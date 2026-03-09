@@ -377,8 +377,10 @@ export class SubagentOrchestrator {
   private populateSettingsService(
     service: SettingsService,
     profile: Profile,
+    profileName: string,
   ): void {
     const provider = profile.provider;
+    service.setCurrentProfileName(profileName);
     service.set('activeProvider', provider);
     service.set(`providers.${provider}.model`, profile.model);
 
@@ -408,6 +410,13 @@ export class SubagentOrchestrator {
       service.set('auth-key', authKey);
       service.set(`providers.${provider}.apiKey`, authKey);
     }
+    const authKeyName = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-key-name',
+    ]);
+    if (authKeyName) {
+      service.set('auth-key-name', authKeyName);
+    }
+
     const authKeyfile = this.getStringSetting(profile.ephemeralSettings, [
       'auth-keyfile',
     ]);
@@ -628,7 +637,7 @@ export class SubagentOrchestrator {
       agentRuntimeId,
     );
     const settingsService = new SettingsService();
-    this.populateSettingsService(settingsService, profile);
+    this.populateSettingsService(settingsService, profile, subagent.profile);
 
     const providerRuntime: ProviderRuntimeContext =
       createProviderRuntimeContext({

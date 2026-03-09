@@ -24,6 +24,7 @@ import {
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import { DebugLogger } from '../debug/index.js';
+import { getProviderKeyStorage } from '../storage/provider-key-storage.js';
 
 const logger = new DebugLogger('llxprt:auth:precedence');
 
@@ -640,6 +641,13 @@ export class AuthPrecedenceResolver {
           return authKey;
         }
 
+        const authKeyName = this.normalizeAuthValue(
+          settingsService.get('auth-key-name'),
+        );
+        if (authKeyName) {
+          return this.resolveNamedKey(authKeyName);
+        }
+
         const authKeyfile = this.normalizeAuthValue(
           settingsService.get('auth-keyfile'),
         );
@@ -956,6 +964,23 @@ export class AuthPrecedenceResolver {
       return true;
     }
     return trimmed === providerId;
+  }
+
+  private async resolveNamedKey(name: string): Promise<string> {
+    const trimmedName = this.normalizeAuthValue(name);
+    if (!trimmedName) {
+      throw new Error('Named key reference is empty');
+    }
+
+    const storage = getProviderKeyStorage();
+    const key = this.normalizeAuthValue(await storage.getKey(trimmedName));
+    if (!key) {
+      throw new Error(
+        `Named key '${trimmedName}' not found. Save it with /key save ${trimmedName} <api-key> before retrying.`,
+      );
+    }
+
+    return key;
   }
 
   /**

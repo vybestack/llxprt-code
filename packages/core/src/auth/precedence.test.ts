@@ -24,10 +24,25 @@ import {
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 
+const { mockProviderKeyStorageGetKey } = vi.hoisted(() => ({
+  mockProviderKeyStorageGetKey: vi.fn<[string], Promise<string | null>>(),
+}));
+
 // Mock fs module
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
 }));
+
+vi.mock('../storage/provider-key-storage.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../storage/provider-key-storage.js')>();
+  return {
+    ...actual,
+    getProviderKeyStorage: () => ({
+      getKey: mockProviderKeyStorageGetKey,
+    }),
+  };
+});
 
 const mockFs = await import('node:fs/promises');
 
@@ -47,6 +62,7 @@ describe('AuthPrecedenceResolver', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProviderKeyStorageGetKey.mockReset();
     originalEnv = { ...process.env };
     // Clear environment variables
     delete process.env.TEST_API_KEY;
@@ -117,6 +133,56 @@ describe('AuthPrecedenceResolver', () => {
         '/path/to/settings/keyfile',
         'utf-8',
       );
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
+    });
+
+    it('should resolve auth-key-name from provider key storage before environment variables', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key-name', 'chutesminimax');
+      mockProviderKeyStorageGetKey.mockResolvedValue('named-key-123');
+
+      const config: AuthPrecedenceConfig = {
+        envKeyNames: ['TEST_API_KEY'],
+        isOAuthEnabled: true,
+        supportsOAuth: true,
+        oauthProvider: 'qwen',
+      };
+
+      process.env.TEST_API_KEY = 'env-key-789';
+      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-abc');
+
+      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
+
+      const result = await resolver.resolveAuthentication();
+
+      expect(result).toBe('named-key-123');
+      expect(mockProviderKeyStorageGetKey).toHaveBeenCalledWith(
+        'chutesminimax',
+      );
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
+    });
+
+    it('should not fall through when auth-key-name references a missing named key', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key-name', 'missing-key');
+      mockProviderKeyStorageGetKey.mockResolvedValue(null);
+
+      const config: AuthPrecedenceConfig = {
+        envKeyNames: ['TEST_API_KEY'],
+        isOAuthEnabled: true,
+        supportsOAuth: true,
+        oauthProvider: 'qwen',
+      };
+
+      process.env.TEST_API_KEY = 'env-key-789';
+      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-abc');
+
+      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
+
+      await expect(resolver.resolveAuthentication()).rejects.toThrow(
+        "Named key 'missing-key' not found",
+      );
+      expect(mockProviderKeyStorageGetKey).toHaveBeenCalledWith('missing-key');
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 

@@ -51,10 +51,11 @@ vi.mock('../runtime/runtimeSettings.js', () => ({
   })),
 }));
 
-import { OAuthManager } from './oauth-manager.js';
+import { OAuthManager, type OAuthProvider } from './oauth-manager.js';
 import type { OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 
 class MockTokenStore implements TokenStore {
   private tokens = new Map<string, OAuthToken>();
@@ -153,6 +154,143 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
   afterEach(() => {
     tokenStore.clear();
+  });
+
+  it('uses request profile metadata to resolve bucketed tokens for subagent runtimes', async () => {
+    mockGetCurrentProfileName.mockReturnValue('foreground-profile');
+    mockLoadProfile.mockImplementation(async (profileName: string) => {
+      if (profileName === 'foreground-profile') {
+        return {
+          provider: 'anthropic',
+          auth: {
+            type: 'oauth',
+            buckets: ['foreground-bucket'],
+          },
+        };
+      }
+
+      if (profileName === 'opusthinkingbucketed') {
+        return {
+          provider: 'anthropic',
+          auth: {
+            type: 'oauth',
+            buckets: ['bucket-a', 'bucket-b', 'bucket-c'],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected profile lookup: ${profileName}`);
+    });
+
+    const provider: OAuthProvider = {
+      name: 'anthropic',
+      initiateAuth: vi.fn().mockResolvedValue({
+        access_token: 'fresh-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      getToken: vi.fn().mockResolvedValue(null),
+      refreshToken: vi.fn().mockResolvedValue(null),
+    };
+    manager.registerProvider(provider);
+    await manager.toggleOAuthEnabled('anthropic');
+
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'bucket-a-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'bucket-a',
+    );
+
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    const token = await manager.getOAuthToken('anthropic', metadata);
+
+    expect(token?.access_token).toBe('bucket-a-token');
+  });
+
+  it('does not inherit a foreground session bucket when request metadata targets a different profile', async () => {
+    mockGetCurrentProfileName.mockReturnValue('foreground-profile');
+    mockLoadProfile.mockImplementation(async (profileName: string) => {
+      if (profileName === 'foreground-profile') {
+        return {
+          provider: 'anthropic',
+          auth: {
+            type: 'oauth',
+            buckets: ['foreground-bucket'],
+          },
+        };
+      }
+
+      if (profileName === 'opusthinkingbucketed') {
+        return {
+          provider: 'anthropic',
+          auth: {
+            type: 'oauth',
+            buckets: ['bucket-a', 'bucket-b', 'bucket-c'],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected profile lookup: ${profileName}`);
+    });
+
+    const provider: OAuthProvider = {
+      name: 'anthropic',
+      initiateAuth: vi.fn().mockResolvedValue({
+        access_token: 'fresh-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      getToken: vi.fn().mockResolvedValue(null),
+      refreshToken: vi.fn().mockResolvedValue(null),
+    };
+    manager.registerProvider(provider);
+    await manager.toggleOAuthEnabled('anthropic');
+
+    manager.setSessionBucket('anthropic', 'foreground-bucket');
+
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'foreground-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'foreground-bucket',
+    );
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'bucket-a-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'bucket-a',
+    );
+
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    const token = await manager.getOAuthToken('anthropic', metadata);
+
+    expect(token?.access_token).toBe('bucket-a-token');
   });
 
   describe('when requesting buckets for a provider that matches the loaded profile', () => {

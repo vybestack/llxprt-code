@@ -14,6 +14,7 @@ import {
   MessageBus,
   Config,
   mergeRefreshedToken,
+  type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-core';
 
@@ -784,6 +785,12 @@ export class OAuthManager {
     logger.debug(
       () => `[FLOW] Attempting to get existing token for ${providerName}...`,
     );
+    const explicitBucket = typeof bucket === 'string';
+    const requestMetadata =
+      !explicitBucket && bucket && typeof bucket === 'object'
+        ? (bucket as OAuthTokenRequestMetadata)
+        : undefined;
+
     const token = await this.getOAuthToken(providerName, bucket);
 
     // Special handling for different providers
@@ -814,11 +821,17 @@ export class OAuthManager {
     // handle API-error-driven failover. This peek loop only reads the token store
     // directly without mutating any failover state.
     {
-      const profileBuckets = await this.getProfileBuckets(providerName);
+      const profileBuckets = await this.getProfileBuckets(
+        providerName,
+        requestMetadata,
+      );
       if (profileBuckets.length > 1) {
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const thirtySecondsFromNow = nowInSeconds + 30;
-        const alreadyTriedBucket = this.getSessionBucket(providerName);
+        const alreadyTriedBucket = this.getSessionBucket(
+          providerName,
+          requestMetadata,
+        );
         for (const peekBucket of profileBuckets) {
           if (peekBucket === alreadyTriedBucket) continue;
           try {
@@ -962,7 +975,10 @@ export class OAuthManager {
     // Authentication is handled at the turn boundary via ensureBucketsAuthenticated().
     // For single-bucket or non-bucketed profiles, preserve existing auth behavior.
     try {
-      const buckets = await this.getProfileBuckets(providerName);
+      const buckets = await this.getProfileBuckets(
+        providerName,
+        requestMetadata,
+      );
 
       if (buckets.length > 1) {
         // Multi-bucket: pure lookup only — return null.
@@ -1057,6 +1073,10 @@ export class OAuthManager {
     }
 
     const explicitBucket = typeof bucket === 'string';
+    const requestMetadata =
+      !explicitBucket && bucket && typeof bucket === 'object'
+        ? (bucket as OAuthTokenRequestMetadata)
+        : undefined;
 
     // Determine the bucket to use: explicit bucket parameter or session bucket override
     let bucketToUse: string | undefined;
@@ -1077,11 +1097,18 @@ export class OAuthManager {
 
     if (!explicitBucket) {
       await this.withBucketResolutionLock(providerName, async () => {
-        if (this.sessionBuckets.has(providerName)) {
-          bucketToUse = this.sessionBuckets.get(providerName);
+        const sessionBucket = this.getSessionBucket(
+          providerName,
+          requestMetadata,
+        );
+        if (sessionBucket) {
+          bucketToUse = sessionBucket;
         }
 
-        profileBuckets = await this.getProfileBuckets(providerName);
+        profileBuckets = await this.getProfileBuckets(
+          providerName,
+          requestMetadata,
+        );
 
         const config = this.getConfig?.();
         // @fix issue1029 - Enhanced debug logging for failover handler setup
@@ -1138,8 +1165,8 @@ export class OAuthManager {
           }
 
           // Establish a default session bucket for the duration of this CLI session.
-          if (bucketToUse && !this.sessionBuckets.has(providerName)) {
-            this.sessionBuckets.set(providerName, bucketToUse);
+          if (!sessionBucket && bucketToUse) {
+            this.setSessionBucket(providerName, bucketToUse, requestMetadata);
           }
         }
       });
@@ -1887,23 +1914,40 @@ export class OAuthManager {
    * Set session bucket override for a provider
    * Session state is in-memory only and not persisted
    */
-  setSessionBucket(provider: string, bucket: string): void {
-    this.sessionBuckets.set(provider, bucket);
+  setSessionBucket(
+    provider: string,
+    bucket: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): void {
+    this.sessionBuckets.set(
+      this.getSessionBucketScopeKey(provider, metadata),
+      bucket,
+    );
   }
 
   /**
    * Get session bucket override for a provider
    * Returns undefined if no session override set
    */
-  getSessionBucket(provider: string): string | undefined {
-    return this.sessionBuckets.get(provider);
+  getSessionBucket(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): string | undefined {
+    return this.sessionBuckets.get(
+      this.getSessionBucketScopeKey(provider, metadata),
+    );
   }
 
   /**
    * Clear session bucket override for a provider
    */
-  clearSessionBucket(provider: string): void {
-    this.sessionBuckets.delete(provider);
+  clearSessionBucket(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): void {
+    this.sessionBuckets.delete(
+      this.getSessionBucketScopeKey(provider, metadata),
+    );
   }
 
   /**
@@ -2181,19 +2225,44 @@ export class OAuthManager {
     return result;
   }
 
-  private async getProfileBuckets(providerName: string): Promise<string[]> {
-    try {
-      // Try to get profile from runtime settings
-      const { getCliRuntimeServices } = await import(
-        '../runtime/runtimeSettings.js'
-      );
-      const { settingsService } = getCliRuntimeServices();
+  private getSessionBucketScopeKey(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): string {
+    const profileId =
+      typeof metadata?.profileId === 'string' &&
+      metadata.profileId.trim() !== ''
+        ? metadata.profileId.trim()
+        : undefined;
+    return profileId ? `${provider}::${profileId}` : provider;
+  }
 
-      // Get current profile name
-      const currentProfileName =
-        typeof settingsService.getCurrentProfileName === 'function'
-          ? settingsService.getCurrentProfileName()
-          : (settingsService.get('currentProfile') as string | null);
+  private async getProfileBuckets(
+    providerName: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): Promise<string[]> {
+    try {
+      // Prefer the request-scoped profile identity supplied by the caller.
+      const requestedProfileName =
+        typeof metadata?.profileId === 'string' &&
+        metadata.profileId.trim() !== ''
+          ? metadata.profileId.trim()
+          : null;
+
+      let currentProfileName = requestedProfileName;
+      if (!currentProfileName) {
+        // Fall back to the CLI runtime's current profile only when the request
+        // did not provide an explicit profile identity.
+        const { getCliRuntimeServices } = await import(
+          '../runtime/runtimeSettings.js'
+        );
+        const { settingsService } = getCliRuntimeServices();
+        currentProfileName =
+          typeof settingsService.getCurrentProfileName === 'function'
+            ? settingsService.getCurrentProfileName()
+            : ((settingsService.get('currentProfile') as string | null) ??
+              null);
+      }
 
       if (!currentProfileName) {
         return [];
