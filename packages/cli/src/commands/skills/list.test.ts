@@ -9,7 +9,7 @@ import { format } from 'node:util';
 import { handleList, listCommand } from './list.js';
 import { loadSettings, type LoadedSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
-import type { Config } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import chalk from 'chalk';
 
 const emitConsoleLog = vi.hoisted(() => vi.fn());
@@ -22,9 +22,9 @@ const debugLogger = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@google/gemini-cli-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
     coreEvents: {

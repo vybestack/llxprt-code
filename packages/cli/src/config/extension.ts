@@ -46,20 +46,42 @@ export const EXTENSIONS_CONFIG_FILENAME_FALLBACK = 'gemini-extension.json';
 export const INSTALL_METADATA_FILENAME = '.llxprt-extension-install.json';
 
 /**
+ * Extension setting definition from extension config
+ */
+export interface ExtensionSetting {
+  name: string;
+  envVar: string;
+  description?: string;
+  sensitive?: boolean;
+  required?: boolean;
+}
+
+/**
+ * Resolved extension setting with actual value
+ */
+export interface ResolvedExtensionSetting {
+  name: string;
+  envVar: string;
+  value: string;
+  description?: string;
+  sensitive?: boolean;
+}
+
+/**
  * Extension definition as written to disk in gemini-extension.json files.
  * This should *not* be referenced outside of the logic for reading files.
  * If information is required for manipulating extensions (load, unload, update)
  * outside of the loading process that data needs to be stored on the
  * GeminiCLIExtension class defined in Core.
  */
-interface ExtensionConfig {
+export interface ExtensionConfig {
   name: string;
   version: string;
   mcpServers?: Record<string, MCPServerConfig>;
   contextFileName?: string | string[];
   excludeTools?: string[];
   hooks?: Hooks;
-  settings?: Array<import('@vybestack/llxprt-code-core').ExtensionSetting>;
+  settings?: ExtensionSetting[];
 }
 
 export interface ExtensionInstallMetadata {
@@ -144,7 +166,6 @@ export async function performWorkspaceExtensionMigration(
   }
   return failedInstallNames;
 }
-
 export function loadExtensions(
   extensionEnablementManager: ExtensionEnablementManager,
   workspaceDir: string = process.cwd(),
@@ -290,30 +311,26 @@ export function loadExtension(
       .filter((contextFilePath) => fs.existsSync(contextFilePath));
 
     // Resolve settings if present
-    const resolvedSettings: Array<
-      import('@vybestack/llxprt-code-core').ResolvedExtensionSetting
-    > = [];
-    if (config.settings && config.settings.length > 0) {
-      const { getExtensionEnvironment } = await import(
-        './extensions/settingsIntegration.js'
-      );
-      const customEnv = await getExtensionEnvironment(effectiveExtensionPath);
+    const resolvedSettings: ResolvedExtensionSetting[] = [];
 
-      for (const setting of config.settings) {
-        const value = customEnv[setting.envVar];
-        resolvedSettings.push({
-          name: setting.name,
-          envVar: setting.envVar,
-          value:
-            value === undefined
-              ? '[not set]'
-              : setting.sensitive
-                ? '***'
-                : value,
-          sensitive: setting.sensitive ?? false,
-        });
-      }
-    }
+    // TODO: Settings resolution requires async operations which would make this
+    // function and all its callers async. For now, settings are passed through
+    // but not resolved. Resolution can be added in a separate async flow if needed.
+    // if (config.settings && config.settings.length > 0) {
+    //   const { getExtensionEnvironment } = await import(
+    //     './extensions/settingsIntegration.js'
+    //   );
+    //   const customEnv = await getExtensionEnvironment(effectiveExtensionPath);
+    //   for (const setting of config.settings) {
+    //     const value = customEnv[setting.envVar];
+    //     resolvedSettings.push({
+    //       name: setting.name,
+    //       envVar: setting.envVar,
+    //       value: value === undefined ? '[not set]' : setting.sensitive ? '***' : value,
+    //       sensitive: setting.sensitive ?? false,
+    //     });
+    //   }
+    // }
 
     return {
       name: config.name,
@@ -324,8 +341,10 @@ export function loadExtension(
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
       isActive: true, // Barring any other signals extensions should be considered Active.
-      settings: config.settings,
-      resolvedSettings,
+      settings: config.settings as Array<Record<string, unknown>> | undefined,
+      resolvedSettings: resolvedSettings as unknown as Array<
+        Record<string, unknown>
+      >,
     };
   } catch (e) {
     debugLogger.error(

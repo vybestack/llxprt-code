@@ -253,10 +253,10 @@ async function reloadAction(
   }
 }
 
-function disableCompletion(
+async function disableCompletion(
   context: CommandContext,
   partialArg: string,
-): string[] {
+): Promise<string[]> {
   const skillManager = context.services.config?.getSkillManager();
   if (!skillManager) {
     return [];
@@ -267,10 +267,10 @@ function disableCompletion(
     .map((s) => s.name);
 }
 
-function enableCompletion(
+async function enableCompletion(
   context: CommandContext,
   partialArg: string,
-): string[] {
+): Promise<string[]> {
   const skillManager = context.services.config?.getSkillManager();
   if (!skillManager) {
     return [];

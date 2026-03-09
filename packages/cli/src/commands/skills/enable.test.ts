@@ -21,9 +21,9 @@ const debugLogger = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@google/gemini-cli-core')>();
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
     debugLogger,

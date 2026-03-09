@@ -10,7 +10,7 @@ import {
   SettingScope,
   type LoadableSettingScope,
 } from '../../config/settings.js';
-import { debugLogger } from '@google/gemini-cli-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 import { exitCli } from '../utils.js';
 
 interface EnableArgs {

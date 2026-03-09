@@ -2355,7 +2355,7 @@ export function useTextBuffer({
       visualCursor,
       visualScrollRow,
       visualToLogicalMap: visualLayout.visualToLogicalMap,
-      transformationsByLine,
+      transformationsByLine: state.transformationsByLine,
       visualToTransformedMap: visualLayout.visualToTransformedMap,
 
       setText,
@@ -2475,6 +2475,7 @@ export function useTextBuffer({
       vimMoveToLastLine,
       vimMoveToLine,
       vimEscapeInsertMode,
+      state.transformationsByLine,
     ],
   );
   return returnValue;

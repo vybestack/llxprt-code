@@ -54,7 +54,7 @@ export class Storage {
   }
 
   static getUserSkillsDir(): string {
-    return path.join(Storage.getGlobalGeminiDir(), 'skills');
+    return path.join(Storage.getGlobalTempDir(), 'skills');
   }
 
   static getGlobalMemoryFilePath(): string {

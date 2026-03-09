@@ -1,192 +1,81 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
-import { Box, Text, useIsScreenReaderEnabled } from 'ink';
-import { LoadingIndicator } from './LoadingIndicator.js';
-import { StatusDisplay } from './StatusDisplay.js';
-import { AutoAcceptIndicator } from './AutoAcceptIndicator.js';
-import { ShellModeIndicator } from './ShellModeIndicator.js';
-import { DetailedMessagesDisplay } from './DetailedMessagesDisplay.js';
-import { RawMarkdownIndicator } from './RawMarkdownIndicator.js';
-import { InputPrompt } from './InputPrompt.js';
-import { Footer } from './Footer.js';
-import { ShowMoreLines } from './ShowMoreLines.js';
-import { QueuedMessageDisplay } from './QueuedMessageDisplay.js';
-import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { theme } from '../semantic-colors.js';
-import { isNarrowWidth } from '../utils/isNarrowWidth.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import { LoadedSettings } from '../../config/settings.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
-import { useVimMode } from '../contexts/VimModeContext.js';
-import { useConfig } from '../contexts/ConfigContext.js';
-import { useSettings } from '../contexts/SettingsContext.js';
-import { useAlternateBuffer } from '../hooks/useAlternateBuffer.js';
-import { ApprovalMode } from '@google/gemini-cli-core';
-import { StreamingState } from '../types.js';
-import { ConfigInitDisplay } from '../components/ConfigInitDisplay.js';
-import { TodoTray } from './messages/Todo.js';
+import { InputPrompt } from './InputPrompt.js';
 
-export const Composer = () => {
-  const config = useConfig();
-  const settings = useSettings();
-  const isScreenReaderEnabled = useIsScreenReaderEnabled();
+interface ComposerProps {
+  config: Config;
+  settings: LoadedSettings;
+  onSuggestionsVisibilityChange?: (visible: boolean) => void;
+}
+
+/**
+ * The Composer component handles user input in the CLI.
+ * It wraps the InputPrompt component and connects it to the UIState and UIActions contexts.
+ */
+export const Composer = ({
+  config,
+  settings: _settings,
+  onSuggestionsVisibilityChange,
+}: ComposerProps) => {
+  // settings is passed for future use but currently not used
   const uiState = useUIState();
   const uiActions = useUIActions();
-  const { vimEnabled } = useVimMode();
-  const terminalWidth = process.stdout.columns;
-  const isNarrow = isNarrowWidth(terminalWidth);
-  const debugConsoleMaxHeight = Math.floor(Math.max(terminalWidth * 0.2, 5));
-  const [suggestionsVisible, setSuggestionsVisible] = useState(false);
 
-  const isAlternateBuffer = useAlternateBuffer();
-  const { contextFileNames, showAutoAcceptIndicator } = uiState;
-  const suggestionsPosition = isAlternateBuffer ? 'above' : 'below';
-  const hideContextSummary =
-    suggestionsVisible && suggestionsPosition === 'above';
+  const {
+    buffer,
+    inputWidth,
+    suggestionsWidth,
+    slashCommands,
+    commandContext,
+    shellModeActive,
+    isFocused,
+    vimModeEnabled,
+    showAutoAcceptIndicator,
+    placeholder,
+    inputHistory,
+    streamingState,
+    queueErrorMessage,
+    embeddedShellFocused,
+  } = uiState;
 
   return (
-    <Box
-      flexDirection="column"
-      width={uiState.mainAreaWidth}
-      flexGrow={0}
-      flexShrink={0}
-    >
-      {!uiState.embeddedShellFocused && (
-        <LoadingIndicator
-          thought={
-            uiState.streamingState === StreamingState.WaitingForConfirmation ||
-            config.getAccessibility()?.disableLoadingPhrases
-              ? undefined
-              : uiState.thought
-          }
-          currentLoadingPhrase={
-            config.getAccessibility()?.disableLoadingPhrases
-              ? undefined
-              : uiState.currentLoadingPhrase
-          }
-          elapsedTime={uiState.elapsedTime}
-        />
-      )}
-
-      {(!uiState.slashCommands || !uiState.isConfigInitialized) && (
-        <ConfigInitDisplay />
-      )}
-
-      <QueuedMessageDisplay messageQueue={uiState.messageQueue} />
-
-      <TodoTray />
-
-      <Box
-        marginTop={1}
-        justifyContent={
-          settings.merged.ui?.hideContextSummary
-            ? 'flex-start'
-            : 'space-between'
-        }
-        width="100%"
-        flexDirection={isNarrow ? 'column' : 'row'}
-        alignItems={isNarrow ? 'flex-start' : 'center'}
-      >
-        <Box marginRight={1}>
-          {process.env['GEMINI_SYSTEM_MD'] && (
-            <Text color={theme.status.error}>|⌐■_■| </Text>
-          )}
-          {uiState.ctrlCPressedOnce ? (
-            <Text color={theme.status.warning}>
-              Press Ctrl+C again to exit.
-            </Text>
-          ) : uiState.warningMessage ? (
-            <Text color={theme.status.warning}>{uiState.warningMessage}</Text>
-          ) : uiState.ctrlDPressedOnce ? (
-            <Text color={theme.status.warning}>
-              Press Ctrl+D again to exit.
-            </Text>
-          ) : uiState.showEscapePrompt ? (
-            <Text color={theme.text.secondary}>Press Esc again to clear.</Text>
-          ) : uiState.queueErrorMessage ? (
-            <Text color={theme.status.error}>{uiState.queueErrorMessage}</Text>
-          ) : (
-            !settings.merged.ui?.hideContextSummary &&
-            !hideContextSummary && (
-              <StatusDisplay
-                activeHooks={uiState.activeHooks ?? []}
-                ideContext={uiState.ideContextState}
-                geminiMdFileCount={uiState.geminiMdFileCount}
-                contextFileNames={contextFileNames}
-                mcpServers={config.getMcpClientManager()?.getMcpServers() ?? {}}
-                blockedMcpServers={
-                  config.getMcpClientManager()?.getBlockedMcpServers() ?? []
-                }
-                skillCount={config.getSkillManager().getSkills().length}
-              />
-            )
-          )}
-        </Box>
-        <Box paddingTop={isNarrow ? 1 : 0}>
-          {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
-            !uiState.shellModeActive && (
-              <AutoAcceptIndicator approvalMode={showAutoAcceptIndicator} />
-            )}
-          {uiState.shellModeActive && <ShellModeIndicator />}
-          {!uiState.renderMarkdown && <RawMarkdownIndicator />}
-        </Box>
-      </Box>
-
-      {uiState.showErrorDetails && (
-        <OverflowProvider>
-          <Box flexDirection="column">
-            <DetailedMessagesDisplay
-              messages={uiState.filteredConsoleMessages}
-              maxHeight={
-                uiState.constrainHeight ? debugConsoleMaxHeight : undefined
-              }
-              width={uiState.mainAreaWidth}
-              hasFocus={uiState.showErrorDetails}
-            />
-            <ShowMoreLines constrainHeight={uiState.constrainHeight} />
-          </Box>
-        </OverflowProvider>
-      )}
-
-      {uiState.isInputActive && (
-        <InputPrompt
-          buffer={uiState.buffer}
-          inputWidth={uiState.inputWidth}
-          suggestionsWidth={uiState.suggestionsWidth}
-          onSubmit={uiActions.handleFinalSubmit}
-          userMessages={uiState.userMessages}
-          setBannerVisible={uiActions.setBannerVisible}
-          onClearScreen={uiActions.handleClearScreen}
-          config={config}
-          slashCommands={uiState.slashCommands || []}
-          commandContext={uiState.commandContext}
-          shellModeActive={uiState.shellModeActive}
-          setShellModeActive={uiActions.setShellModeActive}
-          approvalMode={showAutoAcceptIndicator}
-          onEscapePromptChange={uiActions.onEscapePromptChange}
-          focus={true}
-          vimHandleInput={uiActions.vimHandleInput}
-          isEmbeddedShellFocused={uiState.embeddedShellFocused}
-          popAllMessages={uiActions.popAllMessages}
-          placeholder={
-            vimEnabled
-              ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
-              : uiState.shellModeActive
-                ? '  Type your shell command'
-                : '  Type your message or @path/to/file'
-          }
-          setQueueErrorMessage={uiActions.setQueueErrorMessage}
-          streamingState={uiState.streamingState}
-          suggestionsPosition={suggestionsPosition}
-          onSuggestionsVisibilityChange={setSuggestionsVisible}
-        />
-      )}
-
-      {!settings.merged.ui?.hideFooter && !isScreenReaderEnabled && <Footer />}
-    </Box>
+    <InputPrompt
+      buffer={buffer}
+      inputWidth={inputWidth}
+      suggestionsWidth={suggestionsWidth}
+      onSubmit={uiActions.handleUserInputSubmit}
+      userMessages={inputHistory}
+      onClearScreen={uiActions.handleClearScreen}
+      config={config}
+      slashCommands={slashCommands || []}
+      commandContext={commandContext}
+      shellModeActive={shellModeActive}
+      setShellModeActive={uiActions.setShellModeActive}
+      onEscapePromptChange={uiActions.handleEscapePromptChange}
+      onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
+      focus={isFocused}
+      vimHandleInput={uiActions.vimHandleInput}
+      placeholder={
+        vimModeEnabled
+          ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
+          : shellModeActive
+            ? '  Type your shell command'
+            : placeholder || '  Type your message or @path/to/file'
+      }
+      approvalMode={showAutoAcceptIndicator}
+      vimModeEnabled={vimModeEnabled}
+      setQueueErrorMessage={uiActions.setQueueErrorMessage}
+      streamingState={streamingState}
+      queueErrorMessage={queueErrorMessage}
+      isEmbeddedShellFocused={embeddedShellFocused}
+    />
   );
 };

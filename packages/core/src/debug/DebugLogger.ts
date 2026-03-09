@@ -22,7 +22,7 @@ if (typeof window === 'undefined') {
   createDebug.log = (...args: unknown[]) => {
     // Call whatever debugLogger.log is at the time of logging
     // This allows the UI's ConsolePatcher to intercept it
-    debugLogger.log(...args);
+    (debugLogger.log as (...args: unknown[]) => void)(...args);
   };
 }
 

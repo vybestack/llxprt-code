@@ -7,20 +7,26 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
-import { type IdeContext, type MCPServerConfig } from '@google/gemini-cli-core';
+import {
+  type IdeContext,
+  type MCPServerConfig,
+} from '@vybestack/llxprt-code-core';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { isNarrowWidth } from '../utils/isNarrowWidth.js';
 
 interface ContextSummaryDisplayProps {
-  geminiMdFileCount: number;
+  llxprtMdFileCount?: number;
+  geminiMdFileCount?: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   ideContext?: IdeContext;
-  skillCount: number;
+  skillCount?: number;
+  showToolDescriptions?: boolean;
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
+  llxprtMdFileCount,
   geminiMdFileCount,
   contextFileNames,
   mcpServers,
@@ -28,6 +34,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   ideContext,
   skillCount,
 }) => {
+  const effectiveMdFileCount = llxprtMdFileCount ?? geminiMdFileCount ?? 0;
   const { columns: terminalWidth } = useTerminalSize();
   const isNarrow = isNarrowWidth(terminalWidth);
   const mcpServerCount = Object.keys(mcpServers || {}).length;
@@ -35,13 +42,13 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   const openFileCount = ideContext?.workspaceState?.openFiles?.length ?? 0;
 
   if (
-    geminiMdFileCount === 0 &&
+    effectiveMdFileCount === 0 &&
     mcpServerCount === 0 &&
     blockedMcpServerCount === 0 &&
     openFileCount === 0 &&
     skillCount === 0
   ) {
-    return <Text color={theme.colors.foreground}> </Text>; // Render an empty space to reserve height
+    return <Text color={theme.text.primary}> </Text>; // Render an empty space to reserve height
   }
 
   const openFilesText = (() => {
@@ -54,13 +61,13 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   })();
 
   const geminiMdText = (() => {
-    if (geminiMdFileCount === 0) {
+    if (effectiveMdFileCount === 0) {
       return '';
     }
     const allNamesTheSame = new Set(contextFileNames).size < 2;
     const name = allNamesTheSame ? contextFileNames[0] : 'context';
-    return `${geminiMdFileCount} ${name} file${
-      geminiMdFileCount > 1 ? 's' : ''
+    return `${effectiveMdFileCount} ${name} file${
+      effectiveMdFileCount > 1 ? 's' : ''
     }`;
   })();
 
@@ -90,7 +97,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     if (skillCount === 0) {
       return '';
     }
-    return `${skillCount} skill${skillCount > 1 ? 's' : ''}`;
+    return `${skillCount ?? 0} skill${(skillCount ?? 0) > 1 ? 's' : ''}`;
   })();
 
   const summaryParts = [openFilesText, geminiMdText, mcpText, skillText].filter(

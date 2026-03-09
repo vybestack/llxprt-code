@@ -184,7 +184,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       {itemForDisplay.type === 'skills_list' && (
         <SkillsList
           skills={itemForDisplay.skills}
-          showDescriptions={itemForDisplay.showDescriptions}
+          showDescriptions={itemForDisplay.showDescriptions ?? false}
         />
       )}
       {itemForDisplay.type === 'mcp_status' && (

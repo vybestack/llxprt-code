@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { type Config, MessageBusType } from '@vybestack/llxprt-code-core';
 import type { ActiveHook } from '../types.js';
 
 /**
@@ -22,8 +22,9 @@ export function useHookDisplayState(config: Config): ActiveHook[] {
     }
 
     const requestSubscription = messageBus.subscribe(
-      'HOOK_EXECUTION_REQUEST',
-      (message: Record<string, unknown>) => {
+      MessageBusType.HOOK_EXECUTION_REQUEST,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (message: any) => {
         const payload = message.payload as { eventName?: string } | undefined;
         if (payload?.eventName) {
           setActiveHooks((prev) => [
@@ -38,10 +39,11 @@ export function useHookDisplayState(config: Config): ActiveHook[] {
     );
 
     const responseSubscription = messageBus.subscribe(
-      'HOOK_EXECUTION_RESPONSE',
-      (message: Record<string, unknown>) => {
+      MessageBusType.HOOK_EXECUTION_RESPONSE,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (message: any) => {
         const payload = message.payload;
-        if (payload?.correlationId) {
+        if ((payload as { correlationId?: string })?.correlationId) {
           // Remove the oldest hook with matching eventName
           // (simple FIFO strategy since we don't have correlation tracking)
           setActiveHooks((prev) => {

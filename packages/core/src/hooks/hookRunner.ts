@@ -272,8 +272,16 @@ export class HookRunner {
       );
 
       // Set up environment variables
+      const sanitizationConfig = this.config.getSanitizationConfig();
       const env = {
-        ...sanitizeEnvironment(process.env, this.config.sanitizationConfig),
+        ...sanitizeEnvironment(
+          process.env,
+          sanitizationConfig || {
+            enableEnvironmentVariableRedaction: false,
+            allowedEnvironmentVariables: [],
+            blockedEnvironmentVariables: [],
+          },
+        ),
         LLXPRT_PROJECT_DIR: input.cwd,
       };
 

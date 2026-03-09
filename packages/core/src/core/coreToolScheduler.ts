@@ -23,7 +23,6 @@ import {
   type AnyToolInvocation,
   type ContextAwareTool,
   BaseToolInvocation,
-  type MessageBus,
 } from '../index.js';
 import { randomUUID } from 'node:crypto';
 import {
@@ -32,84 +31,344 @@ import {
 } from '../confirmation-bus/types.js';
 import { PolicyDecision } from '../policy/types.js';
 
+interface QueuedRequest {
+  request: ToolCallRequestInfo | ToolCallRequestInfo[];
+  signal: AbortSignal;
+  resolve: () => void;
+  reject: (reason?: Error) => void;
+}
 import { DEFAULT_AGENT_ID } from './turn.js';
-import { type Part, type FunctionCall } from '@google/genai';
+import {
+  type Part,
+  type PartListUnion,
+  type FunctionCall,
+} from '@google/genai';
 import {
   isModifiableDeclarativeTool,
   type ModifyContext,
   modifyWithEditor,
 } from '../tools/modifiable-tool.js';
 import * as Diff from 'diff';
+import levenshtein from 'fast-levenshtein';
+import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 import {
-  doesToolInvocationMatch,
-  getToolSuggestion,
-} from '../utils/tool-utils.js';
-import {
+  limitOutputTokens,
   DEFAULT_MAX_TOKENS,
   type ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
-import {
-  convertToFunctionResponse,
-  extractAgentIdFromMetadata,
-  createErrorResponse,
-} from '../utils/generateContentResponseUtilities.js';
 import { DebugLogger } from '../debug/index.js';
 import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
-import { triggerToolNotificationHook } from './coreToolHookTriggers.js';
-
-import type {
-  PolicyContext,
-  QueuedRequest,
-  ValidatingToolCall,
-  ScheduledToolCall,
-  ExecutingToolCall,
-  SuccessfulToolCall,
-  ErroredToolCall,
-  CancelledToolCall,
-  WaitingToolCall,
-  ToolCall,
-  CompletedToolCall,
-  Status,
-  OutputUpdateHandler,
-  AllToolCallsCompleteHandler,
-  ToolCallsUpdateHandler,
-} from '../scheduler/types.js';
-import { ToolExecutor } from '../scheduler/tool-executor.js';
-
+import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import {
+  triggerBeforeToolHook,
+  triggerAfterToolHook,
+  triggerToolNotificationHook,
+} from './coreToolHookTriggers.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
-/**
- * @plan PLAN-20260302-TOOLSCHEDULER.P02
- * @requirement TS-COMPAT-001
- *
- * Re-export types from scheduler/types.ts for backward compatibility.
- * Existing code can continue importing these types from coreToolScheduler.
- */
-export type {
-  ValidatingToolCall,
-  ScheduledToolCall,
-  ExecutingToolCall,
-  SuccessfulToolCall,
-  ErroredToolCall,
-  CancelledToolCall,
-  WaitingToolCall,
-  ToolCall,
-  CompletedToolCall,
-  Status,
-  ConfirmHandler,
-  OutputUpdateHandler,
-  AllToolCallsCompleteHandler,
-  ToolCallsUpdateHandler,
-  QueuedRequest,
-} from '../scheduler/types.js';
+export type ValidatingToolCall = {
+  status: 'validating';
+  request: ToolCallRequestInfo;
+  tool: AnyDeclarativeTool;
+  invocation: AnyToolInvocation;
+  startTime?: number;
+  outcome?: ToolConfirmationOutcome;
+};
+
+export type ScheduledToolCall = {
+  status: 'scheduled';
+  request: ToolCallRequestInfo;
+  tool: AnyDeclarativeTool;
+  invocation: AnyToolInvocation;
+  startTime?: number;
+  outcome?: ToolConfirmationOutcome;
+};
+
+export type ErroredToolCall = {
+  status: 'error';
+  request: ToolCallRequestInfo;
+  response: ToolCallResponseInfo;
+  tool?: AnyDeclarativeTool;
+  durationMs?: number;
+  outcome?: ToolConfirmationOutcome;
+};
+
+export type SuccessfulToolCall = {
+  status: 'success';
+  request: ToolCallRequestInfo;
+  tool: AnyDeclarativeTool;
+  response: ToolCallResponseInfo;
+  invocation: AnyToolInvocation;
+  durationMs?: number;
+  outcome?: ToolConfirmationOutcome;
+};
+
+export type ExecutingToolCall = {
+  status: 'executing';
+  request: ToolCallRequestInfo;
+  tool: AnyDeclarativeTool;
+  invocation: AnyToolInvocation;
+  liveOutput?: string | AnsiOutput;
+  startTime?: number;
+  outcome?: ToolConfirmationOutcome;
+  pid?: number;
+};
+
+export type CancelledToolCall = {
+  status: 'cancelled';
+  request: ToolCallRequestInfo;
+  response: ToolCallResponseInfo;
+  tool: AnyDeclarativeTool;
+  invocation: AnyToolInvocation;
+  durationMs?: number;
+  outcome?: ToolConfirmationOutcome;
+};
+
+export type WaitingToolCall = {
+  status: 'awaiting_approval';
+  request: ToolCallRequestInfo;
+  tool: AnyDeclarativeTool;
+  invocation: AnyToolInvocation;
+  confirmationDetails: ToolCallConfirmationDetails;
+  startTime?: number;
+  outcome?: ToolConfirmationOutcome;
+};
+
+type PolicyContext = {
+  toolName: string;
+  args: Record<string, unknown>;
+  serverName?: string;
+};
+
+export type Status = ToolCall['status'];
+
+export type ToolCall =
+  | ValidatingToolCall
+  | ScheduledToolCall
+  | ErroredToolCall
+  | SuccessfulToolCall
+  | ExecutingToolCall
+  | CancelledToolCall
+  | WaitingToolCall;
+
+export type CompletedToolCall =
+  | SuccessfulToolCall
+  | CancelledToolCall
+  | ErroredToolCall;
+
+export type ConfirmHandler = (
+  toolCall: WaitingToolCall,
+) => Promise<ToolConfirmationOutcome>;
+
+export type OutputUpdateHandler = (
+  toolCallId: string,
+  outputChunk: string | AnsiOutput,
+) => void;
+
+export type AllToolCallsCompleteHandler = (
+  completedToolCalls: CompletedToolCall[],
+) => Promise<void>;
+
+export type ToolCallsUpdateHandler = (toolCalls: ToolCall[]) => void;
 
 /**
  * Formats tool output for a Gemini FunctionResponse.
  */
+function createFunctionResponsePart(
+  callId: string,
+  toolName: string,
+  output: string,
+): Part {
+  return {
+    functionResponse: {
+      id: callId,
+      name: toolName,
+      response: { output },
+    },
+  };
+}
+
+function limitStringOutput(
+  text: string,
+  toolName: string,
+  config?: ToolOutputSettingsProvider,
+): string {
+  if (!config || typeof config.getEphemeralSettings !== 'function') {
+    return text;
+  }
+  const limited = limitOutputTokens(text, config, toolName);
+  if (!limited.wasTruncated) {
+    return limited.content;
+  }
+  if (limited.content && limited.content.length > 0) {
+    return limited.content;
+  }
+  return limited.message ?? '';
+}
+
+function limitFunctionResponsePart(
+  part: Part,
+  toolName: string,
+  config?: ToolOutputSettingsProvider,
+): Part {
+  if (!config || !part.functionResponse) {
+    return part;
+  }
+  const response = part.functionResponse.response;
+  if (!response || typeof response !== 'object') {
+    return part;
+  }
+  const existingOutput = response['output'];
+  if (typeof existingOutput !== 'string') {
+    return part;
+  }
+  const limitedOutput = limitStringOutput(existingOutput, toolName, config);
+  if (limitedOutput === existingOutput) {
+    return part;
+  }
+  return {
+    ...part,
+    functionResponse: {
+      ...part.functionResponse,
+      response: {
+        ...response,
+        output: limitedOutput,
+      },
+    },
+  };
+}
+
+export function convertToFunctionResponse(
+  toolName: string,
+  callId: string,
+  llmContent: PartListUnion,
+  config?: ToolOutputSettingsProvider,
+): Part[] {
+  // Handle simple string case
+  if (typeof llmContent === 'string') {
+    const limitedOutput = limitStringOutput(llmContent, toolName, config);
+    return [createFunctionResponsePart(callId, toolName, limitedOutput)];
+  }
+
+  const parts = toParts(llmContent);
+
+  // Separate text from binary types
+  const textParts: string[] = [];
+  const inlineDataParts: Part[] = [];
+  const fileDataParts: Part[] = [];
+
+  for (const part of parts) {
+    if (part.text !== undefined) {
+      textParts.push(part.text);
+    } else if (part.inlineData) {
+      inlineDataParts.push(part);
+    } else if (part.fileData) {
+      fileDataParts.push(part);
+    } else if (part.functionResponse) {
+      // Passthrough case - preserve existing response
+      if (parts.length > 1) {
+        toolSchedulerLogger.warn(
+          'convertToFunctionResponse received multiple parts with a functionResponse. ' +
+            'Only the functionResponse will be used, other parts will be ignored',
+        );
+      }
+      const passthroughPart = {
+        functionResponse: {
+          id: callId,
+          name: toolName,
+          response: part.functionResponse.response,
+        },
+      };
+      // Apply output limits to the passthrough case as well
+      return [limitFunctionResponsePart(passthroughPart, toolName, config)];
+    }
+    // Ignore other part types (e.g., functionCall)
+  }
+
+  // Build the primary response part
+  const part: Part = {
+    functionResponse: {
+      id: callId,
+      name: toolName,
+      response: textParts.length > 0 ? { output: textParts.join('\n') } : {},
+    },
+  };
+
+  // Handle binary content - use sibling format for all providers
+  const siblingParts: Part[] = [...fileDataParts, ...inlineDataParts];
+
+  // Add descriptive text if response object is empty but we have binary content
+  if (
+    textParts.length === 0 &&
+    (inlineDataParts.length > 0 || fileDataParts.length > 0)
+  ) {
+    const totalBinaryItems = inlineDataParts.length + fileDataParts.length;
+    part.functionResponse!.response = {
+      output: `Binary content provided (${totalBinaryItems} item(s)).`,
+    };
+  }
+
+  // Apply output limits to the functionResponse
+  const limitedPart = limitFunctionResponsePart(part, toolName, config);
+
+  if (siblingParts.length > 0) {
+    return [limitedPart, ...siblingParts];
+  }
+
+  return [limitedPart];
+}
+
+function extractAgentIdFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const candidate = metadata['agentId'];
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return candidate;
+  }
+  return undefined;
+}
+
+function toParts(input: PartListUnion): Part[] {
+  const parts: Part[] = [];
+  for (const part of Array.isArray(input) ? input : [input]) {
+    if (typeof part === 'string') {
+      parts.push({ text: part });
+    } else if (part) {
+      parts.push(part);
+    }
+  }
+  return parts;
+}
+
+const createErrorResponse = (
+  request: ToolCallRequestInfo,
+  error: Error,
+  errorType: ToolErrorType | undefined,
+): ToolCallResponseInfo => ({
+  callId: request.callId,
+  error,
+  responseParts: [
+    // Only functionResponse — the functionCall is already recorded in history
+    // from the model's assistant message. Re-emitting it here would create
+    // orphan tool_use blocks for Anthropic (Issue #244).
+    {
+      functionResponse: {
+        id: request.callId,
+        name: request.name,
+        response: { error: error.message },
+      },
+    },
+  ],
+  resultDisplay: error.message,
+  errorType,
+  agentId: request.agentId ?? DEFAULT_AGENT_ID,
+});
 
 export interface CoreToolSchedulerOptions {
   config: Config;
-  messageBus?: MessageBus;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -158,29 +417,19 @@ export class CoreToolScheduler {
   // When a parallel batch would exceed the context budget, this is set to a
   // tighter per-tool output config so each result is truncated to fit.
   private batchOutputConfig?: ToolOutputSettingsProvider;
-  /**
-   * @plan PLAN-20260303-MESSAGEBUS.P01
-   * MessageBus optional parameter added (Phase 1)
-   */
-  private readonly messageBus: MessageBus;
 
-  /**
-   * @plan PLAN-20260303-MESSAGEBUS.P01
-   * MessageBus optional parameter added (Phase 1)
-   */
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
-    this.messageBus = options.messageBus ?? options.config.getMessageBus();
     this.toolRegistry = options.config.getToolRegistry();
     this.setCallbacks(options);
     this.toolContextInteractiveMode =
       options.toolContextInteractiveMode ?? true;
 
-    this.messageBusUnsubscribe =
-      this.messageBus.subscribe<ToolConfirmationResponse>(
-        MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-        this.handleMessageBusResponse.bind(this),
-      );
+    const messageBus = this.config.getMessageBus();
+    this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
+      MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      this.handleMessageBusResponse.bind(this),
+    );
   }
 
   setCallbacks(options: CoreToolSchedulerOptions): void {
@@ -559,6 +808,33 @@ export class CoreToolScheduler {
     }
   }
 
+  /**
+   * Build a friendly suggestion message when a tool can't be found.
+   */
+  private getToolSuggestion(unknownToolName: string, topN = 3): string {
+    const allToolNames = this.toolRegistry.getAllToolNames();
+    if (!allToolNames.length) {
+      return '';
+    }
+
+    const matches = allToolNames
+      .map((toolName) => ({
+        name: toolName,
+        distance: levenshtein.get(unknownToolName, toolName),
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, topN);
+
+    if (!matches.length || matches[0].distance === Infinity) {
+      return '';
+    }
+
+    const suggestedNames = matches.map((match) => `"${match.name}"`).join(', ');
+    return matches.length > 1
+      ? ` Did you mean one of: ${suggestedNames}?`
+      : ` Did you mean ${suggestedNames}?`;
+  }
+
   schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
@@ -649,10 +925,7 @@ export class CoreToolScheduler {
 
           const toolInstance = this.toolRegistry.getTool(reqInfo.name);
           if (!toolInstance) {
-            const suggestion = getToolSuggestion(
-              reqInfo.name,
-              this.toolRegistry.getAllToolNames(),
-            );
+            const suggestion = this.getToolSuggestion(reqInfo.name);
             const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
             return {
               status: 'error',
@@ -1009,7 +1282,7 @@ export class CoreToolScheduler {
           outcome !== ToolConfirmationOutcome.Cancel &&
           outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
           outcome !== ToolConfirmationOutcome.SuggestEdit;
-        this.messageBus.publish({
+        this.config.getMessageBus().publish({
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId,
           outcome,
@@ -1077,7 +1350,7 @@ export class CoreToolScheduler {
       name: context.toolName,
       args: context.args,
     };
-    this.messageBus.publish({
+    this.config.getMessageBus().publish({
       type: MessageBusType.TOOL_POLICY_REJECTION,
       toolCall,
       correlationId: randomUUID(),
@@ -1094,7 +1367,7 @@ export class CoreToolScheduler {
       name: context.toolName,
       args: context.args,
     };
-    this.messageBus.publish({
+    this.config.getMessageBus().publish({
       type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
       toolCall,
       correlationId,
@@ -1467,10 +1740,9 @@ export class CoreToolScheduler {
       this.batchOutputConfig = undefined;
     }
   }
+
   /**
-   * @plan PLAN-20260302-TOOLSCHEDULER.P04
    * Launch a single scheduled tool call and wire up result buffering / error handling.
-   * Delegates execution to ToolExecutor.
    * @requirement:HOOK-017,HOOK-019,HOOK-129,HOOK-131,HOOK-132,HOOK-134 - Hook result application
    */
   private async launchToolExecution(
@@ -1478,138 +1750,180 @@ export class CoreToolScheduler {
     executionIndex: number,
     signal: AbortSignal,
   ): Promise<void> {
-    const { callId, name: toolName } = scheduledCall.request;
+    const { callId, name: toolName, args } = scheduledCall.request;
+    let invocation = scheduledCall.invocation;
+    let effectiveArgs = args;
 
-    // Transition to executing
     this.setStatusInternal(callId, 'executing');
 
-    // Delegate to ToolExecutor
-    const toolExecutor = new ToolExecutor(this.config);
+    // Trigger BeforeTool hook and await result
+    // @requirement:HOOK-017,HOOK-019 - Block execution or modify args based on hook result
+    const beforeResult = await triggerBeforeToolHook(
+      this.config,
+      toolName,
+      args,
+    );
 
-    try {
-      const executionResult = await toolExecutor.execute({
-        call: scheduledCall,
-        signal,
-        onLiveOutput: (callId, chunk) => {
-          if (this.outputUpdateHandler) {
-            this.outputUpdateHandler(callId, chunk);
-          }
-          this.toolCalls = this.toolCalls.map((tc) =>
-            tc.request.callId === callId && tc.status === 'executing'
-              ? { ...tc, liveOutput: chunk }
-              : tc,
-          );
-          this.notifyToolCallsUpdate();
-        },
-        onPid: (callId, pid) => {
-          this.setPidInternal(callId, pid);
-        },
-      });
-
-      // Success case - buffer the result
-      this.bufferResult(
+    // Check if hook wants to block execution
+    if (beforeResult?.isBlockingDecision()) {
+      const blockReason =
+        beforeResult.getEffectiveReason() || 'Blocked by BeforeTool hook';
+      // Buffer the error - publishBufferedResults will set the proper error status
+      // via publishResult which creates a proper ToolCallResponseInfo
+      this.bufferError(
         callId,
-        toolName,
-        executionResult.result,
+        new Error(blockReason),
         scheduledCall,
         executionIndex,
       );
+      await this.publishBufferedResults(signal);
+      return;
+    }
 
-      await this.publishBufferedResults(signal).catch((publishError: Error) => {
-        // Issue #957: Final catch handler to ensure tool always reaches
-        // terminal state even if publishBufferedResults throws.
-        if (toolSchedulerLogger.enabled) {
-          toolSchedulerLogger.debug(
-            () =>
-              `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+    // Check if hook wants to modify tool input
+    const modifiedInput = beforeResult?.getModifiedToolInput();
+    if (modifiedInput) {
+      effectiveArgs = modifiedInput;
+      // Re-create invocation with modified args
+      invocation = scheduledCall.tool.build(modifiedInput);
+    }
+
+    const liveOutputCallback = scheduledCall.tool.canUpdateOutput
+      ? (outputChunk: string | AnsiOutput) => {
+          if (this.outputUpdateHandler) {
+            this.outputUpdateHandler(callId, outputChunk);
+          }
+          this.toolCalls = this.toolCalls.map((tc) =>
+            tc.request.callId === callId && tc.status === 'executing'
+              ? { ...tc, liveOutput: outputChunk }
+              : tc,
           );
+          this.notifyToolCallsUpdate();
         }
+      : undefined;
 
-        const toolCall = this.toolCalls.find(
-          (tc) => tc.request.callId === callId,
-        );
-        if (
-          toolCall &&
-          toolCall.status !== 'success' &&
-          toolCall.status !== 'error' &&
-          toolCall.status !== 'cancelled'
-        ) {
-          const errorResponse = createErrorResponse(
-            scheduledCall.request,
-            new Error(`Failed to publish tool result: ${publishError.message}`),
-            ToolErrorType.UNHANDLED_EXCEPTION,
+    const setPidCallback = (pid: number) => {
+      this.setPidInternal(callId, pid);
+    };
+
+    return (
+      invocation
+        .execute(
+          signal,
+          liveOutputCallback,
+          undefined,
+          undefined,
+          setPidCallback,
+        )
+        .then(async (toolResult: ToolResult) => {
+          if (signal.aborted) {
+            this.setStatusInternal(
+              callId,
+              'cancelled',
+              'User cancelled tool execution.',
+            );
+            this.bufferCancelled(callId, scheduledCall, executionIndex);
+            await this.publishBufferedResults(signal);
+            return;
+          }
+
+          // Trigger AfterTool hook and await result
+          // @requirement:HOOK-131,HOOK-132 - Apply systemMessage and suppressOutput
+          const afterResult = await triggerAfterToolHook(
+            this.config,
+            toolName,
+            effectiveArgs,
+            toolResult,
           );
-          this.setStatusInternal(callId, 'error', errorResponse);
-        }
-      });
-    } catch (executionError) {
-      // Error or cancellation case
-      if (signal.aborted) {
-        this.setStatusInternal(
-          callId,
-          'cancelled',
-          'User cancelled tool execution.',
-        );
-        this.bufferCancelled(callId, scheduledCall, executionIndex);
-      } else {
-        // Check if this is a STOP_EXECUTION error (per upstream 05049b5a)
-        const error =
-          executionError instanceof Error
-            ? executionError
-            : new Error(String(executionError));
 
-        const isStopExecution = (error as Error & { isStopExecution?: boolean })
-          .isStopExecution;
+          // Apply hook modifications to tool result
+          let finalResult = toolResult;
+          if (afterResult) {
+            // Append systemMessage to llmContent
+            const systemMessage = afterResult.systemMessage;
+            const additionalContext = afterResult.getAdditionalContext();
+            if (systemMessage || additionalContext) {
+              const appendText = systemMessage || additionalContext || '';
+              const existingContent =
+                typeof finalResult.llmContent === 'string'
+                  ? finalResult.llmContent
+                  : JSON.stringify(finalResult.llmContent);
+              finalResult = {
+                ...finalResult,
+                llmContent: `${existingContent}
 
-        if (isStopExecution) {
-          // Create error result with STOP_EXECUTION type
-          const stopResult: ToolResult = {
-            error: {
-              message: error.message,
-              type: ToolErrorType.STOP_EXECUTION,
-            },
-            llmContent: error.message,
-            returnDisplay: error.message,
-          };
-          this.pendingResults.set(callId, {
-            result: stopResult,
+${appendText}`,
+              };
+            }
+
+            // Set suppressDisplay if requested
+            if (afterResult.suppressOutput) {
+              finalResult = {
+                ...finalResult,
+                suppressDisplay: true,
+              };
+            }
+          }
+
+          this.bufferResult(
             callId,
-            toolName: scheduledCall.request.name,
+            toolName,
+            finalResult,
             scheduledCall,
             executionIndex,
-          });
-        } else {
-          this.bufferError(callId, error, scheduledCall, executionIndex);
-        }
-      }
-      await this.publishBufferedResults(signal).catch((publishError: Error) => {
+          );
+
+          await this.publishBufferedResults(signal);
+        })
+        .catch(async (executionError: Error) => {
+          if (signal.aborted) {
+            this.setStatusInternal(
+              callId,
+              'cancelled',
+              'User cancelled tool execution.',
+            );
+            this.bufferCancelled(callId, scheduledCall, executionIndex);
+            await this.publishBufferedResults(signal);
+          } else {
+            this.bufferError(
+              callId,
+              executionError,
+              scheduledCall,
+              executionIndex,
+            );
+            await this.publishBufferedResults(signal);
+          }
+        })
         // Issue #957: Final catch handler to ensure tool always reaches
         // terminal state even if publishBufferedResults throws.
-        if (toolSchedulerLogger.enabled) {
-          toolSchedulerLogger.debug(
-            () =>
-              `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
-          );
-        }
+        .catch((publishError: Error) => {
+          if (toolSchedulerLogger.enabled) {
+            toolSchedulerLogger.debug(
+              () =>
+                `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+            );
+          }
 
-        const toolCall = this.toolCalls.find(
-          (tc) => tc.request.callId === callId,
-        );
-        if (
-          toolCall &&
-          toolCall.status !== 'success' &&
-          toolCall.status !== 'error' &&
-          toolCall.status !== 'cancelled'
-        ) {
-          const errorResponse = createErrorResponse(
-            scheduledCall.request,
-            new Error(`Failed to publish tool result: ${publishError.message}`),
-            ToolErrorType.UNHANDLED_EXCEPTION,
+          const toolCall = this.toolCalls.find(
+            (tc) => tc.request.callId === callId,
           );
-          this.setStatusInternal(callId, 'error', errorResponse);
-        }
-      });
-    }
+          if (
+            toolCall &&
+            toolCall.status !== 'success' &&
+            toolCall.status !== 'error' &&
+            toolCall.status !== 'cancelled'
+          ) {
+            const errorResponse = createErrorResponse(
+              scheduledCall.request,
+              new Error(
+                `Failed to publish tool result: ${publishError.message}`,
+              ),
+              ToolErrorType.UNHANDLED_EXCEPTION,
+            );
+            this.setStatusInternal(callId, 'error', errorResponse);
+          }
+        })
+    );
   }
 
   private async attemptExecutionOfScheduledCalls(

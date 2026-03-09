@@ -5,23 +5,34 @@
  */
 
 import type { CommandModule } from 'yargs';
-import { debugLogger } from '@google/gemini-cli-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../../config/settings.js';
 import { loadCliConfig, type CliArgs } from '../../config/config.js';
+import {
+  loadExtensions,
+  ExtensionEnablementManager,
+} from '../../config/extension.js';
+
 import { exitCli } from '../utils.js';
 import chalk from 'chalk';
 
 export async function handleList() {
   const workspaceDir = process.cwd();
   const settings = loadSettings(workspaceDir);
+  const extensionEnablementManager = new ExtensionEnablementManager(
+    workspaceDir,
+  );
+  const extensions = loadExtensions(extensionEnablementManager, workspaceDir);
 
   const config = await loadCliConfig(
     settings.merged,
+    extensions,
+    extensionEnablementManager,
     'skills-list-session',
     {
       debug: false,
     } as Partial<CliArgs> as CliArgs,
-    { cwd: workspaceDir },
+    workspaceDir,
   );
 
   // Initialize to trigger extension loading and skill discovery

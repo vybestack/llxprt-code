@@ -43,7 +43,7 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
-import { Settings } from './settings.js';
+import { Settings, loadSettings } from './settings.js';
 import { getEnableHooks } from './settingsSchema.js';
 import { createPolicyEngineConfig } from './policy.js';
 
@@ -1391,7 +1391,6 @@ export async function loadCliConfig(
       ? effectiveSettings.mcpServerCommand
       : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
-    mcpEnabled,
 
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
@@ -1446,8 +1445,6 @@ export async function loadCliConfig(
     maxSessionTurns: effectiveSettings.ui?.maxSessionTurns ?? -1,
     experimentalZedIntegration: argv.experimentalAcp || false,
     listExtensions: argv.listExtensions || false,
-    listSessions: argv.listSessions || false,
-    deleteSession: argv.deleteSession,
     activeExtensions: activeExtensions.map((e) => ({
       name: e.name,
       version: e.version,
@@ -1459,19 +1456,21 @@ export async function loadCliConfig(
     allowedMcpServers: mcpEnabled
       ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
       : undefined,
-    blockedMcpServers: mcpEnabled
-      ? argv.allowedMcpServerNames
-        ? undefined
-        : effectiveSettings.mcp?.excluded
-      : undefined,
+    blockedMcpServers: undefined, // Extension-based blocking handled elsewhere
 
-    allowedEnvironmentVariables:
-      effectiveSettings.security?.environmentVariableRedaction?.allowed,
-    blockedEnvironmentVariables:
-      effectiveSettings.security?.environmentVariableRedaction?.blocked,
-    enableEnvironmentVariableRedaction:
-      effectiveSettings.security?.environmentVariableRedaction?.enabled ??
-      false,
+    sanitizationConfig: {
+      allowedEnvironmentVariables: [
+        ...(effectiveSettings.security?.environmentVariableRedaction?.allowed ??
+          []),
+      ],
+      blockedEnvironmentVariables: [
+        ...(effectiveSettings.security?.environmentVariableRedaction?.blocked ??
+          []),
+      ],
+      enableEnvironmentVariableRedaction:
+        effectiveSettings.security?.environmentVariableRedaction?.enabled ??
+        false,
+    },
 
     skillsSupport: effectiveSettings.experimental?.skills,
     disabledSkills: effectiveSettings.skills?.disabled,

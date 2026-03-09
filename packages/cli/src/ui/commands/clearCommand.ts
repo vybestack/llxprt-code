@@ -64,10 +64,13 @@ export const clearCommand: SlashCommand = {
 
           // Display system message if provided
           if (sessionStartOutput?.systemMessage) {
-            context.ui.addItem({
-              type: 'info',
-              text: sessionStartOutput.systemMessage,
-            });
+            context.ui.addItem(
+              {
+                type: 'info',
+                text: sessionStartOutput.systemMessage,
+              },
+              Date.now(),
+            );
           }
 
           // Note: Additional context is NOT injected after clear - clear means fresh start

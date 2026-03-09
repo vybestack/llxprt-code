@@ -75,11 +75,16 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
               {ext.resolvedSettings && ext.resolvedSettings.length > 0 && (
                 <Box flexDirection="column" paddingLeft={2}>
                   <Text color={Colors.DimComment}>settings:</Text>
-                  {ext.resolvedSettings.map((setting) => (
-                    <Text key={setting.name} color={Colors.DimComment}>
-                      - {setting.name}: {setting.value}
-                    </Text>
-                  ))}
+                  {ext.resolvedSettings.map(
+                    (setting: Record<string, unknown>) => (
+                      <Text
+                        key={String(setting.name)}
+                        color={Colors.DimComment}
+                      >
+                        - {String(setting.name)}: {String(setting.value)}
+                      </Text>
+                    ),
+                  )}
                 </Box>
               )}
             </Box>

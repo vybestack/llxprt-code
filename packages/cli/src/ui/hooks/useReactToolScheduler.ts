@@ -403,8 +403,6 @@ export function useReactToolScheduler(
         agentId: req.agentId ?? DEFAULT_AGENT_ID,
       });
 
-      setToolCallsForDisplay([]);
-
       const normalizedRequest = Array.isArray(request)
         ? request.map(ensureAgentId)
         : ensureAgentId(request);

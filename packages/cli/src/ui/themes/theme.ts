@@ -43,6 +43,8 @@ export interface ColorsTheme {
   AccentGreen: string;
   AccentYellow: string;
   AccentRed: string;
+  Warning?: string;
+
   DiffAdded: string;
   DiffRemoved: string;
   // Optional diff colour fields with fallbacks
@@ -151,6 +153,8 @@ export const lightTheme: ColorsTheme = {
   AccentCyan: '#06B6D4',
   AccentGreen: '#3CA84B',
   AccentYellow: '#D5A40A',
+  Warning: '#D5A40A',
+
   AccentRed: '#DD4C4C',
   DiffAdded: '#C6EAD8',
   DiffRemoved: '#FFCCCC',
@@ -171,6 +175,8 @@ export const darkTheme: ColorsTheme = {
   AccentCyan: '#89DCEB',
   AccentGreen: '#A6E3A1',
   AccentYellow: '#F9E2AF',
+  Warning: '#F9E2AF',
+
   AccentRed: '#F38BA8',
   DiffAdded: '#28350B',
   DiffRemoved: '#430000',
@@ -191,6 +197,8 @@ export const ansiTheme: ColorsTheme = {
   AccentCyan: 'cyan',
   AccentGreen: 'green',
   AccentYellow: 'yellow',
+  Warning: 'yellow',
+
   AccentRed: 'red',
   DiffAdded: 'green',
   DiffRemoved: 'red',
@@ -332,6 +340,8 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
     AccentCyan: customTheme.text?.link ?? customTheme.AccentCyan ?? '',
     AccentGreen: customTheme.status?.success ?? customTheme.AccentGreen ?? '',
     AccentYellow: customTheme.status?.warning ?? customTheme.AccentYellow ?? '',
+    Warning: customTheme.status?.warning ?? customTheme.AccentYellow ?? '',
+
     AccentRed: customTheme.status?.error ?? customTheme.AccentRed ?? '',
     DiffAdded:
       customTheme.background?.diff?.added ?? customTheme.DiffAdded ?? '',

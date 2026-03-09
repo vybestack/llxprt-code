@@ -280,7 +280,7 @@ export class ToolRegistry {
    * @param name - The name of the tool to unregister.
    */
   unregisterTool(name: string): void {
-    this.allKnownTools.delete(name);
+    this.tools.delete(name);
   }
 
   /**

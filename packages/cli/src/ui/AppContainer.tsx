@@ -255,10 +255,13 @@ export const AppContainer = (props: AppContainerProps) => {
       if (sessionStartOutput) {
         // Display system message
         if (sessionStartOutput.systemMessage) {
-          addItem({
-            type: 'info',
-            text: sessionStartOutput.systemMessage,
-          });
+          addItem(
+            {
+              type: 'info',
+              text: sessionStartOutput.systemMessage,
+            },
+            Date.now(),
+          );
         }
 
         // Add additional context to history

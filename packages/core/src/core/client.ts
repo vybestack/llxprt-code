@@ -70,6 +70,10 @@ import {
   triggerBeforeAgentHook,
   triggerAfterAgentHook,
 } from './lifecycleHookTriggers.js';
+import type {
+  BeforeAgentHookOutput,
+  AfterAgentHookOutput,
+} from '../hooks/types.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -1412,7 +1416,7 @@ ${jitMemory}`
   private async fireBeforeAgentHookSafe(
     prompt_id: string,
     prompt: string,
-  ): Promise<unknown> {
+  ): Promise<BeforeAgentHookOutput | undefined> {
     // Initialize hook state if needed
     if (!this.hookStateMap.has(prompt_id)) {
       this.hookStateMap.set(prompt_id, {
@@ -1444,7 +1448,7 @@ ${jitMemory}`
     prompt: string,
     responseChunk: string,
     hasPendingToolCalls: boolean,
-  ): Promise<unknown> {
+  ): Promise<AfterAgentHookOutput | undefined> {
     const hookState = this.hookStateMap.get(prompt_id);
     if (!hookState) {
       return undefined;

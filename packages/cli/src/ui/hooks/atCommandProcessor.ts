@@ -161,7 +161,7 @@ function handleResourceReadError(
   const errorMessages = resourceReadDisplays
     .filter((d) => d.status === ToolCallStatus.Error)
     .map((d) => d.resultDisplay);
-  debugLogger.error(errorMessages);
+  debugLogger.error(errorMessages.filter(Boolean).join(', '));
   const errorMsg = `Exiting due to an error processing the @ command: ${firstError.resultDisplay}`;
   return { processedQuery: null, error: errorMsg };
 }

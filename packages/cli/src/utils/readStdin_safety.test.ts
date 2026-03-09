@@ -9,7 +9,7 @@ import { readStdin } from './readStdin.js';
 import { EventEmitter } from 'node:events';
 
 // Mock debugLogger to avoid clutter
-vi.mock('@google/gemini-cli-core', () => ({
+vi.mock('@vybestack/llxprt-code-core', () => ({
   debugLogger: {
     warn: vi.fn(),
   },

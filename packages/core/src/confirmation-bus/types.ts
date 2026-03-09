@@ -13,6 +13,8 @@ export enum MessageBusType {
   UPDATE_POLICY = 'update-policy',
   BUCKET_AUTH_CONFIRMATION_REQUEST = 'bucket-auth-confirmation-request',
   BUCKET_AUTH_CONFIRMATION_RESPONSE = 'bucket-auth-confirmation-response',
+  HOOK_EXECUTION_REQUEST = 'HOOK_EXECUTION_REQUEST',
+  HOOK_EXECUTION_RESPONSE = 'HOOK_EXECUTION_RESPONSE',
 }
 
 export interface ToolConfirmationRequest {

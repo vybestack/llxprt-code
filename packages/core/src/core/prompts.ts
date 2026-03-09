@@ -5,416 +5,526 @@
  */
 
 import path from 'node:path';
-import fs from 'node:fs';
 import os from 'node:os';
-import {
-  EDIT_TOOL_NAME,
-  GLOB_TOOL_NAME,
-  GREP_TOOL_NAME,
-  MEMORY_TOOL_NAME,
-  READ_FILE_TOOL_NAME,
-  SHELL_TOOL_NAME,
-  WRITE_FILE_TOOL_NAME,
-  WRITE_TODOS_TOOL_NAME,
-  DELEGATE_TO_AGENT_TOOL_NAME,
-  ACTIVATE_SKILL_TOOL_NAME,
-} from '../tools/tool-names.js';
 import process from 'node:process';
+import * as fs from 'node:fs/promises';
 import { isGitRepository } from '../utils/gitUtils.js';
-import { CodebaseInvestigatorAgent } from '../agents/codebase-investigator.js';
-import type { Config } from '../config/config.js';
-import { GEMINI_DIR } from '../utils/paths.js';
-import { debugLogger } from '../utils/debugLogger.js';
-import { WriteTodosTool } from '../tools/write-todos.js';
-import { resolveModel, isPreviewModel } from '../config/models.js';
+import { PromptService } from '../prompt-config/prompt-service.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { getFolderStructure } from '../utils/getFolderStructure.js';
+import { DebugLogger } from '../debug/index.js';
+import {
+  getGlobalCoreMemoryFilePath,
+  getProjectCoreMemoryFilePath,
+} from '../tools/memoryTool.js';
+import { tildeifyPath } from '../utils/paths.js';
+import type {
+  PromptContext,
+  PromptEnvironment,
+} from '../prompt-config/types.js';
 
-export function resolvePathFromEnv(envVar?: string): {
-  isSwitch: boolean;
-  value: string | null;
-  isDisabled: boolean;
-} {
-  // Handle the case where the environment variable is not set, empty, or just whitespace.
-  const trimmedEnvVar = envVar?.trim();
-  if (!trimmedEnvVar) {
-    return { isSwitch: false, value: null, isDisabled: false };
+const MAX_FOLDER_STRUCTURE_LINES = 40;
+const MAX_FOLDER_STRUCTURE_CHARS = 6000;
+const MAX_FOLDER_STRUCTURE_TOP_LEVEL = 20;
+const SESSION_STARTED_AT = new Date();
+const SESSION_STARTED_AT_LABEL = SESSION_STARTED_AT.toLocaleString();
+const logger = new DebugLogger('llxprt:core:prompts');
+
+// Singleton instance of PromptService
+let promptService: PromptService | null = null;
+let promptServiceInitialized = false;
+let promptServiceInitPromise: Promise<void> | null = null;
+
+/**
+ * Initialize the PromptService singleton
+ */
+async function initializePromptService(): Promise<void> {
+  if (!promptServiceInitPromise) {
+    promptServiceInitPromise = (async () => {
+      const baseDir =
+        process.env.LLXPRT_PROMPTS_DIR ||
+        path.join(os.homedir(), '.llxprt', 'prompts');
+      promptService = new PromptService({
+        baseDir,
+        debugMode: process.env.DEBUG === 'true',
+      });
+      await promptService.initialize();
+      promptServiceInitialized = true;
+    })();
   }
+  return promptServiceInitPromise;
+}
 
-  const lowerEnvVar = trimmedEnvVar.toLowerCase();
-  // Check if the input is a common boolean-like string.
-  if (['0', 'false', '1', 'true'].includes(lowerEnvVar)) {
-    // If so, identify it as a "switch" and return its value.
-    const isDisabled = ['0', 'false'].includes(lowerEnvVar);
-    return { isSwitch: true, value: lowerEnvVar, isDisabled };
+/**
+ * Get the singleton PromptService instance (async)
+ */
+async function getPromptService(): Promise<PromptService> {
+  if (!promptServiceInitialized) {
+    await initializePromptService();
   }
+  return promptService!;
+}
 
-  // If it's not a switch, treat it as a potential file path.
-  let customPath = trimmedEnvVar;
+export async function drainPromptInstallerNotices(): Promise<string[]> {
+  const service = await getPromptService();
+  return service.consumeInstallerNotices();
+}
 
-  // Safely expand the tilde (~) character to the user's home directory.
-  if (customPath.startsWith('~/') || customPath === '~') {
-    try {
-      const home = os.homedir(); // This is the call that can throw an error.
-      if (customPath === '~') {
-        customPath = home;
-      } else {
-        customPath = path.join(home, customPath.slice(2));
-      }
-    } catch (error) {
-      // If os.homedir() fails, we catch the error instead of crashing.
-      debugLogger.warn(
-        `Could not resolve home directory for path: ${trimmedEnvVar}`,
-        error,
-      );
-      // Return null to indicate the path resolution failed.
-      return { isSwitch: false, value: null, isDisabled: false };
-    }
-  }
-
-  // Return it as a non-switch with the fully resolved absolute path.
+/**
+ * Get tool name mapping - lazy initialization to avoid circular dependencies
+ */
+function getToolNameMapping(): Record<string, string> {
   return {
-    isSwitch: false,
-    value: path.resolve(customPath),
-    isDisabled: false,
+    list_directory: 'Ls',
+    replace: 'Edit',
+    glob: 'Glob',
+    search_file_content: 'Grep',
+    read_file: 'ReadFile',
+    read_many_files: 'ReadManyFiles',
+    run_shell_command: 'Shell',
+    write_file: 'WriteFile',
+    memory: 'Memory',
+    todo_read: 'TodoRead',
+    todo_write: 'TodoWrite',
+    google_web_fetch: 'GoogleWebFetch',
+    direct_web_fetch: 'DirectWebFetch',
+    google_web_search: 'GoogleWebSearch',
+    exa_web_search: 'ExaWebSearch',
+    codesearch: 'CodeSearch',
+    delete_line_range: 'DeleteLineRange',
+    insert_at_line: 'InsertAtLine',
+    read_line_range: 'ReadLineRange',
+    list_subagents: 'ListSubagents',
+    task: 'Task',
   };
 }
 
-export function getCoreSystemPrompt(
-  config: Config,
-  userMemory?: string,
-): string {
-  // A flag to indicate whether the system prompt override is active.
-  let systemMdEnabled = false;
-  // The default path for the system prompt file. This can be overridden.
-  let systemMdPath = path.resolve(path.join(GEMINI_DIR, 'system.md'));
-  // Resolve the environment variable to get either a path or a switch value.
-  const systemMdResolution = resolvePathFromEnv(
-    process.env['GEMINI_SYSTEM_MD'],
+function extractFolderStructureHeader(lines: string[]): {
+  header: string[];
+  body: string[];
+} {
+  if (lines.length === 0) {
+    return { header: [], body: [] };
+  }
+
+  const header: string[] = [];
+  let index = 0;
+
+  header.push(lines[index++] ?? '');
+
+  if (index < lines.length && lines[index].trim() === '') {
+    header.push(lines[index++]);
+  }
+
+  if (index < lines.length) {
+    header.push(lines[index++]);
+  }
+
+  return { header, body: lines.slice(index) };
+}
+
+function compactFolderStructureSnapshot(
+  structure?: string,
+): string | undefined {
+  if (!structure) {
+    return structure;
+  }
+
+  const normalized = structure.replace(/\r\n/g, '\n').trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const lines = normalized.split('\n');
+  if (
+    lines.length <= MAX_FOLDER_STRUCTURE_LINES &&
+    normalized.length <= MAX_FOLDER_STRUCTURE_CHARS
+  ) {
+    return normalized;
+  }
+
+  const { header, body } = extractFolderStructureHeader(lines);
+  if (body.length === 0) {
+    return normalized.slice(0, MAX_FOLDER_STRUCTURE_CHARS);
+  }
+
+  const topLevelEntries = body.filter(
+    (line) => line.startsWith('├───') || line.startsWith('└───'),
   );
+  const candidateLines = topLevelEntries.length > 0 ? topLevelEntries : body;
+  const limitedLines = candidateLines.slice(0, MAX_FOLDER_STRUCTURE_TOP_LEVEL);
+  const omittedCount = Math.max(candidateLines.length - limitedLines.length, 0);
 
-  // Proceed only if the environment variable is set and is not disabled.
-  if (systemMdResolution.value && !systemMdResolution.isDisabled) {
-    systemMdEnabled = true;
+  const truncatedLine = `└───... ${omittedCount} more entries omitted (folder structure truncated for provider limits)`;
+  const snapshotLines = [...header, ...limitedLines, truncatedLine];
 
-    // We update systemMdPath to this new custom path.
-    if (!systemMdResolution.isSwitch) {
-      systemMdPath = systemMdResolution.value;
-    }
-
-    // require file to exist when override is enabled
-    if (!fs.existsSync(systemMdPath)) {
-      throw new Error(`missing system prompt file '${systemMdPath}'`);
-    }
-  }
-
-  // TODO(joshualitt): Replace with system instructions on model configs.
-  const desiredModel = resolveModel(
-    config.getActiveModel(),
-    config.getPreviewFeatures(),
-  );
-
-  const isGemini3 = isPreviewModel(desiredModel);
-
-  const mandatesVariant = isGemini3
-    ? `
-- **Do not call tools in silence:** You must provide to the user very short and concise natural explanation (one sentence) before calling tools.`
-    : ``;
-
-  const enableCodebaseInvestigator = config
-    .getToolRegistry()
-    .getAllToolNames()
-    .includes(CodebaseInvestigatorAgent.name);
-
-  const enableWriteTodosTool = config
-    .getToolRegistry()
-    .getAllToolNames()
-    .includes(WriteTodosTool.Name);
-
-  const interactiveMode = config.isInteractiveShellEnabled();
-
-  const skills = config.getSkillManager().getSkills();
-  let skillsPrompt = '';
-  if (skills.length > 0) {
-    const skillsXml = skills
-      .map(
-        (skill) => `  <skill>
-    <name>${skill.name}</name>
-    <description>${skill.description}</description>
-    <location>${skill.location}</location>
-  </skill>`,
-      )
-      .join('\n');
-
-    skillsPrompt = `
-# Available Agent Skills
-
-You have access to the following specialized skills. To activate a skill and receive its detailed instructions, you can call the \`${ACTIVATE_SKILL_TOOL_NAME}\` tool with the skill's name.
-
-<available_skills>
-${skillsXml}
-</available_skills>
-`;
-  }
-
-  let basePrompt: string;
-  if (systemMdEnabled) {
-    basePrompt = fs.readFileSync(systemMdPath, 'utf8');
-  } else {
-    const promptConfig = {
-      preamble: `You are ${interactiveMode ? 'an interactive ' : 'a non-interactive '}CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.`,
-      coreMandates: `
-# Core Mandates
-
-- **Conventions:** Rigorously adhere to existing project conventions when reading or modifying code. Analyze surrounding code, tests, and configuration first.
-- **Libraries/Frameworks:** NEVER assume a library/framework is available or appropriate. Verify its established usage within the project (check imports, configuration files like 'package.json', 'Cargo.toml', 'requirements.txt', 'build.gradle', etc., or observe neighboring files) before employing it.
-- **Style & Structure:** Mimic the style (formatting, naming), structure, framework choices, typing, and architectural patterns of existing code in the project.
-- **Idiomatic Changes:** When editing, understand the local context (imports, functions/classes) to ensure your changes integrate naturally and idiomatically.
-- **Comments:** Add code comments sparingly. Focus on *why* something is done, especially for complex logic, rather than *what* is done. Only add high-value comments if necessary for clarity or if requested by the user. Do not edit comments that are separate from the code you are changing. *NEVER* talk to the user or describe your changes through comments.
-- **Proactiveness:** Fulfill the user's request thoroughly. When adding features or fixing bugs, this includes adding tests to ensure quality. Consider all created files, especially tests, to be permanent artifacts unless the user says otherwise.
-- ${interactiveMode ? `**Confirm Ambiguity/Expansion:** Do not take significant actions beyond the clear scope of the request without confirming with the user. If asked *how* to do something, explain first, don't just do it.` : `**Handle Ambiguity/Expansion:** Do not take significant actions beyond the clear scope of the request.`}
-- **Explaining Changes:** After completing a code modification or file operation *do not* provide summaries unless asked.
-- **Do Not revert changes:** Do not revert changes to the codebase unless asked to do so by the user. Only revert changes made by you if they have resulted in an error or if the user has explicitly asked you to revert the changes.${
-        skills.length > 0
-          ? `
-- **Skill Guidance:** Once a skill is activated via \`${ACTIVATE_SKILL_TOOL_NAME}\`, its instructions and resources are returned wrapped in \`<ACTIVATED_SKILL>\` tags. You MUST treat the content within \`<INSTRUCTIONS>\` as expert procedural guidance, prioritizing these specialized rules and workflows over your general defaults for the duration of the task. You may utilize any listed \`<AVAILABLE_RESOURCES>\` as needed. Follow this expert guidance strictly while continuing to uphold your core safety and security standards.`
-          : ''
-      }${mandatesVariant}${
-        !interactiveMode
-          ? `
-  - **Continue the work** You are not to interact with the user. Do your best to complete the task at hand, using your best judgement and avoid asking user for any additional information.`
-          : ''
-      }
-
-${config.getAgentRegistry().getDirectoryContext()}${skillsPrompt}`,
-      primaryWorkflows_prefix: `
-# Primary Workflows
-
-## Software Engineering Tasks
-When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
-1. **Understand:** Think about the user's request and the relevant codebase context. Use '${GREP_TOOL_NAME}' and '${GLOB_TOOL_NAME}' search tools extensively (in parallel if independent) to understand file structures, existing code patterns, and conventions.
-Use '${READ_FILE_TOOL_NAME}' to understand context and validate any assumptions you may have. If you need to read multiple files, you should make multiple parallel calls to '${READ_FILE_TOOL_NAME}'.
-2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes. Use output logs or debug statements as part of this process to arrive at a solution.`,
-
-      primaryWorkflows_prefix_ci: `
-# Primary Workflows
-
-## Software Engineering Tasks
-When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
-1. **Understand & Strategize:** Think about the user's request and the relevant codebase context. When the task involves **complex refactoring, codebase exploration or system-wide analysis**, your **first and primary action** must be to delegate to the '${CodebaseInvestigatorAgent.name}' agent using the '${DELEGATE_TO_AGENT_TOOL_NAME}' tool. Use it to build a comprehensive understanding of the code, its structure, and dependencies. For **simple, targeted searches** (like finding a specific function name, file path, or variable declaration), you should use '${GREP_TOOL_NAME}' or '${GLOB_TOOL_NAME}' directly.
-2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. If '${CodebaseInvestigatorAgent.name}' was used, do not ignore the output of the agent, you must use it as the foundation of your plan. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes. Use output logs or debug statements as part of this process to arrive at a solution.`,
-
-      primaryWorkflows_prefix_ci_todo: `
-# Primary Workflows
-
-## Software Engineering Tasks
-When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
-1. **Understand & Strategize:** Think about the user's request and the relevant codebase context. When the task involves **complex refactoring, codebase exploration or system-wide analysis**, your **first and primary action** must be to delegate to the '${CodebaseInvestigatorAgent.name}' agent using the '${DELEGATE_TO_AGENT_TOOL_NAME}' tool. Use it to build a comprehensive understanding of the code, its structure, and dependencies. For **simple, targeted searches** (like finding a specific function name, file path, or variable declaration), you should use '${GREP_TOOL_NAME}' or '${GLOB_TOOL_NAME}' directly.
-2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. If '${CodebaseInvestigatorAgent.name}' was used, do not ignore the output of the agent, you must use it as the foundation of your plan. For complex tasks, break them down into smaller, manageable subtasks and use the \`${WRITE_TODOS_TOOL_NAME}\` tool to track your progress. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes. Use output logs or debug statements as part of this process to arrive at a solution.`,
-
-      primaryWorkflows_todo: `
-# Primary Workflows
-
-## Software Engineering Tasks
-When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
-1. **Understand:** Think about the user's request and the relevant codebase context. Use '${GREP_TOOL_NAME}' and '${GLOB_TOOL_NAME}' search tools extensively (in parallel if independent) to understand file structures, existing code patterns, and conventions. Use '${READ_FILE_TOOL_NAME}' to understand context and validate any assumptions you may have. If you need to read multiple files, you should make multiple parallel calls to '${READ_FILE_TOOL_NAME}'.
-2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. For complex tasks, break them down into smaller, manageable subtasks and use the \`${WRITE_TODOS_TOOL_NAME}\` tool to track your progress. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes. Use output logs or debug statements as part of this process to arrive at a solution.`,
-      primaryWorkflows_suffix: `3. **Implement:** Use the available tools (e.g., '${EDIT_TOOL_NAME}', '${WRITE_FILE_TOOL_NAME}' '${SHELL_TOOL_NAME}' ...) to act on the plan, strictly adhering to the project's established conventions (detailed under 'Core Mandates').
-4. **Verify (Tests):** If applicable and feasible, verify the changes using the project's testing procedures. Identify the correct test commands and frameworks by examining 'README' files, build/package configuration (e.g., 'package.json'), or existing test execution patterns. NEVER assume standard test commands.
-5. **Verify (Standards):** VERY IMPORTANT: After making code changes, execute the project-specific build, linting and type-checking commands (e.g., 'tsc', 'npm run lint', 'ruff check .') that you have identified for this project (or obtained from the user). This ensures code quality and adherence to standards.${interactiveMode ? " If unsure about these commands, you can ask the user if they'd like you to run them and if so how to." : ''}
-6. **Finalize:** After all verification passes, consider the task complete. Do not remove or revert any changes or created files (like tests). Await the user's next instruction.
-
-## New Applications
-
-**Goal:** Autonomously implement and deliver a visually appealing, substantially complete, and functional prototype. Utilize all tools at your disposal to implement the application. Some tools you may especially find useful are '${WRITE_FILE_TOOL_NAME}', '${EDIT_TOOL_NAME}' and '${SHELL_TOOL_NAME}'.
-
-1. **Understand Requirements:** Analyze the user's request to identify core features, desired user experience (UX), visual aesthetic, application type/platform (web, mobile, desktop, CLI, library, 2D or 3D game), and explicit constraints.${interactiveMode ? ' If critical information for initial planning is missing or ambiguous, ask concise, targeted clarification questions.' : ''}
-2. **Propose Plan:** Formulate an internal development plan. Present a clear, concise, high-level summary to the user. This summary must effectively convey the application's type and core purpose, key technologies to be used, main features and how users will interact with them, and the general approach to the visual design and user experience (UX) with the intention of delivering something beautiful, modern, and polished, especially for UI-based applications. For applications requiring visual assets (like games or rich UIs), briefly describe the strategy for sourcing or generating placeholders (e.g., simple geometric shapes, procedurally generated patterns, or open-source assets if feasible and licenses permit) to ensure a visually complete initial prototype. Ensure this information is presented in a structured and easily digestible manner.
-  - When key technologies aren't specified, prefer the following:
-  - **Websites (Frontend):** React (JavaScript/TypeScript) or Angular with Bootstrap CSS, incorporating Material Design principles for UI/UX.
-  - **Back-End APIs:** Node.js with Express.js (JavaScript/TypeScript) or Python with FastAPI.
-  - **Full-stack:** Next.js (React/Node.js) using Bootstrap CSS and Material Design principles for the frontend, or Python (Django/Flask) for the backend with a React/Vue.js/Angular frontend styled with Bootstrap CSS and Material Design principles.
-  - **CLIs:** Python or Go.
-  - **Mobile App:** Compose Multiplatform (Kotlin Multiplatform) or Flutter (Dart) using Material Design libraries and principles, when sharing code between Android and iOS. Jetpack Compose (Kotlin JVM) with Material Design principles or SwiftUI (Swift) for native apps targeted at either Android or iOS, respectively.
-  - **3d Games:** HTML/CSS/JavaScript with Three.js.
-  - **2d Games:** HTML/CSS/JavaScript.
-${(function () {
-  if (interactiveMode) {
-    return `3. **User Approval:** Obtain user approval for the proposed plan.
-4. **Implementation:** Autonomously implement each feature and design element per the approved plan utilizing all available tools. When starting ensure you scaffold the application using '${SHELL_TOOL_NAME}' for commands like 'npm init', 'npx create-react-app'. Aim for full scope completion. Proactively create or source necessary placeholder assets (e.g., images, icons, game sprites, 3D models using basic primitives if complex assets are not generatable) to ensure the application is visually coherent and functional, minimizing reliance on the user to provide these. If the model can generate simple assets (e.g., a uniformly colored square sprite, a simple 3D cube), it should do so. Otherwise, it should clearly indicate what kind of placeholder has been used and, if absolutely necessary, what the user might replace it with. Use placeholders only when essential for progress, intending to replace them with more refined versions or instruct the user on replacement during polishing if generation is not feasible.
-5. **Verify:** Review work against the original request, the approved plan. Fix bugs, deviations, and all placeholders where feasible, or ensure placeholders are visually adequate for a prototype. Ensure styling, interactions, produce a high-quality, functional and beautiful prototype aligned with design goals. Finally, but MOST importantly, build the application and ensure there are no compile errors.
-6. **Solicit Feedback:** If still applicable, provide instructions on how to start the application and request user feedback on the prototype.`;
-  } else {
-    return `3. **Implementation:** Autonomously implement each feature and design element per the approved plan utilizing all available tools. When starting ensure you scaffold the application using '${SHELL_TOOL_NAME}' for commands like 'npm init', 'npx create-react-app'. Aim for full scope completion. Proactively create or source necessary placeholder assets (e.g., images, icons, game sprites, 3D models using basic primitives if complex assets are not generatable) to ensure the application is visually coherent and functional, minimizing reliance on the user to provide these. If the model can generate simple assets (e.g., a uniformly colored square sprite, a simple 3D cube), it should do so. Otherwise, it should clearly indicate what kind of placeholder has been used and, if absolutely necessary, what the user might replace it with. Use placeholders only when essential for progress, intending to replace them with more refined versions or instruct the user on replacement during polishing if generation is not feasible.
-4. **Verify:** Review work against the original request, the approved plan. Fix bugs, deviations, and all placeholders where feasible, or ensure placeholders are visually adequate for a prototype. Ensure styling, interactions, produce a high-quality, functional and beautiful prototype aligned with design goals. Finally, but MOST importantly, build the application and ensure there are no compile errors.`;
-  }
-})()}`,
-      operationalGuidelines: `
-# Operational Guidelines
-${(function () {
-  if (config.getEnableShellOutputEfficiency()) {
-    return `
-## Shell tool output token efficiency:
-
-IT IS CRITICAL TO FOLLOW THESE GUIDELINES TO AVOID EXCESSIVE TOKEN CONSUMPTION.
-
-- Always prefer command flags that reduce output verbosity when using '${SHELL_TOOL_NAME}'.
-- Aim to minimize tool output tokens while still capturing necessary information.
-- If a command is expected to produce a lot of output, use quiet or silent flags where available and appropriate.
-- Always consider the trade-off between output verbosity and the need for information. If a command's full output is essential for understanding the result, avoid overly aggressive quieting that might obscure important details.
-- If a command does not have quiet/silent flags or for commands with potentially long output that may not be useful, redirect stdout and stderr to temp files in the project's temporary directory. For example: 'command > <temp_dir>/out.log 2> <temp_dir>/err.log'.
-- After the command runs, inspect the temp files (e.g. '<temp_dir>/out.log' and '<temp_dir>/err.log') using commands like 'grep', 'tail', 'head', ... (or platform equivalents). Remove the temp files when done.
-`;
-  }
-  return '';
-})()}
-
-## Tone and Style (CLI Interaction)
-- **Concise & Direct:** Adopt a professional, direct, and concise tone suitable for a CLI environment.
-- **Minimal Output:** Aim for fewer than 3 lines of text output (excluding tool use/code generation) per response whenever practical. Focus strictly on the user's query.
-- **Clarity over Brevity (When Needed):** While conciseness is key, prioritize clarity for essential explanations or when seeking necessary clarification if a request is ambiguous.${(function () {
-        if (isGemini3) {
-          return '';
-        } else {
-          return `
-- **No Chitchat:** Avoid conversational filler, preambles ("Okay, I will now..."), or postambles ("I have finished the changes..."). Get straight to the action or answer.`;
-        }
-      })()}
-- **Formatting:** Use GitHub-flavored Markdown. Responses will be rendered in monospace.
-- **Tools vs. Text:** Use tools for actions, text output *only* for communication. Do not add explanatory comments within tool calls or code blocks unless specifically part of the required code/command itself.
-- **Handling Inability:** If unable/unwilling to fulfill a request, state so briefly (1-2 sentences) without excessive justification. Offer alternatives if appropriate.
-
-## Security and Safety Rules
-- **Explain Critical Commands:** Before executing commands with '${SHELL_TOOL_NAME}' that modify the file system, codebase, or system state, you *must* provide a brief explanation of the command's purpose and potential impact. Prioritize user understanding and safety. You should not ask permission to use the tool; the user will be presented with a confirmation dialogue upon use (you do not need to tell them this).
-- **Security First:** Always apply security best practices. Never introduce code that exposes, logs, or commits secrets, API keys, or other sensitive information.
-
-## Tool Usage
-- **Parallelism:** Execute multiple independent tool calls in parallel when feasible (i.e. searching the codebase).
-- **Command Execution:** Use the '${SHELL_TOOL_NAME}' tool for running shell commands, remembering the safety rule to explain modifying commands first.
-${(function () {
-  if (interactiveMode) {
-    return `- **Background Processes:** Use background processes (via \`&\`) for commands that are unlikely to stop on their own, e.g. \`node server.js &\`. If unsure, ask the user.
-- **Interactive Commands:** Prefer non-interactive commands when it makes sense; however, some commands are only interactive and expect user input during their execution (e.g. ssh, vim). If you choose to execute an interactive command consider letting the user know they can press \`ctrl + f\` to focus into the shell to provide input.`;
-  } else {
-    return `- **Background Processes:** Use background processes (via \`&\`) for commands that are unlikely to stop on their own, e.g. \`node server.js &\`.
-- **Interactive Commands:** Only execute non-interactive commands.`;
-  }
-})()}
-- **Remembering Facts:** Use the '${MEMORY_TOOL_NAME}' tool to remember specific, *user-related* facts or preferences when the user explicitly asks, or when they state a clear, concise piece of information that would help personalize or streamline *your future interactions with them* (e.g., preferred coding style, common project paths they use, personal tool aliases). This tool is for user-specific information that should persist across sessions. Do *not* use it for general project context or information.${interactiveMode ? ` If unsure whether to save something, you can ask the user, "Should I remember that for you?"` : ''}
-- **Respect User Confirmations:** Most tool calls (also denoted as 'function calls') will first require confirmation from the user, where they will either approve or cancel the function call. If a user cancels a function call, respect their choice and do _not_ try to make the function call again. It is okay to request the tool call again _only_ if the user requests that same tool call on a subsequent prompt. When a user cancels a function call, assume best intentions from the user and consider inquiring if they prefer any alternative paths forward.
-
-## Interaction Details
-- **Help Command:** The user can use '/help' to display help information.
-- **Feedback:** To report a bug or provide feedback, please use the /bug command.`,
-      sandbox: `
-${(function () {
-  // Determine sandbox status based on environment variables
-  const isSandboxExec = process.env['SANDBOX'] === 'sandbox-exec';
-  const isGenericSandbox = !!process.env['SANDBOX']; // Check if SANDBOX is set to any non-empty value
-
-  if (isSandboxExec) {
-    return `
-# macOS Seatbelt
-You are running under macos seatbelt with limited access to files outside the project directory or system temp directory, and with limited access to host system resources such as ports. If you encounter failures that could be due to macOS Seatbelt (e.g. if a command fails with 'Operation not permitted' or similar error), as you report the error to the user, also explain why you think it could be due to macOS Seatbelt, and how the user may need to adjust their Seatbelt profile.
-`;
-  } else if (isGenericSandbox) {
-    return `
-# Sandbox
-You are running in a sandbox container with limited access to files outside the project directory or system temp directory, and with limited access to host system resources such as ports. If you encounter failures that could be due to sandboxing (e.g. if a command fails with 'Operation not permitted' or similar error), when you report the error to the user, also explain why you think it could be due to sandboxing, and how the user may need to adjust their sandbox configuration.
-`;
-  } else {
-    return `
-# Outside of Sandbox
-You are running outside of a sandbox container, directly on the user's system. For critical commands that are particularly likely to modify the user's system outside of the project directory or system temp directory, as you explain the command to the user (per the Explain Critical Commands rule above), also remind the user to consider enabling sandboxing.
-`;
-  }
-})()}`,
-      git: `
-${(function () {
-  if (isGitRepository(process.cwd())) {
-    return `
-# Git Repository
-- The current working (project) directory is being managed by a git repository.
-- When asked to commit changes or prepare a commit, always start by gathering information using shell commands:
-  - \`git status\` to ensure that all relevant files are tracked and staged, using \`git add ...\` as needed.
-  - \`git diff HEAD\` to review all changes (including unstaged changes) to tracked files in work tree since last commit.
-    - \`git diff --staged\` to review only staged changes when a partial commit makes sense or was requested by the user.
-  - \`git log -n 3\` to review recent commit messages and match their style (verbosity, formatting, signature line, etc.)
-- Combine shell commands whenever possible to save time/steps, e.g. \`git status && git diff HEAD && git log -n 3\`.
-- Always propose a draft commit message. Never just ask the user to give you the full commit message.
-- Prefer commit messages that are clear, concise, and focused more on "why" and less on "what".${
-      interactiveMode
-        ? `
-- Keep the user informed and ask for clarification or confirmation where needed.`
-        : ''
-    }
-- After each commit, confirm that it was successful by running \`git status\`.
-- If a commit fails, never attempt to work around the issues without being asked to do so.
-- Never push changes to a remote repository without being asked explicitly by the user.
-`;
-  }
-  return '';
-})()}`,
-      finalReminder: `
-# Final Reminder
-Your core function is efficient and safe assistance. Balance extreme conciseness with the crucial need for clarity, especially regarding safety and potential system modifications. Always prioritize user control and project conventions. Never make assumptions about the contents of files; instead use '${READ_FILE_TOOL_NAME}' to ensure you aren't making broad assumptions. Finally, you are an agent - please keep going until the user's query is completely resolved.`,
-    };
-
-    const orderedPrompts: Array<keyof typeof promptConfig> = [
-      'preamble',
-      'coreMandates',
-    ];
-
-    if (enableCodebaseInvestigator && enableWriteTodosTool) {
-      orderedPrompts.push('primaryWorkflows_prefix_ci_todo');
-    } else if (enableCodebaseInvestigator) {
-      orderedPrompts.push('primaryWorkflows_prefix_ci');
-    } else if (enableWriteTodosTool) {
-      orderedPrompts.push('primaryWorkflows_todo');
-    } else {
-      orderedPrompts.push('primaryWorkflows_prefix');
-    }
-    orderedPrompts.push(
-      'primaryWorkflows_suffix',
-      'operationalGuidelines',
-      'sandbox',
-      'git',
-      'finalReminder',
+  let snapshot = snapshotLines.join('\n');
+  if (snapshot.length > MAX_FOLDER_STRUCTURE_CHARS) {
+    const allowance = Math.max(
+      MAX_FOLDER_STRUCTURE_CHARS - truncatedLine.length - 1,
+      0,
     );
-
-    // By default, all prompts are enabled. A prompt is disabled if its corresponding
-    // GEMINI_PROMPT_<NAME> environment variable is set to "0" or "false".
-    const enabledPrompts = orderedPrompts.filter((key) => {
-      const envVar = process.env[`GEMINI_PROMPT_${key.toUpperCase()}`];
-      const lowerEnvVar = envVar?.trim().toLowerCase();
-      return lowerEnvVar !== '0' && lowerEnvVar !== 'false';
-    });
-
-    basePrompt = enabledPrompts.map((key) => promptConfig[key]).join('\n');
+    const preserved = snapshotLines
+      .slice(0, snapshotLines.length - 1)
+      .join('\n')
+      .slice(0, allowance);
+    snapshot = preserved ? `${preserved}\n${truncatedLine}` : truncatedLine;
   }
 
-  // if GEMINI_WRITE_SYSTEM_MD is set (and not 0|false), write base system prompt to file
-  const writeSystemMdResolution = resolvePathFromEnv(
-    process.env['GEMINI_WRITE_SYSTEM_MD'],
-  );
+  return snapshot;
+}
 
-  // Write the base prompt to a file if the GEMINI_WRITE_SYSTEM_MD environment
-  // variable is set and is not explicitly '0' or 'false'.
-  if (writeSystemMdResolution.value && !writeSystemMdResolution.isDisabled) {
-    const writePath = writeSystemMdResolution.isSwitch
-      ? systemMdPath
-      : writeSystemMdResolution.value;
+/**
+ * Options for getCoreSystemPromptAsync
+ */
+export interface CoreSystemPromptOptions {
+  userMemory?: string;
+  coreMemory?: string;
+  model?: string;
+  tools?: string[];
+  provider?: string;
+  includeSubagentDelegation?: boolean;
+  asyncSubagentsEnabled?: boolean;
+  profileAsyncEnabled?: boolean;
+  interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
+}
 
-    fs.mkdirSync(path.dirname(writePath), { recursive: true });
-    fs.writeFileSync(writePath, basePrompt);
+/**
+ * Loads core (system) memory content from .LLXPRT_SYSTEM files.
+ * Reads both global (~/.llxprt/.LLXPRT_SYSTEM) and project-level
+ * (<cwd>/.llxprt/.LLXPRT_SYSTEM) files and concatenates them.
+ */
+export async function loadCoreMemoryContent(cwd: string): Promise<string> {
+  const candidates = [
+    { path: path.resolve(getGlobalCoreMemoryFilePath()), label: 'global' },
+    { path: path.resolve(getProjectCoreMemoryFilePath(cwd)), label: 'project' },
+  ];
+
+  // Dedupe in case global and project resolve to the same file (e.g. cwd is $HOME)
+  const seen = new Set<string>();
+  const paths = candidates.filter(({ path: p }) => {
+    if (seen.has(p)) return false;
+    seen.add(p);
+    return true;
+  });
+
+  const parts: string[] = [];
+  for (const { path: filePath } of paths) {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      if (content.trim()) {
+        parts.push(
+          `--- Core System Memory from: ${tildeifyPath(filePath)} ---\n${content.trim()}\n--- End of Core System Memory ---`,
+        );
+      }
+    } catch (err) {
+      const error = err as Error & { code?: string };
+      if (error.code !== 'ENOENT') {
+        logger.warn(
+          () => `Failed to read core memory file ${filePath}: ${error.message}`,
+        );
+      }
+    }
   }
 
-  basePrompt = basePrompt.trim();
+  return parts.join('\n\n');
+}
 
-  const memorySuffix =
-    userMemory && userMemory.trim().length > 0
-      ? `\n\n---\n\n${userMemory.trim()}`
-      : '';
+/**
+ * Options for getCoreSystemPromptAsync
+ */
+export interface CoreSystemPromptOptions {
+  userMemory?: string;
+  coreMemory?: string;
+  mcpInstructions?: string;
+  model?: string;
+  tools?: string[];
+  provider?: string;
+  includeSubagentDelegation?: boolean;
+  interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
+}
 
-  return `${basePrompt}${memorySuffix}`;
+/**
+ * Build PromptContext from current environment and parameters
+ */
+async function buildPromptContext(
+  options: CoreSystemPromptOptions,
+): Promise<PromptContext> {
+  const { model, tools, provider, includeSubagentDelegation, interactionMode } =
+    options;
+  const cwd = process.cwd();
+
+  // Check if folder structure should be included (default: false for better cache hit rates)
+  let includeFolderStructure = false;
+  let enableToolPrompts = false;
+  try {
+    const settingsService = getSettingsService();
+    const folderStructureSetting = settingsService.get(
+      'include-folder-structure',
+    ) as boolean | undefined;
+    if (folderStructureSetting !== undefined) {
+      includeFolderStructure = folderStructureSetting;
+    }
+    const toolPromptsSetting = settingsService.get('enable-tool-prompts') as
+      | boolean
+      | undefined;
+    if (toolPromptsSetting !== undefined) {
+      enableToolPrompts = toolPromptsSetting;
+    }
+  } catch (_error) {
+    // If we can't get settings, use default
+  }
+
+  // Generate folder structure for the current working directory
+  let folderStructure: string | undefined;
+  if (includeFolderStructure) {
+    try {
+      folderStructure = await getFolderStructure(cwd, {
+        maxItems: 100, // Limit for startup performance
+      });
+      folderStructure = compactFolderStructureSnapshot(folderStructure);
+    } catch (error) {
+      // If folder structure generation fails, continue without it
+      logger.debug(() => `Failed to generate folder structure: ${error}`);
+    }
+  }
+
+  const workspaceDirectories = [cwd];
+
+  const environment: PromptEnvironment = {
+    isGitRepository: isGitRepository(cwd),
+    isSandboxed: !!process.env.SANDBOX,
+    hasIdeCompanion: false,
+    sessionStartedAt: SESSION_STARTED_AT_LABEL,
+    workingDirectory: cwd,
+    workspaceRoot: cwd,
+    workspaceName: path.basename(cwd),
+    workspaceDirectories,
+    folderStructure,
+    interactionMode,
+  };
+
+  // Determine sandbox type
+  if (process.env.SANDBOX === 'sandbox-exec') {
+    environment.sandboxType = 'macos-seatbelt';
+  } else if (process.env.SANDBOX) {
+    environment.sandboxType = 'generic';
+  }
+
+  // Add other environment flags
+  if (process.env.IDE_COMPANION === 'true') {
+    environment.hasIdeCompanion = true;
+  }
+
+  // Map tools to PascalCase names
+  const toolMapping = getToolNameMapping();
+  let enabledTools: string[];
+  if (tools === undefined) {
+    enabledTools = [
+      'Ls',
+      'Edit',
+      'Glob',
+      'Grep',
+      'ReadFile',
+      'ReadManyFiles',
+      'Shell',
+      'WriteFile',
+      'Memory',
+      'TodoRead',
+      'TodoWrite',
+      'GoogleWebFetch',
+      'DirectWebFetch',
+      'GoogleWebSearch',
+      'ExaWebSearch',
+      'delete_line_range',
+      'insert_at_line',
+      'read_line_range',
+    ];
+  } else if (tools.length > 0) {
+    const mappedTools = tools
+      .map((toolName) => {
+        // First try direct mapping (handles existing snake_case tools)
+        if (toolMapping[toolName]) {
+          return toolMapping[toolName];
+        }
+        // Try mapping kebab-case versions (for new tools)
+        const snakeName = toolName.replace(/-/g, '_');
+        if (toolMapping[snakeName]) {
+          return toolMapping[snakeName];
+        }
+        // If no mapping, it might already be in the right format
+        return toolName;
+      })
+      .filter(Boolean);
+    enabledTools = Array.from(new Set(mappedTools));
+  } else {
+    enabledTools = [];
+  }
+
+  // Use provider if explicitly passed, otherwise get from settings or default to gemini
+  let resolvedProvider = provider || 'gemini';
+
+  // If provider wasn't explicitly passed, try to get it from settings
+  if (!provider) {
+    try {
+      const settingsService = getSettingsService();
+      const activeProvider = settingsService.get('activeProvider') as string;
+      if (activeProvider) {
+        resolvedProvider = activeProvider;
+      }
+    } catch (_error) {
+      // If we can't get settings (e.g., during tests), use default
+      // Don't log in production to avoid noise
+    }
+  }
+
+  // Determine async subagent settings (global and profile)
+  let asyncSubagentsEnabled = options.asyncSubagentsEnabled;
+  let profileAsyncEnabled = options.profileAsyncEnabled;
+  if (
+    asyncSubagentsEnabled === undefined ||
+    profileAsyncEnabled === undefined
+  ) {
+    try {
+      const settingsService = getSettingsService();
+      if (asyncSubagentsEnabled === undefined) {
+        // Global setting from /settings (nested under subagents.asyncEnabled)
+        const globalSettings = settingsService.getAllGlobalSettings();
+        const subagentsSettings = globalSettings['subagents'] as
+          | { asyncEnabled?: boolean }
+          | undefined;
+        asyncSubagentsEnabled = subagentsSettings?.asyncEnabled !== false;
+      }
+      if (profileAsyncEnabled === undefined) {
+        // Profile setting from /set (subagents.async.enabled)
+        const profileValue = settingsService.get('subagents.async.enabled');
+        profileAsyncEnabled = profileValue !== false;
+      }
+    } catch (_error) {
+      // If we can't get settings, default to enabled
+      asyncSubagentsEnabled = asyncSubagentsEnabled ?? true;
+      profileAsyncEnabled = profileAsyncEnabled ?? true;
+    }
+  }
+
+  return {
+    provider: resolvedProvider,
+    model: model || 'gemini-1.5-pro',
+    enabledTools,
+    environment,
+    enableToolPrompts,
+    includeSubagentDelegation,
+    asyncSubagentsEnabled,
+    profileAsyncEnabled,
+  };
+}
+
+/**
+ * Async version of getCoreSystemPrompt that uses the new PromptService
+ * Supports both legacy positional arguments and options object for backward compatibility
+ */
+export async function getCoreSystemPromptAsync(
+  userMemoryOrOptions?: string | CoreSystemPromptOptions,
+  model?: string,
+  tools?: string[],
+): Promise<string> {
+  const service = await getPromptService();
+
+  // Handle both legacy positional args and options object
+  let userMemory: string | undefined = undefined;
+  let coreMemory: string | undefined = undefined;
+  let modelArg: string | undefined = undefined;
+  let toolsArg: string[] | undefined = undefined;
+  let providerArg: string | undefined = undefined;
+  let includeSubagentDelegation: boolean | undefined = undefined;
+  let asyncSubagentsEnabledArg: boolean | undefined = undefined;
+  let profileAsyncEnabledArg: boolean | undefined = undefined;
+  let interactionModeArg:
+    | 'interactive'
+    | 'non-interactive'
+    | 'subagent'
+    | undefined = undefined;
+
+  let mcpInstructions: string | undefined = undefined;
+
+  if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
+    // Options object mode
+    const opts = userMemoryOrOptions;
+    userMemory = opts.userMemory;
+    coreMemory = opts.coreMemory;
+    mcpInstructions = opts.mcpInstructions;
+    modelArg = opts.model;
+    toolsArg = opts.tools;
+    providerArg = opts.provider;
+    includeSubagentDelegation = opts.includeSubagentDelegation;
+    asyncSubagentsEnabledArg = opts.asyncSubagentsEnabled;
+    profileAsyncEnabledArg = opts.profileAsyncEnabled;
+    interactionModeArg = opts.interactionMode;
+  } else {
+    // Legacy positional args mode
+    userMemory = userMemoryOrOptions;
+    modelArg = model;
+    toolsArg = tools;
+  }
+
+  // Load core memory from disk if not explicitly provided by caller.
+  // The interactive path (client.ts) caches and passes coreMemory;
+  // stateless provider paths don't, so we fall back to disk reads.
+  if (coreMemory === undefined) {
+    try {
+      coreMemory = await loadCoreMemoryContent(process.cwd());
+    } catch {
+      // Non-fatal: proceed without core memory
+    }
+  }
+
+  // Handle allMemoriesAreCore: when enabled, user memory is promoted
+  // to core (system) memory so models treat it as directives
+  let effectiveUserMemory = userMemory;
+  let effectiveCoreMemory = coreMemory;
+  try {
+    const settingsService = getSettingsService();
+    const allMemoriesAreCore = settingsService.get(
+      'model.allMemoriesAreCore',
+    ) as boolean | undefined;
+    if (allMemoriesAreCore) {
+      // Merge user memory into core memory; leave user memory empty
+      const parts = [effectiveCoreMemory, effectiveUserMemory].filter(
+        (p) => p && p.trim(),
+      );
+      effectiveCoreMemory = parts.join('\n\n') || undefined;
+      effectiveUserMemory = undefined;
+    }
+  } catch {
+    // Settings service may not be available (e.g. during tests)
+  }
+
+  // Append MCP instructions to core memory if available
+  if (mcpInstructions && mcpInstructions.trim()) {
+    const parts = [effectiveCoreMemory, mcpInstructions.trim()].filter(
+      (p) => p && p.trim(),
+    );
+    effectiveCoreMemory = parts.join('\n\n') || undefined;
+  }
+
+  const context = await buildPromptContext({
+    model: modelArg,
+    tools: toolsArg,
+    provider: providerArg,
+    includeSubagentDelegation,
+    asyncSubagentsEnabled: asyncSubagentsEnabledArg,
+    profileAsyncEnabled: profileAsyncEnabledArg,
+    interactionMode: interactionModeArg,
+  });
+
+  return service.getPrompt(context, effectiveUserMemory, effectiveCoreMemory);
+}
+
+/**
+ * Initialize the prompt system - call this early in application startup
+ */
+export async function initializePromptSystem(): Promise<void> {
+  await initializePromptService();
 }
 
 /**
@@ -426,11 +536,11 @@ export function getCompressionPrompt(): string {
   return `
 You are the component that summarizes internal chat history into a given structure.
 
-When the conversation history grows too large, you will be invoked to distill the entire history into a concise, structured XML snapshot. This snapshot is CRITICAL, as it will become the agent's *only* memory of the past. The agent will resume its work based solely on this snapshot. All crucial details, plans, errors, and user directives MUST be preserved.
+When the conversation history grows too large, you will be invoked to compress the MIDDLE portion of the history into a structured XML snapshot, reducing it by approximately 50%. This snapshot will be combined with preserved messages from the top and bottom of the conversation. The agent will have access to the full context: summary + preserved top messages + preserved bottom messages.
 
-First, you will think through the entire history in a private <scratchpad>. Review the user's overall goal, the agent's actions, tool outputs, file modifications, and any unresolved questions. Identify every piece of information that is essential for future actions.
+First, you will think through the middle portion of history in a private <scratchpad>. Review the user's overall goal, the agent's actions, tool outputs, file modifications, and any unresolved questions. Identify the most important information to preserve. Remember: user prompts and their exact phrasing are especially important to retain.
 
-After your reasoning is complete, generate the final <state_snapshot> XML object. Be incredibly dense with information. Omit any irrelevant conversational filler.
+After your reasoning is complete, generate the final <state_snapshot> XML object. Be thorough but concise. Focus on preserving essential context while eliminating redundancy. Ensure the agent has sufficient information to continue work effectively.
 
 The structure MUST be as follows:
 
@@ -445,39 +555,68 @@ The structure MUST be as follows:
         <!-- Example:
          - Build Command: \`npm run build\`
          - Testing: Tests are run with \`npm test\`. Test files must end in \`.test.ts\`.
-         - API Endpoint: The primary API endpoint is \`https://api.example.com/v2\`.
-
+         - Authentication: Uses Firebase Auth, API keys stored in \`config/keys.json\`
         -->
     </key_knowledge>
 
-    <file_system_state>
-        <!-- List files that have been created, read, modified, or deleted. Note their status and critical learnings. -->
+    <current_progress>
+        <!-- What has been accomplished so far? Use bullet points. -->
         <!-- Example:
-         - CWD: \`/home/user/project/src\`
-         - READ: \`package.json\` - Confirmed 'axios' is a dependency.
-         - MODIFIED: \`services/auth.ts\` - Replaced 'jsonwebtoken' with 'jose'.
-         - CREATED: \`tests/new-feature.test.ts\` - Initial test structure for the new feature.
+         - Created new authentication middleware in \`src/auth/middleware.ts\`
+         - Updated user registration endpoint to use new JWT library
+         - Started refactoring login endpoint but encountered TypeScript errors
         -->
-    </file_system_state>
+    </current_progress>
 
-    <recent_actions>
-        <!-- A summary of the last few significant agent actions and their outcomes. Focus on facts. -->
+    <active_tasks>
+        <!-- What specific tasks need to be completed next? Use bullet points. -->
         <!-- Example:
-         - Ran \`grep 'old_function'\` which returned 3 results in 2 files.
-         - Ran \`npm run test\`, which failed due to a snapshot mismatch in \`UserProfile.test.ts\`.
-         - Ran \`ls -F static/\` and discovered image assets are stored as \`.webp\`.
+         - Fix TypeScript errors in \`src/auth/login.ts\`
+         - Update unit tests for authentication middleware
+         - Remove deprecated auth helper functions
         -->
-    </recent_actions>
+    </active_tasks>
 
-    <current_plan>
-        <!-- The agent's step-by-step plan. Mark completed steps. -->
+    <open_questions>
+        <!-- Any unresolved issues, errors, or questions that need attention? Use bullet points. -->
         <!-- Example:
-         1. [DONE] Identify all files using the deprecated 'UserAPI'.
-         2. [IN PROGRESS] Refactor \`src/components/UserProfile.tsx\` to use the new 'ProfileAPI'.
-         3. [TODO] Refactor the remaining files.
-         4. [TODO] Update tests to reflect the API change.
+         - Need to decide if old JWT tokens should be invalidated immediately
+         - Database migration for user table might be needed
         -->
-    </current_plan>
+    </open_questions>
+
+    <task_context>
+        <!-- For each active task or todo item, capture: why it exists, what user request originated it, what constraints apply, what approach was chosen, and what has been tried so far. -->
+        <!-- Example:
+         - Task: "Fix TypeScript errors in login.ts" — originated from user request to refactor auth. Constraint: must maintain backward compatibility. Approach: incremental migration. Tried: direct replacement (failed due to type mismatches).
+        -->
+    </task_context>
+
+    <user_directives>
+        <!-- Capture specific user feedback, corrections, and preferences. Use exact quotes where possible. -->
+        <!-- Example:
+         - User said: "Don't use any as a type, ever"
+         - User prefers: functional style over class-based
+         - User corrected: "The config file is at /etc/app.conf, not /etc/app.json"
+        -->
+    </user_directives>
+
+    <errors_encountered>
+        <!-- Record errors hit during the session: exact messages, root causes identified, and resolutions applied. -->
+        <!-- Example:
+         - Error: "Cannot find module './auth/middleware'" — Root cause: file was renamed to middleware.ts. Resolution: updated import path.
+         - Error: "Type 'string' is not assignable to type 'number'" — Root cause: API response shape changed. Resolution: added parseInt() conversion.
+        -->
+    </errors_encountered>
+
+    <code_references>
+        <!-- Preserve important code snippets, exact file paths, and function signatures that are essential for continuing work. -->
+        <!-- Example:
+         - Key file: src/auth/middleware.ts — exports: authenticateRequest(req, res, next)
+         - Modified: src/routes/login.ts lines 45-60 (JWT token generation)
+         - Config: config/keys.json (contains API keys, do not commit)
+        -->
+    </code_references>
 </state_snapshot>
 `.trim();
 }
