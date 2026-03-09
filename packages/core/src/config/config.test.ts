@@ -701,6 +701,45 @@ describe('Server Config (config.ts)', () => {
     expect(config.getUserMemory()).toBe('');
   });
 
+  it('getCoreMemory should delegate to contextManager when JIT context is enabled', async () => {
+    const config = new Config({
+      ...baseParams,
+      jitContextEnabled: true,
+    });
+    await config.initialize();
+
+    const contextManager = config.getContextManager();
+    expect(contextManager).toBeDefined();
+
+    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue(
+      'Always use TypeScript',
+    );
+
+    expect(config.getCoreMemory()).toContain('Always use TypeScript');
+  });
+
+  it('getCoreMemory should return undefined when JIT context is disabled', () => {
+    const config = new Config({
+      ...baseParams,
+      jitContextEnabled: false,
+    });
+
+    expect(config.getCoreMemory()).toBeUndefined();
+  });
+
+  it('getCoreMemory should return undefined when contextManager has empty core memory', async () => {
+    const config = new Config({
+      ...baseParams,
+      jitContextEnabled: true,
+    });
+    await config.initialize();
+
+    const contextManager = config.getContextManager();
+    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue('');
+
+    expect(config.getCoreMemory()).toBeUndefined();
+  });
+
   it('Config constructor should call setLlxprtMdFilename with contextFileName if provided', () => {
     const contextFileName = 'CUSTOM_AGENTS.md';
     const paramsWithContextFile: ConfigParameters = {
