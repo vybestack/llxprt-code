@@ -71,6 +71,20 @@ export async function drainPromptInstallerNotices(): Promise<string[]> {
 }
 
 /**
+ * Set the current value of {{CHRONOLOGY_JSON}} for prompt rendering.
+ *
+ * This is intended to be updated per provider round-trip, after conversation
+ * history is committed and before the provider request is constructed.
+ */
+export function setPromptChronologyJsonSync(value: string): void {
+  if (!promptServiceInitialized || !promptService) {
+    return;
+  }
+
+  promptService.setChronologyJson(value);
+}
+
+/**
  * Get tool name mapping - lazy initialization to avoid circular dependencies
  */
 function getToolNameMapping(): Record<string, string> {

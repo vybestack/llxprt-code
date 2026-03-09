@@ -1332,6 +1332,78 @@ describe('HistoryService - Behavioral Tests', () => {
         expect(toolResponses).toHaveLength(1);
       });
 
+      it('should preserve tool response metadata when relocating out-of-order tool responses', () => {
+        const callId = 'hist_tool_out_of_order_meta';
+
+        service.add(
+          createUserMessage('Please run a tool.', {
+            timestamp: 1700000000000,
+          }),
+        );
+
+        service.add({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: callId,
+              name: 'run_shell_command',
+              parameters: { command: 'echo hi' },
+            },
+          ],
+        });
+
+        // Assistant continues before tool response (corrupted ordering)
+        service.add({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: '...waiting for tool...' }],
+        });
+
+        service.add({
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId,
+              toolName: 'run_shell_command',
+              result: { ok: true },
+              isComplete: true,
+            },
+          ],
+          metadata: {
+            timestamp: 1700000001234,
+            chronology: {
+              userTurnNumber: 1,
+              agentStepNumber: 1,
+            },
+          },
+        });
+
+        const curated = service.getCuratedForProvider();
+
+        const toolCallIndex = curated.findIndex(
+          (content) =>
+            content.speaker === 'ai' &&
+            content.blocks.some(
+              (block) => block.type === 'tool_call' && block.id === callId,
+            ),
+        );
+        expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+
+        const toolResultMessage = curated[toolCallIndex + 1];
+        expect(toolResultMessage?.speaker).toBe('tool');
+        expect(toolResultMessage?.metadata?.synthetic).toBe(true);
+        expect(toolResultMessage?.metadata?.reason).toBe(
+          'reordered_tool_responses',
+        );
+
+        expect(toolResultMessage?.metadata?.timestamp).toBe(1700000001234);
+        expect(toolResultMessage?.metadata?.chronology?.userTurnNumber).toBe(1);
+        expect(
+          toolResultMessage?.metadata?.chronology?.agentStepNumber,
+        ).toBeTypeOf('number');
+      });
+
       it('should preserve MediaBlocks alongside tool_response in getCuratedForProvider', () => {
         service.add(createUserMessage('Take a screenshot'));
         service.add({

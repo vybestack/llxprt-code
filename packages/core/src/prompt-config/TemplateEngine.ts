@@ -17,6 +17,21 @@ import {
  */
 export class TemplateEngine {
   /**
+   * Dynamic chronology JSON made available to templates as {{CHRONOLOGY_JSON}}.
+   *
+   * This is expected to be updated per request (right before building the provider request).
+   */
+  private chronologyJson: string = '';
+
+  setChronologyJson(value: string): void {
+    this.chronologyJson = value;
+  }
+
+  getChronologyJson(): string {
+    return this.chronologyJson;
+  }
+
+  /**
    * Process a template string with variable substitution
    * @param content Template content with {{variables}}
    * @param variables Map of variable names to values
@@ -72,6 +87,13 @@ export class TemplateEngine {
         .substring(openBracketPos + 2, closeBracketPos)
         .trim();
 
+      // Leave dynamic placeholders ({{$VAR}}) intact during the static pass.
+      if (variableName.startsWith('$')) {
+        result += content.substring(openBracketPos, closeBracketPos + 2);
+        currentPosition = closeBracketPos + 2;
+        continue;
+      }
+
       // Handle empty variable names - leave as-is
       if (variableName === '') {
         result += content.substring(openBracketPos, closeBracketPos + 2);
@@ -105,6 +127,80 @@ export class TemplateEngine {
       }
 
       // Update position to after "}}"
+      currentPosition = closeBracketPos + 2;
+    }
+
+    return result;
+  }
+
+  /**
+   * Process dynamic placeholders ({{$VAR}}) as a post-pass.
+   *
+   * This is intended to run on top of cached prompts (cache hits) and immediately
+   * before returning the prompt (cache misses).
+   */
+  processDynamicTemplate(
+    content: string,
+    variables: TemplateVariables,
+    _options?: TemplateProcessingOptions,
+  ): string {
+    if (content === null || content === undefined) {
+      return '';
+    }
+
+    if (typeof content !== 'string') {
+      return content;
+    }
+
+    const vars = variables || {};
+
+    let result = '';
+    let currentPosition = 0;
+    const contentLength = content.length;
+
+    while (currentPosition < contentLength) {
+      const openBracketPos = content.indexOf('{{$', currentPosition);
+
+      if (openBracketPos === -1) {
+        result += content.substring(currentPosition);
+        break;
+      }
+
+      result += content.substring(currentPosition, openBracketPos);
+
+      const closeBracketPos = content.indexOf('}}', openBracketPos + 3);
+      if (closeBracketPos === -1) {
+        result += content.substring(openBracketPos);
+        break;
+      }
+
+      const rawVariableName = content
+        .substring(openBracketPos + 2, closeBracketPos)
+        .trim();
+
+      if (!rawVariableName.startsWith('$')) {
+        result += content.substring(openBracketPos, closeBracketPos + 2);
+        currentPosition = closeBracketPos + 2;
+        continue;
+      }
+
+      const variableName = rawVariableName.slice(1).trim();
+      if (variableName === '') {
+        result += content.substring(openBracketPos, closeBracketPos + 2);
+        currentPosition = closeBracketPos + 2;
+        continue;
+      }
+
+      if (variableName in vars) {
+        const variableValue = vars[variableName];
+        result +=
+          variableValue === null || variableValue === undefined
+            ? ''
+            : String(variableValue);
+      } else {
+        result += '';
+      }
+
       currentPosition = closeBracketPos + 2;
     }
 
@@ -225,6 +321,9 @@ export class TemplateEngine {
     variables['SESSION_STARTED_AT'] =
       sessionStartedAt ?? variables['CURRENT_DATETIME'];
     variables['PLATFORM'] = process.platform;
+
+    // Dynamic per-request chronology metadata (see processDynamicTemplate).
+    variables['CHRONOLOGY_JSON'] = this.chronologyJson;
 
     // Add SUBAGENT_DELEGATION variable - empty unless includeSubagentDelegation is true and the required tools are available
     const enabledTools = context.enabledTools ?? [];

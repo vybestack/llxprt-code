@@ -1049,12 +1049,102 @@ export class GeminiProvider extends BaseProvider {
     const configForMessages =
       options.config ?? options.runtime?.config ?? this.globalConfig;
 
+    const formatChronologyPrefix = (c: IContent): string => {
+      const usrTrn = c.metadata?.chronology?.userTurnNumber;
+      const agTrn = c.metadata?.chronology?.agentStepNumber;
+      const timestamp = c.metadata?.timestamp;
+
+      if (
+        typeof usrTrn !== 'number' ||
+        typeof agTrn !== 'number' ||
+        typeof timestamp !== 'number'
+      ) {
+        return '';
+      }
+
+      const d = new Date(timestamp);
+
+      const yy = String(d.getFullYear() % 100).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+
+      const hms = d.toTimeString().slice(0, 8);
+      const ms = String(d.getMilliseconds()).padStart(3, '0');
+
+      return `${JSON.stringify({ chron: { usrTrn, agTrn, start: `${yy}-${mm}-${dd} ${hms}.${ms}` } })}\n`;
+    };
+
+    const buildChronForToolResponse = (params: {
+      metadataChronology?: {
+        userTurnNumber?: number;
+        agentStepNumber?: number;
+      };
+      metadataTimestamp?: number;
+      durationSec?: number;
+    }):
+      | {
+          chron: {
+            usrTrn?: number;
+            agTrn?: number;
+            start?: string;
+            dur?: number;
+          };
+        }
+      | undefined => {
+      const usrTrn =
+        typeof params.metadataChronology?.userTurnNumber === 'number'
+          ? params.metadataChronology.userTurnNumber
+          : undefined;
+      const agTrn =
+        typeof params.metadataChronology?.agentStepNumber === 'number'
+          ? params.metadataChronology.agentStepNumber
+          : undefined;
+
+      const localStart = (() => {
+        const ts = params.metadataTimestamp;
+        if (typeof ts !== 'number') return undefined;
+        const d = new Date(ts);
+
+        const yy = String(d.getFullYear() % 100).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+
+        const hms = d.toTimeString().slice(0, 8);
+        const ms = String(d.getMilliseconds()).padStart(3, '0');
+
+        return `${yy}-${mm}-${dd} ${hms}.${ms}`;
+      })();
+
+      const dur =
+        typeof params.durationSec === 'number' ? params.durationSec : undefined;
+
+      if (
+        usrTrn === undefined &&
+        agTrn === undefined &&
+        localStart === undefined &&
+        dur === undefined
+      ) {
+        return undefined;
+      }
+
+      return {
+        chron: {
+          ...(usrTrn !== undefined ? { usrTrn } : {}),
+          ...(agTrn !== undefined ? { agTrn } : {}),
+          ...(localStart !== undefined ? { start: localStart } : {}),
+          ...(dur !== undefined ? { dur } : {}),
+        },
+      };
+    };
+
     for (const c of content) {
+      const chronPrefix = formatChronologyPrefix(c);
+
       if (c.speaker === 'human') {
         const parts: Part[] = [];
         for (const block of c.blocks) {
           if (block.type === 'text') {
-            parts.push({ text: block.text });
+            parts.push({ text: `${chronPrefix}${block.text}` });
           } else if (block.type === 'media') {
             if (block.encoding === 'url') {
               parts.push({
@@ -1089,7 +1179,7 @@ export class GeminiProvider extends BaseProvider {
 
         for (const block of c.blocks) {
           if (block.type === 'text') {
-            parts.push({ text: block.text });
+            parts.push({ text: `${chronPrefix}${block.text}` });
           } else if (block.type === 'tool_call') {
             const tc = block;
             parts.push({
@@ -1122,6 +1212,24 @@ export class GeminiProvider extends BaseProvider {
           configForMessages,
         );
 
+        const dur = (() => {
+          const r = toolResponseBlock.result;
+          if (typeof r !== 'object' || r === null || Array.isArray(r)) {
+            return undefined;
+          }
+
+          const maybeDurationSec = (r as { durationSec?: unknown }).durationSec;
+          return typeof maybeDurationSec === 'number'
+            ? maybeDurationSec
+            : undefined;
+        })();
+
+        const chron = buildChronForToolResponse({
+          metadataChronology: c.metadata?.chronology,
+          metadataTimestamp: c.metadata?.timestamp,
+          durationSec: dur,
+        });
+
         const frPart: Part = {
           functionResponse: {
             id: toolResponseBlock.callId,
@@ -1133,6 +1241,7 @@ export class GeminiProvider extends BaseProvider {
               truncated: payload.truncated,
               originalLength: payload.originalLength,
               limitMessage: payload.limitMessage,
+              ...(chron ?? {}),
             },
           },
         };

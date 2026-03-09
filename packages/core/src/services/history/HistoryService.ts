@@ -93,9 +93,72 @@ export class HistoryService
   private tokenizerLock: Promise<void> = Promise.resolve();
   private logger = new DebugLogger('llxprt:history:service');
 
+  private chronologyUserTurnNumber = 0;
+  private chronologyAgentStepNumber = 0;
+
   // Compression state and queue
   private isCompressing: boolean = false;
   private pendingOperations: Array<() => void> = [];
+
+  private incrementUserTurn(): void {
+    this.chronologyUserTurnNumber += 1;
+    this.chronologyAgentStepNumber = 0;
+  }
+
+  private incrementAgentStep(): void {
+    this.chronologyAgentStepNumber += 1;
+  }
+
+  bumpAgentStep(): void {
+    this.incrementAgentStep();
+  }
+
+  getChronologySnapshot(): {
+    userTurnNumber: number;
+    agentStepNumber: number;
+  } {
+    return {
+      userTurnNumber: this.chronologyUserTurnNumber,
+      agentStepNumber: this.chronologyAgentStepNumber,
+    };
+  }
+
+  private stampContent(
+    content: IContent,
+    options?: { isService?: boolean },
+  ): IContent {
+    const now = Date.now();
+
+    if (!content.metadata) {
+      content.metadata = {};
+    }
+
+    if (content.metadata.timestamp === undefined) {
+      content.metadata.timestamp = now;
+    }
+
+    if (!content.metadata.chronology) {
+      content.metadata.chronology = {};
+    }
+
+    if (content.metadata.chronology.userTurnNumber === undefined) {
+      content.metadata.chronology.userTurnNumber =
+        this.chronologyUserTurnNumber;
+    }
+
+    if (content.metadata.chronology.agentStepNumber === undefined) {
+      content.metadata.chronology.agentStepNumber =
+        this.chronologyAgentStepNumber;
+    }
+
+    // Pending-ack flag is only managed by commit-before-send. Clear any caller-provided
+    // marker unless this is an internal service op.
+    if (!options?.isService && 'pendingAck' in content.metadata) {
+      delete content.metadata.pendingAck;
+    }
+
+    return content;
+  }
 
   /**
    * Get or create tokenizer for a specific model
@@ -260,6 +323,14 @@ export class HistoryService
    * Filtering happens only when getting curated history.
    */
   add(content: IContent, modelName?: string): void {
+    return this.addWithOptions(content, modelName);
+  }
+
+  addWithOptions(
+    content: IContent,
+    modelName?: string,
+    options?: { isService?: boolean },
+  ): void {
     // If compression is active, queue this operation
     if (this.isCompressing) {
       this.logger.debug('Queueing add operation during compression', {
@@ -268,48 +339,62 @@ export class HistoryService
       });
 
       this.pendingOperations.push(() => {
-        this.addInternal(content, modelName);
+        this.addInternal(content, modelName, options);
       });
       return;
     }
 
     // Otherwise, add immediately
-    this.addInternal(content, modelName);
+    this.addInternal(content, modelName, options);
   }
 
-  private addInternal(content: IContent, modelName?: string): void {
+  private addInternal(
+    content: IContent,
+    modelName?: string,
+    options?: { isService?: boolean },
+  ): void {
+    if (content.speaker === 'human') {
+      this.incrementUserTurn();
+    }
+
+    const stamped = this.stampContent(content, options);
+
     // Log content being added with any tool call/response IDs
     this.logger.debug('Adding content to history:', {
-      speaker: content.speaker,
-      blockTypes: content.blocks?.map((b) => b.type),
-      toolCallIds: content.blocks
+      speaker: stamped.speaker,
+      blockTypes: stamped.blocks?.map((b) => b.type),
+      toolCallIds: stamped.blocks
         ?.filter((b) => b.type === 'tool_call')
         .map((b) => b.id),
-      toolResponseIds: content.blocks
+      toolResponseIds: stamped.blocks
         ?.filter((b) => b.type === 'tool_response')
         .map((b) => ({
           callId: b.callId,
           toolName: b.toolName,
         })),
-      contentId: content.metadata?.id,
+      contentId: stamped.metadata?.id,
+      chronology: stamped.metadata?.chronology,
       modelName,
     });
 
     // Only do basic validation - must have valid speaker
-    if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
-      this.history.push(content);
+    if (stamped.speaker && ['human', 'ai', 'tool'].includes(stamped.speaker)) {
+      this.history.push(stamped);
 
       this.logger.debug(
         'Content added successfully, history length:',
         this.history.length,
       );
 
-      this.emit('contentAdded', content);
+      this.emit('contentAdded', {
+        content: stamped,
+        isService: options?.isService ?? false,
+      });
 
       // Update token count asynchronously but atomically
-      void this.updateTokenCount(content, modelName);
+      void this.updateTokenCount(stamped, modelName);
     } else {
-      this.logger.debug('Content rejected - invalid speaker:', content.speaker);
+      this.logger.debug('Content rejected - invalid speaker:', stamped.speaker);
     }
   }
 
@@ -456,8 +541,16 @@ export class HistoryService
    * Add multiple contents to the history
    */
   addAll(contents: IContent[], modelName?: string): void {
+    return this.addAllWithOptions(contents, modelName);
+  }
+
+  addAllWithOptions(
+    contents: IContent[],
+    modelName?: string,
+    options?: { isService?: boolean },
+  ): void {
     for (const content of contents) {
-      this.add(content, modelName);
+      this.addWithOptions(content, modelName, options);
     }
   }
 
@@ -698,21 +791,21 @@ export class HistoryService
   /**
    * Clear all history
    */
-  clear(): void {
+  clear(options?: { resetChronology?: boolean }): void {
     // If compression is active, queue this operation
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
       this.pendingOperations.push(() => {
-        this.clearInternal();
+        this.clearInternal(options);
       });
       return;
     }
 
     // Otherwise, clear immediately
-    this.clearInternal();
+    this.clearInternal(options);
   }
 
-  private clearInternal(): void {
+  private clearInternal(options?: { resetChronology?: boolean }): void {
     this.logger.debug('Clearing history', {
       previousLength: this.history.length,
     });
@@ -720,6 +813,11 @@ export class HistoryService
     const previousTokens = this.totalTokens;
     this.history = [];
     this.totalTokens = 0;
+
+    if (options?.resetChronology) {
+      this.chronologyUserTurnNumber = 0;
+      this.chronologyAgentStepNumber = 0;
+    }
 
     // Emit event with reset count
     this.emit('tokensUpdated', {
@@ -1442,10 +1540,20 @@ export class HistoryService
       const responses = responsesByToolCallIndex.get(i);
       if (responses && responses.length > 0) {
         const mediaForThisIndex = mediaBlocksByToolCallIndex.get(i) ?? [];
+
+        const firstResponse = responses[0];
+        const originalToolMessage = contents.find((c) =>
+          c.blocks?.some(
+            (b) =>
+              b.type === 'tool_response' && b.callId === firstResponse.callId,
+          ),
+        );
+
         result.push({
           speaker: 'tool',
           blocks: [...responses, ...mediaForThisIndex],
           metadata: {
+            ...(originalToolMessage?.metadata ?? {}),
             synthetic: true,
             reason: 'reordered_tool_responses',
           },

@@ -45,6 +45,7 @@ export class ContentConverters {
           ?.filter((b) => b.type === 'tool_response')
           .map((b) => b.callId) || [],
     });
+
     // Tool responses should have 'user' role in Gemini format
     let role: 'user' | 'model';
     if (iContent.speaker === 'tool') {
@@ -141,7 +142,17 @@ export class ContentConverters {
     // Keep empty parts array for empty model responses
     // This is valid in Gemini Content format
 
-    const result = { role, parts };
+    const result: Content & {
+      /**
+       * Vendor extension: persisted copy of IContent.metadata for checkpoint round-trips.
+       */
+      llxprtMetadata?: IContent['metadata'];
+    } = { role, parts };
+
+    if (iContent.metadata !== undefined) {
+      result.llxprtMetadata = iContent.metadata;
+    }
+
     this.logger.debug('Converted to Gemini Content:', {
       role,
       partCount: parts.length,
@@ -360,6 +371,17 @@ export class ContentConverters {
       content.role === 'user' && hasToolResponse ? 'tool' : speaker;
 
     metadata.turnId = turnKey;
+
+    const contentWithVendorExtensions = content as Content & {
+      llxprtMetadata?: IContent['metadata'];
+    };
+
+    if (contentWithVendorExtensions.llxprtMetadata !== undefined) {
+      // Preserve persisted metadata (timestamp/chronology/providerMetadata/usage/etc.)
+      // across checkpoint save/load and Gemini Content round-trips.
+      Object.assign(metadata, contentWithVendorExtensions.llxprtMetadata);
+      metadata.turnId = turnKey;
+    }
 
     const result: IContent = {
       speaker: finalSpeaker,
