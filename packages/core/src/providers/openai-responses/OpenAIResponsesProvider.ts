@@ -823,7 +823,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
               return undefined;
             }
 
-            const maybeDurationSec = (r as { durationSec?: unknown }).durationSec;
+            const maybeDurationSec = (r as { durationSec?: unknown })
+              .durationSec;
             return typeof maybeDurationSec === 'number'
               ? maybeDurationSec
               : undefined;
