@@ -1427,8 +1427,7 @@ export class Config {
 
   getCoreMemory(): string | undefined {
     if (this.getJitContextEnabled() && this.contextManager) {
-      const coreMem = this.contextManager.getCoreMemory();
-      return coreMem || undefined;
+      return this.contextManager.getCoreMemory();
     }
     return undefined;
   }

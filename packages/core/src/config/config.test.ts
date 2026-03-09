@@ -727,7 +727,7 @@ describe('Server Config (config.ts)', () => {
     expect(config.getCoreMemory()).toBeUndefined();
   });
 
-  it('getCoreMemory should return undefined when contextManager has empty core memory', async () => {
+  it('getCoreMemory should return empty string when contextManager has no core memory files', async () => {
     const config = new Config({
       ...baseParams,
       jitContextEnabled: true,
@@ -737,7 +737,7 @@ describe('Server Config (config.ts)', () => {
     const contextManager = config.getContextManager();
     vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue('');
 
-    expect(config.getCoreMemory()).toBeUndefined();
+    expect(config.getCoreMemory()).toBe('');
   });
 
   it('Config constructor should call setLlxprtMdFilename with contextFileName if provided', () => {
