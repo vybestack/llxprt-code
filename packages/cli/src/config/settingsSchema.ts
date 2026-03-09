@@ -1291,7 +1291,6 @@ export const SETTINGS_SCHEMA = {
           },
         },
       },
-
     },
   },
 
@@ -1842,8 +1841,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Hook Notifications',
         default: true,
         category: 'Advanced',
-        description:
-          'Show visual indicators when hooks are executing.',
+        description: 'Show visual indicators when hooks are executing.',
         showInDialog: false,
       },
       disabled: {
@@ -1856,74 +1854,73 @@ export const SETTINGS_SCHEMA = {
         showInDialog: false,
       },
     },
-  admin: {
-    type: 'object',
-    label: 'Admin',
-    category: 'Admin',
-    requiresRestart: false,
-    default: {},
-    description: 'Settings configured remotely by enterprise admins.',
-    showInDialog: false,
-    mergeStrategy: MergeStrategy.REPLACE,
-    properties: {
-      secureModeEnabled: {
-        type: 'boolean',
-        label: 'Secure Mode Enabled',
-        category: 'Admin',
-        requiresRestart: false,
-        default: false,
-        description: 'If true, disallows YOLO mode from being used.',
-        showInDialog: false,
-        mergeStrategy: MergeStrategy.REPLACE,
-      },
-      extensions: {
-        type: 'object',
-        label: 'Extensions Settings',
-        category: 'Admin',
-        requiresRestart: false,
-        default: {},
-        description: 'Extensions-specific admin settings.',
-        showInDialog: false,
-        mergeStrategy: MergeStrategy.REPLACE,
-        properties: {
-          enabled: {
-            type: 'boolean',
-            label: 'Extensions Enabled',
-            category: 'Admin',
-            requiresRestart: false,
-            default: true,
-            description:
-              'If false, disallows extensions from being installed or used. (Not enforced yet)',
-            showInDialog: false,
-            mergeStrategy: MergeStrategy.REPLACE,
+    admin: {
+      type: 'object',
+      label: 'Admin',
+      category: 'Admin',
+      requiresRestart: false,
+      default: {},
+      description: 'Settings configured remotely by enterprise admins.',
+      showInDialog: false,
+      mergeStrategy: MergeStrategy.REPLACE,
+      properties: {
+        secureModeEnabled: {
+          type: 'boolean',
+          label: 'Secure Mode Enabled',
+          category: 'Admin',
+          requiresRestart: false,
+          default: false,
+          description: 'If true, disallows YOLO mode from being used.',
+          showInDialog: false,
+          mergeStrategy: MergeStrategy.REPLACE,
+        },
+        extensions: {
+          type: 'object',
+          label: 'Extensions Settings',
+          category: 'Admin',
+          requiresRestart: false,
+          default: {},
+          description: 'Extensions-specific admin settings.',
+          showInDialog: false,
+          mergeStrategy: MergeStrategy.REPLACE,
+          properties: {
+            enabled: {
+              type: 'boolean',
+              label: 'Extensions Enabled',
+              category: 'Admin',
+              requiresRestart: false,
+              default: true,
+              description:
+                'If false, disallows extensions from being installed or used. (Not enforced yet)',
+              showInDialog: false,
+              mergeStrategy: MergeStrategy.REPLACE,
+            },
           },
         },
-      },
-      mcp: {
-        type: 'object',
-        label: 'MCP Settings',
-        category: 'Admin',
-        requiresRestart: false,
-        default: {},
-        description: 'MCP-specific admin settings.',
-        showInDialog: false,
-        mergeStrategy: MergeStrategy.REPLACE,
-        properties: {
-          enabled: {
-            type: 'boolean',
-            label: 'MCP Enabled',
-            category: 'Admin',
-            requiresRestart: false,
-            default: true,
-            description: 'If false, disallows MCP servers from being used.',
-            showInDialog: false,
-            mergeStrategy: MergeStrategy.REPLACE,
+        mcp: {
+          type: 'object',
+          label: 'MCP Settings',
+          category: 'Admin',
+          requiresRestart: false,
+          default: {},
+          description: 'MCP-specific admin settings.',
+          showInDialog: false,
+          mergeStrategy: MergeStrategy.REPLACE,
+          properties: {
+            enabled: {
+              type: 'boolean',
+              label: 'MCP Enabled',
+              category: 'Admin',
+              requiresRestart: false,
+              default: true,
+              description: 'If false, disallows MCP servers from being used.',
+              showInDialog: false,
+              mergeStrategy: MergeStrategy.REPLACE,
+            },
           },
         },
       },
     },
-  },
-
   },
 } as const;
 

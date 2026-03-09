@@ -421,7 +421,10 @@ export class OAuthUtils {
         return payload.exp * 1000; // Convert seconds to milliseconds
       }
     } catch (e) {
-      debugLogger.error('Failed to parse ID token for expiry time with error:', e);
+      debugLogger.error(
+        'Failed to parse ID token for expiry time with error:',
+        e,
+      );
     }
 
     // Return undefined if try block fails or 'exp' is missing/invalid

@@ -61,7 +61,7 @@ export const clearCommand: SlashCommand = {
             context.services.config,
             SessionStartSource.Clear,
           );
-          
+
           // Display system message if provided
           if (sessionStartOutput?.systemMessage) {
             context.ui.addItem({
@@ -69,7 +69,7 @@ export const clearCommand: SlashCommand = {
               text: sessionStartOutput.systemMessage,
             });
           }
-          
+
           // Note: Additional context is NOT injected after clear - clear means fresh start
           // Only the system message is displayed
         } catch {

@@ -1987,7 +1987,9 @@ async function ensureSandboxImageIsPresent(
   if (await pullImage(sandbox, image)) {
     // After attempting to pull, check again to be certain
     if (await imageExists(sandbox, image)) {
-      debugLogger.info(`Sandbox image ${image} is now available after pulling.`);
+      debugLogger.info(
+        `Sandbox image ${image} is now available after pulling.`,
+      );
       return true;
     } else {
       debugLogger.warn(

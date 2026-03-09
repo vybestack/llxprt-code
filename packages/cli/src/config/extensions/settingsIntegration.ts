@@ -337,9 +337,7 @@ export async function getEnvContents(
 export async function getMissingSettings(
   extensionName: string,
   extensionDir: string,
-): Promise<
-  Array<import('@vybestack/llxprt-code-core').ExtensionSetting>
-> {
+): Promise<Array<import('@vybestack/llxprt-code-core').ExtensionSetting>> {
   const settings = loadExtensionSettingsFromManifest(extensionDir);
 
   if (settings.length === 0) {

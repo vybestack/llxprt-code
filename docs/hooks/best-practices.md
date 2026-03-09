@@ -804,13 +804,14 @@ console.log(JSON.stringify(sanitizeOutput(hookOutput)));
 - [Writing Hooks](writing-hooks.md) - Tutorial and examples
 - [Configuration](../cli/configuration.md) - LLxprt Code settings
 - [Hooks Design Document](../hooks-design.md) - Technical architecture
-// Start requests concurrently
-const p1 = fetch(url1).then((r) => r.json());
-const p2 = fetch(url2).then((r) => r.json());
-const p3 = fetch(url3).then((r) => r.json());
+  // Start requests concurrently
+  const p1 = fetch(url1).then((r) => r.json());
+  const p2 = fetch(url2).then((r) => r.json());
+  const p3 = fetch(url3).then((r) => r.json());
 
 // Wait for all results
 const [data1, data2, data3] = await Promise.all([p1, p2, p3]);
+
 ## Using Hooks Securely
 
 ### Threat Model
@@ -818,12 +819,12 @@ const [data1, data2, data3] = await Promise.all([p1, p2, p3]);
 Understanding where hooks come from and what they can do is critical for secure
 usage.
 
-| Hook Source                   | Description                                                                                                                |
-| :---------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| Hook Source                   | Description                                                                                                                 |
+| :---------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
 | **System**                    | Configured by system administrators (e.g., `/etc/llxprt-code/settings.json`, `/Library/...`). Assumed to be the **safest**. |
-| **User** (`~/.llxprt/...`)    | Configured by you. You are responsible for ensuring they are safe.                                                         |
-| **Extensions**                | You explicitly approve and install these. Security depends on the extension source (integrity).                            |
-| **Project** (`./.llxprt/...`) | **Untrusted by default.** Safest in trusted internal repos; higher risk in third-party/public repos.                       |
+| **User** (`~/.llxprt/...`)    | Configured by you. You are responsible for ensuring they are safe.                                                          |
+| **Extensions**                | You explicitly approve and install these. Security depends on the extension source (integrity).                             |
+| **Project** (`./.llxprt/...`) | **Untrusted by default.** Safest in trusted internal repos; higher risk in third-party/public repos.                        |
 
 #### Project Hook Security
 
@@ -980,4 +981,3 @@ function containsSecret(content) {
   return SECRET_PATTERNS.some((pattern) => pattern.test(content));
 }
 ```
-

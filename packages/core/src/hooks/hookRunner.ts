@@ -184,7 +184,8 @@ export class HookRunner {
         case HookEventName.BeforeTool:
           if ('tool_input' in hookOutput.hookSpecificOutput) {
             // For BeforeTool, we update the tool_input
-            const modifiedToolInput = hookOutput.hookSpecificOutput['tool_input'];
+            const modifiedToolInput =
+              hookOutput.hookSpecificOutput['tool_input'];
             if (
               modifiedToolInput &&
               typeof modifiedToolInput === 'object' &&
@@ -192,8 +193,11 @@ export class HookRunner {
               'tool_input' in modifiedInput
             ) {
               // Merge modified input with existing tool_input
-              (modifiedInput as import('./types.js').BeforeToolInput).tool_input = {
-                ...(modifiedInput as import('./types.js').BeforeToolInput).tool_input,
+              (
+                modifiedInput as import('./types.js').BeforeToolInput
+              ).tool_input = {
+                ...(modifiedInput as import('./types.js').BeforeToolInput)
+                  .tool_input,
                 ...(modifiedToolInput as Record<string, unknown>),
               };
             }
@@ -220,7 +224,10 @@ export class HookRunner {
   ): Promise<HookExecutionResult> {
     // Secondary security check - block project hooks in untrusted folders
     const { ConfigSource } = await import('./hookRegistry.js');
-    if (hookConfig.source === ConfigSource.Project && !this.config.isTrustedFolder()) {
+    if (
+      hookConfig.source === ConfigSource.Project &&
+      !this.config.isTrustedFolder()
+    ) {
       const errorMessage = 'Project hook blocked - folder not trusted';
       debugLogger.warn(errorMessage);
       return {

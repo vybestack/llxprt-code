@@ -38,7 +38,7 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
         marginBottom={1}
       >
         <Text color={Colors.Warning} bold>
-           Security Warning:
+          Security Warning:
         </Text>
         <Text color={Colors.Warning}>
           Hooks can execute arbitrary commands on your system. Only use hooks

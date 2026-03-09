@@ -67,7 +67,10 @@ export class StdinRawModeManager {
         } catch (resumeErr) {
           // Ignore resume failures - we've already logged the original error
           if (this.debugModeEnabled) {
-            debugLogger.error('[stdin] Failed to resume after error:', resumeErr);
+            debugLogger.error(
+              '[stdin] Failed to resume after error:',
+              resumeErr,
+            );
           }
         }
       }

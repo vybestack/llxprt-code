@@ -220,7 +220,7 @@ export class GeminiClient {
   private lastPromptId?: string;
   private readonly complexityAnalyzer: ComplexityAnalyzer;
   private readonly todoReminderService: TodoReminderService;
-  
+
   /**
    * Hook state tracking for agent hook deduplication
    * Prevents BeforeAgent/AfterAgent from firing multiple times during recursive calls
@@ -1431,7 +1431,7 @@ ${jitMemory}`
       hookState.hasFiredBeforeAgent = true;
       return result;
     }
-    
+
     return undefined;
   }
 
@@ -1463,7 +1463,7 @@ ${jitMemory}`
         false, // stop_hook_active
       );
     }
-    
+
     return undefined;
   }
 
@@ -1488,12 +1488,12 @@ ${jitMemory}`
       () =>
         `DEBUG: GeminiClient.sendMessageStream Array.isArray(request): ${Array.isArray(initialRequest)}`,
     );
-    
+
     // Clean up old hook state when prompt_id changes
     if (this.lastPromptId && this.lastPromptId !== prompt_id) {
       this.hookStateMap.delete(this.lastPromptId);
     }
-    
+
     await this.lazyInitialize();
 
     if (!this.chat) {
@@ -1545,7 +1545,10 @@ ${jitMemory}`
 
       // Fire BeforeAgent hook for new user prompts and handle result
       // Uses safe method to prevent duplicate firing in recursive calls
-      const hookOutput = await this.fireBeforeAgentHookSafe(prompt_id, promptText);
+      const hookOutput = await this.fireBeforeAgentHookSafe(
+        prompt_id,
+        promptText,
+      );
 
       // Check for blocking decision or stop execution
       if (

@@ -16,7 +16,8 @@ const logger = {
   debug: (...args: any[]) =>
     debugLogger.debug('[DEBUG] [ImportProcessor]', ...args),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warn: (...args: any[]) => debugLogger.warn('[WARN] [ImportProcessor]', ...args),
+  warn: (...args: any[]) =>
+    debugLogger.warn('[WARN] [ImportProcessor]', ...args),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   error: (...args: any[]) =>
     debugLogger.error('[ERROR] [ImportProcessor]', ...args),

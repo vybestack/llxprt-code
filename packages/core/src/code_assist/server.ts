@@ -113,7 +113,10 @@ export class CodeAssistServer implements ContentGenerator {
       debugLogger.log(
         `CodeAssistServer.generateContent: ERROR during request: ${error}`,
       );
-      debugLogger.log(`CodeAssistServer.generateContent: Error details:`, error);
+      debugLogger.log(
+        `CodeAssistServer.generateContent: Error details:`,
+        error,
+      );
       throw error;
     }
   }

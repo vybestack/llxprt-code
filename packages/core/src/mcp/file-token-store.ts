@@ -21,7 +21,10 @@ const safeOsHostname = (): string => {
   try {
     return os.hostname();
   } catch (error) {
-    debugLogger.warn('Failed to resolve hostname, falling back to default', error);
+    debugLogger.warn(
+      'Failed to resolve hostname, falling back to default',
+      error,
+    );
     return 'unknown-host';
   }
 };
@@ -174,7 +177,9 @@ export class FileTokenStore extends BaseTokenStore {
 
       // Validate the loaded data structure
       if (!Array.isArray(tokens)) {
-        debugLogger.warn('Token file contains invalid data structure, ignoring');
+        debugLogger.warn(
+          'Token file contains invalid data structure, ignoring',
+        );
         return tokenMap;
       }
 

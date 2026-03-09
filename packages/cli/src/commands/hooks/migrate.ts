@@ -45,8 +45,12 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
   }
 
   if (!projectRoot) {
-    debugLogger.error('Error: Could not find .llxprt directory in current path.');
-    debugLogger.error('Please run this command from within a project directory.');
+    debugLogger.error(
+      'Error: Could not find .llxprt directory in current path.',
+    );
+    debugLogger.error(
+      'Please run this command from within a project directory.',
+    );
     process.exit(1);
   }
 

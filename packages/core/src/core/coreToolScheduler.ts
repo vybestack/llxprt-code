@@ -33,10 +33,7 @@ import {
 import { PolicyDecision } from '../policy/types.js';
 
 import { DEFAULT_AGENT_ID } from './turn.js';
-import {
-  type Part,
-  type FunctionCall,
-} from '@google/genai';
+import { type Part, type FunctionCall } from '@google/genai';
 import {
   isModifiableDeclarativeTool,
   type ModifyContext,
@@ -79,13 +76,12 @@ import type {
 } from '../scheduler/types.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
 
-
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 /**
  * @plan PLAN-20260302-TOOLSCHEDULER.P02
  * @requirement TS-COMPAT-001
- * 
+ *
  * Re-export types from scheduler/types.ts for backward compatibility.
  * Existing code can continue importing these types from coreToolScheduler.
  */
@@ -180,10 +176,11 @@ export class CoreToolScheduler {
     this.toolContextInteractiveMode =
       options.toolContextInteractiveMode ?? true;
 
-    this.messageBusUnsubscribe = this.messageBus.subscribe<ToolConfirmationResponse>(
-      MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      this.handleMessageBusResponse.bind(this),
-    );
+    this.messageBusUnsubscribe =
+      this.messageBus.subscribe<ToolConfirmationResponse>(
+        MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        this.handleMessageBusResponse.bind(this),
+      );
   }
 
   setCallbacks(options: CoreToolSchedulerOptions): void {
@@ -561,8 +558,6 @@ export class CoreToolScheduler {
       return new Error(String(e));
     }
   }
-
-
 
   schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -1541,9 +1536,7 @@ export class CoreToolScheduler {
         ) {
           const errorResponse = createErrorResponse(
             scheduledCall.request,
-            new Error(
-              `Failed to publish tool result: ${publishError.message}`,
-            ),
+            new Error(`Failed to publish tool result: ${publishError.message}`),
             ToolErrorType.UNHANDLED_EXCEPTION,
           );
           this.setStatusInternal(callId, 'error', errorResponse);
@@ -1564,9 +1557,10 @@ export class CoreToolScheduler {
           executionError instanceof Error
             ? executionError
             : new Error(String(executionError));
-        
-        const isStopExecution = (error as Error & { isStopExecution?: boolean }).isStopExecution;
-        
+
+        const isStopExecution = (error as Error & { isStopExecution?: boolean })
+          .isStopExecution;
+
         if (isStopExecution) {
           // Create error result with STOP_EXECUTION type
           const stopResult: ToolResult = {
@@ -1585,12 +1579,7 @@ export class CoreToolScheduler {
             executionIndex,
           });
         } else {
-          this.bufferError(
-            callId,
-            error,
-            scheduledCall,
-            executionIndex,
-          );
+          this.bufferError(callId, error, scheduledCall, executionIndex);
         }
       }
       await this.publishBufferedResults(signal).catch((publishError: Error) => {
@@ -1614,9 +1603,7 @@ export class CoreToolScheduler {
         ) {
           const errorResponse = createErrorResponse(
             scheduledCall.request,
-            new Error(
-              `Failed to publish tool result: ${publishError.message}`,
-            ),
+            new Error(`Failed to publish tool result: ${publishError.message}`),
             ToolErrorType.UNHANDLED_EXCEPTION,
           );
           this.setStatusInternal(callId, 'error', errorResponse);

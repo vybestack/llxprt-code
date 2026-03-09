@@ -881,7 +881,9 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     // Wait for callback
     const { code } = await callbackServer.response;
 
-    debugLogger.debug('✓ Authorization code received, exchanging for tokens...');
+    debugLogger.debug(
+      '✓ Authorization code received, exchanging for tokens...',
+    );
 
     // Exchange code for tokens
     const tokenResponse = await this.exchangeCodeForToken(
@@ -980,7 +982,9 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     // Try to refresh if we have a refresh token
     if (token.refreshToken && config.clientId && credentials.tokenUrl) {
       try {
-        debugLogger.log(`Refreshing expired token for MCP server: ${serverName}`);
+        debugLogger.log(
+          `Refreshing expired token for MCP server: ${serverName}`,
+        );
 
         const newTokenResponse = await this.refreshAccessToken(
           config,

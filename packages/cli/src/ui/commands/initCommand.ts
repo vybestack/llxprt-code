@@ -38,7 +38,10 @@ async function getInitCommandPrompt(): Promise<string> {
       );
     }
   } catch (error) {
-    debugLogger.warn('Failed to initialize prompt service, using fallback:', error);
+    debugLogger.warn(
+      'Failed to initialize prompt service, using fallback:',
+      error,
+    );
   }
 
   // Fallback to hardcoded prompt

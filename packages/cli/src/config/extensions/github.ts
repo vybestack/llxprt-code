@@ -253,7 +253,9 @@ export async function checkForExtensionUpdate(
       }
       const remoteUrl = remotes[0].refs.fetch;
       if (!remoteUrl) {
-        debugLogger.error(`No fetch URL found for git remote ${remotes[0].name}.`);
+        debugLogger.error(
+          `No fetch URL found for git remote ${remotes[0].name}.`,
+        );
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
         return;
       }
@@ -529,7 +531,10 @@ export async function downloadFile(
       fs.unlink(dest, (unlinkErr) => {
         if (unlinkErr && unlinkErr.code !== 'ENOENT') {
           // Log cleanup failure but still reject with original error
-          debugLogger.error(`Failed to clean up partial file ${dest}:`, unlinkErr);
+          debugLogger.error(
+            `Failed to clean up partial file ${dest}:`,
+            unlinkErr,
+          );
         }
         reject(error);
       });

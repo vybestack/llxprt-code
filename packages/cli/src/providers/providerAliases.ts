@@ -98,7 +98,9 @@ function readAliasFile(
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(stripJsonComments(raw)) as ProviderAliasConfig;
     if (!parsed || typeof parsed !== 'object') {
-      debugLogger.warn(`[ProviderAliases] Ignoring invalid alias file ${filePath}`);
+      debugLogger.warn(
+        `[ProviderAliases] Ignoring invalid alias file ${filePath}`,
+      );
       return null;
     }
 

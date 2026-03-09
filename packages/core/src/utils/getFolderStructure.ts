@@ -348,7 +348,10 @@ export async function getFolderStructure(
 
     return `${summary}\n\n${resolvedPath}${path.sep}\n${structureLines.join('\n')}`;
   } catch (error: unknown) {
-    debugLogger.error(`Error getting folder structure for ${resolvedPath}:`, error);
+    debugLogger.error(
+      `Error getting folder structure for ${resolvedPath}:`,
+      error,
+    );
     return `Error processing directory "${resolvedPath}": ${getErrorMessage(error)}`;
   }
 }

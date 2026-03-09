@@ -24,9 +24,7 @@ export function useHookDisplayState(config: Config): ActiveHook[] {
     const requestSubscription = messageBus.subscribe(
       'HOOK_EXECUTION_REQUEST',
       (message: Record<string, unknown>) => {
-        const payload = message.payload as
-          | { eventName?: string }
-          | undefined;
+        const payload = message.payload as { eventName?: string } | undefined;
         if (payload?.eventName) {
           setActiveHooks((prev) => [
             ...prev,

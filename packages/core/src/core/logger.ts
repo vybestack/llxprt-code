@@ -385,7 +385,10 @@ export class Logger {
         // This is okay, it just means the checkpoint doesn't exist in either format.
         return { history: [] };
       }
-      debugLogger.error(`Failed to read or parse checkpoint file ${path}:`, error);
+      debugLogger.error(
+        `Failed to read or parse checkpoint file ${path}:`,
+        error,
+      );
       return { history: [] };
     }
   }
@@ -408,7 +411,10 @@ export class Logger {
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code !== 'ENOENT') {
-        debugLogger.error(`Failed to delete checkpoint file ${newPath}:`, error);
+        debugLogger.error(
+          `Failed to delete checkpoint file ${newPath}:`,
+          error,
+        );
         throw error; // Rethrow unexpected errors
       }
       // It's okay if it doesn't exist.
@@ -423,7 +429,10 @@ export class Logger {
       } catch (error) {
         const nodeError = error as NodeJS.ErrnoException;
         if (nodeError.code !== 'ENOENT') {
-          debugLogger.error(`Failed to delete checkpoint file ${oldPath}:`, error);
+          debugLogger.error(
+            `Failed to delete checkpoint file ${oldPath}:`,
+            error,
+          );
           throw error; // Rethrow unexpected errors
         }
         // It's okay if it doesn't exist.

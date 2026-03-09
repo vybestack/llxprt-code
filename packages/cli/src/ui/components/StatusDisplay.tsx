@@ -24,7 +24,7 @@ interface StatusDisplayProps {
  * Component that coordinates status display priorities:
  * 1. Hook status (highest priority)
  * 2. Context summary
- * 
+ *
  * When hooks are executing, only the hook status is shown.
  * When no hooks are executing, the context summary is shown.
  */

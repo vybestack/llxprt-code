@@ -1142,7 +1142,6 @@ export class Config {
     return this.blockedMcpServers;
   }
 
-
   getMcpEnabled(): boolean {
     return this.mcpEnabled;
   }

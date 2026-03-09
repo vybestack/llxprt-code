@@ -102,6 +102,8 @@ describe('parseInputForHighlighting', () => {
 
   it('should highlight file paths that include escaped spaces', () => {
     const text = '@my\\ path/with\\ spaces.txt';
-    expect(parseInputForHighlighting(text, 0)).toEqual([{ text, type: 'file' }]);
+    expect(parseInputForHighlighting(text, 0)).toEqual([
+      { text, type: 'file' },
+    ]);
   });
 });

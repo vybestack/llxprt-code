@@ -1256,7 +1256,7 @@ export async function main() {
     if (sessionStartOutput.systemMessage) {
       writeToStderr(`${sessionStartOutput.systemMessage}\n`);
     }
-    
+
     // Prepend additional context to input
     const additionalContext = sessionStartOutput.getAdditionalContext();
     if (additionalContext) {

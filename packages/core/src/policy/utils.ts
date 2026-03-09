@@ -23,7 +23,9 @@ export function buildArgsPatterns(
   const patterns: RegExp[] = [];
 
   if (commandPrefix) {
-    const prefixes = Array.isArray(commandPrefix) ? commandPrefix : [commandPrefix];
+    const prefixes = Array.isArray(commandPrefix)
+      ? commandPrefix
+      : [commandPrefix];
     for (const prefix of prefixes) {
       // Escape quotes in command for JSON matching
       const escaped = prefix.replace(/"/g, '\\"');

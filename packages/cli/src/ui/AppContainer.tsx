@@ -236,7 +236,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     hasSeededResumedHistory.current = true;
   }, [loadHistory, resumedHistory]);
-  
+
   // Trigger SessionStart hook on initialization
   const hasTriggeredSessionStart = useRef(false);
   useEffect(() => {
@@ -244,13 +244,13 @@ export const AppContainer = (props: AppContainerProps) => {
       return;
     }
     hasTriggeredSessionStart.current = true;
-    
+
     const initializeSession = async () => {
       const sessionStartOutput = await triggerSessionStartHook(
         config,
         SessionStartSource.Startup,
       );
-      
+
       if (sessionStartOutput) {
         // Display system message
         if (sessionStartOutput.systemMessage) {
@@ -259,7 +259,7 @@ export const AppContainer = (props: AppContainerProps) => {
             text: sessionStartOutput.systemMessage,
           });
         }
-        
+
         // Add additional context to history
         const additionalContext = sessionStartOutput.getAdditionalContext();
         if (additionalContext) {
@@ -273,10 +273,10 @@ export const AppContainer = (props: AppContainerProps) => {
         }
       }
     };
-    
+
     void initializeSession();
   }, [config, addItem]);
-  
+
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);

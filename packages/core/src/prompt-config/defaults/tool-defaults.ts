@@ -32,7 +32,9 @@ function loadMarkdownFile(filename: string): string {
   }
 
   if (debugLog) {
-    debugLogger.log(`\n[PROMPT_LOADER] ========== Loading ${filename} ==========`);
+    debugLogger.log(
+      `\n[PROMPT_LOADER] ========== Loading ${filename} ==========`,
+    );
     debugLogger.log(`[PROMPT_LOADER] __dirname: ${__dirname}`);
     debugLogger.log(
       `[PROMPT_LOADER] process.cwd(): ${typeof process !== 'undefined' ? process.cwd() : 'N/A'}`,
@@ -211,7 +213,8 @@ function loadMarkdownFile(filename: string): string {
       if (basename(base) === 'bundle') {
         const inBundleTry = join(base, filename);
         if (existsSync(inBundleTry)) {
-          if (debugLog) debugLogger.log(`[PROMPT_LOADER] Found at: ${inBundleTry}`);
+          if (debugLog)
+            debugLogger.log(`[PROMPT_LOADER] Found at: ${inBundleTry}`);
           return readFileSync(inBundleTry, 'utf-8');
         }
       }

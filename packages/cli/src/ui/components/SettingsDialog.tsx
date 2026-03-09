@@ -736,7 +736,6 @@ export function SettingsDialog({
   // Each setting item takes 3 lines (label + description + spacing)
   let maxVisibleItems = Math.max(1, Math.floor(availableHeightForSettings / 3));
 
-
   // Decide whether to show scope selection based on remaining space
   let showScopeSelection = true;
 
@@ -1286,7 +1285,6 @@ export function SettingsDialog({
     onChange: (text) => setSearchQuery(text),
   });
 
-
   const maxLabelOrDescriptionWidth = useMemo(() => {
     const allKeys = getDialogSettingKeys();
     let max = 0;
@@ -1519,8 +1517,17 @@ export function SettingsDialog({
                         {isActive ? '●' : ''}
                       </Text>
                     </Box>
-                    <Box flexDirection="row" flexGrow={1} minWidth={0} alignItems="flex-start">
-                      <Box flexDirection="column" width={maxLabelOrDescriptionWidth} minWidth={0}>
+                    <Box
+                      flexDirection="row"
+                      flexGrow={1}
+                      minWidth={0}
+                      alignItems="flex-start"
+                    >
+                      <Box
+                        flexDirection="column"
+                        width={maxLabelOrDescriptionWidth}
+                        minWidth={0}
+                      >
                         <Text
                           color={
                             isActive ? Colors.AccentGreen : Colors.Foreground
@@ -1554,8 +1561,6 @@ export function SettingsDialog({
                   <Box height={1} />
                 </React.Fragment>
               );
-
-
             })}
             {showScrollDown && (
               <Box marginX={1}>

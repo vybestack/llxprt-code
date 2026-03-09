@@ -74,7 +74,10 @@ export class UserAccountManager {
       ) {
         return defaultState;
       }
-      debugLogger.log('Error during sync read of accounts, starting fresh.', error);
+      debugLogger.log(
+        'Error during sync read of accounts, starting fresh.',
+        error,
+      );
       return defaultState;
     }
   }

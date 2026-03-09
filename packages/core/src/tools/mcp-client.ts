@@ -1694,7 +1694,9 @@ export async function connectToMcpServer(
         }
 
         // For SSE/HTTP servers, try to discover OAuth configuration from the base URL
-        debugLogger.log(`🔍 Attempting OAuth discovery for '${mcpServerName}'...`);
+        debugLogger.log(
+          `🔍 Attempting OAuth discovery for '${mcpServerName}'...`,
+        );
 
         if (hasNetworkTransport(mcpServerConfig)) {
           const serverUrl = new URL(
@@ -1931,7 +1933,10 @@ export async function createTransport(
     if (debugMode) {
       transport.stderr!.on('data', (data) => {
         const stderrStr = data.toString().trim();
-        debugLogger.debug(`[DEBUG] [MCP STDERR (${mcpServerName})]: `, stderrStr);
+        debugLogger.debug(
+          `[DEBUG] [MCP STDERR (${mcpServerName})]: `,
+          stderrStr,
+        );
       });
     }
     return transport;

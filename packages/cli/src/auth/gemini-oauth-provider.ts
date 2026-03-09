@@ -319,7 +319,9 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
                     Date.now(),
                   );
                 } else {
-                  debugLogger.log('Successfully authenticated with Google Gemini!');
+                  debugLogger.log(
+                    'Successfully authenticated with Google Gemini!',
+                  );
                 }
               } catch (saveError) {
                 throw OAuthErrorFactory.storageError(

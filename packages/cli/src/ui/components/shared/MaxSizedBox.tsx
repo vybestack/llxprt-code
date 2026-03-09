@@ -47,7 +47,10 @@ function debugReportError(message: string, element: React.ReactNode) {
     debugLogger.error('Error while trying to get file name:', error);
   }
 
-  debugLogger.error(message, `${String(element.type)}. Source: ${sourceMessage}`);
+  debugLogger.error(
+    message,
+    `${String(element.type)}. Source: ${sourceMessage}`,
+  );
 }
 interface MaxSizedBoxProps {
   children?: React.ReactNode;

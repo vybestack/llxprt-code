@@ -7,7 +7,7 @@
 /**
  * @plan PLAN-20260302-TOOLSCHEDULER.P01
  * @requirement TS-TYPE-001
- * 
+ *
  * CoreToolScheduler type definitions.
  * These types define the state machine for tool execution.
  */

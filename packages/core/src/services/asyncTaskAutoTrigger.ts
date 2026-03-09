@@ -129,7 +129,10 @@ export class AsyncTaskAutoTrigger {
       // FAILURE: Do NOT mark as notified
       // @requirement REQ-ASYNC-011
       // The notification will be included in the next turn's reminder
-      debugLogger.error('[AsyncTaskAutoTrigger] Failed to auto-trigger:', error);
+      debugLogger.error(
+        '[AsyncTaskAutoTrigger] Failed to auto-trigger:',
+        error,
+      );
     } finally {
       this.isTriggering = false;
     }

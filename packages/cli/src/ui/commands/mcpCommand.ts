@@ -343,7 +343,10 @@ const getMcpStatus = async (
         message += '\n';
       }
       message += `  ${COLOR_CYAN}Resources:${RESET_COLOR}\n`;
-      const resourcesToShow = serverResources.slice(0, MAX_MCP_RESOURCES_TO_SHOW);
+      const resourcesToShow = serverResources.slice(
+        0,
+        MAX_MCP_RESOURCES_TO_SHOW,
+      );
       resourcesToShow.forEach((resource) => {
         const resourceName = resource.name ?? resource.uri;
         const resourceUri = resource.uri;

@@ -118,17 +118,21 @@ export class HookRegistry {
    */
   private checkProjectHooksTrust(): void {
     const projectHooks = this.config.getProjectHooks();
-    
+
     // Collect all hook configs from project settings
     const allProjectHooks: HookConfig[] = [];
     if (projectHooks) {
       for (const [key, eventDefinitions] of Object.entries(projectHooks)) {
         // Skip the 'disabled' key
         if (key === 'disabled') continue;
-        
+
         if (Array.isArray(eventDefinitions)) {
           for (const definition of eventDefinitions) {
-            if (definition && typeof definition === 'object' && 'hooks' in definition) {
+            if (
+              definition &&
+              typeof definition === 'object' &&
+              'hooks' in definition
+            ) {
               const hookDef = definition;
               if (hookDef.hooks) {
                 allProjectHooks.push(...hookDef.hooks);
@@ -147,12 +151,12 @@ export class HookRegistry {
     trustManager.load();
 
     const untrusted = trustManager.getUntrustedHooks(allProjectHooks);
-    
+
     if (untrusted.length > 0) {
-      const hookNames = untrusted.map(h => h.name || h.command).join(', ');
+      const hookNames = untrusted.map((h) => h.name || h.command).join(', ');
       const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Auto-trusting to prevent future warnings.
 `;
-      
+
       coreEvents.emit(CoreEvent.Output, {
         chunk: warning,
         isStderr: true,
@@ -173,7 +177,7 @@ export class HookRegistry {
 
     // Get hooks from the main config (this comes from the merged settings)
     const configHooks = this.config.getHooks();
-    
+
     // Skip project hooks if folder is not trusted
     if (!this.config.isTrustedFolder()) {
       debugLogger.log('Skipping project hooks - folder not trusted');
@@ -251,7 +255,7 @@ export class HookRegistry {
       ) {
         // Set source on the hook config for secondary security check
         (hookConfig as { source?: ConfigSource }).source = source;
-        
+
         const hookName = this.getHookName({
           config: hookConfig,
         } as HookRegistryEntry);

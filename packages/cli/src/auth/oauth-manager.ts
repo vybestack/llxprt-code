@@ -2398,7 +2398,9 @@ export class OAuthManager {
     // Callback for delay with visible console output
     const onDelay = async (ms: number, bucket: string): Promise<void> => {
       // Show visible console output for user
-      debugLogger.log(`(waiting ${ms / 1000} seconds before opening browser...)\n`);
+      debugLogger.log(
+        `(waiting ${ms / 1000} seconds before opening browser...)\n`,
+      );
 
       logger.debug(`Waiting ${ms}ms before authenticating bucket: ${bucket}`);
       await new Promise((resolve) => setTimeout(resolve, ms));

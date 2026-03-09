@@ -7,10 +7,10 @@
 /**
  * @plan PLAN-20260302-TOOLSCHEDULER.P04
  * @requirement TS-EXEC-001 through TS-EXEC-007
- * 
+ *
  * Tool executor module — extracted from coreToolScheduler.ts launchToolExecution.
  * Executes a single tool with hooks, PID tracking, output streaming, and error handling.
- * 
+ *
  * This is an EXTRACTION from coreToolScheduler.ts lines 1691-1858.
  * The code is CUT and PASTED with minimal adaptation for module boundaries.
  */
@@ -47,9 +47,9 @@ export interface ToolExecutionResult {
 /**
  * Executes a single tool call with hooks, PID tracking, output streaming,
  * and error handling.
- * 
+ *
  * EXTRACTED FROM: coreToolScheduler.ts launchToolExecution (lines 1691-1858)
- * 
+ *
  * This class encapsulates the single-tool execution logic that was previously
  * embedded in CoreToolScheduler. The code is MOVED, not rewritten.
  */
@@ -58,16 +58,16 @@ export class ToolExecutor {
 
   /**
    * Execute a single tool call from scheduled to completed state.
-   * 
+   *
    * EXTRACTED CODE from coreToolScheduler.ts lines 1691-1858.
-   * 
+   *
    * Handles:
    * - Before/after hook invocation
    * - PID tracking for shell tools
    * - Live output streaming
    * - Error handling and cancellation
    * - Result transformation
-   * 
+   *
    * @throws Never throws - all errors are captured in the result
    */
   async execute(context: ToolExecutionContext): Promise<ToolExecutionResult> {
@@ -94,7 +94,8 @@ export class ToolExecutor {
         beforeResult.getEffectiveReason() || 'Stopped by BeforeTool hook';
       // Throw with special error that caller can recognize as STOP_EXECUTION
       const stopError = new Error(stopReason);
-      (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
+      (stopError as Error & { isStopExecution?: boolean }).isStopExecution =
+        true;
       throw stopError;
     }
 
@@ -116,8 +117,11 @@ export class ToolExecutor {
       } catch (error) {
         // If rebuild fails, log and continue with original invocation
         // This matches upstream behavior of graceful degradation
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        debugLogger.warn(`Failed to rebuild tool invocation after input modification: ${errorMessage}`);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        debugLogger.warn(
+          `Failed to rebuild tool invocation after input modification: ${errorMessage}`,
+        );
       }
     }
 
@@ -132,13 +136,7 @@ export class ToolExecutor {
     };
 
     return invocation
-      .execute(
-        signal,
-        liveOutputCallback,
-        undefined,
-        undefined,
-        setPidCallback,
-      )
+      .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
       .then(async (toolResult: ToolResult) => {
         if (signal.aborted) {
           throw new Error('User cancelled tool execution.');
@@ -155,15 +153,18 @@ export class ToolExecutor {
 
         // Check if AfterTool hook wants to stop execution (per upstream 05049b5a)
         if (afterResult?.shouldStopExecution()) {
-          const stopReason = afterResult.getEffectiveReason() || 'Stopped by AfterTool hook';
+          const stopReason =
+            afterResult.getEffectiveReason() || 'Stopped by AfterTool hook';
           const stopError = new Error(stopReason);
-          (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
+          (stopError as Error & { isStopExecution?: boolean }).isStopExecution =
+            true;
           throw stopError;
         }
 
         // Check if AfterTool hook wants to block/deny (per upstream 05049b5a)
         if (afterResult?.isBlockingDecision()) {
-          const blockReason = afterResult.getEffectiveReason() || 'Blocked by AfterTool hook';
+          const blockReason =
+            afterResult.getEffectiveReason() || 'Blocked by AfterTool hook';
           throw new Error(blockReason);
         }
 

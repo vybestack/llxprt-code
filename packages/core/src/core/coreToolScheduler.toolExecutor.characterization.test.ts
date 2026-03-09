@@ -15,11 +15,7 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import {
-  Config,
-  ApprovalMode,
-  ToolRegistry,
-} from '../index.js';
+import { Config, ApprovalMode, ToolRegistry } from '../index.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { PolicyDecision } from '../policy/types.js';
@@ -127,10 +123,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockTool = new MockTool();
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
@@ -170,10 +163,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       );
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
@@ -214,10 +204,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       mockPolicyEngine.evaluate = vi
         .fn()
         .mockReturnValue(PolicyDecision.ASK_USER);
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
@@ -255,10 +242,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockTool = new MockTool();
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
@@ -302,10 +286,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockTool = new MockTool();
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
@@ -346,13 +327,8 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
       // Policy ALLOW means no confirmation dialog
-      mockPolicyEngine.evaluate = vi
-        .fn()
-        .mockReturnValue(PolicyDecision.ALLOW);
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      mockPolicyEngine.evaluate = vi.fn().mockReturnValue(PolicyDecision.ALLOW);
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
@@ -388,10 +364,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockTool = new MockTool();
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(
-        mockToolRegistry,
-        mockPolicyEngine,
-      );
+      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();

@@ -313,7 +313,10 @@ class ThemeManager {
       if (
         !(error instanceof Error && 'code' in error && error.code === 'ENOENT')
       ) {
-        debugLogger.warn(`Could not load theme from file "${themePath}":`, error);
+        debugLogger.warn(
+          `Could not load theme from file "${themePath}":`,
+          error,
+        );
       }
       return undefined;
     }

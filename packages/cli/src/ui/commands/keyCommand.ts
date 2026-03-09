@@ -122,7 +122,9 @@ async function handleSave(
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    debugLogger.warn(`[key save] Could not check if key '${name}' exists: ${msg}`);
+    debugLogger.warn(
+      `[key save] Could not check if key '${name}' exists: ${msg}`,
+    );
   }
 
   // Save the key (R13.1)

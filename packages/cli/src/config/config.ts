@@ -1175,7 +1175,6 @@ export async function loadCliConfig(
     // allowed since disableYoloMode specifically targets YOLO mode only.
   }
 
-
   if (approvalMode === ApprovalMode.YOLO) {
     logger.warn(
       'YOLO mode is enabled. All tool calls will be automatically approved.',
@@ -1370,7 +1369,6 @@ export async function loadCliConfig(
   // Calculate mcpEnabled based on admin settings
   const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
 
-
   const config = new Config({
     sessionId,
     embeddingModel: undefined, // No embedding model configured for llxprt-code
@@ -1388,7 +1386,9 @@ export async function loadCliConfig(
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
     toolCallCommand: effectiveSettings.toolCallCommand,
-    mcpServerCommand: mcpEnabled ? effectiveSettings.mcpServerCommand : undefined,
+    mcpServerCommand: mcpEnabled
+      ? effectiveSettings.mcpServerCommand
+      : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
     mcpEnabled,
 
@@ -1456,7 +1456,7 @@ export async function loadCliConfig(
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
     allowedMcpServers: mcpEnabled
-      ? argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed
+      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
       : undefined,
     blockedMcpServers: mcpEnabled
       ? argv.allowedMcpServerNames
@@ -1469,7 +1469,8 @@ export async function loadCliConfig(
     blockedEnvironmentVariables:
       effectiveSettings.security?.environmentVariableRedaction?.blocked,
     enableEnvironmentVariableRedaction:
-      effectiveSettings.security?.environmentVariableRedaction?.enabled ?? false,
+      effectiveSettings.security?.environmentVariableRedaction?.enabled ??
+      false,
 
     skillsSupport: effectiveSettings.experimental?.skills,
     disabledSkills: effectiveSettings.skills?.disabled,

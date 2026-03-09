@@ -70,7 +70,10 @@ export function useInputHistoryStore(): UseInputHistoryStoreReturn {
         setIsInitialized(true);
       } catch (error) {
         // Start with empty history even if logger initialization fails
-        debugLogger.warn('Failed to initialize input history from logger:', error);
+        debugLogger.warn(
+          'Failed to initialize input history from logger:',
+          error,
+        );
         setPastSessionMessages([]);
         recalculateHistory([], []);
         setIsInitialized(true);
