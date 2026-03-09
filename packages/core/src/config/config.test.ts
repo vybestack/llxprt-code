@@ -711,11 +711,10 @@ describe('Server Config (config.ts)', () => {
     const contextManager = config.getContextManager();
     expect(contextManager).toBeDefined();
 
-    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue(
-      'Always use TypeScript',
-    );
+    const expected = 'Always use TypeScript';
+    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue(expected);
 
-    expect(config.getCoreMemory()).toContain('Always use TypeScript');
+    expect(config.getCoreMemory()).toBe(expected);
   });
 
   it('getCoreMemory should return undefined when JIT context is disabled', () => {
