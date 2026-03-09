@@ -15,6 +15,7 @@ import {
   Config,
   mergeRefreshedToken,
   type OAuthTokenWithExtras,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:oauth:manager');

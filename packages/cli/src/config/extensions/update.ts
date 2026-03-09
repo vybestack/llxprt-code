@@ -21,6 +21,7 @@ import { checkForExtensionUpdate } from './github.js';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import { getErrorMessage } from '../../utils/errors.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export interface ExtensionUpdateInfo {
   name: string;

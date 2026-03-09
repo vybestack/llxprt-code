@@ -35,6 +35,7 @@ import {
   type ToolConfirmationPayload,
   createInkStdio,
   ApprovalMode,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';

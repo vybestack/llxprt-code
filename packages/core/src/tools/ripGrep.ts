@@ -29,7 +29,6 @@ import {
 } from '../utils/resolveTextSearchTarget.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
 const debugLogger = DebugLogger.getLogger('llxprt:ripgrep');

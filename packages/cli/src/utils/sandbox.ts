@@ -24,7 +24,7 @@ import {
 } from '../config/settings.js';
 import { promisify } from 'node:util';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { FatalSandboxError, debugLogger } from '@vybestack/llxprt-code-core';
 import { ConsolePatcher } from '../ui/utils/ConsolePatcher.js';
 import {
   createAndStartProxy,
@@ -1103,7 +1103,7 @@ export async function start_sandbox(
 
         // commented out as it disrupts ink rendering
         // proxyProcess.stdout?.on('data', (data) => {
-        //   debugLogger.info(data.toString());
+        //   debugLogger.log(data.toString());
         // });
         proxyProcess.stderr?.on('data', (data) => {
           debugLogger.error(data.toString());
@@ -1729,7 +1729,7 @@ export async function start_sandbox(
 
       // commented out as it disrupts ink rendering
       // proxyProcess.stdout?.on('data', (data) => {
-      //   debugLogger.info(data.toString());
+      //   debugLogger.log(data.toString());
       // });
       proxyProcess.stderr?.on('data', (data) => {
         debugLogger.error(data.toString().trim());
@@ -1902,7 +1902,7 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
 }
 
 async function pullImage(sandbox: string, image: string): Promise<boolean> {
-  debugLogger.info(`Attempting to pull image ${image} using ${sandbox}...`);
+  debugLogger.log(`Attempting to pull image ${image} using ${sandbox}...`);
   return new Promise((resolve) => {
     const args = ['pull', image];
     const pullProcess = spawn(sandbox, args, { stdio: 'pipe' });
@@ -1910,7 +1910,7 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
     let stderrData = '';
 
     const onStdoutData = (data: Buffer) => {
-      debugLogger.info(data.toString().trim()); // Show pull progress
+      debugLogger.log(data.toString().trim()); // Show pull progress
     };
 
     const onStderrData = (data: Buffer) => {
@@ -1928,7 +1928,7 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
 
     const onClose = (code: number | null) => {
       if (code === 0) {
-        debugLogger.info(`Successfully pulled image ${image}.`);
+        debugLogger.log(`Successfully pulled image ${image}.`);
         cleanup();
         resolve(true);
       } else {
@@ -1972,13 +1972,13 @@ async function ensureSandboxImageIsPresent(
   sandbox: string,
   image: string,
 ): Promise<boolean> {
-  debugLogger.info(`Checking for sandbox image: ${image}`);
+  debugLogger.log(`Checking for sandbox image: ${image}`);
   if (await imageExists(sandbox, image)) {
-    debugLogger.info(`Sandbox image ${image} found locally.`);
+    debugLogger.log(`Sandbox image ${image} found locally.`);
     return true;
   }
 
-  debugLogger.info(`Sandbox image ${image} not found locally.`);
+  debugLogger.log(`Sandbox image ${image} not found locally.`);
   if (image === LOCAL_DEV_SANDBOX_IMAGE_NAME) {
     // user needs to build the image themselves
     return false;
@@ -1987,9 +1987,7 @@ async function ensureSandboxImageIsPresent(
   if (await pullImage(sandbox, image)) {
     // After attempting to pull, check again to be certain
     if (await imageExists(sandbox, image)) {
-      debugLogger.info(
-        `Sandbox image ${image} is now available after pulling.`,
-      );
+      debugLogger.log(`Sandbox image ${image} is now available after pulling.`);
       return true;
     } else {
       debugLogger.warn(

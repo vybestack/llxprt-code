@@ -23,6 +23,7 @@ import {
   type ExtensionUpdateInfo,
 } from '../../config/extension.js';
 import { checkExhaustive } from '../../utils/checks.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 type ConfirmationRequestWrapper = {
   prompt: React.ReactNode;

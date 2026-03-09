@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   LLXPRT_CONFIG_DIR,

@@ -61,7 +61,6 @@ import type { ToolRegistry } from './tool-registry.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { DebugLogger } from '../debug/index.js';
 import { coreEvents } from '../utils/events.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 

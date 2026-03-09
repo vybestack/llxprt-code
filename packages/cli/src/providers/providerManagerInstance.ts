@@ -19,6 +19,7 @@ import {
   createProviderRuntimeContext,
   getSettingsService,
   DebugLogger,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');

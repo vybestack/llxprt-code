@@ -36,6 +36,7 @@ import {
   DebugLogger,
   uiTelemetryService,
   type RecordingIntegration,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';

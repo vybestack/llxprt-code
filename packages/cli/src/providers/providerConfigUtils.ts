@@ -7,6 +7,7 @@
 import {
   sanitizeForByteString,
   needsSanitization,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
   updateActiveProviderApiKey,

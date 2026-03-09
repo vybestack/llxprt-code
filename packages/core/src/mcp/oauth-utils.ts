@@ -7,7 +7,6 @@
 import { type MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 

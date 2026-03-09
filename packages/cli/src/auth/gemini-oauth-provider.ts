@@ -21,6 +21,7 @@ import {
   RetryHandler,
   shouldLaunchBrowser,
   DebugLogger,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';

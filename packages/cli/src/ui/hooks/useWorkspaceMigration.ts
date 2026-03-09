@@ -9,6 +9,7 @@ import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import { getWorkspaceExtensions } from '../../config/extension.js';
 import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import process from 'node:process';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export function useWorkspaceMigration(settings: LoadedSettings) {
   const [showWorkspaceMigrationDialog, setShowWorkspaceMigrationDialog] =

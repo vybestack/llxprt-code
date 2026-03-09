@@ -9,7 +9,7 @@ import path from 'path';
 import toml from '@iarna/toml';
 import { glob } from 'glob';
 import { z } from 'zod';
-import { Config, Storage } from '@vybestack/llxprt-code-core';
+import { Config, Storage, debugLogger } from '@vybestack/llxprt-code-core';
 import { ICommandLoader } from './types.js';
 import {
   CommandContext,

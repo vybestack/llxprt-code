@@ -13,7 +13,7 @@ import {
   SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-import { PromptService } from '@vybestack/llxprt-code-core';
+import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Get the init command prompt from the prompt service

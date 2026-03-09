@@ -17,7 +17,6 @@ import {
   type ToolResult,
 } from './tools.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:tools:modifiable-tool');
 

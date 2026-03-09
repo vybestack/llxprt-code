@@ -22,6 +22,7 @@ import {
   GracefulErrorHandler,
   RetryHandler,
   DebugLogger,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';

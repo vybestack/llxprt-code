@@ -50,6 +50,7 @@ import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useTextBuffer } from './shared/text-buffer.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface FzfResult {
   item: string;

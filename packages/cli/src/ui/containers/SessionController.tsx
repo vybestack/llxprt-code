@@ -19,6 +19,7 @@ import {
   Config,
   getErrorMessage,
   loadCoreMemoryContent,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';

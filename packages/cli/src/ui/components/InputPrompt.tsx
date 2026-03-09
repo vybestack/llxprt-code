@@ -45,6 +45,7 @@ import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
 import { useMouse } from '../hooks/useMouse.js';
 import type { MouseEvent } from '../hooks/useMouse.js';
 import clipboardy from 'clipboardy';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 const LARGE_PASTE_LINE_THRESHOLD = 4;
 const LARGE_PASTE_CHAR_THRESHOLD = 1000;

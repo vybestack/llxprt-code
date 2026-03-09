@@ -22,6 +22,7 @@ import {
 } from '../extension.js';
 import * as tar from 'tar';
 import extract from 'extract-zip';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 function getGitHubToken(): string | undefined {
   return process.env['GITHUB_TOKEN'];

@@ -17,7 +17,6 @@ import {
 import { getErrorMessage } from '../utils/errors.js';
 import { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 

@@ -11,4 +11,5 @@
 
 import { DebugLogger } from '../debug/DebugLogger.js';
 
+export { DebugLogger };
 export const debugLogger = new DebugLogger('llxprt:debug');

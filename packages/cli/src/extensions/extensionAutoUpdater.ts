@@ -15,6 +15,7 @@ import {
   Storage,
   getErrorMessage,
   type GeminiCLIExtension,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

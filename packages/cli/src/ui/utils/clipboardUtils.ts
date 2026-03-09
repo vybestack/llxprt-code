@@ -8,7 +8,11 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { escapePath, unescapePath } from '@vybestack/llxprt-code-core';
+import {
+  escapePath,
+  unescapePath,
+  debugLogger,
+} from '@vybestack/llxprt-code-core';
 
 const execAsync = promisify(exec);
 

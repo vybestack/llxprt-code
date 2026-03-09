@@ -14,6 +14,7 @@ import {
   coreEvents,
   CoreEvent,
   unescapePath,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
   toCodePoints,

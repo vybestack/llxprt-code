@@ -97,6 +97,7 @@ import {
   triggerSessionEndHook,
   SessionStartSource,
   SessionEndReason,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';

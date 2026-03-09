@@ -10,6 +10,7 @@ import {
   CodexOAuthTokenSchema,
   openBrowserSecurely,
   shouldLaunchBrowser,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type {
   CodexOAuthToken,

@@ -15,6 +15,7 @@ import {
   getErrorMessage,
   isNodeError,
   unescapePath,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import {

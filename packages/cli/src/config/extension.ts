@@ -9,6 +9,7 @@ import {
   GeminiCLIExtension,
   Storage,
   getErrorMessage,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -428,7 +429,7 @@ async function cloneFromGit(
 export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
-  debugLogger.info(consentDescription);
+  debugLogger.log(consentDescription);
   const result = await promptForConsentNonInteractive(
     'Do you want to continue? [Y/n]: ',
   );

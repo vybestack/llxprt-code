@@ -12,6 +12,7 @@ import {
   MCPServerConfig,
   MCPServerStatus,
   createTransport,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';

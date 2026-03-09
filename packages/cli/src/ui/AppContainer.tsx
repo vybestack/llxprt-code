@@ -89,6 +89,7 @@ import {
   type SessionRecordingService,
   type LockHandle,
   type SessionMetadata,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';

@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import * as dotenv from 'dotenv';
 
 import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
   Config,
   type ConfigParameters,

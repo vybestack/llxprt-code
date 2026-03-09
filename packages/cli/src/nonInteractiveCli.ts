@@ -24,6 +24,7 @@ import {
   setActiveProviderRuntimeContext,
   type UserFeedbackPayload,
   type EmojiFilterMode,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import readline from 'node:readline';

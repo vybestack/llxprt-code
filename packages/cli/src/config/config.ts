@@ -40,6 +40,7 @@ import {
   normalizeShellReplacement,
   type GeminiCLIExtension,
   type Profile,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings } from './settings.js';
