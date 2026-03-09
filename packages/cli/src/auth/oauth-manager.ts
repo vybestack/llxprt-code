@@ -644,7 +644,7 @@ export class OAuthManager {
 
     // Resolve which bucket to act on (explicit bucket > session bucket > default)
     const bucketToUse =
-      bucket ?? this.sessionBuckets.get(providerName) ?? 'default';
+      bucket ?? this.getSessionBucket(providerName) ?? 'default';
 
     const tokenForLogout = await this.tokenStore.getToken(
       providerName,
@@ -665,7 +665,7 @@ export class OAuthManager {
     await this.tokenStore.removeToken(providerName, bucketToUse);
 
     // If we just logged out the active session bucket, clear the in-memory override.
-    if (this.sessionBuckets.get(providerName) === bucketToUse) {
+    if (this.getSessionBucket(providerName) === bucketToUse) {
       this.clearSessionBucket(providerName);
     }
 
@@ -844,7 +844,7 @@ export class OAuthManager {
                 () =>
                   `[issue1616] Found valid token in bucket '${peekBucket}' for ${providerName}, switching session`,
               );
-              this.setSessionBucket(providerName, peekBucket);
+              this.setSessionBucket(providerName, peekBucket, requestMetadata);
               return peekToken.access_token;
             }
           } catch (peekError) {
@@ -1009,11 +1009,28 @@ export class OAuthManager {
           `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
         );
         await this.authenticateMultipleBuckets(providerName, effectiveBuckets);
+        const authenticatedBucket = effectiveBuckets[0];
+        if (authenticatedBucket) {
+          this.setSessionBucket(
+            providerName,
+            authenticatedBucket,
+            requestMetadata,
+          );
+        }
       } else {
-        await this.authenticate(providerName);
+        const authenticatedBucket =
+          buckets.length === 1 ? buckets[0] : (bucketToCheck ?? 'default');
+        await this.authenticate(providerName, authenticatedBucket);
+        if (authenticatedBucket) {
+          this.setSessionBucket(
+            providerName,
+            authenticatedBucket,
+            requestMetadata,
+          );
+        }
       }
 
-      const newToken = await this.getOAuthToken(providerName);
+      const newToken = await this.getOAuthToken(providerName, requestMetadata);
       return newToken ? newToken.access_token : null;
     } catch (error) {
       // Special handling for Gemini - USE_EXISTING_GEMINI_OAUTH is not an error
@@ -1984,7 +2001,7 @@ export class OAuthManager {
     }>
   > {
     const buckets = await this.tokenStore.listBuckets(provider);
-    const sessionBucket = this.sessionBuckets.get(provider);
+    const sessionBucket = this.getSessionBucket(provider);
     const statuses: Array<{
       bucket: string;
       authenticated: boolean;
@@ -2037,7 +2054,7 @@ export class OAuthManager {
 
     // Get the token for the specified bucket
     const bucketToUse =
-      bucket ?? this.sessionBuckets.get('anthropic') ?? 'default';
+      bucket ?? this.getSessionBucket('anthropic') ?? 'default';
     const token = await this.tokenStore.getToken('anthropic', bucketToUse);
 
     if (!token) {

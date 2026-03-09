@@ -549,6 +549,21 @@ describe('AuthPrecedenceResolver', () => {
       // Then: Should return env-test_api_key
       expect(methodName).toBe('env-test_api_key');
     });
+
+    it('should get correct auth method name for auth-key-name', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key-name', 'chutesminimax');
+
+      const config: AuthPrecedenceConfig = {
+        envKeyNames: ['TEST_API_KEY'],
+      };
+
+      const resolver = new AuthPrecedenceResolver(config);
+
+      const methodName = await resolver.getAuthMethodName();
+
+      expect(methodName).toBe('named-key');
+    });
   });
 
   describe('File Handling', () => {

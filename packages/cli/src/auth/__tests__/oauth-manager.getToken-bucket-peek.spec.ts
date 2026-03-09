@@ -389,7 +389,16 @@ describe('Issue 1616: getToken bucket peek loop', () => {
 
     await manager.getToken('anthropic');
 
-    expect(setSessionBucketSpy).toHaveBeenCalledWith('anthropic', 'claudius');
+    expect(setSessionBucketSpy).toHaveBeenCalledWith(
+      'anthropic',
+      'default',
+      undefined,
+    );
+    expect(setSessionBucketSpy).toHaveBeenCalledWith(
+      'anthropic',
+      'claudius',
+      undefined,
+    );
   });
 
   it('should return null for multi-bucket profiles when no bucket has a valid token', async () => {

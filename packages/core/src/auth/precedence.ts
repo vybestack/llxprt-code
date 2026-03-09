@@ -865,6 +865,13 @@ export class AuthPrecedenceResolver {
       return 'command-key';
     }
 
+    const authKeyName = this.normalizeAuthValue(
+      settingsService.get('auth-key-name'),
+    );
+    if (authKeyName) {
+      return 'named-key';
+    }
+
     const authKeyfile = settingsService.get('auth-keyfile');
     if (authKeyfile && typeof authKeyfile === 'string') {
       try {
