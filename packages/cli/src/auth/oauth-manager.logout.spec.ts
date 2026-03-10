@@ -190,6 +190,72 @@ describe('OAuthManager.logout runtime cache handling', () => {
     expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-b');
   });
 
+  it('removes bucket tokens for every provider when logging out all providers', async () => {
+    const tokenStore: TokenStore = {
+      saveToken: vi.fn(),
+      getToken: vi.fn().mockResolvedValue(null),
+      removeToken: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn().mockResolvedValue(['qwen', 'anthropic']),
+      listBuckets: vi.fn(async (provider: string) => {
+        if (provider === 'qwen') {
+          return ['default', 'bucket-a'];
+        }
+        if (provider === 'anthropic') {
+          return ['default', 'bucket-b'];
+        }
+        return [];
+      }),
+      getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const manager = new OAuthManager(tokenStore);
+
+    const qwenProvider: OAuthProvider & { logout?: () => Promise<void> } = {
+      name: 'qwen',
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'qwen-token',
+        refresh_token: 'qwen-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
+      getToken: vi.fn(async () => null),
+      refreshToken: vi.fn(async () => null),
+      logout: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const anthropicProvider: OAuthProvider & { logout?: () => Promise<void> } =
+      {
+        name: 'anthropic',
+        initiateAuth: vi.fn(async () => ({
+          access_token: 'anthropic-token',
+          refresh_token: 'anthropic-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer' as const,
+        })),
+        getToken: vi.fn(async () => null),
+        refreshToken: vi.fn(async () => null),
+        logout: vi.fn().mockResolvedValue(undefined),
+      };
+
+    manager.registerProvider(qwenProvider);
+    manager.registerProvider(anthropicProvider);
+    providerRef.current = qwenProvider;
+
+    await manager.logoutAll();
+
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('anthropic', 'default');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith(
+      'anthropic',
+      'bucket-b',
+    );
+  });
+
   it('clears profile-scoped session buckets when logging out all buckets', async () => {
     const tokenStore: TokenStore = {
       saveToken: vi.fn(),

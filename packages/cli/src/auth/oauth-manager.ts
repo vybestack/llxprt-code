@@ -751,8 +751,8 @@ export class OAuthManager {
     // Lines 42-49: FOR EACH provider IN providers DO
     for (const provider of providers) {
       try {
-        // Line 44: AWAIT this.logout(provider)
-        await this.logout(provider);
+        // Line 44: AWAIT this.logoutAllBuckets(provider)
+        await this.logoutAllBuckets(provider);
       } catch (error) {
         // Lines 45-47: LOG "Failed to logout from " + provider + ": " + error
         logger.warn(`Failed to logout from ${provider}: ${error}`);
