@@ -884,7 +884,7 @@ ${jitMemory}`
       const historyService = this.chat.getHistoryService();
       if (historyService) {
         // Clear the history service directly
-        historyService.clear();
+        historyService.clear({ resetChronology: true });
       } else {
         // Fallback to chat's clearHistory if no history service
         this.chat.clearHistory();
@@ -962,7 +962,9 @@ ${jitMemory}`
       historyService.validateAndFix();
 
       // Add all history items
-      historyService.addAll(historyItems);
+      historyService.addAllWithOptions(historyItems, undefined, {
+        isService: true,
+      });
 
       this.logger.debug('History restored successfully', {
         itemCount: historyItems.length,

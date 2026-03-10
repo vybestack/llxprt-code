@@ -60,6 +60,8 @@ Sessions are per-project. Running `llxprt --continue` in a different directory s
 
 The `/chat` command lets you save and restore conversation state within a session. This is useful when you want to try different approaches and branch back to a known-good state.
 
+When restoring a saved conversation, LLxprt preserves per-message metadata that some providers rely on (for example: chronology counters, timestamps, and tool timing fields such as durations) so the reconstructed context stays consistent.
+
 ```
 /chat save before-refactor     # Tag the current conversation state
 ```

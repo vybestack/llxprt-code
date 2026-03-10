@@ -178,12 +178,21 @@ function createFunctionResponsePart(
   callId: string,
   toolName: string,
   output: string,
+  timing?: { startedAt?: string; durationSec?: number },
 ): Part {
   return {
     functionResponse: {
       id: callId,
       name: toolName,
-      response: { output },
+      response: {
+        output,
+        ...(timing?.startedAt !== undefined
+          ? { startedAt: timing.startedAt }
+          : {}),
+        ...(timing?.durationSec !== undefined
+          ? { durationSec: timing.durationSec }
+          : {}),
+      },
     },
   };
 }
@@ -226,6 +235,16 @@ function limitFunctionResponsePart(
   if (limitedOutput === existingOutput) {
     return part;
   }
+
+  const startedAt =
+    typeof response['startedAt'] === 'string'
+      ? response['startedAt']
+      : undefined;
+  const durationSec =
+    typeof response['durationSec'] === 'number'
+      ? response['durationSec']
+      : undefined;
+
   return {
     ...part,
     functionResponse: {
@@ -233,6 +252,8 @@ function limitFunctionResponsePart(
       response: {
         ...response,
         output: limitedOutput,
+        ...(startedAt !== undefined ? { startedAt } : {}),
+        ...(durationSec !== undefined ? { durationSec } : {}),
       },
     },
   };
@@ -243,11 +264,14 @@ export function convertToFunctionResponse(
   callId: string,
   llmContent: PartListUnion,
   config?: ToolOutputSettingsProvider,
+  timing?: { startedAt?: string; durationSec?: number },
 ): Part[] {
   // Handle simple string case
   if (typeof llmContent === 'string') {
     const limitedOutput = limitStringOutput(llmContent, toolName, config);
-    return [createFunctionResponsePart(callId, toolName, limitedOutput)];
+    return [
+      createFunctionResponsePart(callId, toolName, limitedOutput, timing),
+    ];
   }
 
   const parts = toParts(llmContent);
@@ -1637,11 +1661,21 @@ export class CoreToolScheduler {
       // Success case — use tighter per-tool limits when the batch risked
       // exceeding the context window (#1301)
       const outputConfig = this.batchOutputConfig ?? this.config;
+
+      const timing =
+        scheduledCall.startTime !== undefined
+          ? {
+              startedAt: new Date(scheduledCall.startTime).toISOString(),
+              durationSec: (Date.now() - scheduledCall.startTime) / 1000,
+            }
+          : undefined;
+
       const response = convertToFunctionResponse(
         toolName,
         callId,
         result.llmContent,
         outputConfig,
+        timing,
       );
       const metadataAgentId = extractAgentIdFromMetadata(result.metadata);
 

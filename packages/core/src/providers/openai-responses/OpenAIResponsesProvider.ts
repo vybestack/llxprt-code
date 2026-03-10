@@ -587,7 +587,131 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Counter for generating unique reasoning IDs within a single request
     let reasoningIdCounter = 0;
 
+    const formatChronologyPrefix = (content: IContent): string => {
+      const usrTrn = content.metadata?.chronology?.userTurnNumber;
+      const agTrn = content.metadata?.chronology?.agentStepNumber;
+      const timestamp = content.metadata?.timestamp;
+
+      if (
+        typeof usrTrn !== 'number' ||
+        typeof agTrn !== 'number' ||
+        typeof timestamp !== 'number'
+      ) {
+        return '';
+      }
+
+      const d = new Date(timestamp);
+
+      const yy = String(d.getFullYear() % 100).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+
+      const localHms = d.toTimeString().slice(0, 8);
+      const ms = String(d.getMilliseconds()).padStart(3, '0');
+
+      const chron = {
+        chron: {
+          usrTrn,
+          agTrn,
+          start: `${yy}-${mm}-${dd} ${localHms}.${ms}`,
+        },
+      };
+
+      return `${JSON.stringify(chron)}\n`;
+    };
+
+    const enrichToolOutputWithChronology = (params: {
+      rawResult: string;
+      metadataChronology?: {
+        userTurnNumber?: number;
+        agentStepNumber?: number;
+      };
+      metadataTimestamp?: number;
+      durationSec?: number;
+    }): string => {
+      const usrTrn =
+        typeof params.metadataChronology?.userTurnNumber === 'number'
+          ? params.metadataChronology.userTurnNumber
+          : undefined;
+      const agTrn =
+        typeof params.metadataChronology?.agentStepNumber === 'number'
+          ? params.metadataChronology.agentStepNumber
+          : undefined;
+
+      const localStart = (() => {
+        const ts = params.metadataTimestamp;
+        if (typeof ts !== 'number') return undefined;
+        const d = new Date(ts);
+
+        const yy = String(d.getFullYear() % 100).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+
+        const hms = d.toTimeString().slice(0, 8);
+        const ms = String(d.getMilliseconds()).padStart(3, '0');
+
+        return `${yy}-${mm}-${dd} ${hms}.${ms}`;
+      })();
+
+      const dur =
+        typeof params.durationSec === 'number' ? params.durationSec : undefined;
+
+      const shouldEnrich =
+        usrTrn !== undefined ||
+        agTrn !== undefined ||
+        localStart !== undefined ||
+        dur !== undefined;
+
+      if (!shouldEnrich) {
+        return params.rawResult;
+      }
+
+      const chron = {
+        chron: {
+          ...(usrTrn !== undefined ? { usrTrn } : {}),
+          ...(agTrn !== undefined ? { agTrn } : {}),
+          ...(localStart !== undefined ? { start: localStart } : {}),
+          ...(dur !== undefined ? { dur } : {}),
+        },
+      };
+
+      try {
+        const parsed = JSON.parse(params.rawResult) as unknown;
+
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          !Array.isArray(parsed)
+        ) {
+          const cleaned: Record<string, unknown> = {
+            ...(parsed as Record<string, unknown>),
+          };
+
+          if (typeof cleaned['durationSec'] === 'number') {
+            delete cleaned['durationSec'];
+          }
+
+          return JSON.stringify({
+            ...cleaned,
+            ...chron,
+          });
+        }
+
+        return JSON.stringify({
+          output: parsed,
+          ...chron,
+        });
+      } catch {
+        return JSON.stringify({
+          output: params.rawResult,
+          ...chron,
+        });
+      }
+    };
+
     for (const c of patchedContent) {
+      const chronPrefix = formatChronologyPrefix(c);
+
       if (c.speaker === 'human') {
         const hasMedia = c.blocks.some((b) => b.type === 'media');
 
@@ -595,7 +719,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
           const parts: ResponsesContentPart[] = [];
           for (const block of c.blocks) {
             if (block.type === 'text' && block.text) {
-              parts.push({ type: 'input_text', text: block.text });
+              parts.push({
+                type: 'input_text',
+                text: `${chronPrefix}${block.text}`,
+              });
             } else if (block.type === 'media') {
               const category = classifyMediaBlock(block);
               if (category === 'image') {
@@ -629,7 +756,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             .map((b) => b.text)
             .join('\n');
           if (text) {
-            input.push({ role: 'user', content: text });
+            input.push({ role: 'user', content: `${chronPrefix}${text}` });
           }
         }
       } else if (c.speaker === 'ai') {
@@ -660,7 +787,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
         if (contentText) {
           input.push({
             role: 'assistant',
-            content: contentText,
+            content: `${chronPrefix}${contentText}`,
           });
         }
 
@@ -690,6 +817,26 @@ export class OpenAIResponsesProvider extends BaseProvider {
               ? toolResponseBlock.result
               : JSON.stringify(toolResponseBlock.result);
 
+          const dur = (() => {
+            const r = toolResponseBlock.result;
+            if (typeof r !== 'object' || r === null || Array.isArray(r)) {
+              return undefined;
+            }
+
+            const maybeDurationSec = (r as { durationSec?: unknown })
+              .durationSec;
+            return typeof maybeDurationSec === 'number'
+              ? maybeDurationSec
+              : undefined;
+          })();
+
+          const enrichedRawResult = enrichToolOutputWithChronology({
+            rawResult,
+            metadataChronology: c.metadata?.chronology,
+            metadataTimestamp: c.metadata?.timestamp,
+            durationSec: dur,
+          });
+
           const outputLimiterConfig =
             options.config ??
             options.runtime?.config ??
@@ -699,7 +846,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             } satisfies ToolOutputSettingsProvider);
 
           const limited = limitOutputTokens(
-            rawResult,
+            enrichedRawResult,
             outputLimiterConfig,
             toolResponseBlock.toolName ?? 'tool_response',
           );

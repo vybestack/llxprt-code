@@ -61,6 +61,7 @@ import {
   isTransientCompressionError,
 } from './compression/types.js';
 import { PromptResolver } from '../prompt-config/prompt-resolver.js';
+import { setPromptChronologyJsonSync } from './prompts.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type {
@@ -766,7 +767,18 @@ export class GeminiChat {
     const pendingTokens = await this.estimatePendingTokens(userIContents);
     await this.ensureCompressionBeforeSend(prompt_id, pendingTokens, 'send');
 
-    // DO NOT add user content to history yet - use send-then-commit pattern
+    // Commit-before-send: persist the user/tool tail into history before constructing the provider request.
+    // This guarantees request construction uses a fully stamped, consistent IContent stream.
+    const currentModelForCommit = this.runtimeState.model;
+    for (const content of userIContents) {
+      content.metadata = {
+        ...(content.metadata ?? {}),
+        pendingAck: true,
+      };
+      this.historyService.addWithOptions(content, currentModelForCommit, {
+        isService: true,
+      });
+    }
 
     const provider = this.resolveProviderForRuntime('sendMessage');
 
@@ -794,9 +806,8 @@ export class GeminiChat {
       );
     }
 
-    // Build a provider-safe request transcript that includes the new message(s)
-    // without committing them to history yet.
-    const iContents = this.historyService.getCuratedForProvider(userIContents);
+    // Build a provider-safe request transcript from fully committed history.
+    const iContents = this.historyService.getCuratedForProvider();
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
@@ -953,10 +964,25 @@ export class GeminiChat {
       this.sendPromise = (async () => {
         const outputContent = response.candidates?.[0]?.content;
 
-        // Send-then-commit: Now that we have a successful response, add both user and model messages
-        // @plan PLAN-20251027-STATELESS5.P10
-        // @requirement REQ-STAT5-004.1
+        // Commit-before-send: user/tool tail is already committed.
+        // Now that we have a successful response, clear the pending-ack tail marker.
         const currentModel = this.runtimeState.model;
+
+        // Only clear pending-ack markers if these exact items are still the last entries.
+        // This avoids accidentally clearing a new tail in rare race conditions.
+        const raw = this.historyService.getRawHistory();
+        const tail = raw.slice(Math.max(0, raw.length - userIContents.length));
+        const matchesTail =
+          tail.length === userIContents.length &&
+          tail.every((c, idx) => c === userIContents[idx]);
+
+        if (matchesTail) {
+          for (const content of userIContents) {
+            if (content.metadata && 'pendingAck' in content.metadata) {
+              delete content.metadata.pendingAck;
+            }
+          }
+        }
 
         // Handle AFC history or regular history
         const fullAutomaticFunctionCallingHistory =
@@ -983,32 +1009,7 @@ export class GeminiChat {
             );
           }
         } else {
-          // Regular case: Add user content first
-          // Handle both single Content and Content[] from normalizeToolInteractionInput
-          if (Array.isArray(userContent)) {
-            for (const content of userContent) {
-              const turnKey = this.historyService.generateTurnKey();
-              const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-              const matcher = this.makePositionMatcher();
-              this.historyService.add(
-                ContentConverters.toIContent(content, idGen, matcher, turnKey),
-                currentModel,
-              );
-            }
-          } else {
-            const turnKey = this.historyService.generateTurnKey();
-            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-            const matcher = this.makePositionMatcher();
-            this.historyService.add(
-              ContentConverters.toIContent(
-                userContent,
-                idGen,
-                matcher,
-                turnKey,
-              ),
-              currentModel,
-            );
-          }
+          // Regular case: user content is already committed before send.
         }
 
         // Add model response if we have one (but filter out pure thinking responses)
@@ -1199,7 +1200,19 @@ export class GeminiChat {
     const pendingTokens = await this.estimatePendingTokens(userIContents);
     await this.ensureCompressionBeforeSend(prompt_id, pendingTokens, 'stream');
 
-    // DO NOT add anything to history here - wait until after successful send!
+    // Commit-before-send: persist the user/tool tail into history before constructing the provider request.
+    // This guarantees request construction uses a fully stamped, consistent IContent stream.
+    const currentModelForCommit = this.runtimeState.model;
+    for (const content of userIContents) {
+      content.metadata = {
+        ...(content.metadata ?? {}),
+        pendingAck: true,
+      };
+      this.historyService.addWithOptions(content, currentModelForCommit, {
+        isService: true,
+      });
+    }
+
     // Tool responses will be handled in recordHistory after the model responds
 
     let streamDoneResolver: () => void;
@@ -1208,8 +1221,7 @@ export class GeminiChat {
     });
     this.sendPromise = streamDonePromise;
 
-    // DO NOT add user content to history yet - wait until successful send
-    // This is the send-then-commit pattern to avoid orphaned tool calls
+    // User content is committed before send; failures are handled by clearing the pending-ack tail.
 
     return (async function* (instance) {
       try {
@@ -1285,9 +1297,9 @@ export class GeminiChat {
         }
 
         if (lastError) {
-          // With send-then-commit pattern, we don't add to history until success,
-          // so there's nothing to remove on failure. This is the approach upstream
-          // moved to in e705f45c - we were already doing this correctly.
+          // Commit-before-send: the user/tool tail was already committed.
+          // On failure, we rely on the pending-ack tail cleanup logic to prevent the next request
+          // from including unacknowledged content.
           throw lastError;
         }
       } finally {
@@ -1426,16 +1438,23 @@ export class GeminiChat {
             },
           );
 
+          // Chronology is updated per provider round-trip and injected into prompts
+          // via dynamic placeholders ({{$CHRONOLOGY_JSON}}).
+          this.historyService.bumpAgentStep();
+          const chron = this.historyService.getChronologySnapshot();
+          setPromptChronologyJsonSync(JSON.stringify(chron));
+
           // Trigger BeforeModel hook and check for blocking/synthetic response
           // @requirement:HOOK-036 - Block API call or return synthetic response
           if (configForHooks) {
             const requestForHook = {
-              contents: userIContents,
+              contents: this.historyService.getCuratedForProvider(),
               tools:
                 effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
                   ? (effectiveToolsFromConfig as ProviderToolset)
                   : undefined,
             };
+
             const beforeModelResult = await triggerBeforeModelHook(
               configForHooks,
               requestForHook,
@@ -1480,7 +1499,8 @@ export class GeminiChat {
               const modifiedRequest =
                 beforeModelResult.applyLLMRequestModifications({
                   model: this.runtimeState.model || '',
-                  contents: userIContents as Content[],
+                  contents:
+                    this.historyService.getCuratedForProvider() as Content[],
                 });
               // If hook modified contents, update contentsForApi
               if (modifiedRequest && modifiedRequest.contents) {
@@ -1627,42 +1647,8 @@ export class GeminiChat {
     }
 
     const apiCall = async () => {
-      // Convert user content to IContent first so we can check if it's a tool response
-      let requestContents: IContent[];
-      if (Array.isArray(userContent)) {
-        // This is a paired tool call/response - convert each separately
-        const userIContents = userContent.map((content) => {
-          const turnKey = this.historyService.generateTurnKey();
-          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-          const matcher = this.makePositionMatcher();
-          return ContentConverters.toIContent(content, idGen, matcher, turnKey);
-        });
-        // Build a provider-safe request transcript that includes the new message(s)
-        // without committing them to history yet.
-        requestContents =
-          this.historyService.getCuratedForProvider(userIContents);
-      } else {
-        const turnKey = this.historyService.generateTurnKey();
-        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-        const matcher = this.makePositionMatcher();
-        const userIContent = ContentConverters.toIContent(
-          userContent,
-          idGen,
-          matcher,
-          turnKey,
-        );
-        // Build a provider-safe request transcript that includes the new message
-        // without committing it to history yet.
-        requestContents = this.historyService.getCuratedForProvider([
-          userIContent,
-        ]);
-      }
-
-      // DEBUG: Check for malformed entries
-      this.logger.debug(
-        () =>
-          `[DEBUG] geminiChat IContent request (history + new message): ${JSON.stringify(requestContents, null, 2)}`,
-      );
+      // Build a provider-safe request transcript from fully committed history.
+      const requestContents = this.historyService.getCuratedForProvider();
 
       // Get tools in the format the provider expects
       const tools = this.generationConfig.tools;
@@ -2863,10 +2849,9 @@ export class GeminiChat {
     }
 
     // Part 4: Add the new turn (user and model parts) to the history service.
+    // Commit-before-send: user/tool tail was already committed before the provider call,
+    // so recordHistory should not re-add it.
     const currentModel = this.runtimeState.model;
-    for (const entry of newHistoryEntries) {
-      this.historyService.add(entry, currentModel);
-    }
 
     let didAttachThoughtBlocks = false;
     for (const content of consolidatedOutputContents) {

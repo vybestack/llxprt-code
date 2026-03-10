@@ -214,11 +214,18 @@ export class PromptService {
         const cacheKey = this.cache.generateKey(context);
         this.logger.debug(() => `Cache hit: ${cacheKey}`);
       }
-      return this.appendMemoryContent(
-        cached.assembledPrompt,
-        coreMemory,
-        userMemory,
+
+      // Apply dynamic substitutions ({{$VAR}}) on top of cached base prompt.
+      const variables = this.templateEngine.createVariablesFromContext(
+        context,
+        null,
       );
+      const dynamicProcessed = this.templateEngine.processDynamicTemplate(
+        cached.assembledPrompt,
+        variables,
+      );
+
+      return this.appendMemoryContent(dynamicProcessed, coreMemory, userMemory);
     }
 
     // Resolve files
@@ -283,7 +290,17 @@ export class PromptService {
     };
     this.cache.set(context, baseAssembled, metadata);
 
-    return this.appendMemoryContent(baseAssembled, coreMemory, userMemory);
+    // Apply dynamic substitutions ({{$VAR}}) on the freshly assembled prompt.
+    const variables = this.templateEngine.createVariablesFromContext(
+      context,
+      null,
+    );
+    const dynamicProcessed = this.templateEngine.processDynamicTemplate(
+      baseAssembled,
+      variables,
+    );
+
+    return this.appendMemoryContent(dynamicProcessed, coreMemory, userMemory);
   }
 
   /**
@@ -338,9 +355,10 @@ export class PromptService {
    */
   clearCache(): void {
     this.cache.clear();
-    if (this.config.debugMode) {
-      this.logger.debug(() => 'Cache cleared');
-    }
+  }
+
+  setChronologyJson(value: string): void {
+    this.templateEngine.setChronologyJson(value);
   }
 
   /**

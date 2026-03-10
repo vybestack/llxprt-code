@@ -72,6 +72,23 @@ export interface ContentMetadata {
 
   /** Stable identifier for a conversation turn */
   turnId?: string;
+
+  /**
+   * Two-level chronology marker for ordering and grouping items within a user turn.
+   */
+  chronology?: Chronology;
+
+  /**
+   * Marks a committed-but-not-yet-acknowledged tail item during commit-before-send.
+   */
+  pendingAck?: boolean;
+}
+
+export interface Chronology {
+  /** Increments only on real user input */
+  userTurnNumber?: number;
+  /** Increments on each provider/tool round-trip within a user turn */
+  agentStepNumber?: number;
 }
 
 export interface UsageStats {

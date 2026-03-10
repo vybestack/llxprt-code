@@ -364,6 +364,62 @@ describe('ContentConverters - History ID Conversion for Gemini', () => {
       expect(geminiContent.parts[0].functionCall?.id).toBe('hist_tool_123_1');
     });
 
+    it('should persist metadata through Gemini Content round-trip (checkpoint compatibility)', () => {
+      const iContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
+        metadata: {
+          timestamp: 1700000000123,
+          chronology: {
+            userTurnNumber: 3,
+            agentStepNumber: 1,
+          },
+          synthetic: false,
+        },
+      };
+
+      const geminiContent = ContentConverters.toGeminiContent(
+        iContent,
+      ) as Content & {
+        llxprtMetadata?: IContent['metadata'];
+      };
+
+      expect(geminiContent.llxprtMetadata).toBeDefined();
+      expect(geminiContent.llxprtMetadata?.timestamp).toBe(1700000000123);
+      expect(geminiContent.llxprtMetadata?.chronology?.userTurnNumber).toBe(3);
+      expect(geminiContent.llxprtMetadata?.chronology?.agentStepNumber).toBe(1);
+
+      const restored = ContentConverters.toIContent(
+        geminiContent,
+        undefined,
+        undefined,
+        'turn-test',
+      );
+
+      expect(restored.metadata?.timestamp).toBe(1700000000123);
+      expect(restored.metadata?.chronology?.userTurnNumber).toBe(3);
+      expect(restored.metadata?.chronology?.agentStepNumber).toBe(1);
+      expect(restored.metadata?.turnId).toBe('turn-test');
+    });
+
+    it('should keep previous behavior when metadata vendor extension is absent', () => {
+      const geminiContent: Content = {
+        role: 'user',
+        parts: [{ text: 'Hello' }],
+      };
+
+      const restored = ContentConverters.toIContent(
+        geminiContent,
+        undefined,
+        undefined,
+        'turn-test',
+      );
+
+      expect(restored.metadata?.turnId).toBe('turn-test');
+      expect(restored.metadata?.timestamp).toBeUndefined();
+      expect(restored.metadata?.chronology).toBeUndefined();
+    });
+
     it('should preserve thinking signatures on Gemini parts', () => {
       const iContent: IContent = {
         speaker: 'ai',
