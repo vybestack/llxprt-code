@@ -2024,13 +2024,21 @@ export class OAuthManager {
       return scopedSessionBucket;
     }
 
+    const profileBuckets = await this.getProfileBuckets(provider, metadata);
+    if (profileBuckets.length === 1) {
+      return profileBuckets[0];
+    }
+
     const unscopedSessionBucket = this.getSessionBucket(provider);
-    if (unscopedSessionBucket) {
+    if (
+      unscopedSessionBucket &&
+      (profileBuckets.length === 0 ||
+        profileBuckets.includes(unscopedSessionBucket))
+    ) {
       return unscopedSessionBucket;
     }
 
-    const profileBuckets = await this.getProfileBuckets(provider, metadata);
-    return profileBuckets.length === 1 ? profileBuckets[0] : undefined;
+    return undefined;
   }
 
   /**

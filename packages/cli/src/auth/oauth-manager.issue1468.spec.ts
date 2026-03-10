@@ -787,6 +787,76 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
     ).resolves.toBeNull();
   });
 
+  it('prefers the current profile only bucket over a stale unscoped session bucket', async () => {
+    mockGetCurrentProfileName.mockReturnValue('single-bucket-profile');
+    mockLoadProfile.mockResolvedValue({
+      provider: 'anthropic',
+      auth: {
+        type: 'oauth',
+        buckets: ['named-bucket'],
+      },
+    });
+
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const provider: OAuthProvider & { logout?: typeof logout } = {
+      name: 'anthropic',
+      initiateAuth: vi.fn().mockResolvedValue({
+        access_token: 'fresh-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      getToken: vi.fn().mockResolvedValue(null),
+      refreshToken: vi.fn().mockResolvedValue(null),
+      logout,
+    };
+    manager.registerProvider(provider);
+
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'foreground-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'foreground-bucket',
+    );
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'named-bucket-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'named-bucket',
+    );
+    manager.setSessionBucket('anthropic', 'foreground-bucket');
+    mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'named-bucket' });
+
+    const statuses = await manager.getAuthStatusWithBuckets('anthropic');
+    expect(
+      statuses.find((status) => status.bucket === 'named-bucket')
+        ?.isSessionBucket,
+    ).toBe(true);
+    expect(
+      statuses.find((status) => status.bucket === 'foreground-bucket')
+        ?.isSessionBucket,
+    ).toBe(false);
+
+    const usage = await manager.getAnthropicUsageInfo();
+    expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('named-bucket-token');
+    expect(usage).toEqual({ bucket: 'named-bucket' });
+
+    await manager.logout('anthropic');
+
+    expect(logout).toHaveBeenCalledTimes(1);
+    await expect(
+      tokenStore.getToken('anthropic', 'named-bucket'),
+    ).resolves.toBeNull();
+    await expect(
+      tokenStore.getToken('anthropic', 'foreground-bucket'),
+    ).resolves.not.toBeNull();
+  });
+
   describe('when requesting buckets for a provider that matches the loaded profile', () => {
     /**
      * @requirement Issue #1468
