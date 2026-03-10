@@ -642,9 +642,14 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    const sessionMetadata =
+      await this.getCurrentProfileSessionMetadata(providerName);
+
     // Resolve which bucket to act on (explicit bucket > session bucket > default)
     const bucketToUse =
-      bucket ?? this.getSessionBucket(providerName) ?? 'default';
+      bucket ??
+      this.getSessionBucket(providerName, sessionMetadata) ??
+      'default';
 
     const tokenForLogout = await this.tokenStore.getToken(
       providerName,
@@ -665,8 +670,8 @@ export class OAuthManager {
     await this.tokenStore.removeToken(providerName, bucketToUse);
 
     // If we just logged out the active session bucket, clear the in-memory override.
-    if (this.getSessionBucket(providerName) === bucketToUse) {
-      this.clearSessionBucket(providerName);
+    if (this.getSessionBucket(providerName, sessionMetadata) === bucketToUse) {
+      this.clearSessionBucket(providerName, sessionMetadata);
     }
 
     // CRITICAL FIX: Clear all provider auth caches after logout
@@ -2001,7 +2006,9 @@ export class OAuthManager {
     }>
   > {
     const buckets = await this.tokenStore.listBuckets(provider);
-    const sessionBucket = this.getSessionBucket(provider);
+    const sessionMetadata =
+      await this.getCurrentProfileSessionMetadata(provider);
+    const sessionBucket = this.getSessionBucket(provider, sessionMetadata);
     const statuses: Array<{
       bucket: string;
       authenticated: boolean;
@@ -2052,9 +2059,14 @@ export class OAuthManager {
       return null;
     }
 
+    const sessionMetadata =
+      await this.getCurrentProfileSessionMetadata('anthropic');
+
     // Get the token for the specified bucket
     const bucketToUse =
-      bucket ?? this.getSessionBucket('anthropic') ?? 'default';
+      bucket ??
+      this.getSessionBucket('anthropic', sessionMetadata) ??
+      'default';
     const token = await this.tokenStore.getToken('anthropic', bucketToUse);
 
     if (!token) {
@@ -2252,6 +2264,36 @@ export class OAuthManager {
         ? metadata.profileId.trim()
         : undefined;
     return profileId ? `${provider}::${profileId}` : provider;
+  }
+
+  private async getCurrentProfileSessionMetadata(
+    providerName: string,
+  ): Promise<OAuthTokenRequestMetadata | undefined> {
+    try {
+      const { getCliRuntimeServices } = await import(
+        '../runtime/runtimeSettings.js'
+      );
+      const { settingsService } = getCliRuntimeServices();
+      const currentProfileName =
+        typeof settingsService.getCurrentProfileName === 'function'
+          ? settingsService.getCurrentProfileName()
+          : ((settingsService.get('currentProfile') as string | null) ?? null);
+
+      if (!currentProfileName || currentProfileName.trim() === '') {
+        return undefined;
+      }
+
+      return {
+        providerId: providerName,
+        profileId: currentProfileName.trim(),
+      };
+    } catch (error) {
+      logger.debug(
+        `Could not resolve current profile session metadata for ${providerName}:`,
+        error,
+      );
+      return undefined;
+    }
   }
 
   private async getProfileBuckets(
