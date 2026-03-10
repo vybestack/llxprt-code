@@ -1,8 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('../runtime/runtimeSettings.js', () => ({
+  getCliRuntimeServices: vi.fn(() => ({
+    config: undefined,
+    settings: undefined,
+  })),
+  getEphemeralSetting: vi.fn((key: string) => {
+    if (key === 'auth-bucket-delay') {
+      return 0;
+    }
+    return undefined;
+  }),
+  getCliProviderManager: vi.fn(() => undefined),
+  getCliRuntimeContext: vi.fn(() => undefined),
+}));
+
 import { OAuthManager } from './oauth-manager.js';
 import type {
   Config,
   BucketFailoverHandler,
+  OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { TokenStore, OAuthToken } from './types.js';
 
@@ -246,6 +263,53 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
     );
 
     warnSpy.mockRestore();
+    getProfileBucketsSpy.mockRestore();
+  });
+
+  it('wires a metadata-scoped failover handler during eager multi-bucket auth', async () => {
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    const getProfileBucketsSpy = vi
+      .spyOn(
+        oauthManager as unknown as {
+          getProfileBuckets: () => Promise<string[]>;
+        },
+        'getProfileBuckets',
+      )
+      .mockResolvedValue(['bucket-a', 'bucket-b']);
+
+    const authenticateSpy = vi
+      .spyOn(oauthManager, 'authenticate')
+      .mockResolvedValue(undefined);
+
+    await oauthManager.authenticateMultipleBuckets(
+      'anthropic',
+      ['bucket-a', 'bucket-b'],
+      metadata,
+    );
+
+    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
+    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0] as {
+      getCurrentBucket: () => string | undefined;
+      reset: () => void;
+    };
+
+    oauthManager.setSessionBucket('anthropic', 'bucket-b', metadata);
+    expect(handlerArg.getCurrentBucket()).toBe('bucket-a');
+    handlerArg.reset();
+    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
+      'bucket-a',
+    );
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
+
+    authenticateSpy.mockRestore();
     getProfileBucketsSpy.mockRestore();
   });
 });

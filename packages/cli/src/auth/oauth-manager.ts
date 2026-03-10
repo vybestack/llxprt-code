@@ -1013,7 +1013,11 @@ export class OAuthManager {
         logger.debug(
           `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
         );
-        await this.authenticateMultipleBuckets(providerName, effectiveBuckets);
+        await this.authenticateMultipleBuckets(
+          providerName,
+          effectiveBuckets,
+          requestMetadata,
+        );
         const authenticatedBucket = effectiveBuckets[0];
         if (authenticatedBucket) {
           this.setSessionBucket(
@@ -1159,6 +1163,7 @@ export class OAuthManager {
               profileBuckets,
               providerName,
               this,
+              requestMetadata,
             );
             config.setBucketFailoverHandler(handler);
             failoverHandler = handler;
@@ -2405,6 +2410,7 @@ export class OAuthManager {
   async authenticateMultipleBuckets(
     providerName: string,
     buckets: string[],
+    requestMetadata?: OAuthTokenRequestMetadata,
   ): Promise<void> {
     const { MultiBucketAuthenticator } = await import(
       './MultiBucketAuthenticator.js'
@@ -2736,6 +2742,7 @@ export class OAuthManager {
           buckets,
           providerName,
           this,
+          requestMetadata,
         );
         config.setBucketFailoverHandler(handler);
         logger.debug('Bucket failover handler configured', {
