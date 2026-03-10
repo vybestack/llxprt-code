@@ -97,6 +97,7 @@ async function fetchApiKeyProviderQuota(
 ): Promise<{ provider: string; lines: string[] } | null> {
   let provider: 'zai' | 'synthetic' | 'chutes' | 'kimi' | null = null;
   let baseUrlForFetch: string | undefined;
+  const activeProviderName = runtimeApi.getActiveProviderName?.();
 
   // Strategy 1: Check ephemeral base-url setting (highest priority)
   const ephemeralBaseUrl = runtimeApi.getEphemeralSetting('base-url');
@@ -109,10 +110,9 @@ async function fetchApiKeyProviderQuota(
   }
 
   // Strategy 2 & 3: If not found, try provider config base URLs
-  if (!provider) {
+  if (!provider && activeProviderName) {
     const providerManager = runtimeApi.getCliProviderManager?.();
-    const activeProviderName = runtimeApi.getActiveProviderName?.();
-    if (providerManager && activeProviderName) {
+    if (providerManager) {
       const providerInstance =
         providerManager.getProviderByName?.(activeProviderName);
       if (providerInstance) {
@@ -163,14 +163,11 @@ async function fetchApiKeyProviderQuota(
   }
 
   // Strategy 4: If still not found, try active provider name (fallback only)
-  if (!provider) {
-    const activeProviderName = runtimeApi.getActiveProviderName?.();
-    if (activeProviderName) {
-      provider = detectApiKeyProviderFromName(activeProviderName);
-      // Note: baseUrlForFetch remains undefined for name-based detection
-      if (provider) {
-        logger.debug(() => `Detected ${provider} from active provider name`);
-      }
+  if (!provider && activeProviderName) {
+    provider = detectApiKeyProviderFromName(activeProviderName);
+    // Note: baseUrlForFetch remains undefined for name-based detection
+    if (provider) {
+      logger.debug(() => `Detected ${provider} from active provider name`);
     }
   }
 

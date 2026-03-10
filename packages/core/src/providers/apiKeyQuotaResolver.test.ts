@@ -155,6 +155,13 @@ describe('apiKeyQuotaResolver', () => {
       );
       expect(detectApiKeyProviderFromName(42 as unknown as string)).toBeNull();
     });
+
+    it('should return null for whitespace-only string', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('   ')).toBeNull();
+    });
   });
 
   describe('detectApiKeyProvider', () => {
