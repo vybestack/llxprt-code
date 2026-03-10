@@ -672,6 +672,66 @@ describe.skipIf(skipInCI)(
           'work',
         ]);
       });
+
+      it('prefers an explicit bucket over a single configured profile bucket during auth fallback', async () => {
+        const savedTokens = new Map<string, OAuthToken>();
+        const targetBucketToken: OAuthToken = {
+          access_token: 'target-bucket-token',
+          refresh_token: 'target-refresh-token',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        };
+
+        const tokenStore: TokenStore = {
+          saveToken: vi.fn(
+            async (provider: string, token: OAuthToken, bucket?: string) => {
+              savedTokens.set(`${provider}:${bucket ?? 'default'}`, token);
+            },
+          ),
+          getToken: vi.fn(
+            async (provider: string, bucket?: string) =>
+              savedTokens.get(`${provider}:${bucket ?? 'default'}`) ?? null,
+          ),
+          removeToken: vi.fn(async () => undefined),
+          listProviders: vi.fn(async () => []),
+          listBuckets: vi.fn(async () => []),
+          getBucketStats: vi.fn(async () => null),
+          acquireRefreshLock: vi.fn(async () => false),
+          releaseRefreshLock: vi.fn(async () => undefined),
+          acquireAuthLock: vi.fn(async () => true),
+          releaseAuthLock: vi.fn(async () => undefined),
+        };
+
+        const manager = new OAuthManager(tokenStore);
+        const provider: OAuthProvider = {
+          name: 'anthropic',
+          initiateAuth: vi.fn(async () => targetBucketToken),
+          getToken: vi.fn(async () => null),
+          refreshToken: vi.fn(async () => null),
+        };
+        manager.registerProvider(provider);
+        vi.spyOn(manager, 'isOAuthEnabled').mockReturnValue(true);
+        vi.spyOn(
+          manager as unknown as {
+            getProfileBuckets: (provider: string) => Promise<string[]>;
+          },
+          'getProfileBuckets',
+        ).mockResolvedValue(['profile-only-bucket']);
+
+        const authenticateSpy = vi.spyOn(manager, 'authenticate');
+
+        const result = await manager.getToken('anthropic', 'target-bucket');
+
+        expect(authenticateSpy).toHaveBeenCalledWith(
+          'anthropic',
+          'target-bucket',
+        );
+        expect(tokenStore.getToken).toHaveBeenCalledWith(
+          'anthropic',
+          'target-bucket',
+        );
+        expect(result).toBe('target-bucket-token');
+      });
     });
 
     describe.skipIf(skipInCI)('Integration Scenarios', () => {

@@ -659,7 +659,10 @@ export class OAuthManager {
     // Resolve which bucket to act on (explicit bucket > current-profile session bucket > default)
     const bucketToUse =
       bucket ??
-      this.getCurrentProfileSessionBucket(providerName, sessionMetadata) ??
+      (await this.getCurrentProfileSessionBucket(
+        providerName,
+        sessionMetadata,
+      )) ??
       'default';
 
     const tokenForLogout = await this.tokenStore.getToken(
@@ -682,8 +685,10 @@ export class OAuthManager {
 
     // If we just logged out the active session bucket, clear the in-memory override.
     if (
-      this.getCurrentProfileSessionBucket(providerName, sessionMetadata) ===
-      bucketToUse
+      (await this.getCurrentProfileSessionBucket(
+        providerName,
+        sessionMetadata,
+      )) === bucketToUse
     ) {
       if (
         this.getSessionBucket(providerName, sessionMetadata) === bucketToUse
@@ -1040,7 +1045,7 @@ export class OAuthManager {
       }
 
       if (showPrompt) {
-        const effectiveBuckets = buckets.length === 1 ? buckets : ['default'];
+        const effectiveBuckets = bucketToCheck ? [bucketToCheck] : ['default'];
         logger.debug(
           `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
         );
@@ -1058,8 +1063,7 @@ export class OAuthManager {
           );
         }
       } else {
-        const authenticatedBucket =
-          buckets.length === 1 ? buckets[0] : (bucketToCheck ?? 'default');
+        const authenticatedBucket = bucketToCheck ?? 'default';
         await this.authenticate(providerName, authenticatedBucket);
         if (authenticatedBucket) {
           this.setSessionBucket(
@@ -1070,7 +1074,10 @@ export class OAuthManager {
         }
       }
 
-      const newToken = await this.getOAuthToken(providerName, requestMetadata);
+      const newToken = await this.getOAuthToken(
+        providerName,
+        explicitBucket ? bucketToCheck : requestMetadata,
+      );
       return newToken ? newToken.access_token : null;
     } catch (error) {
       // Special handling for Gemini - USE_EXISTING_GEMINI_OAUTH is not an error
@@ -2008,14 +2015,22 @@ export class OAuthManager {
     );
   }
 
-  private getCurrentProfileSessionBucket(
+  private async getCurrentProfileSessionBucket(
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
-  ): string | undefined {
-    return (
-      this.getSessionBucket(provider, metadata) ??
-      this.getSessionBucket(provider)
-    );
+  ): Promise<string | undefined> {
+    const scopedSessionBucket = this.getSessionBucket(provider, metadata);
+    if (scopedSessionBucket) {
+      return scopedSessionBucket;
+    }
+
+    const unscopedSessionBucket = this.getSessionBucket(provider);
+    if (unscopedSessionBucket) {
+      return unscopedSessionBucket;
+    }
+
+    const profileBuckets = await this.getProfileBuckets(provider, metadata);
+    return profileBuckets.length === 1 ? profileBuckets[0] : undefined;
   }
 
   /**
@@ -2071,7 +2086,7 @@ export class OAuthManager {
     const buckets = await this.tokenStore.listBuckets(provider);
     const sessionMetadata =
       await this.getCurrentProfileSessionMetadata(provider);
-    const sessionBucket = this.getCurrentProfileSessionBucket(
+    const sessionBucket = await this.getCurrentProfileSessionBucket(
       provider,
       sessionMetadata,
     );
@@ -2131,7 +2146,10 @@ export class OAuthManager {
     // Get the token for the specified bucket
     const bucketToUse =
       bucket ??
-      this.getCurrentProfileSessionBucket('anthropic', sessionMetadata) ??
+      (await this.getCurrentProfileSessionBucket(
+        'anthropic',
+        sessionMetadata,
+      )) ??
       'default';
     const token = await this.tokenStore.getToken('anthropic', bucketToUse);
 
