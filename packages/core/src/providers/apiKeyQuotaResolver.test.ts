@@ -98,6 +98,27 @@ describe('apiKeyQuotaResolver', () => {
       expect(detectApiKeyProviderFromName('Chutes')).toBe('chutes');
     });
 
+    it('should detect chutes-ai provider name (lowercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('chutes-ai')).toBe('chutes');
+    });
+
+    it('should detect chutes-ai provider name (uppercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('CHUTES-AI')).toBe('chutes');
+    });
+
+    it('should detect chutes-ai provider name (mixed case)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('Chutes-Ai')).toBe('chutes');
+    });
+
     it('should detect zai provider name (lowercase)', async () => {
       const { detectApiKeyProviderFromName } = await import(
         './apiKeyQuotaResolver.js'

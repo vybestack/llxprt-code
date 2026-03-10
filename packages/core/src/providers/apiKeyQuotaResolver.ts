@@ -50,6 +50,7 @@ export function detectApiKeyProviderFromName(
     case 'synthetic':
       return 'synthetic';
     case 'chutes':
+    case 'chutes-ai':
       return 'chutes';
     case 'zai':
       return 'zai';
