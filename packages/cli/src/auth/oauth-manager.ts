@@ -2300,16 +2300,16 @@ export class OAuthManager {
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string[]> {
-    try {
-      // Prefer the request-scoped profile identity supplied by the caller.
-      const requestedProfileName =
-        typeof metadata?.profileId === 'string' &&
-        metadata.profileId.trim() !== ''
-          ? metadata.profileId.trim()
-          : null;
+    // Prefer the request-scoped profile identity supplied by the caller.
+    const requestedProfileName =
+      typeof metadata?.profileId === 'string' &&
+      metadata.profileId.trim() !== ''
+        ? metadata.profileId.trim()
+        : null;
 
-      let currentProfileName = requestedProfileName;
-      if (!currentProfileName) {
+    let currentProfileName = requestedProfileName;
+    if (!currentProfileName) {
+      try {
         // Fall back to the CLI runtime's current profile only when the request
         // did not provide an explicit profile identity.
         const { getCliRuntimeServices } = await import(
@@ -2321,53 +2321,69 @@ export class OAuthManager {
             ? settingsService.getCurrentProfileName()
             : ((settingsService.get('currentProfile') as string | null) ??
               null);
-      }
-
-      if (!currentProfileName) {
-        return [];
-      }
-
-      // Load the profile to check for auth.buckets
-      const profileManager = await createProfileManager();
-      const profile = await profileManager.loadProfile(currentProfileName);
-
-      // Issue #1468: Verify the profile's provider matches the requested provider
-      // Without this check, buckets from one provider's profile could be returned
-      // when requesting buckets for a different provider, causing token storage
-      // corruption (e.g., Anthropic tokens saved under codex:bucket keys)
-      const profileProvider =
-        'provider' in profile && typeof profile.provider === 'string'
-          ? profile.provider
-          : null;
-
-      if (profileProvider !== providerName) {
+      } catch (error) {
         logger.debug(
-          `Profile provider '${profileProvider}' does not match requested provider '${providerName}', returning empty buckets`,
+          `Could not resolve current profile for ${providerName}:`,
+          error,
         );
         return [];
       }
+    }
 
-      // Check if profile has auth.buckets for this provider
-      if (
-        'auth' in profile &&
-        profile.auth &&
-        typeof profile.auth === 'object' &&
-        'type' in profile.auth &&
-        profile.auth.type === 'oauth' &&
-        'buckets' in profile.auth &&
-        Array.isArray(profile.auth.buckets)
-      ) {
-        return profile.auth.buckets;
-      }
-
+    if (!currentProfileName) {
       return [];
+    }
+
+    let profile: Awaited<
+      ReturnType<
+        Awaited<ReturnType<typeof createProfileManager>>['loadProfile']
+      >
+    >;
+    try {
+      // Load the profile to check for auth.buckets
+      const profileManager = await createProfileManager();
+      profile = await profileManager.loadProfile(currentProfileName);
     } catch (error) {
       logger.debug(
         `Could not load profile buckets for ${providerName}:`,
         error,
       );
+      if (requestedProfileName) {
+        throw error;
+      }
       return [];
     }
+
+    // Issue #1468: Verify the profile's provider matches the requested provider
+    // Without this check, buckets from one provider's profile could be returned
+    // when requesting buckets for a different provider, causing token storage
+    // corruption (e.g., Anthropic tokens saved under codex:bucket keys)
+    const profileProvider =
+      'provider' in profile && typeof profile.provider === 'string'
+        ? profile.provider
+        : null;
+
+    if (profileProvider !== providerName) {
+      logger.debug(
+        `Profile provider '${profileProvider}' does not match requested provider '${providerName}', returning empty buckets`,
+      );
+      return [];
+    }
+
+    // Check if profile has auth.buckets for this provider
+    if (
+      'auth' in profile &&
+      profile.auth &&
+      typeof profile.auth === 'object' &&
+      'type' in profile.auth &&
+      profile.auth.type === 'oauth' &&
+      'buckets' in profile.auth &&
+      Array.isArray(profile.auth.buckets)
+    ) {
+      return profile.auth.buckets;
+    }
+
+    return [];
   }
 
   /**
