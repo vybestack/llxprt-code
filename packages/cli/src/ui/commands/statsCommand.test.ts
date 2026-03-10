@@ -13,11 +13,15 @@ import { formatDuration } from '../utils/formatters.js';
 
 const getCliOAuthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
+const getActiveProviderNameMock = vi.fn();
+const getCliProviderManagerMock = vi.fn();
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => ({
     getCliOAuthManager: getCliOAuthManagerMock,
     getEphemeralSetting: getEphemeralSettingMock,
+    getActiveProviderName: getActiveProviderNameMock,
+    getCliProviderManager: getCliProviderManagerMock,
   }),
 }));
 
@@ -589,5 +593,303 @@ describe('statsCommand', () => {
     expect(addItemCalls.length).toBeGreaterThan(0);
 
     vi.restoreAllMocks();
+  });
+
+  // Tests for detection order priority and alias-loaded providers
+  describe('API-key provider detection order', () => {
+    beforeEach(() => {
+      getActiveProviderNameMock.mockReset();
+      getCliProviderManagerMock.mockReset();
+    });
+
+    it('should use ephemeral base-url over provider config (highest priority)', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      // Set up ephemeral base-url pointing to Z.ai
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'base-url') return 'https://api.z.ai/v1';
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Set up provider config with different URL (should be ignored)
+      const mockProvider = {
+        providerConfig: { baseUrl: 'https://api.synthetic.new/v2' },
+      };
+      getActiveProviderNameMock.mockReturnValue('kimi');
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          msg: 'OK',
+          data: {
+            limits: [
+              {
+                type: 'TOKENS_LIMIT',
+                unit: 3,
+                number: 10,
+                percentage: 20,
+                nextResetTime: Date.now() + 3600000,
+              },
+            ],
+            level: 'pro',
+          },
+          success: true,
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Z.ai from ephemeral base-url, not Synthetic from config
+      expect(lastItem.text).toContain('Z.ai Quota Information');
+      expect(lastItem.text).not.toContain('Synthetic');
+
+      vi.restoreAllMocks();
+    });
+
+    it('should use provider config base URL when no ephemeral base-url', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      // No ephemeral base-url
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Provider config has Synthetic base URL
+      const mockProvider = {
+        providerConfig: { baseUrl: 'https://api.synthetic.new/v2' },
+      };
+      getActiveProviderNameMock.mockReturnValue('kimi'); // Name suggests kimi, but config wins
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          subscription: { limit: 1000, requests: 100, renewsAt: null },
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Synthetic from provider config, not Kimi from name
+      expect(lastItem.text).toContain('Synthetic Quota Information');
+      expect(lastItem.text).not.toContain('Kimi');
+
+      vi.restoreAllMocks();
+    });
+
+    it('should use baseProviderConfig when providerConfig has no base URL', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Provider has baseProviderConfig with Kimi URL
+      const mockProvider = {
+        providerConfig: {}, // No baseUrl here
+        baseProviderConfig: { baseURL: 'https://api.moonshot.cn/v1' },
+      };
+      getActiveProviderNameMock.mockReturnValue('synthetic'); // Name suggests synthetic, but config wins
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          available_balance: 100.0,
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Kimi from baseProviderConfig, not Synthetic from name
+      expect(lastItem.text).toContain('Kimi Quota Information');
+      expect(lastItem.text).not.toContain('Synthetic');
+
+      vi.restoreAllMocks();
+    });
+
+    it('should fall back to provider name detection only when no config URLs', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Provider has no config URLs, name-based detection should work
+      const mockProvider = {
+        providerConfig: {},
+        baseProviderConfig: {},
+      };
+      getActiveProviderNameMock.mockReturnValue('kimi'); // This should be used as fallback
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          available_balance: 50.0,
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Kimi from provider name (fallback)
+      expect(lastItem.text).toContain('Kimi Quota Information');
+
+      vi.restoreAllMocks();
+    });
+
+    it('should handle alias-loaded synthetic provider with baseProviderConfig', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Real-world scenario: alias "synthetic" pointing to baseProviderConfig
+      const mockProvider = {
+        providerConfig: { baseUrl: undefined },
+        baseProviderConfig: { baseURL: 'https://api.synthetic.new/v2' },
+      };
+      getActiveProviderNameMock.mockReturnValue('synthetic');
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          subscription: { limit: 2000, requests: 500, renewsAt: null },
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Synthetic from baseProviderConfig base URL
+      expect(lastItem.text).toContain('Synthetic Quota Information');
+      expect(lastItem.text).toContain('500/2000 used');
+
+      vi.restoreAllMocks();
+    });
+
+    it('should handle alias-loaded kimi provider with baseProviderConfig', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Real-world scenario: alias "kimi" pointing to baseProviderConfig
+      const mockProvider = {
+        providerConfig: {},
+        baseProviderConfig: { baseURL: 'https://api.moonshot.cn/v1' },
+      };
+      getActiveProviderNameMock.mockReturnValue('kimi');
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          available_balance: 75.5,
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Kimi from baseProviderConfig base URL
+      expect(lastItem.text).toContain('Kimi Quota Information');
+      expect(lastItem.text).toContain('¥75.5');
+
+      vi.restoreAllMocks();
+    });
   });
 });

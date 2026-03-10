@@ -18,6 +18,7 @@ import {
   CodexUsageInfoSchema,
   DebugLogger,
   detectApiKeyProvider,
+  detectApiKeyProviderFromName,
   fetchApiKeyQuota,
   formatAllUsagePeriods,
   formatCodexUsage,
@@ -84,15 +85,95 @@ async function resolveApiKey(
 /**
  * Attempt to fetch quota for the current profile's API-key-based provider.
  * Returns null if the profile doesn't use a supported API-key provider.
+ *
+ * Detection strategy (in priority order):
+ * 1. Ephemeral base-url setting (most specific, user override)
+ * 2. Provider config baseUrl/baseURL (from providerConfig)
+ * 3. Base provider config baseURL/baseUrl (from baseProviderConfig)
+ * 4. Provider name detection (least specific, fallback only)
  */
 async function fetchApiKeyProviderQuota(
   runtimeApi: ReturnType<typeof getRuntimeApi>,
 ): Promise<{ provider: string; lines: string[] } | null> {
-  const baseUrl = runtimeApi.getEphemeralSetting('base-url');
+  let provider: 'zai' | 'synthetic' | 'chutes' | 'kimi' | null = null;
+  let baseUrlForFetch: string | undefined;
 
-  const provider = detectApiKeyProvider(
-    typeof baseUrl === 'string' ? baseUrl : undefined,
-  );
+  // Strategy 1: Check ephemeral base-url setting (highest priority)
+  const ephemeralBaseUrl = runtimeApi.getEphemeralSetting('base-url');
+  if (typeof ephemeralBaseUrl === 'string') {
+    provider = detectApiKeyProvider(ephemeralBaseUrl);
+    baseUrlForFetch = ephemeralBaseUrl;
+    if (provider) {
+      logger.debug(() => `Detected ${provider} from ephemeral base-url`);
+    }
+  }
+
+  // Strategy 2 & 3: If not found, try provider config base URLs
+  if (!provider) {
+    const providerManager = runtimeApi.getCliProviderManager?.();
+    const activeProviderName = runtimeApi.getActiveProviderName?.();
+    if (providerManager && activeProviderName) {
+      const providerInstance =
+        providerManager.getProviderByName?.(activeProviderName);
+      if (providerInstance) {
+        // Try providerConfig.baseUrl/baseURL first
+        const providerConfig = (
+          providerInstance as {
+            providerConfig?: { baseUrl?: string; baseURL?: string };
+          }
+        ).providerConfig;
+        if (providerConfig) {
+          const configBaseUrl =
+            providerConfig.baseUrl ?? providerConfig.baseURL;
+          if (configBaseUrl) {
+            provider = detectApiKeyProvider(configBaseUrl);
+            baseUrlForFetch = configBaseUrl;
+            if (provider) {
+              logger.debug(
+                () => `Detected ${provider} from provider config base-url`,
+              );
+            }
+          }
+        }
+
+        // Try baseProviderConfig.baseURL/baseUrl if still not found
+        if (!provider) {
+          const baseProviderConfig = (
+            providerInstance as {
+              baseProviderConfig?: { baseURL?: string; baseUrl?: string };
+            }
+          ).baseProviderConfig;
+          if (baseProviderConfig) {
+            const baseConfigUrl =
+              baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl;
+            if (baseConfigUrl) {
+              provider = detectApiKeyProvider(baseConfigUrl);
+              baseUrlForFetch = baseConfigUrl;
+              if (provider) {
+                logger.debug(
+                  () =>
+                    `Detected ${provider} from base provider config base-url`,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Strategy 4: If still not found, try active provider name (fallback only)
+  if (!provider) {
+    const activeProviderName = runtimeApi.getActiveProviderName?.();
+    if (activeProviderName) {
+      provider = detectApiKeyProviderFromName(activeProviderName);
+      // Note: baseUrlForFetch remains undefined for name-based detection
+      if (provider) {
+        logger.debug(() => `Detected ${provider} from active provider name`);
+      }
+    }
+  }
+
   if (!provider) {
     return null;
   }
@@ -105,11 +186,7 @@ async function fetchApiKeyProviderQuota(
     return null;
   }
 
-  return fetchApiKeyQuota(
-    provider,
-    apiKey,
-    typeof baseUrl === 'string' ? baseUrl : undefined,
-  );
+  return fetchApiKeyQuota(provider, apiKey, baseUrlForFetch);
 }
 
 function formatQuotaResetTime(resetTime: string): string {

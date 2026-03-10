@@ -29,6 +29,36 @@ function hostnameMatches(hostname: string, domain: string): boolean {
 }
 
 /**
+ * Identifies the API-key-based provider from a provider name.
+ * Returns null if the name doesn't match a known provider.
+ */
+export function detectApiKeyProviderFromName(
+  providerName: string | undefined,
+): 'zai' | 'synthetic' | 'chutes' | 'kimi' | null {
+  if (!providerName || typeof providerName !== 'string') {
+    return null;
+  }
+
+  const normalized = providerName.trim().toLowerCase();
+  if (normalized === '') {
+    return null;
+  }
+
+  switch (normalized) {
+    case 'kimi':
+      return 'kimi';
+    case 'synthetic':
+      return 'synthetic';
+    case 'chutes':
+      return 'chutes';
+    case 'zai':
+      return 'zai';
+    default:
+      return null;
+  }
+}
+
+/**
  * Identifies the API-key-based provider from a base URL string.
  * Uses safe hostname parsing to prevent misclassification.
  * Returns null if the URL doesn't match a known provider.

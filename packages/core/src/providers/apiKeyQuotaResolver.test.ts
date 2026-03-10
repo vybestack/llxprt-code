@@ -34,6 +34,129 @@ vi.mock('./kimi/usageInfo.js', () => ({
 }));
 
 describe('apiKeyQuotaResolver', () => {
+  describe('detectApiKeyProviderFromName', () => {
+    it('should detect kimi provider name (lowercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('kimi')).toBe('kimi');
+    });
+
+    it('should detect kimi provider name (uppercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('KIMI')).toBe('kimi');
+    });
+
+    it('should detect kimi provider name (mixed case)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('Kimi')).toBe('kimi');
+    });
+
+    it('should detect synthetic provider name (lowercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('synthetic')).toBe('synthetic');
+    });
+
+    it('should detect synthetic provider name (uppercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('SYNTHETIC')).toBe('synthetic');
+    });
+
+    it('should detect synthetic provider name (mixed case)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('Synthetic')).toBe('synthetic');
+    });
+
+    it('should detect chutes provider name (lowercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('chutes')).toBe('chutes');
+    });
+
+    it('should detect chutes provider name (uppercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('CHUTES')).toBe('chutes');
+    });
+
+    it('should detect chutes provider name (mixed case)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('Chutes')).toBe('chutes');
+    });
+
+    it('should detect zai provider name (lowercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('zai')).toBe('zai');
+    });
+
+    it('should detect zai provider name (uppercase)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('ZAI')).toBe('zai');
+    });
+
+    it('should detect zai provider name (mixed case)', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('Zai')).toBe('zai');
+    });
+
+    it('should return null for unknown provider name', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('openai')).toBeNull();
+    });
+
+    it('should return null for undefined input', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName(undefined)).toBeNull();
+    });
+
+    it('should return null for null input', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(
+        detectApiKeyProviderFromName(null as unknown as string),
+      ).toBeNull();
+    });
+
+    it('should return null for empty string', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName('')).toBeNull();
+    });
+
+    it('should return null for non-string input', async () => {
+      const { detectApiKeyProviderFromName } = await import(
+        './apiKeyQuotaResolver.js'
+      );
+      expect(detectApiKeyProviderFromName(42 as unknown as string)).toBeNull();
+    });
+  });
+
   describe('detectApiKeyProvider', () => {
     it('should detect Z.ai from api.z.ai base URL', () => {
       expect(detectApiKeyProvider('https://api.z.ai/v1')).toBe('zai');
