@@ -17,7 +17,12 @@ vi.mock('../runtime/runtimeSettings.js', () => ({
     config: undefined,
     settings: undefined,
   })),
-  getEphemeralSetting: vi.fn(() => undefined),
+  getEphemeralSetting: vi.fn((key: string) => {
+    if (key === 'auth-bucket-delay') {
+      return 0;
+    }
+    return undefined;
+  }),
   getCliProviderManager: vi.fn(() => undefined),
   getCliRuntimeContext: vi.fn(() => undefined),
 }));
