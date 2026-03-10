@@ -123,7 +123,7 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
     getProfileBucketsSpy.mockRestore();
   });
 
-  it('should reuse existing handler if buckets match', async () => {
+  it('should reuse existing handler if buckets match in the same scope', async () => {
     // Setup: Mock token store
     const mockToken: OAuthToken = {
       access_token: 'test-token',
@@ -160,6 +160,58 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
 
     // Assert: Should NOT create a new handler
     expect(mockSetBucketFailoverHandler).not.toHaveBeenCalled();
+
+    getProfileBucketsSpy.mockRestore();
+  });
+
+  it('should recreate handler when the request scope changes even if buckets match', async () => {
+    const mockToken: OAuthToken = {
+      access_token: 'test-token',
+      token_type: 'Bearer',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      refresh_token: 'test-refresh-token',
+    };
+    (mockTokenStore.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+      mockToken,
+    );
+
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'subagent-profile',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    const getProfileBucketsSpy = vi
+      .spyOn(
+        oauthManager as unknown as {
+          getProfileBuckets: () => Promise<string[]>;
+        },
+        'getProfileBuckets',
+      )
+      .mockResolvedValue(['bucket1', 'bucket2']);
+
+    const existingHandler: BucketFailoverHandler = {
+      getBuckets: vi.fn().mockReturnValue(['bucket1', 'bucket2']),
+      getCurrentBucket: vi.fn(),
+      tryFailover: vi.fn(),
+      isEnabled: vi.fn(),
+    };
+
+    mockGetBucketFailoverHandler.mockReturnValue(existingHandler);
+
+    await oauthManager.getOAuthToken('anthropic', metadata);
+
+    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
+    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0] as {
+      getRequestMetadata: () => OAuthTokenRequestMetadata | undefined;
+      reset: () => void;
+    };
+
+    expect(handlerArg.getRequestMetadata()).toEqual(metadata);
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
 
     getProfileBucketsSpy.mockRestore();
   });

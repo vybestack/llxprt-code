@@ -888,10 +888,23 @@ export class OAuthManager {
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
     );
 
+    const resolvedProfileBuckets = await this.getProfileBuckets(
+      providerName,
+      requestMetadata,
+    );
+    const scopedSessionBucket = explicitBucket
+      ? undefined
+      : this.getSessionBucket(providerName, requestMetadata);
+    const bucketToCheck = explicitBucket
+      ? bucket
+      : (scopedSessionBucket ??
+        (resolvedProfileBuckets.length === 1
+          ? resolvedProfileBuckets[0]
+          : undefined));
+
     // @fix issue1262 & issue1195: Before triggering OAuth, check disk with lock
     // Another process or earlier run may have written a valid token that we missed
     // Use the same locking pattern as PR #1258 to prevent race conditions
-    const bucketToCheck = typeof bucket === 'string' ? bucket : undefined;
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
       providerName,
       {
@@ -980,10 +993,7 @@ export class OAuthManager {
     // Authentication is handled at the turn boundary via ensureBucketsAuthenticated().
     // For single-bucket or non-bucketed profiles, preserve existing auth behavior.
     try {
-      const buckets = await this.getProfileBuckets(
-        providerName,
-        requestMetadata,
-      );
+      const buckets = resolvedProfileBuckets;
 
       if (buckets.length > 1) {
         // Multi-bucket: pure lookup only — return null.
@@ -1152,13 +1162,38 @@ export class OAuthManager {
             existingBuckets.every(
               (value, index) => value === profileBuckets[index],
             );
+          const requestedScopeKey = this.getSessionBucketScopeKey(
+            providerName,
+            requestMetadata,
+          );
+          const existingRequestMetadata =
+            typeof (
+              failoverHandler as {
+                getRequestMetadata?: () =>
+                  | OAuthTokenRequestMetadata
+                  | undefined;
+              }
+            )?.getRequestMetadata === 'function'
+              ? (
+                  failoverHandler as {
+                    getRequestMetadata: () =>
+                      | OAuthTokenRequestMetadata
+                      | undefined;
+                  }
+                ).getRequestMetadata()
+              : undefined;
+          const existingScopeKey = this.getSessionBucketScopeKey(
+            providerName,
+            existingRequestMetadata,
+          );
+          const sameScope = existingScopeKey === requestedScopeKey;
 
           logger.debug(
             () =>
-              `[issue1029] Failover handler check: hasExisting=${!!failoverHandler}, sameBuckets=${sameBuckets}, existingBuckets=${JSON.stringify(existingBuckets)}`,
+              `[issue1029] Failover handler check: hasExisting=${!!failoverHandler}, sameBuckets=${sameBuckets}, sameScope=${sameScope}, existingBuckets=${JSON.stringify(existingBuckets)}`,
           );
 
-          if (!failoverHandler || !sameBuckets) {
+          if (!failoverHandler || !sameBuckets || !sameScope) {
             const handler = new BucketFailoverHandlerImpl(
               profileBuckets,
               providerName,

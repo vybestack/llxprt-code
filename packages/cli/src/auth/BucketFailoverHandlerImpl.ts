@@ -106,6 +106,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     return this.buckets[this.currentBucketIndex];
   }
 
+  getRequestMetadata(): OAuthTokenRequestMetadata | undefined {
+    return this.metadata;
+  }
+
   /**
    * Try to failover to the next bucket
    *
