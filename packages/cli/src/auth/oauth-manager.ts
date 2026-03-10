@@ -1967,9 +1967,18 @@ export class OAuthManager {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): void {
-    this.sessionBuckets.delete(
-      this.getSessionBucketScopeKey(provider, metadata),
-    );
+    if (metadata) {
+      this.sessionBuckets.delete(
+        this.getSessionBucketScopeKey(provider, metadata),
+      );
+      return;
+    }
+
+    for (const key of Array.from(this.sessionBuckets.keys())) {
+      if (key === provider || key.startsWith(`${provider}::`)) {
+        this.sessionBuckets.delete(key);
+      }
+    }
   }
 
   /**
