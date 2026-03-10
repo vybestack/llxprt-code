@@ -524,6 +524,49 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
     ).resolves.toBeNull();
   });
 
+  it('falls back to the unscoped foreground session bucket for logout when no scoped bucket exists', async () => {
+    mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
+    mockLoadProfile.mockResolvedValue({
+      provider: 'anthropic',
+      auth: {
+        type: 'oauth',
+        buckets: ['bucket-a', 'bucket-b'],
+      },
+    });
+
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const provider: OAuthProvider & { logout?: typeof logout } = {
+      name: 'anthropic',
+      initiateAuth: vi.fn().mockResolvedValue({
+        access_token: 'fresh-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      getToken: vi.fn().mockResolvedValue(null),
+      refreshToken: vi.fn().mockResolvedValue(null),
+      logout,
+    };
+    manager.registerProvider(provider);
+
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'bucket-b-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'bucket-b',
+    );
+    manager.setSessionBucket('anthropic', 'bucket-b');
+
+    await manager.logout('anthropic');
+
+    expect(logout).toHaveBeenCalledTimes(1);
+    await expect(
+      tokenStore.getToken('anthropic', 'bucket-b'),
+    ).resolves.toBeNull();
+  });
+
   it('marks the current profile scoped session bucket as active in auth status', async () => {
     mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
     mockLoadProfile.mockResolvedValue({
@@ -556,6 +599,46 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
       profileId: 'opusthinkingbucketed',
       providerId: 'anthropic',
     });
+
+    const statuses = await manager.getAuthStatusWithBuckets('anthropic');
+
+    expect(
+      statuses.find((status) => status.bucket === 'bucket-a')?.isSessionBucket,
+    ).toBe(false);
+    expect(
+      statuses.find((status) => status.bucket === 'bucket-b')?.isSessionBucket,
+    ).toBe(true);
+  });
+
+  it('falls back to the unscoped foreground session bucket in auth status when no scoped bucket exists', async () => {
+    mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
+    mockLoadProfile.mockResolvedValue({
+      provider: 'anthropic',
+      auth: {
+        type: 'oauth',
+        buckets: ['bucket-a', 'bucket-b'],
+      },
+    });
+
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'bucket-a-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'bucket-a',
+    );
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'bucket-b-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'bucket-b',
+    );
+    manager.setSessionBucket('anthropic', 'bucket-b');
 
     const statuses = await manager.getAuthStatusWithBuckets('anthropic');
 
@@ -602,6 +685,46 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
       profileId: 'opusthinkingbucketed',
       providerId: 'anthropic',
     });
+    mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'bucket-b' });
+
+    const usage = await manager.getAnthropicUsageInfo();
+
+    expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('bucket-b-token');
+    expect(usage).toEqual({ bucket: 'bucket-b' });
+  });
+
+  it('falls back to the unscoped foreground session bucket for anthropic usage lookups when no scoped bucket exists', async () => {
+    mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
+    mockLoadProfile.mockResolvedValue({
+      provider: 'anthropic',
+      auth: {
+        type: 'oauth',
+        buckets: ['bucket-a', 'bucket-b'],
+      },
+    });
+
+    const provider: OAuthProvider = {
+      name: 'anthropic',
+      initiateAuth: vi.fn().mockResolvedValue({
+        access_token: 'fresh-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }),
+      getToken: vi.fn().mockResolvedValue(null),
+      refreshToken: vi.fn().mockResolvedValue(null),
+    };
+    manager.registerProvider(provider);
+
+    await tokenStore.saveToken(
+      'anthropic',
+      {
+        access_token: 'bucket-b-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'bucket-b',
+    );
+    manager.setSessionBucket('anthropic', 'bucket-b');
     mockFetchAnthropicUsage.mockResolvedValue({ bucket: 'bucket-b' });
 
     const usage = await manager.getAnthropicUsageInfo();

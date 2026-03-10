@@ -656,10 +656,10 @@ export class OAuthManager {
     const sessionMetadata =
       await this.getCurrentProfileSessionMetadata(providerName);
 
-    // Resolve which bucket to act on (explicit bucket > session bucket > default)
+    // Resolve which bucket to act on (explicit bucket > current-profile session bucket > default)
     const bucketToUse =
       bucket ??
-      this.getSessionBucket(providerName, sessionMetadata) ??
+      this.getCurrentProfileSessionBucket(providerName, sessionMetadata) ??
       'default';
 
     const tokenForLogout = await this.tokenStore.getToken(
@@ -681,8 +681,18 @@ export class OAuthManager {
     await this.tokenStore.removeToken(providerName, bucketToUse);
 
     // If we just logged out the active session bucket, clear the in-memory override.
-    if (this.getSessionBucket(providerName, sessionMetadata) === bucketToUse) {
-      this.clearSessionBucket(providerName, sessionMetadata);
+    if (
+      this.getCurrentProfileSessionBucket(providerName, sessionMetadata) ===
+      bucketToUse
+    ) {
+      if (
+        this.getSessionBucket(providerName, sessionMetadata) === bucketToUse
+      ) {
+        this.clearSessionBucket(providerName, sessionMetadata);
+      }
+      if (this.getSessionBucket(providerName) === bucketToUse) {
+        this.clearSessionBucket(providerName);
+      }
     }
 
     // CRITICAL FIX: Clear all provider auth caches after logout
@@ -1998,6 +2008,16 @@ export class OAuthManager {
     );
   }
 
+  private getCurrentProfileSessionBucket(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): string | undefined {
+    return (
+      this.getSessionBucket(provider, metadata) ??
+      this.getSessionBucket(provider)
+    );
+  }
+
   /**
    * Clear session bucket override for a provider
    */
@@ -2055,7 +2075,10 @@ export class OAuthManager {
     const buckets = await this.tokenStore.listBuckets(provider);
     const sessionMetadata =
       await this.getCurrentProfileSessionMetadata(provider);
-    const sessionBucket = this.getSessionBucket(provider, sessionMetadata);
+    const sessionBucket = this.getCurrentProfileSessionBucket(
+      provider,
+      sessionMetadata,
+    );
     const statuses: Array<{
       bucket: string;
       authenticated: boolean;
@@ -2112,7 +2135,7 @@ export class OAuthManager {
     // Get the token for the specified bucket
     const bucketToUse =
       bucket ??
-      this.getSessionBucket('anthropic', sessionMetadata) ??
+      this.getCurrentProfileSessionBucket('anthropic', sessionMetadata) ??
       'default';
     const token = await this.tokenStore.getToken('anthropic', bucketToUse);
 
