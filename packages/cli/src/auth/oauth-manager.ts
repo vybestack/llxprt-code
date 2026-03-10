@@ -2025,25 +2025,17 @@ export class OAuthManager {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): void {
-    if (metadata) {
-      this.sessionBuckets.delete(
-        this.getSessionBucketScopeKey(provider, metadata),
-      );
-      return;
-    }
+    this.sessionBuckets.delete(
+      this.getSessionBucketScopeKey(provider, metadata),
+    );
+  }
 
+  clearAllSessionBuckets(provider: string): void {
     for (const key of Array.from(this.sessionBuckets.keys())) {
       if (key === provider || key.startsWith(`${provider}::`)) {
         this.sessionBuckets.delete(key);
       }
     }
-  }
-
-  /**
-   * List all buckets for a provider
-   */
-  async listBuckets(provider: string): Promise<string[]> {
-    return this.tokenStore.listBuckets(provider);
   }
 
   /**
@@ -2058,7 +2050,11 @@ export class OAuthManager {
         logger.warn(`Failed to logout from bucket ${bucket}:`, error);
       }
     }
-    this.clearSessionBucket(provider);
+    this.clearAllSessionBuckets(provider);
+  }
+
+  async listBuckets(provider: string): Promise<string[]> {
+    return this.tokenStore.listBuckets(provider);
   }
 
   /**

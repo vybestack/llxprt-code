@@ -650,6 +650,28 @@ describe.skipIf(skipInCI)(
         expect(firstOrder).toEqual(secondOrder);
         expect(firstOrder).toEqual(['gemini', 'qwen']);
       });
+
+      it('should list buckets through the public OAuthManager API', async () => {
+        await tokenStore.saveToken('qwen:work', {
+          access_token: 'work-token',
+          refresh_token: 'work-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+          scope: 'read',
+        });
+        await tokenStore.saveToken('qwen:personal', {
+          access_token: 'personal-token',
+          refresh_token: 'personal-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+          scope: 'read',
+        });
+
+        await expect(manager.listBuckets('qwen')).resolves.toEqual([
+          'personal',
+          'work',
+        ]);
+      });
     });
 
     describe.skipIf(skipInCI)('Integration Scenarios', () => {

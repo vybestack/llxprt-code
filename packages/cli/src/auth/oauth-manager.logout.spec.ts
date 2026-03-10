@@ -248,4 +248,47 @@ describe('OAuthManager.logout runtime cache handling', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('does not clear profile-scoped session buckets when clearing only the unscoped provider bucket', () => {
+    const tokenStore: TokenStore = {
+      saveToken: vi.fn(),
+      getToken: vi.fn().mockResolvedValue(null),
+      removeToken: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi.fn().mockResolvedValue([]),
+      getBucketStats: vi.fn().mockResolvedValue(null),
+      acquireRefreshLock: vi.fn().mockResolvedValue(true),
+      releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+      acquireAuthLock: vi.fn().mockResolvedValue(true),
+      releaseAuthLock: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const manager = new OAuthManager(tokenStore);
+
+    manager.setSessionBucket('qwen', 'default');
+    manager.setSessionBucket('qwen', 'bucket-a', {
+      profileId: 'profile-a',
+      providerId: 'qwen',
+    });
+    manager.setSessionBucket('qwen', 'bucket-b', {
+      profileId: 'profile-b',
+      providerId: 'qwen',
+    });
+
+    manager.clearSessionBucket('qwen');
+
+    expect(manager.getSessionBucket('qwen')).toBeUndefined();
+    expect(
+      manager.getSessionBucket('qwen', {
+        profileId: 'profile-a',
+        providerId: 'qwen',
+      }),
+    ).toBe('bucket-a');
+    expect(
+      manager.getSessionBucket('qwen', {
+        profileId: 'profile-b',
+        providerId: 'qwen',
+      }),
+    ).toBe('bucket-b');
+  });
 });
