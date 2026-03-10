@@ -42,6 +42,8 @@ describe('statsCommand', () => {
 
     getCliOAuthManagerMock.mockReset();
     getEphemeralSettingMock.mockReset();
+    getActiveProviderNameMock.mockReset();
+    getCliProviderManagerMock.mockReset();
     // Default: no API-key provider detected
     getEphemeralSettingMock.mockReturnValue(undefined);
   });

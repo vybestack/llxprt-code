@@ -21,6 +21,25 @@ import {
 const logger = new DebugLogger('llxprt:quota:apikey');
 
 /**
+ * Shared type for API-key-based quota providers.
+ */
+export type ApiKeyQuotaProvider = 'zai' | 'synthetic' | 'chutes' | 'kimi';
+
+/**
+ * Map of provider names to their canonical quota provider type.
+ * Includes primary names and aliases.
+ */
+export const API_KEY_PROVIDER_NAME_MAP: Readonly<
+  Record<string, ApiKeyQuotaProvider>
+> = {
+  kimi: 'kimi',
+  synthetic: 'synthetic',
+  chutes: 'chutes',
+  'chutes-ai': 'chutes',
+  zai: 'zai',
+};
+
+/**
  * Safely match a hostname against a known domain.
  * Returns true if the hostname is exactly the domain or a subdomain of it.
  */
@@ -34,7 +53,7 @@ function hostnameMatches(hostname: string, domain: string): boolean {
  */
 export function detectApiKeyProviderFromName(
   providerName: string | undefined,
-): 'zai' | 'synthetic' | 'chutes' | 'kimi' | null {
+): ApiKeyQuotaProvider | null {
   if (!providerName || typeof providerName !== 'string') {
     return null;
   }
@@ -44,19 +63,7 @@ export function detectApiKeyProviderFromName(
     return null;
   }
 
-  switch (normalized) {
-    case 'kimi':
-      return 'kimi';
-    case 'synthetic':
-      return 'synthetic';
-    case 'chutes':
-    case 'chutes-ai':
-      return 'chutes';
-    case 'zai':
-      return 'zai';
-    default:
-      return null;
-  }
+  return API_KEY_PROVIDER_NAME_MAP[normalized] ?? null;
 }
 
 /**
@@ -66,7 +73,7 @@ export function detectApiKeyProviderFromName(
  */
 export function detectApiKeyProvider(
   baseUrl: string | undefined,
-): 'zai' | 'synthetic' | 'chutes' | 'kimi' | null {
+): ApiKeyQuotaProvider | null {
   if (!baseUrl || typeof baseUrl !== 'string') {
     return null;
   }
@@ -115,7 +122,7 @@ export interface ApiKeyQuotaResult {
  * @returns Formatted lines, or null if the fetch failed
  */
 export async function fetchApiKeyQuota(
-  provider: string,
+  provider: ApiKeyQuotaProvider,
   apiKey: string,
   baseUrl?: string,
 ): Promise<ApiKeyQuotaResult | null> {

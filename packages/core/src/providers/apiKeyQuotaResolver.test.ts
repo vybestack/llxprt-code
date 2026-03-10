@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   detectApiKeyProvider,
+  detectApiKeyProviderFromName,
   fetchApiKeyQuota,
 } from './apiKeyQuotaResolver.js';
 
@@ -35,153 +36,33 @@ vi.mock('./kimi/usageInfo.js', () => ({
 
 describe('apiKeyQuotaResolver', () => {
   describe('detectApiKeyProviderFromName', () => {
-    it('should detect kimi provider name (lowercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('kimi')).toBe('kimi');
-    });
-
-    it('should detect kimi provider name (uppercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('KIMI')).toBe('kimi');
-    });
-
-    it('should detect kimi provider name (mixed case)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('Kimi')).toBe('kimi');
-    });
-
-    it('should detect synthetic provider name (lowercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('synthetic')).toBe('synthetic');
-    });
-
-    it('should detect synthetic provider name (uppercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('SYNTHETIC')).toBe('synthetic');
-    });
-
-    it('should detect synthetic provider name (mixed case)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('Synthetic')).toBe('synthetic');
-    });
-
-    it('should detect chutes provider name (lowercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('chutes')).toBe('chutes');
-    });
-
-    it('should detect chutes provider name (uppercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('CHUTES')).toBe('chutes');
-    });
-
-    it('should detect chutes provider name (mixed case)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('Chutes')).toBe('chutes');
-    });
-
-    it('should detect chutes-ai provider name (lowercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('chutes-ai')).toBe('chutes');
-    });
-
-    it('should detect chutes-ai provider name (uppercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('CHUTES-AI')).toBe('chutes');
-    });
-
-    it('should detect chutes-ai provider name (mixed case)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('Chutes-Ai')).toBe('chutes');
-    });
-
-    it('should detect zai provider name (lowercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('zai')).toBe('zai');
-    });
-
-    it('should detect zai provider name (uppercase)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('ZAI')).toBe('zai');
-    });
-
-    it('should detect zai provider name (mixed case)', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('Zai')).toBe('zai');
-    });
-
-    it('should return null for unknown provider name', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('openai')).toBeNull();
-    });
-
-    it('should return null for undefined input', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName(undefined)).toBeNull();
-    });
-
-    it('should return null for null input', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(
-        detectApiKeyProviderFromName(null as unknown as string),
-      ).toBeNull();
-    });
-
-    it('should return null for empty string', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('')).toBeNull();
-    });
-
-    it('should return null for non-string input', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName(42 as unknown as string)).toBeNull();
-    });
-
-    it('should return null for whitespace-only string', async () => {
-      const { detectApiKeyProviderFromName } = await import(
-        './apiKeyQuotaResolver.js'
-      );
-      expect(detectApiKeyProviderFromName('   ')).toBeNull();
+    it.each([
+      // Valid provider names (various casings)
+      ['kimi', 'kimi'],
+      ['KIMI', 'kimi'],
+      ['Kimi', 'kimi'],
+      ['synthetic', 'synthetic'],
+      ['SYNTHETIC', 'synthetic'],
+      ['Synthetic', 'synthetic'],
+      ['chutes', 'chutes'],
+      ['CHUTES', 'chutes'],
+      ['Chutes', 'chutes'],
+      ['chutes-ai', 'chutes'],
+      ['CHUTES-AI', 'chutes'],
+      ['Chutes-Ai', 'chutes'],
+      ['zai', 'zai'],
+      ['ZAI', 'zai'],
+      ['Zai', 'zai'],
+      // Invalid inputs
+      ['openai', null],
+      ['unknown', null],
+      ['', null],
+      ['   ', null],
+      [undefined, null],
+      [null as unknown as string, null],
+      [42 as unknown as string, null],
+    ])('detectApiKeyProviderFromName("%s") returns %s', (input, expected) => {
+      expect(detectApiKeyProviderFromName(input)).toBe(expected);
     });
   });
 
