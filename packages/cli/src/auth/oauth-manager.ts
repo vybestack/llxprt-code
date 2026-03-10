@@ -49,6 +49,17 @@ function isLoggingWrapperCandidate(
   );
 }
 
+function hasRequestMetadata(handler: unknown): handler is {
+  getRequestMetadata: () => OAuthTokenRequestMetadata | undefined;
+} {
+  return (
+    !!handler &&
+    typeof handler === 'object' &&
+    typeof (handler as { getRequestMetadata?: unknown }).getRequestMetadata ===
+      'function'
+  );
+}
+
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P12
  * @requirement REQ-SP3-003
@@ -1166,22 +1177,9 @@ export class OAuthManager {
             providerName,
             requestMetadata,
           );
-          const existingRequestMetadata =
-            typeof (
-              failoverHandler as {
-                getRequestMetadata?: () =>
-                  | OAuthTokenRequestMetadata
-                  | undefined;
-              }
-            )?.getRequestMetadata === 'function'
-              ? (
-                  failoverHandler as {
-                    getRequestMetadata: () =>
-                      | OAuthTokenRequestMetadata
-                      | undefined;
-                  }
-                ).getRequestMetadata()
-              : undefined;
+          const existingRequestMetadata = hasRequestMetadata(failoverHandler)
+            ? failoverHandler.getRequestMetadata()
+            : undefined;
           const existingScopeKey = this.getSessionBucketScopeKey(
             providerName,
             existingRequestMetadata,
