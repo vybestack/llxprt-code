@@ -35,6 +35,7 @@ import { Config, ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
+import { createEditBackups } from './edit-backups.js';
 import { spawnSync } from 'child_process';
 import FastGlob from 'fast-glob';
 import { DebugLogger } from '../debug/index.js';
@@ -243,6 +244,16 @@ export interface ASTEditToolParams {
    * If provided, the tool will verify the file hasn't been modified since this time.
    */
   last_modified?: number;
+
+  /**
+   * If true (default), writes backups under .backups/ in the project root.
+   */
+  backups?: boolean;
+
+  /**
+   * Optional title used for backup metadata.
+   */
+  title?: string;
 }
 
 // ===== ReadFile Parameter Interface =====
@@ -1598,6 +1609,17 @@ export class ASTEditTool
               'The exact literal text to replace old_string with. Provide the complete replacement text.',
             type: 'string',
           },
+          backups: {
+            description:
+              "If true (default), writes backups under .backups/ in the project root using a parallel directory structure. A backup is a point-in-time snapshot of the file content that allows you to restore previous versions without relying on git commits. Baseline is the file state before the first successful edit made via this tool. Naming: '<relativeFilePath>_baseline' for the baseline snapshot, and '<relativeFilePath>_YYYYMMDD_HHMMSS_mmm' (UTC) after each successful edit. Next to each backup file, a '<sameName>.json' metadata file is written containing at least the edit 'title'.",
+            type: 'boolean',
+            default: true,
+          },
+          title: {
+            description:
+              'Optional title for this edit, written into backup metadata for future undo UX.',
+            type: 'string',
+          },
           force: {
             type: 'boolean',
             description: 'Internal execution control. Managed automatically.',
@@ -1620,6 +1642,11 @@ export class ASTEditTool
   protected override validateToolParamValues(
     params: ASTEditToolParams,
   ): string | null {
+    if (typeof params.title === 'string') {
+      const trimmed = params.title.trim();
+      params.title = trimmed.length > 0 ? trimmed : undefined;
+    }
+
     if (!params.file_path) {
       return "The 'file_path' parameter must be non-empty.";
     }
@@ -2073,9 +2100,28 @@ class ASTEditToolInvocation
     // Execute actual file write
     try {
       await this.ensureParentDirectoriesExist(this.params.file_path);
+
+      const backupsEnabled = this.params.backups !== false;
+      const projectRoot = this.config.getTargetDir();
+      const relativeFilePath = makeRelative(this.params.file_path, projectRoot);
+
+      let backupWarning: string | null = null;
+
       await this.config
         .getFileSystemService()
         .writeTextFile(this.params.file_path, editData.newContent);
+
+      if (backupsEnabled) {
+        ({ backupWarning } = await createEditBackups({
+          projectRoot,
+          relativeFilePath,
+          originalFilePath: this.params.file_path,
+          currentContent: editData.currentContent ?? '',
+          newContent: editData.newContent,
+          isNewFile: editData.isNewFile,
+          title: this.params.title,
+        }));
+      }
 
       // Return execution result
       const fileName = path.basename(this.params.file_path);
@@ -2104,6 +2150,12 @@ class ASTEditToolInvocation
         `- Changes: ${editData.occurrences} replacement(s) applied`,
         `- AST validation: ${editData.astValidation?.valid ? 'PASSED' : 'FAILED'}`,
       ];
+
+      if (backupWarning) {
+        llmSuccessMessageParts.push(
+          `\n\n<system-reminder>\n${backupWarning}\n</system-reminder>`,
+        );
+      }
 
       // @plan PLAN-20250212-LSP.P31
       // @requirement REQ-DIAG-010

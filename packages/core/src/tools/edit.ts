@@ -39,6 +39,7 @@ import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
+import { createEditBackups } from './edit-backups.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -214,6 +215,16 @@ export interface EditToolParams {
    * Initially proposed content.
    */
   ai_proposed_content?: string;
+
+  /**
+   * If true (default), writes backups under .backups/ in the project root.
+   */
+  backups?: boolean;
+
+  /**
+   * Optional title used for backup metadata.
+   */
+  title?: string;
 }
 
 interface CalculatedEdit {
@@ -704,9 +715,28 @@ class EditToolInvocation extends BaseToolInvocation<
     const filePath = this.getFilePath();
     try {
       await this.ensureParentDirectoriesExist(filePath);
+
+      const backupsEnabled = this.params.backups !== false;
+      const projectRoot = this.config.getTargetDir();
+      const relativeFilePath = makeRelative(filePath, projectRoot);
+
+      let backupWarning: string | null = null;
+
       await this.config
         .getFileSystemService()
         .writeTextFile(filePath, editData.newContent);
+
+      if (backupsEnabled) {
+        ({ backupWarning } = await createEditBackups({
+          projectRoot,
+          relativeFilePath,
+          originalFilePath: filePath,
+          currentContent: editData.currentContent ?? '',
+          newContent: editData.newContent,
+          isNewFile: editData.isNewFile,
+          title: this.params.title,
+        }));
+      }
 
       // Track git stats if logging is enabled and service is available
       let gitStats = null;
@@ -768,6 +798,12 @@ class EditToolInvocation extends BaseToolInvocation<
       if (editData.filterResult?.systemFeedback) {
         llmSuccessMessageParts.push(
           `\n\n<system-reminder>\n${editData.filterResult.systemFeedback}\n</system-reminder>`,
+        );
+      }
+
+      if (backupWarning) {
+        llmSuccessMessageParts.push(
+          `\n\n<system-reminder>\n${backupWarning}\n</system-reminder>`,
         );
       }
 
@@ -891,6 +927,17 @@ Expectation for required parameters:
               'Optional 1-based line number where the replacement should begin. Strongly recommended to always set this to guard against misinterpreting the file structure, especially when similar text appears multiple times.',
             minimum: 1,
           },
+          backups: {
+            description:
+              "If true (default), writes backups under .backups/ in the project root using a parallel directory structure. A backup is a point-in-time snapshot of the file content that allows you to restore previous versions without relying on git commits. Baseline is the file state before the first successful edit made via this tool. Naming: '<relativeFilePath>_baseline' for the baseline snapshot, and '<relativeFilePath>_YYYYMMDD_HHMMSS_mmm' (UTC) after each successful edit. Next to each backup file, a '<sameName>.json' metadata file is written which may include metadata such as the optional edit 'title' (when provided).",
+            type: 'boolean',
+            default: true,
+          },
+          title: {
+            description:
+              'Optional title used for backup metadata (useful for future undo UX).',
+            type: 'string',
+          },
         },
         required: ['old_string', 'new_string'],
         type: 'object',
@@ -909,6 +956,11 @@ Expectation for required parameters:
   protected override validateToolParamValues(
     params: EditToolParams,
   ): string | null {
+    if (typeof params.title === 'string') {
+      const trimmed = params.title.trim();
+      params.title = trimmed.length > 0 ? trimmed : undefined;
+    }
+
     // Accept either absolute_path or file_path
     const filePath = params.absolute_path || params.file_path || '';
 
