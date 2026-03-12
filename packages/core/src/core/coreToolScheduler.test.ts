@@ -77,7 +77,9 @@ class AbortDuringConfirmationInvocation extends BaseToolInvocation<
     private readonly abortController: AbortController,
     private readonly abortError: Error,
     params: Record<string, unknown>,
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(params, messageBus);
   }
@@ -108,7 +110,9 @@ class AbortDuringConfirmationTool extends BaseDeclarativeTool<
   constructor(
     private readonly abortController: AbortController,
     private readonly abortError: Error,
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(
       'abortDuringConfirmationTool',
@@ -1790,7 +1794,9 @@ class MockEditToolInvocation extends BaseToolInvocation<
 > {
   constructor(
     params: Record<string, unknown>,
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(params, messageBus);
   }
@@ -1828,7 +1834,9 @@ class MockEditTool extends BaseDeclarativeTool<
   ToolResult
 > {
   constructor(
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(
       'mockEditTool',

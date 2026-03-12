@@ -726,6 +726,42 @@ describe('CLI --version and --help flags', () => {
     expect(output).toContain('--version');
     expect(output).toContain('--help');
   });
+
+  it('should print help even with invalid settings.json (--help)', async () => {
+    // Write an invalid settings file with an unrecognized key
+    const settingsDir = path.join(tempDir, '.llxprt');
+    await fs.mkdir(settingsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({ telemetry: { logConversations: true } }),
+    );
+
+    const result = await runCli(['--help'], { HOME: tempDir });
+    expect(result.exitCode).toBe(0);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('llxprt');
+    expect(output).toContain('--version');
+    expect(output).toContain('--help');
+    // Should NOT contain config error messages
+    expect(output).not.toContain('Invalid configuration');
+  });
+
+  it('should show config error (not silently fail) with invalid settings.json and no args', async () => {
+    // Write an invalid settings file with an unrecognized key
+    const settingsDir = path.join(tempDir, '.llxprt');
+    await fs.mkdir(settingsDir, { recursive: true });
+    await fs.writeFile(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify({ telemetry: { logConversations: true } }),
+    );
+
+    const result = await runCli([], { HOME: tempDir });
+    // Should exit with non-zero exit code
+    expect(result.exitCode).not.toBe(0);
+    const output = result.stdout + result.stderr;
+    // Should contain the config error, not silently fail
+    expect(output).toContain('Invalid configuration');
+  });
 });
 
 /**

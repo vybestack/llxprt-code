@@ -22,7 +22,6 @@ import {
 import { PolicyDecision } from '../policy/types.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';
 
-
 // Helper function to create a mock MessageBus
 function createMockMessageBus() {
   return {
@@ -59,7 +58,9 @@ class OrderTrackingInvocation extends BaseToolInvocation<
     private readonly toolName: string,
     private readonly delayMs: number = 10,
     private readonly outputSize: number = 0,
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(params, messageBus);
   }
@@ -105,12 +106,23 @@ class OrderTrackingTool extends BaseDeclarativeTool<
     name: string,
     private readonly delayMs: number = 10,
     private readonly outputSize: number = 0,
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
-    super(name, name, `A tool named ${name}`, Kind.Other, {
-      type: 'object',
-      properties: {},
-    }, true, false, messageBus);
+    super(
+      name,
+      name,
+      `A tool named ${name}`,
+      Kind.Other,
+      {
+        type: 'object',
+        properties: {},
+      },
+      true,
+      false,
+      messageBus,
+    );
   }
 
   protected createInvocation(

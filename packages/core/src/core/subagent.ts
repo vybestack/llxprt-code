@@ -735,7 +735,9 @@ export class SubAgentScope {
                 sessionId: string,
                 callbacks: SchedulerCallbacks,
                 options?: SchedulerOptions,
-                dependencies?: { messageBus?: import('../index.js').MessageBus },
+                dependencies?: {
+                  messageBus?: import('../index.js').MessageBus;
+                },
               ): ReturnType<Config['getOrCreateScheduler']>;
             }
           ).getOrCreateScheduler(

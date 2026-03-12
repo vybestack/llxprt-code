@@ -35,7 +35,7 @@ class MockOAuthProvider implements OAuthProvider {
     this.token = this._initialToken || null;
   }
 
-  async initiateAuth(): Promise<void> {
+  async initiateAuth(): Promise<OAuthToken> {
     this.authInitiated = true;
     // Simulate successful auth flow
     if (!this.token) {
@@ -47,6 +47,7 @@ class MockOAuthProvider implements OAuthProvider {
         scope: 'read write',
       };
     }
+    return this.token;
   }
 
   async getToken(): Promise<OAuthToken | null> {
@@ -130,6 +131,14 @@ class MockTokenStore implements TokenStore {
   }
 
   async releaseRefreshLock(): Promise<void> {
+    // No-op
+  }
+
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
     // No-op
   }
 
@@ -640,6 +649,88 @@ describe.skipIf(skipInCI)(
 
         expect(firstOrder).toEqual(secondOrder);
         expect(firstOrder).toEqual(['gemini', 'qwen']);
+      });
+
+      it('should list buckets through the public OAuthManager API', async () => {
+        await tokenStore.saveToken('qwen:work', {
+          access_token: 'work-token',
+          refresh_token: 'work-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+          scope: 'read',
+        });
+        await tokenStore.saveToken('qwen:personal', {
+          access_token: 'personal-token',
+          refresh_token: 'personal-refresh',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+          scope: 'read',
+        });
+
+        await expect(manager.listBuckets('qwen')).resolves.toEqual([
+          'personal',
+          'work',
+        ]);
+      });
+
+      it('prefers an explicit bucket over a single configured profile bucket during auth fallback', async () => {
+        const savedTokens = new Map<string, OAuthToken>();
+        const targetBucketToken: OAuthToken = {
+          access_token: 'target-bucket-token',
+          refresh_token: 'target-refresh-token',
+          expiry: Math.floor(Date.now() / 1000) + 3600,
+          token_type: 'Bearer',
+        };
+
+        const tokenStore: TokenStore = {
+          saveToken: vi.fn(
+            async (provider: string, token: OAuthToken, bucket?: string) => {
+              savedTokens.set(`${provider}:${bucket ?? 'default'}`, token);
+            },
+          ),
+          getToken: vi.fn(
+            async (provider: string, bucket?: string) =>
+              savedTokens.get(`${provider}:${bucket ?? 'default'}`) ?? null,
+          ),
+          removeToken: vi.fn(async () => undefined),
+          listProviders: vi.fn(async () => []),
+          listBuckets: vi.fn(async () => []),
+          getBucketStats: vi.fn(async () => null),
+          acquireRefreshLock: vi.fn(async () => false),
+          releaseRefreshLock: vi.fn(async () => undefined),
+          acquireAuthLock: vi.fn(async () => true),
+          releaseAuthLock: vi.fn(async () => undefined),
+        };
+
+        const manager = new OAuthManager(tokenStore);
+        const provider: OAuthProvider = {
+          name: 'anthropic',
+          initiateAuth: vi.fn(async () => targetBucketToken),
+          getToken: vi.fn(async () => null),
+          refreshToken: vi.fn(async () => null),
+        };
+        manager.registerProvider(provider);
+        vi.spyOn(manager, 'isOAuthEnabled').mockReturnValue(true);
+        vi.spyOn(
+          manager as unknown as {
+            getProfileBuckets: (provider: string) => Promise<string[]>;
+          },
+          'getProfileBuckets',
+        ).mockResolvedValue(['profile-only-bucket']);
+
+        const authenticateSpy = vi.spyOn(manager, 'authenticate');
+
+        const result = await manager.getToken('anthropic', 'target-bucket');
+
+        expect(authenticateSpy).toHaveBeenCalledWith(
+          'anthropic',
+          'target-bucket',
+        );
+        expect(tokenStore.getToken).toHaveBeenCalledWith(
+          'anthropic',
+          'target-bucket',
+        );
+        expect(result).toBe('target-bucket-token');
       });
     });
 

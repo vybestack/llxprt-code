@@ -40,7 +40,9 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
   }
 }
 
-export async function initializeTestConfig(config: Config): Promise<MessageBus> {
+export async function initializeTestConfig(
+  config: Config,
+): Promise<MessageBus> {
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
@@ -52,7 +54,6 @@ export async function initializeTestConfig(config: Config): Promise<MessageBus> 
   ).initialize({ messageBus: sessionMessageBus });
   return sessionMessageBus;
 }
-
 
 /**
  * Creates a profile file in the specified directory

@@ -18,7 +18,10 @@ import {
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from './providerRuntimeContext.js';
-import { getSettingsService, resetSettingsService } from '../settings/settingsServiceInstance.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../settings/settingsServiceInstance.js';
 import type { Config } from '../config/config.js';
 
 describe('providerRuntimeContext', () => {

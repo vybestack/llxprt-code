@@ -90,7 +90,9 @@ export async function executeToolCall(
         callbacks: {
           getPreferredEditor: () => undefined;
           onEditorClose: () => void;
-          onAllToolCallsComplete: (completedToolCalls: CompletedToolCall[]) => Promise<void>;
+          onAllToolCallsComplete: (
+            completedToolCalls: CompletedToolCall[],
+          ) => Promise<void>;
         },
         options?: { interactiveMode?: boolean },
         extraDependencies?: { messageBus?: MessageBus },

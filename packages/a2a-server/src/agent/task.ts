@@ -479,7 +479,9 @@ export class Task {
           sessionId: string,
           callbacks: {
             outputUpdateHandler: (toolCallId: string, chunk: string) => void;
-            onAllToolCallsComplete: (completedToolCalls: CompletedToolCall[]) => Promise<void>;
+            onAllToolCallsComplete: (
+              completedToolCalls: CompletedToolCall[],
+            ) => Promise<void>;
             onToolCallsUpdate: (toolCalls: ToolCall[]) => void;
             getPreferredEditor: () => typeof DEFAULT_GUI_EDITOR;
             onEditorClose: () => void;

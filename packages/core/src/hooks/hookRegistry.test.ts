@@ -685,10 +685,12 @@ describe('HookRegistry', () => {
     beforeEach(() => {
       coreEventsSpy = vi.spyOn(coreEvents, 'emit');
       // Set up config for a trusted folder with project hooks
-      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder =
-        vi.fn().mockReturnValue(true);
-      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks =
-        vi.fn().mockReturnValue({
+      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder = vi
+        .fn()
+        .mockReturnValue(true);
+      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks = vi
+        .fn()
+        .mockReturnValue({
           BeforeTool: [
             {
               hooks: [
@@ -760,9 +762,9 @@ describe('HookRegistry', () => {
     });
 
     it('does not warn or check trust when no project hooks exist', async () => {
-      vi.mocked(
-        mockConfig as Record<string, unknown>,
-      ).getProjectHooks = vi.fn().mockReturnValue(undefined);
+      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks = vi
+        .fn()
+        .mockReturnValue(undefined);
 
       await hookRegistry.initialize();
 
@@ -774,8 +776,9 @@ describe('HookRegistry', () => {
     });
 
     it('skips trust check when folder is not trusted', async () => {
-      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder =
-        vi.fn().mockReturnValue(false);
+      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder = vi
+        .fn()
+        .mockReturnValue(false);
 
       await hookRegistry.initialize();
 

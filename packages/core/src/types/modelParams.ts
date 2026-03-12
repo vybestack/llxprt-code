@@ -69,6 +69,10 @@ export interface EphemeralSettings {
   'auth-key-name'?: string;
   /** API base URL */
   'base-url'?: string;
+  /** Base URL override used when running inside a container sandbox (Docker/Podman) */
+  'sandbox-base-url'?: string;
+  /** Whether the provider requires API key authentication (set to false for local providers) */
+  'requires-auth'?: boolean;
   /** Tool format override */
   'tool-format'?: string;
   /** API version (for Azure) */

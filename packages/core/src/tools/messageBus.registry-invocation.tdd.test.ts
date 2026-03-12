@@ -5,7 +5,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Config, type ConfigParameters, ApprovalMode } from '../config/config.js';
+import {
+  Config,
+  type ConfigParameters,
+  ApprovalMode,
+} from '../config/config.js';
 import { ToolRegistry } from './tool-registry.js';
 import { IdeClient } from '../ide/ide-client.js';
 import {
@@ -147,14 +151,17 @@ describe('ToolRegistry MessageBus integration TDD', () => {
     const observedInjectedRequests: ToolConfirmationRequest[] = [];
     const observedDecoyRequests: ToolConfirmationRequest[] = [];
 
-    injectedBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, (message) => {
-      const request = message as ToolConfirmationRequest;
-      observedInjectedRequests.push(request);
-      injectedBus.respondToConfirmation(
-        request.correlationId,
-        ToolConfirmationOutcome.ProceedOnce,
-      );
-    });
+    injectedBus.subscribe(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      (message) => {
+        const request = message as ToolConfirmationRequest;
+        observedInjectedRequests.push(request);
+        injectedBus.respondToConfirmation(
+          request.correlationId,
+          ToolConfirmationOutcome.ProceedOnce,
+        );
+      },
+    );
     decoyBus.subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, (message) => {
       const request = message as ToolConfirmationRequest;
       observedDecoyRequests.push(request);
@@ -164,9 +171,11 @@ describe('ToolRegistry MessageBus integration TDD', () => {
       );
     });
 
-    const invocation = registry.getTool(Phase04RegistryBusAwareTool.Name)?.build({
-      payload: 'registry-direct',
-    });
+    const invocation = registry
+      .getTool(Phase04RegistryBusAwareTool.Name)
+      ?.build({
+        payload: 'registry-direct',
+      });
     const confirmation = invocation
       ? await invocation.shouldConfirmExecute(new AbortController().signal)
       : false;

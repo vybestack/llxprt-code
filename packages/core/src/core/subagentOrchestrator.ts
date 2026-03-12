@@ -40,6 +40,7 @@ import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { canonicalizeToolName } from './toolGovernance.js';
 
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
@@ -52,6 +53,11 @@ const createAbortError = (message: string): Error => {
   error.name = 'AbortError';
   return error;
 };
+
+const DEFAULT_DISABLED_TOOLS = ['google_web_fetch'] as const;
+
+const normalizeDefaultToolSet = (tools: readonly string[]): Set<string> =>
+  new Set(tools.map((tool) => canonicalizeToolName(tool)).filter(Boolean));
 
 export interface SubagentLaunchRequest {
   name: string;
@@ -91,6 +97,9 @@ export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
   private readonly scopeFactory: ScopeFactory;
   private readonly idFactory: () => string;
+  private readonly defaultDisabledTools = normalizeDefaultToolSet(
+    DEFAULT_DISABLED_TOOLS,
+  );
 
   constructor(private readonly options: SubagentOrchestratorOptions) {
     this.runtimeLoader = options.runtimeLoader ?? loadAgentRuntime;
@@ -338,10 +347,13 @@ export class SubagentOrchestrator {
       'tools.allowed',
       'tools_allowed',
     ]);
-    const disabled = this.getStringArraySetting(profile.ephemeralSettings, [
-      'tools.disabled',
-      'disabled-tools',
-    ]);
+    const disabled = this.mergeDefaultDisabledTools(
+      this.getStringArraySetting(profile.ephemeralSettings, [
+        'tools.disabled',
+        'disabled-tools',
+      ]),
+      allowed,
+    );
 
     return {
       compressionThreshold: this.getNumberSetting(profile.ephemeralSettings, [
@@ -366,8 +378,10 @@ export class SubagentOrchestrator {
   private populateSettingsService(
     service: SettingsService,
     profile: Profile,
+    profileName: string,
   ): void {
     const provider = profile.provider;
+    service.setCurrentProfileName(profileName);
     service.set('activeProvider', provider);
     service.set(`providers.${provider}.model`, profile.model);
 
@@ -397,6 +411,13 @@ export class SubagentOrchestrator {
       service.set('auth-key', authKey);
       service.set(`providers.${provider}.apiKey`, authKey);
     }
+    const authKeyName = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-key-name',
+    ]);
+    if (authKeyName) {
+      service.set('auth-key-name', authKeyName);
+    }
+
     const authKeyfile = this.getStringSetting(profile.ephemeralSettings, [
       'auth-keyfile',
     ]);
@@ -460,10 +481,13 @@ export class SubagentOrchestrator {
       service.set('tools.allowed', allowed);
     }
 
-    const disabled = this.getStringArraySetting(profile.ephemeralSettings, [
-      'tools.disabled',
-      'disabled-tools',
-    ]);
+    const disabled = this.mergeDefaultDisabledTools(
+      this.getStringArraySetting(profile.ephemeralSettings, [
+        'tools.disabled',
+        'disabled-tools',
+      ]),
+      allowed,
+    );
     if (disabled) {
       service.set('tools.disabled', disabled);
     }
@@ -528,6 +552,43 @@ export class SubagentOrchestrator {
     return (settings as Record<string, unknown>)[key];
   }
 
+  private mergeDefaultDisabledTools(
+    disabled: string[] | undefined,
+    allowed: string[] | undefined,
+  ): string[] | undefined {
+    const disabledSource = Array.isArray(disabled) ? disabled : [];
+    const allowedSet = new Set(
+      (allowed ?? [])
+        .map((tool) => canonicalizeToolName(tool))
+        .filter((tool) => tool.length > 0),
+    );
+
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    const addTool = (toolName: string, respectAllowed: boolean) => {
+      const canonical = canonicalizeToolName(toolName);
+      if (
+        !canonical ||
+        seen.has(canonical) ||
+        (respectAllowed && allowedSet.has(canonical))
+      ) {
+        return;
+      }
+      seen.add(canonical);
+      merged.push(canonical);
+    };
+
+    for (const tool of disabledSource) {
+      addTool(tool, false);
+    }
+
+    for (const tool of this.defaultDisabledTools) {
+      addTool(tool, true);
+    }
+
+    return merged.length > 0 ? merged : undefined;
+  }
+
   private createRuntimeState(
     profile: Profile,
     modelConfig: ModelConfig,
@@ -577,7 +638,7 @@ export class SubagentOrchestrator {
       agentRuntimeId,
     );
     const settingsService = new SettingsService();
-    this.populateSettingsService(settingsService, profile);
+    this.populateSettingsService(settingsService, profile, subagent.profile);
 
     const providerRuntime: ProviderRuntimeContext =
       createProviderRuntimeContext({

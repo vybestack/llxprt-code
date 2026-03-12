@@ -335,15 +335,13 @@ describe('getEnableHooks', () => {
   });
 
   it('returns false when only tools.enableHooks is true (hooks.enabled defaults to false)', () => {
-    expect(
-      getEnableHooks({ tools: { enableHooks: true } } as Settings),
-    ).toBe(false);
+    expect(getEnableHooks({ tools: { enableHooks: true } } as Settings)).toBe(
+      false,
+    );
   });
 
   it('returns true when hooks.enabled is true and tools.enableHooks is absent (defaults true)', () => {
-    expect(
-      getEnableHooks({ hooks: { enabled: true } } as Settings),
-    ).toBe(true);
+    expect(getEnableHooks({ hooks: { enabled: true } } as Settings)).toBe(true);
   });
 
   it('returns true when both gates are explicitly true', () => {
@@ -373,4 +371,3 @@ describe('getEnableHooks', () => {
     ).toBe(false);
   });
 });
-

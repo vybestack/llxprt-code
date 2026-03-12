@@ -126,7 +126,7 @@ async function createMockConfig(
     settingsService,
   };
   const config = new Config(configParams);
-    await initializeTestConfig(config);
+  await initializeTestConfig(config);
 
   await config.refreshAuth();
 

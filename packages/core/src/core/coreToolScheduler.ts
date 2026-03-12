@@ -267,12 +267,12 @@ export class CoreToolScheduler {
     this.toolContextInteractiveMode =
       options.toolContextInteractiveMode ?? true;
 
-    this.messageBusUnsubscribe = this.messageBus.subscribe<ToolConfirmationResponse>(
-      MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      this.handleMessageBusResponse.bind(this),
-    );
+    this.messageBusUnsubscribe =
+      this.messageBus.subscribe<ToolConfirmationResponse>(
+        MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        this.handleMessageBusResponse.bind(this),
+      );
   }
-
 
   setCallbacks(options: CoreToolSchedulerOptions): void {
     this.outputUpdateHandler = options.outputUpdateHandler;
@@ -1125,7 +1125,6 @@ export class CoreToolScheduler {
           outcome !== ToolConfirmationOutcome.ModifyWithEditor &&
           outcome !== ToolConfirmationOutcome.SuggestEdit;
         this.messageBus.publish({
-
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId,
           outcome,
@@ -1679,7 +1678,6 @@ export class CoreToolScheduler {
         })
     );
   }
-
 
   private async attemptExecutionOfScheduledCalls(
     signal: AbortSignal,

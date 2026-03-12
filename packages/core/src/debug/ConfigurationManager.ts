@@ -7,7 +7,6 @@ import * as path from 'path';
 import * as os from 'os';
 import { LLXPRT_DIR } from '../utils/paths.js';
 import { type DebugSettings } from './types.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 export class ConfigurationManager {
   // Line 11: PRIVATE static instance: ConfigurationManager
@@ -113,8 +112,8 @@ export class ConfigurationManager {
           if (parsed.debug) {
             this.userConfig = parsed.debug;
           }
-        } catch (error) {
-          debugLogger.warn('Failed to load user config:', error);
+        } catch {
+          // Silently ignore — can't use debugLogger here (circular dep)
         }
       }
     } catch (_error) {
@@ -138,8 +137,8 @@ export class ConfigurationManager {
           if (parsed.debug) {
             this.projectConfig = parsed.debug;
           }
-        } catch (error) {
-          debugLogger.warn('Failed to load project config:', error);
+        } catch {
+          // Silently ignore — can't use debugLogger here (circular dep)
         }
       }
     } catch (_error) {

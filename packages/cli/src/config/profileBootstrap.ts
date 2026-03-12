@@ -42,7 +42,6 @@ export interface RuntimeBootstrapMetadata {
   metadata?: Record<string, unknown>;
 }
 
-
 export interface ParsedBootstrapArgs {
   bootstrapArgs: BootstrapProfileArgs;
   runtimeMetadata: RuntimeBootstrapMetadata;
@@ -384,7 +383,10 @@ export async function prepareRuntimeForProfile(
   };
   const runtimeMessageBus =
     runtimeInit.messageBus ??
-    new MessageBus(runtimeConfig.getPolicyEngine(), runtimeConfig.getDebugMode());
+    new MessageBus(
+      runtimeConfig.getPolicyEngine(),
+      runtimeConfig.getDebugMode(),
+    );
 
   const { manager: providerManager, oauthManager } = createProviderManager(
     {

@@ -47,7 +47,7 @@ export type ResponsesInputItem =
   | {
       type: 'function_call_output';
       call_id: string;
-      output: string | ResponsesContentPart[];
+      output: string;
     };
 
 export function buildResponsesInputFromContent(
@@ -157,30 +157,33 @@ export function buildResponsesInputFromContent(
 
         const textResult = limited.content || limited.message || '';
 
-        let outputContent: string | ResponsesContentPart[];
+        input.push({
+          type: 'function_call_output',
+          call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
+          output: textResult,
+        });
 
+        // OpenAI Responses API function_call_output.output only accepts a
+        // string.  When the tool response carried media blocks (e.g.
+        // screenshots, images from read_file), emit them as a synthetic
+        // user message so the model can still see the actual image data.
         if (mediaBlocks.length > 0) {
-          const parts: ResponsesContentPart[] = [];
-
-          if (textResult) {
-            parts.push({ type: 'input_text', text: textResult });
-          }
-
+          const mediaParts: ResponsesContentPart[] = [];
           for (const media of mediaBlocks) {
             const category = classifyMediaBlock(media);
             if (category === 'image') {
-              parts.push({
+              mediaParts.push({
                 type: 'input_image',
                 image_url: normalizeMediaToDataUri(media),
               });
             } else if (category === 'pdf') {
-              parts.push({
+              mediaParts.push({
                 type: 'input_file',
                 file_data: normalizeMediaToDataUri(media),
                 ...(media.filename ? { filename: media.filename } : {}),
               });
             } else {
-              parts.push({
+              mediaParts.push({
                 type: 'input_text',
                 text: buildUnsupportedMediaPlaceholder(
                   media,
@@ -189,17 +192,13 @@ export function buildResponsesInputFromContent(
               });
             }
           }
-
-          outputContent = parts;
-        } else {
-          outputContent = textResult;
+          if (mediaParts.length > 0) {
+            input.push({
+              role: 'user',
+              content: mediaParts,
+            });
+          }
         }
-
-        input.push({
-          type: 'function_call_output',
-          call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-          output: outputContent,
-        });
       }
     }
   }

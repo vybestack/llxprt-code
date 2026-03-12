@@ -1,14 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('../runtime/runtimeSettings.js', () => ({
+  getCliRuntimeServices: vi.fn(() => ({
+    config: undefined,
+    settings: undefined,
+  })),
+  getEphemeralSetting: vi.fn((key: string) => {
+    if (key === 'auth-bucket-delay') {
+      return 0;
+    }
+    return undefined;
+  }),
+  getCliProviderManager: vi.fn(() => undefined),
+  getCliRuntimeContext: vi.fn(() => undefined),
+}));
+
 import { OAuthManager } from './oauth-manager.js';
 import type {
   Config,
   BucketFailoverHandler,
+  OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { TokenStore, OAuthToken } from './types.js';
 
 interface OAuthProvider {
   name: string;
-  initiateAuth(): Promise<void>;
+  initiateAuth(): Promise<OAuthToken>;
   getToken(): Promise<OAuthToken | null>;
   refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null>;
   logout?(token?: OAuthToken): Promise<void>;
@@ -46,6 +63,8 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       listBuckets: vi.fn(),
       acquireRefreshLock: vi.fn(),
       releaseRefreshLock: vi.fn(),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } as unknown as TokenStore;
 
     // Create mock provider
@@ -105,7 +124,7 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
     getProfileBucketsSpy.mockRestore();
   });
 
-  it('should reuse existing handler if buckets match', async () => {
+  it('should reuse existing handler if buckets match in the same scope', async () => {
     // Setup: Mock token store
     const mockToken: OAuthToken = {
       access_token: 'test-token',
@@ -142,6 +161,58 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
 
     // Assert: Should NOT create a new handler
     expect(mockSetBucketFailoverHandler).not.toHaveBeenCalled();
+
+    getProfileBucketsSpy.mockRestore();
+  });
+
+  it('should recreate handler when the request scope changes even if buckets match', async () => {
+    const mockToken: OAuthToken = {
+      access_token: 'test-token',
+      token_type: 'Bearer',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      refresh_token: 'test-refresh-token',
+    };
+    (mockTokenStore.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+      mockToken,
+    );
+
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'subagent-profile',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    const getProfileBucketsSpy = vi
+      .spyOn(
+        oauthManager as unknown as {
+          getProfileBuckets: () => Promise<string[]>;
+        },
+        'getProfileBuckets',
+      )
+      .mockResolvedValue(['bucket1', 'bucket2']);
+
+    const existingHandler: BucketFailoverHandler = {
+      getBuckets: vi.fn().mockReturnValue(['bucket1', 'bucket2']),
+      getCurrentBucket: vi.fn(),
+      tryFailover: vi.fn(),
+      isEnabled: vi.fn(),
+    };
+
+    mockGetBucketFailoverHandler.mockReturnValue(existingHandler);
+
+    await oauthManager.getOAuthToken('anthropic', metadata);
+
+    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
+    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0] as {
+      getRequestMetadata: () => OAuthTokenRequestMetadata | undefined;
+      reset: () => void;
+    };
+
+    expect(handlerArg.getRequestMetadata()).toEqual(metadata);
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
 
     getProfileBucketsSpy.mockRestore();
   });
@@ -202,6 +273,8 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       listBuckets: vi.fn(),
       acquireRefreshLock: vi.fn(),
       releaseRefreshLock: vi.fn(),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } as unknown as TokenStore;
 
     const mockProviderNoConfig: OAuthProvider = {
@@ -243,6 +316,53 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
     );
 
     warnSpy.mockRestore();
+    getProfileBucketsSpy.mockRestore();
+  });
+
+  it('wires a metadata-scoped failover handler during eager multi-bucket auth', async () => {
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    const getProfileBucketsSpy = vi
+      .spyOn(
+        oauthManager as unknown as {
+          getProfileBuckets: () => Promise<string[]>;
+        },
+        'getProfileBuckets',
+      )
+      .mockResolvedValue(['bucket-a', 'bucket-b']);
+
+    const authenticateSpy = vi
+      .spyOn(oauthManager, 'authenticate')
+      .mockResolvedValue(undefined);
+
+    await oauthManager.authenticateMultipleBuckets(
+      'anthropic',
+      ['bucket-a', 'bucket-b'],
+      metadata,
+    );
+
+    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
+    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0] as {
+      getCurrentBucket: () => string | undefined;
+      reset: () => void;
+    };
+
+    oauthManager.setSessionBucket('anthropic', 'bucket-b', metadata);
+    expect(handlerArg.getCurrentBucket()).toBe('bucket-a');
+    handlerArg.reset();
+    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
+      'bucket-a',
+    );
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
+
+    authenticateSpy.mockRestore();
     getProfileBucketsSpy.mockRestore();
   });
 });

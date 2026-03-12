@@ -462,6 +462,91 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(result.dispose).toBeTypeOf('function');
   });
 
+  it('seeds default disabled tools into subagent runtime settings when profile omits disabled tools', async () => {
+    const profileWithoutDisabled: Profile = {
+      ...profile,
+      ephemeralSettings: {
+        'auth-key': 'test-api-key',
+        'tools.allowed': ['read_file'],
+      },
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi.fn().mockResolvedValue(profileWithoutDisabled);
+
+    const runtimeBundle = createRuntimeBundle('plan');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'planner-2',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: subagentConfig.name,
+      runConfig,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    expect(loaderArgs.profile.settings.tools?.disabled).toEqual([
+      'google_web_fetch',
+    ]);
+  });
+
+  it('preserves profile disabled tools even when they are present in tools.allowed', async () => {
+    const profileWithAllowedDisabledOverlap: Profile = {
+      ...profile,
+      ephemeralSettings: {
+        'auth-key': 'test-api-key',
+        'tools.allowed': ['read_file', 'write_file', 'google_web_fetch'],
+        'tools.disabled': ['write_file'],
+      },
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi
+      .fn()
+      .mockResolvedValue(profileWithAllowedDisabledOverlap);
+
+    const runtimeBundle = createRuntimeBundle('plan-overlap');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'planner-overlap',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: subagentConfig.name,
+      runConfig,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    expect(loaderArgs.profile.settings.tools?.disabled).toEqual(['write_file']);
+  });
+
   it('copies base-url into provider settings for subagent runtimes', async () => {
     const qwenBaseUrl = 'https://portal.qwen.ai/v1';
     const qwenProfile: Profile = {
@@ -614,6 +699,60 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loaderArgs = runtimeLoader.mock.calls[0][0];
     const settingsService = loaderArgs.profile.providerRuntime.settingsService;
     expect(settingsService.get('user-agent')).toBe('RooCode/1.0');
+  });
+
+  it('preserves subagent profile identity and auth-key-name in runtime settings', async () => {
+    const keyNameProfile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'minimax-m1',
+      modelParams: {},
+      ephemeralSettings: {
+        'auth-key-name': 'chutesminimax',
+      },
+    };
+
+    const keyNameSubagent: SubagentConfig = {
+      name: 'codeanalyzer',
+      profile: 'chutesminimax',
+      systemPrompt: 'Analyze code precisely.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(keyNameSubagent);
+    const loadProfile = vi.fn().mockResolvedValue(keyNameProfile);
+
+    const runtimeBundle = createRuntimeBundle('key-name');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'codeanalyzer-1',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: keyNameSubagent.name,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
+
+    expect(settingsService.getCurrentProfileName()).toBe(
+      keyNameSubagent.profile,
+    );
+    expect(settingsService.get('auth-key-name')).toBe('chutesminimax');
   });
 
   it('provides a dispose hook that clears runtime history and returns unique agent ids per launch', async () => {

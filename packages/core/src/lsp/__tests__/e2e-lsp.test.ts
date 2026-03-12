@@ -223,6 +223,7 @@ vi.mock('../../utils/memoryDiscovery.js', () => ({
   loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadJitSubdirectoryMemory: vi.fn().mockResolvedValue({ files: [] }),
+  loadCoreMemory: vi.fn().mockResolvedValue({ files: [] }),
   concatenateInstructions: vi.fn().mockReturnValue(''),
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
 }));

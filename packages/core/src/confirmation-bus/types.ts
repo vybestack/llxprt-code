@@ -96,6 +96,16 @@ export interface BucketAuthConfirmationResponse {
   confirmed: boolean;
 }
 
+export interface HookExecutionRequest {
+  type: MessageBusType.HOOK_EXECUTION_REQUEST;
+  payload: { eventName: string; correlationId: string };
+}
+
+export interface HookExecutionResponse {
+  type: MessageBusType.HOOK_EXECUTION_RESPONSE;
+  payload: { correlationId: string };
+}
+
 export type MessageBusMessage =
   | ToolConfirmationRequest
   | ToolConfirmationResponse
@@ -104,4 +114,6 @@ export type MessageBusMessage =
   | ToolExecutionFailure
   | UpdatePolicy
   | BucketAuthConfirmationRequest
-  | BucketAuthConfirmationResponse;
+  | BucketAuthConfirmationResponse
+  | HookExecutionRequest
+  | HookExecutionResponse;

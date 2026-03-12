@@ -18,6 +18,7 @@ import {
   CompletedToolCall,
   type Config,
   type CoreToolScheduler,
+  type MessageBus,
   DebugLogger,
   PolicyDecision,
   type SchedulerCallbacks as SchedulerCallbacksCore,
@@ -309,6 +310,8 @@ const mockConfig = {
         existing.setCallbacks({
           ...callbacks,
           config: mockConfig,
+          messageBus: mockMessageBus as unknown as MessageBus,
+          toolRegistry: mockToolRegistry as unknown as ToolRegistry,
         });
         return Promise.resolve(existing);
       }

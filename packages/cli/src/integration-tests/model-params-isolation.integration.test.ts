@@ -95,11 +95,15 @@ describe('Runtime model parameter isolation', () => {
       config.getPolicyEngine(),
       config.getDebugMode(),
     );
-    registerCliProviderInfrastructure(providerManager, {
-      runtimeMessageBus,
-    } as unknown as OAuthManager, {
-      messageBus: runtimeMessageBus,
-    });
+    registerCliProviderInfrastructure(
+      providerManager,
+      {
+        runtimeMessageBus,
+      } as unknown as OAuthManager,
+      {
+        messageBus: runtimeMessageBus,
+      },
+    );
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'model-params-isolation.integration.test.ts' },
     });

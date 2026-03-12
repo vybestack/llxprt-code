@@ -41,7 +41,7 @@ class MockOAuthProvider implements OAuthProvider {
     this.name = name;
   }
 
-  async initiateAuth(): Promise<void> {
+  async initiateAuth(): Promise<OAuthToken> {
     this.initiateAuthCalled = true;
     this.initiateAuthCallCount++;
     // Simulate OAuth flow completing
@@ -52,6 +52,7 @@ class MockOAuthProvider implements OAuthProvider {
       token_type: 'Bearer',
       scope: 'read write',
     };
+    return this._token;
   }
 
   async getToken(): Promise<OAuthToken | null> {
@@ -135,6 +136,14 @@ class MockTokenStore implements TokenStore {
   }
 
   async releaseRefreshLock(): Promise<void> {
+    // No-op
+  }
+
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
     // No-op
   }
 

@@ -11,6 +11,7 @@ import type {
   OAuthToken,
   TokenStore,
   BucketFailureReason,
+  OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 
 class MemoryTokenStore implements TokenStore {
@@ -58,6 +59,14 @@ class MemoryTokenStore implements TokenStore {
   async releaseRefreshLock(): Promise<void> {
     // No-op
   }
+
+  async acquireAuthLock(): Promise<boolean> {
+    return true;
+  }
+
+  async releaseAuthLock(): Promise<void> {
+    // No-op
+  }
 }
 
 function makeToken(accessToken: string): OAuthToken {
@@ -80,7 +89,12 @@ describe('BucketFailoverHandlerImpl', () => {
 
     const provider: OAuthProvider = {
       name: 'anthropic',
-      initiateAuth: vi.fn(async () => undefined),
+      initiateAuth: vi.fn(async () => ({
+        access_token: 'mock-token',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      })),
       getToken: vi.fn(async () => null),
       refreshToken: vi.fn(async () => null),
     };
@@ -118,6 +132,52 @@ describe('BucketFailoverHandlerImpl', () => {
     expect(handler.getCurrentBucket()).toBe('bucket-b');
   });
 
+  it('uses scoped session buckets when initialized with request metadata', async () => {
+    await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+    await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    oauthManager.setSessionBucket('anthropic', 'bucket-b', metadata);
+
+    const HandlerCtor = BucketFailoverHandlerImpl as unknown as {
+      new (
+        buckets: string[],
+        provider: string,
+        oauthManager: OAuthManager,
+        metadata?: OAuthTokenRequestMetadata,
+      ): BucketFailoverHandlerImpl;
+    };
+
+    const handler = new HandlerCtor(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager,
+      metadata,
+    );
+
+    expect(handler.getCurrentBucket()).toBe('bucket-b');
+    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
+      'bucket-b',
+    );
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
+
+    handler.reset();
+
+    expect(handler.getCurrentBucket()).toBe('bucket-a');
+    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
+      'bucket-a',
+    );
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
+  });
+
   it('skips buckets with missing tokens and updates session bucket on success', async () => {
     await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
     await tokenStore.saveToken('anthropic', makeToken('t3'), 'bucket-c');
@@ -141,6 +201,16 @@ describe('BucketFailoverHandlerImpl', () => {
     await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
     oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
+    // Phase 4: Mock authenticate to fail - no token available for bucket-b
+    // Pass 3 foreground reauth will attempt authenticate for bucket-b (no-token)
+    // The mock must be set BEFORE creating the handler
+    const authenticateSpy = vi
+      .spyOn(oauthManager, 'authenticate')
+      .mockImplementation(async () => {
+        // Simulate user canceling auth or auth failure - do not save token
+        throw new Error('Authentication failed');
+      });
+
     const handler = new BucketFailoverHandlerImpl(
       ['bucket-a', 'bucket-b'],
       'anthropic',
@@ -152,6 +222,8 @@ describe('BucketFailoverHandlerImpl', () => {
     expect(result).toBe(false);
     expect(handler.getCurrentBucket()).toBe('bucket-a');
     expect(oauthManager.getSessionBucket('anthropic')).toBe('bucket-a');
+    // Verify authenticate was called (tried to reauth bucket-b)
+    expect(authenticateSpy).toHaveBeenCalled();
   });
 
   it('wraps around to earlier buckets when later buckets are exhausted', async () => {
@@ -179,6 +251,16 @@ describe('BucketFailoverHandlerImpl', () => {
     await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
     oauthManager.setSessionBucket('anthropic', 'bucket-b');
 
+    // Phase 4: Mock authenticate to fail - no tokens available for bucket-a or bucket-c
+    // Pass 3 foreground reauth will attempt authenticate but should fail
+    // The mock must be set BEFORE creating the handler
+    const authenticateSpy = vi
+      .spyOn(oauthManager, 'authenticate')
+      .mockImplementation(async () => {
+        // Simulate user canceling auth or auth failure - do not save token
+        throw new Error('Authentication failed');
+      });
+
     const handler = new BucketFailoverHandlerImpl(
       ['bucket-a', 'bucket-b', 'bucket-c'],
       'anthropic',
@@ -190,6 +272,8 @@ describe('BucketFailoverHandlerImpl', () => {
     expect(result).toBe(false);
     // Should remain on the current bucket since all others failed
     expect(handler.getCurrentBucket()).toBe('bucket-b');
+    // Verify authenticate was called (tried to reauth bucket-a or bucket-c)
+    expect(authenticateSpy).toHaveBeenCalled();
   });
 
   describe('resetSession()', () => {
@@ -1294,6 +1378,42 @@ describe('ensureBucketsAuthenticated', () => {
     expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledWith(
       'anthropic',
       ['bucket-a', 'bucket-b', 'bucket-c'],
+      undefined,
+    );
+  });
+
+  it('passes request metadata through eager multi-bucket authentication', async () => {
+    const tokenStore = new MemoryTokenStore();
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+    const oauthManager = {
+      getOAuthToken: vi.fn(async () => null),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => undefined),
+      authenticate: vi.fn(async () => {}),
+      authenticateMultipleBuckets: vi.fn(async () => {}),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+      metadata,
+    );
+
+    await handler.ensureBucketsAuthenticated();
+
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledWith(
+      'anthropic',
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      metadata,
     );
   });
 
@@ -1320,5 +1440,247 @@ describe('ensureBucketsAuthenticated', () => {
 
     // Assert
     expect(oauthManager.authenticateMultipleBuckets).not.toHaveBeenCalled();
+  });
+
+  it('coalesces concurrent ensureBucketsAuthenticated calls into one in-flight auth run', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    let resolveAuthRun: (() => void) | undefined;
+    const authRunPromise = new Promise<void>((resolve) => {
+      resolveAuthRun = resolve;
+    });
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(async () => null),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => undefined),
+      authenticate: vi.fn(async () => {}),
+      authenticateMultipleBuckets: vi.fn(async () => authRunPromise),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Act
+    const first = handler.ensureBucketsAuthenticated();
+    const second = handler.ensureBucketsAuthenticated();
+
+    // Assert (before completion): only one underlying auth run started
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(1);
+
+    // Complete in-flight run and verify both callers resolve
+    resolveAuthRun?.();
+    await Promise.all([first, second]);
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears in-flight state after failure so a later call can retry', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(async () => null),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => undefined),
+      authenticate: vi.fn(async () => {}),
+      authenticateMultipleBuckets: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('first auth attempt failed'))
+        .mockResolvedValueOnce(undefined),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Act / Assert
+    await expect(handler.ensureBucketsAuthenticated()).rejects.toThrow(
+      'first auth attempt failed',
+    );
+
+    await expect(handler.ensureBucketsAuthenticated()).resolves.toBeUndefined();
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses token from in-flight eager auth in tryFailover pass 3 without duplicate authenticate call', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    let releaseEagerAuth: (() => void) | undefined;
+    const eagerAuthPromise = new Promise<void>((resolve) => {
+      releaseEagerAuth = resolve;
+    });
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(async (_provider: string, bucket?: string) =>
+        tokenStore.getToken('anthropic', bucket),
+      ),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => 'bucket-a'),
+      authenticate: vi.fn(async () => {
+        throw new Error('pass-3 authenticate should not be called');
+      }),
+      authenticateMultipleBuckets: vi.fn(async () => {
+        await eagerAuthPromise;
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('eager-token'),
+          'bucket-b',
+        );
+      }),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Start eager auth and leave it in-flight while failover starts
+    const ensurePromise = handler.ensureBucketsAuthenticated();
+    const failoverPromise = handler.tryFailover({ triggeringStatus: 401 });
+
+    releaseEagerAuth?.();
+    await ensurePromise;
+
+    // Assert
+    await expect(failoverPromise).resolves.toBe(true);
+    expect(handler.getCurrentBucket()).toBe('bucket-b');
+    expect(oauthManager.authenticate).not.toHaveBeenCalled();
+    expect(oauthManager.setSessionBucket).toHaveBeenCalledWith(
+      'anthropic',
+      'bucket-b',
+      undefined,
+    );
+  });
+
+  it('coalesces concurrent pass-3 foreground reauth for the same bucket', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    // Current bucket starts with no token to force pass-3 foreground auth.
+
+    let releaseForegroundAuth: (() => void) | undefined;
+    const foregroundAuthGate = new Promise<void>((resolve) => {
+      releaseForegroundAuth = resolve;
+    });
+
+    const oauthManager = {
+      getOAuthToken: vi.fn(async (_provider: string, bucket?: string) =>
+        tokenStore.getToken('anthropic', bucket),
+      ),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => 'bucket-a'),
+      authenticate: vi.fn(async (_provider: string, bucket?: string) => {
+        await foregroundAuthGate;
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('pass3-token'),
+          bucket ?? 'default',
+        );
+      }),
+      authenticateMultipleBuckets: vi.fn(async () => undefined),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    // Act: Launch two failovers concurrently that both need pass-3 reauth.
+    const first = handler.tryFailover({ triggeringStatus: 401 });
+    const second = handler.tryFailover({ triggeringStatus: 401 });
+
+    // Allow the shared pass-3 authenticate call to complete.
+    releaseForegroundAuth?.();
+
+    // Assert: both calls succeed but only one foreground authenticate occurs.
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
+    expect(oauthManager.authenticate).toHaveBeenCalledTimes(1);
+    expect(oauthManager.authenticate).toHaveBeenCalledWith(
+      'anthropic',
+      'bucket-a',
+    );
+  });
+
+  it('re-checks late-started eager auth before pass-3 foreground reauth', async () => {
+    // Arrange
+    const tokenStore = new MemoryTokenStore();
+
+    let releaseFirstGetOAuthToken: (() => void) | undefined;
+    const firstGetOAuthTokenGate = new Promise<void>((resolve) => {
+      releaseFirstGetOAuthToken = resolve;
+    });
+
+    let releaseEagerAuth: (() => void) | undefined;
+    const eagerAuthGate = new Promise<void>((resolve) => {
+      releaseEagerAuth = resolve;
+    });
+
+    let getOAuthTokenCalls = 0;
+    const oauthManager = {
+      getOAuthToken: vi.fn(async (_provider: string, bucket?: string) => {
+        getOAuthTokenCalls += 1;
+        if (getOAuthTokenCalls === 1) {
+          await firstGetOAuthTokenGate;
+          return null;
+        }
+        return tokenStore.getToken('anthropic', bucket);
+      }),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => 'bucket-b'),
+      authenticate: vi.fn(async (_provider: string, bucket?: string) => {
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('pass3-token'),
+          bucket ?? 'default',
+        );
+      }),
+      authenticateMultipleBuckets: vi.fn(async () => {
+        await eagerAuthGate;
+        await tokenStore.saveToken(
+          'anthropic',
+          makeToken('late-eager-token'),
+          'bucket-a',
+        );
+      }),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+    );
+
+    const failoverPromise = handler.tryFailover({ triggeringStatus: 401 });
+
+    // Start eager auth after pass-3 started, while first token check is blocked.
+    const ensurePromise = handler.ensureBucketsAuthenticated();
+
+    // Allow first check to complete with null so pass-3 executes late in-flight re-check.
+    releaseFirstGetOAuthToken?.();
+
+    // Keep eager auth in-flight until pass-3 reaches late guard.
+    await Promise.resolve();
+    releaseEagerAuth?.();
+    await ensurePromise;
+
+    await expect(failoverPromise).resolves.toBe(true);
+    expect(getOAuthTokenCalls).toBe(2);
+    expect(oauthManager.authenticate).not.toHaveBeenCalled();
+    expect(handler.getCurrentBucket()).toBe('bucket-a');
   });
 });

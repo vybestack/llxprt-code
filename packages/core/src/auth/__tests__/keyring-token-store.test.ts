@@ -1125,32 +1125,192 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
 
   /**
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P05
-   * @requirement R6.2
-   * @given A provider with multiple buckets
-   * @when listBuckets is called
-   * @then Bucket listing is always sorted
+   * @requirement R10.2
+   * @given A KeyringTokenStore instance with multiple tokens and buckets
+   * @when All tokens are removed for that provider
+   * @then listBuckets returns an empty array
    */
-  it('PROP: bucket listing is always sorted', async () => {
+  it('PROP: listBuckets returns empty array after all tokens removed', async () => {
     await fc.assert(
       fc.asyncProperty(uniqueNameArrayArb, async (buckets) => {
         const setup = await createTestStore();
         try {
-          for (const b of buckets) {
+          for (const bucket of buckets) {
             await setup.tokenStore.saveToken(
-              'sortprovider',
+              'propremove',
               makeMinimalToken(),
-              b,
+              bucket,
             );
           }
-          const listed = await setup.tokenStore.listBuckets('sortprovider');
-          const sorted = [...listed].sort();
-          expect(listed).toEqual(sorted);
+          for (const bucket of buckets) {
+            await setup.tokenStore.removeToken('propremove', bucket);
+          }
+          const result = await setup.tokenStore.listBuckets('propremove');
+          expect(result).toEqual([]);
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }
       }),
-      { numRuns: 10 },
+      { numRuns: 5 },
     );
+  });
+
+  // ─── Auth Lock (acquireAuthLock / releaseAuthLock) ──────────────────────
+
+  describe('Auth lock (acquireAuthLock / releaseAuthLock)', () => {
+    /**
+     * @plan project-plans/issue1652/plan.md Phase 1
+     * @requirement Test 1.1: Auth lock acquire and release
+     * @given A KeyringTokenStore instance
+     * @when acquireAuthLock('anthropic', { bucket: 'default' }) is called
+     * @then It returns true
+     * AND a lock file exists at {lockDir}/anthropic-auth.lock (default bucket has no suffix)
+     * AND when releaseAuthLock('anthropic', 'default') is called
+     * THEN the lock file is removed
+     */
+    it('Test 1.1: Auth lock acquire and release', async () => {
+      const acquired = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+      });
+      expect(acquired).toBe(true);
+
+      const lockPath = path.join(tempDir, 'locks', 'anthropic-auth.lock');
+      const existsAfterAcquire = await fs
+        .access(lockPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(existsAfterAcquire).toBe(true);
+
+      await tokenStore.releaseAuthLock('anthropic', 'default');
+      const existsAfterRelease = await fs
+        .access(lockPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(existsAfterRelease).toBe(false);
+    });
+
+    /**
+     * @plan project-plans/issue1652/plan.md Phase 1
+     * @requirement Test 1.2: Auth lock blocks concurrent acquisition
+     * @given Process A has acquired auth lock for anthropic/default
+     * @when Process B calls acquireAuthLock('anthropic', { bucket: 'default', waitMs: 100 })
+     * @then Process B returns false (timeout)
+     * AND when process A releases the lock
+     * AND process B retries acquireAuthLock
+     * THEN process B returns true
+     */
+    it('Test 1.2: Auth lock blocks concurrent acquisition', async () => {
+      const firstAcquire = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+      });
+      expect(firstAcquire).toBe(true);
+
+      const secondAcquire = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+        waitMs: 100,
+      });
+      expect(secondAcquire).toBe(false);
+
+      await tokenStore.releaseAuthLock('anthropic', 'default');
+
+      const thirdAcquire = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+      });
+      expect(thirdAcquire).toBe(true);
+      await tokenStore.releaseAuthLock('anthropic', 'default');
+    });
+
+    /**
+     * @plan project-plans/issue1652/plan.md Phase 1
+     * @requirement Test 1.3: Separate locks per bucket
+     * @given Auth lock acquired for anthropic/default
+     * @when acquireAuthLock('anthropic', { bucket: 'claudius' }) is called
+     * @then It returns true (different bucket = different lock)
+     */
+    it('Test 1.3: Separate locks per bucket', async () => {
+      const defaultAcquire = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+      });
+      expect(defaultAcquire).toBe(true);
+
+      const claudiusAcquire = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'claudius',
+      });
+      expect(claudiusAcquire).toBe(true);
+
+      await tokenStore.releaseAuthLock('anthropic', 'default');
+      await tokenStore.releaseAuthLock('anthropic', 'claudius');
+    });
+
+    /**
+     * @plan project-plans/issue1652/plan.md Phase 1
+     * @requirement Test 1.4: Stale lock broken
+     * @given A lock file exists with timestamp older than staleMs (360000ms)
+     * @when acquireAuthLock is called with staleMs: 360000
+     * @then The stale lock is broken and new lock acquired (returns true)
+     */
+    it('Test 1.4: Stale lock broken', async () => {
+      const lockDirPath = path.join(tempDir, 'locks');
+      await fs.mkdir(lockDirPath, { recursive: true, mode: 0o700 });
+      const lockFile = path.join(lockDirPath, 'anthropic-auth.lock');
+      const staleLockInfo = {
+        pid: 99999,
+        timestamp: Date.now() - 400_000, // Older than 360000ms
+      };
+      await fs.writeFile(lockFile, JSON.stringify(staleLockInfo), {
+        mode: 0o600,
+      });
+
+      const acquired = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+        staleMs: 360_000,
+      });
+      expect(acquired).toBe(true);
+      await tokenStore.releaseAuthLock('anthropic', 'default');
+    });
+
+    /**
+     * @plan project-plans/issue1652/plan.md Phase 1
+     * @requirement Test 1.5: Auth lock separate from refresh lock
+     * @given Refresh lock acquired for anthropic/default
+     * @when acquireAuthLock('anthropic', { bucket: 'default' }) is called
+     * @then It returns true (different lock file)
+     */
+    it('Test 1.5: Auth lock separate from refresh lock', async () => {
+      const refreshAcquired = await tokenStore.acquireRefreshLock('anthropic', {
+        bucket: 'default',
+      });
+      expect(refreshAcquired).toBe(true);
+
+      const authAcquired = await tokenStore.acquireAuthLock('anthropic', {
+        bucket: 'default',
+      });
+      expect(authAcquired).toBe(true);
+
+      await tokenStore.releaseRefreshLock('anthropic', 'default');
+      await tokenStore.releaseAuthLock('anthropic', 'default');
+    });
+
+    /**
+     * @plan project-plans/issue1652/plan.md Phase 1
+     * @requirement Test 1.6: Default bucket lock file naming
+     * @given No bucket specified
+     * @when acquireAuthLock('anthropic') is called
+     * @then The lock file is at {lockDir}/anthropic-auth.lock (no bucket suffix)
+     */
+    it('Test 1.6: Default bucket lock file naming', async () => {
+      const acquired = await tokenStore.acquireAuthLock('anthropic');
+      expect(acquired).toBe(true);
+
+      const lockPath = path.join(tempDir, 'locks', 'anthropic-auth.lock');
+      const exists = await fs
+        .access(lockPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(true);
+
+      await tokenStore.releaseAuthLock('anthropic');
+    });
   });
 
   /**

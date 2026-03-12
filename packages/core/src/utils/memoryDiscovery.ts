@@ -9,7 +9,11 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
 import { bfsFileSearch } from './bfsFileSearch.js';
-import { getAllLlxprtMdFilenames as getAllGeminiMdFilenames } from '../tools/memoryTool.js';
+import {
+  getAllLlxprtMdFilenames as getAllGeminiMdFilenames,
+  getGlobalCoreMemoryFilePath,
+  getProjectCoreMemoryFilePath,
+} from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
 import type { FileFilteringOptions } from '../config/constants.js';
@@ -396,7 +400,7 @@ async function findUpwardGeminiFiles(
   let currentDir = path.resolve(startDir);
   const resolvedStopDir = path.resolve(stopDir);
   const geminiMdFilenames = getAllGeminiMdFilenames();
-  const globalGeminiDir = path.join(homedir(), GEMINI_DIR);
+  const globalGeminiDir = path.resolve(path.join(homedir(), GEMINI_DIR));
 
   if (debugMode) {
     logger.debug(
@@ -409,20 +413,43 @@ async function findUpwardGeminiFiles(
       break;
     }
 
-    // Parallelize checks for all filename variants in the current directory
     const accessChecks = geminiMdFilenames.map(async (filename) => {
-      const potentialPath = path.join(currentDir, filename);
-      try {
-        await fs.access(potentialPath, fsSync.constants.R_OK);
-        return potentialPath;
-      } catch {
-        return null;
-      }
+      const checks: Array<Promise<string | null>> = [];
+
+      const directPath = path.join(currentDir, filename);
+      checks.push(
+        (async () => {
+          try {
+            await fs.access(directPath, fsSync.constants.R_OK);
+            return directPath;
+          } catch {
+            return null;
+          }
+        })(),
+      );
+
+      const llxprtDirPath = path.join(currentDir, GEMINI_DIR, filename);
+      checks.push(
+        (async () => {
+          try {
+            await fs.access(llxprtDirPath, fsSync.constants.R_OK);
+            if (llxprtDirPath !== path.join(globalGeminiDir, filename)) {
+              return llxprtDirPath;
+            }
+            return null;
+          } catch {
+            return null;
+          }
+        })(),
+      );
+
+      return Promise.all(checks);
     });
 
-    const foundPathsInDir = (await Promise.all(accessChecks)).filter(
-      (p): p is string => p !== null,
-    );
+    const pathArrays = await Promise.all(accessChecks);
+    const foundPathsInDir = pathArrays
+      .flat()
+      .filter((p): p is string => p !== null);
 
     upwardPaths.unshift(...foundPathsInDir);
 
@@ -480,6 +507,72 @@ export async function loadEnvironmentMemory(
         content: item.content as string,
       })),
   };
+}
+
+export async function loadCoreMemory(
+  trustedRoots: string[],
+  debugMode: boolean = false,
+): Promise<MemoryLoadResult> {
+  const allPaths = new Set<string>();
+
+  const globalCoreMemoryPath = getGlobalCoreMemoryFilePath();
+  try {
+    await fs.access(globalCoreMemoryPath, fsSync.constants.R_OK);
+    allPaths.add(globalCoreMemoryPath);
+    if (debugMode) {
+      logger.debug(`Found global core memory: ${globalCoreMemoryPath}`);
+    }
+  } catch {
+    if (debugMode) {
+      logger.debug('Global core memory file not found.');
+    }
+  }
+
+  for (const root of trustedRoots) {
+    const projectCoreMemoryPath = getProjectCoreMemoryFilePath(root);
+    try {
+      await fs.access(projectCoreMemoryPath, fsSync.constants.R_OK);
+      allPaths.add(projectCoreMemoryPath);
+      if (debugMode) {
+        logger.debug(`Found project core memory: ${projectCoreMemoryPath}`);
+      }
+    } catch {
+      if (debugMode) {
+        logger.debug(
+          `Project core memory file not found at ${projectCoreMemoryPath}`,
+        );
+      }
+    }
+  }
+
+  const sortedPaths = Array.from(allPaths).sort();
+  const results: Array<{ path: string; content: string }> = [];
+
+  for (const filePath of sortedPaths) {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      if (debugMode) {
+        logger.debug(
+          `Successfully read core memory: ${filePath} (Length: ${content.length})`,
+        );
+      }
+      results.push({ path: filePath, content });
+    } catch (error: unknown) {
+      const isTestEnv =
+        process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
+      if (!isTestEnv) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(
+          `Warning: Could not read core memory file at ${filePath}. Error: ${message}`,
+        );
+      }
+      if (debugMode) {
+        logger.debug(`Failed to read core memory: ${filePath}`);
+      }
+    }
+  }
+
+  return { files: results };
 }
 
 export interface LoadServerHierarchicalMemoryResponse {

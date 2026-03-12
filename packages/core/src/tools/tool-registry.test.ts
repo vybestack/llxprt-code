@@ -643,7 +643,13 @@ describe('ToolRegistry', () => {
 
   describe('DiscoveredToolInvocation', () => {
     it('should return the stringified params from getDescription', () => {
-      const tool = new DiscoveredTool(config, 'test-tool', 'A test tool', {}, messageBus);
+      const tool = new DiscoveredTool(
+        config,
+        'test-tool',
+        'A test tool',
+        {},
+        messageBus,
+      );
       const params = { param: 'testValue' };
       const invocation = tool.build(params);
       const description = invocation.getDescription();

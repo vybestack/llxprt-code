@@ -18,7 +18,7 @@ import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
 import { getCliRuntimeContext } from '../../runtime/runtimeSettings.js';
-
+import { themeManager } from '../themes/theme-manager.js';
 
 // Components
 import { AppHeader } from '../components/AppHeader.js';
@@ -168,6 +168,7 @@ export const DefaultAppLayout = ({
 
   const showTodoPanelSetting = settings.merged.ui?.showTodoPanel ?? true;
   const hideContextSummary = settings.merged.ui?.hideContextSummary ?? false;
+  const currentThemeName = themeManager.getActiveTheme().name;
   const { isNarrow } = uiState;
 
   const useAlternateBuffer =
@@ -306,12 +307,12 @@ export const DefaultAppLayout = ({
 
             <BucketAuthConfirmation
               messageBus={
-              (
-                getCliRuntimeContext() as {
-                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
-                }
-              ).messageBus
-            }
+                (
+                  getCliRuntimeContext() as {
+                    messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                  }
+                ).messageBus
+              }
               isFocused={!dialogsVisible}
             />
 
@@ -441,6 +442,7 @@ export const DefaultAppLayout = ({
                 hideCWD={settings.merged.hideCWD}
                 hideSandboxStatus={settings.merged.hideSandboxStatus}
                 hideModelInfo={settings.merged.hideModelInfo}
+                themeName={currentThemeName}
               />
             )}
           </Box>
@@ -653,6 +655,7 @@ export const DefaultAppLayout = ({
               hideCWD={settings.merged.hideCWD}
               hideSandboxStatus={settings.merged.hideSandboxStatus}
               hideModelInfo={settings.merged.hideModelInfo}
+              themeName={currentThemeName}
             />
           )}
         </Box>

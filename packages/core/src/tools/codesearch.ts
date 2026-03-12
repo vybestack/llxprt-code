@@ -19,6 +19,7 @@ import { ToolErrorType } from './tool-error.js';
 import { Config } from '../config/config.js';
 import { BaseToolInvocation } from './tools.js';
 import fetch from 'node-fetch';
+import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 
 const API_CONFIG = {
   BASE_URL: 'https://mcp.exa.ai',
@@ -180,7 +181,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
               data.result.content &&
               data.result.content.length > 0
             ) {
-              const content = data.result.content[0].text;
+              const content = ensureJsonSafe(data.result.content[0].text);
               return {
                 llmContent: content,
                 returnDisplay: content,

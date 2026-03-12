@@ -403,6 +403,10 @@ If git status cannot be read, the tool will still return file content and includ
     if (!normalizedParams.absolute_path && normalizedParams.file_path) {
       normalizedParams.absolute_path = normalizedParams.file_path;
     }
-    return new ReadFileToolInvocation(this.config, normalizedParams, messageBus);
+    return new ReadFileToolInvocation(
+      this.config,
+      normalizedParams,
+      messageBus,
+    );
   }
 }

@@ -22,8 +22,13 @@ type SchedulerConfigWithExplicitMessageBus = Config & {
   getOrCreateScheduler(
     sessionId: string,
     callbacks: {
-      outputUpdateHandler?: (toolCallId: string, outputChunk: string | AnsiOutput) => void;
-      onAllToolCallsComplete?: (completedToolCalls: CompletedToolCall[]) => Promise<void> | void;
+      outputUpdateHandler?: (
+        toolCallId: string,
+        outputChunk: string | AnsiOutput,
+      ) => void;
+      onAllToolCallsComplete?: (
+        completedToolCalls: CompletedToolCall[],
+      ) => Promise<void> | void;
       onToolCallsUpdate?: (calls: TrackedToolCall[]) => void;
       getPreferredEditor?: () => undefined;
       onEditorClose?: () => void;
@@ -32,8 +37,6 @@ type SchedulerConfigWithExplicitMessageBus = Config & {
     dependencies?: { messageBus?: MessageBus },
   ): Promise<CoreToolScheduler>;
 };
-
-
 
 /**
  * Tracked tool call with response submission state

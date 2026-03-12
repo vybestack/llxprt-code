@@ -43,6 +43,10 @@ export interface ProviderAliasConfig {
   baseProvider: string;
   /** Base URL for the provider API (consistent with profile ephemeral settings) */
   'base-url'?: string;
+  /** Overrides base-url when running in a container sandbox (Docker/Podman) */
+  'sandbox-base-url'?: string;
+  /** When false, bypasses API key validation for providers that don't need auth */
+  'requires-auth'?: boolean;
   defaultModel?: string;
   ephemeralSettings?: Record<string, unknown>;
   description?: string;
@@ -121,6 +125,26 @@ function readAliasFile(
         `[ProviderAliases] Alias '${alias}' is missing required baseProvider`,
       );
       return null;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(parsed, 'sandbox-base-url') &&
+      typeof parsed['sandbox-base-url'] !== 'string'
+    ) {
+      debugLogger.warn(
+        `[ProviderAliases] Ignoring non-string sandbox-base-url in ${filePath}`,
+      );
+      parsed['sandbox-base-url'] = undefined;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(parsed, 'requires-auth') &&
+      typeof parsed['requires-auth'] !== 'boolean'
+    ) {
+      debugLogger.warn(
+        `[ProviderAliases] Ignoring non-boolean requires-auth in ${filePath}`,
+      );
+      parsed['requires-auth'] = undefined;
     }
 
     // Validate modelDefaults if present

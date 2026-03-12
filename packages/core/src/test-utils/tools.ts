@@ -106,7 +106,16 @@ export class MockTool extends BaseDeclarativeTool<
     },
     messageBus: MessageBus = createTestMessageBus(),
   ) {
-    super(name, displayName ?? name, description, Kind.Other, params, true, false, messageBus);
+    super(
+      name,
+      displayName ?? name,
+      description,
+      Kind.Other,
+      params,
+      true,
+      false,
+      messageBus,
+    );
     this.executeFn = vi.fn();
   }
 

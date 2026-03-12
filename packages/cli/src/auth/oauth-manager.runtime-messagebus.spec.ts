@@ -61,13 +61,22 @@ function createMockTokenStore(): TokenStore {
     getBucketStats: vi.fn(async () => null),
     acquireRefreshLock: vi.fn(async (): Promise<boolean> => true),
     releaseRefreshLock: vi.fn(async (): Promise<void> => {}),
+    acquireAuthLock: vi.fn(async (): Promise<boolean> => true),
+    releaseAuthLock: vi.fn(async (): Promise<void> => {}),
   };
 }
 
 function createMockProvider(name: string): OAuthProvider {
   return {
     name,
-    initiateAuth: vi.fn(async (): Promise<void> => {}),
+    initiateAuth: vi.fn(
+      async (): Promise<OAuthToken> => ({
+        access_token: `${name}-token`,
+        refresh_token: `${name}-refresh`,
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer',
+      }),
+    ),
     getToken: vi.fn(
       async (): Promise<OAuthToken> => ({
         access_token: `${name}-token`,
@@ -131,7 +140,8 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
 
     expect(explicitBus.requestBucketAuthConfirmation).toHaveBeenCalled();
     expect(
-      (manager as unknown as { runtimeMessageBus?: MessageBus }).runtimeMessageBus,
+      (manager as unknown as { runtimeMessageBus?: MessageBus })
+        .runtimeMessageBus,
     ).toBe(explicitBus);
   });
 });

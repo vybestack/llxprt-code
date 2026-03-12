@@ -245,6 +245,8 @@ ssh-add ~/.ssh/id_ed25519
 llxprt --sandbox-engine podman
 ```
 
+**Podman macOS: exit code 137 / OOM with high memory settings:** The Podman VM memory is lower than the container `--memory` limit. On macOS, Podman containers run inside a VM, and the VM memory is the hard ceiling — LLxprt container flags do not resize the VM. Check with `podman machine inspect --format '{{.Resources.Memory}}'` and resize with `podman machine set --memory <MB>`. See [Sandbox troubleshooting](./sandbox.md#podman-macos-oom-killed-with-exit-code-137) for full details.
+
 **Enable sandbox debug output:**
 
 ```bash

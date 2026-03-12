@@ -47,6 +47,8 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       getBucketStats: vi.fn<TokenStore['getBucketStats']>(async () => null),
       acquireRefreshLock: vi.fn(async () => true),
       releaseRefreshLock: vi.fn(async () => undefined),
+      acquireAuthLock: vi.fn(async () => true),
+      releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
 
     provider = new AnthropicOAuthProvider(tokenStore);
@@ -122,16 +124,22 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       shutdown,
     });
 
-    await provider.initiateAuth();
+    // Phase 4: initiateAuth now returns the token instead of void
+    const token = await provider.initiateAuth();
 
     expect(startLocalOAuthCallbackMock).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'generated-state' }),
     );
     expect(openBrowserArgs.some((url) => url.includes('localhost'))).toBe(true);
-    expect(tokenStore.saveToken).toHaveBeenCalledWith(
-      'anthropic',
+
+    // Phase 4: Provider no longer calls saveToken - OAuthManager handles persistence
+    expect(tokenStore.saveToken).not.toHaveBeenCalled();
+
+    // Verify initiateAuth returned the token
+    expect(token).toEqual(
       expect.objectContaining({ access_token: 'local-token' }),
     );
+
     // After successful callback, __oauth_needs_code is cleared (false)
     expect(
       (global as { __oauth_needs_code?: boolean }).__oauth_needs_code,

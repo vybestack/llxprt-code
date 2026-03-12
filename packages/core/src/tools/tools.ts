@@ -110,7 +110,6 @@ export abstract class BaseToolInvocation<
     return this.messageBus;
   }
 
-
   abstract getDescription(): string;
 
   toolLocations(): ToolLocation[] {

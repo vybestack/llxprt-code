@@ -58,7 +58,7 @@ From the command line:
 llxprt --provider codex
 ```
 
-Each command opens a browser for authentication with your existing account. See [OAuth Setup](../oauth-setup.md) for details.
+Each `enable` command sets up lazy OAuth — a browser opens automatically when you make your first request to that provider. Use `/auth <provider> login` to open the browser immediately. See [OAuth Setup](../oauth-setup.md) for details.
 
 ### API Keys (Keyring)
 

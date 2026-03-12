@@ -37,7 +37,12 @@ function createMockToken(
 function createMockProvider(name: string): OAuthProvider {
   return {
     name,
-    initiateAuth: vi.fn().mockResolvedValue(undefined),
+    initiateAuth: vi.fn().mockResolvedValue({
+      access_token: 'mock-token',
+      refresh_token: 'mock-refresh',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'Bearer' as const,
+    }),
     getToken: vi.fn().mockResolvedValue(null),
     refreshToken: vi.fn().mockResolvedValue(null),
   };
@@ -55,6 +60,8 @@ function createMockTokenStore(): TokenStore {
     listBuckets: vi.fn().mockResolvedValue([]),
     acquireRefreshLock: vi.fn().mockResolvedValue(true),
     releaseRefreshLock: vi.fn().mockResolvedValue(undefined),
+    acquireAuthLock: vi.fn(async () => true),
+    releaseAuthLock: vi.fn(async () => undefined),
     getBucketStats: vi.fn().mockResolvedValue(null),
   };
 }

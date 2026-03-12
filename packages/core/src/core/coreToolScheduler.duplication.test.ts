@@ -96,7 +96,9 @@ class ExecutionTrackingTool extends BaseDeclarativeTool<
   static executionCount = 0;
 
   constructor(
-    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(
       'ExecutionTrackingTool',

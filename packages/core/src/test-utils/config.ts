@@ -46,7 +46,6 @@ export async function initializeTestConfig(config: Config): Promise<void> {
   ).initialize({ messageBus: sessionMessageBus });
 }
 
-
 /**
  * Creates a fake config instance for testing
  */

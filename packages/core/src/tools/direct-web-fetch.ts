@@ -23,6 +23,7 @@ import fetch, { type RequestInit } from 'node-fetch';
 import TurndownService from 'turndown';
 import * as cheerio from 'cheerio';
 import { retryWithBackoff } from '../utils/retry.js';
+import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000; // 30 seconds
@@ -218,7 +219,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
       }
 
       return {
-        llmContent: output,
+        llmContent: ensureJsonSafe(output),
         returnDisplay: `Fetched ${url} as ${format}`,
       };
     } catch (error) {

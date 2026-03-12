@@ -297,7 +297,9 @@ export function createProviderManager(
   if (config) {
     manager.setConfig(config);
     config.setProviderManager(manager);
-    logger.debug('OAuthManager runtime dependencies configured from composition root');
+    logger.debug(
+      'OAuthManager runtime dependencies configured from composition root',
+    );
   } else {
     logger.debug('No config provided; runtime MessageBus was not injected');
   }

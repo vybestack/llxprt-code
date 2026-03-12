@@ -187,7 +187,7 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
 }
 
 export const AppContainer = (props: AppContainerProps) => {
-  debug.log('AppContainer architecture active (v2)');
+  debug.debug('AppContainer architecture active (v2)');
   const {
     config,
     settings,
@@ -2099,7 +2099,6 @@ export const AppContainer = (props: AppContainerProps) => {
    * @pseudocode lines 122-133
    */
   const activeHooks = useHookDisplayState(runtimeMessageBus);
-
 
   // Build UIState object
   const uiState: UIState = {

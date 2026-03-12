@@ -204,7 +204,10 @@ describe('AgentExecutor', () => {
     vi.useFakeTimers();
 
     mockConfig = makeFakeConfig();
-    parentToolRegistry = new ToolRegistry(mockConfig, getTestRuntimeMessageBus(mockConfig));
+    parentToolRegistry = new ToolRegistry(
+      mockConfig,
+      getTestRuntimeMessageBus(mockConfig),
+    );
     parentToolRegistry.registerTool(new LSTool(mockConfig));
     parentToolRegistry.registerTool(new ReadFileTool(mockConfig));
     parentToolRegistry.registerTool(MOCK_TOOL_NOT_ALLOWED);

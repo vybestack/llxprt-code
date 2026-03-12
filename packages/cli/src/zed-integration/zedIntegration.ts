@@ -31,7 +31,6 @@ import {
   type Todo,
   DEFAULT_AGENT_ID,
   type FilterFilesOptions,
-  ReadManyFilesTool,
   type ToolConfirmationPayload,
   createInkStdio,
   ApprovalMode,
@@ -1214,7 +1213,7 @@ export class Session {
     const ignoredPaths: string[] = [];
 
     const toolRegistry = this.config.getToolRegistry();
-    const readManyFilesTool = new ReadManyFilesTool(this.config);
+    const readManyFilesTool = toolRegistry.getTool('read_many_files')!;
     const globTool = toolRegistry.getTool('glob');
 
     for (const atPathPart of atPathCommandParts) {

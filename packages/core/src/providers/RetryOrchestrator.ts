@@ -247,7 +247,8 @@ export class RetryOrchestrator implements IProvider {
     let currentDelay = initialDelayMs;
     let consecutive429s = 0;
     let consecutiveAuthErrors = 0;
-    const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s
+    let consecutiveNetworkErrors = 0;
+    const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s/network errors
 
     while (attempt < maxAttempts) {
       if (signal?.aborted) {
@@ -303,6 +304,7 @@ export class RetryOrchestrator implements IProvider {
         // Success - reset error counters and bucket failover tracking
         consecutive429s = 0;
         consecutiveAuthErrors = 0;
+        consecutiveNetworkErrors = 0;
         // Reset bucket failover session on success so future failures in this turn
         // can try all buckets again (rate limits may have cleared)
         bucketFailoverHandler?.resetSession?.();
@@ -327,10 +329,11 @@ export class RetryOrchestrator implements IProvider {
         const is429 = errorStatus === 429 || isOverload;
         const is402 = errorStatus === 402;
         const isAuthError = errorStatus === 401 || errorStatus === 403;
+        const isNetworkError = isNetworkTransientError(error);
 
         this.logger.debug(
           () =>
-            `[attempt ${attempt}/${maxAttempts}] Error: status=${errorStatus}, is429=${is429}, is402=${is402}, isAuth=${isAuthError}`,
+            `[attempt ${attempt}/${maxAttempts}] Error: status=${errorStatus}, is429=${is429}, is402=${is402}, isAuth=${isAuthError}, isNetwork=${isNetworkError}`,
         );
 
         // Track consecutive errors for bucket failover
@@ -346,6 +349,12 @@ export class RetryOrchestrator implements IProvider {
           consecutiveAuthErrors = 0;
         }
 
+        if (isNetworkError && !is429 && !isAuthError) {
+          consecutiveNetworkErrors++;
+        } else {
+          consecutiveNetworkErrors = 0;
+        }
+
         // Retry once to allow OAuth refresh before failover
         const shouldAttemptRefreshRetry =
           isAuthError && bucketFailoverHandler && consecutiveAuthErrors === 1;
@@ -355,12 +364,15 @@ export class RetryOrchestrator implements IProvider {
           bucketFailoverHandler &&
           ((is429 && consecutive429s > failoverThreshold) ||
             is402 ||
-            (isAuthError && consecutiveAuthErrors > 1));
+            (isAuthError && consecutiveAuthErrors > 1) ||
+            (isNetworkError && consecutiveNetworkErrors > failoverThreshold));
 
         if (shouldAttemptFailover) {
           const failoverReason = is429
             ? `${consecutive429s} consecutive 429 errors`
-            : `status ${errorStatus}`;
+            : isNetworkError
+              ? `${consecutiveNetworkErrors} consecutive network errors`
+              : `status ${errorStatus}`;
           this.logger.debug(
             () => `Attempting bucket failover after ${failoverReason}`,
           );
@@ -380,6 +392,7 @@ export class RetryOrchestrator implements IProvider {
             );
             consecutive429s = 0;
             consecutiveAuthErrors = 0;
+            consecutiveNetworkErrors = 0;
             currentDelay = initialDelayMs;
             // Don't increment attempt counter - fresh start with new bucket
             attempt--;

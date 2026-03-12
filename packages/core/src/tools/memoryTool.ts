@@ -399,10 +399,7 @@ export class MemoryTool
     return null;
   }
 
-  protected createInvocation(
-    params: SaveMemoryParams,
-    messageBus: MessageBus,
-  ) {
+  protected createInvocation(params: SaveMemoryParams, messageBus: MessageBus) {
     const invocation = new MemoryToolInvocation(params, messageBus);
     if (this.config) {
       invocation.setWorkingDir(this.config.getWorkingDir());

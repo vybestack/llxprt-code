@@ -495,14 +495,9 @@ export async function runNonInteractive({
                   messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
                 },
               ) => Promise<Awaited<ReturnType<typeof executeToolCall>>>)
-          )(
-            config,
-            requestInfo,
-            abortController.signal,
-            {
-              messageBus: runtimeMessageBus,
-            },
-          );
+          )(config, requestInfo, abortController.signal, {
+            messageBus: runtimeMessageBus,
+          });
           const toolResponse = completed.response;
 
           if (streamFormatter) {

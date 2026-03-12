@@ -202,7 +202,6 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
   }
 }
 
-
 export class ToolRegistry {
   private tools: Map<string, AnyDeclarativeTool> = new Map();
   private config: Config;
@@ -223,7 +222,6 @@ export class ToolRegistry {
   }
 
   private getToolGovernance(): {
-
     allowed: Set<string>;
     disabled: Set<string>;
     excluded: Set<string>;
@@ -676,7 +674,6 @@ export class ToolRegistry {
     tool: AnyDeclarativeTool,
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
-
     // Normalize the tool name for consistent storage and lookup
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 

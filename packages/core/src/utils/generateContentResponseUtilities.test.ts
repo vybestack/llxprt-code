@@ -335,17 +335,21 @@ describe('generateContentResponseUtilities', () => {
     };
 
     it('creates a functionResponse part with the provided id, name, and output', () => {
-      expect(createFunctionResponsePart('call-1', 'read_file', 'done')).toEqual({
-        functionResponse: {
-          id: 'call-1',
-          name: 'read_file',
-          response: { output: 'done' },
+      expect(createFunctionResponsePart('call-1', 'read_file', 'done')).toEqual(
+        {
+          functionResponse: {
+            id: 'call-1',
+            name: 'read_file',
+            response: { output: 'done' },
+          },
         },
-      });
+      );
     });
 
     it('passes string output through unchanged when no config is provided', () => {
-      expect(limitStringOutput('plain output', 'read_file')).toBe('plain output');
+      expect(limitStringOutput('plain output', 'read_file')).toBe(
+        'plain output',
+      );
     });
 
     it('returns the limiter message when warn mode truncates the entire string output', () => {
@@ -419,17 +423,17 @@ describe('generateContentResponseUtilities', () => {
     });
 
     it('wraps string llmContent in a single functionResponse', () => {
-      expect(convertToFunctionResponse('tool', 'call-4', 'simple output')).toEqual(
-        [
-          {
-            functionResponse: {
-              id: 'call-4',
-              name: 'tool',
-              response: { output: 'simple output' },
-            },
+      expect(
+        convertToFunctionResponse('tool', 'call-4', 'simple output'),
+      ).toEqual([
+        {
+          functionResponse: {
+            id: 'call-4',
+            name: 'tool',
+            response: { output: 'simple output' },
           },
-        ],
-      );
+        },
+      ]);
     });
 
     it('aggregates text parts with newlines into one functionResponse output', () => {
@@ -515,7 +519,9 @@ describe('generateContentResponseUtilities', () => {
         },
       };
 
-      expect(convertToFunctionResponse('tool', 'call-8', [inlineDataPart])).toEqual([
+      expect(
+        convertToFunctionResponse('tool', 'call-8', [inlineDataPart]),
+      ).toEqual([
         {
           functionResponse: {
             id: 'call-8',

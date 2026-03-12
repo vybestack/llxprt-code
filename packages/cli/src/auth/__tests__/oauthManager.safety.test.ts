@@ -16,9 +16,12 @@ const unwrap = unwrapLoggingProvider as unknown as (
 function createProvider(name: string): OAuthProvider {
   return {
     name,
-    initiateAuth: async () => {
-      /* no-op for tests */
-    },
+    initiateAuth: async () => ({
+      access_token: 'mock-token',
+      refresh_token: 'mock-refresh',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      token_type: 'Bearer' as const,
+    }),
     getToken: async () => null,
     refreshToken: async () => null,
   };

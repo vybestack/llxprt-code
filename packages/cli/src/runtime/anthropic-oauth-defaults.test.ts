@@ -257,9 +257,13 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
     (
       mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
     ).runtimeMessageBus = runtimeMessageBus;
-    registerCliProviderInfrastructure(mockProviderManager as never, mockOAuthManager, {
-      messageBus: runtimeMessageBus,
-    });
+    registerCliProviderInfrastructure(
+      mockProviderManager as never,
+      mockOAuthManager,
+      {
+        messageBus: runtimeMessageBus,
+      },
+    );
 
     vi.clearAllMocks();
   });

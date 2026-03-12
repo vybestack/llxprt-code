@@ -56,12 +56,7 @@ class Phase04BusAwareInvocation extends BaseToolInvocation<
   ToolResult
 > {
   constructor(params: Phase04Params, messageBus: MessageBus) {
-    super(
-      params,
-      messageBus,
-      Phase04BusAwareTool.Name,
-      'Phase04BusAwareTool',
-    );
+    super(params, messageBus, Phase04BusAwareTool.Name, 'Phase04BusAwareTool');
   }
 
   override async shouldConfirmExecute(
@@ -96,7 +91,10 @@ class Phase04BusAwareInvocation extends BaseToolInvocation<
   }
 }
 
-class Phase04BusAwareTool extends BaseDeclarativeTool<Phase04Params, ToolResult> {
+class Phase04BusAwareTool extends BaseDeclarativeTool<
+  Phase04Params,
+  ToolResult
+> {
   static readonly Name = 'phase04_bus_aware_tool';
 
   constructor(messageBus?: MessageBus) {

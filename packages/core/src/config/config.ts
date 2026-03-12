@@ -536,7 +536,6 @@ export interface ConfigParameters {
   jitContextEnabled?: boolean;
 }
 
-
 export class Config {
   private toolRegistry!: ToolRegistry;
   private mcpClientManager?: McpClientManager;
@@ -1508,8 +1507,10 @@ export class Config {
   }
 
   getCoreMemory(): string | undefined {
-    const noCoreMemory = undefined;
-    return noCoreMemory;
+    if (this.getJitContextEnabled() && this.contextManager) {
+      return this.contextManager.getCoreMemory();
+    }
+    return undefined;
   }
 
   setCoreMemory(_content: string): void {}
@@ -1560,7 +1561,6 @@ export class Config {
       );
     }
 
-
     this.approvalMode = mode;
   }
 
@@ -1571,7 +1571,6 @@ export class Config {
   getContextManager(): ContextManager | undefined {
     return this.contextManager;
   }
-
 
   getAccessibility(): AccessibilitySettings {
     return this.accessibility;
@@ -2403,7 +2402,6 @@ ${trimmed}
    * @requirement REQ-D01-002.3
    * @pseudocode lines 103-111
    */
-
 
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11

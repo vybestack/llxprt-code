@@ -75,7 +75,9 @@ describe('getProviderManager runtime OAuth MessageBus composition', () => {
     expect(oauthManager).not.toBeNull();
 
     const registeredProviders = manager.listProviders().sort();
-    const supportedOAuthProviders = oauthManager!.getSupportedProviders().sort();
+    const supportedOAuthProviders = oauthManager!
+      .getSupportedProviders()
+      .sort();
 
     expect(registeredProviders).toEqual(
       expect.arrayContaining(['anthropic', 'codex', 'gemini', 'openai']),

@@ -9,7 +9,6 @@ import { OAuthManager, OAuthProvider } from '../oauth-manager.js';
 import { TokenStore, OAuthToken } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
-
 /**
  * Issue 1616: getToken Bucket Peek Loop Tests
  *
@@ -45,13 +44,22 @@ function createMockTokenStore(): TokenStore {
     ),
     acquireRefreshLock: vi.fn(async (): Promise<boolean> => true),
     releaseRefreshLock: vi.fn(async (): Promise<void> => {}),
+    acquireAuthLock: vi.fn(async () => true),
+    releaseAuthLock: vi.fn(async () => undefined),
   };
 }
 
 function createMockProvider(name: string): OAuthProvider {
   return {
     name,
-    initiateAuth: vi.fn(async (): Promise<void> => {}),
+    initiateAuth: vi.fn(
+      async (): Promise<OAuthToken> => ({
+        access_token: 'mock-token-from-initiate',
+        refresh_token: 'mock-refresh',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        token_type: 'Bearer' as const,
+      }),
+    ),
     getToken: vi.fn(
       async (): Promise<OAuthToken> => ({
         access_token: 'mock-token',
@@ -386,7 +394,16 @@ describe('Issue 1616: getToken bucket peek loop', () => {
 
     await manager.getToken('anthropic');
 
-    expect(setSessionBucketSpy).toHaveBeenCalledWith('anthropic', 'claudius');
+    expect(setSessionBucketSpy).toHaveBeenCalledWith(
+      'anthropic',
+      'default',
+      undefined,
+    );
+    expect(setSessionBucketSpy).toHaveBeenCalledWith(
+      'anthropic',
+      'claudius',
+      undefined,
+    );
   });
 
   it('should return null for multi-bucket profiles when no bucket has a valid token', async () => {

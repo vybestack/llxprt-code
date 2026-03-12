@@ -109,6 +109,8 @@ export async function* parseResponsesStream(
   // - Second event (output_item.done with encrypted_content): re-emit hidden block WITH encrypted_content
   const emittedThoughts = new Map<string, { hasEncrypted: boolean }>();
 
+  let hasEmittedVisibleThinking = false;
+
   let lastLoggedType: string | undefined;
 
   try {
@@ -201,9 +203,14 @@ export async function* parseResponsesStream(
                 // When includeThinkingInResponse is false, still emit but with isHidden: true
                 // This preserves encrypted content for round-trip while hiding UI display
                 const thoughtContent = (event.text || reasoningText).trim();
-                if (thoughtContent && !emittedThoughts.has(thoughtContent)) {
+                if (
+                  thoughtContent &&
+                  !emittedThoughts.has(thoughtContent) &&
+                  !hasEmittedVisibleThinking
+                ) {
                   // Mark as emitted without encrypted content - output_item.done may follow with it
                   emittedThoughts.set(thoughtContent, { hasEncrypted: false });
+                  hasEmittedVisibleThinking = true;
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -227,9 +234,14 @@ export async function* parseResponsesStream(
                 const summaryContent = (
                   event.text || reasoningSummaryText
                 ).trim();
-                if (summaryContent && !emittedThoughts.has(summaryContent)) {
+                if (
+                  summaryContent &&
+                  !emittedThoughts.has(summaryContent) &&
+                  !hasEmittedVisibleThinking
+                ) {
                   // Mark as emitted without encrypted content - output_item.done may follow with it
                   emittedThoughts.set(summaryContent, { hasEncrypted: false });
+                  hasEmittedVisibleThinking = true;
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -321,6 +333,10 @@ export async function* parseResponsesStream(
                     const shouldHide =
                       !includeThinkingInResponse || Boolean(prior);
 
+                    if (!shouldHide) {
+                      hasEmittedVisibleThinking = true;
+                    }
+
                     const baseReasoningBlock: ContentBlock = {
                       type: 'thinking',
                       thought: finalThought,
@@ -405,11 +421,13 @@ export async function* parseResponsesStream(
                 const remainingReasoning = reasoningText.trim();
                 if (
                   remainingReasoning &&
-                  !emittedThoughts.has(remainingReasoning)
+                  !emittedThoughts.has(remainingReasoning) &&
+                  !hasEmittedVisibleThinking
                 ) {
                   emittedThoughts.set(remainingReasoning, {
                     hasEncrypted: false,
                   });
+                  hasEmittedVisibleThinking = true;
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -425,11 +443,13 @@ export async function* parseResponsesStream(
                 const remainingSummary = reasoningSummaryText.trim();
                 if (
                   remainingSummary &&
-                  !emittedThoughts.has(remainingSummary)
+                  !emittedThoughts.has(remainingSummary) &&
+                  !hasEmittedVisibleThinking
                 ) {
                   emittedThoughts.set(remainingSummary, {
                     hasEncrypted: false,
                   });
+                  hasEmittedVisibleThinking = true;
                   yield {
                     speaker: 'ai',
                     blocks: [

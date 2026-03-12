@@ -544,6 +544,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       type: 'string',
       description: 'Path to file containing API key for the current provider',
     })
+    .option('key-name', {
+      type: 'string',
+      description:
+        'Load a named API key from the keyring (same as /key load <name>)',
+    })
     .option('baseurl', {
       type: 'string',
       description: 'Base URL for the current provider',
@@ -1560,7 +1565,6 @@ export async function loadCliConfig(
       },
     );
   }
-
 
   let appliedProfileResult: Awaited<
     ReturnType<typeof applyProfileSnapshot>

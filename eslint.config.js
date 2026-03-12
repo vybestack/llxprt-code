@@ -234,6 +234,13 @@ export default tseslint.config(
       ],
     },
   },
+  // Debug infrastructure files ARE the logger — they must use console directly
+  {
+    files: ['packages/core/src/debug/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
   // Vitest test configuration
   {
     // Prevent self-imports in packages

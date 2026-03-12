@@ -94,11 +94,15 @@ describe('CLI model parameter command integration', () => {
       config.getPolicyEngine(),
       config.getDebugMode(),
     );
-    registerCliProviderInfrastructure(providerManager, {
-      runtimeMessageBus,
-    } as unknown as OAuthManager, {
-      messageBus: runtimeMessageBus,
-    });
+    registerCliProviderInfrastructure(
+      providerManager,
+      {
+        runtimeMessageBus,
+      } as unknown as OAuthManager,
+      {
+        messageBus: runtimeMessageBus,
+      },
+    );
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'modelParams.integration.test.ts' },
     });
