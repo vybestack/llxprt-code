@@ -5,18 +5,24 @@
  */
 
 import { useState, useEffect } from 'react';
-import { type Config, MessageBusType } from '@vybestack/llxprt-code-core';
+import { MessageBusType } from '@vybestack/llxprt-code-core';
+import type { MessageBus } from '@vybestack/llxprt-code-core';
 import type { ActiveHook } from '../types.js';
 
 /**
  * Hook to track actively executing hooks for UI display.
  * Subscribes to MessageBus HOOK_EXECUTION_REQUEST/RESPONSE events.
  */
-export function useHookDisplayState(config: Config): ActiveHook[] {
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+ * @requirement REQ-D01-002
+ * @requirement REQ-D01-003
+ * @pseudocode lines 122-133
+ */
+export function useHookDisplayState(messageBus?: MessageBus): ActiveHook[] {
   const [activeHooks, setActiveHooks] = useState<ActiveHook[]>([]);
 
   useEffect(() => {
-    const messageBus = config.getMessageBus?.();
     if (!messageBus) {
       return;
     }
@@ -25,13 +31,16 @@ export function useHookDisplayState(config: Config): ActiveHook[] {
       MessageBusType.HOOK_EXECUTION_REQUEST,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (message: any) => {
-        const payload = message.payload as { eventName?: string } | undefined;
+        const payload = message.payload as
+          | { eventName?: string; correlationId?: string }
+          | undefined;
         if (payload?.eventName) {
           setActiveHooks((prev) => [
             ...prev,
             {
               name: payload.eventName,
               eventName: payload.eventName,
+              correlationId: payload.correlationId,
             },
           ]);
         }
@@ -42,13 +51,15 @@ export function useHookDisplayState(config: Config): ActiveHook[] {
       MessageBusType.HOOK_EXECUTION_RESPONSE,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (message: any) => {
-        const payload = message.payload;
-        if ((payload as { correlationId?: string })?.correlationId) {
-          // Remove the oldest hook with matching eventName
-          // (simple FIFO strategy since we don't have correlation tracking)
+        const payload = message.payload as
+          | { correlationId?: string }
+          | undefined;
+        const corrId = payload?.correlationId;
+        if (corrId) {
           setActiveHooks((prev) => {
-            if (prev.length > 0) {
-              return prev.slice(1);
+            const idx = prev.findIndex((h) => h.correlationId === corrId);
+            if (idx >= 0) {
+              return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
             }
             return prev;
           });
@@ -60,7 +71,7 @@ export function useHookDisplayState(config: Config): ActiveHook[] {
       requestSubscription();
       responseSubscription();
     };
-  }, [config]);
+  }, [messageBus]);
 
   return activeHooks;
 }

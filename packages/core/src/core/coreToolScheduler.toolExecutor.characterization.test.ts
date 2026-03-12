@@ -49,11 +49,11 @@ function createMockToolRegistry(tool: MockTool) {
     registerTool: () => {},
     getToolByName: () => tool,
     getToolByDisplayName: () => tool,
-    getTools: () => [],
+    getTools: () => [tool],
     discoverTools: async () => {},
-    getAllTools: () => [],
+    getAllTools: () => [tool],
     getToolsByServer: () => [],
-    getAllToolNames: () => ['mockTool'],
+    getAllToolNames: () => [tool.name],
   } as unknown as ToolRegistry;
 }
 
@@ -89,6 +89,8 @@ function createScheduler(
 ) {
   return new CoreToolScheduler({
     config: mockConfig,
+    messageBus: mockConfig.getMessageBus(),
+    toolRegistry: mockConfig.getToolRegistry(),
     onAllToolCallsComplete,
     onToolCallsUpdate,
     getPreferredEditor: () => 'vscode',
@@ -120,7 +122,7 @@ async function _waitForStatus(
 describe('CoreToolScheduler - Tool Execution Characterization', () => {
   describe('TS-EXEC-001: Successful tool execution', () => {
     it('should transition tool through validating → scheduled → executing → success', async () => {
-      const mockTool = new MockTool();
+      const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
       const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
@@ -157,10 +159,12 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 
   describe('TS-EXEC-002: Tool execution error handling', () => {
     it('should transition to error state when tool execution throws', async () => {
-      const mockTool = new MockTool();
-      mockTool.executionResult = Promise.reject(
-        new Error('Tool execution failed'),
-      );
+      const mockTool = new MockTool({
+        name: 'mockTool',
+        execute: async () => {
+          throw new Error('Tool execution failed');
+        },
+      });
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
       const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
@@ -197,7 +201,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 
   describe('TS-EXEC-003: Tool cancellation via abort', () => {
     it('should transition to cancelled when signal is aborted before execution', async () => {
-      const mockTool = new MockTool();
+      const mockTool = new MockTool('mockTool');
       mockTool.shouldConfirm = true;
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
@@ -239,7 +243,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 
   describe('TS-EXEC-004: Multiple tool scheduling', () => {
     it('should schedule and execute multiple tools', async () => {
-      const mockTool = new MockTool();
+      const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
       const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
@@ -283,7 +287,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 
   describe('TS-EXEC-005: Tool result structure', () => {
     it('should include llmContent in successful tool result', async () => {
-      const mockTool = new MockTool();
+      const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
       const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
@@ -315,14 +319,15 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const successCall = completedCalls[0];
       expect(successCall.status).toBe('success');
       if (successCall.status === 'success') {
-        expect(successCall.result).toBeDefined();
+        expect(successCall.response).toBeDefined();
+        expect(successCall.response.responseParts).toBeDefined();
       }
     });
   });
 
   describe('TS-EXEC-006: Policy-allowed execution skips confirmation', () => {
     it('should execute without confirmation when policy allows', async () => {
-      const mockTool = new MockTool();
+      const mockTool = new MockTool('mockTool');
       mockTool.shouldConfirm = true;
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
@@ -361,7 +366,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 
   describe('TS-EXEC-007: Duplicate callId prevention', () => {
     it('should not re-execute a tool with the same callId', async () => {
-      const mockTool = new MockTool();
+      const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
       const mockPolicyEngine = createMockPolicyEngine();
       const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
@@ -389,12 +394,8 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
 
       // Second schedule with same callId
       await scheduler.schedule([request], abortController.signal);
-      // Should still only have one completion (second was deduped)
-      expect(onAllToolCallsComplete).toHaveBeenCalledTimes(2);
-      const secondCompletedCalls = onAllToolCallsComplete.mock
-        .calls[1][0] as ToolCall[];
-      // Second call should complete immediately with no tools
-      expect(secondCompletedCalls).toHaveLength(0);
+      // Duplicate callIds are ignored rather than producing an empty second batch.
+      expect(onAllToolCallsComplete).toHaveBeenCalledTimes(1);
     });
   });
 });

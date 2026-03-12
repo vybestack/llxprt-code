@@ -97,6 +97,7 @@ import {
   triggerSessionEndHook,
   SessionStartSource,
   SessionEndReason,
+  MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { theme } from './ui/colors.js';
@@ -272,6 +273,7 @@ export async function startInteractiveUI(
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
+  runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
   resumedHistory?: IContent[],
   initialRecordingService?: SessionRecordingService,
@@ -308,6 +310,7 @@ export async function startInteractiveUI(
           <AppWrapper
             config={config}
             settings={settings}
+            runtimeMessageBus={runtimeMessageBus}
             startupWarnings={startupWarnings}
             version={version}
             terminalBackgroundColor={config.getTerminalBackground()}
@@ -460,6 +463,10 @@ export async function main() {
     argv,
     workspaceRoot,
     { settingsService: runtimeSettingsService },
+  );
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
   );
   const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
@@ -620,7 +627,11 @@ export async function main() {
     );
   }
 
-  await config.initialize();
+  await (
+    config as typeof config & {
+      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+    }
+  ).initialize({ messageBus: sessionMessageBus });
 
   // Register dynamic settings after config is fully initialized
   try {
@@ -1214,6 +1225,7 @@ export async function main() {
       settings,
       startupWarnings,
       workspaceRoot,
+      sessionMessageBus,
       recordingIntegration,
       resumedHistory ?? undefined,
       recordingService,
@@ -1271,6 +1283,7 @@ export async function main() {
       settings,
       input,
       prompt_id,
+      runtimeMessageBus: sessionMessageBus,
     });
 
     // Fire SessionEnd hook on successful completion

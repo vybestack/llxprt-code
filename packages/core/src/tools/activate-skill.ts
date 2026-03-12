@@ -33,7 +33,7 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: ActivateSkillToolParams,
-    messageBus: MessageBus | undefined,
+    messageBus: MessageBus,
     _toolName?: string,
     _toolDisplayName?: string,
   ) {
@@ -111,7 +111,7 @@ export class ActivateSkillTool extends BaseDeclarativeTool<
 
   constructor(
     private config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     const skills = config.getSkillManager().getSkills();
     const skillNames = skills.map((s) => s.name);
@@ -143,7 +143,7 @@ export class ActivateSkillTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ActivateSkillToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     _toolName?: string,
     _toolDisplayName?: string,
   ): ToolInvocation<ActivateSkillToolParams, ToolResult> {

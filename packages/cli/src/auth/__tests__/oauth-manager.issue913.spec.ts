@@ -161,7 +161,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         },
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       // Trigger authentication for a single bucket
@@ -195,7 +195,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         },
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       // Trigger authentication
@@ -233,7 +233,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         async (): Promise<boolean> => true,
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       await manager.getToken('anthropic');
@@ -346,7 +346,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         },
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       // This test requires profile-level integration to fully test.

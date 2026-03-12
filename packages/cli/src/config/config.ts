@@ -1555,8 +1555,12 @@ export async function loadCliConfig(
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
       runtimeState.oauthManager,
+      {
+        messageBus: runtimeState.runtimeMessageBus,
+      },
     );
   }
+
 
   let appliedProfileResult: Awaited<
     ReturnType<typeof applyProfileSnapshot>

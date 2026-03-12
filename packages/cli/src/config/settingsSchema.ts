@@ -524,7 +524,7 @@ export const SETTINGS_SCHEMA = {
         requiresRestart: false,
         default: false,
         description:
-          'Show Gemini CLI status and thoughts in the terminal window title',
+          'Show LLxprt Code status and thoughts in the terminal window title',
         showInDialog: true,
       },
       hideTips: {

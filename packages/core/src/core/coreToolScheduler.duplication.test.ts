@@ -13,6 +13,7 @@ import {
   ToolResult,
   ApprovalMode,
   Config,
+  Kind,
 } from '../index.js';
 import {
   CoreToolScheduler,
@@ -94,10 +95,34 @@ class ExecutionTrackingTool extends BaseDeclarativeTool<
   displayName = 'ExecutionTrackingTool';
   static executionCount = 0;
 
-  createInvocation(params: {
-    id: string;
-  }): ToolInvocation<{ id: string }, ToolResult> {
-    return new ExecutionTrackingToolInvocation(this, params);
+  constructor(
+    messageBus: ReturnType<typeof createMockMessageBus> = createMockMessageBus(),
+  ) {
+    super(
+      'ExecutionTrackingTool',
+      'ExecutionTrackingTool',
+      'A tool that tracks execution count',
+      Kind.Other,
+      {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+        required: ['id'],
+      },
+      false,
+      false,
+      messageBus,
+    );
+  }
+
+  createInvocation(
+    params: {
+      id: string;
+    },
+    messageBus: ReturnType<typeof createMockMessageBus>,
+  ): ToolInvocation<{ id: string }, ToolResult> {
+    return new ExecutionTrackingToolInvocation(this, params, messageBus);
   }
 
   static resetCount() {
@@ -109,8 +134,12 @@ class ExecutionTrackingToolInvocation extends BaseToolInvocation<
   { id: string },
   ToolResult
 > {
-  constructor(_tool: ExecutionTrackingTool, params: { id: string }) {
-    super(params);
+  constructor(
+    _tool: ExecutionTrackingTool,
+    params: { id: string },
+    messageBus: ReturnType<typeof createMockMessageBus>,
+  ) {
+    super(params, messageBus);
   }
 
   override async shouldConfirmExecute(): Promise<{
@@ -214,6 +243,8 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -339,6 +370,8 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -440,6 +473,8 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     const onToolCallsUpdate1 = vi.fn();
     const scheduler1 = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete: onAllToolCallsComplete1,
       onToolCallsUpdate: onToolCallsUpdate1,
       getPreferredEditor: () => 'vscode',
@@ -450,6 +485,8 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     const onToolCallsUpdate2 = vi.fn();
     const scheduler2 = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete: onAllToolCallsComplete2,
       onToolCallsUpdate: onToolCallsUpdate2,
       getPreferredEditor: () => 'vscode',
@@ -558,6 +595,8 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

@@ -66,7 +66,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: WebSearchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }

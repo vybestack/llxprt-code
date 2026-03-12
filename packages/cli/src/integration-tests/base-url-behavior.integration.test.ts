@@ -13,8 +13,13 @@ import {
   IProvider,
   createProviderRuntimeContext,
   SettingsService,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import {
   setCliRuntimeContext,
@@ -48,7 +53,7 @@ describe('Base URL Runtime Helper Integration', () => {
       model: 'test-model',
       cwd: tempDir,
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     settingsService = config.getSettingsService();
     const runtime = createProviderRuntimeContext({
@@ -56,11 +61,19 @@ describe('Base URL Runtime Helper Integration', () => {
       config,
       metadata: { source: 'base-url-test' },
     });
+    const runtimeMessageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
     const { manager, oauthManager } = createProviderManager(runtime, {
       allowBrowserEnvironment: true,
+      config,
+      runtimeMessageBus,
     });
     providerManager = manager;
-    registerCliProviderInfrastructure(providerManager, oauthManager);
+    registerCliProviderInfrastructure(providerManager, oauthManager, {
+      messageBus: runtimeMessageBus,
+    });
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'base-url-test' },
     });

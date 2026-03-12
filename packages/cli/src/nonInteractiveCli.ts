@@ -24,6 +24,7 @@ import {
   setActiveProviderRuntimeContext,
   type UserFeedbackPayload,
   type EmojiFilterMode,
+  type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
@@ -40,6 +41,7 @@ interface RunNonInteractiveParams {
   settings: LoadedSettings;
   input: string;
   prompt_id: string;
+  runtimeMessageBus?: MessageBus;
 }
 
 export async function runNonInteractive({
@@ -47,6 +49,7 @@ export async function runNonInteractive({
   settings,
   input,
   prompt_id,
+  runtimeMessageBus,
 }: RunNonInteractiveParams): Promise<void> {
   const outputFormat =
     typeof config.getOutputFormat === 'function'
@@ -482,10 +485,23 @@ export async function runNonInteractive({
             agentId: requestFromModel.agentId ?? 'primary',
           };
 
-          const completed = await executeToolCall(
+          const completed = await (
+            executeToolCall as typeof executeToolCall &
+              ((
+                config: Config,
+                requestInfo: ToolCallRequestInfo,
+                abortSignal: AbortSignal,
+                dependencies: {
+                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                },
+              ) => Promise<Awaited<ReturnType<typeof executeToolCall>>>)
+          )(
             config,
             requestInfo,
             abortController.signal,
+            {
+              messageBus: runtimeMessageBus,
+            },
           );
           const toolResponse = completed.response;
 

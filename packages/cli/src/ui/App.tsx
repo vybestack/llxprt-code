@@ -11,6 +11,7 @@ import type {
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
@@ -35,6 +36,7 @@ interface AppProps {
   resumedHistory?: IContent[];
   version: string;
   terminalBackgroundColor?: string;
+  runtimeMessageBus?: MessageBus;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */

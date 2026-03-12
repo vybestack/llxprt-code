@@ -5,7 +5,7 @@
  */
 
 import type { CommandModule } from 'yargs';
-import { debugLogger } from '@vybestack/llxprt-code-core';
+import { MessageBus, debugLogger } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../../config/settings.js';
 import { loadCliConfig, type CliArgs } from '../../config/config.js';
 import {
@@ -35,8 +35,17 @@ export async function handleList() {
     workspaceDir,
   );
 
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
+
   // Initialize to trigger extension loading and skill discovery
-  await config.initialize();
+  await (
+    config as typeof config & {
+      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+    }
+  ).initialize({ messageBus: sessionMessageBus });
 
   const skillManager = config.getSkillManager();
   const skills = skillManager.getAllSkills();

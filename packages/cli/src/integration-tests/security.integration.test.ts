@@ -12,6 +12,7 @@ import {
   cleanupTempDirectory,
   createTempProfile,
   createTempKeyfile,
+  initializeTestConfig,
   readSettingsFile,
   writeSettingsFile,
 } from './test-utils.js';
@@ -32,7 +33,7 @@ describe('API Key Security Integration Tests', () => {
       cwd: tempDir,
       model: 'gemini-1.5-flash',
     });
-    await config.initialize();
+    await initializeTestConfig(config);
   });
 
   afterEach(async () => {

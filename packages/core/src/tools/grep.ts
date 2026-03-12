@@ -124,8 +124,9 @@ class GrepToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: GrepToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
     this.fileExclusions = config.getFileExclusions();
   }
 
@@ -960,7 +961,7 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
 
   constructor(
     private readonly config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       GrepTool.Name,
@@ -1043,12 +1044,12 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
 
   protected override createInvocation(
     params: GrepToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<GrepToolParams, ToolResult> {
     const normalizedParams = { ...params };
     if (!normalizedParams.dir_path && normalizedParams.path) {
       normalizedParams.dir_path = normalizedParams.path;
     }
-    return new GrepToolInvocation(this.config, normalizedParams);
+    return new GrepToolInvocation(this.config, normalizedParams, messageBus);
   }
 }

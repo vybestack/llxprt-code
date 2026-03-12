@@ -70,8 +70,9 @@ class GrepToolInvocation extends BaseToolInvocation<
     private readonly config: Config,
     private readonly fileDiscoveryService: FileDiscoveryService,
     params: RipGrepToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   private resolveTarget(relativePath?: string): ResolvedSearchTarget {
@@ -483,7 +484,7 @@ export class RipGrepTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       RipGrepTool.Name,
@@ -541,12 +542,13 @@ export class RipGrepTool extends BaseDeclarativeTool<
 
   protected override createInvocation(
     params: RipGrepToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<RipGrepToolParams, ToolResult> {
     return new GrepToolInvocation(
       this.config,
       this.fileDiscoveryService,
       params,
+      messageBus,
     );
   }
 }

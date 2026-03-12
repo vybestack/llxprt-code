@@ -7,26 +7,26 @@
 import {
   Config,
   DebugLogger,
+  type MessageBus,
   ProviderRuntimeContext,
   SettingsService,
   ProfileManager,
   createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   getProfilePersistableKeys,
   resolveAlias,
   getProviderConfigKeys,
   isLoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
-import type {
-  ProviderManager,
-  Profile,
-  ModelParams,
-  RuntimeAuthScopeFlushResult,
-  LoadBalancerProfile,
-  HydratedModel,
+  type ProviderManager,
+  type Profile,
+  type ModelParams,
+  type RuntimeAuthScopeFlushResult,
+  type LoadBalancerProfile,
+  type HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
+import { registerProviderManagerSingleton } from '../providers/providerManagerInstance.js';
+
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import type { LoadedSettings } from '../config/settings.js';
 import {
@@ -270,14 +270,10 @@ function resolveActiveRuntimeIdentity(): {
     return scope;
   }
 
-  const context = getActiveProviderRuntimeContext();
-  const runtimeId =
-    typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
-      ? context.runtimeId
-      : LEGACY_RUNTIME_ID;
-  const metadata = context.metadata ?? {};
-
-  return { runtimeId, metadata };
+  return {
+    runtimeId: LEGACY_RUNTIME_ID,
+    metadata: {},
+  };
 }
 
 function upsertRuntimeEntry(
@@ -360,6 +356,12 @@ export interface CliRuntimeServices {
 }
 
 /**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P06
+ * @requirement REQ-D01-003.3
+ * @requirement REQ-D01-004.3
+ * @pseudocode lines 73-82
+ */
+/**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement:REQ-SP4-004
  * @requirement:REQ-SP4-005
@@ -395,7 +397,6 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
       settingsService ??
       entry.config.getSettingsService() ??
       new SettingsService();
-
     return createProviderRuntimeContext({
       settingsService: resolvedSettings,
       config: entry.config,
@@ -414,17 +415,13 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
     );
   }
 
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // Legacy fallback to global context (should not be used under stateless hardening)
-  const context = getActiveProviderRuntimeContext();
-
-  if (!context.config) {
-    throw new Error(
-      '[cli-runtime] Active provider runtime context is missing Config instance. ' +
-        'Ensure gemini bootstrap initialised runtime before invoking helpers.',
-    );
-  }
-  return context;
+  throw new Error(
+    formatMissingRuntimeMessage({
+      runtimeId: identity.runtimeId,
+      missingFields: ['runtime registration'],
+      hint: 'Register the runtime via setCliRuntimeContext() before invoking CLI runtime helpers.',
+    }),
+  );
 }
 
 /**
@@ -607,9 +604,18 @@ export async function activateIsolatedRuntimeContext(
   await handle.activate(overrides);
 }
 
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+ * @requirement REQ-D01-002
+ * @requirement REQ-D01-003
+ * @pseudocode lines 122-133
+ */
 export function registerCliProviderInfrastructure(
   manager: ProviderManager,
   oauthManager: OAuthManager,
+  _options: {
+    messageBus: MessageBus;
+  },
 ): void {
   const { runtimeId, metadata } = resolveActiveRuntimeIdentity();
   const entry = upsertRuntimeEntry(runtimeId, {
@@ -617,23 +623,16 @@ export function registerCliProviderInfrastructure(
     oauthManager,
     metadata,
   });
+  registerProviderManagerSingleton(manager, oauthManager);
 
-  const context = getActiveProviderRuntimeContext();
-  const config = entry.config ?? context.config ?? null;
+  const config = entry.config ?? null;
   if (config) {
     config.setProviderManager(manager);
     manager.setConfig(config);
-    // Set message bus getter on OAuthManager for interactive TUI prompts
-    // This enables the bucket auth confirmation dialog to work via message bus
-    // @plan PLAN-20251213issue490
-    oauthManager.setMessageBus(() => config.getMessageBus());
-    oauthManager.setConfigGetter(() => config);
+
     logger.debug(
       () =>
         `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled?.() ?? false})`,
-    );
-    logger.debug(
-      () => `[cli-runtime] OAuthManager message bus getter configured`,
     );
     upsertRuntimeEntry(runtimeId, { config });
   }

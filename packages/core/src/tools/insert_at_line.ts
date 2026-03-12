@@ -18,6 +18,8 @@ import {
   type ToolEditConfirmationDetails,
   ToolConfirmationOutcome,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+
 import { ToolErrorType } from './tool-error.js';
 
 import { Config, ApprovalMode } from '../config/config.js';
@@ -58,8 +60,9 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: InsertAtLineToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -341,7 +344,8 @@ export class InsertAtLineTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: InsertAtLineToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<InsertAtLineToolParams, ToolResult> {
-    return new InsertAtLineToolInvocation(this.config, params);
+    return new InsertAtLineToolInvocation(this.config, params, messageBus);
   }
 }

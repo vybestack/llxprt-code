@@ -11,6 +11,8 @@ import {
   coreEvents,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { initializeTestConfig } from '../integration-tests/test-utils.js';
+
 import type { LoadedSettings } from '../config/settings.js';
 import { setupTerminalAndTheme } from './terminalTheme.js';
 import { terminalCapabilityManager } from '../ui/utils/terminalCapabilityManager.js';
@@ -65,7 +67,7 @@ describe('setupTerminalAndTheme', () => {
       model: 'test-model',
       settingsService,
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     // Create a minimal mock LoadedSettings
     mockSettings = {

@@ -122,7 +122,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     private readonly config: Config,
     params: ShellToolParams,
     private readonly allowlist: Set<string>,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -782,7 +782,7 @@ export class ShellTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       ShellTool.Name,
@@ -892,7 +892,7 @@ export class ShellTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ShellToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<ShellToolParams, ToolResult> {
     const normalizedParams = { ...params };
     if (!normalizedParams.dir_path && normalizedParams.directory) {

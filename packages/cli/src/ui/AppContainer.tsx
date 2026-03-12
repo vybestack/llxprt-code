@@ -37,6 +37,7 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+
 import {
   useTodoContinuation,
   type TodoContinuationHook,
@@ -89,6 +90,7 @@ import {
   type SessionRecordingService,
   type LockHandle,
   type SessionMetadata,
+  type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../services/performResume.js';
@@ -162,6 +164,7 @@ interface AppContainerProps {
   resumedHistory?: IContent[];
   version: string;
   terminalBackgroundColor?: string;
+  runtimeMessageBus?: MessageBus;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
@@ -188,6 +191,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const {
     config,
     settings,
+    runtimeMessageBus,
     startupWarnings = [],
     resumedHistory,
     appState,
@@ -1460,6 +1464,7 @@ export const AppContainer = (props: AppContainerProps) => {
     registerTodoPause,
     handleExternalEditorOpen,
     recordingIntegration,
+    runtimeMessageBus,
   );
 
   const pendingHistoryItems = useMemo(
@@ -2087,7 +2092,14 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [config, mainAreaWidth, terminalHeight]);
 
   // Track actively executing hooks for visual indicators
-  const activeHooks = useHookDisplayState(config);
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  const activeHooks = useHookDisplayState(runtimeMessageBus);
+
 
   // Build UIState object
   const uiState: UIState = {

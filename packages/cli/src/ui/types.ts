@@ -19,6 +19,7 @@ export type { SkillDefinition };
 export interface ActiveHook {
   name?: string;
   eventName?: string;
+  correlationId?: string;
   index?: number;
   total?: number;
 }

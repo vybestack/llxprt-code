@@ -16,6 +16,7 @@ import {
   type ConfigParameters,
   FileDiscoveryService,
   ApprovalMode,
+  MessageBus,
   loadServerHierarchicalMemory,
   LLXPRT_CONFIG_DIR as GEMINI_CONFIG_DIR,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -87,8 +88,16 @@ export async function loadConfig(
   const config = new Config({
     ...configParams,
   });
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
   // Needed to initialize ToolRegistry, and git checkpointing if enabled
-  await config.initialize();
+  await (
+    config as Config & {
+      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+    }
+  ).initialize({ messageBus: sessionMessageBus });
 
   if (process.env['USE_CCPA']) {
     logger.info('[Config] Using CCPA Auth:');

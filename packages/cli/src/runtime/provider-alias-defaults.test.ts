@@ -295,10 +295,13 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     setCliRuntimeContext(stubSettingsService as never, stubConfig as never, {
       runtimeId: 'test-runtime',
     });
-    registerCliProviderInfrastructure(
-      mockProviderManager as never,
-      mockOAuthManager,
-    );
+    const runtimeMessageBus = {} as never;
+    (
+      mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
+    ).runtimeMessageBus = runtimeMessageBus;
+    registerCliProviderInfrastructure(mockProviderManager as never, mockOAuthManager, {
+      messageBus: runtimeMessageBus,
+    });
 
     aliasEntries.length = 0;
     aliasEntries.push({

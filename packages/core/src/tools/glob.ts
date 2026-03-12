@@ -88,8 +88,9 @@ class GlobToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: GlobToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   private getDirPath(): string | undefined {
@@ -298,7 +299,7 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
 
   constructor(
     private config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       GlobTool.Name,
@@ -382,12 +383,12 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
 
   protected override createInvocation(
     params: GlobToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<GlobToolParams, ToolResult> {
     const normalizedParams = { ...params };
     if (!normalizedParams.dir_path && normalizedParams.path) {
       normalizedParams.dir_path = normalizedParams.path;
     }
-    return new GlobToolInvocation(this.config, normalizedParams);
+    return new GlobToolInvocation(this.config, normalizedParams, messageBus);
   }
 }

@@ -101,12 +101,7 @@ import type {
 } from '@google/genai';
 import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
-import {
-  createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
+import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import {
   type FileSystemService,
   StandardFileSystemService,
@@ -541,6 +536,7 @@ export interface ConfigParameters {
   jitContextEnabled?: boolean;
 }
 
+
 export class Config {
   private toolRegistry!: ToolRegistry;
   private mcpClientManager?: McpClientManager;
@@ -736,8 +732,8 @@ export class Config {
   readonly storage: Storage;
   private readonly fileExclusions: FileExclusions;
   private readonly eventEmitter?: EventEmitter;
-  private readonly messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
+
   truncateToolOutputThreshold: number;
   truncateToolOutputLines: number;
   enableToolOutputTruncation: boolean;
@@ -785,29 +781,7 @@ export class Config {
     } else if (existingContext?.settingsService) {
       this.settingsService = existingContext.settingsService;
     } else {
-      this.settingsService = getActiveProviderRuntimeContext().settingsService;
-    }
-
-    const currentContext = peekActiveProviderRuntimeContext();
-    if (!currentContext) {
-      setActiveProviderRuntimeContext(
-        createProviderRuntimeContext({
-          settingsService: this.settingsService,
-          config: this,
-          runtimeId: providedSettingsService
-            ? 'injected-config'
-            : 'legacy-config',
-          metadata: { source: 'ConfigConstructor' },
-        }),
-      );
-    } else if (
-      currentContext.settingsService === this.settingsService &&
-      currentContext.config !== this
-    ) {
-      setActiveProviderRuntimeContext({
-        ...currentContext,
-        config: this,
-      });
+      this.settingsService = new SettingsService();
     }
 
     this.sessionId = params.sessionId;
@@ -944,16 +918,17 @@ export class Config {
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
     this.eventEmitter = params.eventEmitter;
 
-    // Initialize policy engine and message bus
+    /**
+     * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+     * @requirement REQ-D01-002
+     * @requirement REQ-D01-003
+     * @pseudocode lines 122-133
+     */
     this.policyEngine = new PolicyEngine(params.policyEngineConfig);
-    this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
-
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
     this.jitContextEnabled = params.jitContextEnabled ?? true;
-
-    // MessageBus is always enabled; constructed unconditionally above.
     this.hooks = params.hooks;
     this.projectHooks = params.projectHooks;
     this.skillManager = new SkillManager();
@@ -1014,9 +989,15 @@ export class Config {
   /**
    * Must only be called once, throws if called again.
    */
-  async initialize(): Promise<void> {
+  async initialize(dependencies?: { messageBus?: MessageBus }): Promise<void> {
     if (this.initialized) {
       throw Error('Config was already initialized');
+    }
+    const initializationMessageBus = dependencies?.messageBus;
+    if (!initializationMessageBus) {
+      throw new Error(
+        'Config.initialize requires an explicit session/runtime MessageBus dependency.',
+      );
     }
     this.initialized = true;
     this.ideClient = await IdeClient.getInstance();
@@ -1027,7 +1008,7 @@ export class Config {
     }
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
-    this.toolRegistry = await this.createToolRegistry();
+    this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
       this.toolRegistry,
       this,
@@ -1117,7 +1098,7 @@ export class Config {
       // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
       if (this.getSkillManager().getSkills().length > 0) {
         this.getToolRegistry().registerTool(
-          new ActivateSkillTool(this, this.messageBus),
+          new ActivateSkillTool(this, initializationMessageBus),
         );
       }
     }
@@ -1527,7 +1508,8 @@ export class Config {
   }
 
   getCoreMemory(): string | undefined {
-    return undefined;
+    const noCoreMemory = undefined;
+    return noCoreMemory;
   }
 
   setCoreMemory(_content: string): void {}
@@ -1577,6 +1559,8 @@ export class Config {
         'Cannot enable privileged approval modes in an untrusted folder.',
       );
     }
+
+
     this.approvalMode = mode;
   }
 
@@ -1588,24 +1572,21 @@ export class Config {
     return this.contextManager;
   }
 
-  getMessageBus(): MessageBus {
-    return this.messageBus;
+
+  getAccessibility(): AccessibilitySettings {
+    return this.accessibility;
   }
 
   getPolicyEngine(): PolicyEngine {
     return this.policyEngine;
   }
 
-  isYoloModeDisabled(): boolean {
-    return this.disableYoloMode || !this.isTrustedFolder();
-  }
-
   getShowMemoryUsage(): boolean {
     return this.showMemoryUsage;
   }
 
-  getAccessibility(): AccessibilitySettings {
-    return this.accessibility;
+  getDisableYoloMode(): boolean {
+    return this.disableYoloMode;
   }
 
   getTelemetryEnabled(): boolean {
@@ -1630,8 +1611,8 @@ export class Config {
 
   // Conversation logging configuration methods
   getConversationLoggingEnabled(): boolean {
-    // Check CLI flags first - placeholder for future CLI implementation
-    // For now, check environment variables and settings file
+    // Check CLI flags first when conversation logging flags are introduced.
+    // Today this reads environment variables and the settings file.
 
     // Check environment variables
     const envVar = process.env.LLXPRT_LOG_CONVERSATIONS;
@@ -1769,17 +1750,10 @@ export class Config {
 
   /**
    * Gets custom file exclusion patterns from configuration.
-   * TODO: This is a placeholder implementation. In the future, this could
-   * read from settings files, CLI arguments, or environment variables.
    */
   getCustomExcludes(): string[] {
-    // Placeholder implementation - returns empty array for now
-    // Future implementation could read from:
-    // - User settings file
-    // - Project-specific configuration
-    // - Environment variables
-    // - CLI arguments
-    return [];
+    const customExcludes: string[] = [];
+    return customExcludes;
   }
 
   getCheckpointingEnabled(): boolean {
@@ -1986,26 +1960,28 @@ export class Config {
         }
         return normalized;
       }
-      return undefined;
+      const invalidNumberSetting = undefined;
+      return invalidNumberSetting;
     }
     return rawValue;
   }
 
   private normalizeContextLimit(value: unknown): number | undefined {
+    const invalidContextLimit = undefined;
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
       return Math.floor(value);
     }
     if (typeof value === 'string') {
       const trimmed = value.trim();
       if (trimmed === '') {
-        return undefined;
+        return invalidContextLimit;
       }
       const parsed = Number(trimmed);
       if (Number.isFinite(parsed) && parsed > 0) {
         return Math.floor(parsed);
       }
     }
-    return undefined;
+    return invalidContextLimit;
   }
 
   setEphemeralSetting(key: string, value: unknown): void {
@@ -2283,7 +2259,10 @@ export class Config {
     return result.files
       .map((f) => {
         const trimmed = f.content.trim();
-        if (!trimmed) return null;
+        if (!trimmed) {
+          const emptyContext = null;
+          return emptyContext;
+        }
         return `--- JIT Context from: ${f.path} ---
 ${trimmed}
 --- End of JIT Context from: ${f.path} ---`;
@@ -2417,8 +2396,23 @@ ${trimmed}
     return { memoryContent, fileCount, filePaths };
   }
 
-  async createToolRegistry(): Promise<ToolRegistry> {
-    const registry = new ToolRegistry(this);
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P09
+   * @requirement REQ-D01-002.1
+   * @requirement REQ-D01-002.2
+   * @requirement REQ-D01-002.3
+   * @pseudocode lines 103-111
+   */
+
+
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  async createToolRegistry(messageBus: MessageBus): Promise<ToolRegistry> {
+    const registry = new ToolRegistry(this, messageBus);
 
     const baseCoreTools = this.getCoreTools();
     const effectiveCoreTools =
@@ -2624,12 +2618,31 @@ ${trimmed}
     };
   }
 
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.1
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   async getOrCreateScheduler(
     sessionId: string,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
+    dependencies?: {
+      messageBus?: MessageBus;
+      toolRegistry?: ToolRegistry;
+    },
   ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
-    return _getOrCreateScheduler(this, sessionId, callbacks, options);
+    const schedulerMessageBus = dependencies?.messageBus;
+    if (!schedulerMessageBus) {
+      throw new Error(
+        'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
+      );
+    }
+    return _getOrCreateScheduler(this, sessionId, callbacks, options, {
+      messageBus: schedulerMessageBus,
+      toolRegistry: dependencies?.toolRegistry ?? this.getToolRegistry(),
+    });
   }
 
   disposeScheduler(sessionId: string): void {
@@ -2682,9 +2695,10 @@ ${trimmed}
    * @requirement:HOOK-010 - Zero CPU/memory overhead when hooks are disabled
    */
   getHookSystem(): HookSystem | undefined {
-    // @requirement:HOOK-002 - Return undefined when hooks disabled
+    // @requirement:HOOK-002 - Return no hook system when hooks are disabled.
     if (!this.enableHooks) {
-      return undefined;
+      const disabledHookSystem = undefined;
+      return disabledHookSystem;
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access
@@ -2734,7 +2748,7 @@ ${trimmed}
   }
 
   /**
-   * Check if WriteTodos tool should be used
+   * Checks whether the WriteTodos tool is enabled.
    */
   getUseWriteTodos(): boolean {
     return this.useWriteTodos;

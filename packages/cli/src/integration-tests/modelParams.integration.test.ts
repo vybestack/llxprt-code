@@ -9,6 +9,7 @@ import {
   Config,
   ProviderManager,
   SettingsService,
+  MessageBus,
   type IProvider,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/oauth-manager.js';
@@ -22,7 +23,11 @@ import {
   buildRuntimeProfileSnapshot,
   clearActiveModelParam,
 } from '../runtime/runtimeSettings.js';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 
 function createStubProvider(name: string): IProvider {
   return {
@@ -78,17 +83,22 @@ describe('CLI model parameter command integration', () => {
       cwd: tempDir,
       model: 'alpha-model',
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     settingsService = config.getSettingsService();
     providerManager = new ProviderManager({ settingsService, config });
     providerManager.registerProvider(createStubProvider('alpha'));
     providerManager.setActiveProvider('alpha');
 
-    registerCliProviderInfrastructure(
-      providerManager,
-      {} as unknown as OAuthManager,
+    const runtimeMessageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
     );
+    registerCliProviderInfrastructure(providerManager, {
+      runtimeMessageBus,
+    } as unknown as OAuthManager, {
+      messageBus: runtimeMessageBus,
+    });
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'modelParams.integration.test.ts' },
     });

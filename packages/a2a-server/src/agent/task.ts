@@ -19,6 +19,7 @@ import {
   DEFAULT_GUI_EDITOR,
   EDIT_TOOL_NAMES,
   processRestorableToolCalls,
+  MessageBus,
   type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -86,6 +87,7 @@ export class Task {
     reject: (reason?: Error) => void;
   };
   private modelInfo?: ModelInfo;
+  private readonly sessionMessageBus: MessageBus;
 
   private constructor(
     id: string,
@@ -98,6 +100,10 @@ export class Task {
     this.contextId = contextId;
     this.config = config;
     this.scheduler = null;
+    this.sessionMessageBus = new MessageBus(
+      this.config.getPolicyEngine(),
+      this.config.getDebugMode(),
+    );
     const contentConfig = this.config.getContentGeneratorConfig();
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
@@ -467,13 +473,33 @@ export class Task {
     if (!sessionId) {
       throw new Error('Scheduler sessionId is required');
     }
-    return this.config.getOrCreateScheduler(sessionId, {
-      outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
-      onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
-      onToolCallsUpdate: this._schedulerToolCallsUpdate.bind(this),
-      getPreferredEditor: () => DEFAULT_GUI_EDITOR,
-      onEditorClose: () => {},
-    });
+    return (
+      this.config as Config & {
+        getOrCreateScheduler(
+          sessionId: string,
+          callbacks: {
+            outputUpdateHandler: (toolCallId: string, chunk: string) => void;
+            onAllToolCallsComplete: (completedToolCalls: CompletedToolCall[]) => Promise<void>;
+            onToolCallsUpdate: (toolCalls: ToolCall[]) => void;
+            getPreferredEditor: () => typeof DEFAULT_GUI_EDITOR;
+            onEditorClose: () => void;
+          },
+          options?: Record<string, unknown>,
+          dependencies?: { messageBus?: MessageBus },
+        ): Promise<CoreToolScheduler>;
+      }
+    ).getOrCreateScheduler(
+      sessionId,
+      {
+        outputUpdateHandler: this._schedulerOutputUpdate.bind(this),
+        onAllToolCallsComplete: this._schedulerAllToolCallsComplete.bind(this),
+        onToolCallsUpdate: this._schedulerToolCallsUpdate.bind(this),
+        getPreferredEditor: () => DEFAULT_GUI_EDITOR,
+        onEditorClose: () => {},
+      },
+      undefined,
+      { messageBus: this.sessionMessageBus },
+    );
   }
 
   private _pickFields<

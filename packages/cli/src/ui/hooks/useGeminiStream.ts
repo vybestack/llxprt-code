@@ -36,6 +36,7 @@ import {
   DebugLogger,
   uiTelemetryService,
   type RecordingIntegration,
+  type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
@@ -248,6 +249,7 @@ export const useGeminiStream = (
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
   recordingIntegration?: RecordingIntegration,
+  runtimeMessageBus?: MessageBus,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -454,6 +456,7 @@ export const useGeminiStream = (
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
+    runtimeMessageBus,
   );
 
   const pendingToolCallGroupDisplay = useMemo(

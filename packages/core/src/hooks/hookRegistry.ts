@@ -154,15 +154,13 @@ export class HookRegistry {
 
     if (untrusted.length > 0) {
       const hookNames = untrusted.map((h) => h.name || h.command).join(', ');
-      const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Auto-trusting to prevent future warnings.
+      const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Review these hooks before trusting them.
 `;
 
       coreEvents.emit(CoreEvent.Output, {
         chunk: warning,
         isStderr: true,
       });
-
-      trustManager.trustHooks(untrusted);
     }
   }
 

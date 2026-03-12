@@ -46,10 +46,11 @@ commands on your machine. Malicious or poorly configured hooks can:
 
 **Project-level hooks** (in `.llxprt/settings.json`) and **Extension hooks** are
 particularly risky when opening third-party projects or extensions from
-untrusted authors. LLxprt Code will **warn you** the first time it detects a new
-project hook (identified by its name and command), but it is **your
-responsibility** to review these hooks (and any installed extensions) before
-trusting them.
+untrusted authors. LLxprt Code will **warn you** when it detects untrusted
+project hooks (identified by their name and command). Untrusted hooks are
+**not auto-approved** — they remain untrusted until you explicitly trust them.
+It is **your responsibility** to review these hooks (and any installed
+extensions) before trusting them.
 
 See [Security Considerations](best-practices.md#using-hooks-securely) for a
 detailed threat model and mitigation strategies.
@@ -58,13 +59,20 @@ detailed threat model and mitigation strategies.
 
 ### 1. Enable Hooks
 
-Hooks are enabled by default. Verify in your `~/.llxprt/settings.json`:
+Hooks are **disabled by default** and require explicit opt-in. Add the
+following to your `~/.llxprt/settings.json`:
 
 ```json
 {
-  "enableHooks": true
+  "hooks": {
+    "enabled": true
+  }
 }
 ```
+
+There is also an experimental gate (`tools.enableHooks`) that defaults to
+`true`. Both `hooks.enabled` and `tools.enableHooks` must be `true` for hooks
+to run.
 
 ### 2. Configure a Hook
 

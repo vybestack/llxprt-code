@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url';
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
 import type { LspConfig } from '../types.js';
+import { initializeTestConfig } from '../../test-utils/config.js';
+
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../../tools/memoryTool.js';
 import * as lspServiceClientModule from '../lsp-service-client.js';
 
@@ -274,7 +276,7 @@ describe('LSP system integration (P35)', () => {
 
   it('returns undefined client/config when lsp is false', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     expect(config.getLspServiceClient()).toBeUndefined();
     expect(config.getLspConfig()).toBeUndefined();
@@ -282,7 +284,7 @@ describe('LSP system integration (P35)', () => {
 
   it('defaults to disabled when lsp key is absent (not configured)', async () => {
     const config = new Config(createBaseConfigParams());
-    await config.initialize();
+    await initializeTestConfig(config);
 
     expect(config.getLspConfig()).toBeUndefined();
     expect(config.getLspServiceClient()).toBeUndefined();
@@ -290,7 +292,7 @@ describe('LSP system integration (P35)', () => {
 
   it('defaults to enabled config when lsp is true', async () => {
     const config = new Config(createBaseConfigParams({ lsp: true }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     expect(config.getLspConfig()).toEqual({ servers: [] });
     expect(config.getLspServiceClient()).toBeDefined();
@@ -304,14 +306,14 @@ describe('LSP system integration (P35)', () => {
       navigationTools: true,
     };
     const config = new Config(createBaseConfigParams({ lsp }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     expect(config.getLspConfig()).toEqual(lsp);
   });
 
   it('returns same LSP service client instance across calls', async () => {
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const client1 = config.getLspServiceClient();
     const client2 = config.getLspServiceClient();
@@ -321,7 +323,7 @@ describe('LSP system integration (P35)', () => {
 
   it('returns same LSP config reference across calls', async () => {
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const config1 = config.getLspConfig();
     const config2 = config.getLspConfig();
@@ -338,7 +340,7 @@ describe('LSP system integration (P35)', () => {
         },
       }),
     );
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const tools = config.getToolRegistry().getAllTools();
     const lspNavTools = tools.filter(
@@ -359,7 +361,7 @@ describe('LSP system integration (P35)', () => {
           },
         }),
       );
-      await config.initialize();
+      await initializeTestConfig(config);
 
       const tools = config.getToolRegistry().getAllTools();
       const lspNavTools = tools.filter(
@@ -383,7 +385,7 @@ describe('LSP system integration (P35)', () => {
         },
       }),
     );
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const lspClient = config.getLspServiceClient();
     expect(lspClient?.isAlive()).toBe(false);
@@ -402,7 +404,7 @@ describe('LSP system integration (P35)', () => {
     ).mockRejectedValue(new Error('simulated start failure'));
 
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
-    await expect(config.initialize()).resolves.toBeUndefined();
+    await expect(initializeTestConfig(config)).resolves.toBeUndefined();
     expect(config.getLspServiceClient()).toBeUndefined();
     expect(config.getLspConfig()).toEqual({ servers: [] });
   });
@@ -416,7 +418,7 @@ describe('LSP system integration (P35)', () => {
         },
       }),
     );
-    await config.initialize();
+    await initializeTestConfig(config);
 
     await config.shutdownLspService();
 

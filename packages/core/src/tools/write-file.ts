@@ -164,7 +164,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: WriteFileToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     toolName?: string,
     displayName?: string,
   ) {
@@ -637,7 +637,7 @@ export class WriteFileTool
 
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       WriteFileTool.Name,
@@ -712,7 +712,7 @@ export class WriteFileTool
 
   protected createInvocation(
     params: WriteFileToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     toolName?: string,
     displayName?: string,
   ): ToolInvocation<WriteFileToolParams, ToolResult> {
@@ -724,7 +724,7 @@ export class WriteFileTool
     return new WriteFileToolInvocation(
       this.config,
       normalizedParams,
-      messageBus ?? this.messageBus,
+      messageBus,
       toolName ?? this.name,
       displayName ?? this.displayName,
     );

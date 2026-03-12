@@ -10,6 +10,7 @@ import {
   ProviderManager,
   Profile,
   SettingsService,
+  MessageBus,
   type IProvider,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/oauth-manager.js';
@@ -25,7 +26,11 @@ import {
   applyProfileSnapshot,
   setActiveModel,
 } from '../runtime/runtimeSettings.js';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 
 function createStubProvider(name: string): IProvider & { clearState(): void } {
   return {
@@ -76,7 +81,7 @@ describe('Runtime model parameter isolation', () => {
       cwd: tempDir,
       model: 'alpha-model',
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     settingsService = config.getSettingsService();
     providerManager = new ProviderManager({ settingsService, config });
@@ -86,10 +91,15 @@ describe('Runtime model parameter isolation', () => {
     providerManager.registerProvider(createStubProvider('beta'));
     providerManager.registerProvider(createStubProvider('gamma'));
 
-    registerCliProviderInfrastructure(
-      providerManager,
-      {} as unknown as OAuthManager,
+    const runtimeMessageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
     );
+    registerCliProviderInfrastructure(providerManager, {
+      runtimeMessageBus,
+    } as unknown as OAuthManager, {
+      messageBus: runtimeMessageBus,
+    });
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'model-params-isolation.integration.test.ts' },
     });

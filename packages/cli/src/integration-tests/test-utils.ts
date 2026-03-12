@@ -8,7 +8,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import * as http from 'http';
-import { Profile } from '@vybestack/llxprt-code-core';
+import { Config, MessageBus, Profile } from '@vybestack/llxprt-code-core';
 
 /**
  * Creates a temporary directory for tests
@@ -39,6 +39,20 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
     }
   }
 }
+
+export async function initializeTestConfig(config: Config): Promise<MessageBus> {
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
+  await (
+    config as Config & {
+      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+    }
+  ).initialize({ messageBus: sessionMessageBus });
+  return sessionMessageBus;
+}
+
 
 /**
  * Creates a profile file in the specified directory

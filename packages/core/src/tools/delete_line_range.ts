@@ -18,6 +18,8 @@ import {
   type ToolEditConfirmationDetails,
   ToolConfirmationOutcome,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+
 import { ToolErrorType } from './tool-error.js';
 
 import { Config, ApprovalMode } from '../config/config.js';
@@ -57,8 +59,9 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: DeleteLineRangeToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -316,7 +319,8 @@ export class DeleteLineRangeTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: DeleteLineRangeToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<DeleteLineRangeToolParams, ToolResult> {
-    return new DeleteLineRangeToolInvocation(this.config, params);
+    return new DeleteLineRangeToolInvocation(this.config, params, messageBus);
   }
 }

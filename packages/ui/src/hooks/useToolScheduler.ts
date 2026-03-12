@@ -11,12 +11,29 @@ import type {
   CancelledToolCall,
   ToolCallConfirmationDetails,
   AnsiOutput,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
 import type { ToolStatus } from '../types/events';
 import { getLogger } from '../lib/logger';
 import type { ConfirmationPayload } from './useToolApproval';
 
 const logger = getLogger('nui:tool-scheduler');
+type SchedulerConfigWithExplicitMessageBus = Config & {
+  getOrCreateScheduler(
+    sessionId: string,
+    callbacks: {
+      outputUpdateHandler?: (toolCallId: string, outputChunk: string | AnsiOutput) => void;
+      onAllToolCallsComplete?: (completedToolCalls: CompletedToolCall[]) => Promise<void> | void;
+      onToolCallsUpdate?: (calls: TrackedToolCall[]) => void;
+      getPreferredEditor?: () => undefined;
+      onEditorClose?: () => void;
+    },
+    options?: Record<string, unknown>,
+    dependencies?: { messageBus?: MessageBus },
+  ): Promise<CoreToolScheduler>;
+};
+
+
 
 /**
  * Tracked tool call with response submission state
@@ -279,6 +296,7 @@ function markCallsAsSubmitted(
  */
 export function useToolScheduler(
   config: Config | null,
+  messageBus: MessageBus | undefined,
   onAllToolCallsComplete: OnCompleteCallback,
   onToolCallsUpdate?: OnUpdateCallback,
 ): UseToolSchedulerResult {
@@ -373,15 +391,22 @@ export function useToolScheduler(
     // subscriptions and "unknown correlationId" errors.
     const initializeScheduler = async () => {
       try {
-        const scheduler = await config.getOrCreateScheduler(sessionId, {
-          outputUpdateHandler: handleOutputUpdate,
-          onAllToolCallsComplete: handleAllComplete,
-          onToolCallsUpdate: handleToolCallsUpdate,
-          getPreferredEditor: () => undefined,
-          onEditorClose: () => {
-            /* no-op */
+        const scheduler = await (
+          config as SchedulerConfigWithExplicitMessageBus
+        ).getOrCreateScheduler(
+          sessionId,
+          {
+            outputUpdateHandler: handleOutputUpdate,
+            onAllToolCallsComplete: handleAllComplete,
+            onToolCallsUpdate: handleToolCallsUpdate,
+            getPreferredEditor: () => undefined,
+            onEditorClose: () => {
+              /* no-op */
+            },
           },
-        });
+          undefined,
+          { messageBus },
+        );
 
         if (!mounted) {
           config.disposeScheduler(sessionId);

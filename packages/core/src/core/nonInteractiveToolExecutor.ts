@@ -8,6 +8,7 @@ import {
   type ToolCallRequestInfo,
   ToolErrorType,
   DEFAULT_AGENT_ID,
+  type MessageBus,
 } from '../index.js';
 import { type Part } from '@google/genai';
 import { type Config } from '../config/config.js';
@@ -54,6 +55,9 @@ export async function executeToolCall(
   config: ToolExecutionConfig,
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
+  dependencies?: {
+    messageBus?: MessageBus;
+  },
 ): Promise<CompletedToolCall> {
   const startTime = Date.now();
 
@@ -79,7 +83,20 @@ export async function executeToolCall(
   const sessionId = config.getSessionId();
 
   // Use the singleton scheduler factory with non-interactive mode
-  const scheduler = await config.getOrCreateScheduler(
+  const scheduler = await (
+    config as ToolExecutionConfig & {
+      getOrCreateScheduler(
+        sessionId: string,
+        callbacks: {
+          getPreferredEditor: () => undefined;
+          onEditorClose: () => void;
+          onAllToolCallsComplete: (completedToolCalls: CompletedToolCall[]) => Promise<void>;
+        },
+        options?: { interactiveMode?: boolean },
+        extraDependencies?: { messageBus?: MessageBus },
+      ): Promise<import('./coreToolScheduler.js').CoreToolScheduler>;
+    }
+  ).getOrCreateScheduler(
     sessionId,
     {
       getPreferredEditor: () => undefined,
@@ -89,6 +106,7 @@ export async function executeToolCall(
       },
     },
     { interactiveMode: false },
+    dependencies,
   );
 
   try {

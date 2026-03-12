@@ -134,8 +134,9 @@ class ReadFileToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: ReadFileToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   private getFilePath(): string {
@@ -305,7 +306,7 @@ export class ReadFileTool extends BaseDeclarativeTool<
 
   constructor(
     private config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       ReadFileTool.Name,
@@ -395,13 +396,13 @@ If git status cannot be read, the tool will still return file content and includ
 
   protected override createInvocation(
     params: ReadFileToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<ReadFileToolParams, ToolResult> {
     // Normalize parameters: if file_path is provided but not absolute_path, copy it over
     const normalizedParams = { ...params };
     if (!normalizedParams.absolute_path && normalizedParams.file_path) {
       normalizedParams.absolute_path = normalizedParams.file_path;
     }
-    return new ReadFileToolInvocation(this.config, normalizedParams);
+    return new ReadFileToolInvocation(this.config, normalizedParams, messageBus);
   }
 }

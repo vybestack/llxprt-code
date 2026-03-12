@@ -7,6 +7,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager, OAuthProvider } from '../oauth-manager.js';
 import { TokenStore, OAuthToken } from '../types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+
 
 /**
  * Issue 1616: getToken Bucket Peek Loop Tests
@@ -228,7 +230,8 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       getLastFailoverReasons: vi.fn().mockReturnValue({}),
     };
 
-    manager.setConfigGetter(() => createMockConfig(mockFailoverHandler));
+    (manager as unknown as { config?: Config }).config =
+      createMockConfig(mockFailoverHandler);
 
     const result = await manager.getToken('anthropic');
 
@@ -274,7 +277,8 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       getLastFailoverReasons: vi.fn().mockReturnValue({}),
     };
 
-    manager.setConfigGetter(() => createMockConfig(mockFailoverHandler));
+    (manager as unknown as { config?: Config }).config =
+      createMockConfig(mockFailoverHandler);
 
     await manager.getToken('anthropic');
 
@@ -328,7 +332,8 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       getLastFailoverReasons: vi.fn().mockReturnValue({}),
     };
 
-    manager.setConfigGetter(() => createMockConfig(mockFailoverHandler));
+    (manager as unknown as { config?: Config }).config =
+      createMockConfig(mockFailoverHandler);
 
     const result = await manager.getToken('anthropic');
 
@@ -374,7 +379,8 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       getLastFailoverReasons: vi.fn().mockReturnValue({}),
     };
 
-    manager.setConfigGetter(() => createMockConfig(mockFailoverHandler));
+    (manager as unknown as { config?: Config }).config =
+      createMockConfig(mockFailoverHandler);
 
     const setSessionBucketSpy = vi.spyOn(manager, 'setSessionBucket');
 
@@ -406,7 +412,8 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       reset: vi.fn(),
       getLastFailoverReasons: vi.fn().mockReturnValue({}),
     };
-    manager.setConfigGetter(() => createMockConfig(mockFailoverHandler));
+    (manager as unknown as { config?: Config }).config =
+      createMockConfig(mockFailoverHandler);
 
     const result = await manager.getToken('anthropic');
 

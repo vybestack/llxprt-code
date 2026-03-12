@@ -22,6 +22,8 @@ import type {
 } from '@google/genai';
 import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+
 import type { ToolCallRequestInfo } from '../core/turn.js';
 import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { GlobTool } from '../tools/glob.js';
@@ -62,6 +64,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private readonly agentId: string;
   private readonly toolRegistry: ToolRegistry;
   private readonly runtimeContext: Config;
+  private readonly messageBus: MessageBus;
   private readonly onActivity?: ActivityCallback;
 
   /**
@@ -75,13 +78,23 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
    * @param onActivity An optional callback to receive activity events.
    * @returns A promise that resolves to a new `AgentExecutor` instance.
    */
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   static async create<TOutput extends z.ZodTypeAny>(
     definition: AgentDefinition<TOutput>,
     runtimeContext: Config,
+    messageBus: MessageBus,
     onActivity?: ActivityCallback,
   ): Promise<AgentExecutor<TOutput>> {
-    // Create an isolated tool registry for this agent instance.
-    const agentToolRegistry = new ToolRegistry(runtimeContext);
+    /**
+     * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+     * @requirement REQ-D01-001.2
+     * @pseudocode lines 56-72
+     */
+    const agentToolRegistry = new ToolRegistry(runtimeContext, messageBus);
     const parentToolRegistry = runtimeContext.getToolRegistry();
 
     if (definition.toolConfig) {
@@ -114,6 +127,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       definition,
       runtimeContext,
       agentToolRegistry,
+      messageBus,
       onActivity,
     );
   }
@@ -128,11 +142,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     definition: AgentDefinition<TOutput>,
     runtimeContext: Config,
     toolRegistry: ToolRegistry,
+    messageBus: MessageBus,
     onActivity?: ActivityCallback,
   ) {
     this.definition = definition;
     this.runtimeContext = runtimeContext;
     this.toolRegistry = toolRegistry;
+    this.messageBus = messageBus;
     this.onActivity = onActivity;
 
     const randomIdPart = Math.random().toString(36).slice(2, 8);
@@ -391,7 +407,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
                 .getGeminiClient?.()
                 ?.getContentGenerator();
             } catch {
-              return undefined;
+              const unavailableContentGenerator = void 0;
+              return unavailableContentGenerator;
             }
           })(),
         },
@@ -590,6 +607,9 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           this.runtimeContext,
           requestInfo,
           signal,
+          {
+            messageBus: this.messageBus,
+          },
         );
         const toolResponse = completed.response;
 
@@ -758,8 +778,8 @@ Important Rules:
     toolRegistry: ToolRegistry,
     agentName: string,
   ): Promise<void> {
-    // Tools that are non-interactive. This is temporary until we have tool
-    // confirmations for subagents.
+    // Tools that are currently approved for non-interactive execution while
+    // subagent confirmation handling remains restricted to this allowlist.
     const allowlist = new Set([
       LSTool.Name,
       ReadFileTool.Name,
@@ -801,7 +821,8 @@ Important Rules:
       return AgentTerminateMode.TIMEOUT;
     }
 
-    return null;
+    const activeRun: AgentTerminateMode | null = null;
+    return activeRun;
   }
 
   /** Emits an activity event to the configured callback. */

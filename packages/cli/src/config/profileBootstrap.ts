@@ -6,6 +6,7 @@
 
 import {
   SettingsService,
+  MessageBus,
   type ProviderRuntimeContext,
   type ProviderManager,
 } from '@vybestack/llxprt-code-core';
@@ -37,8 +38,10 @@ export interface RuntimeBootstrapMetadata {
   config?: ProviderRuntimeContext['config'];
   oauthManager?: OAuthManager;
   runtimeId?: string;
+  messageBus?: MessageBus;
   metadata?: Record<string, unknown>;
 }
+
 
 export interface ParsedBootstrapArgs {
   bootstrapArgs: BootstrapProfileArgs;
@@ -47,6 +50,7 @@ export interface ParsedBootstrapArgs {
 
 export interface BootstrapRuntimeState {
   runtime: ProviderRuntimeContext;
+  runtimeMessageBus: MessageBus;
   providerManager: ProviderManager;
   oauthManager?: OAuthManager;
 }
@@ -360,12 +364,27 @@ export async function prepareRuntimeForProfile(
     stage: 'prepareRuntimeForProfile',
   };
 
-  const runtime = {
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  const runtimeConfig = runtimeInit.config;
+  if (!runtimeConfig) {
+    throw new Error(
+      '[cli-bootstrap] createBootstrapRuntimeState requires an explicit Config instance.',
+    );
+  }
+  const runtime: ProviderRuntimeContext = {
     settingsService,
-    config: runtimeInit.config,
+    config: runtimeConfig,
     runtimeId,
     metadata,
-  } as ProviderRuntimeContext;
+  };
+  const runtimeMessageBus =
+    runtimeInit.messageBus ??
+    new MessageBus(runtimeConfig.getPolicyEngine(), runtimeConfig.getDebugMode());
 
   const { manager: providerManager, oauthManager } = createProviderManager(
     {
@@ -376,16 +395,17 @@ export async function prepareRuntimeForProfile(
     },
     {
       config: runtime.config,
+      runtimeMessageBus,
     },
   );
 
-  // Register CLI infrastructure AFTER provider manager creation
-  // This ensures tests that call prepareRuntimeForProfile directly still work.
-  // loadCliConfig will call this again but it's idempotent.
-  registerCliProviderInfrastructure(providerManager, oauthManager);
+  registerCliProviderInfrastructure(providerManager, oauthManager, {
+    messageBus: runtimeMessageBus,
+  });
 
   return {
     runtime,
+    runtimeMessageBus,
     providerManager,
     oauthManager,
   };

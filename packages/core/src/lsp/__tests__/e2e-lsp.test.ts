@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url';
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
 import type { LspConfig } from '../types.js';
+import { initializeTestConfig } from '../../test-utils/config.js';
+
 import { Diagnostic } from '../types.js';
 import * as lspServiceClientModule from '../lsp-service-client.js';
 import { LspServiceClient } from '../lsp-service-client.js';
@@ -290,7 +292,7 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(
         createBaseConfigParams({ lsp: { servers: [] } }),
       );
-      await config.initialize();
+      await initializeTestConfig(config);
 
       const client = config.getLspServiceClient();
       expect(client).toBeDefined();
@@ -310,7 +312,7 @@ describe('LSP E2E integration (P36)', () => {
   // --- 2. Edit → No Errors When Disabled ---
   it('produces no diagnostics when lsp is false', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const client = config.getLspServiceClient();
     expect(client).toBeUndefined();
@@ -344,7 +346,7 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(
         createBaseConfigParams({ lsp: { servers: [] } }),
       );
-      await config.initialize();
+      await initializeTestConfig(config);
 
       const client = config.getLspServiceClient()!;
       expect(client.isAlive()).toBe(true);
@@ -405,7 +407,7 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(
         createBaseConfigParams({ lsp: { servers: [] } }),
       );
-      await expect(config.initialize()).resolves.toBeUndefined();
+      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
 
       expect(config.getLspServiceClient()).toBeUndefined();
       expect(config.getLspConfig()).toEqual({ servers: [] });
@@ -417,7 +419,7 @@ describe('LSP E2E integration (P36)', () => {
   // --- 7. Config: lsp false ---
   it('Config with lsp:false creates no service and no config', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
-    await config.initialize();
+    await initializeTestConfig(config);
 
     expect(config.getLspServiceClient()).toBeUndefined();
     expect(config.getLspConfig()).toBeUndefined();
@@ -426,7 +428,7 @@ describe('LSP E2E integration (P36)', () => {
   // --- 8. Config: Default Enabled ---
   it('Config defaults to disabled when lsp key is absent', async () => {
     const config = new Config(createBaseConfigParams());
-    await config.initialize();
+    await initializeTestConfig(config);
 
     expect(config.getLspConfig()).toBeUndefined();
     expect(config.getLspServiceClient()).toBeUndefined();
@@ -442,7 +444,7 @@ describe('LSP E2E integration (P36)', () => {
 
     try {
       const config = new Config(createBaseConfigParams({ lsp: true }));
-      await config.initialize();
+      await initializeTestConfig(config);
 
       expect(config.getLspConfig()).toEqual({ servers: [] });
       expect(config.getLspServiceClient()).toBeDefined();
@@ -521,7 +523,7 @@ describe('LSP E2E integration (P36)', () => {
           lsp: { servers: [], navigationTools: true },
         }),
       );
-      await config.initialize();
+      await initializeTestConfig(config);
 
       const tools = config.getToolRegistry().getAllTools();
       const lspNavTools = tools.filter(
@@ -542,7 +544,7 @@ describe('LSP E2E integration (P36)', () => {
         lsp: { servers: [], navigationTools: false },
       }),
     );
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const tools = config.getToolRegistry().getAllTools();
     const lspNavTools = tools.filter(
@@ -576,7 +578,7 @@ describe('LSP E2E integration (P36)', () => {
           lsp: { servers: [], navigationTools: true },
         }),
       );
-      await config.initialize();
+      await initializeTestConfig(config);
 
       expect(config.getLspServiceClient()).toBeDefined();
       const toolsBefore = config.getToolRegistry().getAllTools();

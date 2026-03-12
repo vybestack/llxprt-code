@@ -240,7 +240,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Requires restart:** Yes
 
 - **`ui.showStatusInTitle`** (boolean):
-  - **Description:** Show Gemini CLI status and thoughts in the terminal window title
+  - **Description:** Show LLxprt Code status and thoughts in the terminal window title
   - **Default:** `false`
 
 - **`ui.hideTips`** (boolean):

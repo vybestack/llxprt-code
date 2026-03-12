@@ -10,8 +10,13 @@ import {
   Profile,
   ProfileManager,
   ProviderManager,
+  SettingsService,
 } from '@vybestack/llxprt-code-core';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 
 describe('Ephemeral Settings Integration Tests', () => {
   let tempDir: string;
@@ -36,13 +41,14 @@ describe('Ephemeral Settings Integration Tests', () => {
     config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,
+      settingsService: new SettingsService(),
       debugMode: false,
       model: 'gemini-2.0-flash-exp',
       cwd: tempDir,
     });
 
     // Initialize the config
-    await config.initialize();
+    await initializeTestConfig(config);
   });
 
   afterEach(async () => {
@@ -232,11 +238,12 @@ describe('Ephemeral Settings Integration Tests', () => {
       const newConfig = new Config({
         sessionId: 'profile-test-session',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await newConfig.initialize();
+      await initializeTestConfig(newConfig);
 
       // Verify ephemeral settings are not there initially
       expect(newConfig.getEphemeralSetting('context-limit')).toBeUndefined();
@@ -276,11 +283,12 @@ describe('Ephemeral Settings Integration Tests', () => {
       const anotherConfig = new Config({
         sessionId: 'another-session',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await anotherConfig.initialize();
+      await initializeTestConfig(anotherConfig);
 
       // Verify ephemeral settings are not there (not automatically loaded)
       expect(

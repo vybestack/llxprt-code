@@ -130,7 +130,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: GoogleWebFetchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     toolName?: string,
     displayName?: string,
   ) {
@@ -474,7 +474,7 @@ export class GoogleWebFetchTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       GoogleWebFetchTool.Name,
@@ -521,14 +521,14 @@ export class GoogleWebFetchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: GoogleWebFetchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     toolName?: string,
     displayName?: string,
   ): ToolInvocation<GoogleWebFetchToolParams, ToolResult> {
     return new GoogleWebFetchToolInvocation(
       this.config,
       params,
-      messageBus ?? this.messageBus,
+      messageBus,
       toolName ?? this.name,
       displayName ?? this.displayName,
     );

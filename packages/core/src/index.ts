@@ -127,6 +127,7 @@ export {
   limitStringOutput,
   limitFunctionResponsePart,
   toParts,
+  convertToFunctionResponse,
   extractAgentIdFromMetadata,
   createErrorResponse,
 } from './utils/generateContentResponseUtilities.js';
@@ -386,9 +387,11 @@ export {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
-  setProviderRuntimeContextFallback,
 } from './runtime/providerRuntimeContext.js';
-export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
+export type {
+  ProviderRuntimeContext,
+  ProviderRuntimeContextInit,
+} from './runtime/providerRuntimeContext.js';
 
 // @plan PLAN-20251027-STATELESS5.P06
 // Export AgentRuntimeState types and functions for CLI adapter integration

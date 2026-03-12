@@ -124,6 +124,8 @@ describe('CoreToolScheduler cancellation edge cases', () => {
 
     scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -234,6 +236,8 @@ describe('CoreToolScheduler cancellation edge cases', () => {
 
     scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -323,6 +327,8 @@ describe('CoreToolScheduler cancellation edge cases', () => {
 
     scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

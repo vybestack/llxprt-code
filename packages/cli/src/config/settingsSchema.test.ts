@@ -12,6 +12,7 @@ import {
   type SettingDefinition,
   SETTINGS_SCHEMA,
   Settings,
+  getEnableHooks,
 } from './settingsSchema.js';
 
 describe('SettingsSchema', () => {
@@ -327,3 +328,49 @@ describe('SettingsSchema', () => {
     });
   });
 });
+
+describe('getEnableHooks', () => {
+  it('returns false when no settings are provided (both defaults)', () => {
+    expect(getEnableHooks({} as Settings)).toBe(false);
+  });
+
+  it('returns false when only tools.enableHooks is true (hooks.enabled defaults to false)', () => {
+    expect(
+      getEnableHooks({ tools: { enableHooks: true } } as Settings),
+    ).toBe(false);
+  });
+
+  it('returns true when hooks.enabled is true and tools.enableHooks is absent (defaults true)', () => {
+    expect(
+      getEnableHooks({ hooks: { enabled: true } } as Settings),
+    ).toBe(true);
+  });
+
+  it('returns true when both gates are explicitly true', () => {
+    expect(
+      getEnableHooks({
+        tools: { enableHooks: true },
+        hooks: { enabled: true },
+      } as Settings),
+    ).toBe(true);
+  });
+
+  it('returns false when tools.enableHooks is explicitly false', () => {
+    expect(
+      getEnableHooks({
+        tools: { enableHooks: false },
+        hooks: { enabled: true },
+      } as Settings),
+    ).toBe(false);
+  });
+
+  it('returns false when hooks.enabled is explicitly false', () => {
+    expect(
+      getEnableHooks({
+        tools: { enableHooks: true },
+        hooks: { enabled: false },
+      } as Settings),
+    ).toBe(false);
+  });
+});
+

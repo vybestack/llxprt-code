@@ -30,7 +30,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
   // Properties required by OAuthClientProvider, with no-op values
   readonly redirectUrl = '';
   readonly clientMetadata: OAuthClientMetadata = {
-    client_name: 'Gemini CLI (Service Account Impersonation)',
+    client_name: 'LLxprt Code (Service Account Impersonation)',
     redirect_uris: [],
     grant_types: [],
     response_types: [],

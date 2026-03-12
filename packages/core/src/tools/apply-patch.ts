@@ -104,7 +104,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: ApplyPatchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -431,7 +431,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       ApplyPatchTool.Name,
@@ -501,7 +501,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ApplyPatchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<ApplyPatchToolParams, ToolResult> {
     // Normalize parameters: if file_path is provided but not absolute_path, copy it over
     const normalizedParams = { ...params };

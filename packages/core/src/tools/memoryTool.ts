@@ -207,7 +207,7 @@ class MemoryToolInvocation extends BaseToolInvocation<
   private static readonly allowlist: Set<string> = new Set();
   private workingDir?: string;
 
-  constructor(params: SaveMemoryParams, messageBus?: MessageBus) {
+  constructor(params: SaveMemoryParams, messageBus: MessageBus) {
     super(params, messageBus);
   }
 
@@ -401,7 +401,7 @@ export class MemoryTool
 
   protected createInvocation(
     params: SaveMemoryParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     const invocation = new MemoryToolInvocation(params, messageBus);
     if (this.config) {

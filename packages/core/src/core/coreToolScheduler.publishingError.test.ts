@@ -79,6 +79,8 @@ describe('CoreToolScheduler publishing error handling', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);
@@ -173,6 +175,8 @@ describe('CoreToolScheduler publishing error handling', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

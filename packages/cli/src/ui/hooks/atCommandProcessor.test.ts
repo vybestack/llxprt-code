@@ -129,7 +129,7 @@ describe('handleAtCommand', () => {
       getEnableExtensionReloading: () => false,
     } as unknown as Config;
 
-    const registry = new ToolRegistry(mockConfig);
+    const registry = new ToolRegistry(mockConfig, mockConfig.getMessageBus());
     registry.registerTool(new ReadManyFilesTool(mockConfig));
     registry.registerTool(new GlobTool(mockConfig));
     getToolRegistry.mockReturnValue(registry);

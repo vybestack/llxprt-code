@@ -71,8 +71,9 @@ export class DirectWebFetchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: DirectWebFetchToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<DirectWebFetchToolParams, ToolResult> {
-    return new DirectWebFetchToolInvocation(this.config, params);
+    return new DirectWebFetchToolInvocation(this.config, params, messageBus);
   }
 }
 
@@ -83,7 +84,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
   constructor(
     _config: Config,
     params: DirectWebFetchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }

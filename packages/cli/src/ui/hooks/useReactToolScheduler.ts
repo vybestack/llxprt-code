@@ -22,6 +22,7 @@ import {
   DEFAULT_AGENT_ID,
   DebugLogger,
   type AnsiOutput,
+  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import {
@@ -41,6 +42,24 @@ type ExternalSchedulerFactory = (args: {
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
   ): Promise<void> | void;
+};
+
+type SchedulerConfigWithExplicitMessageBus = Config & {
+  getOrCreateScheduler(
+    sessionId: string,
+    callbacks: {
+      outputUpdateHandler?: OutputUpdateHandler;
+      onAllToolCallsComplete?: (calls: CompletedToolCall[]) => Promise<void> | void;
+      onToolCallsUpdate?: ToolCallsUpdateHandler;
+      getPreferredEditor?: () => EditorType | undefined;
+      onEditorClose?: () => void;
+      onEditorOpen?: () => void;
+    },
+    options?: Record<string, unknown>,
+    dependencies?: {
+      messageBus?: MessageBus;
+    },
+  ): Promise<CoreToolScheduler>;
 };
 
 const logger = DebugLogger.getLogger('llxprt:cli:react-tool-scheduler');
@@ -93,6 +112,7 @@ export function useReactToolScheduler(
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void = () => {},
+  runtimeMessageBus?: MessageBus,
 ): readonly [
   TrackedToolCall[],
   ScheduleFn,
@@ -222,37 +242,45 @@ export function useReactToolScheduler(
     let mounted = true;
     let resolved = false;
 
-    const initializeScheduler = async () => {
-      try {
-        const instance = await config.getOrCreateScheduler(sessionId, {
-          outputUpdateHandler: (toolCallId, chunk) => {
-            if (!mounted) {
-              return;
-            }
-            updateToolCallOutput(mainSchedulerId, toolCallId, chunk);
-            setLastToolOutputTime(Date.now());
-          },
-          onAllToolCallsComplete: async (completedToolCalls) => {
-            if (!mounted) {
-              return;
-            }
-            if (completedToolCalls.length > 0) {
-              await onCompleteRef.current(mainSchedulerId, completedToolCalls, {
-                isPrimary: true,
-              });
-            }
-            replaceToolCallsForScheduler(mainSchedulerId, []);
-          },
-          onToolCallsUpdate: (calls) => {
-            if (!mounted) {
-              return;
-            }
-            replaceToolCallsForScheduler(mainSchedulerId, calls);
-          },
-          getPreferredEditor,
-          onEditorClose,
-          onEditorOpen,
-        });
+      const initializeScheduler = async () => {
+        try {
+          const instance = await (
+            config as SchedulerConfigWithExplicitMessageBus
+          ).getOrCreateScheduler(
+            sessionId,
+            {
+              outputUpdateHandler: (toolCallId, chunk) => {
+                if (!mounted) {
+                  return;
+                }
+                updateToolCallOutput(mainSchedulerId, toolCallId, chunk);
+                setLastToolOutputTime(Date.now());
+              },
+              onAllToolCallsComplete: async (completedToolCalls) => {
+                if (!mounted) {
+                  return;
+                }
+                if (completedToolCalls.length > 0) {
+                  await onCompleteRef.current(mainSchedulerId, completedToolCalls, {
+                    isPrimary: true,
+                  });
+                }
+                replaceToolCallsForScheduler(mainSchedulerId, []);
+              },
+              onToolCallsUpdate: (calls) => {
+                if (!mounted) {
+                  return;
+                }
+                replaceToolCallsForScheduler(mainSchedulerId, calls);
+              },
+              getPreferredEditor,
+              onEditorClose,
+              onEditorOpen,
+            },
+            undefined,
+            { messageBus: runtimeMessageBus },
+          );
+
 
         resolved = true;
         if (!mounted) {
@@ -303,6 +331,8 @@ export function useReactToolScheduler(
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
+    runtimeMessageBus,
+
   ]);
 
   const createExternalScheduler = useCallback(
@@ -320,7 +350,9 @@ export function useReactToolScheduler(
 
       // Use the shared scheduler instance for this session to avoid multiple
       // MessageBus subscriptions and "unknown correlationId" errors
-      const instance = await schedulerConfig.getOrCreateScheduler(
+      const instance = await (
+        schedulerConfig as SchedulerConfigWithExplicitMessageBus
+      ).getOrCreateScheduler(
         schedulerSessionId,
         {
           // Only update the local UI state - don't call outputUpdateHandler as well,
@@ -348,6 +380,8 @@ export function useReactToolScheduler(
           onEditorClose,
           onEditorOpen,
         },
+        undefined,
+        { messageBus: runtimeMessageBus },
       );
 
       return {
@@ -364,6 +398,8 @@ export function useReactToolScheduler(
       replaceToolCallsForScheduler,
       updateToolCallOutput,
       onEditorOpen,
+      runtimeMessageBus,
+
     ],
   ) as unknown as ExternalSchedulerFactory;
 

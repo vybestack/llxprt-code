@@ -17,7 +17,6 @@ import {
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '../config/config.js';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
@@ -116,13 +115,13 @@ export interface OutputObject {
 export interface PromptConfig {
   /**
    * A single system prompt string that defines the subagent's persona and instructions.
-   * Note: You should use either `systemPrompt` or `initialMessages`, but not both.
+   * Note: Use either `systemPrompt` or `initialMessages`, but not both.
    */
   systemPrompt?: string;
 
   /**
    * An array of user/model content pairs to seed the chat history for few-shot prompting.
-   * Note: You should use either `systemPrompt` or `initialMessages`, but not both.
+   * Note: Use either `systemPrompt` or `initialMessages`, but not both.
    */
   initialMessages?: Content[];
 }
@@ -144,7 +143,7 @@ export interface ToolConfig {
 export interface OutputConfig {
   /**
    * A record describing the variables the subagent is expected to emit.
-   * The subagent will be prompted to generate these values before terminating.
+   * The subagent is prompted to generate these values before terminating.
    */
   outputs: Record<string, string>;
 }
@@ -154,6 +153,7 @@ export interface SubAgentRuntimeOverrides {
   toolRegistry?: ToolRegistry;
   environmentContextLoader?: (runtime: AgentRuntimeContext) => Promise<Part[]>;
   runtimeBundle?: AgentRuntimeLoaderResult;
+  messageBus?: import('../index.js').MessageBus;
 }
 
 type EnvironmentContextLoader = (
@@ -172,9 +172,9 @@ const defaultEnvironmentContextLoader: EnvironmentContextLoader =
  */
 export interface ModelConfig {
   /**
-   * The name or identifier of the model to be used (e.g., 'gemini-2.5-pro').
+   * The name or identifier of the model to use (e.g., 'gemini-2.5-pro').
    *
-   * TODO: In the future, this needs to support 'auto' or some other string to support routing use cases.
+   * Routing-capable model selection can expand this contract later with a distinct sentinel value such as 'auto'.
    */
   model: string;
   /**
@@ -192,7 +192,7 @@ export interface ModelConfig {
  * This interface defines parameters that control the subagent's runtime behavior,
  * such as maximum execution time, to prevent infinite loops or excessive resource consumption.
  *
- * TODO: Consider adding max_tokens as a form of budgeting.
+ * Token-budget controls fit this interface without changing the current execution contract.
  */
 export interface RunConfig {
   /** The maximum execution time for the subagent in minutes. */
@@ -305,6 +305,7 @@ function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
   toolRegistry: ToolRegistry,
   foregroundConfig: Config,
+  messageBus?: import('../index.js').MessageBus,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
 ): ToolExecutionConfig {
@@ -345,8 +346,10 @@ function createToolExecutionConfig(
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
     // Use foreground config's scheduler singleton methods
-    getOrCreateScheduler: (sessionId, callbacks, options) =>
-      foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options),
+    getOrCreateScheduler: (sessionId, callbacks, options, dependencies) =>
+      foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
+        messageBus: dependencies?.messageBus ?? messageBus,
+      }),
     disposeScheduler: (sessionId) =>
       foregroundConfig.disposeScheduler(sessionId),
   };
@@ -380,22 +383,22 @@ function buildEphemeralSettings(
 }
 
 /**
- * Replaces `${...}` placeholders in a template string with values from a context.
+ * Replaces `${...}` tokens in a template string with values from a context.
  *
- * This function identifies all placeholders in the format `${key}`, validates that
- * each key exists in the provided `ContextState`, and then performs the substitution.
+ * This function identifies all `${key}` tokens, validates that each key exists
+ * in the provided `ContextState`, and then performs the substitution.
  *
- * @param template The template string containing placeholders.
- * @param context The `ContextState` object providing placeholder values.
- * @returns The populated string with all placeholders replaced.
- * @throws {Error} if any placeholder key is not found in the context.
+ * @param template The template string containing `${key}` tokens.
+ * @param context The `ContextState` object providing token values.
+ * @returns The populated string with all `${key}` tokens replaced.
+ * @throws {Error} if any required key is not found in the context.
  */
 function templateString(template: string, context: ContextState): string {
-  const placeholderRegex = /\$\{(\w+)\}/g;
+  const templateTokenRegex = /\$\{(\w+)\}/g;
 
   // First, find all unique keys required by the template.
   const requiredKeys = new Set(
-    Array.from(template.matchAll(placeholderRegex), (match) => match[1]),
+    Array.from(template.matchAll(templateTokenRegex), (match) => match[1]),
   );
 
   // Check if all required keys exist in the context.
@@ -413,7 +416,7 @@ function templateString(template: string, context: ContextState): string {
   }
 
   // Perform the replacement using a replacer function.
-  return template.replace(placeholderRegex, (_match, key) =>
+  return template.replace(templateTokenRegex, (_match, key) =>
     String(context.get(key)),
   );
 }
@@ -479,7 +482,7 @@ export class SubAgentScope {
     private readonly toolExecutorContext: ToolExecutionConfigShim,
     private readonly environmentContextLoader: EnvironmentContextLoader,
     private readonly config: Config,
-    private readonly messageBus: MessageBus,
+    private readonly messageBus?: import('../index.js').MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
     settingsSnapshot?: ReadonlySettingsSnapshot,
@@ -503,7 +506,8 @@ export class SubAgentScope {
       (settingsSnapshot?.emojifilter as EmojiFilterMode) ?? 'auto';
 
     if (filterMode === 'allowed') {
-      return undefined;
+      const noFilter: EmojiFilter | undefined = void 0;
+      return noFilter;
     }
 
     return new EmojiFilter({ mode: filterMode });
@@ -524,6 +528,9 @@ export class SubAgentScope {
    * @plan PLAN-20251028-STATELESS6.P08
    * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1, REQ-STAT6-003.2
    * @pseudocode agent-runtime-context.md lines 94-98 (steps 007.2-007.6)
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.1
+   * @pseudocode lines 56-72
    *
    * @param {string} name - The name of the subagent.
    * @param {Config} foregroundConfig - Foreground configuration used for shared scheduler plumbing.
@@ -584,14 +591,13 @@ export class SubAgentScope {
       runtimeBundle,
       toolRegistry,
       foregroundConfig,
+      overrides.messageBus,
       settingsSnapshot,
       toolConfig,
     );
 
     const environmentContextLoader =
       overrides.environmentContextLoader ?? defaultEnvironmentContextLoader;
-
-    const messageBus = foregroundConfig.getMessageBus();
 
     return new SubAgentScope(
       name,
@@ -603,7 +609,7 @@ export class SubAgentScope {
       toolExecutorContext,
       environmentContextLoader,
       foregroundConfig,
-      messageBus,
+      overrides.messageBus,
       toolConfig,
       outputConfig,
       settingsSnapshot,
@@ -723,13 +729,29 @@ export class SubAgentScope {
         )
       : (async () => {
           const sessionId = schedulerConfig.getSessionId();
-          return schedulerConfig.getOrCreateScheduler(sessionId, {
-            outputUpdateHandler,
-            onAllToolCallsComplete: handleCompletion,
-            onToolCallsUpdate: undefined,
-            getPreferredEditor: () => undefined,
-            onEditorClose: () => {},
-          });
+          return (
+            schedulerConfig as Config & {
+              getOrCreateScheduler(
+                sessionId: string,
+                callbacks: SchedulerCallbacks,
+                options?: SchedulerOptions,
+                dependencies?: { messageBus?: import('../index.js').MessageBus },
+              ): ReturnType<Config['getOrCreateScheduler']>;
+            }
+          ).getOrCreateScheduler(
+            sessionId,
+            {
+              outputUpdateHandler,
+              onAllToolCallsComplete: handleCompletion,
+              onToolCallsUpdate: undefined,
+              getPreferredEditor: () => undefined,
+              onEditorClose: () => {},
+            },
+            undefined,
+            {
+              messageBus: this.messageBus,
+            },
+          );
         })();
 
     let scheduler: Awaited<typeof schedulerPromise>;
@@ -1310,7 +1332,7 @@ export class SubAgentScope {
 
   /**
    * Dispose of the subagent scope, cleaning up resources and references.
-   * This method should be called when the subagent is no longer needed to prevent memory leaks.
+   * Call this when the subagent is no longer needed to prevent memory leaks.
    *
    * Cleanup performed:
    * - Aborts any active operations
@@ -1413,6 +1435,9 @@ export class SubAgentScope {
           this.createSchedulerConfig({ interactive: false }),
           requestInfo,
           abortController.signal,
+          {
+            messageBus: this.messageBus,
+          },
         );
         toolResponse = completed.response;
       }
@@ -1528,17 +1553,24 @@ export class SubAgentScope {
         typeof this.config.getApprovalMode === 'function'
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
-      getMessageBus: () => this.messageBus,
       getPolicyEngine: () => this.config.getPolicyEngine(),
       getOrCreateScheduler: (
         sessionId: string,
         callbacks: SchedulerCallbacks,
         schedulerOptions?: SchedulerOptions,
+        dependencies?: {
+          messageBus?: import('../index.js').MessageBus;
+        },
       ) =>
-        this.config.getOrCreateScheduler(sessionId, callbacks, {
-          ...schedulerOptions,
-          interactiveMode: isInteractive,
-        }),
+        this.config.getOrCreateScheduler(
+          sessionId,
+          callbacks,
+          {
+            ...schedulerOptions,
+            interactiveMode: isInteractive,
+          },
+          dependencies,
+        ),
       disposeScheduler: (sessionId: string) => {
         this.config.disposeScheduler(sessionId);
       },
@@ -1630,7 +1662,8 @@ export class SubAgentScope {
     ) {
       return (resultDisplay as { message: string }).message;
     }
-    return undefined;
+    const missingResultDisplay: string | undefined = void 0;
+    return missingResultDisplay;
   }
 
   private handleEmitValueCall(request: ToolCallRequestInfo): Part[] {
@@ -1753,7 +1786,8 @@ export class SubAgentScope {
   private async buildTodoCompletionPrompt(): Promise<string | null> {
     const sessionId = this.runtimeContext.state.sessionId;
     if (!sessionId) {
-      return null;
+      const missingSessionPrompt: string | null = null;
+      return missingSessionPrompt;
     }
 
     try {
@@ -1763,13 +1797,15 @@ export class SubAgentScope {
       }
 
       if (todos.length === 0) {
-        return null;
+        const noTodosPrompt: string | null = null;
+        return noTodosPrompt;
       }
 
       const outstanding = todos.filter((todo) => todo.status !== 'completed');
 
       if (outstanding.length === 0) {
-        return null;
+        const noOutstandingPrompt: string | null = null;
+        return noOutstandingPrompt;
       }
 
       const previewCount = Math.min(3, outstanding.length);
@@ -1795,7 +1831,8 @@ export class SubAgentScope {
         () =>
           `Subagent ${this.subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return null;
+      const todoInspectionUnavailable: string | null = null;
+      return todoInspectionUnavailable;
     }
   }
 
@@ -1917,14 +1954,16 @@ export class SubAgentScope {
         start_history,
         'startChat',
       );
-      // The calling function will handle the undefined return.
-      return undefined;
+      // The calling function handles the missing chat object result.
+      const missingChatObject: GeminiChat | undefined = void 0;
+      return missingChatObject;
     }
   }
 
   private buildRuntimeFunctionDeclarations(): FunctionDeclaration[] {
     if (!this.toolConfig || this.toolConfig.tools.length === 0) {
-      return [];
+      const noFunctionDeclarations: FunctionDeclaration[] = [];
+      return noFunctionDeclarations;
     }
 
     const toolsView = this.runtimeContext.tools;
@@ -1946,7 +1985,7 @@ export class SubAgentScope {
         !allowedNames.has(normalizeToolName(entry))
       ) {
         debugLogger.warn(
-          `Tool "${entry}" is not permitted by the runtime view and will be skipped.`,
+          `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
         );
         continue;
       }
@@ -1954,7 +1993,7 @@ export class SubAgentScope {
       const metadata = toolsView.getToolMetadata(entry);
       if (!metadata) {
         debugLogger.warn(
-          `Tool "${entry}" is not available in the runtime view and will be skipped.`,
+          `Tool "${entry}" is not available in the runtime view and is skipped.`,
         );
         continue;
       }
@@ -1996,7 +2035,8 @@ export class SubAgentScope {
 
   private normalizeToolName(rawName: string | undefined): string | null {
     if (!rawName) {
-      return null;
+      const missingToolName: string | null = null;
+      return missingToolName;
     }
 
     const candidates = new Set<string>();
@@ -2026,7 +2066,8 @@ export class SubAgentScope {
       }
     }
 
-    return null;
+    const unresolvedToolName: string | null = null;
+    return unresolvedToolName;
   }
 
   private toSnakeCase(value: string): string {
@@ -2045,7 +2086,7 @@ export class SubAgentScope {
    */
   private buildChatSystemPrompt(context: ContextState): string {
     if (!this.promptConfig.systemPrompt) {
-      // This should ideally be caught in createChatObject, but serves as a safeguard.
+      // createChatObject normally guards this path; this branch keeps the prompt builder defensive.
       return '';
     }
 

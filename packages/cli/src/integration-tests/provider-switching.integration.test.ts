@@ -11,8 +11,13 @@ import {
   ProviderManager,
   SettingsService,
   createProviderRuntimeContext,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import {
   setCliRuntimeContext,
@@ -47,7 +52,7 @@ describe('Runtime Provider Switching Integration', () => {
       cwd: tempDir,
       model: 'test-model',
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     settingsService = config.getSettingsService();
     const runtime = createProviderRuntimeContext({
@@ -55,11 +60,19 @@ describe('Runtime Provider Switching Integration', () => {
       config,
       metadata: { source: 'provider-switch-test' },
     });
+    const runtimeMessageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
     const { manager, oauthManager } = createProviderManager(runtime, {
       allowBrowserEnvironment: true,
+      config,
+      runtimeMessageBus,
     });
     providerManager = manager;
-    registerCliProviderInfrastructure(providerManager, oauthManager);
+    registerCliProviderInfrastructure(providerManager, oauthManager, {
+      messageBus: runtimeMessageBus,
+    });
     setCliRuntimeContext(settingsService, config, {
       metadata: { source: 'provider-switch-test' },
     });

@@ -14,6 +14,7 @@ import {
   type ToolLocation,
   type ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { type PartUnion } from '@google/genai';
 import {
@@ -125,8 +126,9 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: ReadLineRangeToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -360,7 +362,8 @@ If git status cannot be read, the tool will still return file content and includ
 
   protected createInvocation(
     params: ReadLineRangeToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<ReadLineRangeToolParams, ToolResult> {
-    return new ReadLineRangeToolInvocation(this.config, params);
+    return new ReadLineRangeToolInvocation(this.config, params, messageBus);
   }
 }

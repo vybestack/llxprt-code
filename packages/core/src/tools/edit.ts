@@ -233,7 +233,7 @@ class EditToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: EditToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     toolName?: string,
     displayName?: string,
   ) {
@@ -839,7 +839,7 @@ export class EditTool
   static readonly Name = EDIT_TOOL_NAME;
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       EditTool.Name,
@@ -949,7 +949,7 @@ Expectation for required parameters:
 
   protected createInvocation(
     params: EditToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
     toolName?: string,
     displayName?: string,
   ): ToolInvocation<EditToolParams, ToolResult> {
@@ -961,7 +961,7 @@ Expectation for required parameters:
     return new EditToolInvocation(
       this.config,
       normalizedParams,
-      messageBus ?? this.messageBus,
+      messageBus,
       toolName ?? this.name,
       displayName ?? this.displayName,
     );

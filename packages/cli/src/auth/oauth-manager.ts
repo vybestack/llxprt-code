@@ -18,6 +18,11 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 
+export interface OAuthManagerRuntimeMessageBusDeps {
+  messageBus?: MessageBus;
+  config?: Config;
+}
+
 const logger = new DebugLogger('llxprt:oauth:manager');
 
 /** Maximum consecutive proactive renewal failures before stopping retries. */
@@ -217,19 +222,29 @@ export class OAuthManager {
   private proactiveRenewalFailures: Map<string, number>;
   private proactiveRenewalInFlight: Set<string>;
   private proactiveRenewalTokens: Map<string, string>;
-  // Getter function for message bus (lazy resolution for TUI prompts)
-  private getMessageBus?: () => MessageBus | undefined;
-  // Getter function for config (lazy resolution for bucket failover handler)
-  private getConfig?: () => Config | undefined;
+  private runtimeMessageBus?: MessageBus;
+  private readonly config?: Config;
   // Session-scoped flag: user dismissed the BucketAuthConfirmation dialog.
   // When true, subsequent auth attempts skip the dialog and proceed directly
   // (i.e. "don't bother me again" rather than "block auth").
   private userDismissedAuthPrompt = false;
 
-  constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P06
+   * @requirement REQ-D01-003.3
+   * @requirement REQ-D01-004.3
+   * @pseudocode lines 73-82
+   */
+  constructor(
+    tokenStore: TokenStore,
+    settings?: LoadedSettings,
+    runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
+  ) {
     this.providers = new Map();
     this.tokenStore = tokenStore;
     this.settings = settings;
+    this.runtimeMessageBus = runtimeDeps?.messageBus;
+    this.config = runtimeDeps?.config;
     this.inMemoryOAuthState = new Map();
     this.sessionBuckets = new Map();
     this.bucketResolutionLocks = new Map();
@@ -266,22 +281,19 @@ export class OAuthManager {
   }
 
   /**
-   * Set the message bus getter for interactive TUI prompts
-   * Uses a getter function to enable lazy resolution after TUI is initialized
-   * @param getter - Function that returns the message bus instance from Config
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
    */
-  setMessageBus(getter: () => MessageBus | undefined): void {
-    this.getMessageBus = getter;
-  }
-
-  /**
-   * Set the config getter for bucket failover handler setup
-   * Uses a getter function to enable lazy resolution
-   * @plan PLAN-20251213issue490
-   * @param getter - Function that returns the Config instance
-   */
-  setConfigGetter(getter: () => Config | undefined): void {
-    this.getConfig = getter;
+  private requireRuntimeMessageBus(): MessageBus {
+    const messageBus = this.runtimeMessageBus;
+    if (!messageBus) {
+      throw new Error(
+        'OAuthManager requires a runtime MessageBus from the session/runtime composition root.',
+      );
+    }
+    return messageBus;
   }
 
   /**
@@ -962,7 +974,7 @@ export class OAuthManager {
 
         profileBuckets = await this.getProfileBuckets(providerName);
 
-        const config = this.getConfig?.();
+        const config = this.config;
         // @fix issue1029 - Enhanced debug logging for failover handler setup
         logger.debug(
           () =>
@@ -1000,8 +1012,9 @@ export class OAuthManager {
         } else if (profileBuckets.length > 1 && !config) {
           // @fix issue1029 - This is the bug! We have multiple buckets but no config to set handler on
           logger.warn(
-            `[issue1029] CRITICAL: Profile has ${profileBuckets.length} buckets but no Config available to set failover handler! ` +
-              `Bucket failover will NOT work. Ensure OAuthManager.setConfigGetter is called with the active Config instance.`,
+              `[issue1029] CRITICAL: Profile has ${profileBuckets.length} buckets but no Config available to set failover handler! ` +
+              `Bucket failover will NOT work. Ensure OAuthManager receives the active Config instance from the composition root.`,
+
           );
         }
 
@@ -1990,7 +2003,7 @@ export class OAuthManager {
 
       // Fetch usage info for this bucket
       try {
-        const config = this.getConfig?.();
+        const config = this.config;
         const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
         const codexBaseUrl =
           typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
@@ -2220,69 +2233,59 @@ export class OAuthManager {
       // Issue 913: When prompt mode is enabled, wait indefinitely for user approval
       const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
 
-      // Try interactive TUI prompt if message bus getter is available
-      // Use lazy resolution to get message bus after TUI is initialized
-      const messageBus = this.getMessageBus?.();
-      if (messageBus) {
-        try {
-          logger.debug('Requesting bucket auth confirmation via message bus', {
-            provider,
-            bucket,
-            promptMode: showPrompt,
-          });
+      const messageBus = this.requireRuntimeMessageBus();
+      logger.debug('Requesting bucket auth confirmation via message bus', {
+        provider,
+        bucket,
+        promptMode: showPrompt,
+      });
 
-          // Request confirmation via message bus
-          const confirmPromise = messageBus.requestBucketAuthConfirmation(
-            provider,
-            bucket,
-            buckets.indexOf(bucket) + 1,
-            buckets.length,
-          );
+      // Request confirmation via message bus
+      const confirmPromise = messageBus.requestBucketAuthConfirmation(
+        provider,
+        bucket,
+        buckets.indexOf(bucket) + 1,
+        buckets.length,
+      );
 
-          // Issue 913 FIX: When prompt mode is enabled, wait indefinitely for user approval
-          // The MessageBus has its own 5-minute timeout as an emergency safeguard
-          if (showPrompt) {
-            logger.debug(
-              'Prompt mode enabled - waiting indefinitely for user approval',
-            );
-            const result = await confirmPromise;
-            logger.debug('User responded to bucket auth confirmation', {
-              result,
-            });
-            if (!result) {
-              this.userDismissedAuthPrompt = true;
-            }
-            return result;
-          }
-
-          // Prompt mode disabled: Race with a 3-second timeout for backward compatibility
-          // If TUI is ready, it will respond; otherwise we fall back to delay
-          const timeoutPromise = new Promise<'timeout'>((resolve) =>
-            setTimeout(() => resolve('timeout'), 3000),
-          );
-
-          const result = await Promise.race([confirmPromise, timeoutPromise]);
-
-          if (result !== 'timeout') {
-            // TUI responded - return the confirmation result
-            logger.debug('TUI responded to bucket auth confirmation', {
-              result,
-            });
-            if (!result) {
-              this.userDismissedAuthPrompt = true;
-            }
-            return result;
-          }
-          // TUI didn't respond in time - fall back to delay
-          logger.debug('TUI not ready, falling back to delay-based prompt');
-        } catch (error) {
-          logger.debug('Error using message bus, falling back to delay', {
-            error,
-          });
+      // Issue 913 FIX: When prompt mode is enabled, wait indefinitely for user approval
+      // The MessageBus has its own 5-minute timeout as an emergency safeguard
+      if (showPrompt) {
+        logger.debug(
+          'Prompt mode enabled - waiting indefinitely for user approval',
+        );
+        const result = await confirmPromise;
+        logger.debug('User responded to bucket auth confirmation', {
+          result,
+        });
+        if (!result) {
+          this.userDismissedAuthPrompt = true;
         }
-      } else {
-        logger.debug('No message bus available');
+        return result;
       }
+
+      // Prompt mode disabled: Race with a 3-second timeout for backward compatibility
+      // If TUI is ready, it will respond; otherwise we fall back to delay
+      const timeoutPromise = new Promise<'timeout'>((resolve) =>
+        setTimeout(() => resolve('timeout'), 3000),
+      );
+
+      const result = await Promise.race([confirmPromise, timeoutPromise]);
+
+      if (result !== 'timeout') {
+        // TUI responded - return the confirmation result
+        logger.debug('TUI responded to bucket auth confirmation', {
+          result,
+        });
+        if (!result) {
+          this.userDismissedAuthPrompt = true;
+        }
+        return result;
+      }
+      // TUI didn't respond in time - fall back to delay
+      logger.debug('TUI not ready, falling back to delay-based prompt');
+
+
 
       // TUI not available or timed out - try stdin if TTY and prompt enabled
       logger.debug('Checking TTY prompt fallback', {
@@ -2439,7 +2442,7 @@ export class OAuthManager {
     // Set up bucket failover handler if we have multiple buckets and config is available
     // @plan PLAN-20251213issue490
     if (buckets.length > 1) {
-      const config = this.getConfig?.();
+      const config = this.config;
       if (config) {
         const handler = new BucketFailoverHandlerImpl(
           buckets,

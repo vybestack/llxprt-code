@@ -52,7 +52,16 @@ export async function handleUpdate(args: UpdateArgs) {
         (extension) => extension.name === args.name,
       );
       if (!extension) {
-        debugLogger.log(`Extension "${args.name}" not found.`);
+        const installed = extensions.map((e) => e.name).filter(Boolean);
+        if (installed.length > 0) {
+          debugLogger.log(
+            `Extension "${args.name}" not found. Installed extensions: ${installed.join(', ')}`,
+          );
+        } else {
+          debugLogger.log(
+            `Extension "${args.name}" not found. No extensions are installed.`,
+          );
+        }
         return;
       }
       if (!extension.installMetadata) {
@@ -69,7 +78,6 @@ export async function handleUpdate(args: UpdateArgs) {
         debugLogger.log(`Extension "${args.name}" is already up to date.`);
         return;
       }
-      // TODO(chrstnb): we should list extensions if the requested extension is not installed.
       const updatedExtensionInfo = (await updateExtension(
         extension,
         workingDir,

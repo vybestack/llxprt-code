@@ -150,7 +150,7 @@ function formatListMessage(
   const filtered = tools.filter((tool) => !('serverName' in tool));
 
   if (filtered.length === 0) {
-    return 'Available Gemini CLI tools:\n\n  No tools available\n';
+    return 'Available LLxprt Code tools:\n\n  No tools available\n';
   }
 
   const lines = filtered.map((tool) =>
@@ -160,7 +160,7 @@ function formatListMessage(
   const disabledCount = disabledSet.size;
   const summary = `\nDisabled tools: ${disabledCount}`;
 
-  return `Available Gemini CLI tools:\n\n${lines.join('\n')}\n${summary}`;
+  return `Available LLxprt Code tools:\n\n${lines.join('\n')}\n${summary}`;
 }
 
 function resolveToolByName(
@@ -189,7 +189,7 @@ function resolveToolByName(
 
 export const toolsCommand: SlashCommand = {
   name: 'tools',
-  description: 'List, enable, or disable Gemini CLI tools',
+  description: 'List, enable, or disable LLxprt Code tools',
   kind: CommandKind.BUILT_IN,
   schema: toolsSchema,
   action: async (context: CommandContext, args = ''): Promise<void> => {
