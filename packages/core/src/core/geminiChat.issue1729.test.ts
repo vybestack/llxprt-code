@@ -199,5 +199,49 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       const response = geminiChat.convertIContentToResponse(icontent);
       expect(response.text).toBe('Hello world');
     });
+
+    it('should concatenate multiple visible text blocks', () => {
+      const thinkingBlock: ThinkingBlock = {
+        type: 'thinking',
+        thought: 'Let me think...',
+      };
+
+      const icontent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          thinkingBlock,
+          { type: 'text', text: 'First part. ' },
+          { type: 'text', text: 'Second part.' },
+        ],
+        metadata: {},
+      };
+
+      const response = geminiChat.convertIContentToResponse(icontent);
+      expect(response.text).toBe('First part. Second part.');
+    });
+  });
+
+  describe('stopReason mapping completeness', () => {
+    it('should map model_context_window_exceeded to MAX_TOKENS', () => {
+      const icontent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'truncated' }],
+        metadata: { stopReason: 'model_context_window_exceeded' },
+      };
+
+      const response = geminiChat.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
+    });
+
+    it('should not set finishReason for unknown stop reasons', () => {
+      const icontent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'text' }],
+        metadata: { stopReason: 'some_future_reason' },
+      };
+
+      const response = geminiChat.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBeUndefined();
+    });
   });
 });

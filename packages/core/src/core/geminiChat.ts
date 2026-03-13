@@ -3131,7 +3131,12 @@ export class GeminiChat {
       ],
       // These are required properties that must be present
       get text() {
-        return parts.find((p) => 'text' in p && !isThoughtPart(p))?.text || '';
+        return (
+          parts
+            .filter((p) => 'text' in p && !isThoughtPart(p))
+            .map((p) => p.text)
+            .join('') || ''
+        );
       },
       functionCalls: parts
         .filter((p) => 'functionCall' in p)
@@ -3166,22 +3171,19 @@ export class GeminiChat {
     }
 
     if (input.metadata?.stopReason && response.candidates?.[0]) {
-      const stopReason = input.metadata.stopReason;
-      let finishReason: FinishReason;
-
-      if (stopReason === 'end_turn') {
-        finishReason = FinishReason.STOP;
-      } else if (stopReason === 'max_tokens') {
-        finishReason = FinishReason.MAX_TOKENS;
-      } else if (stopReason === 'stop_sequence') {
-        finishReason = FinishReason.STOP;
-      } else if (stopReason === 'tool_use') {
-        finishReason = FinishReason.STOP;
-      } else {
-        finishReason = FinishReason.STOP;
+      const finishReasonByStopReason: Record<string, FinishReason> = {
+        end_turn: FinishReason.STOP,
+        max_tokens: FinishReason.MAX_TOKENS,
+        stop_sequence: FinishReason.STOP,
+        tool_use: FinishReason.STOP,
+        pause_turn: FinishReason.STOP,
+        refusal: FinishReason.STOP,
+        model_context_window_exceeded: FinishReason.MAX_TOKENS,
+      };
+      const finishReason = finishReasonByStopReason[input.metadata.stopReason];
+      if (finishReason) {
+        response.candidates[0].finishReason = finishReason;
       }
-
-      response.candidates[0].finishReason = finishReason;
     }
 
     return response;
