@@ -446,6 +446,7 @@ export async function main() {
    */
   const runtimeSettingsService = new SettingsService();
   setCliRuntimeContext(runtimeSettingsService, undefined, {
+    runtimeId: 'cli.runtime.bootstrap',
     metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
   });
 
@@ -470,6 +471,7 @@ export async function main() {
   );
   const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
+    runtimeId: 'cli.runtime.bootstrap',
     metadata: { source: 'cli-bootstrap', stage: 'post-config' },
     profileManager,
   });
