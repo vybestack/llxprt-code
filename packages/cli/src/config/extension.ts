@@ -10,6 +10,8 @@ import {
   Storage,
   getErrorMessage,
   debugLogger,
+  type SkillDefinition,
+  loadSkillsFromDirSync,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -332,6 +334,24 @@ export function loadExtension(
     //   }
     // }
 
+    const hydrationContext = {
+      extensionPath: effectiveExtensionPath,
+      workspacePath: workspaceDir,
+      '/': path.sep,
+      pathSeparator: path.sep,
+    };
+
+    const rawSkills = loadSkillsFromDirSync(
+      path.join(effectiveExtensionPath, 'skills'),
+    );
+    const skills: SkillDefinition[] = rawSkills.map(
+      (skill) =>
+        recursivelyHydrateStrings(
+          skill as unknown as JsonObject,
+          hydrationContext,
+        ) as unknown as SkillDefinition,
+    );
+
     return {
       name: config.name,
       version: config.version,
@@ -340,6 +360,7 @@ export function loadExtension(
       installMetadata,
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
+      skills,
       isActive: true, // Barring any other signals extensions should be considered Active.
       settings: config.settings as Array<Record<string, unknown>> | undefined,
       resolvedSettings: resolvedSettings as unknown as Array<

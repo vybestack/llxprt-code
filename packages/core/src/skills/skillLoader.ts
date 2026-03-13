@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import { glob } from 'glob';
 import yaml from 'js-yaml';
@@ -110,4 +111,69 @@ export async function loadSkillFromFile(
     debugLogger.log(`Error parsing skill file ${filePath}:`, error);
     return null;
   }
+}
+
+function loadSkillFromFileSync(filePath: string): SkillDefinition | null {
+  try {
+    const content = fsSync.readFileSync(filePath, 'utf-8');
+    const match = content.match(FRONTMATTER_REGEX);
+    if (!match) {
+      return null;
+    }
+
+    const frontmatter = yaml.load(match[1]);
+    if (!frontmatter || typeof frontmatter !== 'object') {
+      return null;
+    }
+
+    const { name, description } = frontmatter as Record<string, unknown>;
+    if (typeof name !== 'string' || typeof description !== 'string') {
+      return null;
+    }
+
+    return {
+      name,
+      description,
+      location: filePath,
+      body: match[2].trim(),
+    };
+  } catch (error) {
+    debugLogger.log(`Error parsing skill file ${filePath}:`, error);
+    return null;
+  }
+}
+
+export function loadSkillsFromDirSync(dir: string): SkillDefinition[] {
+  const discoveredSkills: SkillDefinition[] = [];
+
+  try {
+    const absoluteSearchPath = path.resolve(dir);
+    if (
+      !fsSync.existsSync(absoluteSearchPath) ||
+      !fsSync.statSync(absoluteSearchPath).isDirectory()
+    ) {
+      return [];
+    }
+
+    const entries = fsSync.readdirSync(absoluteSearchPath, {
+      withFileTypes: true,
+    });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const skillFile = path.join(absoluteSearchPath, entry.name, 'SKILL.md');
+      if (!fsSync.existsSync(skillFile)) {
+        continue;
+      }
+      const skill = loadSkillFromFileSync(skillFile);
+      if (skill) {
+        discoveredSkills.push(skill);
+      }
+    }
+  } catch (error) {
+    debugLogger.log(`Error discovering skills in ${dir}:`, error);
+  }
+
+  return discoveredSkills;
 }
