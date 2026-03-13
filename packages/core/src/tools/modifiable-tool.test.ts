@@ -14,6 +14,7 @@ import {
   isModifiableDeclarativeTool,
 } from './modifiable-tool.js';
 import { DEFAULT_GUI_EDITOR } from '../utils/editor.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -326,8 +327,9 @@ describe('modifyWithEditor', () => {
   });
 
   it('should handle temp file cleanup errors gracefully', async () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
+    const logger = DebugLogger.getLogger('llxprt:tools:modifiable-tool');
+    const debugErrorSpy = vi
+      .spyOn(logger, 'error')
       .mockImplementation(() => {});
     vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {
       throw new Error('Failed to delete file');
@@ -343,15 +345,15 @@ describe('modifyWithEditor', () => {
       abortSignal,
     );
 
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(3);
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expect(debugErrorSpy).toHaveBeenCalledTimes(3);
+    expect(debugErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Error deleting temp diff file:'),
     );
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expect(debugErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Error deleting temp diff directory:'),
     );
 
-    consoleErrorSpy.mockRestore();
+    debugErrorSpy.mockRestore();
   });
 
   it('should create temp files with correct naming with extension', async () => {

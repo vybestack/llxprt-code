@@ -709,7 +709,7 @@ describe('Server Config (config.ts)', () => {
       ...baseParams,
       jitContextEnabled: true,
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const contextManager = config.getContextManager();
     expect(contextManager).toBeDefined();
@@ -734,7 +734,7 @@ describe('Server Config (config.ts)', () => {
       ...baseParams,
       jitContextEnabled: true,
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const contextManager = config.getContextManager();
     vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue('');

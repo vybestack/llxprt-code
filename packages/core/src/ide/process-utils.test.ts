@@ -23,7 +23,9 @@ vi.mock('node:util', () => ({
 vi.mock('node:os', () => ({
   default: {
     platform: vi.fn(),
+    homedir: vi.fn(),
   },
+  homedir: vi.fn(),
 }));
 
 describe('getIdeProcessInfo', () => {

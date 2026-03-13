@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -19,6 +18,7 @@ import open from 'open';
 import { FatalAuthenticationError } from '../utils/errors.js';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const httpServerState: {
   handler?: (req: IncomingMessage, res: ServerResponse) => unknown;
@@ -80,8 +80,9 @@ describe('OAuth2', () => {
       }),
     );
 
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'error').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'log').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
 
     // Mock fs to prevent actual file operations
     (fs.stat as Mock).mockRejectedValue(new Error('File does not exist'));
@@ -173,7 +174,7 @@ describe('OAuth2', () => {
       }),
     );
 
-    expect(console.log).toHaveBeenCalledWith(
+    expect(debugLogger.log).toHaveBeenCalledWith(
       expect.stringContaining('Code Assist login required.'),
     );
     expect(mockReadline.question).toHaveBeenCalledWith(
@@ -337,7 +338,7 @@ describe('OAuth2', () => {
       'Failed to open browser: Browser failed to open',
     );
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(debugLogger.error).toHaveBeenCalledWith(
       'An unexpected error occurred while trying to open the browser:',
       'Browser failed to open',
       expect.stringContaining(
@@ -415,7 +416,7 @@ describe('OAuth2', () => {
       codeVerifier: mockCodeVerifier.codeVerifier,
       redirect_uri: mockRedirectUri,
     });
-    expect(console.error).toHaveBeenCalledWith(
+    expect(debugLogger.error).toHaveBeenCalledWith(
       'Failed to authenticate with authorization code:',
       'Invalid authorization code',
     );
@@ -543,8 +544,10 @@ describe('OAuth2', () => {
 
     (open as unknown as Mock).mockResolvedValue(undefined);
 
-    // Mock console.debug to verify it's called
-    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    // Mock debugLogger.debug to verify it's called
+    const debugSpy = vi
+      .spyOn(debugLogger, 'debug')
+      .mockImplementation(() => {});
 
     try {
       await getOauthClient(mockConfig);

@@ -9,7 +9,12 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import * as path from 'node:path';
 import { getFolderStructure } from '../utils/getFolderStructure.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { ToolResult, ToolInvocation } from './tools.js';
+import type {
+  ToolResult,
+  ToolCallConfirmationDetails,
+  ToolInvocation,
+  ToolConfirmationOutcome,
+} from './tools.js';
 import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
 import type { Config } from '../config/config.js';
 import { ACTIVATE_SKILL_TOOL_NAME } from './tool-names.js';
@@ -58,6 +63,41 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
       );
     }
     return this.cachedFolderStructure;
+  }
+
+  override async shouldConfirmExecute(
+    _abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    if (!this.messageBus) {
+      return false;
+    }
+
+    const skillName = this.params.name;
+    const skill = this.config.getSkillManager().getSkill(skillName);
+
+    if (!skill) {
+      return false;
+    }
+
+    const folderStructure = await this.getOrFetchFolderStructure(
+      skill.location,
+    );
+
+    const confirmationDetails: ToolCallConfirmationDetails = {
+      type: 'info',
+      title: `Activate Skill: ${skillName}`,
+      prompt: `You are about to enable the specialized agent skill **${skillName}**.
+
+**Description:**
+${skill.description}
+
+**Resources to be shared with the model:**
+${folderStructure}`,
+      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        await this.publishPolicyUpdate(outcome);
+      },
+    };
+    return confirmationDetails;
   }
 
   async execute(_signal: AbortSignal): Promise<ToolResult> {

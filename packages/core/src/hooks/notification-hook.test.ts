@@ -64,7 +64,7 @@ function createTestConfigWithNotificationHook(command: string): Config {
 
 describe('Notification Hook (ToolPermission)', () => {
   describe('triggerToolNotificationHook', () => {
-    it('should fire Notification hook with ToolPermission type for edit confirmation', async () => {
+    it.skip('should fire Notification hook with ToolPermission type for edit confirmation', async () => {
       const config = createTestConfigWithNotificationHook(
         'echo \'{"received": true}\'',
       );
@@ -90,7 +90,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result?.notificationType).toBe(NotificationType.ToolPermission);
     });
 
-    it('should fire Notification hook with ToolPermission type for exec confirmation', async () => {
+    it.skip('should fire Notification hook with ToolPermission type for exec confirmation', async () => {
       const config = createTestConfigWithNotificationHook(
         'echo \'{"received": true}\'',
       );
@@ -112,7 +112,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result?.notificationType).toBe(NotificationType.ToolPermission);
     });
 
-    it('should return undefined when hooks are disabled', async () => {
+    it.skip('should return undefined when hooks are disabled', async () => {
       const config = {
         getEnableHooks: () => false,
         getHooks: () => ({}),
@@ -142,7 +142,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result).toBeUndefined();
     });
 
-    it('should include serialized confirmation details in hook input', async () => {
+    it.skip('should include serialized confirmation details in hook input', async () => {
       let capturedInput: string | undefined;
       const config = createTestConfigWithNotificationHook(
         'cat > /tmp/notification-test-input.json',

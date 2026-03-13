@@ -62,6 +62,8 @@ describe('skills list command', () => {
         getSkillManager: vi.fn().mockReturnValue({
           getAllSkills: vi.fn().mockReturnValue([]),
         }),
+        getPolicyEngine: vi.fn().mockReturnValue(null),
+        getDebugMode: vi.fn().mockReturnValue(false),
       };
       mockLoadCliConfig.mockResolvedValue(mockConfig as unknown as Config);
 
@@ -93,6 +95,8 @@ describe('skills list command', () => {
         getSkillManager: vi.fn().mockReturnValue({
           getAllSkills: vi.fn().mockReturnValue(skills),
         }),
+        getPolicyEngine: vi.fn().mockReturnValue(null),
+        getDebugMode: vi.fn().mockReturnValue(false),
       };
       mockLoadCliConfig.mockResolvedValue(mockConfig as unknown as Config);
 

@@ -62,6 +62,14 @@ function makeConfig(): Config {
     getSessionId: vi.fn().mockReturnValue('test-session-id'),
     getTargetDir: vi.fn().mockReturnValue('/test/project'),
     getEnableHooks: vi.fn().mockReturnValue(true),
+    isTrustedFolder: vi.fn().mockReturnValue(true),
+    getProjectHooks: vi.fn().mockReturnValue(null),
+    getSanitizationConfig: vi.fn().mockReturnValue({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
+    getSessionRecordingService: vi.fn().mockReturnValue(null),
   } as unknown as Config;
 }
 
@@ -190,6 +198,14 @@ describe('HookSystem management APIs (DELTA-HSYS-002)', () => {
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getTargetDir: vi.fn().mockReturnValue('/test/project'),
       getEnableHooks: vi.fn().mockReturnValue(true),
+      isTrustedFolder: vi.fn().mockReturnValue(true),
+      getProjectHooks: vi.fn().mockReturnValue(null),
+      getSanitizationConfig: vi.fn().mockReturnValue({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
     system = new HookSystem(config);

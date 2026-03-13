@@ -60,7 +60,18 @@ export function parseInputForHighlighting(
       tokens.push({ text: text.slice(last), type: 'default' });
     }
 
-    return tokens;
+    // Merge consecutive tokens of the same type
+    const mergedTokens: HighlightToken[] = [];
+    for (const token of tokens) {
+      const lastToken = mergedTokens[mergedTokens.length - 1];
+      if (lastToken && lastToken.type === token.type) {
+        lastToken.text += token.text;
+      } else {
+        mergedTokens.push(token);
+      }
+    }
+
+    return mergedTokens;
   };
 
   const tokens: HighlightToken[] = [];

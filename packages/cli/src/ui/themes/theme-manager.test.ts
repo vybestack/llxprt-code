@@ -16,6 +16,7 @@ import { SemanticColors } from './semantic-tokens.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import type * as osActual from 'node:os';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 vi.mock('node:fs');
 vi.mock('node:os', async (importOriginal) => {
@@ -263,19 +264,19 @@ describe('ThemeManager', () => {
     it('should not load a theme from an untrusted file path and log a message', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockTheme));
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
+      const debugWarnSpy = vi
+        .spyOn(DebugLogger.prototype, 'warn')
         .mockImplementation(() => {});
 
       const result = themeManager.setActiveTheme('/untrusted/my-theme.json');
 
       expect(result).toBe(false);
       expect(themeManager.getActiveTheme().name).toBe(DEFAULT_THEME.name);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect(debugWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('is outside your home directory'),
       );
 
-      consoleWarnSpy.mockRestore();
+      debugWarnSpy.mockRestore();
     });
   });
 });

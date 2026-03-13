@@ -84,11 +84,20 @@ const mockLogExtensionEnable = vi.hoisted(() => vi.fn());
 const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
 const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
 const mockLogExtensionDisable = vi.hoisted(() => vi.fn());
+const mockDebugLoggerError = vi.hoisted(() => vi.fn());
+
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
+    debugLogger: {
+      error: mockDebugLoggerError,
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    },
+
     logExtensionEnable: mockLogExtensionEnable,
     logExtensionInstallEvent: mockLogExtensionInstallEvent,
     logExtensionUninstall: mockLogExtensionUninstall,
@@ -436,7 +445,7 @@ describe('extension tests', () => {
     });
 
     it('should skip extensions with invalid JSON and log a warning', () => {
-      const consoleSpy = vi
+      const _consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
@@ -459,17 +468,15 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('good-ext');
-      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
+      expect(mockDebugLoggerError).toHaveBeenCalledExactlyOnceWith(
         expect.stringContaining(
           `Warning: Skipping extension in ${badExtDir}: Expected`,
         ),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it('should skip extensions with missing name and log a warning', () => {
-      const consoleSpy = vi
+      const _consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
@@ -492,13 +499,11 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('good-ext');
-      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
+      expect(mockDebugLoggerError).toHaveBeenCalledExactlyOnceWith(
         expect.stringContaining(
           `Invalid extension config in ${badConfigPath}: missing name or version.`,
         ),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it('should filter trust out of mcp servers', () => {
@@ -523,7 +528,7 @@ describe('extension tests', () => {
     });
 
     it('should throw an error for invalid extension names', () => {
-      const consoleSpy = vi
+      const _consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const badExtDir = createExtension({
@@ -538,10 +543,9 @@ describe('extension tests', () => {
       });
 
       expect(extension).toBeNull();
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(mockDebugLoggerError).toHaveBeenCalledWith(
         expect.stringContaining('Invalid extension name: "bad_name"'),
       );
-      consoleSpy.mockRestore();
     });
   });
 

@@ -135,7 +135,15 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
     vi.clearAllMocks();
     clearMockEphemeralSettings();
     tokenStore = createMockTokenStore();
-    manager = new OAuthManager(tokenStore);
+    const mockMessageBus = {
+      subscribe: vi.fn(),
+      publish: vi.fn(),
+      unsubscribe: vi.fn(),
+      requestBucketAuthConfirmation: vi.fn().mockResolvedValue(true),
+    } as unknown as MessageBus;
+    manager = new OAuthManager(tokenStore, undefined, {
+      messageBus: mockMessageBus,
+    });
     mockProvider = createMockProvider('anthropic');
     manager.registerProvider(mockProvider);
   });
@@ -256,7 +264,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       }
     });
 
-    it('should preserve stdin state when falling back to TTY prompt without MessageBus', async () => {
+    it('should preserve stdin state when falling back to TTY prompt', async () => {
       setMockEphemeralSetting('auth-bucket-prompt', true);
 
       const originalIsTTY = process.stdin.isTTY;

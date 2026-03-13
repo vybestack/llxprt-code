@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -8,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
+import { debugLogger } from './debugLogger.js';
 import * as path from 'path';
 import { WorkspaceContext } from './workspaceContext.js';
 
@@ -396,7 +396,7 @@ describe('WorkspaceContext with optional directories', () => {
     fs.mkdirSync(existingDir1, { recursive: true });
     fs.mkdirSync(existingDir2, { recursive: true });
 
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -411,8 +411,8 @@ describe('WorkspaceContext with optional directories', () => {
     ]);
     const directories = workspaceContext.getDirectories();
     expect(directories).toEqual([cwd, existingDir1]);
-    expect(console.warn).toHaveBeenCalledTimes(1);
-    expect(console.warn).toHaveBeenCalledWith(
+    expect(debugLogger.warn).toHaveBeenCalledTimes(1);
+    expect(debugLogger.warn).toHaveBeenCalledWith(
       `[WARN] Skipping unreadable directory: ${nonExistentDir} (Directory does not exist: ${nonExistentDir})`,
     );
   });
@@ -421,6 +421,6 @@ describe('WorkspaceContext with optional directories', () => {
     const workspaceContext = new WorkspaceContext(cwd, [existingDir1]);
     const directories = workspaceContext.getDirectories();
     expect(directories).toEqual([cwd, existingDir1]);
-    expect(console.warn).not.toHaveBeenCalled();
+    expect(debugLogger.warn).not.toHaveBeenCalled();
   });
 });

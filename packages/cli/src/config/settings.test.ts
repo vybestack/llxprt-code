@@ -186,6 +186,11 @@ describe('Settings Loading and Merging', () => {
         auth: {},
         blockGitExtensions: false,
         enablePermanentToolApproval: false,
+        environmentVariableRedaction: {
+          enabled: false,
+          allowed: [],
+          blocked: [],
+        },
       });
       expect(settings.merged.tools).toMatchObject({
         autoAccept: false,

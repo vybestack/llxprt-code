@@ -30,6 +30,14 @@ describe('Hook Re-Initialization (126c32ac)', () => {
       getExtensions: () => mockExtensions,
       getDisabledHooks: () => [],
       getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
     } as unknown as Config;
   });
 
@@ -119,6 +127,14 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
       getExtensions: () => [],
       getDisabledHooks: () => [],
       getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
     } as unknown as Config;
 
     const hookSystem = new HookSystem(mockConfig, mockMessageBus);
@@ -156,6 +172,14 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
       getExtensions: () => [],
       getDisabledHooks: () => [],
       getModel: () => 'test-model',
+      isTrustedFolder: () => true,
+      getProjectHooks: () => null,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: () => null,
     } as unknown as Config;
 
     const hookSystem = new HookSystem(mockConfig, mockMessageBus);

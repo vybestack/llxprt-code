@@ -75,10 +75,21 @@ describe('HookRunner', () => {
     timestamp: '2025-01-01T00:00:00.000Z',
   };
 
+  // Mock Config object with required methods
+  const mockConfig = {
+    isTrustedFolder: () => true,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+
   beforeEach(() => {
     vi.resetAllMocks();
 
-    hookRunner = new HookRunner();
+    hookRunner = new HookRunner(mockConfig);
 
     // Mock spawn with accessible mock functions
     const mockStdoutOn = vi.fn();

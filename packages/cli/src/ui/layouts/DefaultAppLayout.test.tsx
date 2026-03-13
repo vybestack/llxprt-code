@@ -77,6 +77,38 @@ vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
 }));
 
+vi.mock('../themes/theme-manager.js', () => ({
+  themeManager: {
+    getActiveTheme: () => ({
+      name: 'default',
+      colors: {
+        GradientColors: ['#ffffff', '#ffffff'],
+      },
+    }),
+  },
+}));
+
+vi.mock('../colors.js', () => ({
+  Colors: {
+    AccentRed: '#ff0000',
+    AccentYellow: '#ffff00',
+    Gray: '#808080',
+    GradientColors: ['#ffffff'],
+  },
+  SemanticColors: new Proxy({}, { get: () => '#808080' }),
+}));
+
+vi.mock('../../runtime/runtimeSettings.js', () => ({
+  getCliRuntimeContext: () => ({
+    messageBus: {
+      subscribe: vi.fn(),
+      publish: vi.fn(),
+      unsubscribe: vi.fn(),
+      requestBucketAuthConfirmation: vi.fn(),
+    },
+  }),
+}));
+
 const mockUseUIState = vi.mocked(useUIState);
 const mockUseUIActions = vi.mocked(useUIActions);
 
@@ -128,6 +160,7 @@ function createBaseUIState() {
     mainAreaWidth: 120,
     inputWidth: 120,
     suggestionsWidth: 60,
+    isNarrow: false,
     history: [],
     pendingHistoryItems: [],
     streamingState: StreamingState.Idle,

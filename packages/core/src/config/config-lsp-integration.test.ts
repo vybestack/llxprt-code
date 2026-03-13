@@ -20,6 +20,7 @@ import { initializeTestConfig } from '../test-utils/config.js';
 
 import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import * as lspServiceClientModule from '../lsp/lsp-service-client.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
 vi.mock('fs', async (importOriginal) => {
@@ -741,7 +742,7 @@ describe('Config LSP Integration (P33)', () => {
   describe('LSP package not found notification', () => {
     it('should emit console.error when LSP package is not found', async () => {
       const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+        .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
       const startSpy = vi

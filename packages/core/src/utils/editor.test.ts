@@ -21,6 +21,7 @@ import {
   isEditorAvailable,
   type EditorType,
 } from './editor.js';
+import * as debugLoggerModule from './debugLogger.js';
 import { execSync, spawnSync, spawn } from 'child_process';
 
 vi.mock('child_process', () => ({
@@ -414,12 +415,12 @@ describe('editor utils', () => {
     }
 
     it('should log an error if diff command is not available', async () => {
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+      const debugErrorSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'error')
         .mockImplementation(() => {});
       // @ts-expect-error Testing unsupported editor
       await openDiff('old.txt', 'new.txt', 'foobar', () => {});
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(debugErrorSpy).toHaveBeenCalledWith(
         'No diff tool available. Install a supported editor.',
       );
     });

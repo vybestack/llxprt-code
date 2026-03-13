@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+
 import { setCommand, listCommand } from './settings.js';
 import yargs from 'yargs';
 import type * as settingsIntegrationModule from '../../config/extensions/settingsIntegration.js';

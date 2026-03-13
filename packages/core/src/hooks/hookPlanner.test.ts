@@ -399,7 +399,7 @@ describe('HookPlanner', () => {
           config: {
             name: 'a:b',
             type: HookType.Command,
-            command: 'c',
+            command: 'd',
           },
           source: ConfigSource.Project,
           eventName: HookEventName.BeforeTool,

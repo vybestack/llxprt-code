@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsService } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -46,6 +47,7 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
+    const activeContext: any = { scope: 'test' };
     vi.doMock('@vybestack/llxprt-code-core', async () => {
       const actual = await vi.importActual<
         typeof import('@vybestack/llxprt-code-core')
@@ -71,15 +73,30 @@ describe('Anthropic OAuth registration with environment key', () => {
         OpenAIResponsesProvider: MockProvider,
         OpenAIVercelProvider: openaivercelCtor,
         AnthropicProvider: anthropicCtor,
+        setActiveProviderRuntimeContext: vi.fn((ctx: any) => {
+          Object.assign(activeContext, ctx);
+        }),
+        getActiveProviderRuntimeContext: vi.fn(() => activeContext),
+        peekActiveProviderRuntimeContext: () => activeContext,
+        getCurrentRuntimeScope: () => undefined,
       };
     });
 
-    const { getProviderManager, resetProviderManager } = await import(
-      './providerManagerInstance.js'
-    );
+    vi.clearAllMocks();
+
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
 
     resetProviderManager();
-    getProviderManager(undefined, false, undefined);
+
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: undefined,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
 
     const registeredAnthropic =
       ensureOAuthProviderRegisteredMock.mock.calls.some(
@@ -104,6 +121,7 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
+    const activeContext: any = { scope: 'test' };
     vi.doMock('@vybestack/llxprt-code-core', async () => {
       const actual = await vi.importActual<
         typeof import('@vybestack/llxprt-code-core')
@@ -130,12 +148,22 @@ describe('Anthropic OAuth registration with environment key', () => {
           openaivercelCtor as unknown as typeof actual.OpenAIVercelProvider,
         AnthropicProvider:
           anthropicCtor as unknown as typeof actual.AnthropicProvider,
+        setActiveProviderRuntimeContext: vi.fn((ctx: any) => {
+          Object.assign(activeContext, ctx);
+        }),
+        getActiveProviderRuntimeContext: vi.fn(() => activeContext),
+        peekActiveProviderRuntimeContext: () => activeContext,
+        getCurrentRuntimeScope: () => undefined,
       };
     });
 
-    const { getProviderManager, resetProviderManager } = await import(
-      './providerManagerInstance.js'
-    );
+    vi.clearAllMocks();
+
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
 
     resetProviderManager();
     const mockConfig = {
@@ -148,7 +176,11 @@ describe('Anthropic OAuth registration with environment key', () => {
       },
     } as unknown as Config;
 
-    getProviderManager(mockConfig, false, undefined);
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: mockConfig,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
 
     expect(openaiCtor).toHaveBeenCalled();
     const firstOpenaiCall = openaiCtor.mock.calls[0] as unknown[] | undefined;
@@ -172,6 +204,7 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
+    const activeContext: any = { scope: 'test' };
     vi.doMock('@vybestack/llxprt-code-core', async () => {
       const actual = await vi.importActual<
         typeof import('@vybestack/llxprt-code-core')
@@ -198,15 +231,30 @@ describe('Anthropic OAuth registration with environment key', () => {
           openaivercelCtor as unknown as typeof actual.OpenAIVercelProvider,
         AnthropicProvider:
           anthropicCtor as unknown as typeof actual.AnthropicProvider,
+        setActiveProviderRuntimeContext: vi.fn((ctx: any) => {
+          Object.assign(activeContext, ctx);
+        }),
+        getActiveProviderRuntimeContext: vi.fn(() => activeContext),
+        peekActiveProviderRuntimeContext: () => activeContext,
+        getCurrentRuntimeScope: () => undefined,
       };
     });
 
-    const { getProviderManager, resetProviderManager } = await import(
-      './providerManagerInstance.js'
-    );
+    vi.clearAllMocks();
+
+    const {
+      createProviderManager,
+      resetProviderManager,
+      registerProviderManagerSingleton,
+    } = await import('./providerManagerInstance.js');
 
     resetProviderManager();
-    getProviderManager(undefined, false, undefined);
+
+    const { manager, oauthManager } = createProviderManager(activeContext, {
+      config: undefined,
+      allowBrowserEnvironment: false,
+    });
+    registerProviderManagerSingleton(manager, oauthManager);
 
     expect(openaivercelCtor).toHaveBeenCalled();
     const openaivercelArgs = openaivercelCtor.mock.calls[0] as

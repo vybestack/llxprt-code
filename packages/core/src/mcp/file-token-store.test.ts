@@ -11,6 +11,7 @@ import { Buffer } from 'node:buffer';
 import * as crypto from 'node:crypto';
 import { FileTokenStore } from './file-token-store.js';
 import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock file system operations
 vi.mock('node:fs', () => ({
@@ -33,6 +34,7 @@ vi.mock('../config/storage.js', () => ({
 vi.mock('node:os', () => ({
   hostname: vi.fn().mockReturnValue('test-hostname'),
   userInfo: vi.fn().mockReturnValue({ username: 'test-user' }),
+  homedir: vi.fn().mockReturnValue('/test/home'),
 }));
 
 const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 1);
@@ -111,8 +113,8 @@ describe('FileTokenStore', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'error').mockImplementation(() => {});
     tokenStore = new FileTokenStore(testTokenPath, DEFAULT_OPTIONS);
   });
 

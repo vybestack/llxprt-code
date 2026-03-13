@@ -11,8 +11,19 @@ import * as path from 'path';
 import * as childProcess from 'child_process';
 import { isGitRepository } from '@vybestack/llxprt-code-core';
 
+const { mockDebugLogger } = vi.hoisted(() => ({
+  mockDebugLogger: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    log: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
 vi.mock('@vybestack/llxprt-code-core', () => ({
   isGitRepository: vi.fn(),
+  debugLogger: mockDebugLogger,
 }));
 
 vi.mock('fs', async (importOriginal) => {
@@ -62,7 +73,6 @@ describe('getInstallationInfo', () => {
   });
 
   it('should return UNKNOWN and log error if realpathSync fails', () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     process.argv[1] = '/path/to/cli';
     const error = new Error('realpath failed');
     mockedRealPathSync.mockImplementation(() => {
@@ -72,8 +82,7 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
 
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
-    expect(consoleSpy).toHaveBeenCalledWith(error);
-    consoleSpy.mockRestore();
+    expect(mockDebugLogger.log).toHaveBeenCalledWith(String(error));
   });
 
   it('should detect running from a local git clone', () => {

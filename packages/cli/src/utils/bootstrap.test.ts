@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import os from 'node:os';
 import {
   shouldRelaunchForMemory,
@@ -98,7 +99,7 @@ describe('bootstrap utilities', () => {
     it('should not include debug logging when debug is false', () => {
       delete process.env.LLXPRT_CODE_NO_RELAUNCH;
       const consoleSpy = vi
-        .spyOn(console, 'debug')
+        .spyOn(DebugLogger.prototype, 'debug')
         .mockImplementation(() => {});
       shouldRelaunchForMemory(false);
       expect(consoleSpy).not.toHaveBeenCalled();
@@ -108,7 +109,7 @@ describe('bootstrap utilities', () => {
     it('should include debug logging when debug is true', () => {
       delete process.env.LLXPRT_CODE_NO_RELAUNCH;
       const consoleSpy = vi
-        .spyOn(console, 'debug')
+        .spyOn(DebugLogger.prototype, 'debug')
         .mockImplementation(() => {});
       shouldRelaunchForMemory(true);
       // Check that debug was called for current heap size
@@ -190,7 +191,7 @@ describe('bootstrap utilities', () => {
 
     it('should log debug info when debugMode is true', () => {
       const consoleSpy = vi
-        .spyOn(console, 'debug')
+        .spyOn(DebugLogger.prototype, 'debug')
         .mockImplementation(() => {});
       computeSandboxMemoryArgs(true, 6144);
       expect(consoleSpy).toHaveBeenCalled();
@@ -199,7 +200,7 @@ describe('bootstrap utilities', () => {
 
     it('should not log debug info when debugMode is false', () => {
       const consoleSpy = vi
-        .spyOn(console, 'debug')
+        .spyOn(DebugLogger.prototype, 'debug')
         .mockImplementation(() => {});
       computeSandboxMemoryArgs(false, 6144);
       expect(consoleSpy).not.toHaveBeenCalled();

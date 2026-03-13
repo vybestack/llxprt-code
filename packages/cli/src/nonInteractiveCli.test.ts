@@ -12,6 +12,7 @@ import {
   shutdownTelemetry,
   GeminiEventType,
   ServerGeminiStreamEvent,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -88,7 +89,9 @@ describe('runNonInteractive', () => {
     });
     mockGetCommands.mockReturnValue([]);
 
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleErrorSpy = vi
+      .spyOn(DebugLogger.prototype, 'error')
+      .mockImplementation(() => {});
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
@@ -269,6 +272,7 @@ describe('runNonInteractive', () => {
       mockConfig,
       expect.objectContaining({ name: 'testTool', agentId: 'primary' }),
       expect.any(AbortSignal),
+      expect.objectContaining({ messageBus: undefined }),
     );
     expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
       2,
@@ -356,6 +360,7 @@ describe('runNonInteractive', () => {
         agentId: 'primary',
       }),
       expect.any(AbortSignal),
+      expect.objectContaining({ messageBus: undefined }),
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('All done');
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
@@ -464,6 +469,7 @@ describe('runNonInteractive', () => {
       mockConfig,
       expect.objectContaining({ name: 'errorTool', agentId: 'primary' }),
       expect.any(AbortSignal),
+      expect.objectContaining({ messageBus: undefined }),
     );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool errorTool: Execution failed',
@@ -546,6 +552,7 @@ describe('runNonInteractive', () => {
       mockConfig,
       expect.objectContaining({ name: 'nonexistentTool', agentId: 'primary' }),
       expect.any(AbortSignal),
+      expect.objectContaining({ messageBus: undefined }),
     );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool nonexistentTool: Tool "nonexistentTool" not found in registry.',
@@ -811,6 +818,7 @@ describe('runNonInteractive', () => {
       mockConfig,
       expect.objectContaining({ name: 'ShellTool' }),
       expect.any(AbortSignal),
+      expect.objectContaining({ messageBus: undefined }),
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
   });

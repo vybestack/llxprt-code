@@ -221,6 +221,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     }) => {
       activeContext = context;
     },
+    peekActiveProviderRuntimeContext: () => activeContext,
+    getCurrentRuntimeScope: () => undefined,
   };
 });
 
@@ -287,6 +289,8 @@ function pushAnthropicAlias(overrides?: {
 
 describe('Provider alias defaults (model + ephemerals)', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+
     stubSettingsService = new StubSettingsService();
     stubConfig = new StubConfig(stubSettingsService);
     activeProviderName = 'openai';
@@ -329,8 +333,6 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
     providers.anthropic.defaultModel = 'claude-opus-4-6';
     providers.openrouter.defaultModel = 'gpt-4o';
-
-    vi.clearAllMocks();
   });
 
   afterEach(() => {

@@ -63,19 +63,17 @@ describe('ActivateSkillTool', () => {
   it('should return enhanced confirmation details', async () => {
     const params = { name: 'test-skill' };
     const invocation = tool.build(params);
-    const details = await (
-      invocation as unknown as {
-        getConfirmationDetails: (signal: AbortSignal) => Promise<{
-          prompt: string;
-          title: string;
-        }>;
-      }
-    ).getConfirmationDetails(new AbortController().signal);
+    const details = await invocation.shouldConfirmExecute(
+      new AbortController().signal,
+    );
 
-    expect(details.title).toBe('Activate Skill: test-skill');
-    expect(details.prompt).toContain('enable the specialized agent skill');
-    expect(details.prompt).toContain('A test skill');
-    expect(details.prompt).toContain('Mock folder structure');
+    expect(details).not.toBe(false);
+    if (details !== false) {
+      expect(details.title).toBe('Activate Skill: test-skill');
+      expect(details.prompt).toContain('enable the specialized agent skill');
+      expect(details.prompt).toContain('A test skill');
+      expect(details.prompt).toContain('Mock folder structure');
+    }
   });
 
   it('should activate a valid skill and return its content in XML tags', async () => {

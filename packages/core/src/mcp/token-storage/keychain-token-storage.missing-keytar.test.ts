@@ -10,6 +10,7 @@ import {
   resetKeytarLoader,
   setKeytarLoader,
 } from './keychain-token-storage.js';
+import { debugLogger } from '../../utils/debugLogger.js';
 
 describe('KeychainTokenStorage when keytar is missing', () => {
   afterEach(() => {
@@ -20,8 +21,10 @@ describe('KeychainTokenStorage when keytar is missing', () => {
     const error = new Error("Cannot find module 'keytar'");
     (error as NodeJS.ErrnoException).code = 'ERR_MODULE_NOT_FOUND';
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi
+      .spyOn(debugLogger, 'error')
+      .mockImplementation(() => {});
 
     setKeytarLoader(() => Promise.reject(error));
 
@@ -43,8 +46,10 @@ describe('KeychainTokenStorage when keytar is missing', () => {
     const error = new Error('Cannot load native module');
     (error as NodeJS.ErrnoException).code = 'ERR_DLOPEN_FAILED';
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi
+      .spyOn(debugLogger, 'error')
+      .mockImplementation(() => {});
 
     setKeytarLoader(() => Promise.reject(error));
 

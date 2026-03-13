@@ -8,6 +8,7 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { useInputHistoryStore } from './useInputHistoryStore.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 describe('useInputHistoryStore', () => {
   beforeEach(() => {
@@ -108,7 +109,9 @@ describe('useInputHistoryStore', () => {
         .mockRejectedValue(new Error('Logger error')),
     };
 
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const debugWarnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
 
     const { result } = renderHook(() => useInputHistoryStore());
 
@@ -117,12 +120,12 @@ describe('useInputHistoryStore', () => {
     });
 
     expect(result.current.inputHistory).toEqual([]);
-    expect(consoleSpy).toHaveBeenCalledWith(
+    expect(debugWarnSpy).toHaveBeenCalledWith(
       'Failed to initialize input history from logger:',
       expect.any(Error),
     );
 
-    consoleSpy.mockRestore();
+    debugWarnSpy.mockRestore();
   });
 
   it('should initialize only once', async () => {

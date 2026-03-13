@@ -44,6 +44,17 @@ vi.mock('../utils.js', () => ({
   }),
 }));
 
+const mockDebugLogger = {
+  error: vi.fn(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+};
+
+vi.mock('@vybestack/llxprt-code-core', () => ({
+  debugLogger: mockDebugLogger,
+}));
+
 const mockedLoadSettings = loadSettings as Mock;
 
 describe('mcp add command', () => {
@@ -254,7 +265,7 @@ describe('mcp add command', () => {
           parser.parseAsync(`add ${serverName} ${command}`),
         ).rejects.toThrow('process.exit called');
 
-        expect(mockConsoleError).toHaveBeenCalledWith(
+        expect(mockDebugLogger.error).toHaveBeenCalledWith(
           'Error: Please use --scope user to edit settings in the home directory.',
         );
         expect(mockSetValue).not.toHaveBeenCalled();
@@ -265,7 +276,7 @@ describe('mcp add command', () => {
           parser.parseAsync(`add --scope project ${serverName} ${command}`),
         ).rejects.toThrow('process.exit called');
 
-        expect(mockConsoleError).toHaveBeenCalledWith(
+        expect(mockDebugLogger.error).toHaveBeenCalledWith(
           'Error: Please use --scope user to edit settings in the home directory.',
         );
         expect(mockSetValue).not.toHaveBeenCalled();
@@ -278,7 +289,7 @@ describe('mcp add command', () => {
           'mcpServers',
           expect.any(Object),
         );
-        expect(mockConsoleError).not.toHaveBeenCalled();
+        expect(mockDebugLogger.error).not.toHaveBeenCalled();
       });
     });
 

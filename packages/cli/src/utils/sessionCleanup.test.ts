@@ -7,7 +7,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { SESSION_FILE_PREFIX, type Config } from '@vybestack/llxprt-code-core';
+import {
+  SESSION_FILE_PREFIX,
+  type Config,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
 import type { Settings } from '../config/settings.js';
 import { cleanupExpiredSessions } from './sessionCleanup.js';
 import { type SessionInfo, getAllSessionFiles } from './sessionUtils.js';
@@ -124,7 +128,9 @@ describe('Session Cleanup', () => {
         },
       };
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
 
       const result = await cleanupExpiredSessions(config, settings);
 
@@ -296,7 +302,9 @@ describe('Session Cleanup', () => {
         },
       };
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
 
       // Mock getSessionFiles to throw an error
       mockGetAllSessionFiles.mockRejectedValue(
@@ -355,7 +363,9 @@ describe('Session Cleanup', () => {
       );
       mockFs.unlink.mockResolvedValue(undefined);
 
-      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      const debugSpy = vi
+        .spyOn(DebugLogger.prototype, 'debug')
+        .mockImplementation(() => {});
 
       await cleanupExpiredSessions(config, settings);
 
@@ -829,7 +839,9 @@ describe('Session Cleanup', () => {
         },
       };
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
 
       const result = await cleanupExpiredSessions(config, settings);
 
@@ -858,7 +870,9 @@ describe('Session Cleanup', () => {
         },
       };
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
 
       const result = await cleanupExpiredSessions(config, settings);
 
@@ -924,7 +938,9 @@ describe('Session Cleanup', () => {
         },
       };
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
 
       const result = await cleanupExpiredSessions(config, settings);
 
@@ -948,7 +964,9 @@ describe('Session Cleanup', () => {
         },
       };
 
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
 
       const result = await cleanupExpiredSessions(config, settings);
 
@@ -974,7 +992,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1000,7 +1018,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1026,7 +1044,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1052,7 +1070,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1078,7 +1096,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1183,7 +1201,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1212,7 +1230,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1344,7 +1362,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1412,7 +1430,7 @@ describe('Session Cleanup', () => {
         };
 
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);
@@ -1441,7 +1459,7 @@ describe('Session Cleanup', () => {
 
         // The validation logic rejects invalid maxAge format even if maxCount is valid
         const errorSpy = vi
-          .spyOn(console, 'error')
+          .spyOn(DebugLogger.prototype, 'error')
           .mockImplementation(() => {});
 
         const result = await cleanupExpiredSessions(config, settings);

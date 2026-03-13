@@ -36,6 +36,7 @@ import { MockTool } from '../test-utils/mock-tool.js';
 import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { z } from 'zod';
 import type { ToolErrorType } from '../index.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -714,7 +715,7 @@ describe('AgentExecutor', () => {
       ]);
 
       const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
+        .spyOn(debugLogger, 'warn')
         .mockImplementation(() => {});
 
       await executor.run({ goal: 'Sec test' }, signal);

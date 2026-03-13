@@ -14,10 +14,10 @@ import {
   Mock,
   MockInstance,
 } from 'vitest';
+import { DebugLogger, createTransport } from '@vybestack/llxprt-code-core';
 import { listMcpServers } from './list.js';
 import { loadSettings } from '../../config/settings.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
-import { createTransport } from '@vybestack/llxprt-code-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 vi.mock('../../config/settings.js', () => ({
@@ -29,19 +29,24 @@ vi.mock('../../config/extension.js', () => ({
     getUserExtensionsDir: vi.fn(),
   },
 }));
-vi.mock('@vybestack/llxprt-code-core', () => ({
-  createTransport: vi.fn(),
-  Storage: {
-    getGlobalSettingsPath: vi
-      .fn()
-      .mockReturnValue('/mock/home/.llxprt/settings.json'),
-    getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
-  },
-  MCPServerStatus: {
-    CONNECTED: 'CONNECTED',
-    DISCONNECTED: 'DISCONNECTED',
-  },
-}));
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    createTransport: vi.fn(),
+    Storage: {
+      getGlobalSettingsPath: vi
+        .fn()
+        .mockReturnValue('/mock/home/.llxprt/settings.json'),
+      getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+    },
+    MCPServerStatus: {
+      CONNECTED: 'CONNECTED',
+      DISCONNECTED: 'DISCONNECTED',
+    },
+  };
+});
 vi.mock('@modelcontextprotocol/sdk/client/index.js');
 
 const mockedExtensionStorage = ExtensionStorage as unknown as {
@@ -70,7 +75,9 @@ describe('mcp list command', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleSpy = vi
+      .spyOn(DebugLogger.prototype, 'log')
+      .mockImplementation(() => {});
 
     mockTransport = { close: vi.fn() };
     mockClient = {
@@ -258,7 +265,9 @@ describe('mcp list command', () => {
 
   // EXPECTED TO FAIL: no deprecation warning currently exists
   it('should show deprecation warning when both httpUrl and url are present', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
 
     mockedLoadSettings.mockReturnValue({
       merged: {
