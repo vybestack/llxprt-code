@@ -2732,6 +2732,10 @@ ${block.code}
                   `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
               );
 
+              const stopReason = (
+                chunk as unknown as { delta?: { stop_reason?: string } }
+              ).delta?.stop_reason;
+
               yield {
                 speaker: 'ai',
                 blocks: [],
@@ -2744,6 +2748,7 @@ ${block.code}
                     cache_read_input_tokens: cacheRead,
                     cache_creation_input_tokens: cacheCreation,
                   },
+                  stopReason,
                 },
               } as IContent;
             }
