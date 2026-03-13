@@ -28,9 +28,9 @@ export class MessageBus {
   private readonly policyEngine: PolicyEngine;
   private readonly debugMode: boolean;
 
-  constructor(policyEngine: PolicyEngine, debugMode = false) {
+  constructor(policyEngine?: PolicyEngine, debugMode = false) {
     this.emitter = new EventEmitter();
-    this.policyEngine = policyEngine;
+    this.policyEngine = policyEngine ?? new PolicyEngine();
     this.debugMode = debugMode;
 
     // Increase max listeners to prevent warnings in complex flows

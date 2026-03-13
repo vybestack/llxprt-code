@@ -363,30 +363,25 @@ export async function prepareRuntimeForProfile(
     stage: 'prepareRuntimeForProfile',
   };
 
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
-   * @requirement REQ-D01-002
-   * @requirement REQ-D01-003
-   * @pseudocode lines 122-133
-   */
+  // Config may not exist yet during early CLI bootstrap (chicken-and-egg:
+  // Config is created later in loadCliConfig after profile resolution).
+  // Both createProviderManager and registerCliProviderInfrastructure
+  // already guard against undefined config.
   const runtimeConfig = runtimeInit.config;
-  if (!runtimeConfig) {
-    throw new Error(
-      '[cli-bootstrap] createBootstrapRuntimeState requires an explicit Config instance.',
-    );
-  }
-  const runtime: ProviderRuntimeContext = {
+  const runtime = {
     settingsService,
     config: runtimeConfig,
     runtimeId,
     metadata,
-  };
+  } as ProviderRuntimeContext;
   const runtimeMessageBus =
     runtimeInit.messageBus ??
-    new MessageBus(
-      runtimeConfig.getPolicyEngine(),
-      runtimeConfig.getDebugMode(),
-    );
+    (runtimeConfig
+      ? new MessageBus(
+          runtimeConfig.getPolicyEngine(),
+          runtimeConfig.getDebugMode(),
+        )
+      : new MessageBus());
 
   const { manager: providerManager, oauthManager } = createProviderManager(
     {

@@ -13,6 +13,7 @@ import {
   ProfileManager,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
   getProfilePersistableKeys,
   resolveAlias,
   getProviderConfigKeys,
@@ -270,10 +271,16 @@ function resolveActiveRuntimeIdentity(): {
     return scope;
   }
 
-  return {
-    runtimeId: LEGACY_RUNTIME_ID,
-    metadata: {},
-  };
+  const context = peekActiveProviderRuntimeContext();
+  if (context) {
+    const runtimeId =
+      typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
+        ? context.runtimeId
+        : LEGACY_RUNTIME_ID;
+    return { runtimeId, metadata: context.metadata ?? {} };
+  }
+
+  return { runtimeId: LEGACY_RUNTIME_ID, metadata: {} };
 }
 
 function upsertRuntimeEntry(
