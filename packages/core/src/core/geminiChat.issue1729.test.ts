@@ -102,7 +102,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
-    it('should set finishReason STOP for max_tokens stopReason', () => {
+    it('should set finishReason MAX_TOKENS for max_tokens stopReason', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Some text' }],
@@ -231,6 +231,28 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
       const response = geminiChat.convertIContentToResponse(icontent);
       expect(response.candidates[0].finishReason).toBe('MAX_TOKENS');
+    });
+
+    it('should map pause_turn to STOP', () => {
+      const icontent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'paused' }],
+        metadata: { stopReason: 'pause_turn' },
+      };
+
+      const response = geminiChat.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('STOP');
+    });
+
+    it('should map refusal to STOP', () => {
+      const icontent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'refused' }],
+        metadata: { stopReason: 'refusal' },
+      };
+
+      const response = geminiChat.convertIContentToResponse(icontent);
+      expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
     it('should not set finishReason for unknown stop reasons', () => {
