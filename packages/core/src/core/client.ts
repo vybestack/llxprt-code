@@ -1590,7 +1590,7 @@ ${jitMemory}`
       ? [...(request as Part[])]
       : request;
     let retryCount = 0;
-    const MAX_RETRIES = 2;
+    const MAX_RETRIES = 3;
     let lastTurn: Turn | undefined;
     let hadToolCallsThisTurn = false; // Track if model executed tools - preserve across retries
 
@@ -1812,10 +1812,8 @@ ${jitMemory}`
         return turn;
       }
 
-      // Issue #1400: If model generated thinking but no content or tool calls,
+      // Issue #1400/#1729: If model generated thinking but no content or tool calls,
       // auto-continue so the model proceeds with its planned actions.
-      // Deferred events (Finished, etc.) from this iteration are intentionally
-      // dropped — the retry supersedes this turn.
       if (
         hadThinkingThisIteration &&
         !hadContentThisIteration &&
@@ -1827,6 +1825,16 @@ ${jitMemory}`
             yield deferred;
           }
           return turn;
+        }
+        // Flush Content/Citation events so they reach the UI before retry.
+        // Drop Finished events from the superseded iteration.
+        for (const deferred of deferredEvents) {
+          if (
+            deferred.type === GeminiEventType.Content ||
+            deferred.type === GeminiEventType.Citation
+          ) {
+            yield deferred;
+          }
         }
         baseRequest = [
           {
