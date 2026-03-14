@@ -273,11 +273,26 @@ function resolveActiveRuntimeIdentity(): {
 
   const context = peekActiveProviderRuntimeContext();
   if (context) {
-    const runtimeId =
+    const candidateId =
       typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
         ? context.runtimeId
         : LEGACY_RUNTIME_ID;
-    return { runtimeId, metadata: context.metadata ?? {} };
+
+    // If the active context's runtimeId is registered in the CLI registry, use it.
+    // Otherwise fall back to a registered ID — the active context may be a
+    // provider-scoped context (e.g. a per-call UUID from BaseProvider) that was
+    // never registered in the CLI runtime registry.
+    if (runtimeRegistry.has(candidateId)) {
+      return { runtimeId: candidateId, metadata: context.metadata ?? {} };
+    }
+
+    // Fall back to the first registered runtimeId (typically cli.runtime.bootstrap)
+    const firstRegistered = runtimeRegistry.keys().next().value;
+    if (firstRegistered) {
+      return { runtimeId: firstRegistered, metadata: context.metadata ?? {} };
+    }
+
+    return { runtimeId: candidateId, metadata: context.metadata ?? {} };
   }
 
   return { runtimeId: LEGACY_RUNTIME_ID, metadata: {} };
@@ -336,11 +351,10 @@ function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   const registeredIds = Array.from(runtimeRegistry.keys());
   const scope = getCurrentRuntimeScope();
   const activeCtx = peekActiveProviderRuntimeContext();
-  const diagMsg = `[requireRuntimeEntry] MISS for runtimeId=${runtimeId}; registered=[${registeredIds.join(', ')}]; scope=${JSON.stringify(scope)}; activeCtx.runtimeId=${activeCtx?.runtimeId}`;
-  // Temporary diagnostic — always emit so crash root cause is visible
-  // eslint-disable-next-line no-console
-  console.error(diagMsg);
-  logger.debug(() => diagMsg);
+  logger.debug(
+    () =>
+      `[requireRuntimeEntry] MISS for runtimeId=${runtimeId}; registered=[${registeredIds.join(', ')}]; scope=${JSON.stringify(scope)}; activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+  );
 
   const hint = isStatelessProviderIntegrationEnabled()
     ? 'Stateless hardening requires explicit runtime registration.'
@@ -401,11 +415,10 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
     const registeredIds = Array.from(runtimeRegistry.keys());
     const scope = getCurrentRuntimeScope();
     const activeCtx = peekActiveProviderRuntimeContext();
-    const diag = `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!(entry && entry.config)}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`;
-    // Temporary diagnostic — always emit so crash root cause is visible
-    // eslint-disable-next-line no-console
-    console.error(diag);
-    logger.debug(() => diag);
+    logger.debug(
+      () =>
+        `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!(entry && entry.config)}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+    );
   }
 
   if (entry && entry.config) {
