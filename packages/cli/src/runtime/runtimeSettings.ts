@@ -320,6 +320,10 @@ function upsertRuntimeEntry(
         : (current?.metadata ?? {}),
   };
   runtimeRegistry.set(runtimeId, next);
+  logger.debug(
+    () =>
+      `[upsertRuntimeEntry] SET runtimeId=${runtimeId}, hasConfig=${!!next.config}, hasProviderManager=${!!next.providerManager}, registered=[${Array.from(runtimeRegistry.keys()).join(', ')}]`,
+  );
   return next;
 }
 
@@ -328,6 +332,15 @@ function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   if (entry) {
     return entry;
   }
+
+  const registeredIds = Array.from(runtimeRegistry.keys());
+  const scope = getCurrentRuntimeScope();
+  const activeCtx = peekActiveProviderRuntimeContext();
+  const diagMsg = `[requireRuntimeEntry] MISS for runtimeId=${runtimeId}; registered=[${registeredIds.join(', ')}]; scope=${JSON.stringify(scope)}; activeCtx.runtimeId=${activeCtx?.runtimeId}`;
+  // Temporary diagnostic — always emit so crash root cause is visible
+  // eslint-disable-next-line no-console
+  console.error(diagMsg);
+  logger.debug(() => diagMsg);
 
   const hint = isStatelessProviderIntegrationEnabled()
     ? 'Stateless hardening requires explicit runtime registration.'
@@ -383,6 +396,17 @@ export interface CliRuntimeServices {
 export function getCliRuntimeContext(): ProviderRuntimeContext {
   const identity = resolveActiveRuntimeIdentity();
   const entry = runtimeRegistry.get(identity.runtimeId);
+
+  if (!entry || !entry.config) {
+    const registeredIds = Array.from(runtimeRegistry.keys());
+    const scope = getCurrentRuntimeScope();
+    const activeCtx = peekActiveProviderRuntimeContext();
+    const diag = `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!(entry && entry.config)}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`;
+    // Temporary diagnostic — always emit so crash root cause is visible
+    // eslint-disable-next-line no-console
+    console.error(diag);
+    logger.debug(() => diag);
+  }
 
   if (entry && entry.config) {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
