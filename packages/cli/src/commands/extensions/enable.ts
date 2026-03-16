@@ -5,11 +5,7 @@
  */
 
 import { type CommandModule } from 'yargs';
-import {
-  FatalConfigError,
-  getErrorMessage,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { enableExtension } from '../../config/extension.js';
 import { SettingScope } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
@@ -27,11 +23,11 @@ export async function handleEnable(args: EnableArgs) {
       enableExtension(args.name, SettingScope.User);
     }
     if (args.scope) {
-      debugLogger.log(
+      console.log(
         `Extension "${args.name}" successfully enabled for scope "${args.scope}".`,
       );
     } else {
-      debugLogger.log(
+      console.log(
         `Extension "${args.name}" successfully enabled in all scopes.`,
       );
     }

@@ -10,7 +10,6 @@ import type { CommandModule } from 'yargs';
 import { fileURLToPath } from 'node:url';
 import { getErrorMessage } from '../../utils/errors.js';
 import { exitCli } from '../utils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface NewArgs {
   path: string;
@@ -44,14 +43,14 @@ async function copyDirectory(template: string, path: string) {
 async function handleNew(args: NewArgs) {
   try {
     await copyDirectory(args.template, args.path);
-    debugLogger.log(
+    console.log(
       `Successfully created new extension from template "${args.template}" at ${args.path}.`,
     );
-    debugLogger.log(
+    console.log(
       `You can install this using "llxprt extensions link ${args.path}" to test it out.`,
     );
   } catch (error) {
-    debugLogger.error(getErrorMessage(error));
+    console.error(getErrorMessage(error));
     throw error;
   }
 }

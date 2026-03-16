@@ -241,9 +241,12 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
-  // CLI extension commands produce user-facing stdout output
+  // CLI extension commands produce user-facing stdout/stderr output
   {
-    files: ['packages/cli/src/commands/extensions/{install,uninstall,update}.ts'],
+    files: [
+      'packages/cli/src/commands/extensions/*.ts',
+      'packages/cli/src/config/extension.ts',
+    ],
     rules: {
       'no-console': 'off',
     },

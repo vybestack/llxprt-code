@@ -13,7 +13,6 @@ import {
   ExtensionSettingScope,
 } from '../../config/extensions/settingsIntegration.js';
 import { exitCli } from '../utils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface SetArgs {
   name: string;
@@ -112,7 +111,6 @@ async function handleList(args: ListArgs): Promise<void> {
   const { extension, extensionConfig } = await getExtensionAndConfig(args.name);
 
   if (!extension || !extensionConfig) {
-    await exitCli();
     return;
   }
 
@@ -131,15 +129,14 @@ async function handleList(args: ListArgs): Promise<void> {
   );
 
   if (contents.length === 0) {
-    debugLogger.log(`Extension "${args.name}" has no settings.`);
-    await exitCli();
+    console.log(`Extension "${args.name}" has no settings.`);
     return;
   }
 
   const scopeLabel = scope ? ` (${scope} scope)` : ' (merged user + workspace)';
-  debugLogger.log(`Settings for extension "${args.name}"${scopeLabel}:`);
+  console.log(`Settings for extension "${args.name}"${scopeLabel}:`);
   for (const { name, value } of contents) {
-    debugLogger.log(`  ${name}: ${value}`);
+    console.log(`  ${name}: ${value}`);
   }
 }
 

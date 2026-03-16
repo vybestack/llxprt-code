@@ -13,9 +13,9 @@ import {
   afterEach,
   type Mock,
 } from 'vitest';
-import { DebugLogger, FatalConfigError } from '@vybestack/llxprt-code-core';
 import { handleEnable, enableCommand } from './enable.js';
 import yargs from 'yargs';
+import { FatalConfigError } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
 import type * as extensionModule from '../../config/extension.js';
 
@@ -68,9 +68,7 @@ describe('handleEnable', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    consoleLogSpy = vi
-      .spyOn(DebugLogger.prototype, 'log')
-      .mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     mockEnableExtension.mockResolvedValue(undefined);
   });
 

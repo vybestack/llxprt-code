@@ -14,7 +14,6 @@ import {
   type Mock,
   type MockInstance,
 } from 'vitest';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { handleLink } from './link.js';
 import type * as extensionModule from '../../config/extension.js';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
@@ -58,12 +57,8 @@ describe('handleLink', () => {
   let processSpy: MockInstance;
 
   beforeEach(() => {
-    consoleLogSpy = vi
-      .spyOn(DebugLogger.prototype, 'log')
-      .mockImplementation(() => {});
-    consoleErrorSpy = vi
-      .spyOn(DebugLogger.prototype, 'error')
-      .mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);

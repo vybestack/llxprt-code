@@ -9,7 +9,6 @@ import {
   GeminiCLIExtension,
   Storage,
   getErrorMessage,
-  debugLogger,
   type SkillDefinition,
   loadSkillsFromDirSync,
 } from '@vybestack/llxprt-code-core';
@@ -233,7 +232,7 @@ export function loadExtension(
 ): GeminiCLIExtension | null {
   const { extensionDir, workspaceDir } = context;
   if (!fs.statSync(extensionDir).isDirectory()) {
-    debugLogger.error(
+    console.error(
       `Warning: unexpected file ${extensionDir} in extensions directory.`,
     );
     return null;
@@ -267,7 +266,7 @@ export function loadExtension(
     );
   }
   if (!fs.existsSync(configFilePath)) {
-    debugLogger.warn(
+    console.warn(
       `Extension directory ${effectiveExtensionPath} does not contain a valid config file (${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}). Skipping.`,
     );
     return null;
@@ -282,7 +281,7 @@ export function loadExtension(
       pathSeparator: path.sep,
     }) as unknown as ExtensionConfig;
     if (!config.name || !config.version) {
-      debugLogger.error(
+      console.error(
         `Invalid extension config in ${configFilePath}: missing name or version.`,
       );
       return null;
@@ -291,7 +290,7 @@ export function loadExtension(
     try {
       validateName(config.name);
     } catch (e) {
-      debugLogger.error(getErrorMessage(e));
+      console.error(getErrorMessage(e));
       return null;
     }
 
@@ -368,7 +367,7 @@ export function loadExtension(
       >,
     };
   } catch (e) {
-    debugLogger.error(
+    console.error(
       `Warning: Skipping extension in ${effectiveExtensionPath}: ${getErrorMessage(e)}`,
     );
     return null;
@@ -469,7 +468,7 @@ async function cloneFromGit(
 export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
-  debugLogger.log(consentDescription);
+  console.info(consentDescription);
   const result = await promptForConsentNonInteractive(
     'Do you want to continue? [Y/n]: ',
   );
@@ -690,7 +689,7 @@ export async function installOrUpdateExtension(
       if (missingSettings.length > 0) {
         const settingNames = missingSettings.map((s) => s.name).join(', ');
         const message = `Extension "${newExtensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions settings ${newExtensionConfig.name} <setting-name>" to configure them.`;
-        debugLogger.warn(message);
+        console.warn(message);
       }
     }
 
@@ -878,7 +877,7 @@ export async function loadExtensionConfig(
     );
   }
   if (!fs.existsSync(configFilePath)) {
-    debugLogger.warn(
+    console.warn(
       `Extension config file not found at ${extensionDir}. Expected ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK}.`,
     );
     return null;
@@ -887,7 +886,7 @@ export async function loadExtensionConfig(
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
     const rawConfig = JSON.parse(configContent) as ExtensionConfig;
     if (!rawConfig.name || !rawConfig.version) {
-      debugLogger.warn(
+      console.warn(
         `Invalid extension configuration in ${configFilePath}: missing ${!rawConfig.name ? '"name"' : '"version"'}`,
       );
       return null;
@@ -921,7 +920,7 @@ export async function loadExtensionConfig(
     ) {
       throw e;
     }
-    debugLogger.warn(
+    console.warn(
       `Failed to load extension config from ${configFilePath}: ${e instanceof Error ? e.message : String(e)}`,
     );
     return null;

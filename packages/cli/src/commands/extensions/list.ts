@@ -8,22 +8,21 @@ import type { CommandModule } from 'yargs';
 import { loadUserExtensions, toOutputString } from '../../config/extension.js';
 import { getErrorMessage } from '../../utils/errors.js';
 import { exitCli } from '../utils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export async function handleList() {
   try {
     const extensions = loadUserExtensions();
     if (extensions.length === 0) {
-      debugLogger.log('No extensions installed.');
+      console.log('No extensions installed.');
       return;
     }
-    debugLogger.log(
+    console.log(
       extensions
         .map((extension, _): string => toOutputString(extension, process.cwd()))
         .join('\n\n'),
     );
   } catch (error) {
-    debugLogger.error(getErrorMessage(error));
+    console.error(getErrorMessage(error));
     await exitCli(1);
   }
 }
