@@ -8,7 +8,11 @@ import type {
   Config,
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
-import { GeminiEventType, ApprovalMode } from '@vybestack/llxprt-code-core';
+import {
+  GeminiEventType,
+  ApprovalMode,
+  debugLogger,
+} from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
 import type {
   TaskStatusUpdateEvent,
@@ -707,7 +711,9 @@ describe('E2E Tests', () => {
     });
 
     it('should handle cyclic commands gracefully', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation(() => {});
 
       const cyclicCommand: Command = {
         name: 'cyclic-command',

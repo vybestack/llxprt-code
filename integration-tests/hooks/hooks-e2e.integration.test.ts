@@ -83,6 +83,13 @@ function createRealConfig(options: {
     getExtensions: () => [],
     getModel: () => 'test-model',
     getSessionRecordingService: () => undefined,
+    isTrustedFolder: () => true,
+    getProjectHooks: () => null,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
     getHookSystem: () => {
       if (!hookSystem) {
         hookSystem = new HookSystem(config as Config);

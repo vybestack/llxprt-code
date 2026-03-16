@@ -7,7 +7,6 @@
 import { CommandModule } from 'yargs';
 import { uninstallExtension } from '../../config/extension.js';
 import { exitCli } from '../utils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface UninstallArgs {
   names: string[];
@@ -17,7 +16,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
   const uniqueNames = [...new Set(args.names)];
 
   if (uniqueNames.length === 0) {
-    debugLogger.error('No valid extension names provided to uninstall.');
+    console.error('No valid extension names provided to uninstall.');
     await exitCli(1);
     return;
   }
@@ -27,7 +26,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
   for (const name of uniqueNames) {
     try {
       await uninstallExtension(name, false);
-      debugLogger.log(`Extension "${name}" successfully uninstalled.`);
+      console.log(`Extension "${name}" successfully uninstalled.`);
     } catch (error) {
       errors.push({ name, error: (error as Error).message });
     }
@@ -35,7 +34,7 @@ export async function handleUninstall(args: UninstallArgs): Promise<void> {
 
   if (errors.length > 0) {
     for (const { name, error } of errors) {
-      debugLogger.error(`Failed to uninstall "${name}": ${error}`);
+      console.error(`Failed to uninstall "${name}": ${error}`);
     }
     await exitCli(1);
   }

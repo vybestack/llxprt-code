@@ -120,20 +120,20 @@ export const NEVER_ALLOWED_NAME_PATTERNS = [
 export const NEVER_ALLOWED_VALUE_PATTERNS = [
   /-----BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY-----/i,
   /-----BEGIN CERTIFICATE-----/i,
-  // Credentials in URL
-  /(https?|ftp|smtp):\/\/[^:]+:[^@]+@/i,
+  // Credentials in URL (quantifiers bounded to prevent polynomial backtracking)
+  /(https?|ftp|smtp):\/\/[^:]{1,2048}:[^@]{1,2048}@/i,
   // GitHub tokens (classic, fine-grained, OAuth, etc.)
-  /(ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,}/i,
+  /(ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9_]{36,255}/i,
   // Google API keys
   /AIzaSy[a-zA-Z0-9_\\-]{33}/i,
   // Amazon AWS Access Key ID
   /AKIA[A-Z0-9]{16}/i,
-  // Generic OAuth/JWT tokens
-  /eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*/i,
+  // Generic OAuth/JWT tokens (quantifiers bounded to prevent polynomial backtracking)
+  /eyJ[a-zA-Z0-9_-]{0,8192}\.[a-zA-Z0-9_-]{0,8192}\.[a-zA-Z0-9_-]{0,8192}/i,
   // Stripe API keys
   /(s|r)k_(live|test)_[0-9a-zA-Z]{24}/i,
   // Slack tokens (bot, user, etc.)
-  /xox[abpr]-[a-zA-Z0-9-]+/i,
+  /xox[abpr]-[a-zA-Z0-9-]{1,255}/i,
 ] as const;
 
 function shouldRedactEnvironmentVariable(

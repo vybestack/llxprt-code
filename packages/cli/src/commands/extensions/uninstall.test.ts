@@ -14,7 +14,6 @@ import {
   type Mock,
   type MockInstance,
 } from 'vitest';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { handleUninstall, uninstallCommand } from './uninstall.js';
 import yargs from 'yargs';
 import type * as extensionModule from '../../config/extension.js';
@@ -49,12 +48,8 @@ describe('handleUninstall', () => {
   let processExitSpy: MockInstance;
 
   beforeEach(() => {
-    consoleLogSpy = vi
-      .spyOn(DebugLogger.prototype, 'log')
-      .mockImplementation(() => {});
-    consoleErrorSpy = vi
-      .spyOn(DebugLogger.prototype, 'error')
-      .mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processExitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);

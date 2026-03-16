@@ -19,7 +19,6 @@ import {
 import { getErrorMessage } from '../../utils/errors.js';
 import * as fs from 'node:fs/promises';
 import { exitCli } from '../utils.js';
-import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface InstallArgs {
   source?: string;
@@ -45,7 +44,7 @@ export async function handleInstall(args: InstallArgs) {
           autoUpdate: args.autoUpdate,
         };
       } else if (source.startsWith('sso://')) {
-        debugLogger.warn(
+        console.warn(
           'sso:// URLs require a git-remote-sso helper to be installed. See https://github.com/google/git-remote-sso for more information.',
         );
         installMetadata = {
@@ -94,7 +93,7 @@ export async function handleInstall(args: InstallArgs) {
               autoUpdate: args.autoUpdate,
             };
           } catch {
-            debugLogger.error('Install source not found.');
+            console.error('Install source not found.');
             await exitCli(1);
           }
         }
@@ -117,11 +116,11 @@ export async function handleInstall(args: InstallArgs) {
       workspaceDir,
     );
     const extension = loadExtensionByName(extensionName, workspaceDir);
-    debugLogger.log(
+    console.log(
       `Extension "${extension?.name ?? extensionName}" installed successfully and enabled.`,
     );
   } catch (error) {
-    debugLogger.error(getErrorMessage(error));
+    console.error(getErrorMessage(error));
     await exitCli(1);
   }
 }

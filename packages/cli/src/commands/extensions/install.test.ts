@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, type MockInstance, type Mock } from 'vitest';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
@@ -62,10 +62,10 @@ describe('handleInstall', () => {
 
   beforeEach(() => {
     consoleLogSpy = vi
-      .spyOn(DebugLogger.prototype, 'log')
+      .spyOn(console, 'log')
       .mockImplementation(() => {});
     consoleErrorSpy = vi
-      .spyOn(DebugLogger.prototype, 'error')
+      .spyOn(console, 'error')
       .mockImplementation(() => {});
     processSpy = vi
       .spyOn(process, 'exit')
