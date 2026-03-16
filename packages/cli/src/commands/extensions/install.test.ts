@@ -61,12 +61,8 @@ describe('handleInstall', () => {
   let processSpy: MockInstance;
 
   beforeEach(() => {
-    consoleLogSpy = vi
-      .spyOn(console, 'log')
-      .mockImplementation(() => {});
-    consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
