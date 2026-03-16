@@ -2554,6 +2554,7 @@ export class GeminiChat {
     let hasToolCall = false;
     let finishReason: FinishReason | undefined;
     let hasTextResponse = false;
+    let hasThinkingResponse = false;
     const allChunks: GenerateContentResponse[] = [];
 
     for await (const chunk of streamResponse) {
@@ -2573,16 +2574,21 @@ export class GeminiChat {
             hasToolCall = true;
           }
 
-          // Check if any part has text content (not just thoughts)
+          // Check if any part has non-thought text content
           if (
             content.parts.some(
               (part) =>
                 part.text &&
                 typeof part.text === 'string' &&
-                part.text.trim() !== '',
+                part.text.trim() !== '' &&
+                !isThoughtPart(part),
             )
           ) {
             hasTextResponse = true;
+          }
+
+          if (content.parts.some((part) => isThoughtPart(part))) {
+            hasThinkingResponse = true;
           }
 
           const includeThoughtsInHistory =
@@ -2627,7 +2633,7 @@ export class GeminiChat {
     }
 
     const responseText = consolidatedParts
-      .filter((part) => part.text)
+      .filter((part) => isValidNonThoughtTextPart(part))
       .map((part) => part.text)
       .join('')
       .trim();
@@ -2649,6 +2655,7 @@ export class GeminiChat {
     if (
       !hasToolCall &&
       !isToolContinuationInput &&
+      !hasThinkingResponse &&
       ((!finishReason && !hasTextResponse) || !responseText)
     ) {
       if (!finishReason && !hasTextResponse) {
@@ -3059,7 +3066,7 @@ export class GeminiChat {
   /**
    * Convert IContent (from provider) to GenerateContentResponse for SDK compatibility
    */
-  private convertIContentToResponse(input: IContent): GenerateContentResponse {
+  convertIContentToResponse(input: IContent): GenerateContentResponse {
     // Convert IContent blocks to Gemini Parts
     const parts: Part[] = [];
 
@@ -3124,7 +3131,12 @@ export class GeminiChat {
       ],
       // These are required properties that must be present
       get text() {
-        return parts.find((p) => 'text' in p)?.text || '';
+        return (
+          parts
+            .filter((p) => 'text' in p && !isThoughtPart(p))
+            .map((p) => p.text)
+            .join('') || ''
+        );
       },
       functionCalls: parts
         .filter((p) => 'functionCall' in p)
@@ -3156,6 +3168,22 @@ export class GeminiChat {
           input.metadata.usage.cache_creation_input_tokens || 0,
       };
       response.usageMetadata = usageMetadata;
+    }
+
+    if (input.metadata?.stopReason && response.candidates?.[0]) {
+      const finishReasonByStopReason: Record<string, FinishReason> = {
+        end_turn: FinishReason.STOP,
+        max_tokens: FinishReason.MAX_TOKENS,
+        stop_sequence: FinishReason.STOP,
+        tool_use: FinishReason.STOP,
+        pause_turn: FinishReason.STOP,
+        refusal: FinishReason.STOP,
+        model_context_window_exceeded: FinishReason.MAX_TOKENS,
+      };
+      const finishReason = finishReasonByStopReason[input.metadata.stopReason];
+      if (finishReason) {
+        response.candidates[0].finishReason = finishReason;
+      }
     }
 
     return response;
