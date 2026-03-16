@@ -241,6 +241,13 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  // CLI extension commands produce user-facing stdout output
+  {
+    files: ['packages/cli/src/commands/extensions/{install,uninstall,update}.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
   // Vitest test configuration
   {
     // Prevent self-imports in packages
