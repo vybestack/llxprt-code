@@ -195,7 +195,7 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': ['error'],
       '@typescript-eslint/no-unnecessary-type-assertion': ['error'],
 
-      // --- Strict rules from lsp/ui (enabled as warnings for core/cli) ---
+      // --- Strict rules modeled after lsp/ui packages (enabled as warnings for core/cli) ---
 
       // Strict TypeScript rules
       '@typescript-eslint/no-misused-promises': 'warn',
