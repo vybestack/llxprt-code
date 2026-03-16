@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   detectApiKeyProvider,
+  detectApiKeyProviderFromName,
   fetchApiKeyQuota,
 } from './apiKeyQuotaResolver.js';
 
@@ -34,6 +35,37 @@ vi.mock('./kimi/usageInfo.js', () => ({
 }));
 
 describe('apiKeyQuotaResolver', () => {
+  describe('detectApiKeyProviderFromName', () => {
+    it.each([
+      // Valid provider names (various casings)
+      ['kimi', 'kimi'],
+      ['KIMI', 'kimi'],
+      ['Kimi', 'kimi'],
+      ['synthetic', 'synthetic'],
+      ['SYNTHETIC', 'synthetic'],
+      ['Synthetic', 'synthetic'],
+      ['chutes', 'chutes'],
+      ['CHUTES', 'chutes'],
+      ['Chutes', 'chutes'],
+      ['chutes-ai', 'chutes'],
+      ['CHUTES-AI', 'chutes'],
+      ['Chutes-Ai', 'chutes'],
+      ['zai', 'zai'],
+      ['ZAI', 'zai'],
+      ['Zai', 'zai'],
+      // Invalid inputs
+      ['openai', null],
+      ['unknown', null],
+      ['', null],
+      ['   ', null],
+      [undefined, null],
+      [null as unknown as string, null],
+      [42 as unknown as string, null],
+    ])('detectApiKeyProviderFromName("%s") returns %s', (input, expected) => {
+      expect(detectApiKeyProviderFromName(input)).toBe(expected);
+    });
+  });
+
   describe('detectApiKeyProvider', () => {
     it('should detect Z.ai from api.z.ai base URL', () => {
       expect(detectApiKeyProvider('https://api.z.ai/v1')).toBe('zai');

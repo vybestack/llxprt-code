@@ -11,6 +11,7 @@ import type {
   OAuthToken,
   TokenStore,
   BucketFailureReason,
+  OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 
 class MemoryTokenStore implements TokenStore {
@@ -129,6 +130,52 @@ describe('BucketFailoverHandlerImpl', () => {
     );
 
     expect(handler.getCurrentBucket()).toBe('bucket-b');
+  });
+
+  it('uses scoped session buckets when initialized with request metadata', async () => {
+    await tokenStore.saveToken('anthropic', makeToken('t1'), 'bucket-a');
+    await tokenStore.saveToken('anthropic', makeToken('t2'), 'bucket-b');
+
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+
+    oauthManager.setSessionBucket('anthropic', 'bucket-b', metadata);
+
+    const HandlerCtor = BucketFailoverHandlerImpl as unknown as {
+      new (
+        buckets: string[],
+        provider: string,
+        oauthManager: OAuthManager,
+        metadata?: OAuthTokenRequestMetadata,
+      ): BucketFailoverHandlerImpl;
+    };
+
+    const handler = new HandlerCtor(
+      ['bucket-a', 'bucket-b'],
+      'anthropic',
+      oauthManager,
+      metadata,
+    );
+
+    expect(handler.getCurrentBucket()).toBe('bucket-b');
+    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
+      'bucket-b',
+    );
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
+
+    handler.reset();
+
+    expect(handler.getCurrentBucket()).toBe('bucket-a');
+    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
+      'bucket-a',
+    );
+    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
   });
 
   it('skips buckets with missing tokens and updates session bucket on success', async () => {
@@ -1331,6 +1378,42 @@ describe('ensureBucketsAuthenticated', () => {
     expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledWith(
       'anthropic',
       ['bucket-a', 'bucket-b', 'bucket-c'],
+      undefined,
+    );
+  });
+
+  it('passes request metadata through eager multi-bucket authentication', async () => {
+    const tokenStore = new MemoryTokenStore();
+    const metadata: OAuthTokenRequestMetadata = {
+      profileId: 'opusthinkingbucketed',
+      providerId: 'anthropic',
+      runtimeMetadata: {
+        source: 'SubagentOrchestrator',
+        subagent: 'codeanalyzer',
+      },
+    };
+    const oauthManager = {
+      getOAuthToken: vi.fn(async () => null),
+      getTokenStore: vi.fn(() => tokenStore),
+      setSessionBucket: vi.fn(),
+      getSessionBucket: vi.fn(() => undefined),
+      authenticate: vi.fn(async () => {}),
+      authenticateMultipleBuckets: vi.fn(async () => {}),
+    };
+
+    const handler = new BucketFailoverHandlerImpl(
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      'anthropic',
+      oauthManager as unknown as OAuthManager,
+      metadata,
+    );
+
+    await handler.ensureBucketsAuthenticated();
+
+    expect(oauthManager.authenticateMultipleBuckets).toHaveBeenCalledWith(
+      'anthropic',
+      ['bucket-a', 'bucket-b', 'bucket-c'],
+      metadata,
     );
   });
 
@@ -1476,6 +1559,7 @@ describe('ensureBucketsAuthenticated', () => {
     expect(oauthManager.setSessionBucket).toHaveBeenCalledWith(
       'anthropic',
       'bucket-b',
+      undefined,
     );
   });
 

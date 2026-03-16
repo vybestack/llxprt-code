@@ -1151,8 +1151,8 @@ sub memory
       );
       await fromAsync(stream);
 
-      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
-      expect(forwardedRequests.length).toBe(2);
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(3);
+      expect(forwardedRequests.length).toBe(3);
 
       const secondRequest = forwardedRequests[1];
       const reminderPart = secondRequest?.find(
@@ -2112,8 +2112,8 @@ sub memory
       );
       const events = await fromAsync(stream);
 
-      // MAX_RETRIES is 2, so: initial call + 1 retry = 2 calls
-      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      // MAX_RETRIES is 3, so: initial call + 2 retries = 3 calls
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(3);
       // Should eventually return with Finished event
       expect(events.some((e) => e.type === GeminiEventType.Finished)).toBe(
         true,
