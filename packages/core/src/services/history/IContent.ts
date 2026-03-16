@@ -72,6 +72,9 @@ export interface ContentMetadata {
 
   /** Stable identifier for a conversation turn */
   turnId?: string;
+
+  /** Stop reason from provider (e.g., end_turn, max_tokens) */
+  stopReason?: string;
 }
 
 export interface UsageStats {

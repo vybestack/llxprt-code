@@ -154,7 +154,7 @@ export function AuthDialog({
       <Box marginTop={1}>
         <Text color={Colors.DimComment}>
           Note: You can also use API keys via /key, /keyfile, --key, --keyfile,
-          or environment variables
+          --key-name, or environment variables
         </Text>
       </Box>
       <Box marginTop={1}>

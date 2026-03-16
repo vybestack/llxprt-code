@@ -13,6 +13,7 @@ import {
   loadGlobalMemory,
   loadEnvironmentMemory,
   loadJitSubdirectoryMemory,
+  loadCoreMemory,
 } from './memoryDiscovery.js';
 import {
   setLlxprtMdFilename,
@@ -989,13 +990,76 @@ included directory memory
       );
 
       expect(result.files).toHaveLength(2);
-      // Verify order: PRIMARY should come before SECONDARY because they are
-      // sorted by path and PRIMARY.md comes before SECONDARY.md alphabetically
-      // if in same dir.
       expect(result.files[0].path).toBe(primaryFile);
       expect(result.files[1].path).toBe(secondaryFile);
       expect(result.files[0].content).toBe('Primary content');
       expect(result.files[1].content).toBe('Secondary content');
+    });
+
+    it('should discover .llxprt/ subdirectory memory files during upward scan', async () => {
+      const trustedRoot = await createEmptyDir(
+        path.join(testRootDir, 'env_root'),
+      );
+
+      const llxprtMemoryFile = await createTestFile(
+        path.join(trustedRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Env .llxprt memory',
+      );
+
+      const result = await loadEnvironmentMemory(
+        [trustedRoot],
+        new SimpleExtensionLoader([]),
+      );
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(llxprtMemoryFile);
+      expect(result.files[0].content).toBe('Env .llxprt memory');
+    });
+
+    it('should discover both direct and .llxprt/ memory files from the same directory', async () => {
+      const trustedRoot = await createEmptyDir(
+        path.join(testRootDir, 'env_root'),
+      );
+
+      const directFile = await createTestFile(
+        path.join(trustedRoot, DEFAULT_CONTEXT_FILENAME),
+        'Direct memory',
+      );
+      const llxprtFile = await createTestFile(
+        path.join(trustedRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Llxprt memory',
+      );
+
+      const result = await loadEnvironmentMemory(
+        [trustedRoot],
+        new SimpleExtensionLoader([]),
+      );
+
+      expect(result.files).toHaveLength(2);
+      expect(result.files.map((f) => f.path).sort()).toEqual(
+        [directFile, llxprtFile].sort(),
+      );
+    });
+
+    it('should not duplicate global memory path when .llxprt/ scan encounters global dir', async () => {
+      const globalFile = await createTestFile(
+        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Global memory',
+      );
+
+      const trustedRoot = await createEmptyDir(
+        path.join(testRootDir, 'env_root'),
+      );
+
+      const result = await loadEnvironmentMemory(
+        [trustedRoot],
+        new SimpleExtensionLoader([]),
+      );
+
+      const globalFileOccurrences = result.files.filter(
+        (f) => f.path === globalFile,
+      );
+      expect(globalFileOccurrences.length).toBe(0);
     });
   });
 
@@ -1019,6 +1083,27 @@ included directory memory
       expect(result.files).toHaveLength(1);
       expect(result.files[0].path).toBe(subDirMemory);
       expect(result.files[0].content).toBe('Subdir JIT content');
+    });
+
+    it('should discover .llxprt/ subdirectory memory files during JIT upward scan', async () => {
+      const rootDir = await createEmptyDir(path.join(testRootDir, 'jit_root'));
+      const subDir = await createEmptyDir(path.join(rootDir, 'subdir'));
+      const targetFile = path.join(subDir, 'target.txt');
+
+      const subDirLlxprtMemory = await createTestFile(
+        path.join(subDir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Subdir .llxprt memory',
+      );
+
+      const result = await loadJitSubdirectoryMemory(
+        targetFile,
+        [rootDir],
+        new Set(),
+      );
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(subDirLlxprtMemory);
+      expect(result.files[0].content).toBe('Subdir .llxprt memory');
     });
 
     it('should skip JIT memory when target is outside trusted roots', async () => {
@@ -1162,6 +1247,72 @@ included directory memory
       expect(result.files).toHaveLength(1);
       expect(result.files[0].path).toBe(subDirMemory);
       expect(result.files[0].content).toBe('Subdir JIT content');
+    });
+  });
+
+  describe('loadCoreMemory', () => {
+    it('should load global .LLXPRT_SYSTEM file', async () => {
+      const globalCoreFile = await createTestFile(
+        path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        'Global core memory',
+      );
+
+      const result = await loadCoreMemory([]);
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(globalCoreFile);
+      expect(result.files[0].content).toBe('Global core memory');
+    });
+
+    it('should load project .LLXPRT_SYSTEM file from trusted roots', async () => {
+      const trustedRoot = await createEmptyDir(
+        path.join(testRootDir, 'core_root'),
+      );
+
+      const projectCoreFile = await createTestFile(
+        path.join(trustedRoot, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        'Project core memory',
+      );
+
+      const result = await loadCoreMemory([trustedRoot]);
+
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0].path).toBe(projectCoreFile);
+      expect(result.files[0].content).toBe('Project core memory');
+    });
+
+    it('should load both global and project .LLXPRT_SYSTEM files', async () => {
+      const globalCoreFile = await createTestFile(
+        path.join(homedir, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        'Global core memory',
+      );
+
+      const trustedRoot = await createEmptyDir(
+        path.join(testRootDir, 'core_root'),
+      );
+
+      const projectCoreFile = await createTestFile(
+        path.join(trustedRoot, LLXPRT_DIR, '.LLXPRT_SYSTEM'),
+        'Project core memory',
+      );
+
+      const result = await loadCoreMemory([trustedRoot]);
+
+      expect(result.files).toHaveLength(2);
+      expect(result.files.map((f) => f.path)).toEqual([
+        projectCoreFile,
+        globalCoreFile,
+      ]);
+    });
+
+    it('should return empty if no .LLXPRT_SYSTEM files exist', async () => {
+      const trustedRoot = await createEmptyDir(
+        path.join(testRootDir, 'core_root'),
+      );
+
+      const result = await loadCoreMemory([trustedRoot]);
+
+      expect(result.files).toHaveLength(0);
     });
   });
 });

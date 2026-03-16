@@ -54,7 +54,7 @@ describe('terminalProtocolCleanup', () => {
     });
 
     const disableKittySpy = vi
-      .spyOn(terminalCapabilityManager, 'disableKittyProtocol')
+      .spyOn(terminalCapabilityManager, 'disableKittyProtocolOnExit')
       .mockImplementation(() => {});
 
     restoreTerminalProtocolsSync();
@@ -74,7 +74,7 @@ describe('terminalProtocolCleanup', () => {
 
     const disableKittySpy = vi.spyOn(
       terminalCapabilityManager,
-      'disableKittyProtocol',
+      'disableKittyProtocolOnExit',
     );
 
     restoreTerminalProtocolsSync();

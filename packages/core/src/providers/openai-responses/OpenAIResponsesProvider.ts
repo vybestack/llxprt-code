@@ -361,7 +361,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       | {
           type: 'function_call_output';
           call_id: string;
-          output: string | ResponsesContentPart[];
+          output: string;
         }
       | {
           type: 'reasoning';
@@ -562,7 +562,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       | {
           type: 'function_call_output';
           call_id: string;
-          output: string | ResponsesContentPart[];
+          output: string;
         }
       | {
           type: 'reasoning';
@@ -732,28 +732,33 @@ export class OpenAIResponsesProvider extends BaseProvider {
             continue;
           }
 
-          let outputContent: string | ResponsesContentPart[];
+          input.push({
+            type: 'function_call_output',
+            call_id: outputCallId,
+            output: candidate,
+          });
 
+          // OpenAI Responses API function_call_output.output only accepts a
+          // string.  When the tool response carried media blocks (e.g.
+          // screenshots, images from read_file), emit them as a synthetic
+          // user message so the model can still see the actual image data.
           if (mediaBlocks.length > 0) {
-            const parts: ResponsesContentPart[] = [];
-            if (candidate) {
-              parts.push({ type: 'input_text', text: candidate });
-            }
+            const mediaParts: ResponsesContentPart[] = [];
             for (const media of mediaBlocks) {
               const category = classifyMediaBlock(media);
               if (category === 'image') {
-                parts.push({
+                mediaParts.push({
                   type: 'input_image',
                   image_url: normalizeMediaToDataUri(media),
                 });
               } else if (category === 'pdf') {
-                parts.push({
+                mediaParts.push({
                   type: 'input_file',
                   file_data: normalizeMediaToDataUri(media),
                   ...(media.filename ? { filename: media.filename } : {}),
                 });
               } else {
-                parts.push({
+                mediaParts.push({
                   type: 'input_text',
                   text: buildUnsupportedMediaPlaceholder(
                     media,
@@ -762,16 +767,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
                 });
               }
             }
-            outputContent = parts.length > 0 ? parts : candidate;
-          } else {
-            outputContent = candidate;
+            if (mediaParts.length > 0) {
+              input.push({
+                role: 'user',
+                content: mediaParts,
+              });
+            }
           }
-
-          input.push({
-            type: 'function_call_output',
-            call_id: outputCallId,
-            output: outputContent,
-          });
         }
       }
     }

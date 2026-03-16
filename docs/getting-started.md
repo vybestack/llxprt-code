@@ -74,7 +74,7 @@ llxprt
 /model qwen-3-coder
 ```
 
-Each `/auth` command opens a browser for OAuth with your existing account.
+Each `/auth <provider> enable` command enables lazy OAuth — a browser opens automatically when you make your first request to that provider. Use `/auth <provider> login` to open the browser immediately.
 
 ### Option C: API Keys
 

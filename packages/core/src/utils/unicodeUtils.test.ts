@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   sanitizeUnicodeReplacements,
   hasUnicodeReplacements,
+  hasJsonUnsafeCharacters,
   ensureJsonSafe,
   cleanCp932Artifacts,
 } from './unicodeUtils.js';
@@ -39,6 +40,48 @@ describe('Unicode utilities regression tests', () => {
       expect(hasUnicodeReplacements('Normal text')).toBe(false);
       expect(hasUnicodeReplacements('Text with \uFFFD')).toBe(true);
       expect(hasUnicodeReplacements('\uFFFD')).toBe(true);
+    });
+  });
+
+  describe('hasJsonUnsafeCharacters', () => {
+    it('should return false for clean strings', () => {
+      expect(hasJsonUnsafeCharacters('Normal text')).toBe(false);
+      expect(hasJsonUnsafeCharacters('Hello, world!')).toBe(false);
+      expect(hasJsonUnsafeCharacters('Line\nbreak\ttab')).toBe(false);
+      expect(hasJsonUnsafeCharacters('')).toBe(false);
+    });
+
+    it('should detect Unicode replacement characters', () => {
+      expect(hasJsonUnsafeCharacters('Text with \uFFFD')).toBe(true);
+    });
+
+    it('should detect unpaired high surrogates', () => {
+      expect(hasJsonUnsafeCharacters('Test\uD800End')).toBe(true);
+    });
+
+    it('should detect unpaired low surrogates', () => {
+      expect(hasJsonUnsafeCharacters('Test\uDC00End')).toBe(true);
+    });
+
+    it('should accept valid surrogate pairs', () => {
+      expect(hasJsonUnsafeCharacters('Test\uD83D\uDE00End')).toBe(false); // 😀
+      expect(hasJsonUnsafeCharacters('Test😀End')).toBe(false);
+    });
+
+    it('should detect control characters', () => {
+      expect(hasJsonUnsafeCharacters('Test\x00End')).toBe(true);
+      expect(hasJsonUnsafeCharacters('Test\x01End')).toBe(true);
+      expect(hasJsonUnsafeCharacters('Test\x7FEnd')).toBe(true);
+    });
+
+    it('should accept tab, newline, and carriage return', () => {
+      expect(hasJsonUnsafeCharacters('Test\tEnd')).toBe(false);
+      expect(hasJsonUnsafeCharacters('Test\nEnd')).toBe(false);
+      expect(hasJsonUnsafeCharacters('Test\rEnd')).toBe(false);
+    });
+
+    it('should detect high surrogate at end of string', () => {
+      expect(hasJsonUnsafeCharacters('Test\uD800')).toBe(true);
     });
   });
 

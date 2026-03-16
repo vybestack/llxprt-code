@@ -171,6 +171,7 @@ vi.mock('../utils/memoryDiscovery.js', () => ({
   loadGlobalMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadEnvironmentMemory: vi.fn().mockResolvedValue({ files: [] }),
   loadJitSubdirectoryMemory: mockLoadJitSubdirectoryMemory,
+  loadCoreMemory: vi.fn().mockResolvedValue({ files: [] }),
   concatenateInstructions: vi.fn().mockReturnValue(''),
   getAllLlxprtMdFilenames: vi.fn().mockReturnValue([]),
   loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
@@ -698,6 +699,44 @@ describe('Server Config (config.ts)', () => {
     const config = new Config(paramsWithoutMemory);
 
     expect(config.getUserMemory()).toBe('');
+  });
+
+  it('getCoreMemory should delegate to contextManager when JIT context is enabled', async () => {
+    const config = new Config({
+      ...baseParams,
+      jitContextEnabled: true,
+    });
+    await config.initialize();
+
+    const contextManager = config.getContextManager();
+    expect(contextManager).toBeDefined();
+
+    const expected = 'Always use TypeScript';
+    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue(expected);
+
+    expect(config.getCoreMemory()).toBe(expected);
+  });
+
+  it('getCoreMemory should return undefined when JIT context is disabled', () => {
+    const config = new Config({
+      ...baseParams,
+      jitContextEnabled: false,
+    });
+
+    expect(config.getCoreMemory()).toBeUndefined();
+  });
+
+  it('getCoreMemory should return empty string when contextManager has no core memory files', async () => {
+    const config = new Config({
+      ...baseParams,
+      jitContextEnabled: true,
+    });
+    await config.initialize();
+
+    const contextManager = config.getContextManager();
+    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue('');
+
+    expect(config.getCoreMemory()).toBe('');
   });
 
   it('Config constructor should call setLlxprtMdFilename with contextFileName if provided', () => {

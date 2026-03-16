@@ -42,7 +42,7 @@ For OAuth providers (Gemini, Anthropic, Codex, Qwen), enable them:
 /auth anthropic enable
 ```
 
-Authentication opens a browser automatically when you make your first request.
+With `/auth <provider> enable`, authentication is lazy — a browser opens automatically when you make your first request. Use `/auth <provider> login` to open the browser immediately.
 
 See [Authentication](./cli/authentication.md) for full details.
 

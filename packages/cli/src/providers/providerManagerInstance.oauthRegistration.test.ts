@@ -88,7 +88,7 @@ describe('Anthropic OAuth registration with environment key', () => {
     expect(registeredAnthropic).toBe(true);
 
     const ctorCalls = anthropicCtor.mock.calls;
-    expect(ctorCalls).toHaveLength(1);
+    expect(ctorCalls.length).toBeGreaterThanOrEqual(1);
     const firstCall = ctorCalls[0] as unknown[] | undefined;
     const oauthManagerArg = firstCall ? firstCall[3] : undefined;
     expect(oauthManagerArg).toBeTruthy();

@@ -16,6 +16,7 @@ import {
   type FailoverContext,
   type BucketFailureReason,
   type OAuthToken,
+  type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from './oauth-manager.js';
 
@@ -34,6 +35,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private currentBucketIndex: number;
   private readonly provider: string;
   private readonly oauthManager: OAuthManager;
+  private readonly metadata?: OAuthTokenRequestMetadata;
   private triedBucketsThisSession: Set<string>;
   private ensureBucketsAuthInFlight: Promise<void> | null = null;
   private foregroundReauthInFlightByBucket = new Map<
@@ -48,15 +50,24 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    */
   private lastFailoverReasons: Record<string, BucketFailureReason> = {};
 
-  constructor(buckets: string[], provider: string, oauthManager: OAuthManager) {
+  constructor(
+    buckets: string[],
+    provider: string,
+    oauthManager: OAuthManager,
+    metadata?: OAuthTokenRequestMetadata,
+  ) {
     this.buckets = buckets;
     this.currentBucketIndex = 0;
     this.provider = provider;
     this.oauthManager = oauthManager;
+    this.metadata = metadata;
     this.triedBucketsThisSession = new Set<string>();
 
     // Align the handler state with any existing session override.
-    const sessionBucket = this.oauthManager.getSessionBucket(provider);
+    const sessionBucket = this.oauthManager.getSessionBucket(
+      provider,
+      this.metadata,
+    );
     if (sessionBucket) {
       const existingIndex = this.buckets.indexOf(sessionBucket);
       if (existingIndex >= 0) {
@@ -64,7 +75,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       }
     } else if (this.buckets.length > 0) {
       // Default to the first configured bucket for this session.
-      this.oauthManager.setSessionBucket(provider, this.buckets[0]);
+      this.oauthManager.setSessionBucket(
+        provider,
+        this.buckets[0],
+        this.metadata,
+      );
     }
 
     logger.debug('BucketFailoverHandler initialized', {
@@ -91,6 +106,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     return this.buckets[this.currentBucketIndex];
   }
 
+  getRequestMetadata(): OAuthTokenRequestMetadata | undefined {
+    return this.metadata;
+  }
+
   /**
    * Try to failover to the next bucket
    *
@@ -110,7 +129,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     // Re-sync cursor from session state so that external session-bucket
     // switches (e.g. the peek loop in OAuthManager.getToken) are visible
     // to the failover algorithm.
-    const sessionBucket = this.oauthManager.getSessionBucket(this.provider);
+    const sessionBucket = this.oauthManager.getSessionBucket(
+      this.provider,
+      this.metadata,
+    );
     if (sessionBucket) {
       const idx = this.buckets.indexOf(sessionBucket);
       if (idx >= 0) {
@@ -266,7 +288,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
             }
             this.triedBucketsThisSession.add(bucket);
             try {
-              this.oauthManager.setSessionBucket(this.provider, bucket);
+              this.oauthManager.setSessionBucket(
+                this.provider,
+                bucket,
+                this.metadata,
+              );
             } catch (setError) {
               logger.warn(
                 `Failed to set session bucket during pass-2 refresh: ${setError}`,
@@ -311,7 +337,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       }
       this.triedBucketsThisSession.add(bucket);
       try {
-        this.oauthManager.setSessionBucket(this.provider, bucket);
+        this.oauthManager.setSessionBucket(
+          this.provider,
+          bucket,
+          this.metadata,
+        );
       } catch (setError) {
         logger.warn(
           `Failed to set session bucket during pass-2 switch: ${setError}`,
@@ -401,7 +431,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           }
           this.triedBucketsThisSession.add(candidateBucket);
           try {
-            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+            this.oauthManager.setSessionBucket(
+              this.provider,
+              candidateBucket,
+              this.metadata,
+            );
           } catch (setError) {
             logger.warn(
               `Failed to set session bucket during pass-3 token re-check switch: ${setError}`,
@@ -453,7 +487,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           }
           this.triedBucketsThisSession.add(candidateBucket);
           try {
-            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+            this.oauthManager.setSessionBucket(
+              this.provider,
+              candidateBucket,
+              this.metadata,
+            );
           } catch (setError) {
             logger.warn(
               `Failed to set session bucket during final pass-3 token re-check switch: ${setError}`,
@@ -494,7 +532,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           }
           this.triedBucketsThisSession.add(candidateBucket);
           try {
-            this.oauthManager.setSessionBucket(this.provider, candidateBucket);
+            this.oauthManager.setSessionBucket(
+              this.provider,
+              candidateBucket,
+              this.metadata,
+            );
           } catch (setError) {
             logger.warn(
               `Failed to set session bucket during pass-3 reauth: ${setError}`,
@@ -568,7 +610,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     }
 
     const authPromise = this.oauthManager
-      .authenticateMultipleBuckets(this.provider, this.buckets)
+      .authenticateMultipleBuckets(this.provider, this.buckets, this.metadata)
       .finally(() => {
         if (this.ensureBucketsAuthInFlight === authPromise) {
           this.ensureBucketsAuthInFlight = null;
@@ -597,7 +639,11 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     this.currentBucketIndex = 0;
     this.triedBucketsThisSession.clear();
     if (this.buckets.length > 0) {
-      this.oauthManager.setSessionBucket(this.provider, this.buckets[0]);
+      this.oauthManager.setSessionBucket(
+        this.provider,
+        this.buckets[0],
+        this.metadata,
+      );
     }
     logger.debug('Bucket failover handler reset', {
       provider: this.provider,

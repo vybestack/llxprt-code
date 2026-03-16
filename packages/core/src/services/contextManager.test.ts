@@ -23,6 +23,7 @@ vi.mock('../utils/memoryDiscovery.js', async (importOriginal) => {
     loadGlobalMemory: vi.fn(),
     loadEnvironmentMemory: vi.fn(),
     loadJitSubdirectoryMemory: vi.fn(),
+    loadCoreMemory: vi.fn(),
     concatenateInstructions: vi
       .fn()
       .mockImplementation(actual.concatenateInstructions),
@@ -72,6 +73,13 @@ describe('ContextManager', () => {
         mockEnvResult,
       );
 
+      const mockCoreResult: memoryDiscovery.MemoryLoadResult = {
+        files: [],
+      };
+      vi.mocked(memoryDiscovery.loadCoreMemory).mockResolvedValue(
+        mockCoreResult,
+      );
+
       await contextManager.refresh();
 
       expect(memoryDiscovery.loadGlobalMemory).toHaveBeenCalledWith(false);
@@ -93,6 +101,11 @@ describe('ContextManager', () => {
         'MCP Instructions',
       );
 
+      expect(memoryDiscovery.loadCoreMemory).toHaveBeenCalledWith(
+        ['/app'],
+        false,
+      );
+
       expect(contextManager.getLoadedPaths()).toContain(
         '/home/user/.llxprt/.LLXPRT_SYSTEM',
       );
@@ -108,11 +121,17 @@ describe('ContextManager', () => {
       const mockEnvResult = {
         files: [{ path: '/app/src/.llxprt/LLXPRT.md', content: 'env content' }],
       };
+      const mockCoreResult = {
+        files: [],
+      };
       vi.mocked(memoryDiscovery.loadGlobalMemory).mockResolvedValue(
         mockGlobalResult,
       );
       vi.mocked(memoryDiscovery.loadEnvironmentMemory).mockResolvedValue(
         mockEnvResult,
+      );
+      vi.mocked(memoryDiscovery.loadCoreMemory).mockResolvedValue(
+        mockCoreResult,
       );
 
       await contextManager.refresh();
@@ -120,6 +139,40 @@ describe('ContextManager', () => {
       expect(coreEvents.emit).toHaveBeenCalledWith(CoreEvent.MemoryChanged, {
         fileCount: 2,
       });
+    });
+
+    it('should load core memory during refresh', async () => {
+      const mockGlobalResult = {
+        files: [],
+      };
+      const mockEnvResult = {
+        files: [],
+      };
+      const mockCoreResult = {
+        files: [
+          { path: '/app/.llxprt/.LLXPRT_SYSTEM', content: 'Core content' },
+        ],
+      };
+      vi.mocked(memoryDiscovery.loadGlobalMemory).mockResolvedValue(
+        mockGlobalResult,
+      );
+      vi.mocked(memoryDiscovery.loadEnvironmentMemory).mockResolvedValue(
+        mockEnvResult,
+      );
+      vi.mocked(memoryDiscovery.loadCoreMemory).mockResolvedValue(
+        mockCoreResult,
+      );
+
+      await contextManager.refresh();
+
+      expect(memoryDiscovery.loadCoreMemory).toHaveBeenCalledWith(
+        ['/app'],
+        false,
+      );
+      expect(contextManager.getCoreMemory()).toContain('Core content');
+      expect(contextManager.getLoadedPaths()).toContain(
+        '/app/.llxprt/.LLXPRT_SYSTEM',
+      );
     });
   });
 
@@ -131,11 +184,17 @@ describe('ContextManager', () => {
       const mockEnvResult = {
         files: [{ path: '/app/.llxprt/LLXPRT.md', content: 'root' }],
       };
+      const mockCoreResult = {
+        files: [],
+      };
       vi.mocked(memoryDiscovery.loadGlobalMemory).mockResolvedValue(
         mockGlobalResult,
       );
       vi.mocked(memoryDiscovery.loadEnvironmentMemory).mockResolvedValue(
         mockEnvResult,
+      );
+      vi.mocked(memoryDiscovery.loadCoreMemory).mockResolvedValue(
+        mockCoreResult,
       );
 
       await contextManager.refresh();
@@ -166,10 +225,16 @@ describe('ContextManager', () => {
       const mockResult = {
         files: [{ path: '/app/.llxprt/LLXPRT.md', content: 'content' }],
       };
+      const mockCoreResult = {
+        files: [],
+      };
       vi.mocked(memoryDiscovery.loadGlobalMemory).mockResolvedValue(mockResult);
       vi.mocked(memoryDiscovery.loadEnvironmentMemory).mockResolvedValue({
         files: [],
       });
+      vi.mocked(memoryDiscovery.loadCoreMemory).mockResolvedValue(
+        mockCoreResult,
+      );
 
       await contextManager.refresh();
 

@@ -214,7 +214,7 @@ describe('TerminalCapabilityManager', () => {
     expect(enableKittyKeyboardProtocol).toHaveBeenCalled();
   });
 
-  it('should disable Kitty protocol', async () => {
+  it('should disable Kitty protocol (simple)', async () => {
     const { disableKittyKeyboardProtocol } = await import(
       '@vybestack/llxprt-code-core'
     );
@@ -229,7 +229,51 @@ describe('TerminalCapabilityManager', () => {
 
     manager.disableKittyProtocol();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
+
     expect(disableKittyKeyboardProtocol).toHaveBeenCalled();
+  });
+
+  it('should disable Kitty protocol on exit synchronously on TTY', async () => {
+    const { writeSync } = await import('node:fs');
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    stdin.emit('data', Buffer.from('\x1b[?1u'));
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+    expect(manager.isKittyProtocolEnabled()).toBe(true);
+
+    vi.mocked(writeSync).mockClear();
+    manager.disableKittyProtocolOnExit();
+    expect(manager.isKittyProtocolEnabled()).toBe(false);
+
+    expect(vi.mocked(writeSync).mock.calls).toEqual([
+      [stdout.fd, '\x1b[<u'],
+      [stdout.fd, '\x1b[?1049l'],
+      [stdout.fd, '\x1b[<u'],
+      [stdout.fd, '\x1b[=0;1u'],
+      [stdout.fd, '\x1b[?1006l'],
+    ]);
+  });
+
+  it('should skip synchronous writes on non-TTY when disabling on exit', async () => {
+    const { writeSync } = await import('node:fs');
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    stdin.emit('data', Buffer.from('\x1b[?1u'));
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+    expect(manager.isKittyProtocolEnabled()).toBe(true);
+
+    vi.mocked(writeSync).mockClear();
+    stdout.isTTY = false;
+    manager.disableKittyProtocolOnExit();
+    expect(manager.isKittyProtocolEnabled()).toBe(false);
+
+    expect(vi.mocked(writeSync)).not.toHaveBeenCalled();
   });
 
   it('should re-enable Kitty protocol after disable', async () => {

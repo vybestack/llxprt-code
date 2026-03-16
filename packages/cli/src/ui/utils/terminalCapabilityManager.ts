@@ -93,7 +93,7 @@ export class TerminalCapabilityManager {
         // Auto-enable kitty if supported
         if (this.kittySupported) {
           this.enableKittyProtocol();
-          process.once('exit', () => this.disableKittyProtocol());
+          process.once('exit', () => this.disableKittyProtocolOnExit());
         }
 
         resolve();
@@ -199,6 +199,30 @@ export class TerminalCapabilityManager {
     try {
       if (this.kittyEnabled) {
         disableKittyKeyboardProtocol();
+        this.kittyEnabled = false;
+      }
+    } catch (_e) {
+      // Ignore errors during disable (terminal may already be closed)
+    }
+  }
+
+  disableKittyProtocolOnExit(): void {
+    try {
+      if (this.kittyEnabled) {
+        if (process.stdout.isTTY && typeof process.stdout.fd === 'number') {
+          // Kitty progressive enhancement flags are managed per screen buffer.
+          // We may have enabled in main screen but be cleaning up while still in
+          // alternate screen, so we deliberately send the `<u` sequence twice:
+          // once for the alternate-screen context and once for the main-screen context.
+          // Synchronous write is required for process.on('exit') reliability.
+          fs.writeSync(process.stdout.fd, '\x1b[<u');
+          fs.writeSync(process.stdout.fd, '\x1b[?1049l');
+          fs.writeSync(process.stdout.fd, '\x1b[<u');
+          // Explicitly reset all progressive enhancement flags (mode 1) to cover
+          // terminals that implement flag-setting but not stack pop semantics.
+          fs.writeSync(process.stdout.fd, '\x1b[=0;1u');
+          fs.writeSync(process.stdout.fd, '\x1b[?1006l');
+        }
         this.kittyEnabled = false;
       }
     } catch (_e) {
