@@ -442,7 +442,7 @@ export function useToolScheduler(
       config.disposeScheduler(sessionId);
       schedulerRef.current = null;
     };
-  }, [config]);
+  }, [config, messageBus]);
 
   // Schedule new tool calls
   const schedule: ScheduleFn = useCallback(
