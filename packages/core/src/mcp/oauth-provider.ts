@@ -925,15 +925,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       // Verify token was saved
       const savedToken = await tokenStorage.getCredentials(serverName);
       if (savedToken && savedToken.token && savedToken.token.accessToken) {
-        // Avoid leaking token material; log a short SHA-256 fingerprint instead.
-        const tokenFingerprint = crypto
-          .createHash('sha256')
-          .update(savedToken.token.accessToken)
-          .digest('hex')
-          .slice(0, 8);
-        debugLogger.debug(
-          `✓ Token verification successful (fingerprint: ${tokenFingerprint})`,
-        );
+        debugLogger.debug('[OK] Token verification successful');
       } else {
         debugLogger.error(
           'Token verification failed: token not found or invalid after save',

@@ -469,6 +469,8 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
           # Force SecureStore to use encrypted-file fallback instead of keyring (R15.2)
           LLXPRT_SECURE_STORE_FORCE_FALLBACK: ${{ matrix.secure-store-mode == 'fallback' && 'true' || '' }}
+          # Increase heap for vitest workers — jsdom environment accumulates memory across test files
+          NODE_OPTIONS: '--max-old-space-size=6144'
         run: 'npm run test'
 
       - name: 'Run script harness tests (macOS)'

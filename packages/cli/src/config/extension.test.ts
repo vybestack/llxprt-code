@@ -84,19 +84,11 @@ const mockLogExtensionEnable = vi.hoisted(() => vi.fn());
 const mockLogExtensionInstallEvent = vi.hoisted(() => vi.fn());
 const mockLogExtensionUninstall = vi.hoisted(() => vi.fn());
 const mockLogExtensionDisable = vi.hoisted(() => vi.fn());
-const mockDebugLoggerError = vi.hoisted(() => vi.fn());
-
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
-    debugLogger: {
-      error: mockDebugLoggerError,
-      warn: vi.fn(),
-      info: vi.fn(),
-      debug: vi.fn(),
-    },
 
     logExtensionEnable: mockLogExtensionEnable,
     logExtensionInstallEvent: mockLogExtensionInstallEvent,
@@ -445,7 +437,7 @@ describe('extension tests', () => {
     });
 
     it('should skip extensions with invalid JSON and log a warning', () => {
-      const _consoleSpy = vi
+      const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
@@ -468,7 +460,7 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('good-ext');
-      expect(mockDebugLoggerError).toHaveBeenCalledExactlyOnceWith(
+      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
         expect.stringContaining(
           `Warning: Skipping extension in ${badExtDir}: Expected`,
         ),
@@ -476,7 +468,7 @@ describe('extension tests', () => {
     });
 
     it('should skip extensions with missing name and log a warning', () => {
-      const _consoleSpy = vi
+      const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
@@ -499,7 +491,7 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('good-ext');
-      expect(mockDebugLoggerError).toHaveBeenCalledExactlyOnceWith(
+      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
         expect.stringContaining(
           `Invalid extension config in ${badConfigPath}: missing name or version.`,
         ),
@@ -528,7 +520,7 @@ describe('extension tests', () => {
     });
 
     it('should throw an error for invalid extension names', () => {
-      const _consoleSpy = vi
+      const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const badExtDir = createExtension({
@@ -543,7 +535,7 @@ describe('extension tests', () => {
       });
 
       expect(extension).toBeNull();
-      expect(mockDebugLoggerError).toHaveBeenCalledWith(
+      expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Invalid extension name: "bad_name"'),
       );
     });

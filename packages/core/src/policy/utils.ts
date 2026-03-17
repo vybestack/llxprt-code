@@ -25,6 +25,12 @@ function validatePolicyRegex(source: string): void {
       `Policy regex pattern exceeds maximum allowed length of ${MAX_POLICY_REGEX_SOURCE_LENGTH}`,
     );
   }
+  // Reject patterns with nested quantifiers that can cause catastrophic backtracking (ReDoS)
+  if (/([+*]|\{\d+,\d*\})\??([+*]|\{\d+,\d*\})/.test(source)) {
+    throw new Error(
+      'Policy regex contains nested quantifiers (potential ReDoS)',
+    );
+  }
 }
 
 /**
@@ -53,7 +59,8 @@ export function buildArgsPatterns(
 
   if (commandRegex) {
     validatePolicyRegex(commandRegex);
-    patterns.push(new RegExp(`"command":"${commandRegex}`));
+    // Use non-backtracking prefix with bounded match length
+    patterns.push(new RegExp(`"command":"(?:${commandRegex})`));
   }
 
   if (argsPattern) {
