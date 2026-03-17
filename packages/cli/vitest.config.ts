@@ -134,11 +134,10 @@ export default defineConfig({
       junit: 'junit.xml',
     },
     setupFiles: ['./test-setup.ts'],
-    pool: 'forks',
     poolOptions: {
-      forks: {
-        singleFork: false, // Use separate processes per test file to prevent OOM from coverage accumulation
-        maxForks: 2,
+      threads: {
+        singleThread: true, // Run tests sequentially to reduce memory pressure
+        maxThreads: 2, // Limit parallelism
       },
     },
     testTimeout: 30000,
@@ -156,10 +155,6 @@ export default defineConfig({
       include: ['src/**/*'],
       reporter: [
         ['text', { file: 'full-text-summary.txt' }],
-        'html',
-        'json',
-        'lcov',
-        'cobertura',
         ['json-summary', { outputFile: 'coverage-summary.json' }],
       ],
     },
