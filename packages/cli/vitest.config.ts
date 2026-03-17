@@ -134,10 +134,11 @@ export default defineConfig({
       junit: 'junit.xml',
     },
     setupFiles: ['./test-setup.ts'],
+    pool: 'forks',
     poolOptions: {
-      threads: {
-        singleThread: true, // Run tests sequentially to reduce memory pressure
-        maxThreads: 2, // Limit parallelism
+      forks: {
+        singleFork: false, // Use separate processes per test file to prevent OOM from coverage accumulation
+        maxForks: 2,
       },
     },
     testTimeout: 30000,

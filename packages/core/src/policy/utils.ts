@@ -65,7 +65,10 @@ export function buildArgsPatterns(
 
   if (argsPattern) {
     validatePolicyRegex(argsPattern.source);
-    patterns.push(argsPattern);
+    // Rebuild regex with .* replaced by [^"]* to prevent polynomial
+    // backtracking when matching JSON-serialized tool arguments.
+    const safeSource = argsPattern.source.replace(/\.\*/g, '[^"]*');
+    patterns.push(new RegExp(safeSource, argsPattern.flags));
   }
 
   return patterns;
