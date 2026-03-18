@@ -498,8 +498,8 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
 
 - **`tools.enableHooks`** (boolean):
-  - **Description:** Enable the hooks system for intercepting and customizing LLxprt CLI behavior. When enabled, hooks configured in settings will execute at appropriate lifecycle events (BeforeTool, AfterTool, BeforeModel, etc.). Requires MessageBus integration.
-  - **Default:** `false`
+  - **Description:** Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 #### `mcp`
@@ -559,6 +559,18 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Whether to use an external authentication flow.
   - **Default:** `undefined`
   - **Requires restart:** Yes
+
+- **`security.environmentVariableRedaction.allowed`** (array):
+  - **Description:** Environment variables to allow in addition to the default allowlist.
+  - **Default:** `[]`
+
+- **`security.environmentVariableRedaction.blocked`** (array):
+  - **Description:** Environment variables to block in addition to the default blocklist.
+  - **Default:** `[]`
+
+- **`security.environmentVariableRedaction.enabled`** (boolean):
+  - **Description:** Enable environment variable redaction (disabled by default).
+  - **Default:** `false`
 
 #### `excludedProjectEnvVars`
 
@@ -630,6 +642,41 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`experimental.jitContext`** (boolean):
   - **Description:** Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.
   - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`experimental.skills`** (boolean):
+  - **Description:** Enable Agent Skills (experimental).
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`experimental.codebaseInvestigatorSettings.enabled`** (boolean):
+  - **Description:** Enable the Codebase Investigator agent.
+  - **Default:** `true`
+  - **Requires restart:** Yes
+
+- **`experimental.codebaseInvestigatorSettings.maxNumTurns`** (number):
+  - **Description:** Maximum number of turns for the Codebase Investigator agent.
+  - **Default:** `10`
+  - **Requires restart:** Yes
+
+- **`experimental.codebaseInvestigatorSettings.maxTimeMinutes`** (number):
+  - **Description:** Maximum time for the Codebase Investigator agent (in minutes).
+  - **Default:** `3`
+  - **Requires restart:** Yes
+
+- **`experimental.codebaseInvestigatorSettings.thinkingBudget`** (number):
+  - **Description:** The thinking budget for the Codebase Investigator agent.
+  - **Default:** `8192`
+  - **Requires restart:** Yes
+
+- **`experimental.codebaseInvestigatorSettings.model`** (string):
+  - **Description:** The model to use for the Codebase Investigator agent.
+  - **Default:** `"auto"`
+  - **Requires restart:** Yes
+
+- **`experimental.introspectionAgentSettings.enabled`** (boolean):
+  - **Description:** Enable the Introspection Agent.
+  - **Default:** `false`
   - **Requires restart:** Yes
 
 #### `defaultProfile`
@@ -744,11 +791,40 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `"default"`
   - **Values:** `"default"`, `"llxprt"`, `"gemini-cli"`, `"whimsical"`, `"custom"`
 
+#### `skills`
+
+- **`skills.disabled`** (array):
+  - **Description:** List of disabled skills.
+  - **Default:** `[]`
+  - **Requires restart:** Yes
+
 #### `hooks`
+
+- **`hooks.enabled`** (boolean):
+  - **Description:** Canonical toggle for the hooks system. When disabled, no hooks will be executed.
+  - **Default:** `false`
+
+- **`hooks.notifications`** (boolean):
+  - **Description:** Show visual indicators when hooks are executing.
+  - **Default:** `true`
 
 - **`hooks.disabled`** (array):
   - **Description:** List of hook names to disable
   - **Default:** `[]`
+
+#### `admin`
+
+- **`admin.secureModeEnabled`** (boolean):
+  - **Description:** If true, disallows YOLO mode from being used.
+  - **Default:** `false`
+
+- **`admin.extensions.enabled`** (boolean):
+  - **Description:** If false, disallows extensions from being installed or used. (Not enforced yet)
+  - **Default:** `true`
+
+- **`admin.mcp.enabled`** (boolean):
+  - **Description:** If false, disallows MCP servers from being used.
+  - **Default:** `true`
   <!-- SETTINGS-AUTOGEN:END -->
 
 - **`contextFileName`** (string or array of strings):

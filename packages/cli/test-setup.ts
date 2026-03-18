@@ -14,7 +14,13 @@ if (process.env.NO_COLOR !== undefined) {
 
 // Setup for React DOM testing - fix for React 19 internals issue
 import React from 'react';
-import { vi } from 'vitest';
+import {
+  clearActiveProviderRuntimeContext,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
+import { cleanup as cleanupInkRenders } from 'ink-testing-library';
+import { afterEach, vi } from 'vitest';
+import { __resetCleanupStateForTesting } from './src/utils/cleanup.js';
 
 // Mock provider aliases globally so tests don't need real config files
 // This prevents "Provider not found" errors when fs is mocked
@@ -178,3 +184,54 @@ if (ReactInternals) {
 }
 
 import './src/test-utils/customMatchers.js';
+
+const managedProcessEvents = [
+  'exit',
+  'SIGINT',
+  'SIGTERM',
+  'warning',
+  'unhandledRejection',
+] as const;
+
+type ManagedProcessEvent = (typeof managedProcessEvents)[number];
+type ProcessListener = (...args: unknown[]) => void;
+
+const baselineProcessListeners = new Map<
+  ManagedProcessEvent,
+  ProcessListener[]
+>(
+  managedProcessEvents.map((eventName) => [
+    eventName,
+    process.listeners(eventName) as ProcessListener[],
+  ]),
+);
+
+function restoreProcessListeners(eventName: ManagedProcessEvent): void {
+  const baseline = baselineProcessListeners.get(eventName) ?? [];
+  const current = process.listeners(eventName) as ProcessListener[];
+  const baselineCounts = new Map<ProcessListener, number>();
+
+  for (const listener of baseline) {
+    baselineCounts.set(listener, (baselineCounts.get(listener) ?? 0) + 1);
+  }
+
+  for (const listener of current) {
+    const remaining = baselineCounts.get(listener) ?? 0;
+    if (remaining > 0) {
+      baselineCounts.set(listener, remaining - 1);
+      continue;
+    }
+
+    process.removeListener(eventName, listener);
+  }
+}
+
+afterEach(async () => {
+  cleanupInkRenders();
+  for (const eventName of managedProcessEvents) {
+    restoreProcessListeners(eventName);
+  }
+  await DebugLogger.resetForTesting();
+  __resetCleanupStateForTesting();
+  clearActiveProviderRuntimeContext();
+});

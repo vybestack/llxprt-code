@@ -8,6 +8,7 @@ import {
   Config,
   DebugLogger,
   type MessageBus,
+  clearActiveProviderRuntimeContext,
   ProviderRuntimeContext,
   SettingsService,
   ProfileManager,
@@ -26,7 +27,10 @@ import {
   type HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { registerProviderManagerSingleton } from '../providers/providerManagerInstance.js';
+import {
+  registerProviderManagerSingleton,
+  resetProviderManager,
+} from '../providers/providerManagerInstance.js';
 
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import type { LoadedSettings } from '../config/settings.js';
@@ -379,7 +383,21 @@ function disposeCliRuntime(
         `[cli-runtime] Revoked ${context.revokedTokens.length} scoped OAuth token(s) for runtime ${runtimeId}.`,
     );
   }
+
   runtimeRegistry.delete(runtimeId);
+
+  const activeContext = peekActiveProviderRuntimeContext();
+  if (activeContext?.runtimeId === runtimeId) {
+    clearActiveProviderRuntimeContext();
+  }
+
+  resetProviderManager();
+}
+
+export function resetCliRuntimeRegistryForTesting(): void {
+  runtimeRegistry.clear();
+  clearActiveProviderRuntimeContext();
+  resetProviderManager();
 }
 
 export interface CliRuntimeServices {

@@ -55,6 +55,8 @@ export class TerminalCapabilityManager {
   private bracketedPasteEnabled = false;
   private detectionComplete = false;
   private terminalName: string | undefined;
+  private cleanupOnExitHandler?: () => void;
+  private disableKittyProtocolOnExitHandler?: () => void;
 
   private constructor() {}
 
@@ -66,6 +68,7 @@ export class TerminalCapabilityManager {
   }
 
   static resetInstanceForTesting(): void {
+    this.instance?.resetForTesting();
     this.instance = undefined;
   }
 
@@ -83,11 +86,14 @@ export class TerminalCapabilityManager {
     }
 
     return new Promise((resolve) => {
+      this.removeProcessListeners();
+
       const cleanupOnExit = () => {
         disableKittyKeyboardProtocol();
         disableModifyOtherKeys();
         disableBracketedPasteMode();
       };
+      this.cleanupOnExitHandler = cleanupOnExit;
       process.on('exit', cleanupOnExit);
       process.on('SIGTERM', cleanupOnExit);
       process.on('SIGINT', cleanupOnExit);
@@ -118,8 +124,10 @@ export class TerminalCapabilityManager {
         // Auto-enable supported modes
         this.enableSupportedModes();
         // Register synchronous exit handler for robust kitty cleanup
-        if (this.kittyEnabled) {
-          process.once('exit', () => this.disableKittyProtocolOnExit());
+        if (this.kittyEnabled && !this.disableKittyProtocolOnExitHandler) {
+          this.disableKittyProtocolOnExitHandler = () =>
+            this.disableKittyProtocolOnExit();
+          process.once('exit', this.disableKittyProtocolOnExitHandler);
         }
 
         resolve();
@@ -309,6 +317,33 @@ export class TerminalCapabilityManager {
 
   isModifyOtherKeysEnabled(): boolean {
     return this.modifyOtherKeysEnabled;
+  }
+
+  private removeProcessListeners(): void {
+    if (this.cleanupOnExitHandler) {
+      process.removeListener('exit', this.cleanupOnExitHandler);
+      process.removeListener('SIGTERM', this.cleanupOnExitHandler);
+      process.removeListener('SIGINT', this.cleanupOnExitHandler);
+      this.cleanupOnExitHandler = undefined;
+    }
+
+    if (this.disableKittyProtocolOnExitHandler) {
+      process.removeListener('exit', this.disableKittyProtocolOnExitHandler);
+      this.disableKittyProtocolOnExitHandler = undefined;
+    }
+  }
+
+  private resetForTesting(): void {
+    this.removeProcessListeners();
+    this.disableKittyProtocol();
+    try {
+      disableModifyOtherKeys();
+      disableBracketedPasteMode();
+    } catch {
+      // Ignore teardown failures in tests.
+    }
+    this.modifyOtherKeysEnabled = false;
+    this.bracketedPasteEnabled = false;
   }
 
   private parseColor(rHex: string, gHex: string, bHex: string): string {

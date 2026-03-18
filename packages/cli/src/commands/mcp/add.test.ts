@@ -44,16 +44,23 @@ vi.mock('../utils.js', () => ({
   }),
 }));
 
-const mockDebugLogger = {
+const mockDebugLogger = vi.hoisted(() => ({
   error: vi.fn(),
   warn: vi.fn(),
   info: vi.fn(),
+  log: vi.fn(),
   debug: vi.fn(),
-};
-
-vi.mock('@vybestack/llxprt-code-core', () => ({
-  debugLogger: mockDebugLogger,
 }));
+
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-core')
+  >('@vybestack/llxprt-code-core');
+  return {
+    ...actual,
+    debugLogger: mockDebugLogger,
+  };
+});
 
 const mockedLoadSettings = loadSettings as Mock;
 

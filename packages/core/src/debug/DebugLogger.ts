@@ -62,11 +62,14 @@ export class DebugLogger {
   }
 
   /**
-   * Reset for testing - clears instances without unsubscribing
-   * (use disposeAll in production)
+   * Reset for testing.
+   * Disposes singleton logger/file-output state and resets configuration state
+   * so test files do not retain listeners, timers, or queued log entries.
    */
-  static resetForTesting(): void {
-    DebugLogger.instances.clear();
+  static async resetForTesting(): Promise<void> {
+    DebugLogger.disposeAll();
+    await FileOutput.resetForTesting();
+    ConfigurationManager.resetForTesting();
   }
 
   constructor(namespace: string) {

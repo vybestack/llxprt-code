@@ -232,10 +232,19 @@ export function useReactToolScheduler(
     }>
   >([]);
   const onCompleteRef = useRef(onComplete);
+  const getPreferredEditorRef = useRef(getPreferredEditor);
+  const onEditorCloseRef = useRef(onEditorClose);
+  const onEditorOpenRef = useRef(onEditorOpen);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
+
+  useEffect(() => {
+    getPreferredEditorRef.current = getPreferredEditor;
+    onEditorCloseRef.current = onEditorClose;
+    onEditorOpenRef.current = onEditorOpen;
+  }, [getPreferredEditor, onEditorClose, onEditorOpen]);
 
   // Use the singleton scheduler from config to ensure all schedulers in a session
   // share the same CoreToolScheduler instance, avoiding duplicate MessageBus
@@ -279,9 +288,9 @@ export function useReactToolScheduler(
               }
               replaceToolCallsForScheduler(mainSchedulerId, calls);
             },
-            getPreferredEditor,
-            onEditorClose,
-            onEditorOpen,
+            getPreferredEditor: () => getPreferredEditorRef.current(),
+            onEditorClose: () => onEditorCloseRef.current(),
+            onEditorOpen: () => onEditorOpenRef.current(),
           },
           undefined,
           { messageBus: runtimeMessageBus },
@@ -333,9 +342,6 @@ export function useReactToolScheduler(
     mainSchedulerId,
     replaceToolCallsForScheduler,
     updateToolCallOutput,
-    getPreferredEditor,
-    onEditorClose,
-    onEditorOpen,
     runtimeMessageBus,
   ]);
 
@@ -380,9 +386,9 @@ export function useReactToolScheduler(
             }
             replaceToolCallsForScheduler(schedulerId, []);
           },
-          getPreferredEditor,
-          onEditorClose,
-          onEditorOpen,
+          getPreferredEditor: () => getPreferredEditorRef.current(),
+          onEditorClose: () => onEditorCloseRef.current(),
+          onEditorOpen: () => onEditorOpenRef.current(),
         },
         undefined,
         { messageBus: runtimeMessageBus },
@@ -396,14 +402,7 @@ export function useReactToolScheduler(
         dispose: () => schedulerConfig.disposeScheduler(schedulerSessionId),
       };
     },
-    [
-      getPreferredEditor,
-      onEditorClose,
-      replaceToolCallsForScheduler,
-      updateToolCallOutput,
-      onEditorOpen,
-      runtimeMessageBus,
-    ],
+    [replaceToolCallsForScheduler, updateToolCallOutput, runtimeMessageBus],
   ) as unknown as ExternalSchedulerFactory;
 
   type ConfigWithSchedulerFactory = Config & {
