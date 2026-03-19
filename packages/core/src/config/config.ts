@@ -1530,9 +1530,16 @@ export class Config {
 
   getLlxprtMdFileCount(): number {
     if (this.getJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getLoadedPaths().size;
+      return this.contextManager.getContextFileCount();
     }
     return this.llxprtMdFileCount;
+  }
+
+  getCoreMemoryFileCount(): number {
+    if (this.getJitContextEnabled() && this.contextManager) {
+      return this.contextManager.getCoreMemoryFileCount();
+    }
+    return 0;
   }
 
   setLlxprtMdFileCount(count: number): void {
@@ -2364,9 +2371,11 @@ ${trimmed}
       const memoryContent = this.getUserMemory();
       const fileCount = this.getLlxprtMdFileCount();
       const filePaths = this.getLlxprtMdFilePaths();
+      const coreMemoryFileCount = this.getCoreMemoryFileCount();
 
       coreEvents.emit(CoreEvent.MemoryChanged, {
         fileCount,
+        coreMemoryFileCount,
       });
 
       return { memoryContent, fileCount, filePaths };

@@ -142,6 +142,7 @@ export const DefaultAppLayout = ({
     showEscapePrompt,
     ideContextState,
     llxprtMdFileCount,
+    coreMemoryFileCount,
     elapsedTime,
     currentLoadingPhrase,
     showAutoAcceptIndicator,
@@ -369,6 +370,7 @@ export const DefaultAppLayout = ({
                       <ContextSummaryDisplay
                         ideContext={ideContextState}
                         llxprtMdFileCount={llxprtMdFileCount}
+                        coreMemoryFileCount={coreMemoryFileCount}
                         contextFileNames={contextFileNames}
                         mcpServers={config.getMcpServers()}
                         blockedMcpServers={config.getBlockedMcpServers()}
@@ -582,6 +584,7 @@ export const DefaultAppLayout = ({
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
                       llxprtMdFileCount={llxprtMdFileCount}
+                      coreMemoryFileCount={coreMemoryFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
                       blockedMcpServers={config.getBlockedMcpServers()}

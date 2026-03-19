@@ -17,6 +17,7 @@ import { isNarrowWidth } from '../utils/isNarrowWidth.js';
 interface ContextSummaryDisplayProps {
   llxprtMdFileCount?: number;
   geminiMdFileCount?: number;
+  coreMemoryFileCount?: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
@@ -28,6 +29,7 @@ interface ContextSummaryDisplayProps {
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   llxprtMdFileCount,
   geminiMdFileCount,
+  coreMemoryFileCount,
   contextFileNames,
   mcpServers,
   blockedMcpServers,
@@ -35,6 +37,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   skillCount,
 }) => {
   const effectiveMdFileCount = llxprtMdFileCount ?? geminiMdFileCount ?? 0;
+  const effectiveCoreCount = coreMemoryFileCount ?? 0;
   const { columns: terminalWidth } = useTerminalSize();
   const isNarrow = isNarrowWidth(terminalWidth);
   const mcpServerCount = Object.keys(mcpServers || {}).length;
@@ -43,6 +46,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
 
   if (
     effectiveMdFileCount === 0 &&
+    effectiveCoreCount === 0 &&
     mcpServerCount === 0 &&
     blockedMcpServerCount === 0 &&
     openFileCount === 0 &&
@@ -58,6 +62,15 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     return `${openFileCount} open file${
       openFileCount > 1 ? 's' : ''
     } (ctrl+g to view)`;
+  })();
+
+  const coreMemoryText = (() => {
+    if (effectiveCoreCount === 0) {
+      return '';
+    }
+    return `${effectiveCoreCount} .LLXPRT_SYSTEM file${
+      effectiveCoreCount > 1 ? 's' : ''
+    }`;
   })();
 
   const geminiMdText = (() => {
@@ -100,9 +113,13 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     return `${skillCount ?? 0} skill${(skillCount ?? 0) > 1 ? 's' : ''}`;
   })();
 
-  const summaryParts = [openFilesText, geminiMdText, mcpText, skillText].filter(
-    Boolean,
-  );
+  const summaryParts = [
+    openFilesText,
+    coreMemoryText,
+    geminiMdText,
+    mcpText,
+    skillText,
+  ].filter(Boolean);
 
   if (isNarrow) {
     return (

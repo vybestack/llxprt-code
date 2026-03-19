@@ -13,6 +13,7 @@ import type { IdeContext, MCPServerConfig } from '@vybestack/llxprt-code-core';
 interface StatusDisplayProps {
   activeHooks: ActiveHook[];
   geminiMdFileCount?: number;
+  coreMemoryFileCount?: number;
   contextFileNames?: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
@@ -31,6 +32,7 @@ interface StatusDisplayProps {
 export const StatusDisplay: React.FC<StatusDisplayProps> = ({
   activeHooks,
   geminiMdFileCount = 0,
+  coreMemoryFileCount = 0,
   contextFileNames = [],
   mcpServers,
   blockedMcpServers,
@@ -46,6 +48,7 @@ export const StatusDisplay: React.FC<StatusDisplayProps> = ({
   return (
     <ContextSummaryDisplay
       geminiMdFileCount={geminiMdFileCount}
+      coreMemoryFileCount={coreMemoryFileCount}
       contextFileNames={contextFileNames}
       mcpServers={mcpServers}
       blockedMcpServers={blockedMcpServers}

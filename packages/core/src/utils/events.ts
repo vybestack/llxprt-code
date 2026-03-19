@@ -38,6 +38,7 @@ export interface UserFeedbackPayload {
  */
 export interface MemoryChangedPayload {
   fileCount: number;
+  coreMemoryFileCount?: number;
 }
 
 export interface ConsoleLogPayload {

@@ -20,6 +20,7 @@ import { coreEvents, CoreEvent } from '../utils/events.js';
 
 export class ContextManager {
   private readonly loadedPaths: Set<string> = new Set();
+  private readonly coreMemoryPaths: Set<string> = new Set();
   private globalMemory = '';
   private environmentMemory = '';
   private coreMemory = '';
@@ -31,6 +32,7 @@ export class ContextManager {
    */
   async refresh(): Promise<void> {
     this.loadedPaths.clear();
+    this.coreMemoryPaths.clear();
     await this.loadGlobalMemory();
     await this.loadEnvironmentMemory();
     await this.loadCoreMemory();
@@ -85,7 +87,8 @@ export class ContextManager {
 
   private emitMemoryChanged(): void {
     coreEvents.emit(CoreEvent.MemoryChanged, {
-      fileCount: this.loadedPaths.size,
+      fileCount: this.getContextFileCount(),
+      coreMemoryFileCount: this.getCoreMemoryFileCount(),
     });
   }
 
@@ -102,7 +105,11 @@ export class ContextManager {
       [...this.config.getWorkspaceContext().getDirectories()],
       this.config.getDebugMode(),
     );
-    this.markAsLoaded(result.files.map((f) => f.path));
+    const paths = result.files.map((f) => f.path);
+    this.markAsLoaded(paths);
+    for (const p of paths) {
+      this.coreMemoryPaths.add(p);
+    }
     this.coreMemory = concatenateInstructions(
       result.files.map((f) => ({ filePath: f.path, content: f.content })),
       this.config.getWorkingDir(),
@@ -111,6 +118,14 @@ export class ContextManager {
 
   getCoreMemory(): string {
     return this.coreMemory;
+  }
+
+  getContextFileCount(): number {
+    return this.loadedPaths.size - this.coreMemoryPaths.size;
+  }
+
+  getCoreMemoryFileCount(): number {
+    return this.coreMemoryPaths.size;
   }
 
   private markAsLoaded(paths: string[]): void {

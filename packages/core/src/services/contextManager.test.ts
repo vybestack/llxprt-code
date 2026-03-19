@@ -138,6 +138,7 @@ describe('ContextManager', () => {
 
       expect(coreEvents.emit).toHaveBeenCalledWith(CoreEvent.MemoryChanged, {
         fileCount: 2,
+        coreMemoryFileCount: 0,
       });
     });
 
@@ -173,6 +174,45 @@ describe('ContextManager', () => {
       expect(contextManager.getLoadedPaths()).toContain(
         '/app/.llxprt/.LLXPRT_SYSTEM',
       );
+      expect(contextManager.getCoreMemoryFileCount()).toBe(1);
+      expect(contextManager.getContextFileCount()).toBe(0);
+    });
+
+    it('should emit separate core memory and context file counts', async () => {
+      const mockGlobalResult = {
+        files: [
+          {
+            path: '/home/user/.llxprt/.LLXPRT_SYSTEM',
+            content: 'Global System',
+          },
+        ],
+      };
+      const mockEnvResult = {
+        files: [{ path: '/app/.llxprt/LLXPRT.md', content: 'Env Content' }],
+      };
+      const mockCoreResult = {
+        files: [
+          { path: '/app/.llxprt/.LLXPRT_SYSTEM', content: 'Core content' },
+        ],
+      };
+      vi.mocked(memoryDiscovery.loadGlobalMemory).mockResolvedValue(
+        mockGlobalResult,
+      );
+      vi.mocked(memoryDiscovery.loadEnvironmentMemory).mockResolvedValue(
+        mockEnvResult,
+      );
+      vi.mocked(memoryDiscovery.loadCoreMemory).mockResolvedValue(
+        mockCoreResult,
+      );
+
+      await contextManager.refresh();
+
+      expect(contextManager.getContextFileCount()).toBe(2);
+      expect(contextManager.getCoreMemoryFileCount()).toBe(1);
+      expect(coreEvents.emit).toHaveBeenCalledWith(CoreEvent.MemoryChanged, {
+        fileCount: 2,
+        coreMemoryFileCount: 1,
+      });
     });
   });
 

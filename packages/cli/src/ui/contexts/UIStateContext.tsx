@@ -152,6 +152,7 @@ export interface UIState {
   // Context and status
   ideContextState: IdeContext | undefined;
   llxprtMdFileCount: number;
+  coreMemoryFileCount: number;
   branchName: string | undefined;
   errorCount: number;
   activeHooks?: Array<import('../types.js').ActiveHook>;

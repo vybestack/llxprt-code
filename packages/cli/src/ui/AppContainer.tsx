@@ -670,6 +670,7 @@ export const AppContainer = (props: AppContainerProps) => {
   useStaticHistoryRefresh(history, refreshStatic);
 
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
+  const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [themeError, _setThemeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -1773,6 +1774,7 @@ export const AppContainer = (props: AppContainerProps) => {
   useEffect(() => {
     if (config) {
       void setLlxprtMdFileCount(config.getLlxprtMdFileCount());
+      void setCoreMemoryFileCount(config.getCoreMemoryFileCount());
     }
   }, [config, config.getLlxprtMdFileCount]);
 
@@ -2199,6 +2201,7 @@ export const AppContainer = (props: AppContainerProps) => {
     // Context and status
     ideContextState,
     llxprtMdFileCount,
+    coreMemoryFileCount,
     branchName,
     errorCount,
     activeHooks,
