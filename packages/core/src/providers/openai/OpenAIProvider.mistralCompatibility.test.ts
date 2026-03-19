@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { buildMessagesWithReasoning, validateToolMessageSequence } from './OpenAIRequestBuilder.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -68,14 +69,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options);
+      const messages = buildMessagesWithReasoning(contents, options);
 
       expect(messages).toHaveLength(1);
       const assistantMsg =
@@ -111,14 +105,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options);
+      const messages = buildMessagesWithReasoning(contents, options);
 
       expect(messages).toHaveLength(1);
       const assistantMsg =
@@ -150,14 +137,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options);
+      const messages = buildMessagesWithReasoning(contents, options);
 
       const assistantMsg =
         messages[0] as OpenAI.Chat.ChatCompletionAssistantMessageParam;
@@ -185,14 +165,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options);
+      const messages = buildMessagesWithReasoning(contents, options);
 
       expect(messages).toHaveLength(1);
       const assistantMsg =
@@ -224,15 +197,8 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options, 'mistral');
+      const messages = buildMessagesWithReasoning(contents, options, 'mistral');
+
 
       expect(messages).toHaveLength(1);
       const toolMsg = messages[0] as OpenAI.Chat.ChatCompletionToolMessageParam;
@@ -269,15 +235,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options, 'mistral');
+      const messages = buildMessagesWithReasoning(contents, options, 'mistral');
 
       expect(messages).toHaveLength(2);
 
@@ -295,10 +253,6 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
     });
 
     it('should omit name field for standard openai-format tool responses', () => {
-      const openaiProvider = new OpenAIProvider(
-        'test-api-key',
-        'https://api.openai.com/v1',
-      );
 
       const contents: IContent[] = [
         {
@@ -319,15 +273,8 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        openaiProvider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options, 'openai');
+      const messages = buildMessagesWithReasoning(contents, options, 'openai');
+
 
       expect(messages).toHaveLength(1);
       const toolMsg = messages[0] as Record<string, unknown>;
@@ -369,13 +316,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         },
       ] as OpenAI.Chat.ChatCompletionMessageParam[];
 
-      const validated = (
-        provider as unknown as {
-          validateToolMessageSequence: (
-            messages: OpenAI.Chat.ChatCompletionMessageParam[],
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).validateToolMessageSequence(messages);
+      const validated = validateToolMessageSequence(messages);
 
       // Regression guard: both tool responses must remain in sequence.
       // A tool response should not clear the active assistant tool_call context.
@@ -441,15 +382,7 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
         'reasoning.stripFromContext': 'none',
       });
 
-      const messages = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: NormalizedGenerateChatOptions,
-            toolFormat?: 'openai' | 'qwen' | 'kimi' | 'mistral',
-          ) => OpenAI.Chat.ChatCompletionMessageParam[];
-        }
-      ).buildMessagesWithReasoning(contents, options, 'mistral');
+      const messages = buildMessagesWithReasoning(contents, options, 'mistral');
 
       expect(messages).toHaveLength(3);
 

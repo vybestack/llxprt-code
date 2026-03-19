@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from '../OpenAIProvider';
+import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder';
 import type {
   IContent,
   ThinkingBlock,
@@ -194,20 +195,11 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       settingsService.set('reasoning.includeInContext', true);
       settingsService.set('reasoning.stripFromContext', 'none');
 
-      // Build messages using the private method
-      const buildMessagesWithReasoning = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: { settings: SettingsService; config: unknown },
-          ) => unknown[];
-        }
-      ).buildMessagesWithReasoning;
-
-      const messages = buildMessagesWithReasoning.call(provider, history, {
+      // Build messages using the extracted function
+      const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      });
+      } as any);
 
       const assistantMsg = messages.find(
         (m: { role: string }) => m.role === 'assistant',
@@ -309,19 +301,10 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       settingsService.set('reasoning.includeInContext', true);
       settingsService.set('reasoning.stripFromContext', 'none');
 
-      const buildMessagesWithReasoning = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: { settings: SettingsService; config: unknown },
-          ) => unknown[];
-        }
-      ).buildMessagesWithReasoning;
-
-      const messages = buildMessagesWithReasoning.call(provider, history, {
+      const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      });
+      } as any);
 
       const assistantMsg = messages.find(
         (m: { role: string; tool_calls?: unknown[] }) =>
@@ -374,19 +357,10 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
 
       settingsService.set('reasoning.includeInContext', false);
 
-      const buildMessagesWithReasoning = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: { settings: SettingsService; config: unknown },
-          ) => unknown[];
-        }
-      ).buildMessagesWithReasoning;
-
-      const messages = buildMessagesWithReasoning.call(provider, history, {
+      const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      });
+      } as any);
 
       const assistantMsg = messages.find(
         (m: { role: string }) => m.role === 'assistant',
@@ -452,19 +426,10 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       settingsService.set('reasoning.includeInContext', true);
       settingsService.set('reasoning.stripFromContext', 'allButLast');
 
-      const buildMessagesWithReasoning = (
-        provider as unknown as {
-          buildMessagesWithReasoning: (
-            contents: IContent[],
-            options: { settings: SettingsService; config: unknown },
-          ) => unknown[];
-        }
-      ).buildMessagesWithReasoning;
-
-      const messages = buildMessagesWithReasoning.call(provider, history, {
+      const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      });
+      } as any);
 
       const assistantMsgs = messages.filter(
         (m: { role: string }) => m.role === 'assistant',

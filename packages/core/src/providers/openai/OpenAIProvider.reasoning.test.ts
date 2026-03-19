@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
+import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import type {
   ThinkingBlock,
   ToolCallBlock,
@@ -13,9 +15,11 @@ import type {
 } from '../../services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type OpenAI from 'openai';
+import { DebugLogger } from '../../debug/index.js';
 
 describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', () => {
   let provider: OpenAIProvider;
+  const mockLogger = new DebugLogger('llxprt:test');
 
   beforeEach(() => {
     // Minimal provider setup - no OAuth, basic config
@@ -29,13 +33,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
       };
 
       // Call the private method via type assertion
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       expect(result).not.toBeNull();
       expect(result.thinking).not.toBeNull();
@@ -52,13 +50,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
         content: 'Regular content',
       };
 
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       expect(result.thinking).toBeNull();
       expect(result.toolCalls).toHaveLength(0);
@@ -69,13 +61,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
         reasoning_content: '',
       };
 
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       expect(result.thinking).toBeNull();
       expect(result.toolCalls).toHaveLength(0);
@@ -87,13 +73,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
         content: 'Response',
       };
 
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       expect(result).not.toBeNull();
       expect(result.thinking).not.toBeNull();
@@ -110,13 +90,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
         reasoning_content: 'Analysis',
       };
 
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       expect(result).not.toBeNull();
       expect(result.thinking).not.toBeNull();
@@ -127,14 +101,9 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
 
   describe('graceful handling @requirement:REQ-THINK-003.4', () => {
     it('should handle null delta gracefully (streaming)', () => {
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta | null,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(
+      const result = parseStreamingReasoningDelta(
         null as unknown as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+        mockLogger,
       );
 
       expect(result.thinking).toBeNull();
@@ -142,16 +111,9 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
     });
 
     it('should handle undefined delta gracefully (streaming)', () => {
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta:
-              | OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
-              | undefined,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(
+      const result = parseStreamingReasoningDelta(
         undefined as unknown as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
+        mockLogger,
       );
 
       expect(result.thinking).toBeNull();
@@ -162,13 +124,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
       const delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta =
         {};
 
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       expect(result.thinking).toBeNull();
       expect(result.toolCalls).toHaveLength(0);
@@ -181,13 +137,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
         reasoning_content: '   \n\t  ',
       };
 
-      const result = (
-        provider as unknown as {
-          parseStreamingReasoningDelta: (
-            delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-          ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-        }
-      ).parseStreamingReasoningDelta(delta);
+      const result = parseStreamingReasoningDelta(delta, mockLogger);
 
       // Whitespace should be preserved for proper formatting during accumulation
       expect(result).not.toBeNull();
@@ -295,14 +245,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Should include reasoning_content field
         expect(result).toHaveLength(1);
@@ -316,14 +259,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Should not include reasoning_content field
         expect(result).toHaveLength(1);
@@ -342,14 +278,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Should include reasoning_content for all messages
         expect(result).toHaveLength(2);
@@ -367,14 +296,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'all',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Should not include reasoning_content for any messages
         expect(result).toHaveLength(2);
@@ -392,14 +314,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'allButLast',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Should not include reasoning_content for first, but include for last
         expect(result).toHaveLength(2);
@@ -416,14 +331,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(1);
         expect(result[0]).toHaveProperty('reasoning_content', 'Thinking...');
@@ -441,14 +349,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(3);
         expect(result[0]).toHaveProperty('reasoning_content', 'Thinking 1');
@@ -465,14 +366,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(1);
         expect(result[0]).not.toHaveProperty('reasoning_content');
@@ -489,14 +383,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(2);
         expect(result[0]).not.toHaveProperty('reasoning_content');
@@ -516,14 +403,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'all',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(3);
         result.forEach((msg) => {
@@ -542,14 +422,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'allButLast',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(3);
         expect(result[0]).not.toHaveProperty('reasoning_content');
@@ -568,14 +441,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(3);
         expect(result[0]).toHaveProperty('reasoning_content', 'Thinking 1');
@@ -590,14 +456,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'allButLast',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(1);
         expect(result[0]).toHaveProperty('reasoning_content', 'Thinking');
@@ -612,14 +471,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(0);
       });
@@ -634,14 +486,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(2);
         expect(result[0]).not.toHaveProperty('reasoning_content');
@@ -660,14 +505,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(1);
         // Should concatenate all thinking blocks
@@ -690,14 +528,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(3);
         expect(result[0]).toHaveProperty('reasoning_content', 'Thinking');
@@ -727,14 +558,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'none',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         expect(result).toHaveLength(1);
         const hasReasoningContent = 'reasoning_content' in result[0];
@@ -750,14 +574,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           // No reasoning settings provided
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Should handle gracefully with defaults
         expect(result).toHaveLength(1);
@@ -773,14 +590,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           'reasoning.stripFromContext': 'all',
         });
 
-        const result = (
-          provider as unknown as {
-            buildMessagesWithReasoning: (
-              contents: IContent[],
-              options: NormalizedGenerateChatOptions,
-            ) => OpenAI.Chat.ChatCompletionMessageParam[];
-          }
-        ).buildMessagesWithReasoning(contents, options);
+        const result = buildMessagesWithReasoning(contents, options);
 
         // Even though includeInContext is true, "all" should strip everything
         expect(result).toHaveLength(2);
@@ -818,13 +628,7 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
 That should find it.`,
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         expect(result).not.toBeNull();
         expect(result.thinking).not.toBeNull();
@@ -848,13 +652,7 @@ That should find it.`,
 <|tool_calls_section_end|>`,
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         expect(result).not.toBeNull();
         expect(result.thinking).toBeNull(); // No thinking text, just tool calls
@@ -881,13 +679,7 @@ Now let me read the files.
 Done analyzing.`,
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         expect(result).not.toBeNull();
         expect(result.thinking).not.toBeNull();
@@ -906,13 +698,7 @@ Done analyzing.`,
             reasoning_content: 'Just thinking, no tools needed.',
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         expect(result).not.toBeNull();
         expect(result.thinking).not.toBeNull();
@@ -928,13 +714,7 @@ Done analyzing.`,
             content: 'Regular content',
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         expect(result).not.toBeNull();
         expect(result.thinking).toBeNull();
@@ -950,13 +730,7 @@ Done analyzing.`,
   Trailing whitespace  `,
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         expect(result.thinking).not.toBeNull();
         expect(result.thinking?.thought).toBe(
@@ -975,13 +749,7 @@ Done analyzing.`,
 More thinking.`,
           };
 
-        const result = (
-          provider as unknown as {
-            parseStreamingReasoningDelta: (
-              delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta,
-            ) => { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] };
-          }
-        ).parseStreamingReasoningDelta(delta);
+        const result = parseStreamingReasoningDelta(delta, mockLogger);
 
         // Should still extract thinking and strip the malformed section
         expect(result.thinking).not.toBeNull();
