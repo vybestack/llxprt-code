@@ -11,6 +11,8 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import prettierConfig from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
 import vitest from '@vitest/eslint-plugin';
+import sonarjs from 'eslint-plugin-sonarjs';
+import eslintComments from 'eslint-plugin-eslint-comments';
 import globals from 'globals';
 import headers from 'eslint-plugin-headers';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
@@ -97,6 +99,8 @@ export default tseslint.config(
     files: ['packages/*/src/**/*.{ts,tsx}'], // Target only TS/TSX in the cli package
     plugins: {
       import: importPlugin,
+      sonarjs,
+      'eslint-comments': eslintComments,
     },
     settings: {
       'import/resolver': {
@@ -192,6 +196,68 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': ['error'],
       '@typescript-eslint/no-unnecessary-type-assertion': ['error'],
 
+      // --- Strict rules modeled after lsp/ui packages (enabled as warnings for core/cli) ---
+
+      // Strict TypeScript rules
+      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/strict-boolean-expressions': [
+        'warn',
+        {
+          allowString: true,
+          allowNumber: false,
+          allowNullableObject: true,
+          allowNullableBoolean: false,
+          allowNullableString: true,
+          allowNullableNumber: false,
+          allowAny: false,
+        },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'warn',
+        { prefer: 'type-imports' },
+      ],
+      '@typescript-eslint/switch-exhaustiveness-check': 'warn',
+      '@typescript-eslint/no-unnecessary-condition': 'warn',
+      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
+      '@typescript-eslint/prefer-optional-chain': 'warn',
+
+      // General code quality
+      'no-console': 'warn',
+      'no-else-return': 'warn',
+      'no-lonely-if': 'warn',
+      'no-unneeded-ternary': 'warn',
+
+      // Complexity limits
+      complexity: ['warn', 15],
+      'max-lines': [
+        'warn',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'warn',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+
+      // Sonarjs rules (spread recommended as warnings, then override specifics)
+      ...Object.fromEntries(
+        Object.entries(sonarjs.configs.recommended.rules ?? {}).map(
+          ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
+        ),
+      ),
+      'sonarjs/cognitive-complexity': ['warn', 30],
+      'sonarjs/function-return-type': 'off',
+      'sonarjs/no-wildcard-import': 'off',
+      'sonarjs/file-header': 'off',
+
+      // ESLint comments (recommended rules downgraded to warn)
+      ...Object.fromEntries(
+        Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
+          ([rule, config]) => [rule, Array.isArray(config) ? ['warn', ...config.slice(1)] : 'warn'],
+        ),
+      ),
+
+      // --- End strict rules ---
+
       // Additional React-specific rules to prevent infinite loops
       'react-hooks/exhaustive-deps': [
         'error',
@@ -284,7 +350,6 @@ export default tseslint.config(
     },
     rules: {
       ...vitest.configs.recommended.rules,
-      'vitest/expect-expect': 'off',
       'vitest/no-commented-out-tests': 'off',
       'vitest/no-disabled-tests': 'off',
       'vitest/no-standalone-expect': [
@@ -293,6 +358,18 @@ export default tseslint.config(
           additionalTestBlockFunctions: ['itProp'],
         },
       ],
+
+      // Stricter vitest rules (warnings for now)
+      'vitest/expect-expect': 'warn',
+      'vitest/no-conditional-expect': 'warn',
+      'vitest/no-conditional-in-test': 'warn',
+      'vitest/require-to-throw-message': 'warn',
+      'vitest/prefer-strict-equal': 'warn',
+      'vitest/max-nested-describe': ['warn', { max: 3 }],
+      'vitest/require-top-level-describe': 'warn',
+
+      // Relax complexity rules for test files
+      'max-lines-per-function': 'off',
     },
   },
   // Settings for eslint-rules directory
