@@ -49,7 +49,10 @@ describe('coerceMessageContentToString', () => {
   });
 
   it('joins text parts from array content', () => {
-    const parts = [{ type: 'text', text: 'hello ' }, { type: 'text', text: 'world' }];
+    const parts = [
+      { type: 'text', text: 'hello ' },
+      { type: 'text', text: 'world' },
+    ];
     expect(coerceMessageContentToString(parts)).toBe('hello world');
   });
 
@@ -160,8 +163,9 @@ describe('cleanThinkingContent', () => {
 
 describe('parseStreamingReasoningDelta', () => {
   it('extracts reasoning_content into thinking block', () => {
-    const delta = { reasoning_content: 'I think...' } as unknown as
-      OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
+    const delta = {
+      reasoning_content: 'I think...',
+    } as unknown as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
     const result = parseStreamingReasoningDelta(delta, mockLogger);
     expect(result.thinking).not.toBeNull();
     expect(result.thinking!.thought).toBe('I think...');
@@ -169,8 +173,9 @@ describe('parseStreamingReasoningDelta', () => {
   });
 
   it('returns null thinking for delta without reasoning fields', () => {
-    const delta = { content: 'regular content' } as unknown as
-      OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
+    const delta = {
+      content: 'regular content',
+    } as unknown as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
     const result = parseStreamingReasoningDelta(delta, mockLogger);
     expect(result.thinking).toBeNull();
   });
@@ -182,8 +187,9 @@ describe('parseStreamingReasoningDelta', () => {
   });
 
   it('returns empty tool calls array when no tool calls in delta', () => {
-    const delta = { reasoning_content: 'thought' } as unknown as
-      OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
+    const delta = {
+      reasoning_content: 'thought',
+    } as unknown as OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta;
     const result = parseStreamingReasoningDelta(delta, mockLogger);
     expect(result.toolCalls).toHaveLength(0);
   });

@@ -36,9 +36,7 @@ import {
   extractThinkingBlocks,
   type StripPolicy,
 } from '../reasoning/reasoningUtils.js';
-import {
-  normalizeToOpenAIToolId,
-} from '../utils/toolIdNormalization.js';
+import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import {
   normalizeMediaToDataUri,
   classifyMediaBlock,

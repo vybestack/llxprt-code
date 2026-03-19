@@ -139,7 +139,9 @@ describe('buildMessagesWithReasoning', () => {
     const messages = buildMessagesWithReasoning(contents, options);
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('user');
-    expect((messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam).content).toBe('Hello world');
+    expect(
+      (messages[0] as OpenAI.Chat.ChatCompletionUserMessageParam).content,
+    ).toBe('Hello world');
   });
 
   it('converts assistant with tool_calls to assistant message', () => {
@@ -164,7 +166,8 @@ describe('buildMessagesWithReasoning', () => {
     const messages = buildMessagesWithReasoning(contents, options);
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('assistant');
-    const assistant = messages[0] as OpenAI.Chat.ChatCompletionAssistantMessageParam;
+    const assistant =
+      messages[0] as OpenAI.Chat.ChatCompletionAssistantMessageParam;
     expect(assistant.tool_calls).toHaveLength(1);
     expect(assistant.tool_calls![0].function.name).toBe('test_tool');
   });
@@ -191,7 +194,9 @@ describe('buildMessagesWithReasoning', () => {
     const messages = buildMessagesWithReasoning(contents, options);
     expect(messages).toHaveLength(1);
     expect(messages[0].role).toBe('tool');
-    expect((messages[0] as OpenAI.Chat.ChatCompletionToolMessageParam).tool_call_id).toBe('call_abc');
+    expect(
+      (messages[0] as OpenAI.Chat.ChatCompletionToolMessageParam).tool_call_id,
+    ).toBe('call_abc');
   });
 
   it('attaches reasoning_content when toolFormat is undefined and includeInContext is true', () => {
@@ -315,7 +320,11 @@ describe('validateToolMessageSequence', () => {
         role: 'assistant',
         content: null,
         tool_calls: [
-          { id: 'call_1', type: 'function', function: { name: 'test', arguments: '{}' } },
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'test', arguments: '{}' },
+          },
         ],
       },
       { role: 'tool', tool_call_id: 'call_1', content: 'result' },
@@ -333,7 +342,11 @@ describe('validateToolMessageSequence', () => {
         role: 'assistant',
         content: null,
         tool_calls: [
-          { id: 'call_1', type: 'function', function: { name: 'test', arguments: '{}' } },
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'test', arguments: '{}' },
+          },
         ],
       },
       { role: 'tool', tool_call_id: 'call_WRONG', content: 'result' },
@@ -360,8 +373,16 @@ describe('validateToolMessageSequence', () => {
         role: 'assistant',
         content: null,
         tool_calls: [
-          { id: 'call_1', type: 'function', function: { name: 'a', arguments: '{}' } },
-          { id: 'call_2', type: 'function', function: { name: 'b', arguments: '{}' } },
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'a', arguments: '{}' },
+          },
+          {
+            id: 'call_2',
+            type: 'function',
+            function: { name: 'b', arguments: '{}' },
+          },
         ],
       },
       { role: 'tool', tool_call_id: 'call_1', content: 'result1' },
@@ -386,7 +407,11 @@ describe('buildContinuationMessages', () => {
     const existingMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'user', content: 'do something' },
     ];
-    const result = buildContinuationMessages(toolCalls, existingMessages, 'openai');
+    const result = buildContinuationMessages(
+      toolCalls,
+      existingMessages,
+      'openai',
+    );
     expect(result.length).toBeGreaterThan(existingMessages.length);
     expect(result[0].role).toBe('user');
     expect(result[0]).toStrictEqual(existingMessages[0]);
@@ -400,7 +425,11 @@ describe('buildContinuationMessages', () => {
         reasoning_content: 'deep thoughts',
       } as unknown as OpenAI.Chat.ChatCompletionMessageParam,
     ];
-    const result = buildContinuationMessages(toolCalls, existingMessages, 'openai');
+    const result = buildContinuationMessages(
+      toolCalls,
+      existingMessages,
+      'openai',
+    );
     const assistantInHistory = result[0] as unknown as Record<string, unknown>;
     expect(assistantInHistory.reasoning_content).toBeUndefined();
     expect(assistantInHistory.content).toBe('I analyzed the code');
@@ -410,8 +439,15 @@ describe('buildContinuationMessages', () => {
     const existingMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'user', content: 'do something' },
     ];
-    const result = buildContinuationMessages(toolCalls, existingMessages, 'mistral');
-    const toolMsg = result.find((m) => m.role === 'tool') as Record<string, unknown>;
+    const result = buildContinuationMessages(
+      toolCalls,
+      existingMessages,
+      'mistral',
+    );
+    const toolMsg = result.find((m) => m.role === 'tool') as Record<
+      string,
+      unknown
+    >;
     expect(toolMsg).toBeDefined();
     expect(toolMsg.name).toBe('test_tool');
   });
@@ -420,8 +456,15 @@ describe('buildContinuationMessages', () => {
     const existingMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'user', content: 'do something' },
     ];
-    const result = buildContinuationMessages(toolCalls, existingMessages, 'openai');
-    const toolMsg = result.find((m) => m.role === 'tool') as Record<string, unknown>;
+    const result = buildContinuationMessages(
+      toolCalls,
+      existingMessages,
+      'openai',
+    );
+    const toolMsg = result.find((m) => m.role === 'tool') as Record<
+      string,
+      unknown
+    >;
     expect(toolMsg).toBeDefined();
     expect(toolMsg.name).toBeUndefined();
   });
@@ -430,7 +473,11 @@ describe('buildContinuationMessages', () => {
     const existingMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'user', content: 'do something' },
     ];
-    const result = buildContinuationMessages(toolCalls, existingMessages, 'openai');
+    const result = buildContinuationMessages(
+      toolCalls,
+      existingMessages,
+      'openai',
+    );
     const lastMsg = result[result.length - 1];
     expect(lastMsg.role).toBe('user');
   });

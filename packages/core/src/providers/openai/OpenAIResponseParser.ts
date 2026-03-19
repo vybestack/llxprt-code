@@ -16,7 +16,10 @@
 
 import OpenAI from 'openai';
 import type { DebugLogger } from '../../debug/index.js';
-import type { ToolCallBlock, ThinkingBlock } from '../../services/history/IContent.js';
+import type {
+  ToolCallBlock,
+  ThinkingBlock,
+} from '../../services/history/IContent.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';
 import { normalizeToHistoryToolId } from '../utils/toolIdNormalization.js';
@@ -27,7 +30,9 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
  * into a plain string. Defensive for OpenAI-compatible providers that emit
  * structured content blocks.
  */
-export function coerceMessageContentToString(content: unknown): string | undefined {
+export function coerceMessageContentToString(
+  content: unknown,
+): string | undefined {
   if (typeof content === 'string') {
     return content;
   }
@@ -57,7 +62,10 @@ export function coerceMessageContentToString(content: unknown): string | undefin
  * - Strip Markdown code fences (```json ... ```).
  * - Try to isolate the main JSON object if wrapped in prose.
  */
-export function sanitizeToolArgumentsString(raw: unknown, logger: DebugLogger): string {
+export function sanitizeToolArgumentsString(
+  raw: unknown,
+  logger: DebugLogger,
+): string {
   if (raw === null || raw === undefined) {
     return '{}';
   }
@@ -183,20 +191,20 @@ export function extractKimiToolCallsFromText(
     );
 
     if (toolCalls.length > 0) {
-      logger.debug(() => `[extractKimiToolCallsFromText] Parsed Kimi tool_calls_section`, {
-        toolCallCount: toolCalls.length,
-        originalLength: raw.length,
-        cleanedLength: text.length,
-      });
+      logger.debug(
+        () => `[extractKimiToolCallsFromText] Parsed Kimi tool_calls_section`,
+        {
+          toolCallCount: toolCalls.length,
+          originalLength: raw.length,
+          cleanedLength: text.length,
+        },
+      );
     }
   }
 
   // ALWAYS run stray token cleanup, even if no complete sections were found
   // This handles partial sections, malformed tokens, orphaned markers, etc.
-  text = text.replace(
-    /<\|tool_call(?:_(?:begin|end|argument_begin))?\|>/g,
-    '',
-  );
+  text = text.replace(/<\|tool_call(?:_(?:begin|end|argument_begin))?\|>/g, '');
   text = text.replace(/<\|tool_calls_section_(?:begin|end)\|>/g, '');
 
   // Don't trim - preserve leading/trailing newlines that are important for formatting
@@ -209,7 +217,10 @@ export function extractKimiToolCallsFromText(
  * Used when extracting thinking from <think> tags that may contain embedded tool calls.
  * @issue #749
  */
-export function cleanThinkingContent(thought: string, logger: DebugLogger): string {
+export function cleanThinkingContent(
+  thought: string,
+  logger: DebugLogger,
+): string {
   return extractKimiToolCallsFromText(thought, logger).cleanedText;
 }
 
@@ -244,8 +255,10 @@ export function parseStreamingReasoningDelta(
   }
 
   // Extract Kimi K2 tool calls embedded in reasoning_content (fixes issue #749)
-  const { cleanedText, toolCalls } =
-    extractKimiToolCallsFromText(reasoningContent, logger);
+  const { cleanedText, toolCalls } = extractKimiToolCallsFromText(
+    reasoningContent,
+    logger,
+  );
 
   // For streaming, preserve whitespace-only content for proper formatting (issue #721)
   // Only return null if the cleaned text is empty (length 0)

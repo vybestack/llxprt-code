@@ -130,7 +130,9 @@ export function extractModelParamsFromOptions(
  * @requirement:REQ-SP4-003
  * Resolve runtime key from normalized options for client scoping
  */
-export function resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
+export function resolveRuntimeKey(
+  options: NormalizedGenerateChatOptions,
+): string {
   if (options.runtime?.runtimeId) {
     return options.runtime.runtimeId;
   }

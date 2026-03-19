@@ -98,7 +98,9 @@ describe('OpenAIClientFactory', () => {
     it('translates maxOutputTokens to max_tokens', () => {
       const options = {
         invocation: { modelParams: {} },
-        settings: { get: (key: string) => (key === 'maxOutputTokens' ? 2000 : undefined) },
+        settings: {
+          get: (key: string) => (key === 'maxOutputTokens' ? 2000 : undefined),
+        },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -109,7 +111,9 @@ describe('OpenAIClientFactory', () => {
     it('does not override existing max_tokens', () => {
       const options = {
         invocation: { modelParams: { max_tokens: 1000 } },
-        settings: { get: (key: string) => (key === 'maxOutputTokens' ? 2000 : undefined) },
+        settings: {
+          get: (key: string) => (key === 'maxOutputTokens' ? 2000 : undefined),
+        },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -132,7 +136,9 @@ describe('OpenAIClientFactory', () => {
     it('ignores invalid maxOutputTokens values', () => {
       const options = {
         invocation: { modelParams: {} },
-        settings: { get: (key: string) => (key === 'maxOutputTokens' ? -1 : undefined) },
+        settings: {
+          get: (key: string) => (key === 'maxOutputTokens' ? -1 : undefined),
+        },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -167,7 +173,9 @@ describe('OpenAIClientFactory', () => {
       const options = {
         runtime: {},
         metadata: {},
-        settings: { get: (key: string) => (key === 'call-id' ? 'call-789' : undefined) },
+        settings: {
+          get: (key: string) => (key === 'call-id' ? 'call-789' : undefined),
+        },
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = resolveRuntimeKey(options);
@@ -205,7 +213,10 @@ describe('OpenAIClientFactory', () => {
     });
 
     it('sets baseURL when provided', () => {
-      const client = instantiateClient('test-token', 'https://custom.api.com/v1');
+      const client = instantiateClient(
+        'test-token',
+        'https://custom.api.com/v1',
+      );
       expect(client).toBeDefined();
       expect(client.baseURL).toBe('https://custom.api.com/v1');
     });
@@ -218,8 +229,14 @@ describe('OpenAIClientFactory', () => {
 
     it('applies default headers to client', () => {
       const headers = { 'User-Agent': 'TestAgent/1.0', 'X-Custom': 'value' };
-      const client = instantiateClient('test-token', undefined, undefined, headers);
-      const opts = (client as unknown as Record<string, unknown>)._options as Record<string, unknown>;
+      const client = instantiateClient(
+        'test-token',
+        undefined,
+        undefined,
+        headers,
+      );
+      const opts = (client as unknown as Record<string, unknown>)
+        ._options as Record<string, unknown>;
       expect(opts).toBeDefined();
       const dh = opts.defaultHeaders as Record<string, string>;
       expect(dh['User-Agent']).toBe('TestAgent/1.0');
@@ -235,12 +252,12 @@ describe('OpenAIClientFactory', () => {
     it('passes HTTP agents through to client options', () => {
       const httpAgent = new http.Agent();
       const httpsAgent = new https.Agent();
-      const client = instantiateClient(
-        'test-token',
-        undefined,
-        { httpAgent, httpsAgent },
-      );
-      const opts = (client as unknown as Record<string, unknown>)._options as Record<string, unknown>;
+      const client = instantiateClient('test-token', undefined, {
+        httpAgent,
+        httpsAgent,
+      });
+      const opts = (client as unknown as Record<string, unknown>)
+        ._options as Record<string, unknown>;
       expect(opts).toBeDefined();
       expect(opts.httpAgent).toBe(httpAgent);
       expect(opts.httpsAgent).toBe(httpsAgent);
@@ -248,7 +265,8 @@ describe('OpenAIClientFactory', () => {
 
     it('omits defaultHeaders when no headers provided', () => {
       const client = instantiateClient('test-token');
-      const opts = (client as unknown as Record<string, unknown>)._options as Record<string, unknown>;
+      const opts = (client as unknown as Record<string, unknown>)
+        ._options as Record<string, unknown>;
       expect(opts).toBeDefined();
       expect(opts.defaultHeaders).toBeUndefined();
     });
@@ -268,11 +286,15 @@ describe('OpenAIClientFactory', () => {
       const options = {
         invocation: {
           getEphemeral: (key: string) =>
-            key === 'custom-headers' ? { 'X-Invocation': 'inv-value' } : undefined,
+            key === 'custom-headers'
+              ? { 'X-Invocation': 'inv-value' }
+              : undefined,
         },
       } as unknown as NormalizedGenerateChatOptions;
 
-      const result = mergeInvocationHeaders(options, { 'X-Base': 'base-value' });
+      const result = mergeInvocationHeaders(options, {
+        'X-Base': 'base-value',
+      });
       expect(result).toBeDefined();
       expect(result?.['X-Base']).toBe('base-value');
       expect(result?.['X-Invocation']).toBe('inv-value');
@@ -295,11 +317,15 @@ describe('OpenAIClientFactory', () => {
       const options = {
         invocation: {
           getEphemeral: (key: string) =>
-            key === 'custom-headers' ? { 'X-Shared': 'invocation-value' } : undefined,
+            key === 'custom-headers'
+              ? { 'X-Shared': 'invocation-value' }
+              : undefined,
         },
       } as unknown as NormalizedGenerateChatOptions;
 
-      const result = mergeInvocationHeaders(options, { 'X-Shared': 'base-value' });
+      const result = mergeInvocationHeaders(options, {
+        'X-Shared': 'base-value',
+      });
       expect(result).toBeDefined();
       expect(result?.['X-Shared']).toBe('invocation-value');
     });
@@ -309,7 +335,9 @@ describe('OpenAIClientFactory', () => {
         invocation: { getEphemeral: () => undefined },
       } as unknown as NormalizedGenerateChatOptions;
 
-      const result = mergeInvocationHeaders(options, { 'X-Base': 'base-value' });
+      const result = mergeInvocationHeaders(options, {
+        'X-Base': 'base-value',
+      });
       expect(result).toBeDefined();
       expect(result?.['X-Base']).toBe('base-value');
     });

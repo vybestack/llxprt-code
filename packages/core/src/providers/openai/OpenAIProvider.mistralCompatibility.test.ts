@@ -10,7 +10,10 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { buildMessagesWithReasoning, validateToolMessageSequence } from './OpenAIRequestBuilder.js';
+import {
+  buildMessagesWithReasoning,
+  validateToolMessageSequence,
+} from './OpenAIRequestBuilder.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -199,7 +202,6 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
 
       const messages = buildMessagesWithReasoning(contents, options, 'mistral');
 
-
       expect(messages).toHaveLength(1);
       const toolMsg = messages[0] as OpenAI.Chat.ChatCompletionToolMessageParam;
       expect(toolMsg.role).toBe('tool');
@@ -253,7 +255,6 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
     });
 
     it('should omit name field for standard openai-format tool responses', () => {
-
       const contents: IContent[] = [
         {
           speaker: 'tool',
@@ -274,7 +275,6 @@ describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
       });
 
       const messages = buildMessagesWithReasoning(contents, options, 'openai');
-
 
       expect(messages).toHaveLength(1);
       const toolMsg = messages[0] as Record<string, unknown>;
