@@ -20,9 +20,6 @@
  */
 
 import OpenAI from 'openai';
-import * as http from 'http';
-import * as https from 'https';
-import * as net from 'net';
 import { type IContent } from '../../services/history/IContent.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
@@ -83,6 +80,13 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
+import {
+  createHttpAgents,
+  extractModelParamsFromOptions,
+  resolveRuntimeKey,
+  instantiateClient,
+  mergeInvocationHeaders,
+} from './OpenAIClientFactory.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
@@ -137,133 +141,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Create HTTP/HTTPS agents with socket configuration for local AI servers
-   * Returns undefined if no socket settings are configured
-   *
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement:REQ-SP4-003
-   * Now sources ephemeral settings from call options instead of provider config
-   */
-  private createHttpAgents(
-    options?: NormalizedGenerateChatOptions,
-  ): { httpAgent: http.Agent; httpsAgent: https.Agent } | undefined {
-    // Get socket configuration from call options or fallback to provider config
-    const settingsFromInvocation = options?.invocation?.ephemerals;
-    const settings =
-      settingsFromInvocation ??
-      this.providerConfig?.getEphemeralSettings?.() ??
-      {};
-
-    // Check if any socket settings are explicitly configured
-    const hasSocketSettings =
-      'socket-timeout' in settings ||
-      'socket-keepalive' in settings ||
-      'socket-nodelay' in settings;
-
-    // Only create custom agents if socket settings are configured
-    if (!hasSocketSettings) {
-      return undefined;
-    }
-
-    // Socket configuration with defaults for when settings ARE configured
-    const socketTimeout = (settings['socket-timeout'] as number) || 60000; // 60 seconds default
-    const socketKeepAlive = settings['socket-keepalive'] !== false; // true by default
-    const socketNoDelay = settings['socket-nodelay'] !== false; // true by default
-
-    // Create HTTP agent with socket options
-    const httpAgent = new http.Agent({
-      keepAlive: socketKeepAlive,
-      keepAliveMsecs: 1000,
-      timeout: socketTimeout,
-    });
-
-    // Create HTTPS agent with socket options
-    const httpsAgent = new https.Agent({
-      keepAlive: socketKeepAlive,
-      keepAliveMsecs: 1000,
-      timeout: socketTimeout,
-    });
-
-    // Apply TCP_NODELAY if enabled (reduces latency for local servers)
-    if (socketNoDelay) {
-      const originalCreateConnection = httpAgent.createConnection;
-      httpAgent.createConnection = function (options, callback) {
-        const socket = originalCreateConnection.call(this, options, callback);
-        if (socket instanceof net.Socket) {
-          socket.setNoDelay(true);
-        }
-        return socket;
-      };
-
-      const originalHttpsCreateConnection = httpsAgent.createConnection;
-      httpsAgent.createConnection = function (options, callback) {
-        const socket = originalHttpsCreateConnection.call(
-          this,
-          options,
-          callback,
-        );
-        if (socket instanceof net.Socket) {
-          socket.setNoDelay(true);
-        }
-        return socket;
-      };
-    }
-
-    return { httpAgent, httpsAgent };
-  }
-
-  /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement:REQ-SP4-002
-   * Extract model parameters from normalized options instead of settings service
-   */
-  private extractModelParamsFromOptions(
-    options: NormalizedGenerateChatOptions,
-  ): Record<string, unknown> | undefined {
-    const modelParams = { ...(options.invocation?.modelParams ?? {}) };
-
-    // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
-    const rawMaxOutput = options.settings?.get('maxOutputTokens');
-    const genericMaxOutput =
-      typeof rawMaxOutput === 'number' &&
-      Number.isFinite(rawMaxOutput) &&
-      rawMaxOutput > 0
-        ? rawMaxOutput
-        : undefined;
-    if (
-      genericMaxOutput !== undefined &&
-      modelParams['max_tokens'] === undefined
-    ) {
-      modelParams['max_tokens'] = genericMaxOutput;
-    }
-
-    return Object.keys(modelParams).length > 0 ? modelParams : undefined;
-  }
-
-  /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement:REQ-SP4-003
-   * Resolve runtime key from normalized options for client scoping
-   */
-  private resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
-    if (options.runtime?.runtimeId) {
-      return options.runtime.runtimeId;
-    }
-
-    const metadataRuntimeId = options.metadata?.runtimeId;
-    if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
-      return metadataRuntimeId.trim();
-    }
-
-    const callId = options.settings.get('call-id');
-    if (typeof callId === 'string' && callId.trim()) {
-      return `call:${callId.trim()}`;
-    }
-
-    return 'openai.runtime.unscoped';
-  }
-
-  /**
    * Tool formatter instances cannot be shared between stateless calls,
    * so construct a fresh one for every invocation.
    *
@@ -272,76 +149,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    */
   private createToolFormatter(): ToolFormatter {
     return new ToolFormatter();
-  }
-
-  /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
-   * @requirement:REQ-SP4-002
-   * Instantiates a fresh OpenAI client per call to preserve stateless behaviour.
-   */
-  private instantiateClient(
-    authToken: string,
-    baseURL?: string,
-    agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
-    headers?: Record<string, string>,
-  ): OpenAI {
-    const clientOptions: Record<string, unknown> = {
-      apiKey: authToken || '',
-      maxRetries: 0,
-    };
-
-    if (headers && Object.keys(headers).length > 0) {
-      // Ensure headers like User-Agent are applied even if the SDK call-site
-      // headers option is not forwarded by the OpenAI client implementation.
-      clientOptions.defaultHeaders = headers;
-    }
-
-    if (baseURL && baseURL.trim() !== '') {
-      clientOptions.baseURL = baseURL;
-    }
-
-    if (agents) {
-      clientOptions.httpAgent = agents.httpAgent;
-      clientOptions.httpsAgent = agents.httpsAgent;
-    }
-
-    return new OpenAI(
-      clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
-    );
-  }
-
-
-  /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
-   * @requirement:REQ-SP4-002
-   * @requirement:REQ-LOCAL-001
-   * Creates a client scoped to the active runtime metadata without caching.
-   * Local endpoints (localhost, private IPs) are allowed without authentication
-   * to support local AI servers like Ollama.
-   */
-  private mergeInvocationHeaders(
-    options: NormalizedGenerateChatOptions,
-    baseHeaders?: Record<string, string>,
-  ): Record<string, string> | undefined {
-    const invocationHeadersRaw =
-      options.invocation.getEphemeral('custom-headers');
-    const invocationHeaders =
-      invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
-        ? (invocationHeadersRaw as Record<string, string>)
-        : undefined;
-
-    const invocationUserAgent = options.invocation.getEphemeral('user-agent');
-
-    return baseHeaders || invocationHeaders || invocationUserAgent
-      ? {
-          ...(baseHeaders ?? {}),
-          ...(invocationHeaders ?? {}),
-          ...(typeof invocationUserAgent === 'string' &&
-          invocationUserAgent.trim()
-            ? { 'User-Agent': invocationUserAgent.trim() }
-            : {}),
-        }
-      : undefined;
   }
 
   protected async getClient(
@@ -361,14 +168,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
 
-    const agents = this.createHttpAgents(options);
+    // Resolve settings for HTTP agents from invocation or provider config
+    const agentSettings = options.invocation?.ephemerals ?? this.providerConfig?.getEphemeralSettings?.() ?? {};
+    const agents = createHttpAgents(agentSettings);
 
     // Apply invocation/provider header overrides at client construction time.
     // Some OpenAI-compatible gateways (e.g., Kimi For Coding) enforce allowlisting
     // based on User-Agent, which must be sent as a real HTTP header.
-    const headers = this.mergeInvocationHeaders(options);
+    const headers = mergeInvocationHeaders(options);
 
-    return this.instantiateClient(authToken, baseURL, agents, headers);
+    return instantiateClient(authToken, baseURL, agents, headers);
   }
 
   /**
@@ -418,8 +227,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Local endpoints often work without authentication
       const authToken = await this.getAuthToken();
       const baseURL = this.getBaseURL();
-      const agents = this.createHttpAgents();
-      const client = this.instantiateClient(authToken, baseURL, agents);
+      const agentSettings = this.providerConfig?.getEphemeralSettings?.() ?? {};
+      const agents = createHttpAgents(agentSettings);
+      const client = instantiateClient(authToken, baseURL, agents);
 
       const modelsEndpoint = `${baseURL ?? 'https://api.openai.com/v1'}/models`;
       this.getLogger().debug(
@@ -615,7 +425,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): AsyncIterableIterator<IContent> {
     const callFormatter = this.createToolFormatter();
     const client = await this.getClient(options);
-    const runtimeKey = this.resolveRuntimeKey(options);
+    const runtimeKey = resolveRuntimeKey(options);
     const { tools } = options;
     const logger = new DebugLogger('llxprt:provider:openai');
 
@@ -857,7 +667,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
      * @requirement:REQ-SP4-002
      * Extract per-call request overrides from normalized options instead of cached state
      */
-    const requestOverrides = this.extractModelParamsFromOptions(options);
+    const requestOverrides = extractModelParamsFromOptions(options);
     if (requestOverrides) {
       if (logger.enabled) {
         logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
@@ -961,7 +771,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // The continuation helper must use this merged header set too; otherwise the
     // follow-up request can be routed/validated differently and fail on strict
     // OpenAI-compatible gateways.
-    const mergedHeaders = this.mergeInvocationHeaders(options, customHeaders);
+    const mergedHeaders = mergeInvocationHeaders(options, customHeaders);
 
     if (logger.enabled) {
       logger.debug(() => `[OpenAIProvider] Request body preview`, {
