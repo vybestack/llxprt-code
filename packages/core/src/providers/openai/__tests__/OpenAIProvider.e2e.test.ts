@@ -17,6 +17,7 @@ import { initializeTestProviderRuntime } from '../../../test-utils/runtime';
 import { resetSettingsService } from '../../../settings/settingsServiceInstance';
 import type { SettingsService } from '../../../settings/SettingsService';
 import type OpenAI from 'openai';
+import type { NormalizedGenerateChatOptions } from '../../BaseProvider';
 
 // Mock OpenAI client at the instance level
 const mockChatCompletionsCreate = vi.fn();
@@ -199,7 +200,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      } as any);
+      } as unknown as NormalizedGenerateChatOptions);
 
       const assistantMsg = messages.find(
         (m: { role: string }) => m.role === 'assistant',
@@ -304,7 +305,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      } as any);
+      } as unknown as NormalizedGenerateChatOptions);
 
       const assistantMsg = messages.find(
         (m: { role: string; tool_calls?: unknown[] }) =>
@@ -360,7 +361,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      } as any);
+      } as unknown as NormalizedGenerateChatOptions);
 
       const assistantMsg = messages.find(
         (m: { role: string }) => m.role === 'assistant',
@@ -429,7 +430,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       const messages = buildMessagesWithReasoning(history, {
         settings: settingsService,
         config: runtimeConfig,
-      } as any);
+      } as unknown as NormalizedGenerateChatOptions);
 
       const assistantMsgs = messages.filter(
         (m: { role: string }) => m.role === 'assistant',

@@ -10,7 +10,6 @@ import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import type {
   ThinkingBlock,
-  ToolCallBlock,
   IContent,
 } from '../../services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -18,12 +17,12 @@ import type OpenAI from 'openai';
 import { DebugLogger } from '../../debug/index.js';
 
 describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', () => {
-  let provider: OpenAIProvider;
+  let _provider: OpenAIProvider;
   const mockLogger = new DebugLogger('llxprt:test');
 
   beforeEach(() => {
     // Minimal provider setup - no OAuth, basic config
-    provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
+    _provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
   });
 
   describe('parseStreamingReasoningDelta @requirement:REQ-THINK-003.1', () => {
@@ -148,11 +147,11 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
   });
 
   describe('OpenAIProvider buildMessagesWithReasoning @plan:PLAN-20251202-THINKING.P13', () => {
-    let provider: OpenAIProvider;
+    let _provider: OpenAIProvider;
 
     beforeEach(() => {
       // Minimal provider setup
-      provider = new OpenAIProvider(
+      _provider = new OpenAIProvider(
         'test-api-key',
         'https://api.openai.com/v1',
       );
@@ -608,10 +607,10 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
    * @requirement REQ-KIMI-REASONING-001
    */
   describe('OpenAIProvider Kimi tool calls in reasoning_content @issue:749', () => {
-    let provider: OpenAIProvider;
+    let _provider: OpenAIProvider;
 
     beforeEach(() => {
-      provider = new OpenAIProvider(
+      _provider = new OpenAIProvider(
         'test-api-key',
         'https://api.openai.com/v1',
       );

@@ -8,6 +8,7 @@ import { resetSettingsService } from '../../settings/settingsServiceInstance.js'
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
 import type { SettingsService } from '../../settings/SettingsService.js';
 import type { IContent } from '../IMessage.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -708,7 +709,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
         model: 'MiniMaxAI/MiniMax-M2.1-TEE',
         authToken: 'test-key',
       },
-    } as any;
+    } as unknown as NormalizedGenerateChatOptions;
 
     const messages = buildMessagesWithReasoning(
       contentHistory,

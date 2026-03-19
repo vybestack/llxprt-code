@@ -23,10 +23,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type OpenAI from 'openai';
 
 describe('OpenAIProvider Mistral API Compatibility @issue:760', () => {
-  let provider: OpenAIProvider;
+  let _provider: OpenAIProvider;
 
   beforeEach(() => {
-    provider = new OpenAIProvider('test-api-key', 'https://api.mistral.ai/v1');
+    _provider = new OpenAIProvider('test-api-key', 'https://api.mistral.ai/v1');
   });
 
   /**

@@ -85,7 +85,7 @@ async function* flushTextBuffer(
   buffer: string,
   state: StreamingState,
   deps: StreamProcessorDeps,
-  isKimiK2Model: boolean,
+  _isKimiK2Model: boolean,
 ): AsyncGenerator<IContent, void, unknown> {
   const parsedToolCalls: ToolCallBlock[] = [];
   let workingText = buffer;
