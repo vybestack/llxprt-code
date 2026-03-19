@@ -15,6 +15,8 @@ import { IdeClient } from '../ide/ide-client.js';
 import fs from 'node:fs';
 import { MockTool } from '../test-utils/tools.js';
 
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+
 import { McpClientManager } from './mcp-client-manager.js';
 import { ToolErrorType } from './tool-error.js';
 import {
@@ -102,6 +104,7 @@ describe('ToolRegistry', () => {
   let config: Config;
   let toolRegistry: ToolRegistry;
   let mockConfigGetToolDiscoveryCommand: ReturnType<typeof vi.spyOn>;
+  let messageBus: MessageBus;
 
   beforeEach(() => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -110,7 +113,8 @@ describe('ToolRegistry', () => {
     } as fs.Stats);
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
     config = new Config(baseConfigParams);
-    toolRegistry = new ToolRegistry(config);
+    messageBus = new MessageBus(config.getPolicyEngine(), false);
+    toolRegistry = new ToolRegistry(config, messageBus);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'debug').mockImplementation(() => {});
@@ -639,7 +643,13 @@ describe('ToolRegistry', () => {
 
   describe('DiscoveredToolInvocation', () => {
     it('should return the stringified params from getDescription', () => {
-      const tool = new DiscoveredTool(config, 'test-tool', 'A test tool', {});
+      const tool = new DiscoveredTool(
+        config,
+        'test-tool',
+        'A test tool',
+        {},
+        messageBus,
+      );
       const params = { param: 'testValue' };
       const invocation = tool.build(params);
       const description = invocation.getDescription();

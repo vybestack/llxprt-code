@@ -1,3 +1,4 @@
+import { debugLogger } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,7 +31,7 @@ export async function readStdin(): Promise<string> {
         if (totalSize + chunk.length > MAX_STDIN_SIZE) {
           const remainingSize = MAX_STDIN_SIZE - totalSize;
           data += chunk.slice(0, remainingSize);
-          console.warn(
+          debugLogger.warn(
             `Warning: stdin input truncated to ${MAX_STDIN_SIZE} bytes.`,
           );
           process.stdin.destroy(); // Stop reading further
@@ -59,6 +60,13 @@ export async function readStdin(): Promise<string> {
       process.stdin.removeListener('readable', onReadable);
       process.stdin.removeListener('end', onEnd);
       process.stdin.removeListener('error', onError);
+
+      // Add a no-op error listener if no other error listeners are present to prevent
+      // unhandled 'error' events (like EIO) from crashing the process after we stop reading.
+      // This is especially important for background execution where TTY might cause EIO.
+      if (process.stdin.listenerCount('error') === 0) {
+        process.stdin.on('error', noopErrorHandler);
+      }
     };
 
     process.stdin.on('readable', onReadable);
@@ -66,3 +74,5 @@ export async function readStdin(): Promise<string> {
     process.stdin.on('error', onError);
   });
 }
+
+function noopErrorHandler() {}

@@ -29,11 +29,17 @@ export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
 type ToolParams = Record<string, unknown>;
 
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   constructor(
     private readonly config: Config,
     name: string,
     override readonly description: string,
     override readonly parameterSchema: Record<string, unknown>,
+    messageBus: MessageBus,
   ) {
     const discoveryCmd = config.getToolDiscoveryCommand()!;
     const callCommand = config.getToolCallCommand()!;
@@ -61,11 +67,17 @@ Signal: Signal number or \`(none)\` if no signal was received.
       parameterSchema,
       false, // isOutputMarkdown
       false, // canUpdateOutput
+      messageBus,
     );
   }
 
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   override build(params: ToolParams): DiscoveredToolInvocation {
-    return new DiscoveredToolInvocation(this, params, this.messageBus);
+    return new DiscoveredToolInvocation(this, params, this.requireMessageBus());
   }
 
   async execute(
@@ -165,10 +177,15 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
   ToolParams,
   ToolResult
 > {
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   constructor(
     private readonly tool: DiscoveredTool,
     params: ToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -191,19 +208,17 @@ export class ToolRegistry {
   private logger = new DebugLogger('llxprt:tool-registry');
   private discoveryLock: Promise<void> | null = null;
 
-  constructor(config: Config) {
-    this.config = config;
-  }
+  private readonly messageBus: MessageBus;
 
   /**
-   * Sets the message bus for the registry and all registered tools.
-   * Message bus wiring now happens unconditionally via Config, so this is kept
-   * only for API completeness/future overrides.
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
    */
-  setMessageBus(): void {
-    // Message bus is accessed from config, so this method is currently a no-op.
-    // Tools access the message bus via config.getMessageBus() when needed.
-    // This method exists for API completeness and future extensibility.
+  constructor(config: Config, messageBus: MessageBus) {
+    this.config = config;
+    this.messageBus = messageBus;
   }
 
   private getToolGovernance(): {
@@ -262,6 +277,15 @@ export class ToolRegistry {
    */
   registerTool(tool: AnyDeclarativeTool): void {
     this.registerToolIntoMap(tool, this.tools);
+  }
+
+  /**
+   * Unregisters a tool definition by name.
+   *
+   * @param name - The name of the tool to unregister.
+   */
+  unregisterTool(name: string): void {
+    this.tools.delete(name);
   }
 
   /**
@@ -460,7 +484,9 @@ export class ToolRegistry {
             `discovered_tool_${func.name}`,
             func.description ?? '',
             parameters as Record<string, unknown>,
+            this.messageBus,
           ),
+
           targetMap,
         );
       }
@@ -620,12 +646,14 @@ export class ToolRegistry {
     }
 
     if (!tool) {
-      return undefined;
+      const missingTool: AnyDeclarativeTool | undefined = void 0;
+      return missingTool;
     }
 
     const governance = this.getToolGovernance();
     if (!this.isToolActive(tool.name, governance)) {
-      return undefined;
+      const inactiveTool: AnyDeclarativeTool | undefined = void 0;
+      return inactiveTool;
     }
 
     if (context) {
@@ -637,18 +665,15 @@ export class ToolRegistry {
     return tool;
   }
 
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   private registerToolIntoMap(
     tool: AnyDeclarativeTool,
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
-    if (
-      typeof (tool as { setMessageBus?: (bus: MessageBus) => void })
-        .setMessageBus === 'function'
-    ) {
-      (tool as { setMessageBus: (bus: MessageBus) => void }).setMessageBus(
-        this.config.getMessageBus(),
-      );
-    }
     // Normalize the tool name for consistent storage and lookup
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 

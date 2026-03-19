@@ -110,6 +110,13 @@ function makeConfig(hooksOverride?: Record<string, unknown>): Config {
     getTargetDir: vi.fn().mockReturnValue('/test/project'),
     getEnableHooks: vi.fn().mockReturnValue(true),
     getSessionRecordingService: vi.fn().mockReturnValue(undefined),
+    isTrustedFolder: vi.fn().mockReturnValue(true),
+    getProjectHooks: vi.fn().mockReturnValue(null),
+    getSanitizationConfig: vi.fn().mockReturnValue({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
   } as unknown as Config;
 }
 

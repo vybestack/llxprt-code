@@ -12,6 +12,7 @@ import { Config } from '../config/config.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from './tool-names.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { ToolErrorType } from './tool-error.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export interface GroundingChunkWeb {
   uri?: string;
@@ -65,7 +66,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: WebSearchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -217,7 +218,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
     } catch (error: unknown) {
       const queryDisplay = this.params.query || 'undefined';
       const errorMessage = `Error during web search for query "${queryDisplay}": ${getErrorMessage(error)}`;
-      console.error(errorMessage, error);
+      debugLogger.error(errorMessage, error);
       return {
         llmContent: `Error: ${errorMessage}`,
         returnDisplay: `Error performing web search.`,

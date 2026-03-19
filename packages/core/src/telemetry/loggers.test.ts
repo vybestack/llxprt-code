@@ -411,7 +411,7 @@ describe('loggers', () => {
         },
       }),
       getQuestion: () => 'test-question',
-      getToolRegistry: () => new ToolRegistry(cfg1),
+      getToolRegistry: () => new ToolRegistry(cfg1, cfg1.getMessageBus()),
 
       getUserMemory: () => 'user-memory',
       getComplexityAnalyzerSettings: () => ({

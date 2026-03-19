@@ -75,6 +75,9 @@ export enum ToolErrorType {
   // WebSearch-specific Errors
   WEB_SEARCH_FAILED = 'web_search_failed',
 
+  // Hook-specific Errors
+  STOP_EXECUTION = 'stop_execution',
+
   // CodeSearch-specific Errors
   SEARCH_ERROR = 'search_error',
 

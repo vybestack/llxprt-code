@@ -13,7 +13,7 @@ import {
   SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
-import { PromptService } from '@vybestack/llxprt-code-core';
+import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Get the init command prompt from the prompt service
@@ -32,13 +32,16 @@ async function getInitCommandPrompt(): Promise<string> {
     try {
       return await promptService.loadPrompt('commands/init-command.md');
     } catch (error) {
-      console.warn(
+      debugLogger.warn(
         'Failed to load init command prompt from file, using fallback:',
         error,
       );
     }
   } catch (error) {
-    console.warn('Failed to initialize prompt service, using fallback:', error);
+    debugLogger.warn(
+      'Failed to initialize prompt service, using fallback:',
+      error,
+    );
   }
 
   // Fallback to hardcoded prompt

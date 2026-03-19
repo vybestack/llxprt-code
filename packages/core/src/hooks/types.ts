@@ -18,6 +18,16 @@ import type {
 import { defaultHookTranslator } from './hookTranslator.js';
 
 /**
+ * Generate a unique key for a hook configuration
+ * Used for deduplication and trust tracking
+ */
+export function getHookKey(hook: HookConfig): string {
+  const name = hook.name || '';
+  const command = hook.command || '';
+  return `${name}:${command}`;
+}
+
+/**
  * Event names for the hook system
  */
 export enum HookEventName {
@@ -43,6 +53,7 @@ export interface CommandHookConfig {
   name?: string;
   description?: string;
   timeout?: number;
+  source?: import('./hookRegistry.js').ConfigSource;
 }
 
 export type HookConfig = CommandHookConfig;
@@ -156,9 +167,10 @@ export class DefaultHookOutput implements HookOutput {
 
   /**
    * Get the effective reason for blocking or stopping
+   * Prioritizes stopReason over reason per upstream 05049b5a
    */
   getEffectiveReason(): string {
-    return this.reason || this.stopReason || 'No reason provided';
+    return this.stopReason || this.reason || 'No reason provided';
   }
 
   /**
@@ -469,6 +481,7 @@ export interface BeforeToolOutput extends HookOutput {
     hookEventName: 'BeforeTool';
     permissionDecision?: HookDecision;
     permissionDecisionReason?: string;
+    tool_input?: Record<string, unknown>;
   };
 }
 

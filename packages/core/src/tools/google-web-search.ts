@@ -30,7 +30,7 @@ export class GoogleWebSearchTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       GoogleWebSearchTool.Name,
@@ -69,7 +69,7 @@ export class GoogleWebSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: WebSearchToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<WebSearchToolParams, WebSearchToolResult> {
     return new GoogleWebSearchToolInvocation(this.config, params, messageBus);
   }

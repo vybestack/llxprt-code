@@ -13,6 +13,7 @@ import {
 import type { Config } from '../config/config.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 import type { SubagentConfig } from '../config/types.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 type ListSubagentsParams = Record<string, never>;
 
@@ -52,8 +53,9 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
   constructor(
     params: ListSubagentsParams,
     private readonly subagentManager: SubagentManager,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   override getDescription(): string {
@@ -145,6 +147,7 @@ export class ListSubagentsTool extends BaseDeclarativeTool<
 
   protected override createInvocation(
     params: ListSubagentsParams,
+    messageBus: MessageBus,
   ): ListSubagentsToolInvocation {
     const manager =
       this.dependencies.getSubagentManager?.() ??
@@ -158,7 +161,7 @@ export class ListSubagentsTool extends BaseDeclarativeTool<
       );
     }
 
-    return new ListSubagentsToolInvocation(params, manager);
+    return new ListSubagentsToolInvocation(params, manager, messageBus);
   }
 
   protected override validateToolParamValues(): string | null {

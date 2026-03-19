@@ -16,6 +16,7 @@ import {
   Kind,
   type ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import type {
   AsyncTaskManager,
@@ -36,8 +37,12 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
 > {
   private readonly taskManager: AsyncTaskManager;
 
-  constructor(params: CheckAsyncTasksParams, taskManager: AsyncTaskManager) {
-    super(params);
+  constructor(
+    params: CheckAsyncTasksParams,
+    taskManager: AsyncTaskManager,
+    messageBus: MessageBus,
+  ) {
+    super(params, messageBus);
     this.taskManager = taskManager;
   }
 
@@ -297,6 +302,7 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
 
   protected override createInvocation(
     params: CheckAsyncTasksParams,
+    messageBus: MessageBus,
   ): CheckAsyncTasksInvocation {
     const manager = this.dependencies.getAsyncTaskManager?.();
 
@@ -306,7 +312,7 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
       );
     }
 
-    return new CheckAsyncTasksInvocation(params, manager);
+    return new CheckAsyncTasksInvocation(params, manager, messageBus);
   }
 
   protected override validateToolParamValues(): string | null {

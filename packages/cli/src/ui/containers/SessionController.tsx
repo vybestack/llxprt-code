@@ -19,6 +19,7 @@ import {
   Config,
   getErrorMessage,
   loadCoreMemoryContent,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';
@@ -217,7 +218,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       );
 
       if (config.getDebugMode()) {
-        console.log(
+        debugLogger.log(
           `Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
         );
       }
@@ -230,7 +231,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         },
         Date.now(),
       );
-      console.error('Error refreshing memory:', error);
+      debugLogger.error('Error refreshing memory:', error);
     }
   }, [config, addItem]);
 

@@ -7,6 +7,7 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Checks if a directory is within a git repository hosted on GitHub.
@@ -25,7 +26,7 @@ export const isGitHubRepository = (): boolean => {
     return pattern.test(remotes);
   } catch (_error) {
     // If any filesystem error occurs, assume not a git repo
-    console.debug(`Failed to get git remote:`, _error);
+    debugLogger.debug(`Failed to get git remote:`, _error);
     return false;
   }
 };
@@ -86,7 +87,7 @@ export const getLatestGitHubRelease = async (
     }
     return releaseTag;
   } catch (_error) {
-    console.debug(
+    debugLogger.debug(
       `Failed to determine latest run-llxprt-code release:`,
       _error,
     );

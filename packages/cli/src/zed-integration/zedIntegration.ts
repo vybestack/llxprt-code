@@ -31,10 +31,10 @@ import {
   type Todo,
   DEFAULT_AGENT_ID,
   type FilterFilesOptions,
-  ReadManyFilesTool,
   type ToolConfirmationPayload,
   createInkStdio,
   ApprovalMode,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -561,7 +561,7 @@ export class Session {
       const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
       if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
         this.sendPlanUpdate(event.todos).catch((error) => {
-          console.error('Failed to send plan update to Zed:', error);
+          debugLogger.error('Failed to send plan update to Zed:', error);
         });
       }
     });
@@ -1213,7 +1213,7 @@ export class Session {
     const ignoredPaths: string[] = [];
 
     const toolRegistry = this.config.getToolRegistry();
-    const readManyFilesTool = new ReadManyFilesTool(this.config);
+    const readManyFilesTool = toolRegistry.getTool('read_many_files')!;
     const globTool = toolRegistry.getTool('glob');
 
     for (const atPathPart of atPathCommandParts) {
@@ -1288,7 +1288,7 @@ export class Session {
                 );
               }
             } catch (globError) {
-              console.error(
+              debugLogger.error(
                 `Error during glob search for ${pathName}: ${getErrorMessage(globError)}`,
               );
             }
@@ -1298,7 +1298,7 @@ export class Session {
             );
           }
         } else {
-          console.error(
+          debugLogger.error(
             `Error stating path ${pathName}. Path ${pathName} will be skipped.`,
           );
         }
@@ -1367,7 +1367,7 @@ export class Session {
 
     if (pathSpecsToRead.length === 0 && embeddedContext.length === 0) {
       // Fallback for lone "@" or completely invalid @-commands resulting in empty initialQueryText
-      console.warn('No valid file paths found in @ commands to read.');
+      debugLogger.warn('No valid file paths found in @ commands to read.');
       return [{ text: initialQueryText }];
     }
 
@@ -1429,7 +1429,7 @@ export class Session {
             }
           }
         } else {
-          console.warn(
+          debugLogger.warn(
             'read_many_files tool returned no content or empty content.',
           );
         }
@@ -1482,7 +1482,7 @@ export class Session {
 
   debug(msg: string) {
     if (this.config.getDebugMode()) {
-      console.warn(msg);
+      debugLogger.warn(msg);
     }
   }
 

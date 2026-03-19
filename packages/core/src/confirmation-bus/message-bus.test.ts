@@ -5,6 +5,7 @@ import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
 import type { FunctionCall } from '@google/genai';
 import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 describe('MessageBus', () => {
   let messageBus: MessageBus;
@@ -530,7 +531,7 @@ describe('MessageBus', () => {
 
   describe('debug mode', () => {
     it('logs messages when debug mode enabled', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(debugLogger, 'log');
 
       const debugBus = new MessageBus(policyEngine, true);
 
@@ -551,7 +552,7 @@ describe('MessageBus', () => {
     });
 
     it('does not log when debug mode disabled', () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(debugLogger, 'log');
 
       const message: ToolConfirmationRequest = {
         type: MessageBusType.TOOL_CONFIRMATION_REQUEST,

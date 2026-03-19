@@ -60,6 +60,11 @@ class TrackingToolInvocation extends BaseToolInvocation<
   static executionCount = 0;
   static lastArgs: Record<string, unknown> | undefined;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(params: Record<string, unknown>, messageBus?: any) {
+    super(params, messageBus);
+  }
+
   async execute(): Promise<ToolResult> {
     TrackingToolInvocation.executionCount++;
     TrackingToolInvocation.lastArgs = this.params;
@@ -78,20 +83,26 @@ class TrackingTool extends BaseDeclarativeTool<
   Record<string, unknown>,
   ToolResult
 > {
-  constructor() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(messageBus: any) {
     super(
       'tracking_tool',
       'Tracking Tool',
       'A tool that tracks execution for testing',
       Kind.Other,
       { type: 'object', properties: { path: { type: 'string' } } },
+      false,
+      false,
+      messageBus,
     );
   }
 
   protected createInvocation(
     params: Record<string, unknown>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    messageBus: any,
   ): TrackingToolInvocation {
-    return new TrackingToolInvocation(params);
+    return new TrackingToolInvocation(params, messageBus);
   }
 }
 
@@ -145,7 +156,8 @@ function createConfigWithHook(options: {
 
   let hookSystem: HookSystem | undefined;
 
-  const trackingTool = new TrackingTool();
+  const mockMessageBus = createMockMessageBus();
+  const trackingTool = new TrackingTool(mockMessageBus);
   const mockToolRegistry = {
     getTool: () => trackingTool,
     getFunctionDeclarations: () => [],
@@ -171,7 +183,7 @@ function createConfigWithHook(options: {
     getAllowedTools: () => [],
     getContentGeneratorConfig: () => ({ model: 'test-model' }),
     getToolRegistry: () => mockToolRegistry,
-    getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+    getMessageBus: vi.fn().mockReturnValue(mockMessageBus),
     getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     getEnableHooks: () => true,
     getHooks: () => hooks,
@@ -182,6 +194,13 @@ function createConfigWithHook(options: {
     getModel: () => 'test-model',
     getSessionRecordingService: () => undefined,
     isInteractive: () => true,
+    isTrustedFolder: () => true,
+    getProjectHooks: () => null,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
     getHookSystem() {
       if (!hookSystem) {
         hookSystem = new HookSystem(config);
@@ -202,6 +221,7 @@ function createTestScheduler(config: Config) {
 
   const scheduler = new CoreToolScheduler({
     config,
+    messageBus: config.getMessageBus(),
     toolRegistry: config.getToolRegistry(),
     onAllToolCallsComplete,
     onToolCallsUpdate,

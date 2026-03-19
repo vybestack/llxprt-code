@@ -21,7 +21,7 @@ if (typeof window === 'undefined') {
   createDebug.log = (...args: unknown[]) => {
     // Call whatever console.log is at the time of logging
     // This allows the UI's ConsolePatcher to intercept it
-    console.log(...args);
+    (console.log as (...args: unknown[]) => void)(...args);
   };
 }
 
@@ -62,11 +62,14 @@ export class DebugLogger {
   }
 
   /**
-   * Reset for testing - clears instances without unsubscribing
-   * (use disposeAll in production)
+   * Reset for testing.
+   * Disposes singleton logger/file-output state and resets configuration state
+   * so test files do not retain listeners, timers, or queued log entries.
    */
-  static resetForTesting(): void {
-    DebugLogger.instances.clear();
+  static async resetForTesting(): Promise<void> {
+    DebugLogger.disposeAll();
+    await FileOutput.resetForTesting();
+    ConfigurationManager.resetForTesting();
   }
 
   constructor(namespace: string) {

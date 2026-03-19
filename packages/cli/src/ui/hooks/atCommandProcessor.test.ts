@@ -10,13 +10,14 @@ import {
   Config,
   FileDiscoveryService,
   GlobTool,
+  type MessageBus,
   ReadManyFilesTool,
   StandardFileSystemService,
   ToolRegistry,
   COMMON_IGNORE_PATTERNS,
   DEFAULT_FILE_EXCLUDES,
+  type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
-import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import * as os from 'os';
 import { ToolCallStatus } from '../types.js';
 import { type UseHistoryManagerReturn as _UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -61,15 +62,7 @@ describe('handleAtCommand', () => {
       getToolRegistry,
       getTargetDir: () => testRootDir,
       isSandboxed: () => false,
-      getMessageBus: vi.fn(() => ({
-        subscribe: vi.fn(),
-        unsubscribe: vi.fn(),
-        publish: vi.fn(),
-        respondToConfirmation: vi.fn(),
-        requestConfirmation: vi.fn().mockResolvedValue(true),
-        removeAllListeners: vi.fn(),
-        listenerCount: vi.fn().mockReturnValue(0),
-      })),
+
       getFileService: () => new FileDiscoveryService(testRootDir),
       getFileFilteringRespectGitIgnore: () => true,
       getFileFilteringRespectLlxprtIgnore: () => true,
@@ -129,9 +122,18 @@ describe('handleAtCommand', () => {
       getEnableExtensionReloading: () => false,
     } as unknown as Config;
 
-    const registry = new ToolRegistry(mockConfig);
-    registry.registerTool(new ReadManyFilesTool(mockConfig));
-    registry.registerTool(new GlobTool(mockConfig));
+    const mockMessageBus = {
+      subscribe: vi.fn(),
+      unsubscribe: vi.fn(),
+      publish: vi.fn(),
+      respondToConfirmation: vi.fn(),
+      requestConfirmation: vi.fn().mockResolvedValue(true),
+      removeAllListeners: vi.fn(),
+      listenerCount: vi.fn().mockReturnValue(0),
+    } as unknown as MessageBus;
+    const registry = new ToolRegistry(mockConfig, mockMessageBus);
+    registry.registerTool(new ReadManyFilesTool(mockConfig, mockMessageBus));
+    registry.registerTool(new GlobTool(mockConfig, mockMessageBus));
     getToolRegistry.mockReturnValue(registry);
   });
 

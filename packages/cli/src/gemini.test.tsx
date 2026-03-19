@@ -20,7 +20,11 @@ import {
 import { loadCliConfig, parseArguments } from './config/config.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
+import {
+  FatalConfigError,
+  OutputFormat,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
@@ -342,6 +346,7 @@ describe('gemini.tsx main function', () => {
       })),
       setTerminalBackground: vi.fn(),
       getTerminalBackground: vi.fn(() => undefined),
+      getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
 
     const loadSettingsMock = vi.mocked(loadSettings);
@@ -485,6 +490,7 @@ describe('gemini.tsx main function', () => {
       })),
       setTerminalBackground: vi.fn(),
       getTerminalBackground: vi.fn(() => undefined),
+      getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
 
     const loadSettingsMock = vi.mocked(loadSettings);
@@ -724,34 +730,36 @@ describe('gemini.tsx deferred initialization', () => {
 });
 
 describe('validateDnsResolutionOrder', () => {
-  let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+  let debugWarnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    debugWarnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleWarnSpy.mockRestore();
+    debugWarnSpy.mockRestore();
   });
 
   it('should return "ipv4first" when the input is "ipv4first"', () => {
     expect(validateDnsResolutionOrder('ipv4first')).toBe('ipv4first');
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
+    expect(debugWarnSpy).not.toHaveBeenCalled();
   });
 
   it('should return "verbatim" when the input is "verbatim"', () => {
     expect(validateDnsResolutionOrder('verbatim')).toBe('verbatim');
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
+    expect(debugWarnSpy).not.toHaveBeenCalled();
   });
 
   it('should return the default "ipv4first" when the input is undefined', () => {
     expect(validateDnsResolutionOrder(undefined)).toBe('ipv4first');
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
+    expect(debugWarnSpy).not.toHaveBeenCalled();
   });
 
   it('should return the default "ipv4first" and log a warning for an invalid string', () => {
     expect(validateDnsResolutionOrder('invalid-value')).toBe('ipv4first');
-    expect(consoleWarnSpy).toHaveBeenCalledExactlyOnceWith(
+    expect(debugWarnSpy).toHaveBeenCalledExactlyOnceWith(
       'Invalid value for dnsResolutionOrder in settings: "invalid-value". Using default "ipv4first".',
     );
   });

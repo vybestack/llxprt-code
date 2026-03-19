@@ -17,6 +17,7 @@ import { useUIActions } from '../contexts/UIActionsContext.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
+import { getCliRuntimeContext } from '../../runtime/runtimeSettings.js';
 import { themeManager } from '../themes/theme-manager.js';
 
 // Components
@@ -141,6 +142,7 @@ export const DefaultAppLayout = ({
     showEscapePrompt,
     ideContextState,
     llxprtMdFileCount,
+    coreMemoryFileCount,
     elapsedTime,
     currentLoadingPhrase,
     showAutoAcceptIndicator,
@@ -305,7 +307,13 @@ export const DefaultAppLayout = ({
             )}
 
             <BucketAuthConfirmation
-              config={config}
+              messageBus={
+                (
+                  getCliRuntimeContext() as {
+                    messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                  }
+                ).messageBus
+              }
               isFocused={!dialogsVisible}
             />
 
@@ -362,6 +370,7 @@ export const DefaultAppLayout = ({
                       <ContextSummaryDisplay
                         ideContext={ideContextState}
                         llxprtMdFileCount={llxprtMdFileCount}
+                        coreMemoryFileCount={coreMemoryFileCount}
                         contextFileNames={contextFileNames}
                         mcpServers={config.getMcpServers()}
                         blockedMcpServers={config.getBlockedMcpServers()}
@@ -511,7 +520,16 @@ export const DefaultAppLayout = ({
           )}
 
           {/* OAuth bucket auth confirmation - manages its own state via message bus */}
-          <BucketAuthConfirmation config={config} isFocused={!dialogsVisible} />
+          <BucketAuthConfirmation
+            messageBus={
+              (
+                getCliRuntimeContext() as {
+                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                }
+              ).messageBus
+            }
+            isFocused={!dialogsVisible}
+          />
 
           {dialogsVisible ? (
             <DialogManager
@@ -566,6 +584,7 @@ export const DefaultAppLayout = ({
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
                       llxprtMdFileCount={llxprtMdFileCount}
+                      coreMemoryFileCount={coreMemoryFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
                       blockedMcpServers={config.getBlockedMcpServers()}

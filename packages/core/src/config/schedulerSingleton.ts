@@ -15,6 +15,8 @@ import type {
   CoreToolScheduler,
   ToolCall,
 } from '../core/coreToolScheduler.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { EditorType } from '../utils/editor.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
@@ -46,6 +48,17 @@ export interface SchedulerOptions {
    * Defaults to true for backward compatibility.
    */
   interactiveMode?: boolean;
+}
+
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+ * @requirement REQ-D01-001.1
+ * @requirement REQ-D01-001.2
+ * @pseudocode lines 56-72
+ */
+export interface SchedulerSingletonDependencies {
+  messageBus: MessageBus;
+  toolRegistry: ToolRegistry;
 }
 
 type SchedulerEntry = {
@@ -146,11 +159,18 @@ const shouldRefreshCallbacks = (
   entryCallbacks.onEditorClose !== callbacks.onEditorClose ||
   entryCallbacks.onEditorOpen !== callbacks.onEditorOpen;
 
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+ * @requirement REQ-D01-001.1
+ * @requirement REQ-D01-001.2
+ * @pseudocode lines 56-72
+ */
 export async function getOrCreateScheduler(
   config: Config,
   sessionId: string,
   callbacks: SchedulerCallbacks,
-  options?: SchedulerOptions,
+  options: SchedulerOptions | undefined,
+  dependencies: SchedulerSingletonDependencies,
 ): Promise<CoreToolScheduler> {
   const interactiveMode = options?.interactiveMode ?? true;
   const entry = schedulerEntries.get(sessionId);
@@ -167,6 +187,8 @@ export async function getOrCreateScheduler(
     if (shouldRefreshCallbacks(entry.callbacks, callbacks)) {
       entry.scheduler.setCallbacks?.({
         config,
+        messageBus: dependencies.messageBus,
+        toolRegistry: dependencies.toolRegistry,
         outputUpdateHandler: callbacks.outputUpdateHandler,
         onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
         onToolCallsUpdate: callbacks.onToolCallsUpdate,
@@ -174,6 +196,7 @@ export async function getOrCreateScheduler(
         onEditorClose: callbacks.onEditorClose,
         onEditorOpen: callbacks.onEditorOpen,
       });
+
       entry.callbacks = callbacks;
     }
     return entry.scheduler;
@@ -197,6 +220,8 @@ export async function getOrCreateScheduler(
     const scheduler = await inFlight.promise;
     scheduler.setCallbacks?.({
       config,
+      messageBus: dependencies.messageBus,
+      toolRegistry: dependencies.toolRegistry,
       outputUpdateHandler: combinedCallbacks.outputUpdateHandler,
       onAllToolCallsComplete: combinedCallbacks.onAllToolCallsComplete,
       onToolCallsUpdate: combinedCallbacks.onToolCallsUpdate,
@@ -229,6 +254,8 @@ export async function getOrCreateScheduler(
     );
     return new CoreToolSchedulerClass({
       config,
+      messageBus: dependencies.messageBus,
+      toolRegistry: dependencies.toolRegistry,
       toolContextInteractiveMode: interactiveMode,
       outputUpdateHandler: callbacks.outputUpdateHandler,
       onAllToolCallsComplete: callbacks.onAllToolCallsComplete,

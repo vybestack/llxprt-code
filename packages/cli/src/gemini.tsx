@@ -32,7 +32,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
       typeof warning === 'string'
         ? warning
         : (warning?.stack ?? warning?.message ?? String(warning));
-    console.warn(message);
+    debugLogger.warn(message);
   });
 }
 
@@ -97,6 +97,8 @@ import {
   triggerSessionEndHook,
   SessionStartSource,
   SessionEndReason,
+  MessageBus,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -178,7 +180,7 @@ export function validateDnsResolutionOrder(
     return order;
   }
   // We don't want to throw here, just warn and use the default.
-  console.warn(
+  debugLogger.warn(
     `Invalid value for dnsResolutionOrder in settings: "${order}". Using default "${defaultValue}".`,
   );
   return defaultValue;
@@ -248,17 +250,17 @@ ${reason.stack}`
 
 function handleError(error: Error, errorInfo: ErrorInfo) {
   // Log to console for debugging
-  console.error('Application Error:', error);
-  console.error('Component Stack:', errorInfo.componentStack);
+  debugLogger.error('Application Error:', error);
+  debugLogger.error('Component Stack:', errorInfo.componentStack);
 
   // Special handling for maximum update depth errors
   if (error.message.includes('Maximum update depth exceeded')) {
-    console.error('\nCRITICAL: RENDER LOOP DETECTED!');
-    console.error('This is likely caused by:');
-    console.error('- State updates during render');
-    console.error('- Incorrect useEffect dependencies');
-    console.error('- Non-memoized props causing re-renders');
-    console.error('\nCheck recent changes to React components and hooks.');
+    debugLogger.error('\nCRITICAL: RENDER LOOP DETECTED!');
+    debugLogger.error('This is likely caused by:');
+    debugLogger.error('- State updates during render');
+    debugLogger.error('- Incorrect useEffect dependencies');
+    debugLogger.error('- Non-memoized props causing re-renders');
+    debugLogger.error('\nCheck recent changes to React components and hooks.');
   }
 }
 
@@ -271,6 +273,7 @@ export async function startInteractiveUI(
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
+  runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
   resumedHistory?: IContent[],
   initialRecordingService?: SessionRecordingService,
@@ -307,6 +310,7 @@ export async function startInteractiveUI(
           <AppWrapper
             config={config}
             settings={settings}
+            runtimeMessageBus={runtimeMessageBus}
             startupWarnings={startupWarnings}
             version={version}
             terminalBackgroundColor={config.getTerminalBackground()}
@@ -328,7 +332,7 @@ export async function startInteractiveUI(
     .catch((err) => {
       // Silently ignore update check errors.
       if (config.getDebugMode()) {
-        console.error('Update check failed:', err);
+        debugLogger.error('Update check failed:', err);
       }
     });
 
@@ -345,7 +349,7 @@ export async function main() {
   // but no listeners are registered yet, so yargs output would be lost.
   const rawArgs = process.argv.slice(2);
   if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
-    console.log(await getCliVersion());
+    debugLogger.log(await getCliVersion());
     process.exit(0);
   }
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {
@@ -426,8 +430,11 @@ export async function main() {
   // If we're in ACP mode, redirect console output IMMEDIATELY
   // before any config loading that might write to stdout
   if (argv.experimentalAcp) {
+    // eslint-disable-next-line no-console
     console.log = console.error;
+    // eslint-disable-next-line no-console
     console.info = console.error;
+    // eslint-disable-next-line no-console
     console.debug = console.error;
   }
 
@@ -439,6 +446,7 @@ export async function main() {
    */
   const runtimeSettingsService = new SettingsService();
   setCliRuntimeContext(runtimeSettingsService, undefined, {
+    runtimeId: 'cli.runtime.bootstrap',
     metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
   });
 
@@ -457,8 +465,13 @@ export async function main() {
     workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
   const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
+    runtimeId: 'cli.runtime.bootstrap',
     metadata: { source: 'cli-bootstrap', stage: 'post-config' },
     profileManager,
   });
@@ -565,7 +578,7 @@ export async function main() {
       await loadProfileByName(bootstrapProfileName);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(
+      debugLogger.warn(
         `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
       );
     }
@@ -595,7 +608,7 @@ export async function main() {
 
   if (config.getListExtensions()) {
     for (const _extension of extensions) {
-      // List extensions without console.log
+      // List extensions without debugLogger.log
     }
     process.exit(0);
   }
@@ -616,7 +629,11 @@ export async function main() {
     );
   }
 
-  await config.initialize();
+  await (
+    config as typeof config & {
+      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
+    }
+  ).initialize({ messageBus: sessionMessageBus });
 
   // Register dynamic settings after config is fully initialized
   try {
@@ -634,7 +651,7 @@ export async function main() {
       `Registered ${Object.keys(fullDynamicSettings).length} dynamic settings`,
     );
   } catch (error) {
-    console.error('[gemini] Failed to register dynamic settings:', error);
+    debugLogger.error('[gemini] Failed to register dynamic settings:', error);
   }
 
   if (spinnerInstance) {
@@ -735,7 +752,7 @@ export async function main() {
       // No need to set auth type when using a provider
       // CLI arguments have already been applied by applyCliArgumentOverrides() above
     } catch (e) {
-      console.error(chalk.red((e as Error).message));
+      debugLogger.error(chalk.red((e as Error).message));
       process.exit(1);
     }
   } else {
@@ -901,15 +918,15 @@ export async function main() {
   if (argv.listSessions) {
     const { sessions } = await listSessions(chatsDir, projectHash);
     if (sessions.length === 0) {
-      console.log('No recorded sessions for this project.');
+      debugLogger.log('No recorded sessions for this project.');
     } else {
-      console.log(`Sessions for this project (${sessions.length}):
+      debugLogger.log(`Sessions for this project (${sessions.length}):
 `);
       for (let i = 0; i < sessions.length; i++) {
         const s = sessions[i];
         const modified = s.lastModified.toLocaleString();
         const sizeKb = (s.fileSize / 1024).toFixed(1);
-        console.log(
+        debugLogger.log(
           `  ${i + 1}. ${s.sessionId.slice(0, 8)}  ${modified}  ${sizeKb} KB  ${s.provider}/${s.model}`,
         );
       }
@@ -925,12 +942,12 @@ export async function main() {
       projectHash,
     );
     if (result.ok) {
-      console.log(
+      debugLogger.log(
         chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`),
       );
       process.exit(0);
     } else {
-      console.error(chalk.red(result.error));
+      debugLogger.error(chalk.red(result.error));
       process.exit(1);
     }
   }
@@ -958,11 +975,11 @@ export async function main() {
       config.adoptSessionId(resumeResult.metadata.sessionId);
       if (resumeResult.warnings.length > 0) {
         for (const warning of resumeResult.warnings) {
-          console.warn(chalk.yellow(warning));
+          debugLogger.warn(chalk.yellow(warning));
         }
       }
     } else {
-      console.warn(
+      debugLogger.warn(
         chalk.yellow(
           `Could not resume session (ref: ${continueRef}): ${resumeResult.error}`,
         ),
@@ -998,7 +1015,7 @@ export async function main() {
       }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
-      console.warn(
+      debugLogger.warn(
         chalk.yellow('Could not restore conversation history: ' + messageText),
       );
     }
@@ -1014,9 +1031,9 @@ export async function main() {
   });
 
   if (config.getListExtensions()) {
-    console.log('Installed extensions:');
+    debugLogger.log('Installed extensions:');
     for (const extension of extensions) {
-      console.log(`- ${extension.name}`);
+      debugLogger.log(`- ${extension.name}`);
     }
     process.exit(0);
   }
@@ -1057,8 +1074,8 @@ export async function main() {
   // Check for experimental UI flag
   if (argv.experimentalUi) {
     if (!commandExists.sync('bun')) {
-      console.error('--experimental-ui requires Bun to be installed.');
-      console.error(
+      debugLogger.error('--experimental-ui requires Bun to be installed.');
+      debugLogger.error(
         'Install bun from https://bun.sh or via your package manager.',
       );
       await runExitCleanup();
@@ -1071,7 +1088,7 @@ export async function main() {
       }
     ).resolve;
     if (typeof resolveImportMeta !== 'function') {
-      console.error(
+      debugLogger.error(
         '--experimental-ui requires a Node version that supports import.meta.resolve.',
       );
       process.exit(1);
@@ -1087,10 +1104,10 @@ export async function main() {
         error.code === 'MODULE_NOT_FOUND' ||
         error.code === 'ERR_MODULE_NOT_FOUND'
       ) {
-        console.error(
+        debugLogger.error(
           '--experimental-ui requires @vybestack/llxprt-ui to be installed',
         );
-        console.error('Run: npm install -g @vybestack/llxprt-ui');
+        debugLogger.error('Run: npm install -g @vybestack/llxprt-ui');
         process.exit(1);
       }
       throw e;
@@ -1119,7 +1136,7 @@ export async function main() {
       uiRoot = dirname(uiRoot);
     }
     if (!existsSync(join(uiRoot, 'package.json'))) {
-      console.error(
+      debugLogger.error(
         `Unable to locate @vybestack/llxprt-ui package root from: ${uiEntryPath}`,
       );
       process.exit(1);
@@ -1172,7 +1189,7 @@ export async function main() {
     });
 
     child.on('error', async (err) => {
-      console.error('Failed to launch experimental UI via bun:', err);
+      debugLogger.error('Failed to launch experimental UI via bun:', err);
       await runExitCleanup();
       process.exit(1);
     });
@@ -1211,6 +1228,7 @@ export async function main() {
       settings,
       startupWarnings,
       workspaceRoot,
+      sessionMessageBus,
       recordingIntegration,
       resumedHistory ?? undefined,
       recordingService,
@@ -1244,11 +1262,23 @@ export async function main() {
 
   initializeOutputListenersAndFlush();
 
-  // Fire SessionStart hook for non-interactive mode
-  await triggerSessionStartHook(
+  // Fire SessionStart hook for non-interactive mode and inject context
+  const sessionStartOutput = await triggerSessionStartHook(
     nonInteractiveConfig,
     SessionStartSource.Startup,
   );
+  if (sessionStartOutput) {
+    // Display system message
+    if (sessionStartOutput.systemMessage) {
+      writeToStderr(`${sessionStartOutput.systemMessage}\n`);
+    }
+
+    // Prepend additional context to input
+    const additionalContext = sessionStartOutput.getAdditionalContext();
+    if (additionalContext) {
+      input = `${additionalContext}\n\n${input}`;
+    }
+  }
 
   try {
     await runNonInteractive({
@@ -1256,6 +1286,7 @@ export async function main() {
       settings,
       input,
       prompt_id,
+      runtimeMessageBus: sessionMessageBus,
     });
 
     // Fire SessionEnd hook on successful completion
@@ -1271,7 +1302,7 @@ export async function main() {
       writeToStderr(`${formatter.formatError(normalizedError, 1)}\n`);
     } else {
       const printableError = formatNonInteractiveError(error);
-      console.error(`Non-interactive run failed: ${printableError}`);
+      debugLogger.error(`Non-interactive run failed: ${printableError}`);
     }
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
@@ -1292,7 +1323,7 @@ function setWindowTitle(title: string, settings: LoadedSettings) {
   }
 }
 
-function initializeOutputListenersAndFlush() {
+export function initializeOutputListenersAndFlush() {
   // If there are no listeners for output, make sure we flush so output is not
   // lost.
   if (coreEvents.listenerCount(CoreEvent.Output) === 0) {

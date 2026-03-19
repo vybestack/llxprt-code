@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TemplateEngine } from './TemplateEngine.js';
+import { debugLogger } from '../utils/debugLogger.js';
 import type {
   TemplateVariables,
   TemplateProcessingOptions,
@@ -726,7 +727,7 @@ More content`;
 
     beforeEach(() => {
       originalDebug = process.env.DEBUG;
-      consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      consoleSpy = vi.spyOn(debugLogger, 'log').mockImplementation(() => {});
     });
 
     afterEach(() => {

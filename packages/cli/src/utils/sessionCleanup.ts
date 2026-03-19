@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type Config } from '@vybestack/llxprt-code-core';
+import { type Config, debugLogger } from '@vybestack/llxprt-code-core';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
 
@@ -62,7 +62,7 @@ export async function cleanupExpiredSessions(
     );
     if (validationErrorMessage) {
       // Log validation errors to console for visibility
-      console.error(`Session cleanup disabled: ${validationErrorMessage}`);
+      debugLogger.error(`Session cleanup disabled: ${validationErrorMessage}`);
       return { ...result, disabled: true };
     }
 
@@ -88,11 +88,11 @@ export async function cleanupExpiredSessions(
 
         if (config.getDebugMode()) {
           if (sessionToDelete.sessionInfo === null) {
-            console.debug(
+            debugLogger.debug(
               `Deleted corrupted session file: ${sessionToDelete.fileName}`,
             );
           } else {
-            console.debug(
+            debugLogger.debug(
               `Deleted expired session: ${sessionToDelete.sessionInfo.id} (${sessionToDelete.sessionInfo.lastUpdated})`,
             );
           }
@@ -114,7 +114,7 @@ export async function cleanupExpiredSessions(
               : sessionToDelete.sessionInfo.id;
           const errorMessage =
             error instanceof Error ? error.message : 'Unknown error';
-          console.error(
+          debugLogger.error(
             `Failed to delete session ${sessionId}: ${errorMessage}`,
           );
           result.failed++;
@@ -125,7 +125,7 @@ export async function cleanupExpiredSessions(
     result.skipped = result.scanned - result.deleted - result.failed;
 
     if (config.getDebugMode() && result.deleted > 0) {
-      console.debug(
+      debugLogger.debug(
         `Session cleanup: deleted ${result.deleted}, skipped ${result.skipped}, failed ${result.failed}`,
       );
     }
@@ -133,7 +133,7 @@ export async function cleanupExpiredSessions(
     // Global error handler - don't let cleanup failures break startup
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    console.error(`Session cleanup failed: ${errorMessage}`);
+    debugLogger.error(`Session cleanup failed: ${errorMessage}`);
     result.failed++;
   }
 
@@ -273,7 +273,7 @@ function validateRetentionConfig(
     } catch (error) {
       // If minRetention format is invalid, fall back to default
       if (config.getDebugMode()) {
-        console.error(`Failed to parse minRetention: ${error}`);
+        debugLogger.error(`Failed to parse minRetention: ${error}`);
       }
       minRetentionMs = parseRetentionPeriod(DEFAULT_MIN_RETENTION);
     }

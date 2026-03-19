@@ -1,3 +1,4 @@
+import { debugLogger } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -53,7 +54,7 @@ export class SecureInputHandler {
     if (shouldBeSecure) {
       // Debug logging
       if (process.env.DEBUG_SECURE_INPUT) {
-        console.log('[SecureHandler] Input:', JSON.stringify(text));
+        debugLogger.log('[SecureHandler] Input:', JSON.stringify(text));
       }
 
       // @plan PLAN-20260206-TOOLKEY.P11
@@ -121,12 +122,12 @@ export class SecureInputHandler {
           const result = `/key ${maskedKey}${afterLineBreak}`;
 
           if (process.env.DEBUG_SECURE_INPUT) {
-            console.log('[SecureHandler] Output:', JSON.stringify(result));
-            console.log(
+            debugLogger.log('[SecureHandler] Output:', JSON.stringify(result));
+            debugLogger.log(
               '[SecureHandler] Key to mask:',
               JSON.stringify(keyToMask),
             );
-            console.log(
+            debugLogger.log(
               '[SecureHandler] After line break:',
               JSON.stringify(afterLineBreak),
             );

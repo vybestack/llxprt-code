@@ -112,8 +112,8 @@ export class ConfigurationManager {
           if (parsed.debug) {
             this.userConfig = parsed.debug;
           }
-        } catch (error) {
-          console.warn('Failed to load user config:', error);
+        } catch {
+          // Silently ignore — can't use debugLogger here (circular dep)
         }
       }
     } catch (_error) {
@@ -137,8 +137,8 @@ export class ConfigurationManager {
           if (parsed.debug) {
             this.projectConfig = parsed.debug;
           }
-        } catch (error) {
-          console.warn('Failed to load project config:', error);
+        } catch {
+          // Silently ignore — can't use debugLogger here (circular dep)
         }
       }
     } catch (_error) {

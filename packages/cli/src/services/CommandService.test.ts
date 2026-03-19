@@ -8,6 +8,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CommandService } from './CommandService.js';
 import { type ICommandLoader } from './types.js';
 import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const createMockCommand = (name: string, kind: CommandKind): SlashCommand => ({
   name,
@@ -131,6 +132,10 @@ describe('CommandService', () => {
     const error = new Error('Loader failed');
     vi.spyOn(failingLoader, 'loadCommands').mockRejectedValue(error);
 
+    const debugSpy = vi
+      .spyOn(DebugLogger.prototype, 'debug')
+      .mockImplementation(() => {});
+
     const service = await CommandService.create(
       [successfulLoader, failingLoader],
       new AbortController().signal,
@@ -139,10 +144,9 @@ describe('CommandService', () => {
     const commands = service.getCommands();
     expect(commands).toHaveLength(1);
     expect(commands).toEqual([mockCommandA]);
-    expect(console.debug).toHaveBeenCalledWith(
-      'A command loader failed:',
-      error,
-    );
+    expect(debugSpy).toHaveBeenCalledWith('A command loader failed:', error);
+
+    debugSpy.mockRestore();
   });
 
   it('getCommands should return a readonly array that cannot be mutated', async () => {

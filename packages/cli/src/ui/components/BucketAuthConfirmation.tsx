@@ -7,11 +7,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import {
-  Config,
   MessageBusType,
   BucketAuthConfirmationRequest,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import type { MessageBus } from '@vybestack/llxprt-code-core';
 import {
   RadioButtonSelect,
   RadioSelectItem,
@@ -23,7 +23,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
 const logger = new DebugLogger('llxprt:bucket:confirmation:ui');
 
 interface BucketAuthConfirmationProps {
-  config: Config;
+  messageBus?: MessageBus;
   isFocused?: boolean;
 }
 
@@ -41,17 +41,21 @@ type ConfirmOption = 'proceed' | 'cancel';
  * Component that listens for bucket auth confirmation requests
  * and shows an approval dialog in the TUI.
  */
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+ * @requirement REQ-D01-002
+ * @requirement REQ-D01-003
+ * @pseudocode lines 122-133
+ */
 export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
-  config,
+  messageBus,
   isFocused = true,
 }) => {
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(
     null,
   );
 
-  // Subscribe to bucket auth confirmation requests
   useEffect(() => {
-    const messageBus = config.getMessageBus();
     logger.debug('BucketAuthConfirmation useEffect running', {
       hasMessageBus: !!messageBus,
     });
@@ -84,26 +88,24 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
       logger.debug('Unsubscribing from BUCKET_AUTH_CONFIRMATION_REQUEST');
       unsubscribe();
     };
-  }, [config]);
+  }, [messageBus]);
 
   const handleConfirm = useCallback(
     (confirmed: boolean) => {
-      if (!pendingRequest) return;
-
-      const messageBus = config.getMessageBus();
-      if (messageBus) {
-        messageBus.respondToBucketAuthConfirmation(
-          pendingRequest.correlationId,
-          confirmed,
-        );
+      if (!pendingRequest || !messageBus) {
+        return;
       }
+
+      messageBus.respondToBucketAuthConfirmation(
+        pendingRequest.correlationId,
+        confirmed,
+      );
 
       setPendingRequest(null);
     },
-    [config, pendingRequest],
+    [messageBus, pendingRequest],
   );
 
-  // Handle escape key to cancel
   useKeypress(
     (key) => {
       if (!pendingRequest || !isFocused) return;
@@ -121,7 +123,6 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
     [handleConfirm],
   );
 
-  // Don't render anything if no pending request
   if (!pendingRequest) {
     return null;
   }

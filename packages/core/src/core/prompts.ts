@@ -180,6 +180,8 @@ function compactFolderStructureSnapshot(
 export interface CoreSystemPromptOptions {
   userMemory?: string;
   coreMemory?: string;
+  mcpInstructions?: string;
+
   model?: string;
   tools?: string[];
   provider?: string;
@@ -229,21 +231,6 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
 
   return parts.join('\n\n');
 }
-
-/**
- * Options for getCoreSystemPromptAsync
- */
-export interface CoreSystemPromptOptions {
-  userMemory?: string;
-  coreMemory?: string;
-  mcpInstructions?: string;
-  model?: string;
-  tools?: string[];
-  provider?: string;
-  includeSubagentDelegation?: boolean;
-  interactionMode?: 'interactive' | 'non-interactive' | 'subagent';
-}
-
 /**
  * Build PromptContext from current environment and parameters
  */

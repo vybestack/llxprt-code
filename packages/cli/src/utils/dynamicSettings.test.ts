@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,8 +14,9 @@ import {
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 // Mock DebugLogger
-const { mockLog } = vi.hoisted(() => ({
+const { mockLog, mockDebugLoggerError } = vi.hoisted(() => ({
   mockLog: vi.fn(),
+  mockDebugLoggerError: vi.fn(),
 }));
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
@@ -25,6 +27,13 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     DebugLogger: vi.fn().mockImplementation(() => ({
       log: mockLog,
     })),
+    debugLogger: {
+      error: mockDebugLoggerError,
+      warn: vi.fn(),
+      debug: vi.fn(),
+      log: vi.fn(),
+      info: vi.fn(),
+    },
   };
 });
 
@@ -399,7 +408,7 @@ describe('generateDynamicToolSettings', () => {
 
     const toolSettings = generateDynamicToolSettings(errorConfig);
     expect(toolSettings).toEqual({});
-    expect(console.error).toHaveBeenCalledWith(
+    expect(mockDebugLoggerError).toHaveBeenCalledWith(
       '[generateDynamicToolSettings] Error:',
       expect.any(Error),
     );

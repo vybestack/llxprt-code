@@ -42,7 +42,7 @@ export class SubagentInvocation<
     params: AgentInputs,
     private readonly definition: AgentDefinition<TOutput>,
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -105,6 +105,7 @@ export class SubagentInvocation<
       const executor = await AgentExecutor.create(
         this.definition,
         this.config,
+        this.requireMessageBus(),
         onActivity,
       );
 

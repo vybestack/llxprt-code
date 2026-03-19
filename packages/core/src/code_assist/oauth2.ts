@@ -24,6 +24,7 @@ import readline from 'node:readline';
 import open from 'open';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { Storage } from '../config/storage.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const userAccountManager = new UserAccountManager();
 
@@ -86,7 +87,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
   client.on('tokens', (tokens: Credentials) => {
     // Don't await - cache credentials asynchronously to avoid blocking
     cacheCredentials(tokens).catch((error) => {
-      console.error('Error caching OAuth tokens:', error);
+      debugLogger.error('Error caching OAuth tokens:', error);
     });
   });
 
@@ -99,7 +100,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
         await fetchAndCacheUserInfo(client);
       } catch (error) {
         // Non-fatal, continue with existing auth.
-        console.warn('Failed to fetch user info:', getErrorMessage(error));
+        debugLogger.warn('Failed to fetch user info:', getErrorMessage(error));
       }
     }
     // Loaded cached credentials
@@ -111,13 +112,13 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
   // the identity of the user logged into Cloud Shell.
   if (process.env.CLOUD_SHELL === 'true') {
     try {
-      console.log("Attempting to authenticate via Cloud Shell VM's ADC.");
+      debugLogger.log("Attempting to authenticate via Cloud Shell VM's ADC.");
       const computeClient = new Compute({
         // We can leave this empty, since the metadata server will provide
         // the service account email.
       });
       await computeClient.getAccessToken();
-      console.log('Authentication successful.');
+      debugLogger.log('Authentication successful.');
 
       // Do not cache creds in this case; note that Compute client will handle its own refresh
       return computeClient;
@@ -142,7 +143,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
           | undefined,
       );
       if (!success) {
-        console.error(
+        debugLogger.error(
           '\nFailed to authenticate with user code.',
           i === maxRetries - 1 ? '' : 'Retrying...\n',
         );
@@ -172,7 +173,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
       );
     }
 
-    console.log(
+    debugLogger.log(
       `\n\nCode Assist login required.\n` +
         `Attempting to open authentication page in your browser.\n` +
         `Otherwise navigate to:\n\n${webLogin.authUrl}\n\n`,
@@ -189,13 +190,13 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
       // in a minimal Docker container), it will emit an unhandled 'error' event,
       // causing the entire Node.js process to crash.
       childProcess.on('error', (error) => {
-        console.error(
+        debugLogger.error(
           'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
         );
-        console.error('Browser error details:', getErrorMessage(error));
+        debugLogger.error('Browser error details:', getErrorMessage(error));
       });
     } catch (_err) {
-      console.error(
+      debugLogger.error(
         'An unexpected error occurred while trying to open the browser:',
         getErrorMessage(_err),
         '\nThis might be due to browser compatibility issues or system configuration.',
@@ -207,7 +208,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
     }
 
     if (typeof config.isInteractive === 'function' && config.isInteractive()) {
-      console.log('Waiting for authentication...');
+      debugLogger.log('Waiting for authentication...');
     }
 
     // Add timeout to prevent infinite waiting when browser tab gets stuck
@@ -299,20 +300,20 @@ ${authUrl}`,
   const clipboardService = new ClipboardService();
   try {
     await clipboardService.copyToClipboard(authUrl);
-    console.log(
+    debugLogger.log(
       '\n\nCode Assist login required.\n' +
         'The authentication URL has been copied to your clipboard.\n' +
         'Please paste it into your browser to authenticate.\n' +
         'After authenticating, paste the verification code you receive below:\n\n',
     );
   } catch (clipboardError) {
-    console.error('Failed to copy URL to clipboard:', clipboardError);
+    debugLogger.error('Failed to copy URL to clipboard:', clipboardError);
     // If clipboard copy fails, show the URL in a clean format without decorations
-    console.log(
+    debugLogger.log(
       '\nPlease visit the following URL to authorize the application:',
     );
-    console.log(authUrl);
-    console.log(
+    debugLogger.log(authUrl);
+    debugLogger.log(
       '\nAfter authenticating, paste the verification code you receive below:',
     );
   }
@@ -389,7 +390,7 @@ ${authUrl}`,
   }
 
   if (!code) {
-    console.error('Authorization code is required.');
+    debugLogger.error('Authorization code is required.');
     return false;
   }
 
@@ -565,7 +566,7 @@ async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
       }
     } catch (error) {
       // Log specific error for debugging, but continue trying other paths
-      console.debug(
+      debugLogger.debug(
         `Failed to load credentials from ${credPath}:`,
         getErrorMessage(error),
       );
@@ -589,7 +590,7 @@ async function cacheCredentials(credentials: Credentials) {
     } catch (error) {
       // Handle race condition where directory was created between access and mkdir
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        console.error('Failed to create OAuth cache directory:', error);
+        debugLogger.error('Failed to create OAuth cache directory:', error);
         // Don't throw - allow OAuth to continue without caching
         return;
       }
@@ -608,7 +609,7 @@ async function cacheCredentials(credentials: Credentials) {
       /* empty - file already has correct permissions from writeFile */
     }
   } catch (error) {
-    console.error('Failed to cache OAuth credentials:', error);
+    debugLogger.error('Failed to cache OAuth credentials:', error);
     // Don't throw - allow OAuth to continue without caching
   }
 }
@@ -630,7 +631,7 @@ export async function authWithCode(
     try {
       await fetchAndCacheUserInfo(client);
     } catch (error) {
-      console.warn(
+      debugLogger.warn(
         'Failed to retrieve Google Account ID during authentication:',
         getErrorMessage(error),
       );
@@ -638,7 +639,7 @@ export async function authWithCode(
 
     return true;
   } catch (error) {
-    console.error(
+    debugLogger.error(
       'Failed to authenticate with authorization code:',
       getErrorMessage(error),
     );
@@ -654,7 +655,7 @@ export async function clearCachedCredentialFile() {
     // Clear the in-memory OAuth client cache to force re-authentication
     clearOauthClientCache();
   } catch (e) {
-    console.error('Failed to clear cached credentials:', e);
+    debugLogger.error('Failed to clear cached credentials:', e);
   }
 }
 
@@ -675,7 +676,7 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
     );
 
     if (!response.ok) {
-      console.error(
+      debugLogger.error(
         'Failed to fetch user info:',
         response.status,
         response.statusText,
@@ -688,7 +689,7 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
       await userAccountManager.cacheGoogleAccount(userInfo.email);
     }
   } catch (error) {
-    console.error('Error retrieving user info:', error);
+    debugLogger.error('Error retrieving user info:', error);
   }
 }
 
@@ -703,7 +704,7 @@ export function clearOauthClientCache(): void {
     oauthClientPromise = null;
   } catch (error) {
     // Log warning but don't throw - logout should continue even if cache clearing fails
-    console.warn('Failed to clear OAuth client cache:', error);
+    debugLogger.warn('Failed to clear OAuth client cache:', error);
   }
 }
 

@@ -61,6 +61,14 @@ describe('HookSystem', () => {
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getTargetDir: vi.fn().mockReturnValue('/test/project'),
       getEnableHooks: vi.fn().mockReturnValue(true),
+      isTrustedFolder: vi.fn().mockReturnValue(true),
+      getProjectHooks: vi.fn().mockReturnValue(null),
+      getSanitizationConfig: vi.fn().mockReturnValue({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+      getSessionRecordingService: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
     hookSystem = new HookSystem(mockConfig);

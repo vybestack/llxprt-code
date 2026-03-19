@@ -146,7 +146,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
       },
     );
 
-    manager.setMessageBus(() => messageBus);
+    Object.assign(manager, { runtimeMessageBus: messageBus });
     await manager.toggleOAuthEnabled('anthropic');
 
     await manager.getToken('anthropic');
@@ -174,7 +174,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
       },
     );
 
-    manager.setMessageBus(() => messageBus);
+    Object.assign(manager, { runtimeMessageBus: messageBus });
     await manager.toggleOAuthEnabled('anthropic');
 
     // First attempt - user declines
@@ -210,7 +210,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
       },
     );
 
-    manager.setMessageBus(() => messageBus);
+    Object.assign(manager, { runtimeMessageBus: messageBus });
     await manager.toggleOAuthEnabled('anthropic');
 
     // First manager, first attempt - user declines
@@ -236,7 +236,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
       },
     );
 
-    newManager.setMessageBus(() => newMessageBus);
+    Object.assign(newManager, { runtimeMessageBus: newMessageBus });
     await newManager.toggleOAuthEnabled('anthropic');
 
     // New manager should show dialog again (fresh session)

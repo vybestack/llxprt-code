@@ -15,8 +15,8 @@ import {
   CoreToolScheduler,
   ToolCall,
   WaitingToolCall,
-  convertToFunctionResponse,
 } from './coreToolScheduler.js';
+import { convertToFunctionResponse } from '../utils/generateContentResponseUtilities.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -77,8 +77,11 @@ class AbortDuringConfirmationInvocation extends BaseToolInvocation<
     private readonly abortController: AbortController,
     private readonly abortError: Error,
     params: Record<string, unknown>,
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   override async shouldConfirmExecute(
@@ -107,6 +110,9 @@ class AbortDuringConfirmationTool extends BaseDeclarativeTool<
   constructor(
     private readonly abortController: AbortController,
     private readonly abortError: Error,
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
     super(
       'abortDuringConfirmationTool',
@@ -114,16 +120,21 @@ class AbortDuringConfirmationTool extends BaseDeclarativeTool<
       'Test tool that aborts while confirming execution.',
       Kind.Other,
       { type: 'object', properties: {} },
+      true,
+      false,
+      messageBus,
     );
   }
 
   protected createInvocation(
     params: Record<string, unknown>,
+    messageBus: ReturnType<typeof createMockMessageBus>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
     return new AbortDuringConfirmationInvocation(
       this.abortController,
       this.abortError,
       params,
+      messageBus,
     );
   }
 }
@@ -196,6 +207,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -265,6 +277,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -341,6 +354,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -429,6 +443,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -565,6 +580,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -683,6 +699,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -755,6 +772,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -832,6 +851,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -903,6 +924,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -983,6 +1006,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -1079,6 +1104,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -1150,6 +1177,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
@@ -1226,6 +1255,8 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -1271,6 +1302,8 @@ describe('CoreToolScheduler', () => {
       // Create scheduler
       const scheduler = new CoreToolScheduler({
         config: mockConfig,
+        messageBus: mockConfig.getMessageBus(),
+        toolRegistry: mockConfig.getToolRegistry(),
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
       });
@@ -1341,6 +1374,7 @@ describe('CoreToolScheduler with payload', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -1462,11 +1496,12 @@ describe('CoreToolScheduler with payload', () => {
       getUseSmartEdit: () => false,
       getUseModelRouter: () => false,
       getGeminiClient: () => null,
-      getModel: () => DEFAULT_GEMINI_MODEL,
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -1757,8 +1792,13 @@ class MockEditToolInvocation extends BaseToolInvocation<
   Record<string, unknown>,
   ToolResult
 > {
-  constructor(params: Record<string, unknown>) {
-    super(params);
+  constructor(
+    params: Record<string, unknown>,
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
+  ) {
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -1793,14 +1833,28 @@ class MockEditTool extends BaseDeclarativeTool<
   Record<string, unknown>,
   ToolResult
 > {
-  constructor() {
-    super('mockEditTool', 'mockEditTool', 'A mock edit tool', Kind.Edit, {});
+  constructor(
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
+  ) {
+    super(
+      'mockEditTool',
+      'mockEditTool',
+      'A mock edit tool',
+      Kind.Edit,
+      {},
+      true,
+      false,
+      messageBus,
+    );
   }
 
   protected createInvocation(
     params: Record<string, unknown>,
+    messageBus: ReturnType<typeof createMockMessageBus>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
-    return new MockEditToolInvocation(params);
+    return new MockEditToolInvocation(params, messageBus);
   }
 }
 
@@ -1850,6 +1904,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -1964,7 +2019,8 @@ describe('CoreToolScheduler queue handling', () => {
 
     const completedCalls: ToolCall[][] = [];
     const scheduler = new CoreToolScheduler({
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      messageBus: createMockMessageBus(),
+      toolRegistry: toolRegistry as unknown as ToolRegistry,
       onAllToolCallsComplete: (calls) => {
         completedCalls.push(calls);
       },
@@ -2058,7 +2114,8 @@ describe('CoreToolScheduler queue handling', () => {
     };
 
     const scheduler = new CoreToolScheduler({
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      messageBus: createMockMessageBus(),
+      toolRegistry: toolRegistry as unknown as ToolRegistry,
       getPreferredEditor: () => undefined,
       config: {
         getApprovalMode: () => ApprovalMode.YOLO,
@@ -2169,6 +2226,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -2265,6 +2323,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -2389,6 +2448,8 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -2518,6 +2579,8 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -2578,6 +2641,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -2671,6 +2735,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
       toolRegistry: toolRegistry as unknown as ToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate: (toolCalls) => {
@@ -2822,6 +2887,8 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);
@@ -2943,6 +3010,8 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);
@@ -3067,6 +3136,8 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);
@@ -3201,6 +3272,8 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: (calls) => {
         calls.forEach((call) => {
@@ -3297,6 +3370,8 @@ it('injects agentId into ContextAwareTool context', async () => {
 
   const scheduler = new CoreToolScheduler({
     config: mockConfig,
+    messageBus: mockConfig.getMessageBus(),
+    toolRegistry: mockConfig.getToolRegistry(),
     onAllToolCallsComplete: vi.fn(),
     onToolCallsUpdate: vi.fn(),
     getPreferredEditor: () => 'vscode',
@@ -3368,6 +3443,8 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -3477,6 +3554,8 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -3581,6 +3660,8 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -3702,6 +3783,8 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockConfig.getMessageBus(),
+      toolRegistry: mockConfig.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

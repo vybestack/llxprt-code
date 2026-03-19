@@ -101,6 +101,11 @@ export enum SettingScope {
   Session = 'Session',
 }
 
+export type LoadableSettingScope =
+  | SettingScope.User
+  | SettingScope.Workspace
+  | SettingScope.System;
+
 export interface CheckpointingSettings {
   enabled?: boolean;
 }
@@ -431,6 +436,7 @@ export class LoadedSettings {
 
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);
+    coreEvents.emitSettingsChanged();
   }
 
   // Provider keyfile methods for llxprt multi-provider support

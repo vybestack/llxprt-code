@@ -152,8 +152,10 @@ export interface UIState {
   // Context and status
   ideContextState: IdeContext | undefined;
   llxprtMdFileCount: number;
+  coreMemoryFileCount: number;
   branchName: string | undefined;
   errorCount: number;
+  activeHooks?: Array<import('../types.js').ActiveHook>;
 
   // Console and messages
   consoleMessages: ConsoleMessageItem[];
@@ -235,6 +237,9 @@ export interface UIState {
   // Interactive shell focus state
   activeShellPtyId: number | null;
   embeddedShellFocused: boolean;
+
+  // Settings reload nonce (incremented when skills/settings change)
+  settingsNonce: number;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

@@ -135,7 +135,15 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
     vi.clearAllMocks();
     clearMockEphemeralSettings();
     tokenStore = createMockTokenStore();
-    manager = new OAuthManager(tokenStore);
+    const mockMessageBus = {
+      subscribe: vi.fn(),
+      publish: vi.fn(),
+      unsubscribe: vi.fn(),
+      requestBucketAuthConfirmation: vi.fn().mockResolvedValue(true),
+    } as unknown as MessageBus;
+    manager = new OAuthManager(tokenStore, undefined, {
+      messageBus: mockMessageBus,
+    });
     mockProvider = createMockProvider('anthropic');
     manager.registerProvider(mockProvider);
   });
@@ -170,7 +178,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         },
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       // Trigger authentication for a single bucket
@@ -204,7 +212,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         },
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       // Trigger authentication
@@ -242,7 +250,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         async (): Promise<boolean> => true,
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       await manager.getToken('anthropic');
@@ -256,7 +264,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       }
     });
 
-    it('should preserve stdin state when falling back to TTY prompt without MessageBus', async () => {
+    it('should preserve stdin state when falling back to TTY prompt', async () => {
       setMockEphemeralSetting('auth-bucket-prompt', true);
 
       const originalIsTTY = process.stdin.isTTY;
@@ -355,7 +363,7 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
         },
       );
 
-      manager.setMessageBus(() => messageBus);
+      Object.assign(manager, { runtimeMessageBus: messageBus });
       await manager.toggleOAuthEnabled('anthropic');
 
       // This test requires profile-level integration to fully test.

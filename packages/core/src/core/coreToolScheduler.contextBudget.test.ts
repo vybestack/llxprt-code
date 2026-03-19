@@ -20,6 +20,7 @@ import {
   ToolRegistry,
 } from '../index.js';
 import { PolicyDecision } from '../policy/types.js';
+import { getTestRuntimeMessageBus } from '../test-utils/config.js';
 
 // Helper function to create a mock MessageBus
 function createMockMessageBus() {
@@ -57,8 +58,11 @@ class OrderTrackingInvocation extends BaseToolInvocation<
     private readonly toolName: string,
     private readonly delayMs: number = 10,
     private readonly outputSize: number = 0,
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   async execute(): Promise<ToolResult> {
@@ -102,21 +106,35 @@ class OrderTrackingTool extends BaseDeclarativeTool<
     name: string,
     private readonly delayMs: number = 10,
     private readonly outputSize: number = 0,
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
-    super(name, name, `A tool named ${name}`, Kind.Other, {
-      type: 'object',
-      properties: {},
-    });
+    super(
+      name,
+      name,
+      `A tool named ${name}`,
+      Kind.Other,
+      {
+        type: 'object',
+        properties: {},
+      },
+      true,
+      false,
+      messageBus,
+    );
   }
 
   protected createInvocation(
     params: Record<string, unknown>,
+    messageBus: ReturnType<typeof createMockMessageBus>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
     return new OrderTrackingInvocation(
       params,
       this.name,
       this.delayMs,
       this.outputSize,
+      messageBus,
     );
   }
 }
@@ -181,6 +199,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     const scheduler = new CoreToolScheduler({
       config,
+      messageBus: getTestRuntimeMessageBus(config),
+      toolRegistry: config.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -222,6 +242,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     const scheduler = new CoreToolScheduler({
       config,
+      messageBus: getTestRuntimeMessageBus(config),
+      toolRegistry: config.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -284,6 +306,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     const scheduler = new CoreToolScheduler({
       config,
+      messageBus: getTestRuntimeMessageBus(config),
+      toolRegistry: config.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -380,6 +404,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     const scheduler = new CoreToolScheduler({
       config,
+      messageBus: getTestRuntimeMessageBus(config),
+      toolRegistry: config.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -428,6 +454,8 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
 
     const scheduler = new CoreToolScheduler({
       config,
+      messageBus: getTestRuntimeMessageBus(config),
+      toolRegistry: config.getToolRegistry(),
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

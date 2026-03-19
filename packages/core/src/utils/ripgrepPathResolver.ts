@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { debugLogger } from './debugLogger.js';
 
 /**
  * Cross-platform ripgrep path resolution
@@ -175,7 +176,7 @@ export function ensureWindowsShortcut(source: string, target: string): boolean {
       }
     }
   } catch (error) {
-    console.warn('Failed to create Windows shortcut for ripgrep:', error);
+    debugLogger.warn('Failed to create Windows shortcut for ripgrep:', error);
   }
   return false;
 }

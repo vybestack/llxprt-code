@@ -103,6 +103,13 @@ export abstract class BaseToolInvocation<
     readonly _serverName?: string,
   ) {}
 
+  protected requireMessageBus(): MessageBus {
+    if (!this.messageBus) {
+      throw new Error('MessageBus is required for this invocation.');
+    }
+    return this.messageBus;
+  }
+
   abstract getDescription(): string;
 
   toolLocations(): ToolLocation[] {
@@ -358,7 +365,7 @@ export abstract class DeclarativeTool<
   TResult extends ToolResult,
 > implements ToolBuilder<TParams, TResult>
 {
-  protected messageBus?: MessageBus;
+  protected readonly messageBus?: MessageBus;
 
   constructor(
     readonly name: string,
@@ -374,11 +381,18 @@ export abstract class DeclarativeTool<
   }
 
   /**
-   * Sets the message bus for this tool.
-   * Called by ToolRegistry after tool construction.
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
    */
-  setMessageBus(messageBus: MessageBus): void {
-    this.messageBus = messageBus;
+  protected requireMessageBus(): MessageBus {
+    if (!this.messageBus) {
+      throw new Error(
+        `MessageBus is required to build tool invocations for ${this.name}.`,
+      );
+    }
+    return this.messageBus;
   }
 
   get schema(): FunctionDeclaration {
@@ -462,7 +476,7 @@ export abstract class DeclarativeTool<
    * A convenience method that builds and executes the tool in one step.
    * Never throws.
    * @param params The raw, untrusted parameters from the model.
-   * @params abortSignal a signal to abort.
+   * @param abortSignal a signal to abort.
    * @returns The result of the tool execution.
    */
   async validateBuildAndExecute(
@@ -808,6 +822,7 @@ export abstract class BaseTool<
     parameterSchema: unknown,
     isOutputMarkdown: boolean = true,
     canUpdateOutput: boolean = false,
+    messageBus?: MessageBus,
   ) {
     super(
       name,
@@ -817,6 +832,7 @@ export abstract class BaseTool<
       parameterSchema,
       isOutputMarkdown,
       canUpdateOutput,
+      messageBus,
     );
   }
 

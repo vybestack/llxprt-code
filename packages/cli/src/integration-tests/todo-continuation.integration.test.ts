@@ -13,12 +13,17 @@ import {
   ApprovalMode,
   todoEvents,
   createRuntimeStateFromConfig,
+  SettingsService,
   type TodoUpdateEvent,
   type Turn,
   type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import type { PartListUnion } from '@google/genai';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 
 /**
  * Todo Continuation Integration Tests
@@ -55,12 +60,13 @@ describe('Todo Continuation Integration Tests', () => {
     config = new Config({
       sessionId,
       targetDir: tempDir,
+      settingsService: new SettingsService(),
       debugMode: false,
       model: 'gemini-2.0-flash-exp',
       cwd: tempDir,
     });
 
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const runtimeState = createRuntimeStateFromConfig(config, {
       runtimeId: `${sessionId}-todo-runtime`,
@@ -112,11 +118,12 @@ describe('Todo Continuation Integration Tests', () => {
       const newConfig = new Config({
         sessionId: 'new-session',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await newConfig.initialize();
+      await initializeTestConfig(newConfig);
 
       // Then: Setting should not be persisted
       expect(
@@ -288,11 +295,12 @@ describe('Todo Continuation Integration Tests', () => {
       const yoloConfig = new Config({
         sessionId: 'yolo-session',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await yoloConfig.initialize();
+      await initializeTestConfig(yoloConfig);
 
       // When: Set YOLO mode
       yoloConfig.setApprovalMode(ApprovalMode.YOLO);
@@ -571,11 +579,12 @@ describe('Todo Continuation Integration Tests', () => {
       const newConfig = new Config({
         sessionId: 'ephemeral-test',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await newConfig.initialize();
+      await initializeTestConfig(newConfig);
 
       // Then: New instance should have empty ephemeral settings
       const newSettings = newConfig.getEphemeralSettings();

@@ -31,6 +31,7 @@ import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import type { SettingsService } from '../settings/SettingsService.js';
+import { initializeTestConfig } from '../test-utils/config.js';
 
 import { ShellTool } from '../tools/shell.js';
 import { ReadFileTool } from '../tools/read-file.js';
@@ -51,6 +52,7 @@ vi.mock('fs', async (importOriginal) => {
 vi.mock('../tools/tool-registry', () => {
   const ToolRegistryMock = vi.fn();
   ToolRegistryMock.prototype.registerTool = vi.fn();
+  ToolRegistryMock.prototype.unregisterTool = vi.fn();
   ToolRegistryMock.prototype.discoverAllTools = vi.fn();
   ToolRegistryMock.prototype.sortTools = vi.fn();
   ToolRegistryMock.prototype.getAllTools = vi.fn(() => []); // Mock methods if needed
@@ -95,6 +97,7 @@ vi.mock('../core/client.js', () => ({
     setHistory: vi.fn(),
     storeHistoryForLaterUse: vi.fn(),
     dispose: vi.fn(),
+    stripThoughtsFromHistory: vi.fn(),
   })),
 }));
 
@@ -249,7 +252,7 @@ describe('Server Config (config.ts)', () => {
         checkpointing: true,
       });
 
-      await expect(config.initialize()).rejects.toThrow(gitError);
+      await expect(initializeTestConfig(config)).rejects.toThrow(gitError);
     });
 
     it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
@@ -261,7 +264,7 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      await expect(config.initialize()).resolves.toBeUndefined();
+      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
     });
 
     it('should throw an error if initialized more than once', async () => {
@@ -270,8 +273,8 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      await expect(config.initialize()).resolves.toBeUndefined();
-      await expect(config.initialize()).rejects.toThrow(
+      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
+      await expect(initializeTestConfig(config)).rejects.toThrow(
         'Config was already initialized',
       );
     });
@@ -282,7 +285,7 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      await config.initialize();
+      await initializeTestConfig(config);
 
       const getResourceRegistry = (
         config as unknown as {
@@ -300,7 +303,7 @@ describe('Server Config (config.ts)', () => {
     it('should refresh auth and update config', async () => {
       const config = new Config(baseParams);
       // Initialize config to create GeminiClient instance
-      await config.initialize();
+      await initializeTestConfig(config);
 
       const newModel = 'gemini-flash';
       const mockContentConfig = {
@@ -580,7 +583,7 @@ describe('Server Config (config.ts)', () => {
 
     it('should preserve all state after refresh without triggering OAuth', async () => {
       const config = new Config(baseParams);
-      await config.initialize();
+      await initializeTestConfig(config);
 
       // Create a client with history
       const mockExistingHistory = [
@@ -706,7 +709,7 @@ describe('Server Config (config.ts)', () => {
       ...baseParams,
       jitContextEnabled: true,
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const contextManager = config.getContextManager();
     expect(contextManager).toBeDefined();
@@ -731,7 +734,7 @@ describe('Server Config (config.ts)', () => {
       ...baseParams,
       jitContextEnabled: true,
     });
-    await config.initialize();
+    await initializeTestConfig(config);
 
     const contextManager = config.getContextManager();
     vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue('');
@@ -1246,7 +1249,7 @@ describe('Server Config (config.ts)', () => {
         coreTools: ['ShellTool(git status)'],
       };
       const config = new Config(params);
-      await config.initialize();
+      await initializeTestConfig(config);
 
       // The ToolRegistry class is mocked, so we can inspect its prototype's methods.
       const registerToolMock = (
@@ -1744,5 +1747,89 @@ describe('Config getHookSystem', () => {
     const config = new Config(baseParams);
     expect(config.getEnableHooks()).toBe(false);
     expect(config.getHookSystem()).toBeUndefined();
+  });
+
+  describe('reloadSkills', () => {
+    it('should call onReload, update disabledSkills, discover, and apply disabled list', async () => {
+      const mockOnReload = vi.fn().mockResolvedValue({
+        disabledSkills: ['skill2'],
+      });
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+        onReload: mockOnReload,
+      };
+
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const skillManager = config.getSkillManager();
+
+      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+      vi.spyOn(skillManager, 'setDisabledSkills');
+
+      await config.reloadSkills();
+
+      expect(mockOnReload).toHaveBeenCalled();
+      expect(skillManager.discoverSkills).toHaveBeenCalled();
+      expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill2']);
+    });
+
+    it('should discover and apply defaults when no onReload is provided', async () => {
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+      };
+
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const skillManager = config.getSkillManager();
+
+      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+      vi.spyOn(skillManager, 'setDisabledSkills');
+
+      await config.reloadSkills();
+
+      expect(skillManager.discoverSkills).toHaveBeenCalled();
+      expect(skillManager.setDisabledSkills).toHaveBeenCalled();
+    });
+
+    it('should preserve existing disabledSkills when onReload returns undefined for them', async () => {
+      const mockOnReload = vi.fn().mockResolvedValue({
+        disabledSkills: undefined,
+      });
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+        onReload: mockOnReload,
+      };
+
+      const config = new Config(params);
+      // @ts-expect-error - accessing private
+      config.disabledSkills = ['skill1'];
+      await initializeTestConfig(config);
+
+      const skillManager = config.getSkillManager();
+      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+      vi.spyOn(skillManager, 'setDisabledSkills');
+
+      await config.reloadSkills();
+
+      // disabledSkills undefined is falsy, so original value is preserved
+      expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill1']);
+    });
   });
 });

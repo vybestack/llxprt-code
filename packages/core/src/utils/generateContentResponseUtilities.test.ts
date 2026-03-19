@@ -14,6 +14,11 @@ import {
   getFunctionCallsFromPartsAsJson,
   getStructuredResponse,
   getStructuredResponseFromParts,
+  convertToFunctionResponse,
+  createFunctionResponsePart,
+  limitFunctionResponsePart,
+  limitStringOutput,
+  toParts,
 } from './generateContentResponseUtilities.js';
 import {
   GenerateContentResponse,
@@ -318,6 +323,242 @@ describe('generateContentResponseUtilities', () => {
     it('should return undefined if neither text nor function calls exist in parts', () => {
       const parts: Part[] = [];
       expect(getStructuredResponseFromParts(parts)).toBeUndefined();
+    });
+  });
+
+  describe('formatting helper characterization', () => {
+    const configWithTruncation = {
+      getEphemeralSettings: () => ({
+        'tool-output-max-tokens': 50,
+        'tool-output-truncate-mode': 'warn',
+      }),
+    };
+
+    it('creates a functionResponse part with the provided id, name, and output', () => {
+      expect(createFunctionResponsePart('call-1', 'read_file', 'done')).toEqual(
+        {
+          functionResponse: {
+            id: 'call-1',
+            name: 'read_file',
+            response: { output: 'done' },
+          },
+        },
+      );
+    });
+
+    it('passes string output through unchanged when no config is provided', () => {
+      expect(limitStringOutput('plain output', 'read_file')).toBe(
+        'plain output',
+      );
+    });
+
+    it('returns the limiter message when warn mode truncates the entire string output', () => {
+      const oversizedText = Array.from(
+        { length: 200 },
+        (_, index) => `word${index}`,
+      ).join(' ');
+
+      const limited = limitStringOutput(
+        oversizedText,
+        'read_file',
+        configWithTruncation,
+      );
+
+      expect(limited).toContain('read_file output exceeded token limit');
+      expect(limited).toContain(
+        'The results were found but are too large to display',
+      );
+    });
+
+    it('rewrites only functionResponse.output when output limiting applies', () => {
+      const oversizedText = Array.from(
+        { length: 200 },
+        (_, index) => `word${index}`,
+      ).join(' ');
+      const inputPart: Part = {
+        functionResponse: {
+          id: 'call-2',
+          name: 'read_file',
+          response: {
+            output: oversizedText,
+            summary: 'preserved',
+          },
+        },
+      };
+
+      const limitedPart = limitFunctionResponsePart(
+        inputPart,
+        'read_file',
+        configWithTruncation,
+      );
+
+      expect(limitedPart).toEqual({
+        functionResponse: {
+          id: 'call-2',
+          name: 'read_file',
+          response: {
+            output: expect.stringContaining(
+              'read_file output exceeded token limit',
+            ),
+            summary: 'preserved',
+          },
+        },
+      });
+    });
+
+    it('normalizes strings and preserves non-null parts in toParts', () => {
+      const functionResponsePart: Part = {
+        functionResponse: {
+          id: 'call-3',
+          name: 'tool',
+          response: { output: 'kept' },
+        },
+      };
+
+      expect(toParts(['alpha', functionResponsePart, null, 'beta'])).toEqual([
+        { text: 'alpha' },
+        functionResponsePart,
+        { text: 'beta' },
+      ]);
+    });
+
+    it('wraps string llmContent in a single functionResponse', () => {
+      expect(
+        convertToFunctionResponse('tool', 'call-4', 'simple output'),
+      ).toEqual([
+        {
+          functionResponse: {
+            id: 'call-4',
+            name: 'tool',
+            response: { output: 'simple output' },
+          },
+        },
+      ]);
+    });
+
+    it('aggregates text parts with newlines into one functionResponse output', () => {
+      expect(
+        convertToFunctionResponse('tool', 'call-5', [
+          { text: 'line 1' },
+          { text: 'line 2' },
+        ]),
+      ).toEqual([
+        {
+          functionResponse: {
+            id: 'call-5',
+            name: 'tool',
+            response: { output: 'line 1\nline 2' },
+          },
+        },
+      ]);
+    });
+
+    it('passes through functionResponse content using the current call id and tool name', () => {
+      const originalResponse = {
+        output: 'existing output',
+        extra: { nested: true },
+      };
+
+      expect(
+        convertToFunctionResponse('tool', 'call-6', {
+          functionResponse: {
+            id: 'old-id',
+            name: 'old-name',
+            response: originalResponse,
+          },
+        }),
+      ).toEqual([
+        {
+          functionResponse: {
+            id: 'call-6',
+            name: 'tool',
+            response: originalResponse,
+          },
+        },
+      ]);
+    });
+
+    it('returns binary sibling parts after the generated functionResponse part', () => {
+      const fileDataPart: Part = {
+        fileData: {
+          fileUri: 'gs://bucket/example.txt',
+          mimeType: 'text/plain',
+        },
+      };
+      const inlineDataPart: Part = {
+        inlineData: {
+          data: 'YWJj',
+          mimeType: 'text/plain',
+        },
+      };
+
+      expect(
+        convertToFunctionResponse('tool', 'call-7', [
+          { text: 'summary' },
+          inlineDataPart,
+          fileDataPart,
+        ]),
+      ).toEqual([
+        {
+          functionResponse: {
+            id: 'call-7',
+            name: 'tool',
+            response: { output: 'summary' },
+          },
+        },
+        fileDataPart,
+        inlineDataPart,
+      ]);
+    });
+
+    it('describes binary-only content in the functionResponse while preserving siblings', () => {
+      const inlineDataPart: Part = {
+        inlineData: {
+          data: 'YWJj',
+          mimeType: 'text/plain',
+        },
+      };
+
+      expect(
+        convertToFunctionResponse('tool', 'call-8', [inlineDataPart]),
+      ).toEqual([
+        {
+          functionResponse: {
+            id: 'call-8',
+            name: 'tool',
+            response: { output: 'Binary content provided (1 item(s)).' },
+          },
+        },
+        inlineDataPart,
+      ]);
+    });
+
+    it('limits oversized string content before wrapping it in a functionResponse', () => {
+      const oversizedText = Array.from(
+        { length: 200 },
+        (_, index) => `word${index}`,
+      ).join(' ');
+
+      const converted = convertToFunctionResponse(
+        'read_file',
+        'call-9',
+        oversizedText,
+        configWithTruncation,
+      );
+
+      expect(converted).toEqual([
+        {
+          functionResponse: {
+            id: 'call-9',
+            name: 'read_file',
+            response: {
+              output: expect.stringContaining(
+                'read_file output exceeded token limit',
+              ),
+            },
+          },
+        },
+      ]);
     });
   });
 });

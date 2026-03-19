@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, type MockInstance, type Mock } from 'vitest';
+
 import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';

@@ -18,6 +18,8 @@ import type {
   ToolRegistryView,
   ReadonlySettingsSnapshot,
 } from './AgentRuntimeContext.js';
+import { getTestRuntimeMessageBus } from '../test-utils/config.js';
+
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { SettingsService } from '../settings/SettingsService.js';
@@ -231,7 +233,7 @@ describe('AgentRuntimeLoader', () => {
   });
 
   it('filters tool registry view using allowed/disabled lists from settings snapshot', async () => {
-    const registry = new ToolRegistry(config);
+    const registry = new ToolRegistry(config, getTestRuntimeMessageBus(config));
     registry.registerTool(
       new MockTool('alpha', 'alpha', 'Alpha tool for testing.'),
     );

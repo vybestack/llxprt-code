@@ -26,6 +26,22 @@ export function disableKittyKeyboardProtocol() {
   writeToStdout('\x1b[<u');
 }
 
+export function enableModifyOtherKeys(): void {
+  writeToStdout('\x1b[>4;2m');
+}
+
+export function disableModifyOtherKeys(): void {
+  writeToStdout('\x1b[>4;0m');
+}
+
+export function enableBracketedPasteMode(): void {
+  writeToStdout('\x1b[?2004h');
+}
+
+export function disableBracketedPasteMode(): void {
+  writeToStdout('\x1b[?2004l');
+}
+
 export function enableLineWrapping() {
   writeToStdout('\x1b[?7h');
 }

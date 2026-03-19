@@ -10,7 +10,19 @@ import {
   ToolCallConfirmationDetails,
   ToolResultDisplay,
   type ThinkingBlock,
+  type SkillDefinition,
 } from '@vybestack/llxprt-code-core';
+
+export type { SkillDefinition };
+
+// ActiveHook interface for hook display
+export interface ActiveHook {
+  name?: string;
+  eventName?: string;
+  correlationId?: string;
+  index?: number;
+  total?: number;
+}
 
 // Only defining the state enum needed by the UI
 export enum StreamingState {
@@ -235,6 +247,12 @@ export type HistoryItemProfileChange = HistoryItemBase & {
   profileName: string;
 };
 
+export type HistoryItemSkillsList = HistoryItemBase & {
+  type: 'skills_list';
+  skills: SkillDefinition[];
+  showDescriptions?: boolean;
+};
+
 // Union type for all history item types
 export type HistoryItemWithoutId =
   | HistoryItemUser
@@ -260,7 +278,8 @@ export type HistoryItemWithoutId =
   | HistoryItemToolsList
   | HistoryItemMcpStatus
   | HistoryItemChatList
-  | HistoryItemProfileChange;
+  | HistoryItemProfileChange
+  | HistoryItemSkillsList;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
 
@@ -287,6 +306,7 @@ export enum MessageType {
   CHAT_LIST = 'chat_list',
   HOOKS_LIST = 'hooks_list',
   PROFILE_CHANGE = 'profile_change',
+  SKILLS_LIST = 'skills_list',
 }
 
 // Simplified message structure for internal feedback

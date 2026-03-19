@@ -185,6 +185,7 @@ export default tseslint.config(
       'one-var': ['error', 'never'],
       'prefer-arrow-callback': 'error',
       'prefer-const': ['error', { destructuring: 'all' }],
+      'no-console': 'error',
       radix: 'error',
       'default-case': 'error',
       '@typescript-eslint/await-thenable': ['error'],
@@ -231,6 +232,23 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  // Debug infrastructure files ARE the logger — they must use console directly
+  {
+    files: ['packages/core/src/debug/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  // CLI extension commands produce user-facing stdout/stderr output
+  {
+    files: [
+      'packages/cli/src/commands/extensions/*.ts',
+      'packages/cli/src/config/extension.ts',
+    ],
+    rules: {
+      'no-console': 'off',
     },
   },
   // Vitest test configuration

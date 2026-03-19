@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC

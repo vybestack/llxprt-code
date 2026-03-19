@@ -57,10 +57,24 @@ export const clearCommand: SlashCommand = {
       // Trigger SessionStart hook after clearing (fail-open)
       if (context.services.config) {
         try {
-          await triggerSessionStartHook(
+          const sessionStartOutput = await triggerSessionStartHook(
             context.services.config,
             SessionStartSource.Clear,
           );
+
+          // Display system message if provided
+          if (sessionStartOutput?.systemMessage) {
+            context.ui.addItem(
+              {
+                type: 'info',
+                text: sessionStartOutput.systemMessage,
+              },
+              Date.now(),
+            );
+          }
+
+          // Note: Additional context is NOT injected after clear - clear means fresh start
+          // Only the system message is displayed
         } catch {
           // Hooks are fail-open - continue even if hook fails
         }

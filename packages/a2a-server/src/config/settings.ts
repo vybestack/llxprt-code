@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   LLXPRT_CONFIG_DIR,
@@ -98,10 +99,10 @@ export function loadSettings(workspaceDir: string): Settings {
   }
 
   if (settingsErrors.length > 0) {
-    console.error('Errors loading settings:');
+    debugLogger.error('Errors loading settings:');
     for (const error of settingsErrors) {
-      console.error(`  Path: ${error.path}`);
-      console.error(`  Message: ${error.message}`);
+      debugLogger.error(`  Path: ${error.path}`);
+      debugLogger.error(`  Message: ${error.message}`);
     }
   }
 

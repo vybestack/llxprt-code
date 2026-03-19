@@ -14,6 +14,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { Config } from '../config/config.js';
 import { BaseToolInvocation } from './tools.js';
@@ -91,8 +92,9 @@ export class CodeSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: CodeSearchToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<CodeSearchToolParams, ToolResult> {
-    return new CodeSearchToolInvocation(this.config, params);
+    return new CodeSearchToolInvocation(this.config, params, messageBus);
   }
 }
 
@@ -103,8 +105,9 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: CodeSearchToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {

@@ -27,6 +27,7 @@ import { loadExtensions } from '../config/extension.js';
 import { commandRegistry } from '../commands/command-registry.js';
 import type { Command, CommandArgument } from '../commands/types.js';
 import type { GitService } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 type CommandResponse = {
   name: string;
@@ -240,7 +241,7 @@ export async function createApp() {
         ): CommandResponse | undefined => {
           const commandName = command.name;
           if (visited.includes(commandName)) {
-            console.warn(
+            debugLogger.warn(
               `Command ${commandName} already inserted in the response, skipping`,
             );
             return undefined;

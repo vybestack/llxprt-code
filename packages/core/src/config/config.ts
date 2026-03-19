@@ -20,6 +20,8 @@ import { GrepTool } from '../tools/grep.js';
 import { RipGrepTool } from '../tools/ripGrep.js';
 import { GlobTool } from '../tools/glob.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { debugLogger } from '../utils/debugLogger.js';
+
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { ASTEditTool } from '../tools/ast-edit.js';
@@ -45,7 +47,9 @@ import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 import { CodeSearchTool } from '../tools/codesearch.js';
+
 import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
+import { ActivateSkillTool } from '../tools/activate-skill.js';
 
 import { TaskTool } from '../tools/task.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
@@ -97,12 +101,7 @@ import type {
 } from '@google/genai';
 import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
-import {
-  createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
+import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import {
   type FileSystemService,
   StandardFileSystemService,
@@ -117,7 +116,7 @@ import {
 } from './schedulerSingleton.js';
 
 // Re-export OAuth config type
-export type { MCPOAuthConfig, AnyToolInvocation };
+export type { MCPOAuthConfig, AnyToolInvocation, SkillDefinition };
 import type { AnyToolInvocation } from '../tools/tools.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from './storage.js';
@@ -133,6 +132,8 @@ import {
   SimpleExtensionLoader,
 } from '../utils/extensionLoader.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
+import { SkillManager, type SkillDefinition } from '../skills/skillManager.js';
+import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
@@ -185,6 +186,22 @@ export interface ComplexityAnalyzerSettings {
   suggestionCooldownMs?: number;
 }
 
+export interface OutputSettings {
+  format?: OutputFormat;
+}
+
+export interface CodebaseInvestigatorSettings {
+  enabled?: boolean;
+  maxNumTurns?: number;
+  maxTimeMinutes?: number;
+  thinkingBudget?: number;
+  model?: string;
+}
+
+export interface IntrospectionAgentSettings {
+  enabled?: boolean;
+}
+
 export interface TelemetrySettings {
   enabled?: boolean;
   target?: TelemetryTarget;
@@ -232,6 +249,9 @@ export interface GeminiCLIExtension {
   contextFiles: string[];
   excludeTools?: string[];
   hooks?: { [K in HookEventName]?: HookDefinition[] };
+  skills?: SkillDefinition[];
+  settings?: Array<Record<string, unknown>>;
+  resolvedSettings?: Array<Record<string, unknown>>;
 }
 
 export interface ExtensionInstallMetadata {
@@ -499,6 +519,20 @@ export interface ConfigParameters {
   hooks?: {
     [K in HookEventName]?: HookDefinition[];
   };
+  projectHooks?: {
+    [K in HookEventName]?: HookDefinition[];
+  };
+  disabledHooks?: string[];
+  skills?: SkillDefinition[];
+  skillsSupport?: boolean;
+  disabledSkills?: string[];
+  sanitizationConfig?: EnvironmentSanitizationConfig;
+  onReload?: () => Promise<{ disabledSkills?: string[] }>;
+  outputSettings?: OutputSettings;
+  codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
+  introspectionAgentSettings?: IntrospectionAgentSettings;
+  useWriteTodos?: boolean;
+
   jitContextEnabled?: boolean;
 }
 
@@ -697,8 +731,8 @@ export class Config {
   readonly storage: Storage;
   private readonly fileExclusions: FileExclusions;
   private readonly eventEmitter?: EventEmitter;
-  private readonly messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
+
   truncateToolOutputThreshold: number;
   truncateToolOutputLines: number;
   enableToolOutputTruncation: boolean;
@@ -711,6 +745,21 @@ export class Config {
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
   private disabledHooks: string[] = [];
+  private readonly projectHooks:
+    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
+    | undefined;
+  private skillManager!: SkillManager;
+  private readonly skillsSupport: boolean;
+  private disabledSkills: string[];
+  private readonly sanitizationConfig?: EnvironmentSanitizationConfig;
+  private readonly _onReload:
+    | (() => Promise<{ disabledSkills?: string[] }>)
+    | undefined;
+  private readonly outputSettings: OutputSettings;
+  private readonly codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
+  private readonly introspectionAgentSettings: IntrospectionAgentSettings;
+  private readonly useWriteTodos: boolean;
+
   /**
    * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
    * @requirement:HOOK-001,HOOK-002
@@ -731,29 +780,7 @@ export class Config {
     } else if (existingContext?.settingsService) {
       this.settingsService = existingContext.settingsService;
     } else {
-      this.settingsService = getActiveProviderRuntimeContext().settingsService;
-    }
-
-    const currentContext = peekActiveProviderRuntimeContext();
-    if (!currentContext) {
-      setActiveProviderRuntimeContext(
-        createProviderRuntimeContext({
-          settingsService: this.settingsService,
-          config: this,
-          runtimeId: providedSettingsService
-            ? 'injected-config'
-            : 'legacy-config',
-          metadata: { source: 'ConfigConstructor' },
-        }),
-      );
-    } else if (
-      currentContext.settingsService === this.settingsService &&
-      currentContext.config !== this
-    ) {
-      setActiveProviderRuntimeContext({
-        ...currentContext,
-        config: this,
-      });
+      this.settingsService = new SettingsService();
     }
 
     this.sessionId = params.sessionId;
@@ -890,17 +917,34 @@ export class Config {
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
     this.eventEmitter = params.eventEmitter;
 
-    // Initialize policy engine and message bus
+    /**
+     * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+     * @requirement REQ-D01-002
+     * @requirement REQ-D01-003
+     * @pseudocode lines 122-133
+     */
     this.policyEngine = new PolicyEngine(params.policyEngineConfig);
-    this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
-
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
     this.jitContextEnabled = params.jitContextEnabled ?? true;
-
-    // MessageBus is always enabled; constructed unconditionally above.
     this.hooks = params.hooks;
+    this.projectHooks = params.projectHooks;
+    this.skillManager = new SkillManager();
+    this.skillsSupport = params.skillsSupport ?? false;
+    this.disabledSkills = params.disabledSkills ?? [];
+    this.sanitizationConfig = params.sanitizationConfig;
+    this._onReload = params.onReload;
+    this.outputSettings = params.outputSettings ?? {
+      format: OutputFormat.TEXT,
+    };
+    this.codebaseInvestigatorSettings = params.codebaseInvestigatorSettings ?? {
+      enabled: false,
+    };
+    this.introspectionAgentSettings = params.introspectionAgentSettings ?? {
+      enabled: false,
+    };
+    this.useWriteTodos = params.useWriteTodos ?? true;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -910,18 +954,18 @@ export class Config {
     const isTestEnvironment =
       process.env.NODE_ENV === 'test' || process.env.VITEST;
     if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
-      console.log(
+      debugLogger.log(
         `[CONFIG] Telemetry settings:`,
         JSON.stringify(this.telemetrySettings),
       );
     }
     if (this.telemetrySettings.enabled) {
       if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
-        console.log(`[CONFIG] Initializing telemetry`);
+        debugLogger.log(`[CONFIG] Initializing telemetry`);
       }
       initializeTelemetry(this);
     } else if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
-      console.log(`[CONFIG] Telemetry disabled`);
+      debugLogger.log(`[CONFIG] Telemetry disabled`);
     }
 
     // Set up proxy with error handling
@@ -944,9 +988,15 @@ export class Config {
   /**
    * Must only be called once, throws if called again.
    */
-  async initialize(): Promise<void> {
+  async initialize(dependencies?: { messageBus?: MessageBus }): Promise<void> {
     if (this.initialized) {
       throw Error('Config was already initialized');
+    }
+    const initializationMessageBus = dependencies?.messageBus;
+    if (!initializationMessageBus) {
+      throw new Error(
+        'Config.initialize requires an explicit session/runtime MessageBus dependency.',
+      );
     }
     this.initialized = true;
     this.ideClient = await IdeClient.getInstance();
@@ -957,7 +1007,7 @@ export class Config {
     }
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
-    this.toolRegistry = await this.createToolRegistry();
+    this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
       this.toolRegistry,
       this,
@@ -987,7 +1037,7 @@ export class Config {
         if (!this.lspServiceClient.isAlive()) {
           const reason = this.lspServiceClient.getUnavailableReason();
           if (reason?.includes('not found')) {
-            console.error(
+            debugLogger.error(
               'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
             );
           }
@@ -1033,6 +1083,22 @@ export class Config {
         // LSP startup failure is non-fatal (REQ-GRACE-050)
         // Service remains undefined, tools will not use it
         this.lspServiceClient = undefined;
+      }
+    }
+
+    // Discover skills if enabled
+    if (this.skillsSupport) {
+      await this.getSkillManager().discoverSkills(
+        this.storage,
+        this.getExtensions(),
+      );
+      this.getSkillManager().setDisabledSkills(this.disabledSkills);
+
+      // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
+      if (this.getSkillManager().getSkills().length > 0) {
+        this.getToolRegistry().registerTool(
+          new ActivateSkillTool(this, initializationMessageBus),
+        );
       }
     }
 
@@ -1322,6 +1388,21 @@ export class Config {
     return this.resourceRegistry;
   }
 
+  getSkillManager(): SkillManager {
+    return this.skillManager;
+  }
+
+  async reloadSkills(): Promise<void> {
+    if (this._onReload) {
+      const result = await this._onReload();
+      if (result.disabledSkills) {
+        this.disabledSkills = result.disabledSkills;
+      }
+    }
+    await this.skillManager.discoverSkills(this.storage, this.getExtensions());
+    this.skillManager.setDisabledSkills(this.disabledSkills);
+  }
+
   getDebugMode(): boolean {
     return this.debugMode;
   }
@@ -1449,9 +1530,16 @@ export class Config {
 
   getLlxprtMdFileCount(): number {
     if (this.getJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getLoadedPaths().size;
+      return this.contextManager.getContextFileCount();
     }
     return this.llxprtMdFileCount;
+  }
+
+  getCoreMemoryFileCount(): number {
+    if (this.getJitContextEnabled() && this.contextManager) {
+      return this.contextManager.getCoreMemoryFileCount();
+    }
+    return 0;
   }
 
   setLlxprtMdFileCount(count: number): void {
@@ -1479,6 +1567,7 @@ export class Config {
         'Cannot enable privileged approval modes in an untrusted folder.',
       );
     }
+
     this.approvalMode = mode;
   }
 
@@ -1490,24 +1579,20 @@ export class Config {
     return this.contextManager;
   }
 
-  getMessageBus(): MessageBus {
-    return this.messageBus;
+  getAccessibility(): AccessibilitySettings {
+    return this.accessibility;
   }
 
   getPolicyEngine(): PolicyEngine {
     return this.policyEngine;
   }
 
-  isYoloModeDisabled(): boolean {
-    return this.disableYoloMode || !this.isTrustedFolder();
-  }
-
   getShowMemoryUsage(): boolean {
     return this.showMemoryUsage;
   }
 
-  getAccessibility(): AccessibilitySettings {
-    return this.accessibility;
+  getDisableYoloMode(): boolean {
+    return this.disableYoloMode;
   }
 
   getTelemetryEnabled(): boolean {
@@ -1532,8 +1617,8 @@ export class Config {
 
   // Conversation logging configuration methods
   getConversationLoggingEnabled(): boolean {
-    // Check CLI flags first - placeholder for future CLI implementation
-    // For now, check environment variables and settings file
+    // Check CLI flags first when conversation logging flags are introduced.
+    // Today this reads environment variables and the settings file.
 
     // Check environment variables
     const envVar = process.env.LLXPRT_LOG_CONVERSATIONS;
@@ -1671,17 +1756,10 @@ export class Config {
 
   /**
    * Gets custom file exclusion patterns from configuration.
-   * TODO: This is a placeholder implementation. In the future, this could
-   * read from settings files, CLI arguments, or environment variables.
    */
   getCustomExcludes(): string[] {
-    // Placeholder implementation - returns empty array for now
-    // Future implementation could read from:
-    // - User settings file
-    // - Project-specific configuration
-    // - Environment variables
-    // - CLI arguments
-    return [];
+    const customExcludes: string[] = [];
+    return customExcludes;
   }
 
   getCheckpointingEnabled(): boolean {
@@ -1888,26 +1966,28 @@ export class Config {
         }
         return normalized;
       }
-      return undefined;
+      const invalidNumberSetting = undefined;
+      return invalidNumberSetting;
     }
     return rawValue;
   }
 
   private normalizeContextLimit(value: unknown): number | undefined {
+    const invalidContextLimit = undefined;
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
       return Math.floor(value);
     }
     if (typeof value === 'string') {
       const trimmed = value.trim();
       if (trimmed === '') {
-        return undefined;
+        return invalidContextLimit;
       }
       const parsed = Number(trimmed);
       if (Number.isFinite(parsed) && parsed > 0) {
         return Math.floor(parsed);
       }
     }
-    return undefined;
+    return invalidContextLimit;
   }
 
   setEphemeralSetting(key: string, value: unknown): void {
@@ -2185,7 +2265,10 @@ export class Config {
     return result.files
       .map((f) => {
         const trimmed = f.content.trim();
-        if (!trimmed) return null;
+        if (!trimmed) {
+          const emptyContext = null;
+          return emptyContext;
+        }
         return `--- JIT Context from: ${f.path} ---
 ${trimmed}
 --- End of JIT Context from: ${f.path} ---`;
@@ -2288,9 +2371,11 @@ ${trimmed}
       const memoryContent = this.getUserMemory();
       const fileCount = this.getLlxprtMdFileCount();
       const filePaths = this.getLlxprtMdFilePaths();
+      const coreMemoryFileCount = this.getCoreMemoryFileCount();
 
       coreEvents.emit(CoreEvent.MemoryChanged, {
         fileCount,
+        coreMemoryFileCount,
       });
 
       return { memoryContent, fileCount, filePaths };
@@ -2319,8 +2404,22 @@ ${trimmed}
     return { memoryContent, fileCount, filePaths };
   }
 
-  async createToolRegistry(): Promise<ToolRegistry> {
-    const registry = new ToolRegistry(this);
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P09
+   * @requirement REQ-D01-002.1
+   * @requirement REQ-D01-002.2
+   * @requirement REQ-D01-002.3
+   * @pseudocode lines 103-111
+   */
+
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  async createToolRegistry(messageBus: MessageBus): Promise<ToolRegistry> {
+    const registry = new ToolRegistry(this, messageBus);
 
     const baseCoreTools = this.getCoreTools();
     const effectiveCoreTools =
@@ -2526,12 +2625,31 @@ ${trimmed}
     };
   }
 
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
+   * @requirement REQ-D01-001.1
+   * @requirement REQ-D01-001.2
+   * @pseudocode lines 56-72
+   */
   async getOrCreateScheduler(
     sessionId: string,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
+    dependencies?: {
+      messageBus?: MessageBus;
+      toolRegistry?: ToolRegistry;
+    },
   ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
-    return _getOrCreateScheduler(this, sessionId, callbacks, options);
+    const schedulerMessageBus = dependencies?.messageBus;
+    if (!schedulerMessageBus) {
+      throw new Error(
+        'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
+      );
+    }
+    return _getOrCreateScheduler(this, sessionId, callbacks, options, {
+      messageBus: schedulerMessageBus,
+      toolRegistry: dependencies?.toolRegistry ?? this.getToolRegistry(),
+    });
   }
 
   disposeScheduler(sessionId: string): void {
@@ -2584,9 +2702,10 @@ ${trimmed}
    * @requirement:HOOK-010 - Zero CPU/memory overhead when hooks are disabled
    */
   getHookSystem(): HookSystem | undefined {
-    // @requirement:HOOK-002 - Return undefined when hooks disabled
+    // @requirement:HOOK-002 - Return no hook system when hooks are disabled.
     if (!this.enableHooks) {
-      return undefined;
+      const disabledHookSystem = undefined;
+      return disabledHookSystem;
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access
@@ -2603,6 +2722,57 @@ ${trimmed}
    */
   getEnableInteractiveShell(): boolean {
     return this.shouldUseNodePtyShell;
+  }
+
+  /**
+   * Get project hooks configuration
+   */
+  getProjectHooks():
+    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
+    | undefined {
+    return this.projectHooks;
+  }
+
+  /**
+   * Get output settings
+   */
+  getOutputSettings(): OutputSettings {
+    return this.outputSettings;
+  }
+
+  /**
+   * Get codebase investigator settings
+   */
+  getCodebaseInvestigatorSettings(): CodebaseInvestigatorSettings {
+    return this.codebaseInvestigatorSettings;
+  }
+
+  /**
+   * Get introspection agent settings
+   */
+  getIntrospectionAgentSettings(): IntrospectionAgentSettings {
+    return this.introspectionAgentSettings;
+  }
+
+  /**
+   * Checks whether the WriteTodos tool is enabled.
+   */
+  getUseWriteTodos(): boolean {
+    return this.useWriteTodos;
+  }
+
+  /**
+   * Check if skills support is enabled
+   */
+  isSkillsSupportEnabled(): boolean {
+    return this.skillsSupport;
+  }
+
+  /**
+   * Get the sanitization config
+   */
+  getSanitizationConfig(): EnvironmentSanitizationConfig | undefined {
+    return this.sanitizationConfig;
   }
 
   /**

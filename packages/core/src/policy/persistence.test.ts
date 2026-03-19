@@ -20,6 +20,7 @@ import { PolicyEngine } from './policy-engine.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '../config/storage.js';
+import * as debugLoggerModule from '../utils/debugLogger.js';
 
 vi.mock('node:fs/promises');
 vi.mock('../config/storage.js');
@@ -323,8 +324,8 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       (fs.writeFile as unknown as Mock).mockResolvedValue(undefined);
       (fs.rename as unknown as Mock).mockResolvedValue(undefined);
 
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
+      const debugWarnSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'warn')
         .mockImplementation(() => {});
 
       messageBus.publish({
@@ -336,7 +337,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Should warn about corrupt file
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect(debugWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse'),
         expect.anything(),
       );
@@ -348,7 +349,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
         'utf-8',
       );
 
-      consoleWarnSpy.mockRestore();
+      debugWarnSpy.mockRestore();
     });
 
     it('should create new file when none exists (no error)', async () => {

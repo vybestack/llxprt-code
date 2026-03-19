@@ -25,6 +25,7 @@ import {
   SecureStoreError,
   type KeyringAdapter,
 } from '../storage/secure-store.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -238,7 +239,7 @@ export class ToolKeyStorage {
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') return null;
-      console.warn('Encrypted key file corrupt for', toolName);
+      debugLogger.warn('Encrypted key file corrupt for', toolName);
       return null;
     }
   }
@@ -270,7 +271,7 @@ export class ToolKeyStorage {
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code === 'ENOENT') return {};
-      console.warn('Failed to parse keyfiles.json:', error);
+      debugLogger.warn('Failed to parse keyfiles.json:', error);
       return {};
     }
   }
@@ -307,14 +308,14 @@ export class ToolKeyStorage {
       const content = await fs.readFile(filePath, 'utf-8');
       const trimmed = content.trim();
       if (trimmed === '') {
-        console.warn('Keyfile is empty:', filePath);
+        debugLogger.warn('Keyfile is empty:', filePath);
         return null;
       }
       const firstLine = trimmed.split('\n')[0].trim();
       return firstLine;
     } catch (error) {
       const err = error as Error;
-      console.warn('Failed to read keyfile:', filePath, err.message);
+      debugLogger.warn('Failed to read keyfile:', filePath, err.message);
       return null;
     }
   }

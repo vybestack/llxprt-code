@@ -6,6 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { UserAccountManager } from './userAccountManager.js';
+import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
@@ -99,13 +100,13 @@ describe('UserAccountManager', () => {
     it('should handle corrupted JSON by starting fresh', async () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), 'not valid json');
-      const consoleLogSpy = vi
-        .spyOn(console, 'log')
+      const debugLogSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'log')
         .mockImplementation(() => {});
 
       await userAccountManager.cacheGoogleAccount('test1@google.com');
 
-      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(debugLogSpy).toHaveBeenCalled();
       expect(JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'))).toEqual({
         active: 'test1@google.com',
         old: [],
@@ -118,13 +119,13 @@ describe('UserAccountManager', () => {
         accountsFile(),
         JSON.stringify({ active: 'test1@google.com', old: 'not-an-array' }),
       );
-      const consoleLogSpy = vi
-        .spyOn(console, 'log')
+      const debugLogSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'log')
         .mockImplementation(() => {});
 
       await userAccountManager.cacheGoogleAccount('test2@google.com');
 
-      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(debugLogSpy).toHaveBeenCalled();
       expect(JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'))).toEqual({
         active: 'test2@google.com',
         old: [],
@@ -158,14 +159,14 @@ describe('UserAccountManager', () => {
     it('should return null and log if file is corrupted', () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), '{ "active": "test@google.com"'); // Invalid JSON
-      const consoleLogSpy = vi
-        .spyOn(console, 'log')
+      const debugLogSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'log')
         .mockImplementation(() => {});
 
       const account = userAccountManager.getCachedGoogleAccount();
 
       expect(account).toBeNull();
-      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(debugLogSpy).toHaveBeenCalled();
     });
 
     it('should return null if active key is missing', () => {
@@ -207,13 +208,13 @@ describe('UserAccountManager', () => {
     it('should handle corrupted JSON by creating a fresh file', async () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), 'not valid json');
-      const consoleLogSpy = vi
-        .spyOn(console, 'log')
+      const debugLogSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'log')
         .mockImplementation(() => {});
 
       await userAccountManager.clearCachedGoogleAccount();
 
-      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(debugLogSpy).toHaveBeenCalled();
       const stored = JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'));
       expect(stored.active).toBeNull();
       expect(stored.old).toEqual([]);
@@ -269,12 +270,12 @@ describe('UserAccountManager', () => {
     it('should return 0 if the file is corrupted', () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), 'invalid json');
-      const consoleDebugSpy = vi
-        .spyOn(console, 'log')
+      const debugLogSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'log')
         .mockImplementation(() => {});
 
       expect(userAccountManager.getLifetimeGoogleAccounts()).toBe(0);
-      expect(consoleDebugSpy).toHaveBeenCalled();
+      expect(debugLogSpy).toHaveBeenCalled();
     });
 
     it('should return 1 if there is only an active account', () => {
@@ -316,12 +317,12 @@ describe('UserAccountManager', () => {
         accountsFile(),
         JSON.stringify({ active: null, old: 1 }),
       );
-      const consoleLogSpy = vi
-        .spyOn(console, 'log')
+      const debugLogSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'log')
         .mockImplementation(() => {});
 
       expect(userAccountManager.getLifetimeGoogleAccounts()).toBe(0);
-      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(debugLogSpy).toHaveBeenCalled();
     });
 
     it('should not double count if active account is also in old list', () => {

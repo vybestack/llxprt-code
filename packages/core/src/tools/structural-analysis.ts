@@ -69,8 +69,9 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: StructuralAnalysisParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -1264,7 +1265,7 @@ export class StructuralAnalysisTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       StructuralAnalysisTool.Name,
@@ -1321,8 +1322,8 @@ export class StructuralAnalysisTool extends BaseDeclarativeTool<
 
   protected override createInvocation(
     params: StructuralAnalysisParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<StructuralAnalysisParams, ToolResult> {
-    return new StructuralAnalysisInvocation(this.config, params);
+    return new StructuralAnalysisInvocation(this.config, params, messageBus);
   }
 }

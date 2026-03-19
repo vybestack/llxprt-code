@@ -147,6 +147,8 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
   >,
 };
 
+const GEMINI_MODEL_ALIAS_AUTO = 'auto';
+
 /**
  * The canonical schema for all settings.
  * The structure of this object defines the structure of the `Settings` type.
@@ -522,7 +524,7 @@ export const SETTINGS_SCHEMA = {
         requiresRestart: false,
         default: false,
         description:
-          'Show Gemini CLI status and thoughts in the terminal window title',
+          'Show LLxprt Code status and thoughts in the terminal window title',
         showInDialog: true,
       },
       hideTips: {
@@ -1080,12 +1082,12 @@ export const SETTINGS_SCHEMA = {
       },
       enableHooks: {
         type: 'boolean',
-        label: 'Enable Hooks System',
+        label: 'Enable Hooks System (Experimental)',
         category: 'Advanced',
         requiresRestart: true,
-        default: false,
+        default: true,
         description:
-          'Enable the hooks system for intercepting and customizing LLxprt CLI behavior. When enabled, hooks configured in settings will execute at appropriate lifecycle events (BeforeTool, AfterTool, BeforeModel, etc.). Requires MessageBus integration.',
+          'Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.',
         showInDialog: false,
       },
     },
@@ -1247,6 +1249,50 @@ export const SETTINGS_SCHEMA = {
           },
         },
       },
+      environmentVariableRedaction: {
+        type: 'object',
+        label: 'Environment Variable Redaction',
+        category: 'Security',
+        requiresRestart: false,
+        default: {},
+        description:
+          'Configure environment variable sanitization for shell commands, hooks, and MCP servers.',
+        showInDialog: false,
+        properties: {
+          allowed: {
+            type: 'array',
+            label: 'Allowed Variables',
+            category: 'Security',
+            requiresRestart: false,
+            default: [],
+            items: { type: 'string' },
+            description:
+              'Environment variables to allow in addition to the default allowlist.',
+            showInDialog: true,
+          },
+          blocked: {
+            type: 'array',
+            label: 'Blocked Variables',
+            category: 'Security',
+            requiresRestart: false,
+            default: [],
+            items: { type: 'string' },
+            description:
+              'Environment variables to block in addition to the default blocklist.',
+            showInDialog: true,
+          },
+          enabled: {
+            type: 'boolean',
+            label: 'Enable Redaction',
+            category: 'Security',
+            requiresRestart: false,
+            default: false,
+            description:
+              'Enable environment variable redaction (disabled by default).',
+            showInDialog: true,
+          },
+        },
+      },
     },
   },
 
@@ -1361,6 +1407,95 @@ export const SETTINGS_SCHEMA = {
         description:
           'Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.',
         showInDialog: false,
+      },
+      skills: {
+        type: 'boolean',
+        label: 'Agent Skills',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: false,
+        description: 'Enable Agent Skills (experimental).',
+        showInDialog: true,
+      },
+      codebaseInvestigatorSettings: {
+        type: 'object',
+        label: 'Codebase Investigator Settings',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: {},
+        description: 'Configuration for Codebase Investigator.',
+        showInDialog: false,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'Enable Codebase Investigator',
+            category: 'Experimental',
+            requiresRestart: true,
+            default: true,
+            description: 'Enable the Codebase Investigator agent.',
+            showInDialog: true,
+          },
+          maxNumTurns: {
+            type: 'number',
+            label: 'Codebase Investigator Max Num Turns',
+            category: 'Experimental',
+            requiresRestart: true,
+            default: 10,
+            description:
+              'Maximum number of turns for the Codebase Investigator agent.',
+            showInDialog: true,
+          },
+          maxTimeMinutes: {
+            type: 'number',
+            label: 'Max Time (Minutes)',
+            category: 'Experimental',
+            requiresRestart: true,
+            default: 3,
+            description:
+              'Maximum time for the Codebase Investigator agent (in minutes).',
+            showInDialog: false,
+          },
+          thinkingBudget: {
+            type: 'number',
+            label: 'Thinking Budget',
+            category: 'Experimental',
+            requiresRestart: true,
+            default: 8192,
+            description:
+              'The thinking budget for the Codebase Investigator agent.',
+            showInDialog: false,
+          },
+          model: {
+            type: 'string',
+            label: 'Model',
+            category: 'Experimental',
+            requiresRestart: true,
+            default: GEMINI_MODEL_ALIAS_AUTO,
+            description:
+              'The model to use for the Codebase Investigator agent.',
+            showInDialog: false,
+          },
+        },
+      },
+      introspectionAgentSettings: {
+        type: 'object',
+        label: 'Introspection Agent Settings',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: {},
+        description: 'Configuration for Introspection Agent.',
+        showInDialog: false,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'Enable Introspection Agent',
+            category: 'Experimental',
+            requiresRestart: true,
+            default: false,
+            description: 'Enable the Introspection Agent.',
+            showInDialog: true,
+          },
+        },
       },
     },
   },
@@ -1657,19 +1792,63 @@ export const SETTINGS_SCHEMA = {
     ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
   },
 
+  skills: {
+    type: 'object',
+    label: 'Skills',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: {},
+    description: 'Settings for agent skills.',
+    showInDialog: false,
+    properties: {
+      disabled: {
+        type: 'array',
+        label: 'Disabled Skills',
+        category: 'Advanced',
+        requiresRestart: true,
+        default: [] as string[],
+        description: 'List of disabled skills.',
+        showInDialog: false,
+        items: { type: 'string' },
+        mergeStrategy: MergeStrategy.UNION,
+      },
+    },
+  },
+
   hooks: {
     type: 'object',
     label: 'Hooks',
     category: 'Advanced',
     requiresRestart: false,
-    default: {} as
-      | { [K in HookEventName]?: HookDefinition[] }
-      | { disabled?: string[] },
+    default: {} as { [K in HookEventName]?: HookDefinition[] } & {
+      enabled?: boolean;
+      disabled?: string[];
+      notifications?: boolean;
+    },
     description:
       'Hook configurations for intercepting and customizing agent behavior.',
     showInDialog: false,
     mergeStrategy: MergeStrategy.SHALLOW_MERGE,
     properties: {
+      enabled: {
+        type: 'boolean',
+        label: 'Enable Hooks',
+        category: 'Advanced',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Canonical toggle for the hooks system. When disabled, no hooks will be executed.',
+        showInDialog: false,
+      },
+      notifications: {
+        type: 'boolean',
+        label: 'Hook Notifications',
+        default: true,
+        category: 'Advanced',
+        description: 'Show visual indicators when hooks are executing.',
+        showInDialog: false,
+        requiresRestart: false,
+      },
       disabled: {
         type: 'array',
         label: 'Disabled Hooks',
@@ -1678,6 +1857,73 @@ export const SETTINGS_SCHEMA = {
         default: [] as string[],
         description: 'List of hook names to disable',
         showInDialog: false,
+      },
+    },
+  },
+  admin: {
+    type: 'object',
+    label: 'Admin',
+    category: 'Admin',
+    requiresRestart: false,
+    default: {},
+    description: 'Settings configured remotely by enterprise admins.',
+    showInDialog: false,
+    mergeStrategy: MergeStrategy.REPLACE,
+    properties: {
+      secureModeEnabled: {
+        type: 'boolean',
+        label: 'Secure Mode Enabled',
+        category: 'Admin',
+        requiresRestart: false,
+        default: false,
+        description: 'If true, disallows YOLO mode from being used.',
+        showInDialog: false,
+        mergeStrategy: MergeStrategy.REPLACE,
+      },
+      extensions: {
+        type: 'object',
+        label: 'Extensions Settings',
+        category: 'Admin',
+        requiresRestart: false,
+        default: {},
+        description: 'Extensions-specific admin settings.',
+        showInDialog: false,
+        mergeStrategy: MergeStrategy.REPLACE,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'Extensions Enabled',
+            category: 'Admin',
+            requiresRestart: false,
+            default: true,
+            description:
+              'If false, disallows extensions from being installed or used. (Not enforced yet)',
+            showInDialog: false,
+            mergeStrategy: MergeStrategy.REPLACE,
+          },
+        },
+      },
+      mcp: {
+        type: 'object',
+        label: 'MCP Settings',
+        category: 'Admin',
+        requiresRestart: false,
+        default: {},
+        description: 'MCP-specific admin settings.',
+        showInDialog: false,
+        mergeStrategy: MergeStrategy.REPLACE,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'MCP Enabled',
+            category: 'Admin',
+            requiresRestart: false,
+            default: true,
+            description: 'If false, disallows MCP servers from being used.',
+            showInDialog: false,
+            mergeStrategy: MergeStrategy.REPLACE,
+          },
+        },
       },
     },
   },
@@ -1717,7 +1963,8 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
       },
       url: {
         type: 'string',
-        description: 'SSE transport URL.',
+        description:
+          'URL for SSE or HTTP transport. Use with "type" field to specify transport type.',
       },
       httpUrl: {
         type: 'string',
@@ -1731,6 +1978,12 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
       tcp: {
         type: 'string',
         description: 'TCP address for websocket transport.',
+      },
+      type: {
+        type: 'string',
+        description:
+          'Transport type. Use "stdio" for local command, "sse" for Server-Sent Events, or "http" for Streamable HTTP.',
+        enum: ['stdio', 'sse', 'http'],
       },
       timeout: {
         type: 'number',
@@ -2011,6 +2264,16 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
 
 export function getSettingsSchema(): SettingsSchemaType {
   return SETTINGS_SCHEMA;
+}
+
+/**
+ * Determines if hooks should be enabled based on both experimental flag and user setting.
+ * Both tools.enableHooks (experimental gate) and hooks.enabled (user toggle) must be true.
+ */
+export function getEnableHooks(settings: Settings): boolean {
+  const experimentalGate = settings.tools?.enableHooks ?? true;
+  const userToggle = settings.hooks?.enabled ?? false;
+  return experimentalGate && userToggle;
 }
 
 type InferSettings<T extends SettingsSchema> = {

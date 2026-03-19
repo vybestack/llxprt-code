@@ -34,6 +34,8 @@ import {
   ToolErrorType,
 } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
+import { getTestRuntimeMessageBus } from '../test-utils/config.js';
+
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
@@ -156,6 +158,10 @@ function createMockExecutionConfig(
         sessionId,
         callbacks,
         schedulerOptions,
+        {
+          messageBus: getTestRuntimeMessageBus(config as Config),
+          toolRegistry,
+        },
       ),
     disposeScheduler: (sessionId) => disposeScheduler(sessionId),
   };
@@ -215,6 +221,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config: schedulerConfig,
+        messageBus: getTestRuntimeMessageBus(schedulerConfig),
+        toolRegistry: schedulerConfig.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -284,6 +292,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config: schedulerConfig,
+        messageBus: getTestRuntimeMessageBus(schedulerConfig),
+        toolRegistry: schedulerConfig.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -350,6 +360,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config: schedulerConfig,
+        messageBus: getTestRuntimeMessageBus(schedulerConfig),
+        toolRegistry: schedulerConfig.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -400,6 +412,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -443,6 +457,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
         },
@@ -490,6 +506,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -534,6 +552,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -578,6 +598,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -678,6 +700,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -738,6 +762,8 @@ describe('Tool Executor Unification - Integration Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config: schedulerConfig,
+        messageBus: getTestRuntimeMessageBus(schedulerConfig),
+        toolRegistry: schedulerConfig.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);

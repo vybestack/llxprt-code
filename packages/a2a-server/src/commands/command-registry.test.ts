@@ -95,7 +95,10 @@ describe('CommandRegistry', () => {
   });
 
   it('register() should not enter an infinite loop with a cyclic command', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Import debugLogger from the same module cache that command-registry will use
+    // (vi.resetModules() in beforeEach clears the cache, so static imports won't match)
+    const { debugLogger } = await import('@vybestack/llxprt-code-core');
+    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     const { commandRegistry } = await import('./command-registry.js');
     const mockCommand: Command = {
       name: 'cyclic-command',

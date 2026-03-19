@@ -8,6 +8,10 @@ import * as fs from 'node:fs';
 import {
   enableKittyKeyboardProtocol,
   disableKittyKeyboardProtocol,
+  enableModifyOtherKeys,
+  disableModifyOtherKeys,
+  enableBracketedPasteMode,
+  disableBracketedPasteMode,
 } from '@vybestack/llxprt-code-core';
 
 export type TerminalBackgroundColor = string | undefined;
@@ -29,6 +33,14 @@ export class TerminalCapabilityManager {
   // Primary Device Attributes: CSI ? ID ; ... c
   // eslint-disable-next-line no-control-regex
   private static readonly DEVICE_ATTRIBUTES_REGEX = /\x1b\[\?(\d+)(;\d+)*c/;
+  // ModifyOtherKeys query and response
+  private static readonly MODIFY_OTHER_KEYS_QUERY = '\x1b[>4;?m';
+  // eslint-disable-next-line no-control-regex
+  private static readonly MODIFY_OTHER_KEYS_REGEX = /\x1b\[>4;(\d+)m/;
+  // Bracketed paste mode query (DECRQM) and response (DECRPM)
+  private static readonly BRACKETED_PASTE_QUERY = '\x1b[?2004$p';
+  // eslint-disable-next-line no-control-regex
+  private static readonly BRACKETED_PASTE_REGEX = /\x1b\[\?2004;([1-4])\$y/;
   // OSC 11 response: OSC 11 ; rgb:rrrr/gggg/bbbb ST (or BEL)
   private static readonly OSC_11_REGEX =
     // eslint-disable-next-line no-control-regex
@@ -37,8 +49,14 @@ export class TerminalCapabilityManager {
   private terminalBackgroundColor: TerminalBackgroundColor;
   private kittySupported = false;
   private kittyEnabled = false;
+  private modifyOtherKeysSupported = false;
+  private modifyOtherKeysEnabled = false;
+  private bracketedPasteSupported = false;
+  private bracketedPasteEnabled = false;
   private detectionComplete = false;
   private terminalName: string | undefined;
+  private cleanupOnExitHandler?: () => void;
+  private disableKittyProtocolOnExitHandler?: () => void;
 
   private constructor() {}
 
@@ -50,6 +68,7 @@ export class TerminalCapabilityManager {
   }
 
   static resetInstanceForTesting(): void {
+    this.instance?.resetForTesting();
     this.instance = undefined;
   }
 
@@ -67,6 +86,18 @@ export class TerminalCapabilityManager {
     }
 
     return new Promise((resolve) => {
+      this.removeProcessListeners();
+
+      const cleanupOnExit = () => {
+        disableKittyKeyboardProtocol();
+        disableModifyOtherKeys();
+        disableBracketedPasteMode();
+      };
+      this.cleanupOnExitHandler = cleanupOnExit;
+      process.on('exit', cleanupOnExit);
+      process.on('SIGTERM', cleanupOnExit);
+      process.on('SIGINT', cleanupOnExit);
+
       const originalRawMode = process.stdin.isRaw;
       if (!originalRawMode) {
         process.stdin.setRawMode(true);
@@ -90,10 +121,13 @@ export class TerminalCapabilityManager {
         }
         this.detectionComplete = true;
 
-        // Auto-enable kitty if supported
-        if (this.kittySupported) {
-          this.enableKittyProtocol();
-          process.once('exit', () => this.disableKittyProtocolOnExit());
+        // Auto-enable supported modes
+        this.enableSupportedModes();
+        // Register synchronous exit handler for robust kitty cleanup
+        if (this.kittyEnabled && !this.disableKittyProtocolOnExitHandler) {
+          this.disableKittyProtocolOnExitHandler = () =>
+            this.disableKittyProtocolOnExit();
+          process.once('exit', this.disableKittyProtocolOnExitHandler);
         }
 
         resolve();
@@ -142,6 +176,29 @@ export class TerminalCapabilityManager {
           }
         }
 
+        // Check for ModifyOtherKeys support
+        const modifyOtherKeysMatch = buffer.match(
+          TerminalCapabilityManager.MODIFY_OTHER_KEYS_REGEX,
+        );
+        if (modifyOtherKeysMatch) {
+          const level = parseInt(modifyOtherKeysMatch[1], 10);
+          if (level >= 2) {
+            this.modifyOtherKeysSupported = true;
+          }
+        }
+
+        // Check for Bracketed Paste Mode support (DECRPM response)
+        const bracketedPasteMatch = buffer.match(
+          TerminalCapabilityManager.BRACKETED_PASTE_REGEX,
+        );
+        if (bracketedPasteMatch) {
+          const mode = parseInt(bracketedPasteMatch[1], 10);
+          // mode 1 = set, mode 2 = reset (both mean supported)
+          if (mode === 1 || mode === 2) {
+            this.bracketedPasteSupported = true;
+          }
+        }
+
         // We use the Primary Device Attributes response as a sentinel to know
         // that the terminal has processed all our queries. Since we send it
         // last, receiving it means we can stop waiting.
@@ -164,6 +221,8 @@ export class TerminalCapabilityManager {
           TerminalCapabilityManager.KITTY_QUERY +
             TerminalCapabilityManager.OSC_11_QUERY +
             TerminalCapabilityManager.TERMINAL_NAME_QUERY +
+            TerminalCapabilityManager.MODIFY_OTHER_KEYS_QUERY +
+            TerminalCapabilityManager.BRACKETED_PASTE_QUERY +
             TerminalCapabilityManager.DEVICE_ATTRIBUTES_QUERY,
         );
       } catch (_e) {
@@ -206,6 +265,24 @@ export class TerminalCapabilityManager {
     }
   }
 
+  enableSupportedModes(): void {
+    try {
+      if (this.kittySupported) {
+        enableKittyKeyboardProtocol();
+        this.kittyEnabled = true;
+      } else if (this.modifyOtherKeysSupported) {
+        enableModifyOtherKeys();
+        this.modifyOtherKeysEnabled = true;
+      }
+      if (this.bracketedPasteSupported) {
+        enableBracketedPasteMode();
+        this.bracketedPasteEnabled = true;
+      }
+    } catch (_e) {
+      // Ignore errors during enable
+    }
+  }
+
   disableKittyProtocolOnExit(): void {
     try {
       if (this.kittyEnabled) {
@@ -228,6 +305,45 @@ export class TerminalCapabilityManager {
     } catch (_e) {
       // Ignore errors during disable (terminal may already be closed)
     }
+  }
+
+  isBracketedPasteSupported(): boolean {
+    return this.bracketedPasteSupported;
+  }
+
+  isBracketedPasteEnabled(): boolean {
+    return this.bracketedPasteEnabled;
+  }
+
+  isModifyOtherKeysEnabled(): boolean {
+    return this.modifyOtherKeysEnabled;
+  }
+
+  private removeProcessListeners(): void {
+    if (this.cleanupOnExitHandler) {
+      process.removeListener('exit', this.cleanupOnExitHandler);
+      process.removeListener('SIGTERM', this.cleanupOnExitHandler);
+      process.removeListener('SIGINT', this.cleanupOnExitHandler);
+      this.cleanupOnExitHandler = undefined;
+    }
+
+    if (this.disableKittyProtocolOnExitHandler) {
+      process.removeListener('exit', this.disableKittyProtocolOnExitHandler);
+      this.disableKittyProtocolOnExitHandler = undefined;
+    }
+  }
+
+  private resetForTesting(): void {
+    this.removeProcessListeners();
+    this.disableKittyProtocol();
+    try {
+      disableModifyOtherKeys();
+      disableBracketedPasteMode();
+    } catch {
+      // Ignore teardown failures in tests.
+    }
+    this.modifyOtherKeysEnabled = false;
+    this.bracketedPasteEnabled = false;
   }
 
   private parseColor(rHex: string, gHex: string, bHex: string): string {

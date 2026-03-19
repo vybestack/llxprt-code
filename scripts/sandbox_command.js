@@ -32,6 +32,18 @@ const argv = yargs(hideBin(process.argv)).option('q', {
   default: false,
 }).argv;
 
+function normalizeSandboxSetting(value) {
+  if (typeof value === 'string') {
+    return value.toLowerCase();
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+
+  return '';
+}
+
 let geminiSandbox = process.env.LLXPRT_SANDBOX;
 
 if (!geminiSandbox) {
@@ -40,7 +52,7 @@ if (!geminiSandbox) {
     const settings = JSON.parse(
       stripJsonComments(readFileSync(userSettingsFile, 'utf-8')),
     );
-    if (settings.sandbox) {
+    if (settings.sandbox !== undefined) {
       geminiSandbox = settings.sandbox;
     }
   }
@@ -67,7 +79,7 @@ if (!geminiSandbox) {
   geminiSandbox = process.env.LLXPRT_SANDBOX;
 }
 
-geminiSandbox = (geminiSandbox || '').toLowerCase();
+geminiSandbox = normalizeSandboxSetting(geminiSandbox);
 
 const commandExists = (cmd) => {
   const checkCommand = os.platform() === 'win32' ? 'where' : 'command -v';

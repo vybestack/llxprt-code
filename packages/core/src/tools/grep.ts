@@ -31,6 +31,7 @@ import {
   formatLimitedOutput,
 } from '../utils/toolOutputLimiter.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Checks if a glob pattern contains brace expansion syntax that git grep doesn't support.
@@ -123,8 +124,9 @@ class GrepToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: GrepToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
     this.fileExclusions = config.getFileExclusions();
   }
 
@@ -426,7 +428,7 @@ File: ${resolved.basename}
         };
       }
 
-      console.error(`Error during GrepLogic execution: ${error}`);
+      debugLogger.error(`Error during GrepLogic execution: ${error}`);
       const errorMessage = getErrorMessage(error);
       return {
         llmContent: `Error during grep search operation: ${errorMessage}`,
@@ -460,7 +462,7 @@ File: ${resolved.basename}
         });
         child.on('close', (code) => resolve(code === 0));
         child.on('error', (err) => {
-          console.debug(
+          debugLogger.debug(
             `[GrepTool] Failed to start process for '${command}':`,
             err.message,
           );
@@ -734,7 +736,7 @@ File: ${resolved.basename}
           const matches = this.parseGrepOutput(output, absolutePath);
           return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
         } catch (gitError: unknown) {
-          console.debug(
+          debugLogger.debug(
             `GrepLogic: git grep failed: ${getErrorMessage(
               gitError,
             )}. Falling back...`,
@@ -743,7 +745,7 @@ File: ${resolved.basename}
       }
 
       // --- Strategy 2: System grep ---
-      console.debug(
+      debugLogger.debug(
         'GrepLogic: System grep is being considered as fallback strategy.',
       );
 
@@ -852,7 +854,7 @@ File: ${resolved.basename}
           const matches = this.parseGrepOutput(output, absolutePath);
           return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
         } catch (grepError: unknown) {
-          console.debug(
+          debugLogger.debug(
             `GrepLogic: System grep failed: ${getErrorMessage(
               grepError,
             )}. Falling back...`,
@@ -861,7 +863,7 @@ File: ${resolved.basename}
       }
 
       // --- Strategy 3: Pure JavaScript Fallback ---
-      console.debug(
+      debugLogger.debug(
         'GrepLogic: Falling back to JavaScript grep implementation.',
       );
       strategyUsed = 'javascript fallback';
@@ -924,7 +926,7 @@ File: ${resolved.basename}
         } catch (readError: unknown) {
           // Ignore errors like permission denied or file gone during read
           if (!isNodeError(readError) || readError.code !== 'ENOENT') {
-            console.debug(
+            debugLogger.debug(
               `GrepLogic: Could not read/process ${fileAbsolutePath}: ${getErrorMessage(
                 readError,
               )}`,
@@ -939,7 +941,7 @@ File: ${resolved.basename}
         totalFound: totalFound > allMatches.length ? totalFound : undefined,
       };
     } catch (error: unknown) {
-      console.error(
+      debugLogger.error(
         `GrepLogic: Error in performGrepSearch (Strategy: ${strategyUsed}): ${getErrorMessage(
           error,
         )}`,
@@ -959,7 +961,7 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
 
   constructor(
     private readonly config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       GrepTool.Name,
@@ -1042,12 +1044,12 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
 
   protected override createInvocation(
     params: GrepToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<GrepToolParams, ToolResult> {
     const normalizedParams = { ...params };
     if (!normalizedParams.dir_path && normalizedParams.path) {
       normalizedParams.dir_path = normalizedParams.path;
     }
-    return new GrepToolInvocation(this.config, normalizedParams);
+    return new GrepToolInvocation(this.config, normalizedParams, messageBus);
   }
 }

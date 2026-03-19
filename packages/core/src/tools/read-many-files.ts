@@ -114,8 +114,9 @@ class ReadManyFilesToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: ReadManyFilesParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
     this.llxprtIgnorePatterns = config
       .getFileService()
       .getLlxprtIgnorePatterns();
@@ -572,7 +573,7 @@ export class ReadManyFilesTool extends BaseDeclarativeTool<
 
   constructor(
     private config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     const parameterSchema = {
       type: 'object',
@@ -666,8 +667,8 @@ IMPORTANT LIMITS:
 
   protected override createInvocation(
     params: ReadManyFilesParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<ReadManyFilesParams, ToolResult> {
-    return new ReadManyFilesToolInvocation(this.config, params);
+    return new ReadManyFilesToolInvocation(this.config, params, messageBus);
   }
 }

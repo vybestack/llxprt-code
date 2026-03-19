@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isGitRepository } from '@vybestack/llxprt-code-core';
+import { isGitRepository, debugLogger } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
@@ -190,7 +190,7 @@ export function getInstallationInfo(
         : 'Installed with npm. Attempting to automatically update now...',
     };
   } catch (error) {
-    console.log(error);
+    debugLogger.log(String(error));
     return { packageManager: PackageManager.UNKNOWN, isGlobal: false };
   }
 }

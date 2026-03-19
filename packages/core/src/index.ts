@@ -33,6 +33,16 @@ export {
 // Export hooks system
 export * from './hooks/index.js';
 
+// Export skills system
+export * from './skills/skillManager.js';
+export * from './skills/skillLoader.js';
+
+// Export environment sanitization
+export * from './services/environmentSanitization.js';
+
+// Export debugLogger
+export * from './utils/debugLogger.js';
+
 // Export message bus
 export * from './confirmation-bus/types.js';
 export * from './confirmation-bus/message-bus.js';
@@ -64,7 +74,6 @@ export * from './commands/types.js';
 export * from './core/client.js';
 export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
-export * from './core/loggingContentGenerator.js';
 export * from './core/geminiChat.js';
 export * from './core/logger.js';
 export * from './core/prompts.js';
@@ -105,7 +114,23 @@ export * from './utils/textUtils.js';
 export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
-export * from './utils/generateContentResponseUtilities.js';
+export {
+  getResponseText,
+  getResponseTextFromParts,
+  getFunctionCalls,
+  getFunctionCallsFromParts,
+  getFunctionCallsAsJson,
+  getFunctionCallsFromPartsAsJson,
+  getStructuredResponse,
+  getStructuredResponseFromParts,
+  createFunctionResponsePart,
+  limitStringOutput,
+  limitFunctionResponsePart,
+  toParts,
+  convertToFunctionResponse,
+  extractAgentIdFromMetadata,
+  createErrorResponse,
+} from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
@@ -324,7 +349,6 @@ export * from './providers/tokenizers/ITokenizer.js';
 export * from './providers/tokenizers/OpenAITokenizer.js';
 export * from './providers/tokenizers/AnthropicTokenizer.js';
 export * from './utils/browser.js';
-export * from './utils/generateContentResponseUtilities.js';
 export * from './utils/stdio.js';
 export * from './utils/terminal.js';
 
@@ -363,9 +387,11 @@ export {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
-  setProviderRuntimeContextFallback,
 } from './runtime/providerRuntimeContext.js';
-export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
+export type {
+  ProviderRuntimeContext,
+  ProviderRuntimeContextInit,
+} from './runtime/providerRuntimeContext.js';
 
 // @plan PLAN-20251027-STATELESS5.P06
 // Export AgentRuntimeState types and functions for CLI adapter integration

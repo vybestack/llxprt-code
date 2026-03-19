@@ -440,7 +440,7 @@ export function useSlashCompletion(
                 return;
               }
 
-              console.error('Schema completion error:', error);
+              debugLogger.error('Schema completion error:', error);
               setSuggestions([]);
               setShowSuggestions(false);
               setActiveSuggestionIndex(-1);
@@ -822,7 +822,7 @@ export function useSlashCompletion(
             setShowSuggestions(false);
           }
         } else {
-          console.error(
+          debugLogger.error(
             `Error fetching completion suggestions for ${partialPath}: ${getErrorMessage(error)}`,
           );
           if (isMounted) {

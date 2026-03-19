@@ -43,6 +43,7 @@ export interface AuthPrecedenceConfig {
 }
 
 import { type OAuthToken } from './types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export interface OAuthTokenRequestMetadata {
   runtimeAuthScopeId?: string;
@@ -242,7 +243,7 @@ function ensureRuntimeState(
     !legacyRuntimeScopeWarningEmitted &&
     process.env.DEBUG
   ) {
-    console.warn(
+    debugLogger.warn(
       'AuthPrecedenceResolver invoked without runtimeId; using legacy singleton auth cache.',
     );
     legacyRuntimeScopeWarningEmitted = true;
@@ -300,7 +301,7 @@ function registerSettingsSubscriptions(
       unsubscribe();
     } catch (error) {
       if (process.env.DEBUG) {
-        console.debug(
+        debugLogger.debug(
           'Failed to remove runtime auth scope subscription:',
           error,
         );
@@ -490,7 +491,7 @@ export function flushRuntimeAuthScope(
       unsubscribe();
     } catch (error) {
       if (process.env.DEBUG) {
-        console.debug(
+        debugLogger.debug(
           'Failed to clean runtime auth scope subscription:',
           error,
         );
@@ -715,7 +716,7 @@ export class AuthPrecedenceResolver {
               : await enabledResult;
         } catch (error) {
           if (process.env.DEBUG) {
-            console.debug(
+            debugLogger.debug(
               `Failed to determine OAuth enablement for ${this.config.oauthProvider}:`,
               error,
             );
@@ -783,7 +784,7 @@ export class AuthPrecedenceResolver {
               );
             } catch (tokenError) {
               if (process.env.DEBUG) {
-                console.debug(
+                debugLogger.debug(
                   `Failed to fetch OAuth token metadata for ${this.config.oauthProvider}:`,
                   tokenError,
                 );
@@ -804,7 +805,7 @@ export class AuthPrecedenceResolver {
         }
       } catch (error) {
         if (process.env.DEBUG) {
-          console.warn(
+          debugLogger.warn(
             `Failed to get OAuth token for ${this.config.oauthProvider}:`,
             error,
           );
@@ -1010,7 +1011,7 @@ export class AuthPrecedenceResolver {
 
       if (key === '') {
         if (process.env.DEBUG) {
-          console.warn(`Key file ${filePath} is empty`);
+          debugLogger.warn(`Key file ${filePath} is empty`);
         }
         return null;
       }
@@ -1018,7 +1019,7 @@ export class AuthPrecedenceResolver {
       return key;
     } catch (error) {
       if (process.env.DEBUG) {
-        console.warn(`Failed to read key file ${filePath}:`, error);
+        debugLogger.warn(`Failed to read key file ${filePath}:`, error);
       }
       return null;
     }

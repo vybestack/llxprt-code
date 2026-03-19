@@ -18,6 +18,7 @@ import {
   splitCommandsWithTree,
   parseCommandDetails,
 } from './shell-parser.js';
+import { debugLogger } from './debugLogger.js';
 
 export const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
 
@@ -429,7 +430,7 @@ export function checkCommandPermissions(
 
   // Debug logging when VERBOSE is set
   if (process.env.VERBOSE === 'true') {
-    console.log('[SHELL-UTILS] Shell replacement check:', {
+    debugLogger.log('[SHELL-UTILS] Shell replacement check:', {
       ephemeralValue,
       configValue,
       shellReplacementMode,

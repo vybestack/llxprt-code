@@ -38,13 +38,19 @@ import { saveSingleSetting } from '../../utils/singleSettingSaver.js';
 import { useVimMode } from '../contexts/VimModeContext.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import chalk from 'chalk';
-import { cpSlice, cpLen, stripUnsafeCharacters } from '../utils/textUtils.js';
+import {
+  cpSlice,
+  cpLen,
+  stripUnsafeCharacters,
+  getCachedStringWidth,
+} from '../utils/textUtils.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { SettingDefinition as _SettingDefinition } from '../../config/settingsSchema.js';
 import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useTextBuffer } from './shared/text-buffer.js';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface FzfResult {
   item: string;
@@ -119,7 +125,7 @@ export function getToolCurrentState(
     // Tool is enabled if not in excludeTools
     return excludeTools.includes(toolName) ? 'disabled' : 'enabled';
   } catch (error) {
-    console.error('Error getting tool state:', error);
+    debugLogger.error('Error getting tool state:', error);
     return 'enabled'; // Default to enabled on error
   }
 }
@@ -155,7 +161,7 @@ export function updateToolExclusion(
       newExcludeTools as Settings['excludeTools'],
     );
   } catch (error) {
-    console.error('Error updating tool exclusion:', error);
+    debugLogger.error('Error updating tool exclusion:', error);
   }
 }
 
@@ -359,6 +365,8 @@ export function SettingsDialog({
 
       return {
         label: typedDef.label || key,
+        description: typedDef.description,
+
         value: fullKey,
         type: typedDef.type,
         toggle: () => {
@@ -485,6 +493,8 @@ export function SettingsDialog({
       const definition = getSettingDefinition(key);
 
       return {
+        description: definition?.description,
+
         label: definition?.label || key,
         value: key,
         type: definition?.type,
@@ -501,7 +511,7 @@ export function SettingsDialog({
           );
 
           if (!requiresRestart(key)) {
-            console.log(
+            debugLogger.log(
               `[DEBUG SettingsDialog] Saving ${key} immediately with value:`,
               newValue,
             );
@@ -511,7 +521,7 @@ export function SettingsDialog({
             if (key === 'vimMode' && newValue !== vimEnabled) {
               // Call toggleVimEnabled to sync the VimModeContext local state
               toggleVimEnabled().catch((error) => {
-                console.error('Failed to toggle vim mode:', error);
+                debugLogger.error('Failed to toggle vim mode:', error);
               });
             }
 
@@ -546,7 +556,7 @@ export function SettingsDialog({
             setModifiedSettings((prev) => {
               const updated = new Set(prev).add(key);
               const needsRestart = hasRestartRequiredSettings(updated);
-              console.log(
+              debugLogger.log(
                 `[DEBUG SettingsDialog] Modified settings:`,
                 Array.from(updated),
                 'Needs restart:',
@@ -629,7 +639,7 @@ export function SettingsDialog({
     setPendingSettings((prev) => setPendingSettingValueAny(key, parsed, prev));
 
     if (!requiresRestart(key)) {
-      console.log(
+      debugLogger.log(
         `[DEBUG SettingsDialog] Saving ${key} immediately with value:`,
         parsed,
       );
@@ -724,8 +734,8 @@ export function SettingsDialog({
     currentAvailableTerminalHeight - totalFixedHeight,
   );
 
-  // Each setting item takes 2 lines (the setting row + spacing)
-  let maxVisibleItems = Math.max(1, Math.floor(availableHeightForSettings / 2));
+  // Each setting item takes 3 lines (label + description + spacing)
+  let maxVisibleItems = Math.max(1, Math.floor(availableHeightForSettings / 3));
 
   // Decide whether to show scope selection based on remaining space
   let showScopeSelection = true;
@@ -738,7 +748,7 @@ export function SettingsDialog({
       1,
       currentAvailableTerminalHeight - totalWithScope,
     );
-    const maxItemsWithScope = Math.max(1, Math.floor(availableWithScope / 2));
+    const maxItemsWithScope = Math.max(1, Math.floor(availableWithScope / 3));
 
     // If hiding scope selection allows us to show significantly more settings, do it
     if (maxVisibleItems > maxItemsWithScope + 1) {
@@ -750,7 +760,7 @@ export function SettingsDialog({
         1,
         currentAvailableTerminalHeight - totalFixedHeight,
       );
-      maxVisibleItems = Math.max(1, Math.floor(availableHeightForSettings / 2));
+      maxVisibleItems = Math.max(1, Math.floor(availableHeightForSettings / 3));
     }
   } else {
     // For normal height, include scope selection
@@ -1276,6 +1286,30 @@ export function SettingsDialog({
     onChange: (text) => setSearchQuery(text),
   });
 
+  const maxLabelOrDescriptionWidth = useMemo(() => {
+    const allKeys = getDialogSettingKeys();
+    let max = 0;
+    for (const key of allKeys) {
+      const def = getSettingDefinition(key);
+      if (!def) continue;
+
+      const scopeMessage = getScopeMessageForSetting(
+        key,
+        selectedScope,
+        settings,
+      );
+      const label = def.label || key;
+      const labelFull = label + (scopeMessage ? ` ${scopeMessage}` : '');
+      const lWidth = getCachedStringWidth(labelFull);
+      const dWidth = def.description
+        ? getCachedStringWidth(def.description)
+        : 0;
+
+      max = Math.max(max, lWidth, dWidth);
+    }
+    return max;
+  }, [selectedScope, settings]);
+
   return (
     <Box
       borderStyle="round"
@@ -1478,36 +1512,52 @@ export function SettingsDialog({
 
               return (
                 <React.Fragment key={item.value}>
-                  <Box marginX={1} flexDirection="row" alignItems="center">
+                  <Box marginX={1} flexDirection="row" alignItems="flex-start">
                     <Box minWidth={2} flexShrink={0}>
                       <Text color={isActive ? Colors.AccentGreen : Colors.Gray}>
                         {isActive ? '●' : ''}
                       </Text>
                     </Box>
-                    <Box minWidth={50}>
-                      <Text
-                        color={
-                          isActive ? Colors.AccentGreen : Colors.Foreground
-                        }
-                      >
-                        {item.label}
-                        {scopeMessage && (
-                          <Text color={Colors.Gray}> {scopeMessage}</Text>
-                        )}
-                      </Text>
-                    </Box>
-                    <Box minWidth={3} />
-                    <Text
-                      color={
-                        isActive
-                          ? Colors.AccentGreen
-                          : shouldBeGreyedOut
-                            ? Colors.Gray
-                            : Colors.Foreground
-                      }
+                    <Box
+                      flexDirection="row"
+                      flexGrow={1}
+                      minWidth={0}
+                      alignItems="flex-start"
                     >
-                      {displayValue}
-                    </Text>
+                      <Box
+                        flexDirection="column"
+                        width={maxLabelOrDescriptionWidth}
+                        minWidth={0}
+                      >
+                        <Text
+                          color={
+                            isActive ? Colors.AccentGreen : Colors.Foreground
+                          }
+                        >
+                          {item.label}
+                          {scopeMessage && (
+                            <Text color={Colors.Gray}> {scopeMessage}</Text>
+                          )}
+                        </Text>
+                        <Text color={Colors.Gray} wrap="truncate">
+                          {item.description ?? ''}
+                        </Text>
+                      </Box>
+                      <Box minWidth={3} />
+                      <Box flexShrink={0}>
+                        <Text
+                          color={
+                            isActive
+                              ? Colors.AccentGreen
+                              : shouldBeGreyedOut
+                                ? Colors.Gray
+                                : Colors.Foreground
+                          }
+                        >
+                          {displayValue}
+                        </Text>
+                      </Box>
+                    </Box>
                   </Box>
                   <Box height={1} />
                 </React.Fragment>

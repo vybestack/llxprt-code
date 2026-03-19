@@ -17,6 +17,7 @@ import {
   KeyringTokenStore,
   ProviderManager,
   SettingsService,
+  MessageBus,
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -105,6 +106,7 @@ interface RuntimeActivationBindings {
   registerInfrastructure: (
     manager: ProviderManager,
     oauthManager: OAuthManager,
+    options: { messageBus: MessageBus },
   ) => void | Promise<void>;
   linkProviderManager: (
     config: Config,
@@ -264,13 +266,19 @@ export function createIsolatedRuntimeContext(
 
   const resolvedSettingsService =
     config.getSettingsService() ?? settingsService;
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
   // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore =
     sharedTokenStore ??
     (sharedTokenStore = createTokenStore() as KeyringTokenStore); // Step 1 (multi-runtime-baseline.md line 2) keeps token storage shared.
   const oauthManager =
     options.oauthManager ??
-    new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime());
+    new OAuthManager(tokenStore, loadSettingsForIsolatedRuntime(), {
+      messageBus: sessionMessageBus,
+    });
 
   const initialRuntimeContext = createProviderRuntimeContext({
     settingsService: resolvedSettingsService,
@@ -350,7 +358,9 @@ export function createIsolatedRuntimeContext(
       }
 
       await Promise.resolve(
-        bindings.registerInfrastructure(providerManager, oauthManager),
+        bindings.registerInfrastructure(providerManager, oauthManager, {
+          messageBus: sessionMessageBus,
+        }),
       );
       await Promise.resolve(
         bindings.linkProviderManager(config, providerManager),

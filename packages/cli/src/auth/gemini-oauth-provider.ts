@@ -21,6 +21,7 @@ import {
   RetryHandler,
   shouldLaunchBrowser,
   DebugLogger,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -67,7 +68,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     this.addItem = addItem;
 
     if (!tokenStore) {
-      console.warn(
+      debugLogger.warn(
         `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
           `Token persistence will not work. Please update your code.`,
       );
@@ -272,19 +273,19 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
                     Date.now(),
                   );
                 } else {
-                  console.log('\n' + '─'.repeat(60));
-                  console.log(
+                  debugLogger.log('\n' + '─'.repeat(60));
+                  debugLogger.log(
                     'Browser authentication was cancelled or failed.',
                   );
-                  console.log('Fallback options:');
-                  console.log(
+                  debugLogger.log('Fallback options:');
+                  debugLogger.log(
                     '1. Use API key: /keyfile <path-to-your-gemini-key>',
                   );
-                  console.log(
+                  debugLogger.log(
                     '2. Set environment: export GEMINI_API_KEY=<your-key>',
                   );
-                  console.log('3. Try OAuth again: /auth gemini enable');
-                  console.log('─'.repeat(60));
+                  debugLogger.log('3. Try OAuth again: /auth gemini enable');
+                  debugLogger.log('─'.repeat(60));
                 }
 
                 // Throw a user-friendly error that doesn't hang the system
@@ -309,6 +310,21 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
               });
             }
 
+            // Persist to token store if available
+            if (this.tokenStore) {
+              try {
+                await this.tokenStore.saveToken('gemini', token);
+              } catch (saveError) {
+                throw OAuthErrorFactory.storageError(
+                  this.name,
+                  saveError instanceof Error ? saveError : undefined,
+                  {
+                    operation: 'saveToken',
+                  },
+                );
+              }
+            }
+
             // Preserve in-memory cache
             this.currentToken = token;
 
@@ -323,7 +339,7 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
                 Date.now(),
               );
             } else {
-              console.log('Successfully authenticated with Google Gemini!');
+              debugLogger.log('Successfully authenticated with Google Gemini!');
             }
 
             return token;

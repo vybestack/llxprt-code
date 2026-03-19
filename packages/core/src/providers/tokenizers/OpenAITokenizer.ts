@@ -17,6 +17,7 @@
 import { encoding_for_model, type TiktokenModel } from '@dqbd/tiktoken';
 import { DebugLogger } from '../../debug/DebugLogger.js';
 import { type ITokenizer } from './ITokenizer.js';
+import { debugLogger } from '../../utils/debugLogger.js';
 
 export class OpenAITokenizer implements ITokenizer {
   private readonly logger = new DebugLogger('llxprt:tokenizer:openai');
@@ -49,7 +50,7 @@ export class OpenAITokenizer implements ITokenizer {
       const tokens = encoder.encode(text);
       return tokens.length;
     } catch (error) {
-      console.error('Error counting tokens:', error);
+      debugLogger.error('Error counting tokens:', error);
       // Fallback: rough estimate based on characters
       return Math.ceil(text.length / 4);
     }

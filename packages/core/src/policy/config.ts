@@ -23,12 +23,15 @@ import {
   type PolicyFileError,
   escapeRegex,
 } from './toml-loader.js';
+import { buildArgsPatterns } from './utils.js';
+import { SHELL_TOOL_NAMES } from '../utils/shell-utils.js';
 import {
   MessageBusType,
   type UpdatePolicy,
 } from '../confirmation-bus/types.js';
 import { type MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents } from '../utils/events.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -384,11 +387,42 @@ export async function createPolicyEngineConfig(
     // Priority: 2.3 (user tier - explicit temporary allows)
     if (settings.tools?.allowed) {
       for (const tool of settings.tools.allowed) {
-        rules.push({
-          toolName: normalizeToolName(tool),
-          decision: PolicyDecision.ALLOW,
-          priority: 2.3,
-        });
+        // Check for legacy ShellTool(args) format
+        const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
+        if (match) {
+          const [, toolName, argsStr] = match;
+
+          // Normalize ShellTool alias
+          const normalizedName =
+            toolName === 'ShellTool' ? 'run_shell_command' : toolName;
+
+          // Extract command prefix from args
+          if (SHELL_TOOL_NAMES.includes(normalizedName) && argsStr) {
+            const patterns = buildArgsPatterns(undefined, argsStr);
+            for (const pattern of patterns) {
+              rules.push({
+                toolName: normalizedName,
+                argsPattern: pattern,
+                decision: PolicyDecision.ALLOW,
+                priority: 2.3,
+              });
+            }
+          } else {
+            // Non-shell tool with args - just use the tool name
+            rules.push({
+              toolName: normalizedName,
+              decision: PolicyDecision.ALLOW,
+              priority: 2.3,
+            });
+          }
+        } else {
+          // Regular tool allowlist
+          rules.push({
+            toolName: normalizeToolName(tool),
+            decision: PolicyDecision.ALLOW,
+            priority: 2.3,
+          });
+        }
       }
     }
 
@@ -501,7 +535,7 @@ export function createPolicyUpdater(
             existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              console.warn(
+              debugLogger.warn(
                 `Failed to parse ${policyFile}, overwriting with new policy.`,
                 error,
               );

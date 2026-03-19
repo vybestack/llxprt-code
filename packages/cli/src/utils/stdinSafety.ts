@@ -1,3 +1,4 @@
+import { debugLogger } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -50,7 +51,7 @@ export class StdinRawModeManager {
     const handler: StdinErrorHandler = (err: Error) => {
       // Log the error in debug mode
       if (this.debugModeEnabled) {
-        console.error('[stdin] I/O error (non-fatal):', err);
+        debugLogger.error('[stdin] I/O error (non-fatal):', err);
       }
 
       // Allow custom error handling
@@ -66,7 +67,10 @@ export class StdinRawModeManager {
         } catch (resumeErr) {
           // Ignore resume failures - we've already logged the original error
           if (this.debugModeEnabled) {
-            console.error('[stdin] Failed to resume after error:', resumeErr);
+            debugLogger.error(
+              '[stdin] Failed to resume after error:',
+              resumeErr,
+            );
           }
         }
       }
@@ -117,7 +121,7 @@ export class StdinRawModeManager {
       // setRawMode can fail in some terminal configs
       // Log and continue anyway
       if (this.debugModeEnabled) {
-        console.error('[stdin] Failed to set raw mode:', err);
+        debugLogger.error('[stdin] Failed to set raw mode:', err);
       }
       return false;
     }

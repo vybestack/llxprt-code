@@ -23,6 +23,8 @@ import {
 } from './coreToolScheduler.js';
 import { ApprovalMode, Config, ToolRegistry } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
+import { getTestRuntimeMessageBus } from '../test-utils/config.js';
+
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 
@@ -122,6 +124,8 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
         },
@@ -166,6 +170,8 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -218,6 +224,8 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -267,6 +275,8 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: true,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -311,6 +321,8 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -363,6 +375,8 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);

@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'fs';
+import { debugLogger } from '../utils/debugLogger.js';
 import path from 'path';
 
 vi.mock('fs', () => ({
@@ -390,9 +391,9 @@ describe('LSTool', () => {
 
       vi.mocked(fs.readdirSync).mockReturnValue(mockFiles as any);
 
-      // Spy on console.error to verify it's called
+      // Spy on debugLogger.error to verify it's called
       const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+        .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
 
       const invocation = lsTool.build({ path: testPath });

@@ -29,6 +29,7 @@ import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import type { ToolRegistry } from './tool-registry.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   canonicalizeToolName,
   buildToolGovernance,
@@ -143,8 +144,9 @@ class TaskToolInvocation extends BaseToolInvocation<
     params: TaskToolParams,
     private readonly normalized: TaskToolInvocationParams,
     private readonly deps: TaskToolInvocationDeps,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   override getDescription(): string {
@@ -1162,20 +1164,29 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
     return null;
   }
 
-  protected createInvocation(params: TaskToolParams): TaskToolInvocation {
+  protected createInvocation(
+    params: TaskToolParams,
+    messageBus: MessageBus,
+  ): TaskToolInvocation {
     const normalized = this.normalizeParams(params);
-    return new TaskToolInvocation(this.config, params, normalized, {
-      createOrchestrator: () => this.ensureOrchestrator(),
-      getToolRegistry:
-        typeof this.config.getToolRegistry === 'function'
-          ? () => this.config.getToolRegistry()
-          : undefined,
-      getSchedulerFactory: this.dependencies.schedulerFactoryProvider,
-      isInteractiveEnvironment:
-        this.dependencies.isInteractiveEnvironment ??
-        (() => this.config.isInteractive()),
-      getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
-    });
+    return new TaskToolInvocation(
+      this.config,
+      params,
+      normalized,
+      {
+        createOrchestrator: () => this.ensureOrchestrator(),
+        getToolRegistry:
+          typeof this.config.getToolRegistry === 'function'
+            ? () => this.config.getToolRegistry()
+            : undefined,
+        getSchedulerFactory: this.dependencies.schedulerFactoryProvider,
+        isInteractiveEnvironment:
+          this.dependencies.isInteractiveEnvironment ??
+          (() => this.config.isInteractive()),
+        getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
+      },
+      messageBus,
+    );
   }
 
   private normalizeParams(params: TaskToolParams): TaskToolInvocationParams {

@@ -5,8 +5,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Config, Profile, ProfileManager } from '@vybestack/llxprt-code-core';
-import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import {
+  Config,
+  Profile,
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-core';
+import {
+  createTempDirectory,
+  cleanupTempDirectory,
+  initializeTestConfig,
+} from './test-utils.js';
 
 describe('Compression Settings Apply Integration Tests', () => {
   let tempDir: string;
@@ -33,13 +42,14 @@ describe('Compression Settings Apply Integration Tests', () => {
     config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,
+      settingsService: new SettingsService(),
       debugMode: false,
       model: 'gemini-2.0-flash-exp',
       cwd: tempDir,
     });
 
     // Initialize the config
-    await config.initialize();
+    await initializeTestConfig(config);
   });
 
   afterEach(async () => {
@@ -180,11 +190,12 @@ describe('Compression Settings Apply Integration Tests', () => {
       const newConfig = new Config({
         sessionId: 'new-session',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await newConfig.initialize();
+      await initializeTestConfig(newConfig);
 
       // Verify new config doesn't have compression settings initially
       expect(
@@ -231,11 +242,12 @@ describe('Compression Settings Apply Integration Tests', () => {
       const newConfig = new Config({
         sessionId: 'partial-session',
         targetDir: tempDir,
+        settingsService: new SettingsService(),
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await newConfig.initialize();
+      await initializeTestConfig(newConfig);
 
       for (const [key, value] of Object.entries(
         loadedProfile.ephemeralSettings,

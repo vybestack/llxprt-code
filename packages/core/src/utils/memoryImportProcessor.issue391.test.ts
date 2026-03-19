@@ -8,24 +8,25 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { processImports } from './memoryImportProcessor.js';
+import { debugLogger } from './debugLogger.js';
 
 // Mock fs/promises
 vi.mock('fs/promises');
 const mockedFs = vi.mocked(fs);
 
 // Mock console methods to capture error messages
-const originalConsoleError = console.error;
+const originalConsoleError = debugLogger.error;
 
 describe('memoryImportProcessor - Issue #391', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Mock console methods
-    console.error = vi.fn();
+    debugLogger.error = vi.fn();
   });
 
   afterEach(() => {
     // Restore console methods
-    console.error = originalConsoleError;
+    debugLogger.error = originalConsoleError;
   });
 
   it('should gracefully handle missing files without logging errors', async () => {
@@ -46,9 +47,9 @@ describe('memoryImportProcessor - Issue #391', () => {
       '<!-- Import failed: commitlint/config-conventional',
     );
 
-    // The key point for issue #391: The error should NOT be logged to console.error
+    // The key point for issue #391: The error should NOT be logged to debugLogger.error
     // when debug mode is false (default)
-    expect(console.error).not.toHaveBeenCalled();
+    expect(debugLogger.error).not.toHaveBeenCalled();
 
     // Verify the error is included in the content
     expect(result.content).toContain('ENOENT');
@@ -64,14 +65,14 @@ describe('memoryImportProcessor - Issue #391', () => {
 
     // Test with debug mode false (default)
     const resultNormal = await processImports(content, basePath, false);
-    expect(console.error).not.toHaveBeenCalled();
+    expect(debugLogger.error).not.toHaveBeenCalled();
 
     // Reset console mock
     vi.clearAllMocks();
 
     // Test with debug mode true
     const resultDebug = await processImports(content, basePath, true);
-    expect(console.error).toHaveBeenCalledWith(
+    expect(debugLogger.error).toHaveBeenCalledWith(
       '[ERROR] [ImportProcessor]',
       'Failed to import commitlint/config-conventional: ENOENT: no such file or directory',
     );
@@ -104,7 +105,7 @@ describe('memoryImportProcessor - Issue #391', () => {
     expect(result.content).toContain('<!-- Import failed: nonexistent/file.md');
 
     // But should not log any errors to console when debug mode is false
-    expect(console.error).not.toHaveBeenCalled();
+    expect(debugLogger.error).not.toHaveBeenCalled();
   });
 
   it('should handle ENOENT errors specifically and avoid logging', async () => {
@@ -124,7 +125,7 @@ describe('memoryImportProcessor - Issue #391', () => {
     expect(result.content).toContain(
       '<!-- Import failed: commitlint/config-conventional',
     );
-    expect(console.error).not.toHaveBeenCalled();
+    expect(debugLogger.error).not.toHaveBeenCalled();
   });
 
   it('should fail fast in flat mode when encountering missing files', async () => {
@@ -149,6 +150,6 @@ describe('memoryImportProcessor - Issue #391', () => {
     expect(result.content).toContain('Content @commitlint/config-conventional');
 
     // Should not log errors when debug mode is false
-    expect(console.error).not.toHaveBeenCalled();
+    expect(debugLogger.error).not.toHaveBeenCalled();
   });
 });

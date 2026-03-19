@@ -8,6 +8,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import path from 'path';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const execAsync = promisify(exec);
 
@@ -128,7 +129,7 @@ async function getIdeProcessInfoForUnix(): Promise<{
 
       // Debug logging
       if (process.env.DEBUG_PROCESS_TREE) {
-        console.error(
+        debugLogger.error(
           `[Process Tree] PID: ${currentPid}, Parent: ${parentPid}, Name: "${name}", Command: "${command}"`,
         );
       }

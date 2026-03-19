@@ -182,6 +182,7 @@ vi.mock('./profileBootstrap.js', () => ({
 }));
 
 vi.mock('../runtime/runtimeSettings.js', () => {
+  const getProviderManager = () => runtimeStateRef.value.providerManager;
   const applyProfileSnapshot = vi.fn(async () => ({
     providerName: 'openai',
     modelName: 'hf:zai-org/GLM-4.6',
@@ -219,8 +220,45 @@ vi.mock('../runtime/runtimeSettings.js', () => {
     getCliRuntimeServices,
     getCliProviderManager: vi.fn(() => runtimeStateRef.value.providerManager),
     getCliRuntimeConfig: vi.fn(() => runtimeConfigRef.value),
+    getCliOAuthManager: vi.fn(() => runtimeStateRef.value.oauthManager),
     getActiveProviderStatus: vi.fn(() => ({ name: 'openai', isReady: true })),
-    listProviders: vi.fn(() => ['openai']),
+    listProviders: vi.fn(() => getProviderManager().listProviders()),
+    getActiveProviderName: vi.fn(() =>
+      getProviderManager().getActiveProviderName(),
+    ),
+    setActiveModel: vi.fn(async () => ({
+      changed: false,
+      previousModel: null,
+      nextModel: 'hf:zai-org/GLM-4.6',
+      infoMessages: [],
+    })),
+    listAvailableModels: vi.fn(
+      async () => (await getProviderManager().getAvailableModels()) ?? [],
+    ),
+    getActiveModelName: vi.fn(() => 'hf:zai-org/GLM-4.6'),
+    getActiveModelParams: vi.fn(() => ({})),
+    getEphemeralSettings: vi.fn(() => ({})),
+    getEphemeralSetting: vi.fn(() => undefined),
+    setEphemeralSetting: vi.fn(),
+    setActiveModelParam: vi.fn(),
+    clearActiveModelParam: vi.fn(),
+    saveProfileSnapshot: vi.fn(async () => undefined),
+    saveLoadBalancerProfile: vi.fn(async () => undefined),
+    loadProfileByName: vi.fn(async () => undefined),
+    deleteProfileByName: vi.fn(async () => undefined),
+    listSavedProfiles: vi.fn(() => []),
+    getProfileByName: vi.fn(() => undefined),
+    setDefaultProfileName: vi.fn(),
+    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
+    updateActiveProviderApiKey: vi.fn(async () => undefined),
+    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
+    getActiveToolFormatState: vi.fn(() => ({})),
+    setActiveToolFormatOverride: vi.fn(),
+    getActiveProviderMetrics: vi.fn(() => undefined),
+    getSessionTokenUsage: vi.fn(() => undefined),
+    getLoadBalancerStats: vi.fn(() => undefined),
+    getLoadBalancerLastSelected: vi.fn(() => undefined),
+    getAllLoadBalancerStats: vi.fn(() => ({})),
   };
 });
 

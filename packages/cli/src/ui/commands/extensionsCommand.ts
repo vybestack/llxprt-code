@@ -313,11 +313,192 @@ const restartCommand: SlashCommand = {
   completion: completeExtensions,
 };
 
+async function installAction(
+  context: CommandContext,
+  args: string,
+): Promise<void> {
+  const extensionLoader = context.services.config?.getExtensionLoader();
+
+  // Check if extension reloading is enabled
+  if (!extensionLoader) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Extension reloading is not enabled. Use the CLI command instead.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const source = args.trim();
+
+  if (!source) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Usage: /extensions install <source>',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  // Validate source for safety (check for shell injection)
+  const isUrl =
+    source.startsWith('http://') ||
+    source.startsWith('https://') ||
+    source.startsWith('git@') ||
+    source.startsWith('sso://');
+
+  if (!isUrl && /[;&|`'"]/.test(source)) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Invalid characters in source path.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  context.ui.addItem(
+    {
+      type: MessageType.INFO,
+      text: `Installing extension from ${source}...`,
+    },
+    Date.now(),
+  );
+
+  try {
+    const { inferInstallMetadata, installOrUpdateExtension } = await import(
+      '../../config/extension.js'
+    );
+    const installMetadata = await inferInstallMetadata(source);
+
+    // Use requestConsentNonInteractive for slash commands
+    const { requestConsentNonInteractive } = await import(
+      '../../config/extension.js'
+    );
+    await installOrUpdateExtension(
+      installMetadata,
+      requestConsentNonInteractive,
+    );
+
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Extension installed successfully.`,
+      },
+      Date.now(),
+    );
+  } catch (error) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: getErrorMessage(error),
+      },
+      Date.now(),
+    );
+  }
+}
+
+async function uninstallAction(
+  context: CommandContext,
+  args: string,
+): Promise<void> {
+  const extensionLoader = context.services.config?.getExtensionLoader();
+
+  if (!extensionLoader) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Extension reloading is not enabled. Use the CLI command instead.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const name = args.trim();
+
+  if (!name) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Usage: /extensions uninstall <name>',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  context.ui.addItem(
+    {
+      type: MessageType.INFO,
+      text: `Uninstalling extension ${name}...`,
+    },
+    Date.now(),
+  );
+
+  try {
+    const { uninstallExtension } = await import('../../config/extension.js');
+    await uninstallExtension(name, false);
+
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: `Extension ${name} uninstalled successfully.`,
+      },
+      Date.now(),
+    );
+  } catch (error) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: getErrorMessage(error),
+      },
+      Date.now(),
+    );
+  }
+}
+
+const installCommand: SlashCommand = {
+  name: 'install',
+  description: 'Install an extension from a git repo or local path',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: false,
+  action: installAction,
+};
+
+const uninstallCommand: SlashCommand = {
+  name: 'uninstall',
+  description: 'Uninstall an extension',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: false,
+  action: uninstallAction,
+  completion: completeExtensions,
+};
+
+// Build subcommands list with conditional commands
+const buildSubCommands = (): SlashCommand[] => {
+  const commands = [listExtensionsCommand, updateExtensionsCommand];
+
+  // Add commands that require extension reloading
+  // Note: We can't check the config here, so we add them unconditionally
+  // and check inside each action
+  commands.push(restartCommand);
+  commands.push(installCommand);
+  commands.push(uninstallCommand);
+
+  return commands;
+};
+
 export const extensionsCommand: SlashCommand = {
   name: 'extensions',
   description: 'Manage extensions',
   kind: CommandKind.BUILT_IN,
-  subCommands: [listExtensionsCommand, updateExtensionsCommand, restartCommand],
+  subCommands: buildSubCommands(),
   action: (context, args) =>
     // Default to list if no subcommand is provided
     listExtensionsCommand.action!(context, args),

@@ -63,7 +63,7 @@ export class PolicyEngine {
           const subCommands = splitCommands(command);
 
           // Parse failure: empty array for non-empty command → fail-safe to ASK_USER
-          if (subCommands.length === 0) {
+          if (subCommands.length === 0 && command.trim().length > 0) {
             return this.nonInteractive
               ? PolicyDecision.DENY
               : PolicyDecision.ASK_USER;
@@ -74,9 +74,13 @@ export class PolicyEngine {
             let aggregateDecision = PolicyDecision.ALLOW;
 
             for (const subCmd of subCommands) {
+              // Prevent infinite recursion
+              if (subCmd === command) continue;
+
+              // Preserve dir_path from original args
               const subResult = this.evaluate(
                 toolName,
-                { command: subCmd },
+                { ...args, command: subCmd },
                 serverName,
               );
 
@@ -94,6 +98,14 @@ export class PolicyEngine {
               finalDecision === PolicyDecision.ASK_USER
               ? PolicyDecision.DENY
               : finalDecision;
+          }
+
+          // Check for redirections in allowed commands
+          if (!matchingRule.allowRedirection && /[>&|]/.test(command)) {
+            // Downgrade to ASK_USER unless explicitly allowed
+            return this.nonInteractive
+              ? PolicyDecision.DENY
+              : PolicyDecision.ASK_USER;
           }
           // Single command: rule match is valid, fall through to normal return
         }

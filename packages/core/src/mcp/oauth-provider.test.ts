@@ -28,6 +28,7 @@ import {
   type OAuthAuthorizationServerMetadata,
   type OAuthProtectedResourceMetadata,
 } from './oauth-utils.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -129,9 +130,10 @@ describe('MCPOAuthProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOpenBrowserSecurely.mockClear();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(DebugLogger.prototype, 'log').mockImplementation(() => {});
+    vi.spyOn(DebugLogger.prototype, 'warn').mockImplementation(() => {});
+    vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
+    vi.spyOn(DebugLogger.prototype, 'debug').mockImplementation(() => {});
 
     // Mock crypto functions
     vi.mocked(crypto.randomBytes).mockImplementation((size: number) => {
@@ -913,7 +915,7 @@ describe('MCPOAuthProvider', () => {
 
       expect(result).toBeNull();
       expect(deleteCredentialsSpy).toHaveBeenCalledWith('test-server');
-      expect(console.error).toHaveBeenCalledWith(
+      expect(DebugLogger.prototype.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to refresh token'),
       );
     });

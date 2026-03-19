@@ -84,7 +84,8 @@ describe('OAuthManager concurrency', () => {
         storedFailoverHandler = handler;
       }),
     };
-    oauthManager.setConfigGetter(() => config as unknown as Config);
+    (oauthManager as unknown as { config?: Config }).config =
+      config as unknown as Config;
 
     const [tokenA, tokenB] = await Promise.all([
       oauthManager.getOAuthToken('anthropic'),

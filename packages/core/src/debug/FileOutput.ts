@@ -16,7 +16,7 @@ interface QueuedEntry {
 const LOG_FILE_DATE_LENGTH = 10;
 
 export class FileOutput {
-  private static instance: FileOutput;
+  private static instance: FileOutput | undefined;
   private debugDir: string;
   private currentLogFile: string;
   private writeQueue: QueuedEntry[] = [];
@@ -89,6 +89,17 @@ export class FileOutput {
 
     // Flush any remaining entries
     await this.flushQueue();
+    if (FileOutput.instance === this) {
+      FileOutput.instance = undefined;
+    }
+  }
+
+  static async resetForTesting(): Promise<void> {
+    const instance = FileOutput.instance;
+    FileOutput.instance = undefined;
+    if (instance) {
+      await instance.dispose();
+    }
   }
 
   private startFlushTimer(): void {

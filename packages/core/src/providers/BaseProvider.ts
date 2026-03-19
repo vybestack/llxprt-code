@@ -42,6 +42,7 @@ import type {
   UserMemoryInput,
 } from './types/providerRuntime.js';
 import { resolveRuntimeAuthToken } from './utils/authToken.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -986,7 +987,7 @@ export abstract class BaseProvider implements IProvider {
       return (settings[key] as T) || fallback;
     } catch (error) {
       if (process.env.DEBUG) {
-        console.error(
+        debugLogger.error(
           `Failed to get ${key} from SettingsService for ${this.name}:`,
           error,
         );
@@ -1014,7 +1015,7 @@ export abstract class BaseProvider implements IProvider {
       }
     } catch (error) {
       if (process.env.DEBUG) {
-        console.error(
+        debugLogger.error(
           `Failed to set ${key} in SettingsService for ${this.name}:`,
           error,
         );
@@ -1097,7 +1098,7 @@ export abstract class BaseProvider implements IProvider {
         : undefined;
     } catch (error) {
       if (process.env.DEBUG) {
-        console.error(
+        debugLogger.error(
           `Failed to get model params from SettingsService for ${this.name}:`,
           error,
         );
@@ -1142,7 +1143,7 @@ export abstract class BaseProvider implements IProvider {
       }
     } catch (error) {
       if (process.env.DEBUG) {
-        console.error(
+        debugLogger.error(
           `Failed to set model params in SettingsService for ${this.name}:`,
           error,
         );

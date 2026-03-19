@@ -19,6 +19,7 @@ import { BaseTokenStorage } from './base-token-storage.js';
 import type { OAuthCredentials } from './types.js';
 import { coreEvents } from '../../utils/events.js';
 import { createDefaultKeyringAdapter } from '../../storage/secure-store.js';
+import { debugLogger } from '../../utils/debugLogger.js';
 
 interface Keytar {
   getPassword(service: string, account: string): Promise<string | null>;
@@ -91,11 +92,11 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         err?.message?.includes(`'@napi-rs/keyring'`);
 
       if (isModuleMissing) {
-        console.warn(
+        debugLogger.warn(
           '@napi-rs/keyring not available; falling back to encrypted file storage for MCP tokens.',
         );
       } else {
-        console.error('Failed to load @napi-rs/keyring module:', error);
+        debugLogger.error('Failed to load @napi-rs/keyring module:', error);
       }
 
       this.keytarModule = null;

@@ -7,26 +7,31 @@
 import {
   Config,
   DebugLogger,
+  type MessageBus,
+  clearActiveProviderRuntimeContext,
   ProviderRuntimeContext,
   SettingsService,
   ProfileManager,
   createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
   getProfilePersistableKeys,
   resolveAlias,
   getProviderConfigKeys,
   isLoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
-import type {
-  ProviderManager,
-  Profile,
-  ModelParams,
-  RuntimeAuthScopeFlushResult,
-  LoadBalancerProfile,
-  HydratedModel,
+  type ProviderManager,
+  type Profile,
+  type ModelParams,
+  type RuntimeAuthScopeFlushResult,
+  type LoadBalancerProfile,
+  type HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
+import {
+  registerProviderManagerSingleton,
+  resetProviderManager,
+} from '../providers/providerManagerInstance.js';
+
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import type { LoadedSettings } from '../config/settings.js';
 import {
@@ -270,14 +275,31 @@ function resolveActiveRuntimeIdentity(): {
     return scope;
   }
 
-  const context = getActiveProviderRuntimeContext();
-  const runtimeId =
-    typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
-      ? context.runtimeId
-      : LEGACY_RUNTIME_ID;
-  const metadata = context.metadata ?? {};
+  const context = peekActiveProviderRuntimeContext();
+  if (context) {
+    const candidateId =
+      typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
+        ? context.runtimeId
+        : LEGACY_RUNTIME_ID;
 
-  return { runtimeId, metadata };
+    // If the active context's runtimeId is registered in the CLI registry, use it.
+    // Otherwise fall back to a registered ID — the active context may be a
+    // provider-scoped context (e.g. a per-call UUID from BaseProvider) that was
+    // never registered in the CLI runtime registry.
+    if (runtimeRegistry.has(candidateId)) {
+      return { runtimeId: candidateId, metadata: context.metadata ?? {} };
+    }
+
+    // Fall back to the first registered runtimeId (typically cli.runtime.bootstrap)
+    const firstRegistered = runtimeRegistry.keys().next().value;
+    if (firstRegistered) {
+      return { runtimeId: firstRegistered, metadata: context.metadata ?? {} };
+    }
+
+    return { runtimeId: candidateId, metadata: context.metadata ?? {} };
+  }
+
+  return { runtimeId: LEGACY_RUNTIME_ID, metadata: {} };
 }
 
 function upsertRuntimeEntry(
@@ -317,6 +339,10 @@ function upsertRuntimeEntry(
         : (current?.metadata ?? {}),
   };
   runtimeRegistry.set(runtimeId, next);
+  logger.debug(
+    () =>
+      `[upsertRuntimeEntry] SET runtimeId=${runtimeId}, hasConfig=${!!next.config}, hasProviderManager=${!!next.providerManager}, registered=[${Array.from(runtimeRegistry.keys()).join(', ')}]`,
+  );
   return next;
 }
 
@@ -325,6 +351,14 @@ function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   if (entry) {
     return entry;
   }
+
+  const registeredIds = Array.from(runtimeRegistry.keys());
+  const scope = getCurrentRuntimeScope();
+  const activeCtx = peekActiveProviderRuntimeContext();
+  logger.debug(
+    () =>
+      `[requireRuntimeEntry] MISS for runtimeId=${runtimeId}; registered=[${registeredIds.join(', ')}]; scope=${JSON.stringify(scope)}; activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+  );
 
   const hint = isStatelessProviderIntegrationEnabled()
     ? 'Stateless hardening requires explicit runtime registration.'
@@ -349,7 +383,21 @@ function disposeCliRuntime(
         `[cli-runtime] Revoked ${context.revokedTokens.length} scoped OAuth token(s) for runtime ${runtimeId}.`,
     );
   }
+
   runtimeRegistry.delete(runtimeId);
+
+  const activeContext = peekActiveProviderRuntimeContext();
+  if (activeContext?.runtimeId === runtimeId) {
+    clearActiveProviderRuntimeContext();
+  }
+
+  resetProviderManager();
+}
+
+export function resetCliRuntimeRegistryForTesting(): void {
+  runtimeRegistry.clear();
+  clearActiveProviderRuntimeContext();
+  resetProviderManager();
 }
 
 export interface CliRuntimeServices {
@@ -359,6 +407,12 @@ export interface CliRuntimeServices {
   profileManager?: ProfileManager;
 }
 
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P06
+ * @requirement REQ-D01-003.3
+ * @requirement REQ-D01-004.3
+ * @pseudocode lines 73-82
+ */
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement:REQ-SP4-004
@@ -374,6 +428,16 @@ export interface CliRuntimeServices {
 export function getCliRuntimeContext(): ProviderRuntimeContext {
   const identity = resolveActiveRuntimeIdentity();
   const entry = runtimeRegistry.get(identity.runtimeId);
+
+  if (!entry || !entry.config) {
+    const registeredIds = Array.from(runtimeRegistry.keys());
+    const scope = getCurrentRuntimeScope();
+    const activeCtx = peekActiveProviderRuntimeContext();
+    logger.debug(
+      () =>
+        `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!(entry && entry.config)}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+    );
+  }
 
   if (entry && entry.config) {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -395,7 +459,6 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
       settingsService ??
       entry.config.getSettingsService() ??
       new SettingsService();
-
     return createProviderRuntimeContext({
       settingsService: resolvedSettings,
       config: entry.config,
@@ -414,17 +477,13 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
     );
   }
 
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // Legacy fallback to global context (should not be used under stateless hardening)
-  const context = getActiveProviderRuntimeContext();
-
-  if (!context.config) {
-    throw new Error(
-      '[cli-runtime] Active provider runtime context is missing Config instance. ' +
-        'Ensure gemini bootstrap initialised runtime before invoking helpers.',
-    );
-  }
-  return context;
+  throw new Error(
+    formatMissingRuntimeMessage({
+      runtimeId: identity.runtimeId,
+      missingFields: ['runtime registration'],
+      hint: 'Register the runtime via setCliRuntimeContext() before invoking CLI runtime helpers.',
+    }),
+  );
 }
 
 /**
@@ -607,9 +666,18 @@ export async function activateIsolatedRuntimeContext(
   await handle.activate(overrides);
 }
 
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+ * @requirement REQ-D01-002
+ * @requirement REQ-D01-003
+ * @pseudocode lines 122-133
+ */
 export function registerCliProviderInfrastructure(
   manager: ProviderManager,
   oauthManager: OAuthManager,
+  _options: {
+    messageBus: MessageBus;
+  },
 ): void {
   const { runtimeId, metadata } = resolveActiveRuntimeIdentity();
   const entry = upsertRuntimeEntry(runtimeId, {
@@ -617,23 +685,16 @@ export function registerCliProviderInfrastructure(
     oauthManager,
     metadata,
   });
+  registerProviderManagerSingleton(manager, oauthManager);
 
-  const context = getActiveProviderRuntimeContext();
-  const config = entry.config ?? context.config ?? null;
+  const config = entry.config ?? null;
   if (config) {
     config.setProviderManager(manager);
     manager.setConfig(config);
-    // Set message bus getter on OAuthManager for interactive TUI prompts
-    // This enables the bucket auth confirmation dialog to work via message bus
-    // @plan PLAN-20251213issue490
-    oauthManager.setMessageBus(() => config.getMessageBus());
-    oauthManager.setConfigGetter(() => config);
+
     logger.debug(
       () =>
         `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled?.() ?? false})`,
-    );
-    logger.debug(
-      () => `[cli-runtime] OAuthManager message bus getter configured`,
     );
     upsertRuntimeEntry(runtimeId, { config });
   }

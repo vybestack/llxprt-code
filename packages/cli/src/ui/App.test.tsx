@@ -52,6 +52,7 @@ interface MockServerConfig {
   userAgent: string;
   userMemory: string;
   geminiMdFileCount: number;
+  coreMemoryFileCount: number;
   approvalMode: ApprovalMode;
   vertexai?: boolean;
   showMemoryUsage?: boolean;
@@ -81,6 +82,7 @@ interface MockServerConfig {
   setUserMemory: Mock<(newUserMemory: string) => void>;
   getGeminiMdFileCount: Mock<() => number>;
   getLlxprtMdFileCount: Mock<() => number>;
+  getCoreMemoryFileCount: Mock<() => number>;
   setGeminiMdFileCount: Mock<(count: number) => void>;
   getApprovalMode: Mock<() => ApprovalMode>;
   setApprovalMode: Mock<(skip: ApprovalMode) => void>;
@@ -119,6 +121,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         userAgent: opts.userAgent || 'test-agent',
         userMemory: opts.userMemory || '',
         geminiMdFileCount: opts.geminiMdFileCount || 0,
+        coreMemoryFileCount: opts.coreMemoryFileCount || 0,
         approvalMode: opts.approvalMode ?? ApprovalMode.DEFAULT,
         vertexai: opts.vertexai,
         showMemoryUsage: opts.showMemoryUsage ?? false,
@@ -145,6 +148,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         setUserMemory: vi.fn(),
         getGeminiMdFileCount: vi.fn(() => opts.geminiMdFileCount || 0),
         getLlxprtMdFileCount: vi.fn(() => opts.geminiMdFileCount || 0),
+        getCoreMemoryFileCount: vi.fn(() => opts.coreMemoryFileCount || 0),
         setGeminiMdFileCount: vi.fn(),
         getApprovalMode: vi.fn(() => opts.approvalMode ?? ApprovalMode.DEFAULT),
         setApprovalMode: vi.fn(),
@@ -889,6 +893,30 @@ describe('App UI', () => {
     currentUnmount = unmount;
     await Promise.resolve();
     expect(lastFrame()).not.toContain('ANY_FILE.MD');
+  });
+
+  it('should display core memory files separately from custom context files', async () => {
+    mockSettings = createMockSettings({
+      workspace: { contextFileName: 'CONTEXT.md', theme: 'Default' },
+    });
+    mockConfig.getGeminiMdFileCount.mockReturnValue(0);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(0);
+    mockConfig.getCoreMemoryFileCount.mockReturnValue(1);
+    mockConfig.getAllGeminiMdFilenames.mockReturnValue(['CONTEXT.md']);
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
+
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(lastFrame()).toContain('Using: 1 .LLXPRT_SYSTEM file');
+    expect(lastFrame()).not.toContain('Using: 1 CONTEXT.md file');
   });
 
   it('should display GEMINI.md and MCP server count when both are present', async () => {

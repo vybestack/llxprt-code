@@ -23,6 +23,8 @@ import type {
 } from './types.js';
 import type { LLMRequest } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
+import type { Config } from '../config/config.js';
+import { sanitizeEnvironment } from '../services/environmentSanitization.js';
 import {
   escapeShellArg,
   getShellConfiguration,
@@ -47,7 +49,11 @@ const EXIT_CODE_NON_BLOCKING_ERROR = 1;
  * Hook runner that executes command hooks
  */
 export class HookRunner {
-  constructor() {}
+  private readonly config: Config;
+
+  constructor(config: Config) {
+    this.config = config;
+  }
 
   /**
    * Execute a single hook
@@ -175,6 +181,29 @@ export class HookRunner {
           }
           break;
 
+        case HookEventName.BeforeTool:
+          if ('tool_input' in hookOutput.hookSpecificOutput) {
+            // For BeforeTool, we update the tool_input
+            const modifiedToolInput =
+              hookOutput.hookSpecificOutput['tool_input'];
+            if (
+              modifiedToolInput &&
+              typeof modifiedToolInput === 'object' &&
+              !Array.isArray(modifiedToolInput) &&
+              'tool_input' in modifiedInput
+            ) {
+              // Merge modified input with existing tool_input
+              (
+                modifiedInput as import('./types.js').BeforeToolInput
+              ).tool_input = {
+                ...(modifiedInput as import('./types.js').BeforeToolInput)
+                  .tool_input,
+                ...(modifiedToolInput as Record<string, unknown>),
+              };
+            }
+          }
+          break;
+
         default:
           // For other events, no special input modification is needed
           break;
@@ -193,6 +222,23 @@ export class HookRunner {
     input: HookInput,
     startTime: number,
   ): Promise<HookExecutionResult> {
+    // Secondary security check - block project hooks in untrusted folders
+    const { ConfigSource } = await import('./hookRegistry.js');
+    if (
+      hookConfig.source === ConfigSource.Project &&
+      !this.config.isTrustedFolder()
+    ) {
+      const errorMessage = 'Project hook blocked - folder not trusted';
+      debugLogger.warn(errorMessage);
+      return {
+        hookConfig,
+        eventName,
+        success: false,
+        error: new Error(errorMessage),
+        duration: Date.now() - startTime,
+      };
+    }
+
     const timeout = hookConfig.timeout ?? DEFAULT_HOOK_TIMEOUT;
 
     return new Promise((resolve) => {
@@ -226,8 +272,16 @@ export class HookRunner {
       );
 
       // Set up environment variables
+      const sanitizationConfig = this.config.getSanitizationConfig();
       const env = {
-        ...process.env,
+        ...sanitizeEnvironment(
+          process.env,
+          sanitizationConfig || {
+            enableEnvironmentVariableRedaction: false,
+            allowedEnvironmentVariables: [],
+            blockedEnvironmentVariables: [],
+          },
+        ),
         LLXPRT_PROJECT_DIR: input.cwd,
       };
 

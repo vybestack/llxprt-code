@@ -5,6 +5,7 @@
  */
 
 import type { ToolCall } from '../types.js';
+import { debugLogger } from '../../utils/debugLogger.js';
 
 /**
  * Utility class for extracting content and tool calls from provider-specific streaming responses
@@ -43,7 +44,7 @@ export class ProviderContentExtractor {
       // Fallback: try to extract any text content
       return this.extractGenericContent(chunk as Record<string, unknown>);
     } catch (error) {
-      console.warn('Error extracting content from chunk:', error);
+      debugLogger.warn('Error extracting content from chunk:', error);
       return '';
     }
   }
@@ -74,7 +75,7 @@ export class ProviderContentExtractor {
 
       return [];
     } catch (error) {
-      console.warn('Error extracting tool calls from chunk:', error);
+      debugLogger.warn('Error extracting tool calls from chunk:', error);
       return [];
     }
   }

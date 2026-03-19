@@ -71,7 +71,7 @@ export class HookSystem {
     // @requirement:HOOK-006 - Own single shared instances
     this.registry = new HookRegistry(config);
     this.planner = new HookPlanner(this.registry);
-    this.runner = new HookRunner();
+    this.runner = new HookRunner(config);
     this.aggregator = new HookAggregator();
   }
 

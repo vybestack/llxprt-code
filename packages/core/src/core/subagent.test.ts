@@ -36,6 +36,7 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
 import type { IProvider } from '../providers/IProvider.js';
+import { initializeTestConfig } from '../test-utils/config.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
@@ -125,7 +126,8 @@ async function createMockConfig(
     settingsService,
   };
   const config = new Config(configParams);
-  await config.initialize();
+  await initializeTestConfig(config);
+
   await config.refreshAuth();
 
   // Mock getContentGeneratorConfig to return a valid config

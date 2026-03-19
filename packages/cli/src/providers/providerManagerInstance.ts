@@ -16,9 +16,10 @@ import {
   sanitizeForByteString,
   needsSanitization,
   SettingsService,
-  createProviderRuntimeContext,
   getSettingsService,
   DebugLogger,
+  debugLogger,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
@@ -29,10 +30,14 @@ import {
   USER_SETTINGS_PATH,
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import {
+  OAuthManager,
+  type OAuthManagerRuntimeMessageBusDeps,
+} from '../auth/oauth-manager.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
+
 import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
 import {
   loadProviderAliasEntries,
@@ -48,7 +53,7 @@ function sanitizeApiKey(key: string): string {
   const sanitized = sanitizeForByteString(key);
 
   if (needsSanitization(key)) {
-    console.warn(
+    debugLogger.warn(
       '[ProviderManager] API key contained non-ASCII or control characters that were removed. ' +
         'Please check your API key file encoding (should be UTF-8 without BOM).',
     );
@@ -70,6 +75,7 @@ interface ProviderManagerFactoryOptions {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
   ) => number;
+  runtimeMessageBus?: MessageBus;
 }
 
 type RuntimeContextShape = {
@@ -239,7 +245,28 @@ export function createProviderManager(
 
   // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore = createTokenStore();
-  const oauthManager = new OAuthManager(tokenStore, loadedSettings);
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  const runtimeOAuthMessageBus = options.runtimeMessageBus;
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  const oauthRuntimeDeps: OAuthManagerRuntimeMessageBusDeps = {
+    messageBus: runtimeOAuthMessageBus,
+    config: options.config,
+  };
+  const oauthManager = new OAuthManager(
+    tokenStore,
+    loadedSettings,
+    oauthRuntimeDeps,
+  );
 
   const { config, allowBrowserEnvironment = false, addItem } = options;
 
@@ -252,8 +279,6 @@ export function createProviderManager(
     if (config) {
       manager.setConfig(config);
       config.setProviderManager(manager);
-      oauthManager.setMessageBus(() => config.getMessageBus());
-      oauthManager.setConfigGetter(() => config);
     }
     const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
     manager.registerProvider(fakeProvider);
@@ -272,15 +297,11 @@ export function createProviderManager(
   if (config) {
     manager.setConfig(config);
     config.setProviderManager(manager);
-    // Set message bus getter on OAuthManager for interactive TUI prompts
-    // Uses a getter function to enable lazy resolution after TUI is initialized
-    oauthManager.setMessageBus(() => config.getMessageBus());
-    // Set config getter on OAuthManager for bucket failover handler setup
-    // @plan PLAN-20251213issue490
-    oauthManager.setConfigGetter(() => config);
-    logger.debug('OAuthManager message bus getter configured');
+    logger.debug(
+      'OAuthManager runtime dependencies configured from composition root',
+    );
   } else {
-    logger.debug('No config provided, message bus getter NOT configured');
+    logger.debug('No config provided; runtime MessageBus was not injected');
   }
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
@@ -344,7 +365,7 @@ export function createProviderManager(
         ? providerBaseUrl
         : process.env.OPENAI_BASE_URL;
 
-  // Debug logging removed - was using console.log which violates project guidelines
+  // Debug logging removed - was using debugLogger.log which violates project guidelines
   // Use DebugLogger if detailed logging is needed here
 
   const openaiProviderConfig: ProviderConfigWithToolMode = {
@@ -412,6 +433,21 @@ export function createProviderManager(
   return { manager, oauthManager };
 }
 
+/**
+ * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P08
+ * @requirement REQ-D01-003.3
+ * @requirement REQ-D01-004.3
+ * @requirement REQ-D01-001.4
+ * @pseudocode lines 92-102
+ */
+export function registerProviderManagerSingleton(
+  manager: ProviderManager,
+  oauthManager: OAuthManager,
+): void {
+  singletonManager = manager;
+  singletonOAuthManager = oauthManager;
+}
+
 export function getProviderManager(
   config?: Config,
   allowBrowserEnvironment = false,
@@ -421,28 +457,17 @@ export function getProviderManager(
     baseTimestamp: number,
   ) => number,
 ): ProviderManager {
+  void config;
+  void allowBrowserEnvironment;
+  void settings;
   if (singletonManager && addItem && singletonOAuthManager) {
     attachAddItemToOAuthProviders(singletonOAuthManager, addItem);
   }
 
   if (!singletonManager) {
-    const runtime = createProviderRuntimeContext({
-      settingsService: config?.getSettingsService() ?? new SettingsService(),
-      config,
-      runtimeId: 'provider-manager-singleton',
-      metadata: { source: 'providerManagerInstance.getProviderManager' },
-    });
-    const { manager, oauthManager } = createProviderManager(runtime, {
-      config,
-      allowBrowserEnvironment,
-      settings,
-      addItem,
-    });
-    singletonManager = manager;
-    singletonOAuthManager = oauthManager;
-    if (config) {
-      config.setProviderManager(manager);
-    }
+    throw new Error(
+      'ProviderManager singleton has not been registered. Initialize provider infrastructure at the composition root before requesting it.',
+    );
   }
 
   return singletonManager;
@@ -554,7 +579,7 @@ function registerAliasProviders(
         break;
       }
       default: {
-        console.warn(
+        debugLogger.warn(
           `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
         );
       }
@@ -615,7 +640,7 @@ function createOpenAIAliasProvider(
 ): OpenAIProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
     );
     return null;
@@ -688,7 +713,7 @@ function createOpenAIResponsesAliasProvider(
 ): OpenAIResponsesProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
     );
     return null;
@@ -766,7 +791,7 @@ function createOpenAIVercelAliasProvider(
 ): OpenAIVercelProvider | null {
   const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
   if (!resolvedBaseUrl) {
-    console.warn(
+    debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
     );
     return null;

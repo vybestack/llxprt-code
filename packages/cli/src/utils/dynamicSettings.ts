@@ -1,4 +1,8 @@
-import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  type Config,
+  debugLogger,
+} from '@vybestack/llxprt-code-core';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 const logger = new DebugLogger('llxprt:dynamic-settings');
@@ -150,7 +154,7 @@ export function generateDynamicToolSettings(
 
     return toolSettings;
   } catch (error) {
-    console.error('[generateDynamicToolSettings] Error:', error);
+    debugLogger.error('[generateDynamicToolSettings] Error:', error);
     return {};
   }
 }

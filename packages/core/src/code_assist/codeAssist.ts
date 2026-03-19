@@ -10,8 +10,8 @@ import { setupUser } from './setup.js';
 import type { HttpOptions } from './server.js';
 import { CodeAssistServer } from './server.js';
 import type { Config } from '../config/config.js';
-import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
 import { DebugLogger } from '../debug/index.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export async function createCodeAssistContentGenerator(
   httpOptions: HttpOptions,
@@ -64,12 +64,7 @@ export async function createCodeAssistContentGenerator(
 export function getCodeAssistServer(
   config: Config,
 ): CodeAssistServer | undefined {
-  let server = config.getGeminiClient().getContentGenerator();
-
-  // Unwrap LoggingContentGenerator if present
-  if (server instanceof LoggingContentGenerator) {
-    server = server.getWrapped();
-  }
+  const server = config.getGeminiClient().getContentGenerator();
 
   if (!(server instanceof CodeAssistServer)) {
     return undefined;
@@ -91,9 +86,9 @@ export function emitCitationEvent(config: Config, citationText: string): void {
       // TODO: Implement provider-neutral event emission
       // For now, this is a placeholder that can be extended when we have
       // a provider-neutral event emission system
-      console.debug('Citation event would be emitted:', citationText);
+      debugLogger.debug('Citation event would be emitted:', citationText);
     } catch (error) {
-      console.debug('Failed to emit citation event:', error);
+      debugLogger.debug('Failed to emit citation event:', error);
     }
   }
 }

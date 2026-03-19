@@ -216,6 +216,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     }) => {
       activeContext = context;
     },
+    peekActiveProviderRuntimeContext: () => activeContext,
+    getCurrentRuntimeScope: () => undefined,
   };
 });
 
@@ -242,6 +244,8 @@ const mockOAuthManager = {
 
 describe('Anthropic OAuth defaults (Issue #181)', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+
     stubSettingsService = new StubSettingsService();
     stubConfig = new StubConfig(stubSettingsService);
     activeProviderName = 'openai';
@@ -253,12 +257,17 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
     });
 
     // Register the provider manager
+    const runtimeMessageBus = {} as never;
+    (
+      mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
+    ).runtimeMessageBus = runtimeMessageBus;
     registerCliProviderInfrastructure(
       mockProviderManager as never,
       mockOAuthManager,
+      {
+        messageBus: runtimeMessageBus,
+      },
     );
-
-    vi.clearAllMocks();
   });
 
   afterEach(() => {

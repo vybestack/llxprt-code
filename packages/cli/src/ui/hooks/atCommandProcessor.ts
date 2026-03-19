@@ -15,6 +15,7 @@ import {
   getErrorMessage,
   isNodeError,
   unescapePath,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import {
@@ -160,7 +161,7 @@ function handleResourceReadError(
   const errorMessages = resourceReadDisplays
     .filter((d) => d.status === ToolCallStatus.Error)
     .map((d) => d.resultDisplay);
-  console.error(errorMessages);
+  debugLogger.error(errorMessages.filter(Boolean).join(', '));
   const errorMsg = `Exiting due to an error processing the @ command: ${firstError.resultDisplay}`;
   return { processedQuery: null, error: errorMsg };
 }
@@ -381,7 +382,7 @@ export async function handleAtCommand({
                 );
               }
             } catch (globError) {
-              console.error(
+              debugLogger.error(
                 `Error during glob search for ${pathName}: ${getErrorMessage(globError)}`,
               );
               onDebugMessage(
@@ -394,7 +395,7 @@ export async function handleAtCommand({
             );
           }
         } else {
-          console.error(
+          debugLogger.error(
             `Error stating path ${pathName}: ${getErrorMessage(error)}`,
           );
           onDebugMessage(
@@ -474,7 +475,7 @@ export async function handleAtCommand({
     }
 
     const message = `Ignored ${totalIgnored} files:\n${messages.join('\n')}`;
-    console.log(message);
+    debugLogger.log(message);
     onDebugMessage(message);
   }
 

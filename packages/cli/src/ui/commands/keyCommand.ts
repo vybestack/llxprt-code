@@ -25,6 +25,7 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   maskKeyForDisplay,
   SecureStoreError,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 
@@ -122,7 +123,9 @@ async function handleSave(
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[key save] Could not check if key '${name}' exists: ${msg}`);
+    debugLogger.warn(
+      `[key save] Could not check if key '${name}' exists: ${msg}`,
+    );
   }
 
   // Save the key (R13.1)

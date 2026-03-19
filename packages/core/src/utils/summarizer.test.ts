@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { GeminiClient } from '../core/client.js';
 import { Config } from '../config/config.js';
+import { debugLogger } from './debugLogger.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import {
   summarizeToolOutput,
@@ -47,12 +48,12 @@ describe('summarizers', () => {
     mockGeminiClient = new GeminiClient(mockConfigInstance, runtimeState);
     (mockGeminiClient.generateContent as Mock) = vi.fn();
 
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(debugLogger, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.clearAllMocks();
-    (console.error as Mock).mockRestore();
+    (debugLogger.error as Mock).mockRestore();
   });
 
   describe('summarizeToolOutput', () => {
@@ -112,7 +113,7 @@ describe('summarizers', () => {
 
       expect(mockGeminiClient.generateContent).toHaveBeenCalledTimes(1);
       expect(result).toBe(longText);
-      expect(console.error).toHaveBeenCalledWith(
+      expect(debugLogger.error).toHaveBeenCalledWith(
         'Failed to summarize tool output.',
         error,
       );

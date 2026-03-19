@@ -70,9 +70,23 @@ import {
   triggerBeforeAgentHook,
   triggerAfterAgentHook,
 } from './lifecycleHookTriggers.js';
+import type {
+  BeforeAgentHookOutput,
+  AfterAgentHookOutput,
+} from '../hooks/types.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
+
+/**
+ * Hook state for tracking BeforeAgent/AfterAgent deduplication
+ */
+interface HookState {
+  hasFiredBeforeAgent: boolean;
+  cumulativeResponse: string;
+  activeCalls: number;
+}
+
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');
 }
@@ -210,6 +224,12 @@ export class GeminiClient {
   private lastPromptId?: string;
   private readonly complexityAnalyzer: ComplexityAnalyzer;
   private readonly todoReminderService: TodoReminderService;
+
+  /**
+   * Hook state tracking for agent hook deduplication
+   * Prevents BeforeAgent/AfterAgent from firing multiple times during recursive calls
+   */
+  private hookStateMap: Map<string, HookState> = new Map();
   private todoToolsAvailable = false;
   private lastComplexitySuggestionTime: number = 0;
   private readonly complexitySuggestionCooldown: number;
@@ -1389,6 +1409,68 @@ ${jitMemory}`
     return this.config.getModel();
   }
 
+  /**
+   * Safely fire BeforeAgent hook with deduplication
+   * Only fires once per prompt_id regardless of recursive calls
+   */
+  private async fireBeforeAgentHookSafe(
+    prompt_id: string,
+    prompt: string,
+  ): Promise<BeforeAgentHookOutput | undefined> {
+    // Initialize hook state if needed
+    if (!this.hookStateMap.has(prompt_id)) {
+      this.hookStateMap.set(prompt_id, {
+        hasFiredBeforeAgent: false,
+        cumulativeResponse: '',
+        activeCalls: 0,
+      });
+    }
+
+    const hookState = this.hookStateMap.get(prompt_id)!;
+    hookState.activeCalls++;
+
+    // Only fire on first call for this prompt_id
+    if (!hookState.hasFiredBeforeAgent) {
+      const result = await triggerBeforeAgentHook(this.config, prompt);
+      hookState.hasFiredBeforeAgent = true;
+      return result;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Safely fire AfterAgent hook with deduplication
+   * Only fires on outermost call (activeCalls === 1) with cumulative response
+   */
+  private async fireAfterAgentHookSafe(
+    prompt_id: string,
+    prompt: string,
+    responseChunk: string,
+    hasPendingToolCalls: boolean,
+  ): Promise<AfterAgentHookOutput | undefined> {
+    const hookState = this.hookStateMap.get(prompt_id);
+    if (!hookState) {
+      return undefined;
+    }
+
+    // Accumulate response text
+    hookState.cumulativeResponse += responseChunk;
+    hookState.activeCalls--;
+
+    // Only fire on outermost call and when no tool calls pending
+    if (hookState.activeCalls === 0 && !hasPendingToolCalls) {
+      return triggerAfterAgentHook(
+        this.config,
+        prompt,
+        hookState.cumulativeResponse,
+        false, // stop_hook_active
+      );
+    }
+
+    return undefined;
+  }
+
   async *sendMessageStream(
     initialRequest: PartListUnion,
     signal: AbortSignal,
@@ -1410,6 +1492,12 @@ ${jitMemory}`
       () =>
         `DEBUG: GeminiClient.sendMessageStream Array.isArray(request): ${Array.isArray(initialRequest)}`,
     );
+
+    // Clean up old hook state when prompt_id changes
+    if (this.lastPromptId && this.lastPromptId !== prompt_id) {
+      this.hookStateMap.delete(this.lastPromptId);
+    }
+
     await this.lazyInitialize();
 
     if (!this.chat) {
@@ -1437,15 +1525,14 @@ ${jitMemory}`
 
     // Helper to fire AfterAgent hook when returning
     // Returns the hook output for caller to check for continuation
-    // Note: Unlike BeforeAgent which only fires for new prompts, AfterAgent fires
-    // for every turn to allow hooks to monitor all model responses
-    const fireAfterAgentHook = async () => {
+    // Uses safe method to deduplicate hooks across recursive calls
+    const fireAfterAgentHook = async (hasPendingToolCalls: boolean = false) => {
       const responseText = responseChunks.join('');
-      return triggerAfterAgentHook(
-        this.config,
+      return this.fireAfterAgentHookSafe(
+        prompt_id,
         promptText,
         responseText,
-        false, // stop_hook_active - no stop hooks in current implementation
+        hasPendingToolCalls,
       );
     };
 
@@ -1461,7 +1548,11 @@ ${jitMemory}`
       this.currentSequenceModel = null;
 
       // Fire BeforeAgent hook for new user prompts and handle result
-      const hookOutput = await triggerBeforeAgentHook(this.config, promptText);
+      // Uses safe method to prevent duplicate firing in recursive calls
+      const hookOutput = await this.fireBeforeAgentHookSafe(
+        prompt_id,
+        promptText,
+      );
 
       // Check for blocking decision or stop execution
       if (

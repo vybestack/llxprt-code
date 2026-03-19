@@ -38,6 +38,7 @@ export interface UserFeedbackPayload {
  */
 export interface MemoryChangedPayload {
   fileCount: number;
+  coreMemoryFileCount?: number;
 }
 
 export interface ConsoleLogPayload {
@@ -58,6 +59,7 @@ export enum CoreEvent {
   ConsoleLog = 'console-log',
   Output = 'output',
   ExternalEditorClosed = 'external-editor-closed',
+  SettingsChanged = 'settings-changed',
 }
 
 export class CoreEventEmitter extends EventEmitter {
@@ -92,6 +94,13 @@ export class CoreEventEmitter extends EventEmitter {
   }
 
   /**
+   * Notifies subscribers that settings have been modified.
+   */
+  emitSettingsChanged(): void {
+    this.emit(CoreEvent.SettingsChanged);
+  }
+
+  /**
    * Flushes buffered messages. Call this immediately after primary UI listener
    * subscribes.
    */
@@ -123,6 +132,7 @@ export class CoreEventEmitter extends EventEmitter {
     event: CoreEvent.Output,
     listener: (payload: OutputPayload) => void,
   ): this;
+  override on(event: CoreEvent.SettingsChanged, listener: () => void): this;
   override on(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,6 +161,7 @@ export class CoreEventEmitter extends EventEmitter {
     event: CoreEvent.Output,
     listener: (payload: OutputPayload) => void,
   ): this;
+  override off(event: CoreEvent.SettingsChanged, listener: () => void): this;
   override off(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,6 +185,7 @@ export class CoreEventEmitter extends EventEmitter {
   ): boolean;
   override emit(event: CoreEvent.Output, payload: OutputPayload): boolean;
   override emit(event: CoreEvent.ExternalEditorClosed): boolean;
+  override emit(event: CoreEvent.SettingsChanged): boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override emit(event: string | symbol, ...args: any[]): boolean {
     return super.emit(event, ...args);

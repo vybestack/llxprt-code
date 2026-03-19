@@ -14,6 +14,7 @@ import type {
 import { GoogleAuth } from 'google-auth-library';
 import { MCPServerConfig } from '../config/config.js';
 import { FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export class GoogleCredentialProvider implements McpAuthProvider {
   private readonly auth: GoogleAuth;
@@ -23,7 +24,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
   // Properties required by OAuthClientProvider, with no-op values
   readonly redirectUrl = '';
   readonly clientMetadata: OAuthClientMetadata = {
-    client_name: 'Gemini CLI (Google ADC)',
+    client_name: 'LLxprt Code (Google ADC)',
     redirect_uris: [],
     grant_types: [],
     response_types: [],
@@ -69,7 +70,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
     const accessTokenResponse = await client.getAccessToken();
 
     if (!accessTokenResponse.token) {
-      console.error('Failed to get access token from Google ADC');
+      debugLogger.error('Failed to get access token from Google ADC');
       return undefined;
     }
 

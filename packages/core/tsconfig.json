@@ -5,7 +5,11 @@
     "tsBuildInfoFile": ".tsbuildinfo",
     "lib": ["DOM", "DOM.Iterable", "ES2021"],
     "composite": true,
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-core": ["./index.ts"]
+    }
   },
   "include": ["index.ts", "src/**/*.ts", "src/**/*.json"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]

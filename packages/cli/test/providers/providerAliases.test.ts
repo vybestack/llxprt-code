@@ -15,8 +15,15 @@ import {
   getProviderManager,
   resetProviderManager,
   setFileSystem,
+  createProviderManager,
+  registerProviderManagerSingleton,
 } from '../../src/providers/providerManagerInstance.js';
 import { NodeFileSystem } from '../../src/providers/IFileSystem.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
 
 describe('Provider alias integration', () => {
   let tempDir: string;
@@ -60,6 +67,12 @@ describe('Provider alias integration', () => {
 
     resetProviderManager();
     setFileSystem(new NodeFileSystem());
+
+    // After DI migration, set up runtime context and create/register ProviderManager
+    const runtimeContext = createProviderRuntimeContext();
+    setActiveProviderRuntimeContext(runtimeContext);
+    const { manager, oauthManager } = createProviderManager(runtimeContext);
+    registerProviderManagerSingleton(manager, oauthManager);
   });
 
   afterEach(() => {
@@ -80,6 +93,7 @@ describe('Provider alias integration', () => {
     }
 
     resetProviderManager();
+    clearActiveProviderRuntimeContext();
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });

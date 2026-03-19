@@ -13,6 +13,7 @@ import {
   loadPromptFromManifest,
 } from './manifest-loader.js';
 import { reportMissingPrompt } from './prompt-warnings.js';
+import { debugLogger } from '../../utils/debugLogger.js';
 
 // In bundled environment, use global __dirname if available
 const __dirname =
@@ -258,12 +259,12 @@ function loadMarkdownFile(filename: string): string {
         ? error.stack.split('\n')[0]
         : errorMsg;
     reportMissingPrompt(filename, 'provider-defaults', warningDetail);
-    console.error(
+    debugLogger.error(
       `Warning: Could not load ${filename}, using empty content. Error: ${errorMsg}`,
     );
     if (debugLog) {
-      console.warn(`[PROMPT_LOADER] Full error:`, error);
-      console.warn(
+      debugLogger.warn(`[PROMPT_LOADER] Full error:`, error);
+      debugLogger.warn(
         `[PROMPT_LOADER] Stack trace:`,
         error instanceof Error ? error.stack : 'No stack trace',
       );

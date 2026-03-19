@@ -13,6 +13,7 @@ import {
   afterEach,
   type Mock,
 } from 'vitest';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import yargs, { type Argv } from 'yargs';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
 import { removeCommand } from './remove.js';
@@ -76,7 +77,9 @@ describe('mcp remove command', () => {
     });
 
     it('should show a message if server not found', async () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(DebugLogger.prototype, 'log')
+        .mockImplementation(() => {});
       await parser.parseAsync('remove non-existent-server');
 
       expect(mockSetValue).not.toHaveBeenCalled();
@@ -130,7 +133,9 @@ describe('mcp remove command', () => {
       }`;
       fs.writeFileSync(settingsPath, originalContent, 'utf-8');
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(DebugLogger.prototype, 'log')
+        .mockImplementation(() => {});
       await parser.parseAsync('remove server-to-remove');
 
       const updatedContent = fs.readFileSync(settingsPath, 'utf-8');
@@ -161,7 +166,9 @@ describe('mcp remove command', () => {
       }`;
       fs.writeFileSync(settingsPath, originalContent, 'utf-8');
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(DebugLogger.prototype, 'log')
+        .mockImplementation(() => {});
       await parser.parseAsync('remove oldServer');
 
       const updatedContent = fs.readFileSync(settingsPath, 'utf-8');
@@ -184,7 +191,9 @@ describe('mcp remove command', () => {
       }`;
       fs.writeFileSync(settingsPath, originalContent, 'utf-8');
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(DebugLogger.prototype, 'log')
+        .mockImplementation(() => {});
       await parser.parseAsync('remove only-server');
 
       const updatedContent = fs.readFileSync(settingsPath, 'utf-8');
@@ -215,7 +224,9 @@ describe('mcp remove command', () => {
       }`;
       fs.writeFileSync(settingsPath, originalContent, 'utf-8');
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(DebugLogger.prototype, 'log')
+        .mockImplementation(() => {});
       await parser.parseAsync('remove server1');
 
       const updatedContent = fs.readFileSync(settingsPath, 'utf-8');

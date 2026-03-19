@@ -14,6 +14,9 @@ import {
   BaseToolInvocation,
   Kind,
 } from '../tools/tools.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
+import { PolicyDecision } from '../policy/types.js';
 import { vi } from 'vitest';
 
 interface MockToolOptions {
@@ -32,6 +35,18 @@ interface MockToolOptions {
     updateOutput?: (output: string) => void,
   ) => Promise<ToolResult>;
   params?: object;
+  messageBus?: MessageBus;
+}
+
+function createTestMessageBus(): MessageBus {
+  return new MessageBus(
+    new PolicyEngine({
+      rules: [],
+      defaultDecision: PolicyDecision.ALLOW,
+      nonInteractive: false,
+    }),
+    false,
+  );
 }
 
 class MockToolInvocation extends BaseToolInvocation<
@@ -41,8 +56,9 @@ class MockToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly tool: MockTool,
     params: { [key: string]: unknown },
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   execute(
@@ -106,6 +122,7 @@ export class MockTool extends BaseDeclarativeTool<
         } as object),
       options.isOutputMarkdown ?? false,
       options.canUpdateOutput ?? false,
+      options.messageBus ?? createTestMessageBus(),
     );
 
     const defaultExecute: ExecuteFn = async () => ({
@@ -135,6 +152,6 @@ export class MockTool extends BaseDeclarativeTool<
   protected createInvocation(params: {
     [key: string]: unknown;
   }): ToolInvocation<{ [key: string]: unknown }, ToolResult> {
-    return new MockToolInvocation(this, params);
+    return new MockToolInvocation(this, params, this.requireMessageBus());
   }
 }

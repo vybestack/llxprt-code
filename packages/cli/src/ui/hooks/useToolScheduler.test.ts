@@ -18,6 +18,7 @@ import {
   CompletedToolCall,
   type Config,
   type CoreToolScheduler,
+  type MessageBus,
   DebugLogger,
   PolicyDecision,
   type SchedulerCallbacks as SchedulerCallbacksCore,
@@ -309,6 +310,8 @@ const mockConfig = {
         existing.setCallbacks({
           ...callbacks,
           config: mockConfig,
+          messageBus: mockMessageBus as unknown as MessageBus,
+          toolRegistry: mockToolRegistry as unknown as ToolRegistry,
         });
         return Promise.resolve(existing);
       }
@@ -402,8 +405,8 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       agentId: undefined,
     });
 
-    act(() => {
-      schedule(requestWithoutAgent, new AbortController().signal);
+    await act(async () => {
+      await schedule(requestWithoutAgent, new AbortController().signal);
     });
 
     await vi.waitFor(
@@ -534,8 +537,8 @@ describe('useReactToolScheduler', () => {
       args: { param: 'value' },
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
 
     await vi.waitFor(
@@ -594,8 +597,8 @@ describe('useReactToolScheduler', () => {
       args: {},
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
 
     await vi.waitFor(
@@ -638,8 +641,8 @@ describe('useReactToolScheduler', () => {
       args: {},
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
 
     await vi.waitFor(
@@ -676,8 +679,8 @@ describe('useReactToolScheduler', () => {
       args: {},
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
 
     await vi.waitFor(
@@ -715,8 +718,8 @@ describe('useReactToolScheduler', () => {
       args: { data: 'sensitive' },
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
     await act(async () => {
       await vi.runOnlyPendingTimersAsync();
@@ -782,8 +785,8 @@ describe('useReactToolScheduler', () => {
       args: {},
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
     await act(async () => {
       await vi.runOnlyPendingTimersAsync();
@@ -854,8 +857,8 @@ describe('useReactToolScheduler', () => {
       args: {},
     });
 
-    act(() => {
-      schedule(request, new AbortController().signal);
+    await act(async () => {
+      await schedule(request, new AbortController().signal);
     });
     await act(async () => {
       await vi.runOnlyPendingTimersAsync();
@@ -943,8 +946,8 @@ describe('useReactToolScheduler', () => {
       buildRequest({ callId: 'multi2', name: 'tool2', args: { p: 2 } }),
     ];
 
-    act(() => {
-      schedule(requests, new AbortController().signal);
+    await act(async () => {
+      await schedule(requests, new AbortController().signal);
     });
 
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), {

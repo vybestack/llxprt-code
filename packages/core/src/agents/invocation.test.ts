@@ -73,11 +73,17 @@ describe('SubagentInvocation', () => {
 
   describe('getDescription', () => {
     it('should format the description with inputs', () => {
+      const mockMessageBus = {
+        subscribe: vi.fn(),
+        publish: vi.fn(),
+        unsubscribe: vi.fn(),
+      } as unknown as MessageBus;
       const params = { task: 'Analyze data', priority: 5 };
       const invocation = new SubagentInvocation<z.ZodUnknown>(
         params,
         testDefinition,
         mockConfig,
+        mockMessageBus,
       );
       const description = invocation.getDescription();
       expect(description).toBe(
@@ -86,12 +92,18 @@ describe('SubagentInvocation', () => {
     });
 
     it('should truncate long input values', () => {
+      const mockMessageBus = {
+        subscribe: vi.fn(),
+        publish: vi.fn(),
+        unsubscribe: vi.fn(),
+      } as unknown as MessageBus;
       const longTask = 'A'.repeat(100);
       const params = { task: longTask };
       const invocation = new SubagentInvocation<z.ZodUnknown>(
         params,
         testDefinition,
         mockConfig,
+        mockMessageBus,
       );
       const description = invocation.getDescription();
       // Default INPUT_PREVIEW_MAX_LENGTH is 50
@@ -110,10 +122,16 @@ describe('SubagentInvocation', () => {
       for (let i = 0; i < 20; i++) {
         params[`input${i}`] = `value${i}`;
       }
+      const mockMessageBus = {
+        subscribe: vi.fn(),
+        publish: vi.fn(),
+        unsubscribe: vi.fn(),
+      } as unknown as MessageBus;
       const invocation = new SubagentInvocation<z.ZodUnknown>(
         params,
         longNameDef,
         mockConfig,
+        mockMessageBus,
       );
       const description = invocation.getDescription();
       // Default DESCRIPTION_MAX_LENGTH is 200
@@ -135,10 +153,16 @@ describe('SubagentInvocation', () => {
     beforeEach(() => {
       signal = new AbortController().signal;
       updateOutput = vi.fn();
+      const mockMessageBus = {
+        subscribe: vi.fn(),
+        publish: vi.fn(),
+        unsubscribe: vi.fn(),
+      } as unknown as MessageBus;
       invocation = new SubagentInvocation<z.ZodUnknown>(
         params,
         testDefinition,
         mockConfig,
+        mockMessageBus,
       );
     });
 
@@ -154,6 +178,7 @@ describe('SubagentInvocation', () => {
       expect(MockAgentExecutor.create).toHaveBeenCalledWith(
         testDefinition,
         mockConfig,
+        expect.anything(),
         expect.any(Function),
       );
       expect(updateOutput).toHaveBeenCalledWith('Subagent starting...\n');
@@ -173,7 +198,7 @@ describe('SubagentInvocation', () => {
 
     it('should stream THOUGHT_CHUNK activities from the executor', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
-        const onActivity = MockAgentExecutor.create.mock.calls[0][2];
+        const onActivity = MockAgentExecutor.create.mock.calls[0][3];
 
         if (onActivity) {
           onActivity({
@@ -202,7 +227,7 @@ describe('SubagentInvocation', () => {
 
     it('should NOT stream other activities (e.g., TOOL_CALL_START, ERROR)', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
-        const onActivity = MockAgentExecutor.create.mock.calls[0][2];
+        const onActivity = MockAgentExecutor.create.mock.calls[0][3];
 
         if (onActivity) {
           onActivity({
@@ -230,7 +255,7 @@ describe('SubagentInvocation', () => {
 
     it('should run successfully without an updateOutput callback', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
-        const onActivity = MockAgentExecutor.create.mock.calls[0][2];
+        const onActivity = MockAgentExecutor.create.mock.calls[0][3];
         if (onActivity) {
           // Ensure calling activity doesn't crash when updateOutput is undefined
           onActivity({

@@ -13,6 +13,7 @@ import { shortenPath, makeRelative } from '../utils/paths.js';
 import { type Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
 export interface GlobPath {
@@ -87,8 +88,9 @@ class GlobToolInvocation extends BaseToolInvocation<
   constructor(
     private config: Config,
     params: GlobToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   private getDirPath(): string | undefined {
@@ -275,7 +277,7 @@ class GlobToolInvocation extends BaseToolInvocation<
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error(`GlobLogic execute Error: ${errorMessage}`, error);
+      debugLogger.error(`GlobLogic execute Error: ${errorMessage}`, error);
       const rawError = `Error during glob search operation: ${errorMessage}`;
       return {
         llmContent: rawError,
@@ -297,7 +299,7 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
 
   constructor(
     private config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       GlobTool.Name,
@@ -381,12 +383,12 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
 
   protected override createInvocation(
     params: GlobToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<GlobToolParams, ToolResult> {
     const normalizedParams = { ...params };
     if (!normalizedParams.dir_path && normalizedParams.path) {
       normalizedParams.dir_path = normalizedParams.path;
     }
-    return new GlobToolInvocation(this.config, normalizedParams);
+    return new GlobToolInvocation(this.config, normalizedParams, messageBus);
   }
 }

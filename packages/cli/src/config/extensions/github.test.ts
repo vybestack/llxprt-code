@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import * as tar from 'tar';
 import * as archiver from 'archiver';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const mockPlatform = vi.hoisted(() => vi.fn());
 const mockArch = vi.hoisted(() => vi.fn());
@@ -295,12 +296,12 @@ describe('git extension helpers', () => {
       // Mock loadExtension to return null (config can't be loaded)
       mockLoadExtension.mockReturnValue(null);
 
-      // Spy on console.warn and console.error
-      const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
+      // Spy on debugLogger.warn and debugLogger.error
+      const debugWarnSpy = vi
+        .spyOn(DebugLogger.prototype, 'warn')
         .mockImplementation(() => {});
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+      const debugErrorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
         .mockImplementation(() => {});
 
       let result: ExtensionUpdateState | undefined = undefined;
@@ -312,16 +313,16 @@ describe('git extension helpers', () => {
       // Assert: Should use NOT_UPDATABLE (not ERROR)
       expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
 
-      // Assert: Should use console.warn (not console.error)
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
+      // Assert: Should use debugLogger.warn (not debugLogger.error)
+      expect(debugWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
           'Failed to check for update for local extension',
         ),
       );
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      expect(debugErrorSpy).not.toHaveBeenCalled();
 
-      consoleWarnSpy.mockRestore();
-      consoleErrorSpy.mockRestore();
+      debugWarnSpy.mockRestore();
+      debugErrorSpy.mockRestore();
       mockLoadExtension.mockReset();
     });
   });

@@ -33,6 +33,20 @@ async function getSharp(): Promise<SharpFactory> {
   return sharpExport as SharpFactory;
 }
 
+async function createOpaquePngBuffer(): Promise<Buffer> {
+  const sharp = await getSharp();
+  return sharp({
+    create: {
+      width: 4,
+      height: 4,
+      channels: 4,
+      background: { r: 255, g: 0, b: 0, alpha: 1 },
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
 function parseFirstItermImagePayload(writes: string[]): {
   row1: number;
   col1: number;
@@ -347,10 +361,7 @@ async function assertMovedImageClearsPreviousInlineArea(): Promise<void> {
   const bg = '#fafafa';
   const image = new ImageRenderable(renderer, {
     id: 'move-test-image',
-    src: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P8z/D/PwAHggJ/Pq2uGAAAAABJRU5ErkJggg==',
-      'base64',
-    ),
+    src: await createOpaquePngBuffer(),
     pixelWidth: 40,
     pixelHeight: 40,
     backgroundColor: bg,
@@ -431,10 +442,7 @@ async function assertResizedImageClearsPreviousInlineArea(): Promise<void> {
   const bg = '#fafafa';
   const image = new ImageRenderable(renderer, {
     id: 'resize-test-image',
-    src: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P8z/D/PwAHggJ/Pq2uGAAAAABJRU5ErkJggg==',
-      'base64',
-    ),
+    src: await createOpaquePngBuffer(),
     width: 5,
     height: 2,
     backgroundColor: bg,
@@ -521,10 +529,7 @@ async function assertHeaderLayoutBehavesLikeImg(): Promise<void> {
   const aspectRatio = 415 / 260;
   const image = new ImageRenderable(renderer, {
     id: 'logo',
-    src: Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P8z/D/PwAHggJ/Pq2uGAAAAABJRU5ErkJggg==',
-      'base64',
-    ),
+    src: await createOpaquePngBuffer(),
     height: 1,
     aspectRatio,
     backgroundColor: bg,

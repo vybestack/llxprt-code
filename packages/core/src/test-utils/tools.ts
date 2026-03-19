@@ -13,12 +13,26 @@ import {
   type ToolResult,
   Kind,
 } from '../tools/tools.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
+import { PolicyDecision } from '../policy/types.js';
 import {
   type ModifiableDeclarativeTool,
   type ModifyContext,
 } from '../tools/modifiable-tool.js';
 
 type ToolSpy = ReturnType<(typeof vi)['fn']>;
+
+function createTestMessageBus(): MessageBus {
+  return new MessageBus(
+    new PolicyEngine({
+      rules: [],
+      defaultDecision: PolicyDecision.ALLOW,
+      nonInteractive: false,
+    }),
+    false,
+  );
+}
 
 class MockToolInvocation extends BaseToolInvocation<
   { [key: string]: unknown },
@@ -27,8 +41,9 @@ class MockToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly tool: MockTool,
     params: { [key: string]: unknown },
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   async execute(
@@ -89,15 +104,25 @@ export class MockTool extends BaseDeclarativeTool<
       type: 'object',
       properties: { param: { type: 'string' } },
     },
+    messageBus: MessageBus = createTestMessageBus(),
   ) {
-    super(name, displayName ?? name, description, Kind.Other, params);
+    super(
+      name,
+      displayName ?? name,
+      description,
+      Kind.Other,
+      params,
+      true,
+      false,
+      messageBus,
+    );
     this.executeFn = vi.fn();
   }
 
   protected createInvocation(params: {
     [key: string]: unknown;
   }): ToolInvocation<{ [key: string]: unknown }, ToolResult> {
-    return new MockToolInvocation(this, params);
+    return new MockToolInvocation(this, params, this.requireMessageBus());
   }
 }
 
@@ -108,8 +133,9 @@ export class MockModifiableToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly tool: MockModifiableTool,
     params: Record<string, unknown>,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   async execute(
@@ -165,8 +191,11 @@ export class MockModifiableTool
   extends MockTool
   implements ModifiableDeclarativeTool<Record<string, unknown>>
 {
-  constructor(name = 'mockModifiableTool') {
-    super(name);
+  constructor(
+    name = 'mockModifiableTool',
+    messageBus: MessageBus = createTestMessageBus(),
+  ) {
+    super(name, undefined, undefined, undefined, messageBus);
     this.shouldConfirm = true;
   }
 
@@ -188,6 +217,10 @@ export class MockModifiableTool
   protected override createInvocation(
     params: Record<string, unknown>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
-    return new MockModifiableToolInvocation(this, params);
+    return new MockModifiableToolInvocation(
+      this,
+      params,
+      this.requireMessageBus(),
+    );
   }
 }

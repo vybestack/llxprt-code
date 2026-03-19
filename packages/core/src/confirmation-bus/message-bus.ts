@@ -13,6 +13,7 @@ import {
   ToolConfirmationOutcome,
   type ToolConfirmationPayload,
 } from '../tools/tool-confirmation-types.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 type MessageHandler<T extends MessageBusMessage = MessageBusMessage> = (
   message: T,
@@ -27,9 +28,9 @@ export class MessageBus {
   private readonly policyEngine: PolicyEngine;
   private readonly debugMode: boolean;
 
-  constructor(policyEngine: PolicyEngine, debugMode = false) {
+  constructor(policyEngine?: PolicyEngine, debugMode = false) {
     this.emitter = new EventEmitter();
-    this.policyEngine = policyEngine;
+    this.policyEngine = policyEngine ?? new PolicyEngine();
     this.debugMode = debugMode;
 
     // Increase max listeners to prevent warnings in complex flows
@@ -43,7 +44,7 @@ export class MessageBus {
    */
   publish(message: MessageBusMessage): void {
     if (this.debugMode) {
-      console.log(`[MessageBus] Publishing: ${message.type}`, message);
+      debugLogger.log(`[MessageBus] Publishing: ${message.type}`, message);
     }
 
     this.emitter.emit(message.type, message);
@@ -109,7 +110,7 @@ export class MessageBus {
     );
 
     if (this.debugMode) {
-      console.log(
+      debugLogger.log(
         `[MessageBus] Policy decision for ${toolCall.name}: ${decision}`,
       );
     }

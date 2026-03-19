@@ -19,7 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'node:crypto';
 import type { ExtensionSetting } from './extensionSettings.js';
-import { SecureStore } from '@vybestack/llxprt-code-core';
+import { SecureStore, debugLogger } from '@vybestack/llxprt-code-core';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
 
 /**
@@ -185,7 +185,7 @@ export class ExtensionSettingsStorage {
             await this.store.delete(setting.envVar);
           }
         } catch (error) {
-          console.error(
+          debugLogger.error(
             `Failed to persist sensitive setting ${setting.envVar} in keychain:`,
             error,
           );
@@ -229,7 +229,7 @@ export class ExtensionSettingsStorage {
       }
     } catch (error) {
       // Handle missing file gracefully
-      console.error('Failed to read .env file:', error);
+      debugLogger.error('Failed to read .env file:', error);
     }
 
     // Load sensitive settings from SecureStore
@@ -247,7 +247,7 @@ export class ExtensionSettingsStorage {
         const value = await this.store.get(setting.envVar);
         result[setting.envVar] = value ?? undefined;
       } catch (error) {
-        console.error(
+        debugLogger.error(
           `Failed to load sensitive setting ${setting.envVar} from keychain:`,
           error,
         );
@@ -269,7 +269,7 @@ export class ExtensionSettingsStorage {
         await fs.promises.unlink(envPath);
       }
     } catch (error) {
-      console.error('Failed to delete .env file:', error);
+      debugLogger.error('Failed to delete .env file:', error);
     }
 
     // Delete all SecureStore entries for this service
@@ -279,11 +279,11 @@ export class ExtensionSettingsStorage {
         try {
           await this.store.delete(key);
         } catch (error) {
-          console.error(`Failed to delete keychain entry ${key}:`, error);
+          debugLogger.error(`Failed to delete keychain entry ${key}:`, error);
         }
       }
     } catch (error) {
-      console.error('Failed to delete keychain entries:', error);
+      debugLogger.error('Failed to delete keychain entries:', error);
     }
   }
 
@@ -302,7 +302,7 @@ export class ExtensionSettingsStorage {
       const keys = await this.store.list();
       return keys.length > 0;
     } catch (error) {
-      console.error('Failed to check keychain entries:', error);
+      debugLogger.error('Failed to check keychain entries:', error);
     }
 
     return false;

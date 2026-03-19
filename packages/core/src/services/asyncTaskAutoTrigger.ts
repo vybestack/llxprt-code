@@ -12,6 +12,7 @@
 
 import type { AsyncTaskManager, AsyncTaskInfo } from './asyncTaskManager.js';
 import type { AsyncTaskReminderService } from './asyncTaskReminderService.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Auto-triggers agent turns when async tasks complete and the agent is idle.
@@ -128,7 +129,10 @@ export class AsyncTaskAutoTrigger {
       // FAILURE: Do NOT mark as notified
       // @requirement REQ-ASYNC-011
       // The notification will be included in the next turn's reminder
-      console.error('[AsyncTaskAutoTrigger] Failed to auto-trigger:', error);
+      debugLogger.error(
+        '[AsyncTaskAutoTrigger] Failed to auto-trigger:',
+        error,
+      );
     } finally {
       this.isTriggering = false;
     }

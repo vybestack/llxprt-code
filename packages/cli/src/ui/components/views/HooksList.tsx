@@ -30,6 +30,21 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
 
   return (
     <Box flexDirection="column" marginTop={1} marginBottom={1}>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={Colors.Warning}
+        paddingX={1}
+        marginBottom={1}
+      >
+        <Text color={Colors.Warning} bold>
+          Security Warning:
+        </Text>
+        <Text color={Colors.Warning}>
+          Hooks can execute arbitrary commands on your system. Only use hooks
+          from sources you trust.
+        </Text>
+      </Box>
       {Array.from(byEvent.entries()).map(([eventName, entries]) => (
         <Box key={eventName} flexDirection="column" marginBottom={1}>
           <Text color={Colors.AccentCyan} bold>

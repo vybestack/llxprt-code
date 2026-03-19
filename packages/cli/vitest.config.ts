@@ -11,6 +11,14 @@ import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const inkStubPath = resolve(__dirname, './test-utils/ink-stub.ts');
+const inkTestingLibraryPath = resolve(
+  __dirname,
+  './test-utils/ink-testing-library.ts',
+);
+const inkTestingLibraryActualPath = resolve(
+  __dirname,
+  '../../node_modules/ink-testing-library/build/index.js',
+);
 
 const isMultiRuntimeGuardrailRun =
   process.argv.includes('--run') &&
@@ -91,6 +99,8 @@ export default defineConfig({
     extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
     alias: {
       ink: inkStubPath,
+      'ink-testing-library': inkTestingLibraryPath,
+      [inkTestingLibraryActualPath]: inkTestingLibraryPath,
     },
   },
   test: {
@@ -155,10 +165,6 @@ export default defineConfig({
       include: ['src/**/*'],
       reporter: [
         ['text', { file: 'full-text-summary.txt' }],
-        'html',
-        'json',
-        'lcov',
-        'cobertura',
         ['json-summary', { outputFile: 'coverage-summary.json' }],
       ],
     },

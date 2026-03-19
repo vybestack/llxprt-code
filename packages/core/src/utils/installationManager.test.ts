@@ -6,6 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { InstallationManager } from './installationManager.js';
+import * as debugLoggerModule from './debugLogger.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
@@ -89,14 +90,14 @@ describe('InstallationManager', () => {
       readSpy.mockImplementationOnce(() => {
         throw new Error('Read error');
       });
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+      const debugErrorSpy = vi
+        .spyOn(debugLoggerModule.debugLogger, 'error')
         .mockImplementation(() => {});
 
       const id = installationManager.getInstallationId();
 
       expect(id).toBe('123456789');
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(debugErrorSpy).toHaveBeenCalled();
     });
   });
 });

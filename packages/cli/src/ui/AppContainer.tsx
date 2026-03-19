@@ -28,6 +28,7 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
+import { useHookDisplayState } from './hooks/useHookDisplayState.js';
 import { useWelcomeOnboarding } from './hooks/useWelcomeOnboarding.js';
 import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
@@ -36,6 +37,7 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+
 import {
   useTodoContinuation,
   type TodoContinuationHook,
@@ -81,11 +83,15 @@ import {
   type UserFeedbackPayload,
   ShellExecutionService,
   type RecordingIntegration,
+  triggerSessionStartHook,
+  SessionStartSource,
   triggerSessionEndHook,
   SessionEndReason,
   type SessionRecordingService,
   type LockHandle,
   type SessionMetadata,
+  type MessageBus,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
@@ -158,6 +164,7 @@ interface AppContainerProps {
   resumedHistory?: IContent[];
   version: string;
   terminalBackgroundColor?: string;
+  runtimeMessageBus?: MessageBus;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
@@ -184,6 +191,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const {
     config,
     settings,
+    runtimeMessageBus,
     startupWarnings = [],
     resumedHistory,
     appState,
@@ -233,6 +241,50 @@ export const AppContainer = (props: AppContainerProps) => {
 
     hasSeededResumedHistory.current = true;
   }, [loadHistory, resumedHistory]);
+
+  // Trigger SessionStart hook on initialization
+  const hasTriggeredSessionStart = useRef(false);
+  useEffect(() => {
+    if (hasTriggeredSessionStart.current) {
+      return;
+    }
+    hasTriggeredSessionStart.current = true;
+
+    const initializeSession = async () => {
+      const sessionStartOutput = await triggerSessionStartHook(
+        config,
+        SessionStartSource.Startup,
+      );
+
+      if (sessionStartOutput) {
+        // Display system message
+        if (sessionStartOutput.systemMessage) {
+          addItem(
+            {
+              type: 'info',
+              text: sessionStartOutput.systemMessage,
+            },
+            Date.now(),
+          );
+        }
+
+        // Add additional context to history
+        const additionalContext = sessionStartOutput.getAdditionalContext();
+        if (additionalContext) {
+          const geminiClient = config.getGeminiClient();
+          if (geminiClient) {
+            await geminiClient.addHistory({
+              role: 'user',
+              parts: [{ text: additionalContext }],
+            });
+          }
+        }
+      }
+    };
+
+    void initializeSession();
+  }, [config, addItem]);
+
   useMemoryMonitor({ addItem });
   const { todos, updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
@@ -547,7 +599,7 @@ export const AppContainer = (props: AppContainerProps) => {
       try {
         setRawMode(true);
       } catch (error) {
-        console.error('Failed to re-enable raw mode:', error);
+        debugLogger.error('Failed to re-enable raw mode:', error);
       }
     }
 
@@ -607,7 +659,7 @@ export const AppContainer = (props: AppContainerProps) => {
         setRawMode(false);
         externalEditorStateRef.current.rawModeManaged = true;
       } catch (error) {
-        console.error('Failed to disable raw mode:', error);
+        debugLogger.error('Failed to disable raw mode:', error);
       }
     }
 
@@ -618,6 +670,7 @@ export const AppContainer = (props: AppContainerProps) => {
   useStaticHistoryRefresh(history, refreshStatic);
 
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
+  const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [themeError, _setThemeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -662,6 +715,8 @@ export const AppContainer = (props: AppContainerProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
+
+  const [settingsNonce, setSettingsNonce] = useState(0);
 
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
@@ -808,6 +863,17 @@ export const AppContainer = (props: AppContainerProps) => {
 
     return undefined;
   }, [config]);
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setSettingsNonce((prev) => prev + 1);
+    };
+
+    coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
+    return () => {
+      coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
+    };
+  }, []);
 
   useEffect(() => {
     const openDebugConsole = () => {
@@ -976,7 +1042,7 @@ export const AppContainer = (props: AppContainerProps) => {
           : configModel;
 
       if (effectiveModel !== currentModel) {
-        console.debug(
+        debugLogger.debug(
           `[Model Update] Updating footer from ${currentModel} to ${effectiveModel}`,
         );
         setCurrentModel(effectiveModel);
@@ -1108,7 +1174,7 @@ export const AppContainer = (props: AppContainerProps) => {
         Date.now(),
       );
       if (config.getDebugMode()) {
-        console.log(
+        debugLogger.log(
           `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
         );
       }
@@ -1121,7 +1187,7 @@ export const AppContainer = (props: AppContainerProps) => {
         },
         Date.now(),
       );
-      console.error('Error refreshing memory:', error);
+      debugLogger.error('Error refreshing memory:', error);
     }
   }, [config, addItem, settings.merged]);
 
@@ -1399,6 +1465,7 @@ export const AppContainer = (props: AppContainerProps) => {
     registerTodoPause,
     handleExternalEditorOpen,
     recordingIntegration,
+    runtimeMessageBus,
   );
 
   const pendingHistoryItems = useMemo(
@@ -1707,6 +1774,7 @@ export const AppContainer = (props: AppContainerProps) => {
   useEffect(() => {
     if (config) {
       void setLlxprtMdFileCount(config.getLlxprtMdFileCount());
+      void setCoreMemoryFileCount(config.getCoreMemoryFileCount());
     }
   }, [config, config.getLlxprtMdFileCount]);
 
@@ -1766,6 +1834,7 @@ export const AppContainer = (props: AppContainerProps) => {
     clearItems();
     clearConsoleMessagesState();
     if (!useAlternateBuffer) {
+      // eslint-disable-next-line no-console
       console.clear();
     }
     refreshStatic();
@@ -2024,11 +2093,21 @@ export const AppContainer = (props: AppContainerProps) => {
     config.setPtyTerminalSize(mainAreaWidth, terminalHeight);
   }, [config, mainAreaWidth, terminalHeight]);
 
+  // Track actively executing hooks for visual indicators
+  /**
+   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
+   * @requirement REQ-D01-002
+   * @requirement REQ-D01-003
+   * @pseudocode lines 122-133
+   */
+  const activeHooks = useHookDisplayState(runtimeMessageBus);
+
   // Build UIState object
   const uiState: UIState = {
     // Core app context
     config,
     settings,
+    settingsNonce,
 
     // Terminal dimensions
     terminalWidth,
@@ -2122,8 +2201,10 @@ export const AppContainer = (props: AppContainerProps) => {
     // Context and status
     ideContextState,
     llxprtMdFileCount,
+    coreMemoryFileCount,
     branchName,
     errorCount,
+    activeHooks,
 
     // Console and messages
     consoleMessages: filteredConsoleMessages,

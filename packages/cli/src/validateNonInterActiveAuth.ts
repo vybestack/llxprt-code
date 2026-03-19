@@ -9,6 +9,7 @@ import {
   ExitCodes,
   JsonFormatter,
   OutputFormat,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from './config/settings.js';
 
@@ -38,7 +39,7 @@ function reportNonInteractiveAuthError(config: Config, message: string): void {
     return;
   }
 
-  console.error(message);
+  debugLogger.error(message);
 }
 
 /**

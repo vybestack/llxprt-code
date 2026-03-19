@@ -6,6 +6,7 @@
 
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { coreEvents, CoreEvent } from './events.js';
+import { debugLogger } from './debugLogger.js';
 
 const GUI_EDITORS = [
   'vscode',
@@ -199,7 +200,7 @@ export async function openDiff(
 ): Promise<void> {
   const diffCommand = getDiffCommand(oldPath, newPath, editor);
   if (!diffCommand) {
-    console.error('No diff tool available. Install a supported editor.');
+    debugLogger.error('No diff tool available. Install a supported editor.');
     return;
   }
 

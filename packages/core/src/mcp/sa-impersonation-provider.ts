@@ -14,6 +14,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { OAuthUtils, FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
 import type { MCPServerConfig } from '../config/config.js';
 import type { McpAuthProvider } from './auth-provider.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 function createIamApiUrl(targetSA: string): string {
   return `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(targetSA)}:generateIdToken`;
@@ -29,7 +30,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
   // Properties required by OAuthClientProvider, with no-op values
   readonly redirectUrl = '';
   readonly clientMetadata: OAuthClientMetadata = {
-    client_name: 'Gemini CLI (Service Account Impersonation)',
+    client_name: 'LLxprt Code (Service Account Impersonation)',
     redirect_uris: [],
     grant_types: [],
     response_types: [],
@@ -101,11 +102,11 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
       idToken = res.data.token;
 
       if (!idToken || idToken.length === 0) {
-        console.error('Failed to get ID token from Google');
+        debugLogger.error('Failed to get ID token from Google');
         return undefined;
       }
     } catch (e) {
-      console.error('Failed to fetch ID token from Google:', e);
+      debugLogger.error('Failed to fetch ID token from Google:', e);
       return undefined;
     }
 

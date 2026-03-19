@@ -9,6 +9,7 @@ import {
   validateNonInteractiveAuth,
   NonInteractiveConfig,
 } from './validateNonInterActiveAuth.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 describe('validateNonInterActiveAuth', () => {
   // Store all auth-related env vars that need to be cleaned up
@@ -25,7 +26,7 @@ describe('validateNonInterActiveAuth', () => {
   ] as const;
 
   let originalEnvVars: Map<string, string | undefined>;
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+  let debugErrorSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
   let refreshAuthMock: ReturnType<(typeof vi)['fn']>;
 
@@ -36,7 +37,9 @@ describe('validateNonInterActiveAuth', () => {
       originalEnvVars.set(envVar, process.env[envVar]);
       delete process.env[envVar];
     }
-    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    debugErrorSpy = vi
+      .spyOn(DebugLogger.prototype, 'error')
+      .mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code}) called`);
     });
@@ -165,7 +168,7 @@ describe('validateNonInterActiveAuth', () => {
     };
     const promise = validateNonInteractiveAuth(undefined, nonInteractiveConfig);
     await expect(promise).rejects.toThrow('process.exit(41) called');
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expect(debugErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Please set an Auth method'),
     );
     expect(processExitSpy).toHaveBeenCalledWith(41);
@@ -182,7 +185,7 @@ describe('validateNonInterActiveAuth', () => {
 
     await validateNonInteractiveAuth(true, nonInteractiveConfig);
 
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(debugErrorSpy).not.toHaveBeenCalled();
     expect(processExitSpy).not.toHaveBeenCalled();
     expect(refreshAuthMock).not.toHaveBeenCalled();
   });

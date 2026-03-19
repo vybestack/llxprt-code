@@ -68,6 +68,7 @@ import {
 import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 type SessionConfig = Pick<Config, 'getSessionId'>;
 type TelemetryPromptConfig = Pick<Config, 'getTelemetryLogPromptsEnabled'>;
@@ -140,12 +141,12 @@ export function logToolCall(
   event: ToolCallEvent,
 ): void {
   if (process.env.VERBOSE === 'true') {
-    console.error(`[TELEMETRY] logToolCall: ${event.function_name}`);
+    debugLogger.error(`[TELEMETRY] logToolCall: ${event.function_name}`);
   }
 
   if (!isTelemetrySdkInitialized()) {
     if (process.env.VERBOSE === 'true') {
-      console.error(`[TELEMETRY] SDK not initialized, skipping log`);
+      debugLogger.error(`[TELEMETRY] SDK not initialized, skipping log`);
     }
     return;
   }
@@ -494,7 +495,7 @@ export function logConversationRequest(
   try {
     logTelemetryEvent(config, event);
   } catch (error) {
-    console.warn('Failed to log conversation request:', error);
+    debugLogger.warn('Failed to log conversation request:', error);
   }
 }
 
@@ -509,7 +510,7 @@ export function logConversationResponse(
   try {
     logTelemetryEvent(config, event);
   } catch (error) {
-    console.warn('Failed to log conversation response:', error);
+    debugLogger.warn('Failed to log conversation response:', error);
   }
 }
 
@@ -524,7 +525,7 @@ export function logProviderSwitch(
   try {
     logTelemetryEvent(config, event);
   } catch (error) {
-    console.warn('Failed to log provider switch:', error);
+    debugLogger.warn('Failed to log provider switch:', error);
   }
 }
 
@@ -539,7 +540,7 @@ export function logProviderCapability(
   try {
     logTelemetryEvent(config, event);
   } catch (error) {
-    console.warn('Failed to log provider capability:', error);
+    debugLogger.warn('Failed to log provider capability:', error);
   }
 }
 

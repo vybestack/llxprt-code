@@ -32,17 +32,47 @@ If you're used to Claude Code's permission system:
 - Hooks can modify inputs, not just approve/deny them
 - Multiple hooks can run for the same event with aggregated results
 
+## Security and Risks
+
+> [!WARNING] **Hooks execute arbitrary code with your user privileges.**
+
+By configuring hooks, you are explicitly allowing LLxprt Code to run shell
+commands on your machine. Malicious or poorly configured hooks can:
+
+- **Exfiltrate data**: Read sensitive files (`.env`, ssh keys) and send them to
+  remote servers.
+- **Modify system**: Delete files, install malware, or change system settings.
+- **Consume resources**: Run infinite loops or crash your system.
+
+**Project-level hooks** (in `.llxprt/settings.json`) and **Extension hooks** are
+particularly risky when opening third-party projects or extensions from
+untrusted authors. LLxprt Code will **warn you** when it detects untrusted
+project hooks (identified by their name and command). Untrusted hooks are
+**not auto-approved** — they remain untrusted until you explicitly trust them.
+It is **your responsibility** to review these hooks (and any installed
+extensions) before trusting them.
+
+See [Security Considerations](best-practices.md#using-hooks-securely) for a
+detailed threat model and mitigation strategies.
+
 ## Quick Start
 
 ### 1. Enable Hooks
 
-Hooks are enabled by default. Verify in your `~/.llxprt/settings.json`:
+Hooks are **disabled by default** and require explicit opt-in. Add the
+following to your `~/.llxprt/settings.json`:
 
 ```json
 {
-  "enableHooks": true
+  "hooks": {
+    "enabled": true
+  }
 }
 ```
+
+There is also an experimental gate (`tools.enableHooks`) that defaults to
+`true`. Both `hooks.enabled` and `tools.enableHooks` must be `true` for hooks
+to run.
 
 ### 2. Configure a Hook
 

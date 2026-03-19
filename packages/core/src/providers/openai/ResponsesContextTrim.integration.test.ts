@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { IMessage } from '../IMessage.js';

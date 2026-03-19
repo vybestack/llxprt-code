@@ -130,7 +130,9 @@ describe('useFolderTrust', () => {
       process.cwd(),
       TrustLevel.TRUST_FOLDER,
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    // When trust changes from undefined (false) to true, restart is needed and dialog stays open
+    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(result.current.isRestarting).toBe(true);
     // Config trust state is managed by trustedFolders, not directly on config
   });
 
@@ -151,11 +153,13 @@ describe('useFolderTrust', () => {
       process.cwd(),
       TrustLevel.TRUST_PARENT,
     );
-    expect(result.current.isFolderTrustDialogOpen).toBe(false);
+    // When trust changes from undefined (false) to true, restart is needed and dialog stays open
+    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    expect(result.current.isRestarting).toBe(true);
     // Config trust state is managed by trustedFolders, not directly on config
   });
 
-  it('should handle DO_NOT_TRUST choice and trigger restart', () => {
+  it('should handle DO_NOT_TRUST choice without triggering restart when already untrusted', () => {
     isWorkspaceTrustedSpy
       .mockReturnValueOnce(undefined)
       .mockReturnValueOnce(false);
@@ -173,8 +177,9 @@ describe('useFolderTrust', () => {
       TrustLevel.DO_NOT_TRUST,
     );
     // Config trust state is managed by trustedFolders, not directly on config
-    expect(result.current.isRestarting).toBe(true);
-    expect(result.current.isFolderTrustDialogOpen).toBe(true);
+    // When changing from undefined (false) to false, no restart needed
+    expect(result.current.isRestarting).toBe(false);
+    expect(result.current.isFolderTrustDialogOpen).toBe(false);
   });
 
   it('should do nothing for default choice', () => {

@@ -99,6 +99,7 @@ export interface ShellExecutionConfig {
   scrollback?: number;
   inactivityTimeoutMs?: number;
   isSandboxOrCI?: boolean;
+  sanitizationConfig?: import('./environmentSanitization.js').EnvironmentSanitizationConfig;
 }
 
 export type ShellOutputEvent =

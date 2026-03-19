@@ -20,6 +20,7 @@ import {
   ToolRegistry,
 } from '../index.js';
 import { PolicyDecision } from '../policy/types.js';
+import { getTestRuntimeMessageBus } from '../test-utils/config.js';
 
 // Helper function to create a mock MessageBus
 function createMockMessageBus() {
@@ -53,8 +54,11 @@ class FastToolInvocation extends BaseToolInvocation<
       llmContent: 'Fast tool completed',
       returnDisplay: 'Fast tool completed',
     },
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   async execute(): Promise<ToolResult> {
@@ -78,17 +82,35 @@ class FastTool extends BaseDeclarativeTool<
     name: string = 'fast_tool',
     private readonly delayMs: number = 0,
     private readonly result?: ToolResult,
+    messageBus: ReturnType<
+      typeof createMockMessageBus
+    > = createMockMessageBus(),
   ) {
-    super(name, 'Fast Tool', 'A tool that completes quickly', Kind.Other, {
-      type: 'object',
-      properties: {},
-    });
+    super(
+      name,
+      'Fast Tool',
+      'A tool that completes quickly',
+      Kind.Other,
+      {
+        type: 'object',
+        properties: {},
+      },
+      true,
+      false,
+      messageBus,
+    );
   }
 
   protected createInvocation(
     params: Record<string, unknown>,
+    messageBus: ReturnType<typeof createMockMessageBus>,
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
-    return new FastToolInvocation(params, this.delayMs, this.result);
+    return new FastToolInvocation(
+      params,
+      this.delayMs,
+      this.result,
+      messageBus,
+    );
   }
 }
 
@@ -147,6 +169,8 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -189,6 +213,8 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -251,6 +277,8 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -306,6 +334,8 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -358,6 +388,8 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -403,6 +435,8 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
 
       const scheduler = new CoreToolScheduler({
         config,
+        messageBus: getTestRuntimeMessageBus(config),
+        toolRegistry: config.getToolRegistry(),
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',

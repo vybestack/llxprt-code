@@ -54,6 +54,7 @@ import {
 } from '../utils/shell-utils.js';
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Throttle interval for shell output updates to avoid excessive UI updates.
 // Using 100ms provides responsive feedback without overwhelming the system.
@@ -121,7 +122,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     private readonly config: Config,
     params: ShellToolParams,
     private readonly allowlist: Set<string>,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(params, messageBus);
   }
@@ -782,7 +783,7 @@ export class ShellTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ) {
     super(
       ShellTool.Name,
@@ -831,7 +832,7 @@ export class ShellTool extends BaseDeclarativeTool<
     const commandCheck = isCommandAllowed(params.command, this.config);
     if (!commandCheck.allowed) {
       if (!commandCheck.reason) {
-        console.error(
+        debugLogger.error(
           'Unexpected: isCommandAllowed returned false without a reason',
         );
         return `Command is not allowed: ${params.command}`;
@@ -892,7 +893,7 @@ export class ShellTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ShellToolParams,
-    messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<ShellToolParams, ToolResult> {
     const normalizedParams = { ...params };
     if (!normalizedParams.dir_path && normalizedParams.directory) {

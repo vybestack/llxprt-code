@@ -36,6 +36,8 @@ import {
   DebugLogger,
   uiTelemetryService,
   type RecordingIntegration,
+  type MessageBus,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -247,6 +249,7 @@ export const useGeminiStream = (
   onTodoPause?: () => void,
   onEditorOpen: () => void = () => {},
   recordingIntegration?: RecordingIntegration,
+  runtimeMessageBus?: MessageBus,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -422,7 +425,7 @@ export const useGeminiStream = (
               completedToolCallsFromScheduler,
             );
         } catch (error) {
-          console.error(
+          debugLogger.error(
             `Error recording completed tool call information: ${error}`,
           );
         }
@@ -453,6 +456,7 @@ export const useGeminiStream = (
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
+    runtimeMessageBus,
   );
 
   const pendingToolCallGroupDisplay = useMemo(
@@ -620,7 +624,7 @@ export const useGeminiStream = (
                   prompt_id,
                   agentId: DEFAULT_AGENT_ID,
                 };
-                scheduleToolCalls([toolCallRequest], abortSignal);
+                await scheduleToolCalls([toolCallRequest], abortSignal);
                 return { queryToSend: null, shouldProceed: false };
               }
               case 'submit_prompt': {
@@ -1190,7 +1194,12 @@ export const useGeminiStream = (
         });
 
         if (dedupedToolCallRequests.length > 0) {
-          scheduleToolCalls(dedupedToolCallRequests, signal);
+          // Flush pending rationale/history so it renders before tool calls
+          if (pendingHistoryItemRef.current) {
+            addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+            setPendingHistoryItem(null);
+          }
+          await scheduleToolCalls(dedupedToolCallRequests, signal);
         }
       }
       return StreamProcessingStatus.Completed;
@@ -1207,6 +1216,8 @@ export const useGeminiStream = (
       handleContextWindowWillOverflowEvent,
       handleCitationEvent,
       sanitizeContent,
+      addItem,
+      pendingHistoryItemRef,
       setPendingHistoryItem,
     ],
   );

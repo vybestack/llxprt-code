@@ -9,6 +9,7 @@ import {
   Config,
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   getResponseText,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { Content, GenerateContentConfig } from '@google/genai';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
@@ -151,7 +152,7 @@ export function usePromptCompletion({
           (error instanceof Error && error.name === 'AbortError')
         )
       ) {
-        console.error('prompt completion error:', error);
+        debugLogger.error('prompt completion error:', error);
       }
       clearGhostText();
     } finally {

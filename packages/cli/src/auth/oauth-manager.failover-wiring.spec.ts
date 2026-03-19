@@ -85,9 +85,10 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
 
     mockConfigGetter = vi.fn().mockReturnValue(mockConfig);
 
-    oauthManager = new OAuthManager(mockTokenStore);
+    oauthManager = new OAuthManager(mockTokenStore, undefined, {
+      config: mockConfigGetter(),
+    });
     oauthManager.registerProvider(mockProvider);
-    oauthManager.setConfigGetter(mockConfigGetter);
   });
 
   it('should create BucketFailoverHandler when profile has multiple buckets', async () => {

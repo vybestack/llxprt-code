@@ -27,13 +27,14 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       if (error instanceof Error) return error.message;
       return String(error);
     }),
-    getGlobalCoreMemoryFilePath:
-      original.getGlobalCoreMemoryFilePath ??
-      vi.fn(() => '/mock/home/.llxprt/.LLXPRT_SYSTEM'),
-    getProjectCoreMemoryFilePath:
-      original.getProjectCoreMemoryFilePath ??
-      vi.fn((dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`),
-    MemoryTool: original.MemoryTool ?? {
+    getGlobalCoreMemoryFilePath: vi.fn(
+      () => '/mock/home/.llxprt/.LLXPRT_SYSTEM',
+    ),
+    getProjectCoreMemoryFilePath: vi.fn(
+      (dir: string) => `${dir}/.llxprt/.LLXPRT_SYSTEM`,
+    ),
+    MemoryTool: {
+      ...original.MemoryTool,
       performAddMemoryEntry: vi.fn().mockResolvedValue(undefined),
     },
   };

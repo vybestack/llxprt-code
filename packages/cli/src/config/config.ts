@@ -13,6 +13,7 @@ import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
 import { mcpCommand } from '../commands/mcp.js';
+import { skillsCommand } from '../commands/skills.js';
 import { hooksCommand } from '../commands/hooks.js';
 import {
   Config,
@@ -39,9 +40,11 @@ import {
   normalizeShellReplacement,
   type GeminiCLIExtension,
   type Profile,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
-import { Settings } from './settings.js';
+import { Settings, loadSettings } from './settings.js';
+import { getEnableHooks } from './settingsSchema.js';
 import { createPolicyEngineConfig } from './policy.js';
 
 import { annotateActiveExtensions } from './extension.js';
@@ -601,6 +604,10 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     yargsInstance.command(extensionsCommand);
   }
 
+  if (settings?.experimental?.skills ?? false) {
+    yargsInstance.command(skillsCommand);
+  }
+
   yargsInstance
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
@@ -967,7 +974,7 @@ export async function loadCliConfig(
       profileBaseUrl = prepared.profileBaseUrl;
       effectiveSettings = prepared.effectiveSettings;
 
-      // Additional console.debug logging for file-based profiles (for backward compatibility)
+      // Additional debugLogger.debug logging for file-based profiles (for backward compatibility)
       const tempDebugMode =
         argv.debug ||
         [process.env.DEBUG, process.env.DEBUG_MODE].some(
@@ -976,11 +983,11 @@ export async function loadCliConfig(
         false;
 
       if (tempDebugMode) {
-        console.debug(
+        debugLogger.debug(
           `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
         );
         if (profileProvider && profileModel) {
-          console.debug(
+          debugLogger.debug(
             `Applied profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
           );
         }
@@ -993,7 +1000,7 @@ export async function loadCliConfig(
         }
         return failureSummary;
       });
-      console.error(failureSummary);
+      debugLogger.error(failureSummary);
 
       // If profile was explicitly specified via --profile-load, error out
       if (profileExplicitlySpecified) {
@@ -1028,7 +1035,7 @@ export async function loadCliConfig(
   }
 
   if (debugMode) {
-    console.debug('[DEBUG] IDE mode configuration:', {
+    debugLogger.debug('[DEBUG] IDE mode configuration:', {
       'argv.ideMode': argv.ideMode,
       'effectiveSettings.ui.ideMode': effectiveSettings.ui?.ideMode,
       'final ideMode': ideMode,
@@ -1039,7 +1046,7 @@ export async function loadCliConfig(
 
   // Folder trust feature flag removed - now using settings directly
   const folderTrust = settings.folderTrust ?? false;
-  const trustedFolder = isWorkspaceTrusted(settings) ?? true;
+  const trustedFolder = isWorkspaceTrusted(settings) ?? false;
 
   const allExtensions = annotateActiveExtensions(
     extensions,
@@ -1155,12 +1162,19 @@ export async function loadCliConfig(
       argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
   }
 
-  // Override approval mode if disableYoloMode is set.
-  if (effectiveSettings.security?.disableYoloMode) {
+  // Override approval mode if disableYoloMode or secureModeEnabled is set.
+  if (
+    effectiveSettings.security?.disableYoloMode ||
+    effectiveSettings.admin?.secureModeEnabled
+  ) {
     if (approvalMode === ApprovalMode.YOLO) {
-      logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
+      if (effectiveSettings.admin?.secureModeEnabled) {
+        logger.error('YOLO mode is disabled by "secureModeEnabled" setting.');
+      } else {
+        logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
+      }
       throw new Error(
-        'Cannot start in YOLO mode when it is disabled by settings',
+        'Cannot start in YOLO mode since it is disabled by your admin',
       );
     }
     // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
@@ -1358,6 +1372,9 @@ export async function loadCliConfig(
     );
   }
 
+  // Calculate mcpEnabled based on admin settings
+  const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
+
   const config = new Config({
     sessionId,
     embeddingModel: undefined, // No embedding model configured for llxprt-code
@@ -1375,15 +1392,20 @@ export async function loadCliConfig(
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
     toolCallCommand: effectiveSettings.toolCallCommand,
-    mcpServerCommand: effectiveSettings.mcpServerCommand,
-    mcpServers,
+    mcpServerCommand: mcpEnabled
+      ? effectiveSettings.mcpServerCommand
+      : undefined,
+    mcpServers: mcpEnabled ? mcpServers : {},
+
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: filePaths,
     approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
-    disableYoloMode: effectiveSettings.security?.disableYoloMode,
+    disableYoloMode:
+      effectiveSettings.security?.disableYoloMode ||
+      effectiveSettings.admin?.secureModeEnabled,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,
@@ -1436,7 +1458,27 @@ export async function loadCliConfig(
     extensions: allExtensions,
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
-    blockedMcpServers,
+    allowedMcpServers: mcpEnabled
+      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
+      : undefined,
+    blockedMcpServers: undefined, // Extension-based blocking handled elsewhere
+
+    sanitizationConfig: {
+      allowedEnvironmentVariables: [
+        ...(effectiveSettings.security?.environmentVariableRedaction?.allowed ??
+          []),
+      ],
+      blockedEnvironmentVariables: [
+        ...(effectiveSettings.security?.environmentVariableRedaction?.blocked ??
+          []),
+      ],
+      enableEnvironmentVariableRedaction:
+        effectiveSettings.security?.environmentVariableRedaction?.enabled ??
+        false,
+    },
+
+    skillsSupport: effectiveSettings.experimental?.skills,
+    disabledSkills: effectiveSettings.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
@@ -1466,7 +1508,7 @@ export async function loadCliConfig(
         : argv.continue || false,
     // TODO: loading of hooks based on workspace trust
     jitContextEnabled,
-    enableHooks: effectiveSettings.tools?.enableHooks ?? false,
+    enableHooks: getEnableHooks(effectiveSettings),
     hooks: (() => {
       const hooksConfig = effectiveSettings.hooks || {};
       // Filter out the 'disabled' property from hooks config as it's handled separately
@@ -1476,6 +1518,12 @@ export async function loadCliConfig(
       };
       return eventHooks;
     })(),
+    onReload: async () => {
+      const refreshedSettings = loadSettings(cwd);
+      return {
+        disabledSkills: refreshedSettings.merged.skills?.disabled,
+      };
+    },
   });
 
   const enhancedConfig = config;
@@ -1512,6 +1560,9 @@ export async function loadCliConfig(
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
       runtimeState.oauthManager,
+      {
+        messageBus: runtimeState.runtimeMessageBus,
+      },
     );
   }
 

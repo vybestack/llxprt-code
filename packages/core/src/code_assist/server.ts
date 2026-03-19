@@ -34,6 +34,7 @@ import {
   toCountTokenRequest,
   toGenerateContentRequest,
 } from './converter.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /** HTTP options to be used in each of the requests. */
 export interface HttpOptions {
@@ -82,14 +83,14 @@ export class CodeAssistServer implements ContentGenerator {
     req: GenerateContentParameters,
     userPromptId: string,
   ): Promise<GenerateContentResponse> {
-    console.log(
+    debugLogger.log(
       `CodeAssistServer.generateContent: userPromptId=${userPromptId}, model=${req.model}, projectId=${this.projectId}`,
     );
-    console.log(
+    debugLogger.log(
       `CodeAssistServer.generateContent: request contents:`,
       req.contents,
     );
-    console.log(
+    debugLogger.log(
       `CodeAssistServer.generateContent: request config:`,
       req.config,
     );
@@ -106,13 +107,16 @@ export class CodeAssistServer implements ContentGenerator {
         ),
         req.config?.abortSignal,
       );
-      console.log(`CodeAssistServer.generateContent: request successful`);
+      debugLogger.log(`CodeAssistServer.generateContent: request successful`);
       return fromGenerateContentResponse(resp);
     } catch (error) {
-      console.log(
+      debugLogger.log(
         `CodeAssistServer.generateContent: ERROR during request: ${error}`,
       );
-      console.log(`CodeAssistServer.generateContent: Error details:`, error);
+      debugLogger.log(
+        `CodeAssistServer.generateContent: Error details:`,
+        error,
+      );
       throw error;
     }
   }

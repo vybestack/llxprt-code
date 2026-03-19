@@ -11,6 +11,7 @@ import type { Storage } from '../config/storage.js';
 import { HookEventName, HookType } from './types.js';
 import type { Config } from '../config/config.js';
 import type { HookDefinition } from './types.js';
+import { coreEvents, CoreEvent } from '../utils/events.js';
 
 // Mock fs
 vi.mock('fs', () => ({
@@ -32,6 +33,17 @@ vi.mock('../debug/index.js', () => ({
   },
 }));
 
+// Mock TrustedHooksManager
+const mockTrustManager = vi.hoisted(() => ({
+  load: vi.fn(),
+  getUntrustedHooks: vi.fn().mockReturnValue([]),
+  trustHooks: vi.fn(),
+}));
+
+vi.mock('./trustedHooks.js', () => ({
+  TrustedHooksManager: vi.fn(() => mockTrustManager),
+}));
+
 describe('HookRegistry', () => {
   let hookRegistry: HookRegistry;
   let mockConfig: Config;
@@ -49,6 +61,8 @@ describe('HookRegistry', () => {
       getExtensions: vi.fn().mockReturnValue([]),
       getHooks: vi.fn().mockReturnValue({}),
       getDisabledHooks: vi.fn().mockReturnValue([]),
+      isTrustedFolder: vi.fn().mockReturnValue(true),
+      getProjectHooks: vi.fn().mockReturnValue(undefined),
     } as unknown as Config;
 
     hookRegistry = new HookRegistry(mockConfig);
@@ -662,6 +676,113 @@ describe('HookRegistry', () => {
       expect(
         hookRegistry.getHooksForEvent(HookEventName.BeforeTool),
       ).toHaveLength(0);
+    });
+  });
+
+  describe('project hook trust behavior', () => {
+    let coreEventsSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      coreEventsSpy = vi.spyOn(coreEvents, 'emit');
+      // Set up config for a trusted folder with project hooks
+      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder = vi
+        .fn()
+        .mockReturnValue(true);
+      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks = vi
+        .fn()
+        .mockReturnValue({
+          BeforeTool: [
+            {
+              hooks: [
+                {
+                  type: 'command',
+                  command: './hooks/untrusted-script.sh',
+                  name: 'untrusted-hook',
+                },
+              ],
+            },
+          ],
+        });
+    });
+
+    afterEach(() => {
+      coreEventsSpy.mockRestore();
+    });
+
+    it('emits a warning when untrusted project hooks are encountered', async () => {
+      mockTrustManager.getUntrustedHooks.mockReturnValue([
+        {
+          type: 'command',
+          command: './hooks/untrusted-script.sh',
+          name: 'untrusted-hook',
+        },
+      ]);
+
+      await hookRegistry.initialize();
+
+      expect(coreEventsSpy).toHaveBeenCalledWith(
+        CoreEvent.Output,
+        expect.objectContaining({
+          isStderr: true,
+          chunk: expect.stringContaining('untrusted hook'),
+        }),
+      );
+    });
+
+    it('does NOT auto-trust untrusted project hooks after warning', async () => {
+      mockTrustManager.getUntrustedHooks.mockReturnValue([
+        {
+          type: 'command',
+          command: './hooks/untrusted-script.sh',
+          name: 'untrusted-hook',
+        },
+      ]);
+
+      await hookRegistry.initialize();
+
+      expect(mockTrustManager.trustHooks).not.toHaveBeenCalled();
+    });
+
+    it('treats hooks as untrusted on repeated initialization without explicit trust', async () => {
+      mockTrustManager.getUntrustedHooks.mockReturnValue([
+        {
+          type: 'command',
+          command: './hooks/untrusted-script.sh',
+          name: 'untrusted-hook',
+        },
+      ]);
+
+      await hookRegistry.initialize();
+      await hookRegistry.initialize();
+
+      // Both initializations should find untrusted hooks
+      expect(mockTrustManager.getUntrustedHooks).toHaveBeenCalledTimes(2);
+      // Trust should never have been persisted
+      expect(mockTrustManager.trustHooks).not.toHaveBeenCalled();
+    });
+
+    it('does not warn or check trust when no project hooks exist', async () => {
+      vi.mocked(mockConfig as Record<string, unknown>).getProjectHooks = vi
+        .fn()
+        .mockReturnValue(undefined);
+
+      await hookRegistry.initialize();
+
+      expect(mockTrustManager.getUntrustedHooks).not.toHaveBeenCalled();
+      expect(coreEventsSpy).not.toHaveBeenCalledWith(
+        CoreEvent.Output,
+        expect.objectContaining({ isStderr: true }),
+      );
+    });
+
+    it('skips trust check when folder is not trusted', async () => {
+      vi.mocked(mockConfig as Record<string, unknown>).isTrustedFolder = vi
+        .fn()
+        .mockReturnValue(false);
+
+      await hookRegistry.initialize();
+
+      expect(mockTrustManager.getUntrustedHooks).not.toHaveBeenCalled();
     });
   });
 });

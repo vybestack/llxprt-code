@@ -89,6 +89,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
+
     logExtensionEnable: mockLogExtensionEnable,
     logExtensionInstallEvent: mockLogExtensionInstallEvent,
     logExtensionUninstall: mockLogExtensionUninstall,
@@ -464,8 +465,6 @@ describe('extension tests', () => {
           `Warning: Skipping extension in ${badExtDir}: Expected`,
         ),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it('should skip extensions with missing name and log a warning', () => {
@@ -497,8 +496,6 @@ describe('extension tests', () => {
           `Invalid extension config in ${badConfigPath}: missing name or version.`,
         ),
       );
-
-      consoleSpy.mockRestore();
     });
 
     it('should filter trust out of mcp servers', () => {
@@ -541,7 +538,6 @@ describe('extension tests', () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('Invalid extension name: "bad_name"'),
       );
-      consoleSpy.mockRestore();
     });
   });
 

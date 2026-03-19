@@ -18,6 +18,7 @@ import type { Config } from '../config/config.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 /**
  * Parameters for the LS tool
@@ -81,8 +82,9 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
   constructor(
     private readonly config: Config,
     params: LSToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   private getDirPath(): string {
@@ -90,10 +92,10 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
   }
 
   /**
-   * Checks if a filename matches any of the ignore patterns
+   * Checks whether a filename matches any of the ignore patterns.
    * @param filename Filename to check
    * @param patterns Array of glob patterns to check against
-   * @returns True if the filename should be ignored
+   * @returns True when the filename matches an ignore pattern.
    */
   private shouldIgnore(filename: string, patterns?: string[]): boolean {
     if (!patterns || patterns.length === 0) {
@@ -231,7 +233,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           });
         } catch (error) {
           // Log error internally but don't fail the whole listing
-          console.error(`Error accessing ${fullPath}: ${error}`);
+          debugLogger.error(`Error accessing ${fullPath}: ${error}`);
         }
       }
 
@@ -280,7 +282,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
 
   constructor(
     private config: Config,
-    _messageBus?: MessageBus,
+    messageBus?: MessageBus,
   ) {
     super(
       LSTool.Name,
@@ -327,7 +329,22 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
         required: [],
         type: 'object',
       },
+      true,
+      false,
+      messageBus,
     );
+  }
+
+  protected override createInvocation(
+    params: LSToolParams,
+    messageBus: MessageBus,
+  ): ToolInvocation<LSToolParams, ToolResult> {
+    const normalizedParams = { ...params };
+    if (!normalizedParams.dir_path && normalizedParams.path) {
+      normalizedParams.dir_path = normalizedParams.path;
+    }
+
+    return new LSToolInvocation(this.config, normalizedParams, messageBus);
   }
 
   /**
@@ -354,17 +371,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
         ', ',
       )}`;
     }
-    return null;
-  }
-
-  protected override createInvocation(
-    params: LSToolParams,
-    _messageBus?: MessageBus,
-  ): ToolInvocation<LSToolParams, ToolResult> {
-    const normalizedParams = { ...params };
-    if (!normalizedParams.dir_path && normalizedParams.path) {
-      normalizedParams.dir_path = normalizedParams.path;
-    }
-    return new LSToolInvocation(this.config, normalizedParams);
+    const noValidationError = null;
+    return noValidationError;
   }
 }

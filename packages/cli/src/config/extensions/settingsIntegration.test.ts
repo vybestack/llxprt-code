@@ -16,6 +16,7 @@ import {
 } from './settingsIntegration.js';
 import type { ExtensionSetting } from './extensionSettings.js';
 import { getWorkspaceIdentity } from '../../utils/gitUtils.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 vi.mock('../../utils/gitUtils.js', async (importOriginal) => {
   const actual =
@@ -278,8 +279,8 @@ describe('settingsIntegration', () => {
 
       const mockPrompt = vi.fn().mockResolvedValue('new-value');
 
-      const consoleSpy = vi
-        .spyOn(console, 'error')
+      const debugErrorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
         .mockImplementation(() => {});
 
       const result = await updateSetting(
@@ -291,11 +292,11 @@ describe('settingsIntegration', () => {
 
       expect(result).toBe(false);
       expect(mockPrompt).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(debugErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Setting "NonExistent" not found'),
       );
 
-      consoleSpy.mockRestore();
+      debugErrorSpy.mockRestore();
     });
 
     it('should return false if user cancels (empty value)', async () => {

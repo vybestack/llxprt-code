@@ -13,6 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   StdinRawModeManager,
   installStdinErrorHandler,
@@ -178,7 +179,7 @@ describe('stdin EIO error handling', () => {
       stdin.isTTY = true;
       stdin.isRaw = false;
 
-      const consoleErrorSpy = vi.spyOn(console, 'error');
+      const errorSpy = vi.spyOn(DebugLogger.prototype, 'error');
       const manager = new StdinRawModeManager({ debug: true });
 
       manager.enable();
@@ -186,13 +187,13 @@ describe('stdin EIO error handling', () => {
       const testError = new Error('test error');
       process.stdin.emit('error', testError);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect(errorSpy).toHaveBeenCalledWith(
         '[stdin] I/O error (non-fatal):',
         testError,
       );
 
       manager.disable();
-      consoleErrorSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it('should disable raw mode and remove error handler', () => {
@@ -252,20 +253,20 @@ describe('stdin EIO error handling', () => {
     it('should handle setRawMode failures gracefully', () => {
       stdin.isTTY = true;
       stdin.isRaw = false;
-      mockSetRawMode.mockImplementation(() => {
-        throw new Error('Cannot set raw mode');
+
+      const errorSpy = vi.spyOn(DebugLogger.prototype, 'error');
+      stdin.setRawMode = vi.fn(() => {
+        throw new Error('setRawMode failed');
       });
 
-      const consoleErrorSpy = vi.spyOn(console, 'error');
       const manager = new StdinRawModeManager({ debug: true });
-
       const enabled = manager.enable();
 
       expect(enabled).toBe(false);
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalled();
       expect(manager.getManaged()).toBe(false);
 
-      consoleErrorSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it('should call custom error handler', () => {

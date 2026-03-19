@@ -15,6 +15,7 @@ import {
   Storage,
   getErrorMessage,
   type GeminiCLIExtension,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -108,7 +109,7 @@ function createFileStateStore(): ExtensionAutoUpdateStateStore {
         ) {
           return {};
         }
-        console.warn(
+        debugLogger.warn(
           '[extensions] Failed to read extension auto-update state:',
           getErrorMessage(error),
         );
@@ -124,7 +125,7 @@ function createFileStateStore(): ExtensionAutoUpdateStateStore {
           'utf-8',
         );
       } catch (error) {
-        console.warn(
+        debugLogger.warn(
           '[extensions] Failed to persist extension auto-update state:',
           getErrorMessage(error),
         );
@@ -456,11 +457,11 @@ export class ExtensionAutoUpdater {
 
     const prefix = '[extensions]';
     if (level === 'error') {
-      console.error(prefix, message);
+      debugLogger.error(prefix, message);
     } else if (level === 'warn') {
-      console.warn(prefix, message);
+      debugLogger.warn(prefix, message);
     } else {
-      console.log(prefix, message);
+      debugLogger.log(prefix, message);
     }
   }
 }

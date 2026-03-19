@@ -14,7 +14,7 @@
  */
 
 import { OAuthProvider } from './oauth-manager.js';
-import { TokenStore } from '@vybestack/llxprt-code-core';
+import { TokenStore, debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Migrate any in-memory tokens to persistent storage
@@ -35,7 +35,7 @@ export async function migrateInMemoryTokens(
         if (!stored) {
           // Migrate to storage
           await tokenStore.saveToken(name, token);
-          console.log(`Migrated ${name} token to persistent storage`);
+          debugLogger.log(`Migrated ${name} token to persistent storage`);
         }
       }
     } catch (_error) {
@@ -50,7 +50,7 @@ export async function migrateInMemoryTokens(
  * Display migration notice to users about OAuth token storage changes
  */
 export function showMigrationNotice(): void {
-  console.log(`
+  debugLogger.log(`
 LLXPRT OAuth Token Storage Migration
 ====================================
 

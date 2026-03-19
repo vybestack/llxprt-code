@@ -14,6 +14,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { Config } from '../config/config.js';
 import { BaseToolInvocation } from './tools.js';
@@ -68,7 +69,10 @@ export class ExaWebSearchTool extends BaseDeclarativeTool<
 > {
   static readonly Name = 'exa_web_search';
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    _messageBus: MessageBus,
+  ) {
     super(
       ExaWebSearchTool.Name,
       'ExaWebSearch',
@@ -110,8 +114,9 @@ export class ExaWebSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ExaWebSearchToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<ExaWebSearchToolParams, ToolResult> {
-    return new ExaWebSearchToolInvocation(this.config, params);
+    return new ExaWebSearchToolInvocation(this.config, params, messageBus);
   }
 }
 
@@ -119,8 +124,12 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
   ExaWebSearchToolParams,
   ToolResult
 > {
-  constructor(_config: Config, params: ExaWebSearchToolParams) {
-    super(params);
+  constructor(
+    _config: Config,
+    params: ExaWebSearchToolParams,
+    messageBus: MessageBus,
+  ) {
+    super(params, messageBus);
   }
 
   getDescription(): string {

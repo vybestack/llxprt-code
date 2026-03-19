@@ -33,7 +33,7 @@ import {
 } from '../utils/commandUtils.js';
 import {
   parseInputForHighlighting,
-  buildSegmentsForVisualSlice,
+  parseSegmentsFromTokens,
 } from '../utils/highlight.js';
 import {
   clipboardHasImage,
@@ -42,10 +42,10 @@ import {
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
-import { secureInputHandler } from '../utils/secureInputHandler.js';
 import { useMouse } from '../hooks/useMouse.js';
 import type { MouseEvent } from '../hooks/useMouse.js';
 import clipboardy from 'clipboardy';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 const LARGE_PASTE_LINE_THRESHOLD = 4;
 const LARGE_PASTE_CHAR_THRESHOLD = 1000;
@@ -380,7 +380,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         // Silent no-op: clipboard read can fail on Wayland, SSH, headless, etc.
       }
     } catch (error) {
-      console.error('Error handling clipboard paste:', error);
+      debugLogger.error('Error handling clipboard paste:', error);
     }
   }, [buffer, config]);
 
@@ -1056,30 +1056,30 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                   focus && visualIdxInRenderedSet === cursorVisualRow;
 
                 const renderedLine: React.ReactNode[] = [];
-                let charCount = 0;
-                let hasVisibleContent = false;
-                const [logicalLineIdx, logicalStartCol] = mapEntry ?? [0, 0];
-                const rawLogicalLine =
-                  mapEntry && buffer.lines[logicalLineIdx]
-                    ? buffer.lines[logicalLineIdx]
-                    : lineText;
-                // Apply live masking for /key and /toolkey commands.
-                // processInput returns same-length text with sensitive chars
-                // replaced by '*', so cursor positioning stays correct.
-                const logicalLine =
-                  logicalLineIdx === 0
-                    ? secureInputHandler.processInput(rawLogicalLine)
-                    : rawLogicalLine;
+
+                const [logicalLineIdx] = mapEntry ?? [0];
+                const logicalLine = buffer.lines[logicalLineIdx] || '';
+                const transformations =
+                  buffer.transformationsByLine[logicalLineIdx] ?? [];
                 const tokens = parseInputForHighlighting(
                   logicalLine,
                   logicalLineIdx,
+                  transformations,
+                  ...(focus && buffer.cursor[0] === logicalLineIdx
+                    ? [buffer.cursor[1]]
+                    : []),
                 );
-
-                const visualStart = logicalStartCol;
-                const visualEnd = logicalStartCol + cpLen(lineText);
-                const segments = mapEntry
-                  ? buildSegmentsForVisualSlice(tokens, visualStart, visualEnd)
-                  : tokens;
+                const startColInTransformed =
+                  buffer.visualToTransformedMap[absoluteVisualIdx] ?? 0;
+                const visualStartCol = startColInTransformed;
+                const visualEndCol = visualStartCol + cpLen(lineText);
+                const segments = parseSegmentsFromTokens(
+                  tokens,
+                  visualStartCol,
+                  visualEndCol,
+                );
+                let charCount = 0;
+                let hasVisibleContent = false;
 
                 segments.forEach((seg, segIdx) => {
                   const segLen = cpLen(seg.text);
@@ -1099,25 +1099,28 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                       relativeVisualColForHighlight < segEnd
                     ) {
                       const charToHighlight = cpSlice(
-                        seg.text,
+                        display,
                         relativeVisualColForHighlight - segStart,
                         relativeVisualColForHighlight - segStart + 1,
                       );
-                      const highlighted = chalk.inverse(charToHighlight);
+                      const highlighted = charToHighlight
+                        ? chalk.inverse(charToHighlight)
+                        : charToHighlight;
                       display =
                         cpSlice(
-                          seg.text,
+                          display,
                           0,
                           relativeVisualColForHighlight - segStart,
                         ) +
                         highlighted +
                         cpSlice(
-                          seg.text,
+                          display,
                           relativeVisualColForHighlight - segStart + 1,
                         );
                     }
                     charCount = segEnd;
                   } else {
+                    // Advance the running counter even when not on cursor line
                     charCount += segLen;
                   }
 

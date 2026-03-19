@@ -13,6 +13,8 @@ export enum MessageBusType {
   UPDATE_POLICY = 'update-policy',
   BUCKET_AUTH_CONFIRMATION_REQUEST = 'bucket-auth-confirmation-request',
   BUCKET_AUTH_CONFIRMATION_RESPONSE = 'bucket-auth-confirmation-response',
+  HOOK_EXECUTION_REQUEST = 'HOOK_EXECUTION_REQUEST',
+  HOOK_EXECUTION_RESPONSE = 'HOOK_EXECUTION_RESPONSE',
 }
 
 export interface ToolConfirmationRequest {
@@ -94,6 +96,16 @@ export interface BucketAuthConfirmationResponse {
   confirmed: boolean;
 }
 
+export interface HookExecutionRequest {
+  type: MessageBusType.HOOK_EXECUTION_REQUEST;
+  payload: { eventName: string; correlationId: string };
+}
+
+export interface HookExecutionResponse {
+  type: MessageBusType.HOOK_EXECUTION_RESPONSE;
+  payload: { correlationId: string };
+}
+
 export type MessageBusMessage =
   | ToolConfirmationRequest
   | ToolConfirmationResponse
@@ -102,4 +114,6 @@ export type MessageBusMessage =
   | ToolExecutionFailure
   | UpdatePolicy
   | BucketAuthConfirmationRequest
-  | BucketAuthConfirmationResponse;
+  | BucketAuthConfirmationResponse
+  | HookExecutionRequest
+  | HookExecutionResponse;

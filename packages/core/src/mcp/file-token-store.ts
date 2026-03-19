@@ -15,12 +15,16 @@ import {
   type MCPOAuthToken,
   type MCPOAuthCredentials,
 } from './token-store.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const safeOsHostname = (): string => {
   try {
     return os.hostname();
   } catch (error) {
-    console.warn('Failed to resolve hostname, falling back to default', error);
+    debugLogger.warn(
+      'Failed to resolve hostname, falling back to default',
+      error,
+    );
     return 'unknown-host';
   }
 };
@@ -30,7 +34,7 @@ const safeOsUsername = (): string => {
     return os.userInfo().username;
   } catch (error) {
     const fallback = process.env.USER || process.env.USERNAME || 'unknown-user';
-    console.warn('Failed to resolve username, using fallback value', error);
+    debugLogger.warn('Failed to resolve username, using fallback value', error);
     return fallback;
   }
 };
@@ -66,7 +70,7 @@ export class FileTokenStore extends BaseTokenStore {
     try {
       await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
     } catch (error) {
-      console.error(
+      debugLogger.error(
         `Failed to create config directory ${configDir}: ${getErrorMessage(error)}`,
       );
       throw error;
@@ -136,7 +140,7 @@ export class FileTokenStore extends BaseTokenStore {
         return null;
       }
 
-      console.error(
+      debugLogger.error(
         `Failed to read MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`,
       );
       throw error;
@@ -173,7 +177,9 @@ export class FileTokenStore extends BaseTokenStore {
 
       // Validate the loaded data structure
       if (!Array.isArray(tokens)) {
-        console.warn('Token file contains invalid data structure, ignoring');
+        debugLogger.warn(
+          'Token file contains invalid data structure, ignoring',
+        );
         return tokenMap;
       }
 
@@ -181,13 +187,13 @@ export class FileTokenStore extends BaseTokenStore {
         if (this.isValidCredentials(credential)) {
           tokenMap.set(credential.serverName, credential);
         } else {
-          console.warn(
+          debugLogger.warn(
             `Skipping invalid credential entry for server: ${(credential as { serverName?: string })?.serverName || 'unknown'}`,
           );
         }
       }
     } catch (error) {
-      console.error(
+      debugLogger.error(
         `Failed to load MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`,
       );
     }
@@ -227,7 +233,7 @@ export class FileTokenStore extends BaseTokenStore {
 
       // Token saved successfully
     } catch (error) {
-      console.error(
+      debugLogger.error(
         `Failed to save MCP OAuth token for ${serverName}: ${getErrorMessage(error)}`,
       );
       throw error;
@@ -272,7 +278,7 @@ export class FileTokenStore extends BaseTokenStore {
           // Token removed successfully
         }
       } catch (error) {
-        console.error(
+        debugLogger.error(
           `Failed to remove MCP OAuth token for ${serverName}: ${getErrorMessage(error)}`,
         );
         // Don't throw - removal from memory map succeeded
@@ -293,7 +299,7 @@ export class FileTokenStore extends BaseTokenStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         // No token file to clear
       } else {
-        console.error(
+        debugLogger.error(
           `Failed to clear MCP OAuth tokens: ${getErrorMessage(error)}`,
         );
       }

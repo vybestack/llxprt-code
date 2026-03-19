@@ -6,7 +6,7 @@
 
 import updateNotifier, { UpdateInfo } from 'update-notifier';
 import semver from 'semver';
-import { getPackageJson } from '@vybestack/llxprt-code-core';
+import { getPackageJson, debugLogger } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -117,7 +117,7 @@ export async function checkForUpdates(
 
     return null;
   } catch (e) {
-    console.warn('Failed to check for updates: ' + e);
+    debugLogger.warn('Failed to check for updates: ' + e);
     return null;
   }
 }

@@ -9,7 +9,10 @@ import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useVim } from './vim.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
-import { textBufferReducer } from '../components/shared/text-buffer.js';
+import {
+  textBufferReducer,
+  calculateTransformations,
+} from '../components/shared/text-buffer.js';
 
 // Mock the VimModeContext
 const mockVimContext = {
@@ -43,6 +46,35 @@ const TEST_SEQUENCES = {
   LINE_END: { sequence: '$' },
   REPEAT: { sequence: '.' },
 } as const;
+
+// Helper to create complete initial state for reducer tests
+function createReducerState(
+  lines: string[],
+  cursorRow: number,
+  cursorCol: number,
+) {
+  return {
+    lines,
+    cursorRow,
+    cursorCol,
+    preferredCol: null,
+    undoStack: [],
+    redoStack: [],
+    clipboard: null,
+    selectionAnchor: null,
+    transformationsByLine: calculateTransformations(lines),
+    viewportWidth: 80,
+    viewportHeight: 24,
+    visualLayout: {
+      allVisualLines: lines,
+      viewportVisualLines: lines,
+      visualCursor: [cursorRow, cursorCol],
+      visualScrollRow: 0,
+      visualToLogicalMap: lines.map((_, i) => [i, 0] as [number, number]),
+      visualToTransformedMap: lines.map(() => 0),
+    },
+  };
+}
 
 describe('useVim hook', () => {
   let mockBuffer: Partial<TextBuffer>;
@@ -767,16 +799,7 @@ describe('useVim hook', () => {
 
       it('should actually delete the complete word including trailing space', () => {
         // This test uses the real text-buffer reducer instead of mocks
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 0,
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 0);
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_forward',
@@ -790,16 +813,7 @@ describe('useVim hook', () => {
       });
 
       it('should delete word from middle of word correctly', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 2, // cursor on 'l' in "hello"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 2); // cursor on 'l' in "hello"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_forward',
@@ -813,16 +827,7 @@ describe('useVim hook', () => {
       });
 
       it('should handle dw at end of line', () => {
-        const initialState = {
-          lines: ['hello world'],
-          cursorRow: 0,
-          cursorCol: 6, // cursor on 'w' in "world"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world'], 0, 6); // cursor on 'w' in "world"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_forward',
@@ -1287,16 +1292,7 @@ describe('useVim hook', () => {
   describe('Reducer-based integration tests', () => {
     describe('de (delete word end)', () => {
       it('should delete from cursor to end of current word', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 1, // cursor on 'e' in "hello"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 1); // cursor on 'e' in "hello"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_end',
@@ -1310,16 +1306,11 @@ describe('useVim hook', () => {
       });
 
       it('should delete multiple word ends with count', () => {
-        const initialState = {
-          lines: ['hello world test more'],
-          cursorRow: 0,
-          cursorCol: 1, // cursor on 'e' in "hello"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(
+          ['hello world test more'],
+          0,
+          1,
+        ); // cursor on 'e' in "hello"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_end',
@@ -1335,16 +1326,7 @@ describe('useVim hook', () => {
 
     describe('db (delete word backward)', () => {
       it('should delete from cursor to start of previous word', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 11, // cursor on 't' in "test"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 11); // cursor on 't' in "test"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_backward',
@@ -1358,16 +1340,11 @@ describe('useVim hook', () => {
       });
 
       it('should delete multiple words backward with count', () => {
-        const initialState = {
-          lines: ['hello world test more'],
-          cursorRow: 0,
-          cursorCol: 17, // cursor on 'm' in "more"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(
+          ['hello world test more'],
+          0,
+          17,
+        ); // cursor on 'm' in "more"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_word_backward',
@@ -1383,16 +1360,7 @@ describe('useVim hook', () => {
 
     describe('cw (change word forward)', () => {
       it('should delete from cursor to start of next word', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 0, // cursor on 'h' in "hello"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 0); // cursor on 'h' in "hello"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_word_forward',
@@ -1406,16 +1374,11 @@ describe('useVim hook', () => {
       });
 
       it('should change multiple words with count', () => {
-        const initialState = {
-          lines: ['hello world test more'],
-          cursorRow: 0,
-          cursorCol: 0,
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(
+          ['hello world test more'],
+          0,
+          0,
+        );
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_word_forward',
@@ -1431,16 +1394,7 @@ describe('useVim hook', () => {
 
     describe('ce (change word end)', () => {
       it('should change from cursor to end of current word', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 1, // cursor on 'e' in "hello"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 1); // cursor on 'e' in "hello"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_word_end',
@@ -1454,16 +1408,7 @@ describe('useVim hook', () => {
       });
 
       it('should change multiple word ends with count', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 1, // cursor on 'e' in "hello"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 1); // cursor on 'e' in "hello"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_word_end',
@@ -1479,16 +1424,7 @@ describe('useVim hook', () => {
 
     describe('cb (change word backward)', () => {
       it('should change from cursor to start of previous word', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 11, // cursor on 't' in "test"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 11); // cursor on 't' in "test"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_word_backward',
@@ -1504,16 +1440,7 @@ describe('useVim hook', () => {
 
     describe('cc (change line)', () => {
       it('should clear the line and place cursor at the start', () => {
-        const initialState = {
-          lines: ['  hello world'],
-          cursorRow: 0,
-          cursorCol: 5, // cursor on 'o'
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['  hello world'], 0, 5); // cursor on 'o'
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_line',
@@ -1528,16 +1455,11 @@ describe('useVim hook', () => {
 
     describe('dd (delete line)', () => {
       it('should delete the current line', () => {
-        const initialState = {
-          lines: ['line1', 'line2', 'line3'],
-          cursorRow: 1,
-          cursorCol: 2,
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(
+          ['line1', 'line2', 'line3'],
+          1,
+          2,
+        );
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_line',
@@ -1550,16 +1472,11 @@ describe('useVim hook', () => {
       });
 
       it('should delete multiple lines with count', () => {
-        const initialState = {
-          lines: ['line1', 'line2', 'line3', 'line4'],
-          cursorRow: 1,
-          cursorCol: 2,
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(
+          ['line1', 'line2', 'line3', 'line4'],
+          1,
+          2,
+        );
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_line',
@@ -1573,16 +1490,7 @@ describe('useVim hook', () => {
       });
 
       it('should handle deleting last line', () => {
-        const initialState = {
-          lines: ['only line'],
-          cursorRow: 0,
-          cursorCol: 3,
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['only line'], 0, 3);
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_line',
@@ -1598,16 +1506,7 @@ describe('useVim hook', () => {
 
     describe('D (delete to end of line)', () => {
       it('should delete from cursor to end of line', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 6, // cursor on 'w' in "world"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 6); // cursor on 'w' in "world"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_to_end_of_line',
@@ -1620,16 +1519,7 @@ describe('useVim hook', () => {
       });
 
       it('should handle D at end of line', () => {
-        const initialState = {
-          lines: ['hello world'],
-          cursorRow: 0,
-          cursorCol: 11, // cursor at end
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world'], 0, 11); // cursor at end
 
         const result = textBufferReducer(initialState, {
           type: 'vim_delete_to_end_of_line',
@@ -1644,16 +1534,7 @@ describe('useVim hook', () => {
 
     describe('C (change to end of line)', () => {
       it('should change from cursor to end of line', () => {
-        const initialState = {
-          lines: ['hello world test'],
-          cursorRow: 0,
-          cursorCol: 6, // cursor on 'w' in "world"
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world test'], 0, 6); // cursor on 'w' in "world"
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_to_end_of_line',
@@ -1666,16 +1547,7 @@ describe('useVim hook', () => {
       });
 
       it('should handle C at beginning of line', () => {
-        const initialState = {
-          lines: ['hello world'],
-          cursorRow: 0,
-          cursorCol: 0,
-          preferredCol: null,
-          undoStack: [],
-          redoStack: [],
-          clipboard: null,
-          selectionAnchor: null,
-        };
+        const initialState = createReducerState(['hello world'], 0, 0);
 
         const result = textBufferReducer(initialState, {
           type: 'vim_change_to_end_of_line',

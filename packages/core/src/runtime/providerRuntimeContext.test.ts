@@ -17,7 +17,6 @@ import {
   getActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
-  setProviderRuntimeContextFallback,
 } from './providerRuntimeContext.js';
 import {
   getSettingsService,
@@ -29,21 +28,13 @@ describe('providerRuntimeContext', () => {
   beforeEach(() => {
     resetSettingsService();
     clearActiveProviderRuntimeContext();
-    setProviderRuntimeContextFallback(() =>
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'fallback-runtime',
-        metadata: { source: 'test-fallback' },
-      }),
-    );
   });
 
-  it('returns singleton-backed fallback when no active context is registered', () => {
-    const fallbackContext = getActiveProviderRuntimeContext();
-    const singletonInstance = getSettingsService();
-
-    expect(fallbackContext.settingsService).toBe(singletonInstance);
-    expect(peekActiveProviderRuntimeContext()).toBe(fallbackContext);
+  it('throws when no active context is registered', () => {
+    expect(() => getActiveProviderRuntimeContext()).toThrow(
+      /MissingProviderRuntimeError\(provider-runtime\)/,
+    );
+    expect(peekActiveProviderRuntimeContext()).toBeNull();
   });
 
   it('returns explicitly registered context with injected settings and config', () => {
@@ -68,7 +59,7 @@ describe('providerRuntimeContext', () => {
     expect(getSettingsService()).toBe(injectedSettings);
   });
 
-  it('re-hydrates singleton fallback after reset', () => {
+  it('clears the active runtime context when the settings singleton resets', () => {
     const injectedSettings = new SettingsService();
 
     setActiveProviderRuntimeContext(
@@ -82,9 +73,9 @@ describe('providerRuntimeContext', () => {
 
     resetSettingsService();
 
-    const fallbackContext = getActiveProviderRuntimeContext();
-    const singletonInstance = getSettingsService();
-    expect(fallbackContext.settingsService).toBe(singletonInstance);
-    expect(singletonInstance).not.toBe(injectedSettings);
+    expect(peekActiveProviderRuntimeContext()).toBeNull();
+    expect(() => getActiveProviderRuntimeContext()).toThrow(
+      /MissingProviderRuntimeError\(provider-runtime\)/,
+    );
   });
 });

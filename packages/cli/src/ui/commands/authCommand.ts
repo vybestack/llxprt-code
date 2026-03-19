@@ -17,7 +17,7 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
@@ -666,7 +666,18 @@ export const authCommand: SlashCommand = {
     if (!oauthManager) {
       // This should rarely happen, but handle it as a fallback
       const tokenStore = createTokenStore();
-      oauthManager = new OAuthManager(tokenStore, context.services.settings);
+      const config = context.services.config;
+      if (!config) {
+        throw new Error('Auth command requires an initialized Config service.');
+      }
+      const runtimeMessageBus = new MessageBus(
+        config.getPolicyEngine(),
+        config.getDebugMode(),
+      );
+      oauthManager = new OAuthManager(tokenStore, context.services.settings, {
+        messageBus: runtimeMessageBus,
+        config,
+      });
 
       // Register OAuth providers
       oauthManager.registerProvider(new GeminiOAuthProvider());
@@ -674,7 +685,9 @@ export const authCommand: SlashCommand = {
       oauthManager.registerProvider(new AnthropicOAuthProvider());
       oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
 
-      runtime.registerCliProviderInfrastructure(providerManager, oauthManager);
+      runtime.registerCliProviderInfrastructure(providerManager, oauthManager, {
+        messageBus: runtimeMessageBus,
+      });
     }
 
     const executor = new AuthCommandExecutor(oauthManager);

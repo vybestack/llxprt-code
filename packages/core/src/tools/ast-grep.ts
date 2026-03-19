@@ -63,8 +63,9 @@ class AstGrepToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: AstGrepToolParams,
+    messageBus: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -339,7 +340,7 @@ export class AstGrepTool extends BaseDeclarativeTool<
 
   constructor(
     private readonly config: Config,
-    _messageBus?: MessageBus,
+    _messageBus: MessageBus,
   ) {
     super(
       AstGrepTool.Name,
@@ -393,8 +394,8 @@ export class AstGrepTool extends BaseDeclarativeTool<
 
   protected override createInvocation(
     params: AstGrepToolParams,
-    _messageBus?: MessageBus,
+    messageBus: MessageBus,
   ): ToolInvocation<AstGrepToolParams, ToolResult> {
-    return new AstGrepToolInvocation(this.config, params);
+    return new AstGrepToolInvocation(this.config, params, messageBus);
   }
 }

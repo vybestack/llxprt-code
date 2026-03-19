@@ -309,6 +309,7 @@ function AppInner(): React.ReactNode {
 
   const { schedule, cancelAll, respondToConfirmation } = useToolScheduler(
     session?.config ?? null,
+    session?.messageBus,
     onToolsComplete,
     onToolCallsUpdate,
   );

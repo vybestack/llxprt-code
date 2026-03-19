@@ -68,10 +68,10 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     readonly serverName: string,
     readonly serverToolName: string,
     readonly displayName: string,
-    readonly trust?: boolean,
+    readonly trust: boolean | undefined,
     params: ToolParams = {},
+    messageBus: MessageBus,
     private readonly cliConfig?: Config,
-    messageBus?: MessageBus,
   ) {
     // Use composite format for policy checks: serverName__toolName
     // This enables server wildcards (e.g., "google-workspace__*")
@@ -278,6 +278,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ToolParams,
+    messageBus: MessageBus,
   ): ToolInvocation<ToolParams, ToolResult> {
     return new DiscoveredMCPToolInvocation(
       this.mcpTool,
@@ -286,6 +287,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       this.displayName,
       this.trust,
       params,
+      messageBus,
       this.cliConfig,
     );
   }

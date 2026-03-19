@@ -129,17 +129,18 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
         shutdown,
       });
 
-      const consoleLogs: string[] = [];
-      vi.spyOn(global.console, 'log').mockImplementation(
+      const debugLogs: string[] = [];
+      const { DebugLogger } = await import('@vybestack/llxprt-code-core');
+      vi.spyOn(DebugLogger.prototype, 'log').mockImplementation(
         (...args: unknown[]) => {
-          consoleLogs.push(args.map(String).join(' '));
+          debugLogs.push(args.map(String).join(' '));
         },
       );
 
       await provider.initiateAuth();
 
-      // The device code URL should appear in console output, not the callback URL
-      const urlLogLines = consoleLogs.filter(
+      // The device code URL should appear in debug log output, not the callback URL
+      const urlLogLines = debugLogs.filter(
         (line) => line.includes('claude.ai') || line.includes('localhost'),
       );
       const hasDeviceCodeUrl = urlLogLines.some((line) =>

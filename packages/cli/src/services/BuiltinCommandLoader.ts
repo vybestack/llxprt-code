@@ -8,6 +8,7 @@ import { isDevelopment } from '../utils/installationInfo.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { ICommandLoader } from './types.js';
+
 import type { ExtensionEnablementManager } from '../config/extensions/extensionEnablement.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
@@ -34,6 +35,7 @@ import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
+import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
 import { providerCommand } from '../ui/commands/providerCommand.js';
@@ -66,7 +68,7 @@ import { continueCommand } from '../ui/commands/continueCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
- * of the Gemini CLI application.
+ * of the LLxprt Code application.
  */
 export class BuiltinCommandLoader implements ICommandLoader {
   private extensionEnablementManager?: ExtensionEnablementManager;
@@ -149,6 +151,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       statsCommand,
       themeCommand,
       toolsCommand,
+      ...(this.config?.isSkillsSupportEnabled() ? [skillsCommand] : []),
       settingsCommand,
       vimCommand,
       providerCommand,

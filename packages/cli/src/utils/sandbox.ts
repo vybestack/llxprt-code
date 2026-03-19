@@ -24,7 +24,7 @@ import {
 } from '../config/settings.js';
 import { promisify } from 'node:util';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { FatalSandboxError, debugLogger } from '@vybestack/llxprt-code-core';
 import { ConsolePatcher } from '../ui/utils/ConsolePatcher.js';
 import {
   createAndStartProxy,
@@ -184,13 +184,13 @@ export async function setupSshAgentForwarding(
 
   // R4.2: Missing SSH_AUTH_SOCK warns and skips
   if (!sshAuthSock) {
-    console.warn('SSH agent requested but SSH_AUTH_SOCK is not set.');
+    debugLogger.warn('SSH agent requested but SSH_AUTH_SOCK is not set.');
     return {};
   }
 
   // R4.3: Verify socket exists on disk before attempting mount
   if (!fs.existsSync(sshAuthSock)) {
-    console.warn(
+    debugLogger.warn(
       `SSH_AUTH_SOCK path not found at ${sshAuthSock}. Skipping SSH agent forwarding.`,
     );
     return {};
@@ -300,7 +300,9 @@ export async function setupSshAgentDockerMacOS(
   sshAuthSock?: string,
 ): Promise<SshAgentResult> {
   if (!sshAuthSock) {
-    console.warn('No SSH_AUTH_SOCK available. SSH agent forwarding disabled.');
+    debugLogger.warn(
+      'No SSH_AUTH_SOCK available. SSH agent forwarding disabled.',
+    );
     return {};
   }
 
@@ -579,7 +581,7 @@ export async function setupSshAgentPodmanMacOS(
   const existingNetIdx = args.indexOf('--network');
   if (existingNetIdx !== -1) {
     const existingNet = args[existingNetIdx + 1];
-    console.warn(
+    debugLogger.warn(
       `Podman macOS SSH agent forwarding requires --network=host but ` +
         `--network=${existingNet} is already set. Skipping SSH agent setup.`,
     );
@@ -969,8 +971,8 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
         osReleaseContent.match(/^ID_LIKE=.*debian.*/m) || // Covers derivatives
         osReleaseContent.match(/^ID_LIKE=.*ubuntu.*/m) // Covers derivatives
       ) {
-        // note here and below we use console.error for informational messages on stderr
-        console.error(
+        // note here and below we use debugLogger.error for informational messages on stderr
+        debugLogger.error(
           'INFO: Defaulting to use current user UID/GID for Debian/Ubuntu-based Linux.',
         );
         return true;
@@ -978,7 +980,7 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
     } catch (_err) {
       // Silently ignore if /etc/os-release is not found or unreadable.
       // The default (false) will be applied in this case.
-      console.warn(
+      debugLogger.warn(
         'Warning: Could not read /etc/os-release to auto-detect Debian/Ubuntu for UID/GID default.',
       );
     }
@@ -1165,7 +1167,7 @@ export async function start_sandbox(
         );
       }
       // Log on STDERR so it doesn't clutter the output on STDOUT
-      console.error(`using macos seatbelt (profile: ${profile}) ...`);
+      debugLogger.error(`using macos seatbelt (profile: ${profile}) ...`);
       // if DEBUG is enabled, convert to --inspect-brk in NODE_OPTIONS
       const nodeOptions = [
         ...(isSandboxDebugModeEnabled(process.env.DEBUG)
@@ -1259,7 +1261,7 @@ export async function start_sandbox(
         });
         // install handlers to stop proxy on exit/signal
         const stopProxy = () => {
-          console.log('stopping proxy ...');
+          debugLogger.log('stopping proxy ...');
           if (proxyProcess?.pid) {
             process.kill(-proxyProcess.pid, 'SIGTERM');
           }
@@ -1270,10 +1272,10 @@ export async function start_sandbox(
 
         // commented out as it disrupts ink rendering
         // proxyProcess.stdout?.on('data', (data) => {
-        //   console.info(data.toString());
+        //   debugLogger.log(data.toString());
         // });
         proxyProcess.stderr?.on('data', (data) => {
-          console.error(data.toString());
+          debugLogger.error(data.toString());
         });
         proxyProcess.on('close', (code, signal) => {
           if (sandboxProcess?.pid) {
@@ -1283,7 +1285,7 @@ export async function start_sandbox(
             `Proxy command '${proxyCommand}' exited with code ${code}, signal ${signal}`,
           );
         });
-        console.log('waiting for proxy to start ...');
+        debugLogger.log('waiting for proxy to start ...');
         await execAsync(
           `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
         );
@@ -1342,7 +1344,7 @@ export async function start_sandbox(
             // Issue #1020: Log I/O errors but don't crash
             // This can happen after long-running sessions on macOS
             if (cliConfig?.getDebugMode()) {
-              console.error('[sandbox] Failed to restore raw mode:', err);
+              debugLogger.error('[sandbox] Failed to restore raw mode:', err);
             }
           }
         }
@@ -1355,7 +1357,7 @@ export async function start_sandbox(
       });
     }
 
-    console.error(`hopping into sandbox (command: ${config.command}) ...`);
+    debugLogger.error(`hopping into sandbox (command: ${config.command}) ...`);
 
     // determine full path for gemini-cli to distinguish linked vs installed setting
     const gcPath = fs.realpathSync(process.argv[1]);
@@ -1380,14 +1382,14 @@ export async function start_sandbox(
             'run `npm link ./packages/cli` under gemini-cli repo to switch to linked binary.',
         );
       } else {
-        console.error('building sandbox ...');
+        debugLogger.error('building sandbox ...');
         const gcRoot = gcPath.split('/packages/')[0];
         const projectSandboxDockerfile = path.join(
           SETTINGS_DIRECTORY_NAME,
           'sandbox.Dockerfile',
         );
         if (isCustomProjectSandbox) {
-          console.error(`using ${projectSandboxDockerfile} for sandbox`);
+          debugLogger.error(`using ${projectSandboxDockerfile} for sandbox`);
         }
         const buildArgsArray = ['-s'];
         if (isCustomProjectSandbox) {
@@ -1455,7 +1457,7 @@ export async function start_sandbox(
     if (networkMode === 'off') {
       args.push('--network', 'none');
     } else if (networkMode === 'proxied') {
-      console.warn(
+      debugLogger.warn(
         'Sandbox network mode "proxied" is not implemented yet; falling back to default networking.',
       );
     }
@@ -1551,7 +1553,7 @@ export async function start_sandbox(
               `Missing mount path '${from}' listed in ${mountsEnvName}`,
             );
           }
-          console.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
+          debugLogger.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
           args.push('--volume', mount);
         }
       }
@@ -1582,7 +1584,7 @@ export async function start_sandbox(
       const portsToForward: string[] = [...portsToForwardSet];
 
       if (portsToForward.length > 0) {
-        console.error(
+        debugLogger.log(
           `Setting up SSH port forwarding for: ${portsToForward.join(', ')}`,
         );
         portForwardingResult = await setupPortForwardingPodmanMacOS(
@@ -1758,7 +1760,7 @@ export async function start_sandbox(
       for (let env of process.env.SANDBOX_ENV.split(',')) {
         if ((env = env.trim())) {
           if (env.includes('=')) {
-            console.error(`SANDBOX_ENV: ${env}`);
+            debugLogger.error(`SANDBOX_ENV: ${env}`);
             args.push('--env', env);
           } else {
             throw new FatalSandboxError(
@@ -1932,7 +1934,7 @@ export async function start_sandbox(
       });
       // install handlers to stop proxy on exit/signal
       const stopProxy = () => {
-        console.log('stopping proxy container ...');
+        debugLogger.log('stopping proxy container ...');
         execSync(`${config.command} rm -f ${SANDBOX_PROXY_NAME}`);
       };
       process.on('exit', stopProxy);
@@ -1941,10 +1943,10 @@ export async function start_sandbox(
 
       // commented out as it disrupts ink rendering
       // proxyProcess.stdout?.on('data', (data) => {
-      //   console.info(data.toString());
+      //   debugLogger.log(data.toString());
       // });
       proxyProcess.stderr?.on('data', (data) => {
-        console.error(data.toString().trim());
+        debugLogger.error(data.toString().trim());
       });
       proxyProcess.on('close', (code, signal) => {
         if (sandboxProcess?.pid) {
@@ -1954,7 +1956,7 @@ export async function start_sandbox(
           `Proxy container command '${proxyContainerCommand}' exited with code ${code}, signal ${signal}`,
         );
       });
-      console.log('waiting for proxy to start ...');
+      debugLogger.log('waiting for proxy to start ...');
       await execAsync(
         `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
       );
@@ -2018,14 +2020,14 @@ export async function start_sandbox(
           // Issue #1020: Log I/O errors but don't crash
           // This can happen after long-running sessions on macOS
           if (cliConfig?.getDebugMode()) {
-            console.error('[sandbox] Failed to restore raw mode:', err);
+            debugLogger.error('[sandbox] Failed to restore raw mode:', err);
           }
         }
       }
     });
 
     sandboxProcess.on('error', (err) => {
-      console.error('Sandbox process error:', err);
+      debugLogger.error('Sandbox process error:', err);
     });
 
     // Wire SSH tunnel cleanup into sandbox lifecycle (R7.9, R7.10)
@@ -2071,7 +2073,7 @@ export async function start_sandbox(
       sandboxProcess?.on('close', (code, signal) => {
         const exitCode = normalizeExitCode(code, signal);
         if (exitCode !== 0) {
-          console.log(
+          debugLogger.log(
             `Sandbox process exited with code: ${code}, signal: ${signal}`,
           );
         }
@@ -2081,7 +2083,7 @@ export async function start_sandbox(
   } catch (error) {
     // @plan:PLAN-20250214-CREDPROXY.P34 - Clean up credential proxy on error
     await stopProxy();
-    console.error('Sandbox error:', error);
+    debugLogger.error('Sandbox error:', error);
     throw error;
   } finally {
     portForwardingResult?.cleanup?.();
@@ -2104,7 +2106,7 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
     }
 
     checkProcess.on('error', (err) => {
-      console.warn(
+      debugLogger.warn(
         `Failed to start '${sandbox}' command for image check: ${err.message}`,
       );
       resolve(false);
@@ -2114,7 +2116,7 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
       // Non-zero code might indicate docker daemon not running, etc.
       // The primary success indicator is non-empty stdoutData.
       if (code !== 0) {
-        // console.warn(`'${sandbox} images -q ${image}' exited with code ${code}.`);
+        // debugLogger.warn(`'${sandbox} images -q ${image}' exited with code ${code}.`);
       }
       resolve(stdoutData.trim() !== '');
     });
@@ -2122,7 +2124,7 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
 }
 
 async function pullImage(sandbox: string, image: string): Promise<boolean> {
-  console.info(`Attempting to pull image ${image} using ${sandbox}...`);
+  debugLogger.log(`Attempting to pull image ${image} using ${sandbox}...`);
   return new Promise((resolve) => {
     const args = ['pull', image];
     const pullProcess = spawn(sandbox, args, { stdio: 'pipe' });
@@ -2130,16 +2132,16 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
     let stderrData = '';
 
     const onStdoutData = (data: Buffer) => {
-      console.info(data.toString().trim()); // Show pull progress
+      debugLogger.log(data.toString().trim()); // Show pull progress
     };
 
     const onStderrData = (data: Buffer) => {
       stderrData += data.toString();
-      console.error(data.toString().trim()); // Show pull errors/info from the command itself
+      debugLogger.error(data.toString().trim()); // Show pull errors/info from the command itself
     };
 
     const onError = (err: Error) => {
-      console.warn(
+      debugLogger.warn(
         `Failed to start '${sandbox} pull ${image}' command: ${err.message}`,
       );
       cleanup();
@@ -2148,11 +2150,11 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
 
     const onClose = (code: number | null) => {
       if (code === 0) {
-        console.info(`Successfully pulled image ${image}.`);
+        debugLogger.log(`Successfully pulled image ${image}.`);
         cleanup();
         resolve(true);
       } else {
-        console.warn(
+        debugLogger.warn(
           `Failed to pull image ${image}. '${sandbox} pull ${image}' exited with code ${code}.`,
         );
         if (stderrData.trim()) {
@@ -2192,13 +2194,13 @@ async function ensureSandboxImageIsPresent(
   sandbox: string,
   image: string,
 ): Promise<boolean> {
-  console.info(`Checking for sandbox image: ${image}`);
+  debugLogger.log(`Checking for sandbox image: ${image}`);
   if (await imageExists(sandbox, image)) {
-    console.info(`Sandbox image ${image} found locally.`);
+    debugLogger.log(`Sandbox image ${image} found locally.`);
     return true;
   }
 
-  console.info(`Sandbox image ${image} not found locally.`);
+  debugLogger.log(`Sandbox image ${image} not found locally.`);
   if (image === LOCAL_DEV_SANDBOX_IMAGE_NAME) {
     // user needs to build the image themselves
     return false;
@@ -2207,17 +2209,17 @@ async function ensureSandboxImageIsPresent(
   if (await pullImage(sandbox, image)) {
     // After attempting to pull, check again to be certain
     if (await imageExists(sandbox, image)) {
-      console.info(`Sandbox image ${image} is now available after pulling.`);
+      debugLogger.log(`Sandbox image ${image} is now available after pulling.`);
       return true;
     } else {
-      console.warn(
+      debugLogger.warn(
         `Sandbox image ${image} still not found after a pull attempt. This might indicate an issue with the image name or registry, or the pull command reported success but failed to make the image available.`,
       );
       return false;
     }
   }
 
-  console.error(
+  debugLogger.error(
     `Failed to obtain sandbox image ${image} after check and pull attempt.`,
   );
   return false; // Pull command failed or image still not present

@@ -24,6 +24,8 @@ import {
   setActiveProviderRuntimeContext,
   type UserFeedbackPayload,
   type EmojiFilterMode,
+  type MessageBus,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import readline from 'node:readline';
@@ -39,6 +41,7 @@ interface RunNonInteractiveParams {
   settings: LoadedSettings;
   input: string;
   prompt_id: string;
+  runtimeMessageBus?: MessageBus;
 }
 
 export async function runNonInteractive({
@@ -46,6 +49,7 @@ export async function runNonInteractive({
   settings,
   input,
   prompt_id,
+  runtimeMessageBus,
 }: RunNonInteractiveParams): Promise<void> {
   const outputFormat =
     typeof config.getOutputFormat === 'function'
@@ -311,7 +315,7 @@ export async function runNonInteractive({
 
       for await (const event of responseStream) {
         if (abortController.signal.aborted) {
-          console.error('Operation cancelled.');
+          debugLogger.error('Operation cancelled.');
           return;
         }
 
@@ -456,13 +460,13 @@ export async function runNonInteractive({
                   ? (parsed as Record<string, unknown>)
                   : {};
             } catch (error) {
-              console.error(
+              debugLogger.error(
                 `Failed to parse tool arguments for ${requestFromModel.name}: ${error instanceof Error ? error.message : String(error)}`,
               );
               normalizedArgs = {};
             }
           } else if (Array.isArray(rawArgs)) {
-            console.error(
+            debugLogger.error(
               `Unexpected array arguments for tool ${requestFromModel.name}; coercing to empty object.`,
             );
             normalizedArgs = {};
@@ -481,11 +485,19 @@ export async function runNonInteractive({
             agentId: requestFromModel.agentId ?? 'primary',
           };
 
-          const completed = await executeToolCall(
-            config,
-            requestInfo,
-            abortController.signal,
-          );
+          const completed = await (
+            executeToolCall as typeof executeToolCall &
+              ((
+                config: Config,
+                requestInfo: ToolCallRequestInfo,
+                abortSignal: AbortSignal,
+                dependencies: {
+                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                },
+              ) => Promise<Awaited<ReturnType<typeof executeToolCall>>>)
+          )(config, requestInfo, abortController.signal, {
+            messageBus: runtimeMessageBus,
+          });
           const toolResponse = completed.response;
 
           if (streamFormatter) {
@@ -509,7 +521,7 @@ export async function runNonInteractive({
 
           if (toolResponse.error) {
             if (!jsonOutput && !streamJsonOutput) {
-              console.error(
+              debugLogger.error(
                 `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
               );
             }
@@ -550,7 +562,7 @@ export async function runNonInteractive({
     }
   } catch (error) {
     if (!jsonOutput) {
-      console.error(parseAndFormatApiError(error));
+      debugLogger.error(parseAndFormatApiError(error));
     }
     throw error;
   } finally {

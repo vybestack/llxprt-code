@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import levenshtein from 'fast-levenshtein';
 import type { AnyDeclarativeTool, AnyToolInvocation } from '../index.js';
 import { isTool } from '../index.js';
 import { SHELL_TOOL_NAMES, splitCommands } from './shell-utils.js';
@@ -143,4 +144,40 @@ export function isShellInvocationAllowlisted(
       allowedPatterns,
     ),
   );
+}
+
+/**
+ * Build a friendly suggestion message when a tool can't be found.
+ * Uses Levenshtein distance to find similar tool names.
+ *
+ * @param unknownToolName The name of the tool that couldn't be found
+ * @param allToolNames Array of all available tool names
+ * @param topN Number of suggestions to return (default: 3)
+ * @returns A suggestion message, or empty string if no suggestions
+ */
+export function getToolSuggestion(
+  unknownToolName: string,
+  allToolNames: string[],
+  topN = 3,
+): string {
+  if (!allToolNames.length) {
+    return '';
+  }
+
+  const matches = allToolNames
+    .map((toolName) => ({
+      name: toolName,
+      distance: levenshtein.get(unknownToolName, toolName),
+    }))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, topN);
+
+  if (!matches.length || matches[0].distance === Infinity) {
+    return '';
+  }
+
+  const suggestedNames = matches.map((match) => `"${match.name}"`).join(', ');
+  return matches.length > 1
+    ? ` Did you mean one of: ${suggestedNames}?`
+    : ` Did you mean ${suggestedNames}?`;
 }

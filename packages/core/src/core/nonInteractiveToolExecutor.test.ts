@@ -80,7 +80,10 @@ describe('executeToolCall', () => {
     mockConfig = {
       ...baseConfig,
       getOrCreateScheduler: (sessionId, callbacks, options) =>
-        getOrCreateScheduler(mockConfig, sessionId, callbacks, options),
+        getOrCreateScheduler(mockConfig, sessionId, callbacks, options, {
+          messageBus,
+          toolRegistry: mockConfig.getToolRegistry(),
+        }),
       disposeScheduler: (sessionId) => disposeScheduler(sessionId),
     } as unknown as Config;
 
@@ -443,7 +446,10 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     const config: ToolExecutionConfig = {
       ...baseConfig,
       getOrCreateScheduler: (sessionId, callbacks, opts) =>
-        getOrCreateScheduler(config as Config, sessionId, callbacks, opts),
+        getOrCreateScheduler(config as Config, sessionId, callbacks, opts, {
+          messageBus: (config as Config).getMessageBus(),
+          toolRegistry: (config as Config).getToolRegistry(),
+        }),
       disposeScheduler: (sessionId) => disposeScheduler(sessionId),
     };
 

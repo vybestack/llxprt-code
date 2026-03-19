@@ -6,6 +6,7 @@ import {
   SettingsService,
   registerSettingsService,
   resetSettingsService,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
 import type {
   GeminiClient,
@@ -24,6 +25,7 @@ export interface ConfigSessionOptions {
 
 export interface ConfigSession {
   readonly config: Config;
+  readonly messageBus: MessageBus;
   initialize(): Promise<void>;
   getClient(): GeminiClient;
   dispose(): void;
@@ -106,18 +108,23 @@ export function createConfigSession(
   } as ConfigParameters;
 
   const config = new Config(configParams);
+  const sessionMessageBus = new MessageBus(
+    config.getPolicyEngine(),
+    config.getDebugMode(),
+  );
 
   let initialized = false;
   let client: GeminiClient | undefined;
 
   return {
     config,
+    messageBus: sessionMessageBus,
 
     async initialize(): Promise<void> {
       if (initialized) {
         return;
       }
-      await config.initialize();
+      await config.initialize({ messageBus: sessionMessageBus });
 
       // For non-Gemini providers, set up ProviderManager first
       if (requiresProviderManager(options.provider)) {

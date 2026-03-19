@@ -28,6 +28,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
 import { type IContent } from '../services/history/IContent.js';
+import { debugLogger } from '../utils/debugLogger.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionEventType,
@@ -162,7 +163,7 @@ export class SessionRecordingService {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') {
         const diag = this.diagnoseMissingPath();
-        console.error(
+        debugLogger.error(
           `[SessionRecording] ENOENT writing session file — recording stopped.
 ` +
             `  filePath: ${this.filePath}
@@ -176,7 +177,7 @@ export class SessionRecordingService {
             `  This directory was removed mid-session by an external process or AI shell command.`,
         );
       } else {
-        console.error(
+        debugLogger.error(
           `[SessionRecording] Unexpected error writing session file — recording stopped.
 ` +
             `  filePath: ${this.filePath}
@@ -351,7 +352,7 @@ export class SessionRecordingService {
         { persistent: false },
         (eventType) => {
           if (eventType === 'rename' && !existsSync(this.chatsDir)) {
-            console.error(
+            debugLogger.error(
               `[SessionRecording] chatsDir was removed at ${new Date().toISOString()}!
 ` +
                 `  path: ${this.chatsDir}

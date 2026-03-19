@@ -20,6 +20,7 @@ import {
   GracefulErrorHandler,
   RetryHandler,
   DebugLogger,
+  debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
@@ -83,7 +84,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
      * Deprecation warning for missing TokenStore
      */
     if (!_tokenStore) {
-      console.warn(
+      debugLogger.warn(
         `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
           `Token persistence will not work. Please update your code.`,
       );
@@ -252,8 +253,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           addItem(historyItem, Date.now());
         }
 
-        console.log('Visit the following URL to authorize:');
-        console.log(deviceCodeUrl);
+        debugLogger.log('Visit the following URL to authorize:');
+        debugLogger.log(deviceCodeUrl);
 
         // Copy device code URL to clipboard with error handling
         try {
@@ -269,7 +270,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         }
 
         if (interactive) {
-          console.log('Opening browser for authentication...');
+          debugLogger.log('Opening browser for authentication...');
 
           // Open browser with callback URL if available, else device code URL
           const browserUrl = callbackUrl || deviceCodeUrl;

@@ -89,6 +89,7 @@ vi.mock('fs', async (importOriginal) => {
 
 const mockCoreEvents = vi.hoisted(() => ({
   emitFeedback: vi.fn(),
+  emitSettingsChanged: vi.fn(),
 }));
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
@@ -185,6 +186,11 @@ describe('Settings Loading and Merging', () => {
         auth: {},
         blockGitExtensions: false,
         enablePermanentToolApproval: false,
+        environmentVariableRedaction: {
+          enabled: false,
+          allowed: [],
+          blocked: [],
+        },
       });
       expect(settings.merged.tools).toMatchObject({
         autoAccept: false,

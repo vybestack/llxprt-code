@@ -13,7 +13,10 @@ import type {
   OutputConfig,
 } from './types.js';
 import { AgentTerminateMode } from './types.js';
-import { makeFakeConfig } from '../test-utils/config.js';
+import {
+  getTestRuntimeMessageBus,
+  makeFakeConfig,
+} from '../test-utils/config.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
@@ -33,6 +36,7 @@ import { MockTool } from '../test-utils/mock-tool.js';
 import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { z } from 'zod';
 import type { ToolErrorType } from '../index.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -201,7 +205,10 @@ describe('AgentExecutor', () => {
     vi.useFakeTimers();
 
     mockConfig = makeFakeConfig();
-    parentToolRegistry = new ToolRegistry(mockConfig);
+    parentToolRegistry = new ToolRegistry(
+      mockConfig,
+      getTestRuntimeMessageBus(mockConfig),
+    );
     parentToolRegistry.registerTool(new LSTool(mockConfig));
     parentToolRegistry.registerTool(new ReadFileTool(mockConfig));
     parentToolRegistry.registerTool(MOCK_TOOL_NOT_ALLOWED);
@@ -228,6 +235,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
       expect(executor).toBeInstanceOf(AgentExecutor);
@@ -236,7 +244,12 @@ describe('AgentExecutor', () => {
     it('SECURITY: should throw if a tool is not on the non-interactive allowlist', async () => {
       const definition = createTestDefinition([MOCK_TOOL_NOT_ALLOWED.name]);
       await expect(
-        AgentExecutor.create(definition, mockConfig, onActivity),
+        AgentExecutor.create(
+          definition,
+          mockConfig,
+          getTestRuntimeMessageBus(mockConfig),
+          onActivity,
+        ),
       ).rejects.toThrow(/not on the allow-list for non-interactive execution/);
     });
 
@@ -245,6 +258,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -265,6 +279,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
       const inputs: AgentInputs = { goal: 'Find files' };
@@ -376,6 +391,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -436,6 +452,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -486,6 +503,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -549,6 +567,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -584,6 +603,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -671,6 +691,7 @@ describe('AgentExecutor', () => {
       const executor = await AgentExecutor.create(
         definition,
         mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
         onActivity,
       );
 
@@ -694,7 +715,7 @@ describe('AgentExecutor', () => {
       ]);
 
       const consoleWarnSpy = vi
-        .spyOn(console, 'warn')
+        .spyOn(debugLogger, 'warn')
         .mockImplementation(() => {});
 
       await executor.run({ goal: 'Sec test' }, signal);
@@ -757,7 +778,11 @@ describe('AgentExecutor', () => {
       const definition = createTestDefinition([LSTool.Name], {
         max_turns: MAX,
       });
-      const executor = await AgentExecutor.create(definition, mockConfig);
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+      );
 
       mockWorkResponse('t1');
       mockWorkResponse('t2');
@@ -772,7 +797,11 @@ describe('AgentExecutor', () => {
       const definition = createTestDefinition([LSTool.Name], {
         max_time_minutes: 1,
       });
-      const executor = await AgentExecutor.create(definition, mockConfig);
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+      );
 
       mockModelResponse([{ name: LSTool.Name, args: { path: '.' }, id: 't1' }]);
 
@@ -795,7 +824,11 @@ describe('AgentExecutor', () => {
 
     it('should terminate when AbortSignal is triggered', async () => {
       const definition = createTestDefinition();
-      const executor = await AgentExecutor.create(definition, mockConfig);
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+      );
 
       mockSendMessageStream.mockImplementationOnce(async () =>
         (async function* () {

@@ -1,47 +1,58 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { Text } from 'ink';
-import { Colors } from '../colors.js';
+import type React from 'react';
+import { Box, Text } from 'ink';
+import { theme } from '../semantic-colors.js';
 import {
   type IdeContext,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { isNarrowWidth } from '../utils/isNarrowWidth.js';
 
 interface ContextSummaryDisplayProps {
-  activeFile?: string;
-  llxprtMdFileCount: number;
+  llxprtMdFileCount?: number;
+  geminiMdFileCount?: number;
+  coreMemoryFileCount?: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
-  showToolDescriptions?: boolean;
   ideContext?: IdeContext;
+  skillCount?: number;
+  showToolDescriptions?: boolean;
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
-  activeFile: _activeFile,
   llxprtMdFileCount,
+  geminiMdFileCount,
+  coreMemoryFileCount,
   contextFileNames,
   mcpServers,
   blockedMcpServers,
-  showToolDescriptions,
   ideContext,
+  skillCount,
 }) => {
+  const effectiveMdFileCount = llxprtMdFileCount ?? geminiMdFileCount ?? 0;
+  const effectiveCoreCount = coreMemoryFileCount ?? 0;
+  const { columns: terminalWidth } = useTerminalSize();
+  const isNarrow = isNarrowWidth(terminalWidth);
   const mcpServerCount = Object.keys(mcpServers || {}).length;
   const blockedMcpServerCount = blockedMcpServers?.length || 0;
   const openFileCount = ideContext?.workspaceState?.openFiles?.length ?? 0;
 
   if (
-    llxprtMdFileCount === 0 &&
+    effectiveMdFileCount === 0 &&
+    effectiveCoreCount === 0 &&
     mcpServerCount === 0 &&
     blockedMcpServerCount === 0 &&
-    openFileCount === 0
+    openFileCount === 0 &&
+    skillCount === 0
   ) {
-    return <Text color={Colors.Foreground}> </Text>; // Render an empty space to reserve height
+    return <Text color={theme.text.primary}> </Text>; // Render an empty space to reserve height
   }
 
   const openFilesText = (() => {
@@ -53,14 +64,23 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     } (ctrl+g to view)`;
   })();
 
+  const coreMemoryText = (() => {
+    if (effectiveCoreCount === 0) {
+      return '';
+    }
+    return `${effectiveCoreCount} .LLXPRT_SYSTEM file${
+      effectiveCoreCount > 1 ? 's' : ''
+    }`;
+  })();
+
   const geminiMdText = (() => {
-    if (llxprtMdFileCount === 0) {
+    if (effectiveMdFileCount === 0) {
       return '';
     }
     const allNamesTheSame = new Set(contextFileNames).size < 2;
     const name = allNamesTheSame ? contextFileNames[0] : 'context';
-    return `${llxprtMdFileCount} ${name} file${
-      llxprtMdFileCount > 1 ? 's' : ''
+    return `${effectiveMdFileCount} ${name} file${
+      effectiveMdFileCount > 1 ? 's' : ''
     }`;
   })();
 
@@ -86,27 +106,36 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     return parts.join(', ');
   })();
 
-  let summaryText = 'Using: ';
-  const summaryParts = [];
-  if (openFilesText) {
-    summaryParts.push(openFilesText);
-  }
-  if (geminiMdText) {
-    summaryParts.push(geminiMdText);
-  }
-  if (mcpText) {
-    summaryParts.push(mcpText);
-  }
-  summaryText += summaryParts.join(' | ');
-
-  // Add ctrl+t hint when MCP servers are available
-  if (mcpServers && Object.keys(mcpServers).length > 0) {
-    if (showToolDescriptions) {
-      summaryText += ' (ctrl+t to toggle)';
-    } else {
-      summaryText += ' (ctrl+t to view)';
+  const skillText = (() => {
+    if (skillCount === 0) {
+      return '';
     }
+    return `${skillCount ?? 0} skill${(skillCount ?? 0) > 1 ? 's' : ''}`;
+  })();
+
+  const summaryParts = [
+    openFilesText,
+    coreMemoryText,
+    geminiMdText,
+    mcpText,
+    skillText,
+  ].filter(Boolean);
+
+  if (isNarrow) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        {summaryParts.map((part, index) => (
+          <Text key={index} color={theme.text.secondary}>
+            - {part}
+          </Text>
+        ))}
+      </Box>
+    );
   }
 
-  return <Text color={Colors.Gray}>{summaryText}</Text>;
+  return (
+    <Box paddingX={1}>
+      <Text color={theme.text.secondary}>{summaryParts.join(' | ')}</Text>
+    </Box>
+  );
 };

@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as child_process from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 vi.mock('node:child_process');
 vi.mock('node:fs/promises');
@@ -45,7 +46,9 @@ describe('setupSshAgentDockerMacOS', () => {
   });
 
   it('warns and returns empty when no sshAuthSock provided', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentDockerMacOS(args);
     expect(result).toEqual({});
@@ -189,7 +192,9 @@ describe('setupSshAgentForwarding', () => {
   it('warns and skips when SSH_AUTH_SOCK not set (R4.2)', async () => {
     process.env.LLXPRT_SANDBOX_SSH_AGENT = 'on';
     delete process.env.SSH_AUTH_SOCK;
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
     expect(result).toEqual({});
@@ -211,7 +216,9 @@ describe('setupSshAgentForwarding', () => {
     process.env.LLXPRT_SANDBOX_SSH_AGENT = 'on';
     process.env.SSH_AUTH_SOCK = '/nonexistent/ssh-agent.sock';
     const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
     expect(result).toEqual({});
@@ -343,7 +350,9 @@ describe('setupSshAgentPodmanMacOS', () => {
   it('warns and skips when --network already set (conflict guard)', async () => {
     mockValidPodmanConnection();
     const fakeProc = mockTunnelProcess();
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnSpy = vi
+      .spyOn(DebugLogger.prototype, 'warn')
+      .mockImplementation(() => {});
 
     // Pre-populate args with a conflicting network flag
     const args = ['--network', 'none'];
@@ -844,8 +853,10 @@ describe('setupSshAgentDockerLinux', () => {
       ) as never,
     );
     vi.spyOn(os, 'platform').mockReturnValue('linux');
-    // shouldUseCurrentUserInSandbox logs an INFO message via console.error on Debian/Ubuntu
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // shouldUseCurrentUserInSandbox logs an INFO message via debugLogger.error on Debian/Ubuntu
+    const errorSpy = vi
+      .spyOn(DebugLogger.prototype, 'error')
+      .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
 
