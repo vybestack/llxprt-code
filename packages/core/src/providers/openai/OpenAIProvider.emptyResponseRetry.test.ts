@@ -80,7 +80,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
                   id: 'call_123',
                   type: 'function',
                   function: {
-                    name: 'FindFiles',
+                    name: 'findfiles',
                     arguments: '{"pattern":"**/*.ts"}',
                   },
                 },
@@ -641,7 +641,6 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(toolMessage).toMatchObject({
       role: 'tool',
       tool_call_id: 'call_mistral_1',
-      name: 'FindFiles',
       content: '[Tool call acknowledged - awaiting execution]',
     });
   });

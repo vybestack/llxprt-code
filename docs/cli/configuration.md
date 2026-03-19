@@ -196,14 +196,6 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
   - **Requires restart:** Yes
 
-#### `toolCallProcessingMode`
-
-- **`toolCallProcessingMode`** (enum):
-  - **Description:** Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.
-  - **Default:** `"legacy"`
-  - **Values:** `"legacy"`, `"pipeline"`
-  - **Requires restart:** Yes
-
 #### `mcpServerCommand`
 
 - **`mcpServerCommand`** (string):

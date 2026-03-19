@@ -194,14 +194,6 @@
       "markdownDescription": "Command to run for tool calls.\n\n- Category: `Advanced`\n- Requires restart: `yes`",
       "type": "string"
     },
-    "toolCallProcessingMode": {
-      "title": "Tool Call Processing Mode",
-      "description": "Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.",
-      "markdownDescription": "Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `legacy`",
-      "default": "legacy",
-      "type": "string",
-      "enum": ["legacy", "pipeline"]
-    },
     "mcpServerCommand": {
       "title": "MCP Server Command",
       "description": "Command to start an MCP server.",

@@ -47,7 +47,6 @@ describe('SettingsSchema', () => {
         'hasSeenIdeIntegrationNudge',
         'folderTrustFeature',
         'useRipgrep',
-        'toolCallProcessingMode',
         'enableFuzzyFiltering',
         'shouldUseNodePtyShell',
         'allowPtyThemeOverride',
