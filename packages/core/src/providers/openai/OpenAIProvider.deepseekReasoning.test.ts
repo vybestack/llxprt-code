@@ -82,7 +82,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
    * buildMessagesWithReasoning can attach reasoning_content to the assistant
    * message that has tool_calls.
    */
-  it('yields reasoning_content ThinkingBlock and tool_calls in the same IContent (legacy path)', async () => {
+  it('yields reasoning_content ThinkingBlock and tool_calls in the same IContent', async () => {
     // Simulate DeepSeek-reasoner streaming: first reasoning_content chunks,
     // then a tool_call chunk, then finish.
     const chunks = [

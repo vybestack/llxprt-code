@@ -135,7 +135,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       config,
     );
 
-    // Initialize tool call processing mode - default to 'legacy' (fallback)
+    // Initialize tool call pipeline
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
@@ -2835,7 +2835,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement:REQ-SP4-003
-   * Legacy implementation for chat completion using accumulated tool calls approach
+   * Returns the detected tool format for the current model
    */
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
@@ -2984,7 +2984,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   /**
    * Request continuation after tool calls when model returned no text.
-   * This is a helper to avoid code duplication between legacy and pipeline paths.
+   * This is a helper used when the model returns tool calls but no text.
    *
    * @plan PLAN-20250120-DEBUGLOGGING.P15
    * @issue #584, #764 (CodeRabbit review)
