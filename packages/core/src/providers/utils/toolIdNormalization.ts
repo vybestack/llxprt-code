@@ -18,6 +18,8 @@
  * Shared utility for normalizing tool IDs between provider formats and history format.
  */
 
+import { createHash } from 'node:crypto';
+
 const SANITIZE_PATTERN = /[^a-zA-Z0-9_-]/g;
 
 function sanitizeSuffix(suffix: string): string {
@@ -80,4 +82,42 @@ export function normalizeToHistoryToolId(id: string): string {
   }
 
   return `hist_tool_${sanitizeSuffix(id)}`;
+}
+
+/**
+ * Normalizes various tool ID formats to Anthropic format (toolu_xxx).
+ * - toolu_xxx → toolu_xxx (unchanged)
+ * - hist_tool_xxx → toolu_xxx
+ * - call_xxx → toolu_xxx
+ * - unknown → toolu_unknown
+ * - empty → toolu_{generated_hash}
+ *
+ * Note: Unlike OpenAI normalization (which removes invalid chars),
+ * Anthropic normalization replaces invalid chars with hyphens.
+ */
+export function normalizeToAnthropicToolId(id: string): string {
+  if (!id) {
+    const timestamp = Date.now().toString();
+    const hash = createHash('sha256')
+      .update(timestamp + Math.random())
+      .digest('hex')
+      .substring(0, 16);
+    return `toolu_${hash}`;
+  }
+
+  if (id.startsWith('toolu_')) {
+    return id;
+  }
+
+  if (id.startsWith('hist_tool_')) {
+    const suffix = id.substring('hist_tool_'.length);
+    return `toolu_${suffix.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  }
+
+  if (id.startsWith('call_')) {
+    const suffix = id.substring('call_'.length);
+    return `toolu_${suffix.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+  }
+
+  return `toolu_${id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 }

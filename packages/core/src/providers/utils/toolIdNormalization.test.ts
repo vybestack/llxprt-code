@@ -22,6 +22,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeToOpenAIToolId,
   normalizeToHistoryToolId,
+  normalizeToAnthropicToolId,
 } from './toolIdNormalization.js';
 
 describe('normalizeToOpenAIToolId', () => {
@@ -91,5 +92,31 @@ describe('normalizeToHistoryToolId', () => {
 
   it('sanitizes invalid characters in suffix', () => {
     expect(normalizeToHistoryToolId('call_abc.123')).toBe('hist_tool_abc123');
+  });
+});
+
+describe('normalizeToAnthropicToolId', () => {
+  it('preserves toolu_ format unchanged', () => {
+    expect(normalizeToAnthropicToolId('toolu_abc123')).toBe('toolu_abc123');
+  });
+
+  it('converts hist_tool_XXX to toolu_XXX', () => {
+    expect(normalizeToAnthropicToolId('hist_tool_abc123')).toBe('toolu_abc123');
+  });
+
+  it('converts call_XXX to toolu_XXX', () => {
+    expect(normalizeToAnthropicToolId('call_def456')).toBe('toolu_def456');
+  });
+
+  it('prefixes unknown formats with toolu_', () => {
+    expect(normalizeToAnthropicToolId('ghi012')).toBe('toolu_ghi012');
+  });
+
+  it('returns toolu_ with generated fallback for empty input', () => {
+    expect(normalizeToAnthropicToolId('')).toMatch(/^toolu_[a-f0-9]{16}$/);
+  });
+
+  it('replaces invalid characters with hyphens in suffix', () => {
+    expect(normalizeToAnthropicToolId('call_abc.123')).toBe('toolu_abc-123');
   });
 });
