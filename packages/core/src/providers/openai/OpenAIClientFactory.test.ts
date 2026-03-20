@@ -244,9 +244,17 @@ describe('OpenAIClientFactory', () => {
     });
 
     it('creates client without baseURL when not provided', () => {
-      const client = instantiateClient('test-token');
-      expect(client).toBeDefined();
-      expect(client.baseURL).toBe('https://api.openai.com/v1');
+      const savedBaseURL = process.env.OPENAI_BASE_URL;
+      delete process.env.OPENAI_BASE_URL;
+      try {
+        const client = instantiateClient('test-token');
+        expect(client).toBeDefined();
+        expect(client.baseURL).toBe('https://api.openai.com/v1');
+      } finally {
+        if (savedBaseURL !== undefined) {
+          process.env.OPENAI_BASE_URL = savedBaseURL;
+        }
+      }
     });
 
     it('passes HTTP agents through to client options', () => {
