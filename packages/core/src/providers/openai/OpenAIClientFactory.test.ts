@@ -61,9 +61,12 @@ describe('OpenAIClientFactory', () => {
         'socket-nodelay': false,
       });
       expect(result).toBeDefined();
-      // When nodelay is disabled, createConnection should be the original prototype method
-      const protoCreate = http.Agent.prototype.createConnection;
-      expect(result?.httpAgent.createConnection).toBe(protoCreate);
+      expect(result?.httpAgent.createConnection).toBe(
+        http.Agent.prototype.createConnection,
+      );
+      expect(result?.httpsAgent.createConnection).toBe(
+        https.Agent.prototype.createConnection,
+      );
     });
 
     it('respects socket-keepalive=false', () => {
