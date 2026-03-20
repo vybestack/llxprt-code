@@ -90,7 +90,6 @@ export function getSystemDefaultsPath(): string {
 }
 
 export type { DnsResolutionOrder } from './settingsSchema.js';
-export type { ToolCallProcessingMode } from './settingsSchema.js';
 export type { ToolEnabledState } from './settingsSchema.js';
 
 export enum SettingScope {
