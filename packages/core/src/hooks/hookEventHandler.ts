@@ -24,6 +24,7 @@ import type {
   SessionEndReason,
   PreCompressTrigger,
   HookExecutionResult,
+  McpContext,
 } from './types.js';
 import { HookEventName, NotificationType } from './types.js';
 import { DebugLogger } from '../debug/index.js';
@@ -187,10 +188,12 @@ export class HookEventHandler {
   async fireBeforeToolEvent(
     toolName: string,
     toolInput: Record<string, unknown>,
+    mcpContext?: McpContext,
   ): Promise<DefaultHookOutput | undefined> {
     return this.executeEvent(HookEventName.BeforeTool, {
       tool_name: toolName,
       tool_input: toolInput,
+      ...(mcpContext && { mcp_context: mcpContext }),
     });
   }
 
@@ -202,11 +205,13 @@ export class HookEventHandler {
     toolName: string,
     toolInput: Record<string, unknown>,
     toolResponse: Record<string, unknown>,
+    mcpContext?: McpContext,
   ): Promise<DefaultHookOutput | undefined> {
     return this.executeEvent(HookEventName.AfterTool, {
       tool_name: toolName,
       tool_input: toolInput,
       tool_response: toolResponse,
+      ...(mcpContext && { mcp_context: mcpContext }),
     });
   }
 

@@ -466,11 +466,21 @@ export class AfterAgentHookOutput extends DefaultHookOutput {
 }
 
 /**
+ * MCP context information for tool hooks.
+ * Present when the tool originates from an MCP server.
+ */
+export interface McpContext {
+  server_name: string;
+  server_uri?: string;
+}
+
+/**
  * BeforeTool hook input
  */
 export interface BeforeToolInput extends HookInput {
   tool_name: string;
   tool_input: Record<string, unknown>;
+  mcp_context?: McpContext;
 }
 
 /**
@@ -492,6 +502,7 @@ export interface AfterToolInput extends HookInput {
   tool_name: string;
   tool_input: Record<string, unknown>;
   tool_response: Record<string, unknown>;
+  mcp_context?: McpContext;
 }
 
 /**

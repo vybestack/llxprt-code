@@ -119,7 +119,6 @@ vi.mock('./settings.js', async (importOriginal) => {
   };
 });
 
-
 const EXTENSIONS_DIRECTORY_NAME = path.join(GEMINI_DIR, 'extensions');
 
 describe('extension tests', () => {
@@ -603,7 +602,6 @@ describe('extension tests', () => {
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('test-extension');
     });
-
 
     it('should throw an error for invalid extension names', () => {
       const consoleSpy = vi

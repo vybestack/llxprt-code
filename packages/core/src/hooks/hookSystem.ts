@@ -24,6 +24,7 @@ import {
   type SessionStartSource,
   type SessionEndReason,
   type PreCompressTrigger,
+  type McpContext,
   NotificationType,
 } from './types.js';
 
@@ -189,8 +190,13 @@ export class HookSystem {
   async fireBeforeToolEvent(
     toolName: string,
     toolInput: Record<string, unknown>,
+    mcpContext?: McpContext,
   ): Promise<DefaultHookOutput | undefined> {
-    return this.getEventHandler().fireBeforeToolEvent(toolName, toolInput);
+    return this.getEventHandler().fireBeforeToolEvent(
+      toolName,
+      toolInput,
+      mcpContext,
+    );
   }
 
   /**
@@ -204,11 +210,13 @@ export class HookSystem {
     toolName: string,
     toolInput: Record<string, unknown>,
     toolResponse: Record<string, unknown>,
+    mcpContext?: McpContext,
   ): Promise<DefaultHookOutput | undefined> {
     return this.getEventHandler().fireAfterToolEvent(
       toolName,
       toolInput,
       toolResponse,
+      mcpContext,
     );
   }
 

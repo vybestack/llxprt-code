@@ -185,7 +185,7 @@ describe('HookSystem', () => {
       const toolInput = { param: 'value' };
       await hookSystem.fireBeforeToolEvent('TestTool', toolInput);
 
-      expect(spy).toHaveBeenCalledWith('TestTool', toolInput);
+      expect(spy).toHaveBeenCalledWith('TestTool', toolInput, undefined);
       expect(spy).toHaveBeenCalledTimes(1);
     });
 

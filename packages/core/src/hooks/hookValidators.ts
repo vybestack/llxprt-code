@@ -53,6 +53,10 @@ export function validateBeforeToolInput(
   if (!isObject(input)) return false;
   if (!isNonEmptyString(input['tool_name'])) return false;
   if (!isObject(input['tool_input'])) return false;
+  if (input['mcp_context'] !== undefined) {
+    if (!isObject(input['mcp_context'])) return false;
+    if (!isNonEmptyString(input['mcp_context']['server_name'])) return false;
+  }
   return true;
 }
 
@@ -70,6 +74,10 @@ export function validateAfterToolInput(
   if (!isNonEmptyString(input['tool_name'])) return false;
   if (!isObject(input['tool_input'])) return false;
   if (!isObject(input['tool_response'])) return false;
+  if (input['mcp_context'] !== undefined) {
+    if (!isObject(input['mcp_context'])) return false;
+    if (!isNonEmptyString(input['mcp_context']['server_name'])) return false;
+  }
   return true;
 }
 
