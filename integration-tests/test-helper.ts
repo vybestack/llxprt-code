@@ -180,6 +180,8 @@ interface ParsedLog {
 export class InteractiveRun {
   ptyProcess: pty.IPty;
   public output = '';
+  private _exited = false;
+  private _exitCode: number | undefined;
 
   constructor(ptyProcess: pty.IPty) {
     this.ptyProcess = ptyProcess;
@@ -188,6 +190,10 @@ export class InteractiveRun {
       if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
         process.stdout.write(data);
       }
+    });
+    ptyProcess.onExit(({ exitCode }) => {
+      this._exited = true;
+      this._exitCode = exitCode;
     });
   }
 
@@ -244,18 +250,30 @@ export class InteractiveRun {
     }
   }
 
-  async kill() {
-    this.ptyProcess.kill();
+  async kill(gracePeriodMs = 5000): Promise<void> {
+    if (this._exited) return;
+    try {
+      this.ptyProcess.kill('SIGTERM');
+      const exited = await poll(() => this._exited, gracePeriodMs, 100);
+      if (!exited) {
+        this.ptyProcess.kill('SIGKILL');
+      }
+    } catch {
+      // Process may already be dead — ignore
+    }
   }
 
-  expectExit(): Promise<number> {
+  expectExit(timeout?: number): Promise<number> {
+    const effectiveTimeout = timeout ?? getDefaultTimeout();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () =>
           reject(
-            new Error(`Test timed out: process did not exit within a minute.`),
+            new Error(
+              `Test timed out: process did not exit within ${effectiveTimeout}ms.`,
+            ),
           ),
-        60000,
+        effectiveTimeout,
       );
       this.ptyProcess.onExit(({ exitCode }) => {
         clearTimeout(timer);
@@ -593,7 +611,7 @@ export class TestRig {
       }
     });
 
-    const promise = new Promise<string>((resolve, reject) => {
+    const processPromise = new Promise<string>((resolve, reject) => {
       child.on('close', (code: number) => {
         if (code === 0) {
           // Store the raw stdout for Podman telemetry parsing
@@ -655,7 +673,15 @@ export class TestRig {
       });
     });
 
-    return promise;
+    const timeoutMs = getDefaultTimeout() * 4;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`TestRig.run() timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    return Promise.race([processPromise, timeoutPromise]);
   }
 
   runCommand(
@@ -724,11 +750,13 @@ export class TestRig {
   async cleanup() {
     // Kill any interactive runs that are still active
     for (const run of this._interactiveRuns) {
-      try {
-        await run.kill();
-      } catch (error) {
-        if (env['VERBOSE'] === 'true') {
-          console.warn('Failed to kill interactive run during cleanup:', error);
+      if (!run['_exited']) {
+        try {
+          await run.kill();
+        } catch (error) {
+          if (env['VERBOSE'] === 'true') {
+            console.warn('Failed to kill interactive run during cleanup:', error);
+          }
         }
       }
     }
