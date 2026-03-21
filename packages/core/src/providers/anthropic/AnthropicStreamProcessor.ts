@@ -372,10 +372,6 @@ function completeThinkingBlock(
     () =>
       `Completed thinking block: ${currentThinkingBlock.thinking.length} chars`,
   );
-  logger.debug(
-    () =>
-      `Thinking block completed (${currentThinkingBlock.thinking.length} chars total)`,
-  );
 
   const contentBlock = (
     chunk as unknown as {
