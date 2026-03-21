@@ -93,10 +93,10 @@ export class ConversationManager {
    */
   convertUserInputToIContents(userContent: Content | Content[]): IContent[] {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
+    const matcher = this.makePositionMatcher();
     return contents.map((content) => {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      const matcher = this.makePositionMatcher();
       return ContentConverters.toIContent(content, idGen, matcher, turnKey);
     });
   }
@@ -115,10 +115,10 @@ export class ConversationManager {
     validateHistory(initialHistory);
 
     // Convert and add each entry
+    const matcher = this.makePositionMatcher();
     for (const content of initialHistory) {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      const matcher = this.makePositionMatcher();
       this.historyService.add(
         ContentConverters.toIContent(content, idGen, matcher, turnKey),
         model,
@@ -199,6 +199,7 @@ export class ConversationManager {
         );
       }
     } else {
+      const matcher = this.makePositionMatcher();
       // Handle both single Content and Content[] (for paired tool call/response)
       if (Array.isArray(userInput)) {
         // This is a paired tool call/response from the executor
@@ -206,7 +207,6 @@ export class ConversationManager {
         for (const content of userInput) {
           const turnKey = this.historyService.generateTurnKey();
           const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-          const matcher = this.makePositionMatcher();
           const userIContent = ContentConverters.toIContent(
             content,
             idGen,
@@ -219,7 +219,6 @@ export class ConversationManager {
         // Normal user message
         const turnKey = this.historyService.generateTurnKey();
         const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-        const matcher = this.makePositionMatcher();
         const userIContent = ContentConverters.toIContent(
           userInput,
           idGen,

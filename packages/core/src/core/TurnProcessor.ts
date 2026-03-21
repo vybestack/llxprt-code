@@ -210,10 +210,10 @@ export class TurnProcessor {
 
   private _convertToIContents(userContent: Content | Content[]): IContent[] {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
+    const matcher = this.makePositionMatcher();
     return contents.map((content) => {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      const matcher = this.makePositionMatcher();
       return ContentConverters.toIContent(content, idGen, matcher, turnKey);
     });
   }
@@ -250,27 +250,7 @@ export class TurnProcessor {
     pendingTokens: number;
   }> {
     const userContent = normalizeToolInteractionInput(params.message);
-
-    const userIContents: IContent[] = Array.isArray(userContent)
-      ? userContent.map((c) => {
-          const turnKey = this.historyService.generateTurnKey();
-          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-          const matcher = this.makePositionMatcher();
-          return ContentConverters.toIContent(c, idGen, matcher, turnKey);
-        })
-      : [
-          (() => {
-            const turnKey = this.historyService.generateTurnKey();
-            const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-            const matcher = this.makePositionMatcher();
-            return ContentConverters.toIContent(
-              userContent,
-              idGen,
-              matcher,
-              turnKey,
-            );
-          })(),
-        ];
+    const userIContents = this._convertToIContents(userContent);
 
     const pendingTokens = await this.estimatePendingTokens(userIContents);
     await this.compressionHandler.ensureCompressionBeforeSend(
@@ -333,6 +313,7 @@ export class TurnProcessor {
             }
             return false;
           },
+          signal: params.config?.abortSignal,
         },
       );
 
@@ -392,10 +373,16 @@ export class TurnProcessor {
     const tools = this.generationConfig.tools;
     this._logToolDiagnostics(provider, tools, providerBaseUrl);
 
-    const runtimeContext = this.providerRuntimeBuilder(
+    const baseRuntimeContext = this.providerRuntimeBuilder(
       'TurnProcessor.executeProviderCall',
       { toolCount: tools?.length ?? 0 },
     );
+    const runtimeContext = params.config
+      ? {
+          ...baseRuntimeContext,
+          config: { ...baseRuntimeContext.config, ...params.config },
+        }
+      : baseRuntimeContext;
 
     const streamResponse = provider.generateChatCompletion({
       contents: requestContents,

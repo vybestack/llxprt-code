@@ -127,18 +127,17 @@ export class DirectMessageProcessor {
    */
   private _convertUserInput(message: PartListUnion): IContent[] {
     const userContent = normalizeToolInteractionInput(message);
+    const matcher = this.makePositionMatcher();
     const userIContents: IContent[] = Array.isArray(userContent)
       ? userContent.map((content) => {
           const turnKey = this.historyService.generateTurnKey();
           const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-          const matcher = this.makePositionMatcher();
           return ContentConverters.toIContent(content, idGen, matcher, turnKey);
         })
       : [
           (() => {
             const turnKey = this.historyService.generateTurnKey();
             const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-            const matcher = this.makePositionMatcher();
             return ContentConverters.toIContent(
               userContent,
               idGen,
@@ -402,11 +401,13 @@ export class DirectMessageProcessor {
     if (beforeModelResult) {
       const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
         model: this.runtimeContext.state.model || '',
-        contents: userIContents as Content[],
+        contents: ContentConverters.toGeminiContents(userIContents),
       });
       if (modifiedRequest?.contents) {
         return {
-          modifiedContents: modifiedRequest.contents as Content[] as IContent[],
+          modifiedContents: ContentConverters.toIContents(
+            modifiedRequest.contents as Content[],
+          ),
         };
       }
     }

@@ -178,18 +178,17 @@ export class StreamProcessor {
   }
 
   private _buildRequestContents(userContent: Content | Content[]): IContent[] {
+    const matcher = this.conversationManager.makePositionMatcher();
     if (Array.isArray(userContent)) {
       const userIContents = userContent.map((content) => {
         const turnKey = this.historyService.generateTurnKey();
         const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-        const matcher = this.conversationManager.makePositionMatcher();
         return ContentConverters.toIContent(content, idGen, matcher, turnKey);
       });
       return this.historyService.getCuratedForProvider(userIContents);
     }
     const turnKey = this.historyService.generateTurnKey();
     const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-    const matcher = this.conversationManager.makePositionMatcher();
     const userIContent = ContentConverters.toIContent(
       userContent,
       idGen,
