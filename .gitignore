@@ -3,16 +3,20 @@
 .env
 .env~
 
-# gemini-cli settings
-.gemini/
-!gemini/config.yaml
-
-# llxprt-code settings (ignore contents except shared config)
+# llxprt-code settings
+# We want to keep the .llxprt in the root of the repo and ignore any .llxprt
+# in subdirectories. In our root .llxprt we want to allow for version control
+# for commands and skills.
+**/.llxprt/
+!/.llxprt/
 .llxprt/*
+!.llxprt/config.yaml
 !.llxprt/commands/
+!.llxprt/skills/
+!.llxprt/settings.json
 !.llxprt/LLXPRT.md
 
-# Note: .gemini-clipboard/ is NOT in gitignore so Gemini can access pasted images
+# Note: .llxprt-clipboard/ is NOT in gitignore so LLxprt can access pasted images
 
 # Dependency directory
 node_modules

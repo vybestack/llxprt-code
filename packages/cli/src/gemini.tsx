@@ -1065,7 +1065,7 @@ export async function main() {
   let input = config.getQuestion();
   const startupWarnings = [
     ...(await getStartupWarnings()),
-    ...(await getUserStartupWarnings(workspaceRoot)),
+    ...(await getUserStartupWarnings(settings.merged)),
   ];
 
   // Check if a provider is already active on startup

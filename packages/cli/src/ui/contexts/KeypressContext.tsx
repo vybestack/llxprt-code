@@ -495,6 +495,7 @@ function* emitKeys(
         }
         if (name === 'space' && !ctrl && !meta) {
           sequence = ' ';
+          insertable = true;
         }
       } else {
         name = 'undefined';

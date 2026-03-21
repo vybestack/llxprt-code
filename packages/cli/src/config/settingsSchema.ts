@@ -527,6 +527,16 @@ export const SETTINGS_SCHEMA = {
           'Show LLxprt Code status and thoughts in the terminal window title',
         showInDialog: true,
       },
+      showHomeDirectoryWarning: {
+        type: 'boolean',
+        label: 'Show Home Directory Warning',
+        category: 'UI',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Show a warning when running LLxprt CLI in the home directory.',
+        showInDialog: true,
+      },
       hideTips: {
         type: 'boolean',
         label: 'Hide Tips',
