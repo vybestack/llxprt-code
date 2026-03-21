@@ -321,7 +321,12 @@ User provided conversation begins here:`,
         });
       }
     }
-    return { systemField: undefined, messages };
+    const oauthSystemField = buildAnthropicSystemPrompt({
+      isOAuth: true,
+      wantCaching,
+      ttl,
+    });
+    return { systemField: oauthSystemField, messages };
   }
 
   // Build system field with caching support (for non-OAuth)
