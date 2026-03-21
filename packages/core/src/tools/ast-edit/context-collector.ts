@@ -47,6 +47,7 @@ export function prioritizeSymbolsFromDeclarations(
     let score = 0;
     if (decl.type === 'class') score += 10;
     if (decl.type === 'function') score += 5;
+    if (score === 0) continue;
     if (decl.visibility === 'public') score += 3;
 
     scores.set(decl.name, (scores.get(decl.name) || 0) + score);

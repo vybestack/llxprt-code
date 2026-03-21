@@ -282,6 +282,11 @@ export class CrossFileRelationshipAnalyzer {
       const dir = path.dirname(currentFilePath);
       const resolved = path.resolve(dir, importModule);
 
+      // If the import already has an extension that exists, use it directly
+      if (path.extname(resolved) && this.fileExistsSync(resolved)) {
+        return resolved;
+      }
+
       // Try common extensions
       const extensions = ['.ts', '.js', '.tsx', '.jsx'];
       for (const ext of extensions) {
