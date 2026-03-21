@@ -22,15 +22,14 @@ export class ASTQueryExtractor {
     filePath: string,
     content: string,
   ): Promise<EnhancedDeclaration[]> {
-    const extension = filePath.split('.').pop() || '';
+    const extension = (filePath.split('.').pop() || '').toLowerCase();
     const lang = LANGUAGE_MAP[extension];
     if (!lang) {
       return this.fallbackExtraction(content, 'unknown');
     }
 
     try {
-      const parseLang = lang;
-      const root = parse(parseLang, content);
+      const root = parse(lang, content);
       const declarations: EnhancedDeclaration[] = [];
       const sgRoot = root.root();
 
@@ -193,11 +192,12 @@ export class ASTQueryExtractor {
         line.includes(KEYWORDS.CLASS)
       ) {
         const name = this.extractNameBasic(trimmed);
+        const column = Math.max(0, line.indexOf(name));
         declarations.push({
           name,
           type: trimmed.includes(KEYWORDS.CLASS) ? 'class' : 'function',
           line: index + 1,
-          column: line.indexOf(name),
+          column,
           signature: this.extractSignatureBasic(trimmed),
         });
       }

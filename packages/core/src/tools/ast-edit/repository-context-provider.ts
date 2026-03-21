@@ -9,6 +9,9 @@ import * as path from 'path';
 import { spawnSync } from 'child_process';
 import type { RepositoryContext } from './types.js';
 
+const GIT_TIMEOUT_MS = 3000;
+const GIT_MAX_BUFFER = 1024 * 1024;
+
 /**
  * RepositoryContextProvider handles git operations to collect repository context.
  */
@@ -53,6 +56,8 @@ export class RepositoryContextProvider {
         const result = spawnSync('git', ['-C', workspaceRoot, ...args], {
           encoding: 'utf-8',
           stdio: 'pipe',
+          timeout: GIT_TIMEOUT_MS,
+          maxBuffer: GIT_MAX_BUFFER,
         });
         return result.status === 0 ? result.stdout.trim() : '';
       };
@@ -98,7 +103,12 @@ export class RepositoryContextProvider {
       const result = spawnSync(
         'git',
         ['-C', repoPath, 'remote', 'get-url', 'origin'],
-        { encoding: 'utf-8', stdio: 'pipe' },
+        {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT_MS,
+          maxBuffer: GIT_MAX_BUFFER,
+        },
       );
       return result.status === 0 ? result.stdout.trim() : null;
     } catch {
@@ -111,6 +121,8 @@ export class RepositoryContextProvider {
       const result = spawnSync('git', ['-C', repoPath, 'rev-parse', 'HEAD'], {
         encoding: 'utf-8',
         stdio: 'pipe',
+        timeout: GIT_TIMEOUT_MS,
+        maxBuffer: GIT_MAX_BUFFER,
       });
       return result.status === 0 ? result.stdout.trim() : null;
     } catch {
@@ -123,7 +135,12 @@ export class RepositoryContextProvider {
       const result = spawnSync(
         'git',
         ['-C', repoPath, 'branch', '--show-current'],
-        { encoding: 'utf-8', stdio: 'pipe' },
+        {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          timeout: GIT_TIMEOUT_MS,
+          maxBuffer: GIT_MAX_BUFFER,
+        },
       );
       return result.status === 0 ? result.stdout.trim() : null;
     } catch {

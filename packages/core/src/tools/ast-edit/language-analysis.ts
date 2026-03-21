@@ -49,8 +49,8 @@ export function extractImports(content: string, language: string): Import[] {
         trimmed.startsWith(KEYWORDS.FROM)
       ) {
         imports.push({
-          module: extractImportModule(trimmed),
-          items: extractImportItems(trimmed),
+          module: extractPythonImportModule(trimmed),
+          items: extractPythonImportItems(trimmed),
           line: index + 1,
         });
       }
@@ -79,6 +79,37 @@ function extractImportItems(line: string): string[] {
   const match = line.match(REGEX.IMPORT_ITEMS);
   if (match) {
     return match[1].split(',').map((item) => item.trim());
+  }
+  return [];
+}
+
+/**
+ * Extracts the module path from a Python import statement.
+ * Handles: `import os`, `from pathlib import Path`, `from os.path import join`
+ */
+function extractPythonImportModule(line: string): string {
+  const fromMatch = line.match(/^from\s+([\w.]+)\s+import/);
+  if (fromMatch) {
+    return fromMatch[1];
+  }
+  const importMatch = line.match(/^import\s+([\w.]+)/);
+  if (importMatch) {
+    return importMatch[1];
+  }
+  return 'unknown';
+}
+
+/**
+ * Extracts imported items from a Python import statement.
+ * Handles: `from typing import List, Dict`, `from os.path import join, exists`
+ */
+function extractPythonImportItems(line: string): string[] {
+  const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
+  if (fromImportMatch) {
+    return fromImportMatch[1]
+      .split(',')
+      .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))
+      .filter((item) => item);
   }
   return [];
 }

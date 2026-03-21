@@ -180,7 +180,9 @@ export function extractFunctions(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (_language === 'typescript' || _language === 'javascript') {
-      const match = trimmed.match(/function\s+(\w+)\s*\(([^)]*)\):\s*(\w+)/);
+      const match = trimmed.match(
+        /function\s+(\w+)\s*\(([^)]*)\)(?::\s*(\w+))?/,
+      );
       if (match) {
         functions.push({
           name: match[1],
@@ -188,7 +190,7 @@ export function extractFunctions(
             .split(',')
             .map((p) => p.trim())
             .filter((p) => p),
-          returnType: match[3],
+          returnType: match[3] || 'unknown',
           line: index + 1,
         });
       }

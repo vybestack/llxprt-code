@@ -15,9 +15,5 @@ export async function ensureParentDirectoriesExist(
   filePath: string,
 ): Promise<void> {
   const dirName = path.dirname(filePath);
-  try {
-    await fsPromises.access(dirName);
-  } catch {
-    await fsPromises.mkdir(dirName, { recursive: true });
-  }
+  await fsPromises.mkdir(dirName, { recursive: true });
 }

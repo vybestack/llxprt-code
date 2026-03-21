@@ -229,6 +229,9 @@ export class CrossFileRelationshipAnalyzer {
             promises.push(promise);
           }
           await Promise.all(promises);
+          if (references.length > ASTConfig.MAX_RESULTS_PER_SYMBOL) {
+            references.length = ASTConfig.MAX_RESULTS_PER_SYMBOL;
+          }
         }
       })();
 

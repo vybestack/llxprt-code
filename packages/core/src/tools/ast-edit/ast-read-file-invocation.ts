@@ -62,9 +62,10 @@ export class ASTReadFileToolInvocation
 
       // Process line range
       const lines = content.split('\n');
-      const startLine = this.params.offset
-        ? Math.max(1, this.params.offset) - 1
-        : 0;
+      const startLine = Math.min(
+        this.params.offset ? Math.max(1, this.params.offset) - 1 : 0,
+        lines.length,
+      );
       const endLine = this.params.limit
         ? Math.min(lines.length, startLine + this.params.limit)
         : lines.length;
@@ -82,7 +83,7 @@ export class ASTReadFileToolInvocation
       const readLlmContent = [
         `LLXPRT READ: ${this.params.file_path}`,
         `- Language: ${enhancedContext.language}`,
-        `- Lines ${startLine + 1}-${endLine} of ${lines.length}`,
+        `- Lines ${Math.min(startLine + 1, lines.length)}-${endLine} of ${lines.length}`,
         `- Declarations: ${enhancedContext.declarations.length}`,
         '',
         'CONTEXT ANALYSIS:',

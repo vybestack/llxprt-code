@@ -66,28 +66,26 @@ const x = 1;`;
     });
 
     describe('Python', () => {
-      it('should extract Python imports (note: regex requires quotes, so simple imports show as "unknown")', () => {
+      it('should extract standard Python imports', () => {
         const content = `import os
-from "pathlib" import Path
+from pathlib import Path
 import sys`;
         const imports = extractImports(content, 'python');
 
-        // Note: The current implementation expects quoted modules (from JS/TS regex)
-        // so `import os` will be extracted but module will be 'unknown'
         expect(imports).toHaveLength(3);
-        expect(imports[0].module).toBe('unknown'); // No quotes around 'os'
+        expect(imports[0].module).toBe('os');
         expect(imports[0].line).toBe(1);
 
-        expect(imports[1].module).toBe('pathlib'); // Quoted
+        expect(imports[1].module).toBe('pathlib');
+        expect(imports[1].items).toEqual(['Path']);
         expect(imports[1].line).toBe(2);
 
-        expect(imports[2].module).toBe('unknown'); // No quotes around 'sys'
+        expect(imports[2].module).toBe('sys');
         expect(imports[2].line).toBe(3);
       });
 
-      it('should handle from...import syntax with braces (for JS-style imports)', () => {
-        // Note: The current implementation uses JS/TS-style regex for items (curly braces)
-        const content = `from "typing" import { List, Dict, Optional }`;
+      it('should handle from...import syntax with multiple items', () => {
+        const content = `from typing import List, Dict, Optional`;
         const imports = extractImports(content, 'python');
 
         expect(imports).toHaveLength(1);
@@ -95,12 +93,13 @@ import sys`;
         expect(imports[0].items).toEqual(['List', 'Dict', 'Optional']);
       });
 
-      it('should handle from...import without quotes as unknown', () => {
-        const content = `from typing import List`;
+      it('should handle dotted module names', () => {
+        const content = `from os.path import join, exists`;
         const imports = extractImports(content, 'python');
 
         expect(imports).toHaveLength(1);
-        expect(imports[0].module).toBe('unknown'); // No quotes
+        expect(imports[0].module).toBe('os.path');
+        expect(imports[0].items).toEqual(['join', 'exists']);
       });
     });
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   CrossFileRelationshipAnalyzer,
   getWorkspaceFiles,
@@ -24,6 +24,10 @@ describe('CrossFileRelationshipAnalyzer', () => {
     analyzer = new CrossFileRelationshipAnalyzer();
   });
 
+  afterEach(async () => {
+    await fsPromises.rm(testDir, { recursive: true, force: true });
+  });
+
   describe('findRelatedFiles', () => {
     it('should find related files via imports', async () => {
       // Create two related files
@@ -37,7 +41,7 @@ describe('CrossFileRelationshipAnalyzer', () => {
 
       expect(related).toBeDefined();
       expect(Array.isArray(related)).toBe(true);
-      // The exact result depends on import resolution logic
+      expect(related.some((f) => f.includes('helper'))).toBe(true);
     });
 
     it('should handle files with no imports', async () => {
@@ -69,9 +73,6 @@ describe('CrossFileRelationshipAnalyzer', () => {
 
       // Since ENABLE_SYMBOL_INDEXING is false by default, this should be a no-op
       await analyzer.buildSymbolIndex([file]);
-
-      // No error should be thrown
-      expect(true).toBe(true);
     });
   });
 
@@ -85,13 +86,11 @@ describe('CrossFileRelationshipAnalyzer', () => {
       expect(result).toEqual([]);
     });
 
-    it('should handle workspace file limit gracefully', async () => {
-      // Create a large number of dummy files to test MAX_WORKSPACE_FILES guard
-      // This test verifies the guard exists but doesn't actually create thousands of files
+    it('should return empty array for unfound symbol in workspace', async () => {
       const result = await analyzer.findRelatedSymbols('SomeSymbol', testDir);
 
-      // Should not throw, should return empty or results
       expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual([]);
     });
   });
 });
@@ -103,6 +102,10 @@ describe('getWorkspaceFiles', () => {
     testDir = await fsPromises.mkdtemp(
       path.join(os.tmpdir(), 'workspace-files-test-'),
     );
+  });
+
+  afterEach(async () => {
+    await fsPromises.rm(testDir, { recursive: true, force: true });
   });
 
   it('should discover TypeScript and JavaScript files', async () => {

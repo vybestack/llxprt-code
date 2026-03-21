@@ -37,21 +37,20 @@ export async function enrichWithWorkingSetContext(
   // Filter out current file
   const otherFiles = workingSetFiles.filter((f) => f !== targetFilePath);
 
-  for (const filePath of otherFiles) {
-    try {
+  const settled = await Promise.allSettled(
+    otherFiles.map(async (filePath) => {
       const fileContent = await fsPromises.readFile(filePath, 'utf-8');
-      // Skeleton View: only extract declarations, not full code
       const declarations = await astExtractor.extractDeclarations(
         filePath,
         fileContent,
       );
+      return { filePath, declarations };
+    }),
+  );
 
-      connectedFiles.push({
-        filePath,
-        declarations,
-      });
-    } catch {
-      // Ignore read errors
+  for (const item of settled) {
+    if (item.status === 'fulfilled') {
+      connectedFiles.push(item.value);
     }
   }
 

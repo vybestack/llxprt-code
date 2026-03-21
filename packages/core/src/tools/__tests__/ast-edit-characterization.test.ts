@@ -20,6 +20,7 @@ import {
 } from '../ast-edit.js';
 import type { Config } from '../../config/config.js';
 import { ApprovalMode } from '../../config/config.js';
+import { ToolErrorType } from '../tool-error.js';
 
 // Define typed interfaces for private API access in tests
 type TestableASTEditTool = {
@@ -339,24 +340,24 @@ describe('ast-edit characterization tests', () => {
       expect(result).toBe('const x = 1;');
     });
 
-    it('should handle $ special patterns in String.replace', () => {
-      // $& inserts the matched substring
+    it('should preserve literal $ sequences in replacement strings', () => {
+      // $& should be inserted literally, not expanded
       const result1 = ASTEditTool.applyReplacement(
         'hello world',
         'world',
         '$& again',
         false,
       );
-      expect(result1).toBe('hello world again');
+      expect(result1).toBe('hello $& again');
 
-      // $$ inserts a literal $
+      // $$ should be inserted literally, not collapsed
       const result2 = ASTEditTool.applyReplacement(
         'price 10',
         '10',
         '$$20',
         false,
       );
-      expect(result2).toBe('price $20');
+      expect(result2).toBe('price $$20');
     });
   });
 
@@ -979,7 +980,7 @@ describe('ast-edit characterization tests', () => {
 
       const result = await invocation.execute(new AbortController().signal);
       expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe('read_content_failure');
+      expect(result.error?.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
     });
 
     it('should map ENFILE error to READ_CONTENT_FAILURE', async () => {
@@ -1003,7 +1004,7 @@ describe('ast-edit characterization tests', () => {
 
       const result = await invocation.execute(new AbortController().signal);
       expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe('read_content_failure');
+      expect(result.error?.type).toBe(ToolErrorType.READ_CONTENT_FAILURE);
     });
 
     it('should map unknown error to UNKNOWN', async () => {
@@ -1025,7 +1026,7 @@ describe('ast-edit characterization tests', () => {
 
       const result = await invocation.execute(new AbortController().signal);
       expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe('unknown');
+      expect(result.error?.type).toBe(ToolErrorType.UNKNOWN);
     });
 
     it('should return correct metadata shape on success', async () => {

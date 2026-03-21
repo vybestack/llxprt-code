@@ -94,6 +94,8 @@ export async function calculateEdit(
     };
   }
 
+  let occurrences = 0;
+
   if (params.old_string === '' && !fileExists) {
     isNewFile = true;
   } else if (!fileExists) {
@@ -103,7 +105,7 @@ export async function calculateEdit(
       type: ToolErrorType.FILE_NOT_FOUND,
     };
   } else if (currentContent !== null) {
-    const occurrences = countOccurrences(currentContent, normalizedOldString);
+    occurrences = countOccurrences(currentContent, normalizedOldString);
 
     if (occurrences === 0) {
       error = {
@@ -146,7 +148,7 @@ export async function calculateEdit(
   return {
     currentContent,
     newContent,
-    occurrences: countOccurrences(currentContent || '', normalizedOldString),
+    occurrences,
     error,
     isNewFile,
     astValidation,
@@ -192,8 +194,7 @@ export function validateASTSyntax(
   }
 
   try {
-    const parseLang = lang;
-    parse(parseLang, content);
+    parse(lang, content);
     return { valid: true, errors: [] };
   } catch (error) {
     return {

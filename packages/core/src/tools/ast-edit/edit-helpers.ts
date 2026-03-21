@@ -36,6 +36,7 @@ export function applyReplacement(
     return currentContent;
   }
 
-  // For single replacement, use replace() instead of replaceAll()
-  return currentContent.replace(oldString, newString);
+  // For single replacement, use callback form to treat newString literally
+  // (avoids $&, $$, $1 etc. being interpreted as special replacement patterns)
+  return currentContent.replace(oldString, () => newString);
 }

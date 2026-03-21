@@ -156,9 +156,12 @@ export class ASTEditToolInvocation
         this.params.file_path,
       );
 
-      // Detect if this is a new file (same logic as apply path)
-      const isNewFile =
-        this.params.old_string === '' && rawCurrentContent === '';
+      // Detect if this is a new file — distinguish non-existent from empty existing files
+      let isNewFile = false;
+      if (this.params.old_string === '' && rawCurrentContent === '') {
+        const mtime = await this.getFileLastModified(this.params.file_path);
+        isNewFile = mtime === null;
+      }
 
       // Freshness Check (must run first to prevent stale edits in concurrent scenarios)
       if (

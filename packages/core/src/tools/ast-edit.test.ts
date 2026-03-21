@@ -233,8 +233,6 @@ describe('AST Tools', () => {
       // Currently it's a placeholder since ast-edit/ doesn't exist yet
       // When ast-edit/ directory is created in Phase 1+, this test will validate import hygiene
 
-      // For now, verify the monolith exists and has no ast-edit/ subdirectory
-      const { promises: fs } = await import('fs');
       const path = await import('path');
 
       const astEditDir = path.join(
@@ -243,9 +241,11 @@ describe('AST Tools', () => {
       );
 
       try {
-        await fs.access(astEditDir);
+        await fsPromises.access(astEditDir);
         // If we get here, the directory exists - check for upward imports
-        const files = await fs.readdir(astEditDir, { withFileTypes: true });
+        const files = await fsPromises.readdir(astEditDir, {
+          withFileTypes: true,
+        });
         const tsFiles = files
           .filter(
             (f) =>
@@ -254,7 +254,7 @@ describe('AST Tools', () => {
           .map((f) => f.name);
 
         for (const fileName of tsFiles) {
-          const content = await fs.readFile(
+          const content = await fsPromises.readFile(
             path.join(astEditDir, fileName),
             'utf-8',
           );
@@ -263,9 +263,17 @@ describe('AST Tools', () => {
             content.includes('from "../ast-edit.js"');
           expect(hasUpwardImport).toBe(false);
         }
-      } catch {
-        // Directory doesn't exist yet - test passes
-        expect(true).toBe(true);
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          'code' in err &&
+          (err as NodeJS.ErrnoException).code === 'ENOENT'
+        ) {
+          // Directory doesn't exist yet - test passes
+          expect(true).toBe(true);
+        } else {
+          throw err;
+        }
       }
     });
   });
@@ -275,7 +283,6 @@ describe('AST Tools', () => {
       // Three-color DFS cycle detection on the ast-edit/ import graph
       // WHITE = 0, GRAY = 1, BLACK = 2
 
-      const { promises: fs } = await import('fs');
       const path = await import('path');
 
       const astEditDir = path.join(
@@ -284,10 +291,12 @@ describe('AST Tools', () => {
       );
 
       try {
-        await fs.access(astEditDir);
+        await fsPromises.access(astEditDir);
 
         // Build import graph
-        const files = await fs.readdir(astEditDir, { withFileTypes: true });
+        const files = await fsPromises.readdir(astEditDir, {
+          withFileTypes: true,
+        });
         const tsFiles = files
           .filter(
             (f) =>
@@ -302,7 +311,7 @@ describe('AST Tools', () => {
 
         for (const file of tsFiles) {
           const filePath = path.join(astEditDir, file.name);
-          const content = await fs.readFile(filePath, 'utf-8');
+          const content = await fsPromises.readFile(filePath, 'utf-8');
 
           const imports: string[] = [];
           // Match all local sibling references:

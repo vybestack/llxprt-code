@@ -7,10 +7,11 @@
  * Phase 0, Step 0.2: 8 calculateEdit edge case tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ASTEditTool } from '../ast-edit.js';
 import type { Config } from '../../config/config.js';
 import { ApprovalMode } from '../../config/config.js';
+import { ToolErrorType } from '../tool-error.js';
 
 // Define typed interface for private API access in tests
 type TestableASTEditTool = {
@@ -30,6 +31,10 @@ type ToolReturnDisplay = {
 
 describe('calculateEdit characterization tests', () => {
   let mockConfig: Config;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   beforeEach(() => {
     mockConfig = {
@@ -117,7 +122,7 @@ describe('calculateEdit characterization tests', () => {
 
       const result = await invocation.execute(new AbortController().signal);
       expect(result.error).toBeDefined();
-      expect(result.error?.type).toBe('file_modified_conflict');
+      expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
     });
   });
 
