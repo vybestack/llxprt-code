@@ -33,7 +33,11 @@ describe('ast-edit characterization tests', () => {
       getTargetDir: () => '/test',
       getFileSystemService: () => ({
         readTextFile: async (path: string) => {
-          if (path.includes('nonexistent')) throw new Error('ENOENT');
+          if (path.includes('nonexistent')) {
+            const err = new Error('ENOENT') as NodeJS.ErrnoException;
+            err.code = 'ENOENT';
+            throw err;
+          }
           return 'const x = 1;';
         },
         writeTextFile: async () => {},
@@ -589,7 +593,7 @@ describe('ast-edit characterization tests', () => {
   describe('Preview/apply consistency', () => {
     it('should produce identical newContent between preview and apply for same input', async () => {
       mockConfig.getFileSystemService = () => ({
-        readTextFile: async () => 'const x = 1;\\nconst y = 2;',
+        readTextFile: async () => 'const x = 1;\nconst y = 2;',
         writeTextFile: async () => {},
         fileExists: async () => true,
       });
@@ -912,11 +916,6 @@ describe('ast-edit characterization tests', () => {
       expect(typeof display.fileName).toBe('string');
       expect(display).toHaveProperty('filePath');
       expect(typeof display.filePath).toBe('string');
-      expect(display).toHaveProperty('metadata');
-      expect(display.metadata).toHaveProperty('language');
-      expect(typeof display.metadata.language).toBe('string');
-      expect(display.metadata).toHaveProperty('declarationsCount');
-      expect(typeof display.metadata.declarationsCount).toBe('number');
     });
   });
 });

@@ -1,11 +1,10 @@
 /**
- * TRUE RED Test for ensure-dirs.ts
+ * Tests for ensure-dirs.ts
  *
  * This file tests the ensureParentDirectoriesExist function that will be
- * extracted during Phase 1 decomposition. These tests MUST FAIL because
- * the module does not exist yet.
+ * extracted during Phase 1 decomposition.
  *
- * Phase 0, Step 0.3: ensure-dirs RED test
+ * Coverage: ensureParentDirectoriesExist behavior
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -14,7 +13,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('ensureParentDirectoriesExist (TRUE RED)', () => {
+describe('ensureParentDirectoriesExist', () => {
   let tempDir: string;
 
   beforeEach(async () => {

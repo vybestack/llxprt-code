@@ -24,7 +24,11 @@ describe('empty-file characterization tests', () => {
       getTargetDir: () => '/test',
       getFileSystemService: () => ({
         readTextFile: async (path: string) => {
-          if (path.includes('nonexistent')) throw new Error('ENOENT');
+          if (path.includes('nonexistent')) {
+            const err = new Error('ENOENT') as NodeJS.ErrnoException;
+            err.code = 'ENOENT';
+            throw err;
+          }
           return ''; // empty file
         },
         writeTextFile: async () => {},

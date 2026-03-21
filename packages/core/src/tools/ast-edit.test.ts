@@ -313,7 +313,7 @@ describe('AST Tools', () => {
           // - import './foo.js' (side-effect)
           // - export ... from './foo.js'
           const localRefRegex =
-            /(?:import|export)\s+(?:.*?\s+from\s+)?['"]\.\/([^'"]+)['"]/g;
+            /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]\.\/([^'"]+)['"]/g;
           let match;
           while ((match = localRefRegex.exec(content)) !== null) {
             const specifier = match[1];
