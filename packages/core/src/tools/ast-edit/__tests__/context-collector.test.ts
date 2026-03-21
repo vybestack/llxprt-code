@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { prioritizeSymbolsFromDeclarations } from '../context-collector.js';
+import { ASTConfig } from '../ast-config.js';
 import type { EnhancedDeclaration } from '../types.js';
 
 describe('prioritizeSymbolsFromDeclarations', () => {
@@ -45,6 +46,7 @@ describe('prioritizeSymbolsFromDeclarations', () => {
 
     const result = prioritizeSymbolsFromDeclarations(decls);
 
+    expect(result).toEqual(expect.arrayContaining(['MyClass', 'myHelper']));
     expect(result.indexOf('MyClass')).toBeLessThan(result.indexOf('myHelper'));
     // Variables (score 0) are excluded to avoid low-value workspace lookups
     expect(result).not.toContain('someVar');
@@ -101,6 +103,9 @@ describe('prioritizeSymbolsFromDeclarations', () => {
 
     const result = prioritizeSymbolsFromDeclarations(decls);
 
+    expect(result).toEqual(
+      expect.arrayContaining(['publicFunc', 'privateFunc']),
+    );
     expect(result.indexOf('publicFunc')).toBeLessThan(
       result.indexOf('privateFunc'),
     );
@@ -125,8 +130,7 @@ describe('prioritizeSymbolsFromDeclarations', () => {
 
     const result = prioritizeSymbolsFromDeclarations(decls);
 
-    // ASTConfig.MAX_RELATED_SYMBOLS is 10
-    expect(result.length).toBeLessThanOrEqual(10);
+    expect(result.length).toBeLessThanOrEqual(ASTConfig.MAX_RELATED_SYMBOLS);
   });
 
   it('should return empty array for empty declarations', () => {
