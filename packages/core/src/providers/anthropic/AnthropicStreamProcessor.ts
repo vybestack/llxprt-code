@@ -102,14 +102,7 @@ export async function* processAnthropicStream(
         if (chunk.type === 'message_start') {
           yield* handleMessageStart(chunk, cacheLogger);
         } else if (chunk.type === 'content_block_start') {
-          handleContentBlockStart(
-            chunk,
-            currentToolCall,
-            currentThinkingBlock,
-            unprefixToolName,
-            isOAuth,
-            logger,
-          );
+          handleContentBlockStart(chunk, logger);
           if (chunk.content_block.type === 'tool_use') {
             const toolBlock = chunk.content_block as ToolUseBlock;
             currentToolCall = {
@@ -247,10 +240,6 @@ function* handleMessageStart(
 
 function handleContentBlockStart(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_start' },
-  currentToolCall: { id: string; name: string; input: string } | undefined,
-  currentThinkingBlock: { thinking: string; signature?: string } | undefined,
-  unprefixToolName: (name: string, isOAuth: boolean) => string,
-  isOAuth: boolean,
   logger: { debug: (fn: () => string) => void },
 ): void {
   if (chunk.content_block.type === 'tool_use') {
@@ -366,7 +355,8 @@ function handleContentBlockStop(
         `Completed thinking block: ${activeThinkingBlock.thinking.length} chars`,
     );
     logger.debug(
-      () => `Thinking block content: ${activeThinkingBlock.thinking}`,
+      () =>
+        `Thinking block completed (${activeThinkingBlock.thinking.length} chars total)`,
     );
 
     const contentBlock = (
