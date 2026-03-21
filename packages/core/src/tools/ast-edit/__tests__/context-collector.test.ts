@@ -9,7 +9,7 @@ import { prioritizeSymbolsFromDeclarations } from '../context-collector.js';
 import type { EnhancedDeclaration } from '../types.js';
 
 describe('prioritizeSymbolsFromDeclarations', () => {
-  it('should rank classes above functions above variables', () => {
+  it('should rank classes above functions and exclude zero-score types', () => {
     const decls: EnhancedDeclaration[] = [
       {
         name: 'myHelper',
@@ -46,7 +46,8 @@ describe('prioritizeSymbolsFromDeclarations', () => {
     const result = prioritizeSymbolsFromDeclarations(decls);
 
     expect(result.indexOf('MyClass')).toBeLessThan(result.indexOf('myHelper'));
-    expect(result.indexOf('myHelper')).toBeLessThan(result.indexOf('someVar'));
+    // Variables (score 0) are excluded to avoid low-value workspace lookups
+    expect(result).not.toContain('someVar');
   });
 
   it('should exclude short symbol names (length < MIN_SYMBOL_LENGTH)', () => {
