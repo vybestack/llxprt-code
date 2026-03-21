@@ -6,6 +6,7 @@
 
 // Export config
 export * from './config/config.js';
+export * from './config/toolGovernance.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 export * from './config/schedulerSingleton.js';

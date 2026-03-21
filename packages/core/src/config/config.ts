@@ -5,7 +5,6 @@
  */
 
 import * as path from 'node:path';
-import os from 'node:os';
 import process from 'node:process';
 import {
   type ContentGeneratorConfig,
@@ -14,46 +13,16 @@ import {
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
-import { LSTool } from '../tools/ls.js';
-import { ReadFileTool } from '../tools/read-file.js';
-import { GrepTool } from '../tools/grep.js';
-import { RipGrepTool } from '../tools/ripGrep.js';
-import { GlobTool } from '../tools/glob.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
-import { EditTool } from '../tools/edit.js';
-import { ShellTool } from '../tools/shell.js';
-import { ASTEditTool } from '../tools/ast-edit.js';
-import { ASTReadFileTool } from '../tools/ast-edit.js';
-// @plan PLAN-20260211-ASTGREP.P05
-import { AstGrepTool } from '../tools/ast-grep.js';
-import { StructuralAnalysisTool } from '../tools/structural-analysis.js';
-import { WriteFileTool } from '../tools/write-file.js';
-import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
-import { ReadManyFilesTool } from '../tools/read-many-files.js';
-import { ReadLineRangeTool } from '../tools/read_line_range.js';
-import { DeleteLineRangeTool } from '../tools/delete_line_range.js';
-import { InsertAtLineTool } from '../tools/insert_at_line.js';
-import { ApplyPatchTool } from '../tools/apply-patch.js';
 import {
-  MemoryTool,
   setLlxprtMdFilename,
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
 } from '../tools/memoryTool.js';
-import { GoogleWebSearchTool } from '../tools/google-web-search.js';
-import { ExaWebSearchTool } from '../tools/exa-web-search.js';
-import { TodoWrite } from '../tools/todo-write.js';
-import { TodoRead } from '../tools/todo-read.js';
-import { TodoPause } from '../tools/todo-pause.js';
-import { CodeSearchTool } from '../tools/codesearch.js';
-
-import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
 import { ActivateSkillTool } from '../tools/activate-skill.js';
-
-import { TaskTool } from '../tools/task.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
-import { ListSubagentsTool } from '../tools/list-subagents.js';
+
 import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -70,7 +39,7 @@ import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
 import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 // @plan PLAN-20260130-ASYNCTASK.P14
-import { CheckAsyncTasksTool } from '../tools/check-async-tasks.js';
+
 import {
   loadServerHierarchicalMemory,
   loadJitSubdirectoryMemory,
@@ -87,18 +56,12 @@ import {
 } from '../telemetry/index.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
-import type { BucketFailureReason } from '../providers/errors.js';
+
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { type MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { ideContext } from '../ide/ideContext.js';
-import type {
-  CallableTool,
-  Content,
-  FunctionCall,
-  Part,
-  Tool,
-} from '@google/genai';
+import type { Content } from '@google/genai';
 import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
@@ -108,6 +71,29 @@ import {
 } from '../services/fileSystemService.js';
 import { ProfileManager } from './profileManager.js';
 import { SubagentManager } from './subagentManager.js';
+import {
+  initializeLsp,
+  shutdownLspService as shutdownLsp,
+} from './lspIntegration.js';
+import { resolveConstructionTimeEnv } from './envResolver.js';
+import type {
+  WorkspacePathsConfig,
+  FileFilteringConfig,
+  ShellExecutionHostConfig,
+  SandboxAwarenessConfig,
+  DebugOutputConfig,
+  SettingsReadConfig,
+  SettingsMutationConfig,
+  MemoryContextConfig,
+  ToolOutputConfig,
+} from './configInterfaces.js';
+import {
+  buildTelemetrySettings,
+  normalizeFileFilteringSettings,
+  parseLspConfig,
+  normalizeShellReplacement,
+} from './configBuilders.js';
+import { createToolRegistryFromConfig } from './toolRegistryFactory.js';
 import {
   getOrCreateScheduler as _getOrCreateScheduler,
   disposeScheduler as _disposeScheduler,
@@ -124,7 +110,7 @@ import { FileExclusions } from '../utils/ignorePatterns.js';
 import type { EventEmitter } from 'node:events';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
-import type { PolicyEngineConfig } from '../policy/types.js';
+
 import { setGlobalProxy } from '../utils/fetch.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import {
@@ -137,130 +123,51 @@ import type { EnvironmentSanitizationConfig } from '../services/environmentSanit
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
-// Import privacy-related types
-export interface RedactionConfig {
-  redactApiKeys: boolean;
-  redactCredentials: boolean;
-  redactFilePaths: boolean;
-  redactUrls: boolean;
-  redactEmails: boolean;
-  redactPersonalInfo: boolean;
-  customPatterns?: Array<{
-    name: string;
-    pattern: RegExp;
-    replacement: string;
-    enabled: boolean;
-  }>;
-}
+// Types, interfaces, enums, and MCPServerConfig class imported from configTypes.ts
+import {
+  ApprovalMode,
+  MCPServerConfig,
+  type ShellReplacementMode,
+  type RedactionConfig,
+  type AccessibilitySettings,
+  type BugCommandSettings,
+  type ChatCompressionSettings,
+  type SummarizeToolOutputSettings,
+  type ComplexityAnalyzerSettings,
+  type OutputSettings,
+  type CodebaseInvestigatorSettings,
+  type IntrospectionAgentSettings,
+  type TelemetrySettings,
+  type GeminiCLIExtension,
+  type SandboxConfig,
+  type ActiveExtension,
+  type BucketFailoverHandler,
+  type ConfigParameters,
+} from './configTypes.js';
 
-export enum ApprovalMode {
-  DEFAULT = 'default',
-  AUTO_EDIT = 'autoEdit',
-  YOLO = 'yolo',
-}
-
-export interface AccessibilitySettings {
-  disableLoadingPhrases?: boolean;
-  screenReader?: boolean;
-}
-
-export interface BugCommandSettings {
-  urlTemplate: string;
-}
-
-export interface ChatCompressionSettings {
-  contextPercentageThreshold?: number;
-  /** @plan PLAN-20260211-COMPRESSION.P12 */
-  strategy?: string;
-  /** @plan PLAN-20260211-COMPRESSION.P12 */
-  profile?: string;
-}
-
-export interface SummarizeToolOutputSettings {
-  tokenBudget?: number;
-}
-
-export interface ComplexityAnalyzerSettings {
-  complexityThreshold?: number;
-  minTasksForSuggestion?: number;
-  suggestionCooldownMs?: number;
-}
-
-export interface OutputSettings {
-  format?: OutputFormat;
-}
-
-export interface CodebaseInvestigatorSettings {
-  enabled?: boolean;
-  maxNumTurns?: number;
-  maxTimeMinutes?: number;
-  thinkingBudget?: number;
-  model?: string;
-}
-
-export interface IntrospectionAgentSettings {
-  enabled?: boolean;
-}
-
-export interface TelemetrySettings {
-  enabled?: boolean;
-  target?: TelemetryTarget;
-  otlpEndpoint?: string;
-  logPrompts?: boolean;
-  outfile?: string;
-  logConversations?: boolean;
-  logResponses?: boolean;
-  redactSensitiveData?: boolean;
-  maxConversationHistory?: number;
-  conversationLogPath?: string;
-  maxLogFiles?: number;
-  maxLogSizeMB?: number;
-  retentionDays?: number;
-  // Privacy-related settings
-  redactFilePaths?: boolean;
-  redactUrls?: boolean;
-  redactEmails?: boolean;
-  redactPersonalInfo?: boolean;
-  customRedactionPatterns?: Array<{
-    name: string;
-    pattern: RegExp;
-    replacement: string;
-    enabled: boolean;
-  }>;
-  enableDataRetention?: boolean;
-  conversationExpirationDays?: number;
-  maxConversationsStored?: number;
-  remoteConsentGiven?: boolean;
-}
-
-/**
- * All information required in CLI to handle an extension. Defined in Core so
- * that the collection of loaded, active, and inactive extensions can be passed
- * around on the config object though Core does not use this information
- * directly.
- */
-export interface GeminiCLIExtension {
-  name: string;
-  version: string;
-  isActive: boolean;
-  path: string;
-  installMetadata?: ExtensionInstallMetadata;
-  mcpServers?: Record<string, MCPServerConfig>;
-  contextFiles: string[];
-  excludeTools?: string[];
-  hooks?: { [K in HookEventName]?: HookDefinition[] };
-  skills?: SkillDefinition[];
-  settings?: Array<Record<string, unknown>>;
-  resolvedSettings?: Array<Record<string, unknown>>;
-}
-
-export interface ExtensionInstallMetadata {
-  source: string;
-  type: 'git' | 'local' | 'link' | 'github-release';
-  releaseTag?: string; // Only present for github-release installs.
-  ref?: string;
-  autoUpdate?: boolean;
-}
+// Re-export all types from configTypes for backward compatibility
+export {
+  ApprovalMode,
+  AuthProviderType,
+  MCPServerConfig,
+  type RedactionConfig,
+  type AccessibilitySettings,
+  type BugCommandSettings,
+  type ChatCompressionSettings,
+  type SummarizeToolOutputSettings,
+  type ComplexityAnalyzerSettings,
+  type OutputSettings,
+  type CodebaseInvestigatorSettings,
+  type IntrospectionAgentSettings,
+  type TelemetrySettings,
+  type GeminiCLIExtension,
+  type ExtensionInstallMetadata,
+  type SandboxConfig,
+  type ActiveExtension,
+  type FailoverContext,
+  type BucketFailoverHandler,
+  type ConfigParameters,
+} from './configTypes.js';
 
 import type { FileFilteringOptions } from './constants.js';
 import {
@@ -274,269 +181,25 @@ export {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
 };
 
-/** Shell replacement mode type */
-export type ShellReplacementMode = 'allowlist' | 'all' | 'none';
-
-/**
- * Normalize shell-replacement setting to canonical mode.
- * Handles legacy boolean values for backward compatibility.
- */
-export function normalizeShellReplacement(
-  value: ShellReplacementMode | boolean | undefined,
-): ShellReplacementMode {
-  if (value === undefined) {
-    return 'allowlist'; // Default to upstream behavior
-  }
-  if (value === true || value === 'all') {
-    return 'all';
-  }
-  if (value === false || value === 'none') {
-    return 'none';
-  }
-  if (value === 'allowlist') {
-    return 'allowlist';
-  }
-  // Fallback for any unexpected value
-  return 'allowlist';
-}
+// Re-export from configBuilders/configTypes for backward compatibility
+export { normalizeShellReplacement } from './configBuilders.js';
+export type { ShellReplacementMode } from './configTypes.js';
 
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
 export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
-const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
-export class MCPServerConfig {
-  constructor(
-    // For stdio transport
-    readonly command?: string,
-    readonly args?: string[],
-    readonly env?: Record<string, string>,
-    readonly cwd?: string,
-    // For sse transport
-    readonly url?: string,
-    // For streamable http transport
-    readonly httpUrl?: string,
-    readonly headers?: Record<string, string>,
-    // For websocket transport
-    readonly tcp?: string,
-    /**
-     * Transport type for URL-based servers.
-     * When set, disables automatic HTTP→SSE fallback.
-     * - 'http' → StreamableHTTPClientTransport
-     * - 'sse'  → SSEClientTransport
-     * - omitted → defaults to HTTP with SSE fallback (deprecated; add type explicitly)
-     *
-     * Note: 'httpUrl' is deprecated; use 'url' + 'type: "http"' instead.
-     * @plan PLAN-20250219-GMERGE021.R3.P03
-     * @requirement REQ-GMERGE021-R3-001
-     */
-    readonly type?: 'sse' | 'http',
-    // Common
-    readonly timeout?: number,
-    readonly trust?: boolean,
-    // Metadata
-    readonly description?: string,
-    readonly includeTools?: string[],
-    readonly excludeTools?: string[],
-    readonly extensionName?: string,
-    readonly extension?: GeminiCLIExtension,
-    // OAuth configuration
-    readonly oauth?: MCPOAuthConfig,
-    readonly authProviderType?: AuthProviderType,
-    // Service Account Configuration
-    /* targetAudience format: CLIENT_ID.apps.googleusercontent.com */
-    readonly targetAudience?: string,
-    /* targetServiceAccount format: <service-account-name>@<project-num>.iam.gserviceaccount.com */
-    readonly targetServiceAccount?: string,
-  ) {}
-}
 
-export enum AuthProviderType {
-  DYNAMIC_DISCOVERY = 'dynamic_discovery',
-  GOOGLE_CREDENTIALS = 'google_credentials',
-  SERVICE_ACCOUNT_IMPERSONATION = 'service_account_impersonation',
-}
-
-export interface SandboxConfig {
-  command: 'docker' | 'podman' | 'sandbox-exec';
-  image: string;
-}
-
-export interface ActiveExtension {
-  name: string;
-  version: string;
-}
-
-/**
- * @plan PLAN-20260223-ISSUE1598.P03
- * @requirement REQ-1598-IC10
- */
-export interface FailoverContext {
-  triggeringStatus?: number;
-}
-
-/**
- * Handler for bucket failover on rate limit/quota errors
- * @plan PLAN-20251213issue490
- */
-export interface BucketFailoverHandler {
-  /**
-   * Get the list of available buckets
-   */
-  getBuckets(): string[];
-
-  /**
-   * Get the currently active bucket
-   */
-  getCurrentBucket(): string | undefined;
-
-  /**
-   * Try to failover to the next bucket
-   * @plan PLAN-20260223-ISSUE1598.P03
-   * @param context Optional context about the triggering failure
-   * @returns true if failover succeeded (may switch bucket or refresh/reauth current), false if no recovery possible
-   */
-  tryFailover(context?: FailoverContext): Promise<boolean>;
-
-  /**
-   * Check if bucket failover is enabled
-   */
-  isEnabled(): boolean;
-
-  /**
-   * Reset the session tracking so failover can try buckets again in a new request.
-   * Call this at the start of each new request to prevent infinite cycling.
-   */
-  resetSession?(): void;
-
-  /**
-   * Full reset for new user turns: clears tried set, resets to first bucket, and
-   * resets session bucket to the primary (first) bucket so the next request starts fresh.
-   */
-  reset?(): void;
-
-  /**
-   * @plan PLAN-20260223-ISSUE1598.P03
-   * @requirement REQ-1598-IC09
-   * Get the failure reasons for buckets that were skipped during last failover
-   */
-  getLastFailoverReasons?(): Record<string, BucketFailureReason>;
-
-  /**
-   * @fix issue1616
-   * Eagerly authenticate all unauthenticated buckets.
-   * Called at user-turn boundaries so all buckets have tokens before API calls begin.
-   * Respects auth-bucket-prompt and auth-bucket-delay ephemerals.
-   * No-op for single-bucket profiles.
-   */
-  ensureBucketsAuthenticated?(): Promise<void>;
-}
-
-export interface ConfigParameters {
-  sessionId: string;
-  embeddingModel?: string;
-  sandbox?: SandboxConfig;
-  targetDir: string;
-  debugMode: boolean;
-  outputFormat?: OutputFormat;
-  question?: string;
-
-  coreTools?: string[];
-  allowedTools?: string[];
-  excludeTools?: string[];
-  toolDiscoveryCommand?: string;
-  toolCallCommand?: string;
-  mcpServerCommand?: string;
-  mcpServers?: Record<string, MCPServerConfig>;
-  lsp?: import('../lsp/types.js').LspConfig | boolean;
-  userMemory?: string;
-  llxprtMdFileCount?: number;
-  llxprtMdFilePaths?: string[];
-  approvalMode?: ApprovalMode;
-  showMemoryUsage?: boolean;
-  contextLimit?: number;
-  compressionThreshold?: number;
-  contextFileName?: string | string[];
-  accessibility?: AccessibilitySettings;
-  telemetry?: TelemetrySettings;
-  usageStatisticsEnabled?: boolean;
-  fileFiltering?: {
-    respectGitIgnore?: boolean;
-    respectLlxprtIgnore?: boolean;
-    enableRecursiveFileSearch?: boolean;
-    disableFuzzySearch?: boolean;
-  };
-  checkpointing?: boolean;
-  dumpOnError?: boolean;
-  proxy?: string;
-  cwd: string;
-  fileDiscoveryService?: FileDiscoveryService;
-  includeDirectories?: string[];
-  bugCommand?: BugCommandSettings;
-  model: string;
-  extensionContextFilePaths?: string[];
-  maxSessionTurns?: number;
-  experimentalZedIntegration?: boolean;
-  listExtensions?: boolean;
-  activeExtensions?: ActiveExtension[];
-  providerManager?: ProviderManager;
-  provider?: string;
-  extensions?: GeminiCLIExtension[];
-  extensionLoader?: ExtensionLoader;
-  enabledExtensions?: string[];
-  enableExtensionReloading?: boolean;
-  allowedMcpServers?: string[];
-  blockedMcpServers?: Array<{ name: string; extensionName: string }>;
-  noBrowser?: boolean;
-  summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
-  folderTrust?: boolean;
-  ideMode?: boolean;
-  ideClient?: IdeClient;
-  complexityAnalyzer?: ComplexityAnalyzerSettings;
-  loadMemoryFromIncludeDirectories?: boolean;
-  chatCompression?: ChatCompressionSettings;
-  interactive?: boolean;
-  shellReplacement?: 'allowlist' | 'all' | 'none' | boolean;
-  trustedFolder?: boolean;
-  useRipgrep?: boolean;
-  shouldUseNodePtyShell?: boolean;
-  allowPtyThemeOverride?: boolean;
-  ptyScrollbackLimit?: number;
-  ptyTerminalWidth?: number;
-  ptyTerminalHeight?: number;
-  skipNextSpeakerCheck?: boolean;
-  extensionManagement?: boolean;
-  enablePromptCompletion?: boolean;
-  eventEmitter?: EventEmitter;
-  settingsService?: SettingsService;
-  policyEngineConfig?: PolicyEngineConfig;
-  truncateToolOutputThreshold?: number;
-  truncateToolOutputLines?: number;
-  enableToolOutputTruncation?: boolean;
-  continueOnFailedApiCall?: boolean;
-  enableShellOutputEfficiency?: boolean;
-  continueSession?: boolean | string;
-  disableYoloMode?: boolean;
-  enableHooks?: boolean;
-  hooks?: {
-    [K in HookEventName]?: HookDefinition[];
-  };
-  projectHooks?: {
-    [K in HookEventName]?: HookDefinition[];
-  };
-  disabledHooks?: string[];
-  skills?: SkillDefinition[];
-  skillsSupport?: boolean;
-  disabledSkills?: string[];
-  sanitizationConfig?: EnvironmentSanitizationConfig;
-  onReload?: () => Promise<{ disabledSkills?: string[] }>;
-  outputSettings?: OutputSettings;
-  codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
-  introspectionAgentSettings?: IntrospectionAgentSettings;
-  useWriteTodos?: boolean;
-
-  jitContextEnabled?: boolean;
-}
-
-export class Config {
+export class Config
+  implements
+    WorkspacePathsConfig,
+    FileFilteringConfig,
+    ShellExecutionHostConfig,
+    SandboxAwarenessConfig,
+    DebugOutputConfig,
+    SettingsReadConfig,
+    SettingsMutationConfig,
+    MemoryContextConfig,
+    ToolOutputConfig
+{
   private toolRegistry!: ToolRegistry;
   private mcpClientManager?: McpClientManager;
   private allowedMcpServers: string[];
@@ -810,21 +473,8 @@ export class Config {
     /**
      * @plan PLAN-20250212-LSP.P33
      * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
-     * Parse LSP config: false/absent = disabled, true = default enabled, object = use custom config
      */
-    if (params.lsp === false || params.lsp === undefined) {
-      // Explicitly disabled or absent (absent = not configured)
-      this.lspConfig = undefined;
-    } else if (params.lsp === true) {
-      // Boolean true = default enabled (REQ-CFG-015)
-      this.lspConfig = { servers: [] };
-    } else {
-      // Object presence = enabled (REQ-CFG-020), ensure servers field exists
-      this.lspConfig =
-        params.lsp.servers === undefined
-          ? { ...params.lsp, servers: [] }
-          : params.lsp;
-    }
+    this.lspConfig = parseLspConfig(params.lsp);
 
     this.userMemory = params.userMemory ?? '';
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
@@ -832,33 +482,10 @@ export class Config {
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
     this.showMemoryUsage = params.showMemoryUsage ?? false;
     this.accessibility = params.accessibility ?? {};
-    this.telemetrySettings = {
-      enabled: params.telemetry?.enabled ?? false,
-      target: params.telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
-      otlpEndpoint: params.telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
-      logPrompts: params.telemetry?.logPrompts ?? true,
-      outfile: params.telemetry?.outfile,
-      logConversations: params.telemetry?.logConversations ?? false,
-      logResponses: params.telemetry?.logResponses ?? false,
-      redactSensitiveData: params.telemetry?.redactSensitiveData ?? true,
-      redactFilePaths: params.telemetry?.redactFilePaths ?? false,
-      redactUrls: params.telemetry?.redactUrls ?? false,
-      redactEmails: params.telemetry?.redactEmails ?? false,
-      redactPersonalInfo: params.telemetry?.redactPersonalInfo ?? false,
-    };
+    this.telemetrySettings = buildTelemetrySettings(params.telemetry);
     this.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
 
-    this.fileFiltering = {
-      respectGitIgnore:
-        params.fileFiltering?.respectGitIgnore ??
-        DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
-      respectLlxprtIgnore:
-        params.fileFiltering?.respectLlxprtIgnore ??
-        DEFAULT_FILE_FILTERING_OPTIONS.respectLlxprtIgnore,
-      enableRecursiveFileSearch:
-        params.fileFiltering?.enableRecursiveFileSearch ?? true,
-      disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
-    };
+    this.fileFiltering = normalizeFileFilteringSettings(params.fileFiltering);
     this.checkpointing = params.checkpointing ?? false;
     this.dumpOnError = params.dumpOnError ?? false;
     this.proxy = params.proxy;
@@ -951,20 +578,19 @@ export class Config {
     }
 
     // TELEMETRY: Re-enabled for local file logging only - no network endpoints allowed
-    const isTestEnvironment =
-      process.env.NODE_ENV === 'test' || process.env.VITEST;
-    if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
+    const constructionEnv = resolveConstructionTimeEnv();
+    if (constructionEnv.verbose) {
       debugLogger.log(
         `[CONFIG] Telemetry settings:`,
         JSON.stringify(this.telemetrySettings),
       );
     }
     if (this.telemetrySettings.enabled) {
-      if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
+      if (constructionEnv.verbose) {
         debugLogger.log(`[CONFIG] Initializing telemetry`);
       }
       initializeTelemetry(this);
-    } else if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
+    } else if (constructionEnv.verbose) {
       debugLogger.log(`[CONFIG] Telemetry disabled`);
     }
 
@@ -1024,66 +650,15 @@ export class Config {
      * Initialize LSP service client if enabled
      */
     if (this.lspConfig !== undefined) {
-      try {
-        const { LspServiceClient } = await import(
-          '../lsp/lsp-service-client.js'
-        );
-        this.lspServiceClient = new LspServiceClient(
-          this.lspConfig,
-          this.targetDir,
-        );
-        await this.lspServiceClient.start();
-
-        if (!this.lspServiceClient.isAlive()) {
-          const reason = this.lspServiceClient.getUnavailableReason();
-          if (reason?.includes('not found')) {
-            debugLogger.error(
-              'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
-            );
-          }
-        }
-
-        /**
-         * @plan PLAN-20250212-LSP.P33
-         * @requirement REQ-NAV-055, REQ-CFG-070
-         * Register MCP navigation tools only if service started successfully and navigationTools not disabled
-         */
-        if (
-          this.lspServiceClient.isAlive() &&
-          this.lspConfig.navigationTools !== false
-        ) {
-          const streams = this.lspServiceClient.getMcpTransportStreams();
-          if (streams) {
-            try {
-              await Promise.race([
-                this.registerMcpNavigationTools(streams),
-                new Promise<void>((_, reject) => {
-                  const signal = AbortSignal.timeout(
-                    MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS,
-                  );
-                  signal.addEventListener(
-                    'abort',
-                    () =>
-                      reject(
-                        signal.reason ??
-                          new Error('MCP navigation registration timeout'),
-                      ),
-                    { once: true },
-                  );
-                }),
-              ]);
-            } catch {
-              // MCP navigation registration timed out or failed — non-fatal (REQ-GRACE-050)
-              this.lspMcpClient = undefined;
-              this.lspMcpTransport = undefined;
-            }
-          }
-        }
-      } catch (_error) {
-        // LSP startup failure is non-fatal (REQ-GRACE-050)
-        // Service remains undefined, tools will not use it
-        this.lspServiceClient = undefined;
-      }
+      const lspState = await initializeLsp(
+        this.lspConfig,
+        this.targetDir,
+        this.toolRegistry,
+        this,
+      );
+      this.lspServiceClient = lspState.lspServiceClient;
+      this.lspMcpClient = lspState.lspMcpClient;
+      this.lspMcpTransport = lspState.lspMcpTransport;
     }
 
     // Discover skills if enabled
@@ -2361,6 +1936,22 @@ ${trimmed}
     return this.fileExclusions;
   }
 
+  getStorage(): Storage {
+    return this.storage;
+  }
+
+  getTruncateToolOutputThreshold(): number {
+    return this.truncateToolOutputThreshold;
+  }
+
+  getTruncateToolOutputLines(): number {
+    return this.truncateToolOutputLines;
+  }
+
+  isToolOutputTruncationEnabled(): boolean {
+    return this.enableToolOutputTruncation;
+  }
+
   async refreshMemory(): Promise<{
     memoryContent: string;
     fileCount: number;
@@ -2419,193 +2010,15 @@ ${trimmed}
    * @pseudocode lines 122-133
    */
   async createToolRegistry(messageBus: MessageBus): Promise<ToolRegistry> {
-    const registry = new ToolRegistry(this, messageBus);
-
-    const baseCoreTools = this.getCoreTools();
-    const effectiveCoreTools =
-      baseCoreTools && baseCoreTools.length > 0
-        ? [...baseCoreTools]
-        : undefined;
-
-    const matchesToolIdentifier = (value: string, target: string): boolean =>
-      value === target || value.startsWith(`${target}(`);
-
-    const ensureCoreToolIncluded = (identifier: string) => {
-      if (!effectiveCoreTools) {
-        return;
-      }
-      if (
-        !effectiveCoreTools.some((tool) =>
-          matchesToolIdentifier(tool, identifier),
-        )
-      ) {
-        effectiveCoreTools.push(identifier);
-      }
-    };
-
-    ensureCoreToolIncluded('TaskTool');
-    ensureCoreToolIncluded(TaskTool.Name);
-    ensureCoreToolIncluded('ListSubagentsTool');
-    ensureCoreToolIncluded(ListSubagentsTool.Name);
-
-    // helper to create & register core tools that are enabled
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
-      const className = ToolClass.name;
-      const toolName = ToolClass.Name || className;
-      const coreTools = effectiveCoreTools;
-      const excludeTools = this.getExcludeTools() || [];
-
-      let isEnabled = true; // Enabled by default if coreTools is not set.
-      let reason: string | undefined;
-
-      if (coreTools) {
-        isEnabled = coreTools.some(
-          (tool) =>
-            tool === className ||
-            tool === toolName ||
-            tool.startsWith(`${className}(`) ||
-            tool.startsWith(`${toolName}(`),
-        );
-      }
-
-      const isExcluded = excludeTools.some(
-        (tool) => tool === className || tool === toolName,
-      );
-
-      if (isExcluded) {
-        isEnabled = false;
-        reason = 'excluded by excludeTools setting';
-      }
-
-      // Record tool attempt for settings UI
-      const toolRecord = {
-        toolClass: ToolClass,
-        toolName: className,
-        displayName: toolName,
-        isRegistered: false,
-        reason,
-        args,
-      };
-
-      if (isEnabled) {
-        registry.registerTool(new ToolClass(...args));
-        toolRecord.isRegistered = true;
-        toolRecord.reason = undefined;
-      } else if (!reason) {
-        reason = 'not included in coreTools configuration';
-        toolRecord.reason = reason;
-      }
-
-      this.allPotentialTools.push(toolRecord);
-    };
-
-    registerCoreTool(LSTool, this);
-    registerCoreTool(ReadFileTool, this);
-
-    if (this.getUseRipgrep()) {
-      registerCoreTool(RipGrepTool, this);
-    } else {
-      registerCoreTool(GrepTool, this);
+    const result = await createToolRegistryFromConfig(this, messageBus);
+    this.allPotentialTools.push(...result.potentialTools);
+    if (!this.profileManager) {
+      this.setProfileManager(result.profileManager);
     }
-
-    registerCoreTool(GlobTool, this);
-    registerCoreTool(EditTool, this);
-    registerCoreTool(ASTEditTool, this);
-    registerCoreTool(WriteFileTool, this);
-    registerCoreTool(GoogleWebFetchTool, this);
-    registerCoreTool(ReadManyFilesTool, this);
-    registerCoreTool(ReadLineRangeTool, this);
-    registerCoreTool(ASTReadFileTool, this);
-    // @plan PLAN-20260211-ASTGREP.P05
-    registerCoreTool(AstGrepTool, this);
-    registerCoreTool(StructuralAnalysisTool, this);
-    registerCoreTool(DeleteLineRangeTool, this);
-    registerCoreTool(InsertAtLineTool, this);
-    registerCoreTool(ApplyPatchTool, this);
-    registerCoreTool(ShellTool, this);
-    registerCoreTool(MemoryTool, this);
-    registerCoreTool(GoogleWebSearchTool, this);
-    registerCoreTool(ExaWebSearchTool, this);
-    registerCoreTool(TodoWrite);
-    registerCoreTool(TodoRead);
-    registerCoreTool(TodoPause);
-    registerCoreTool(CodeSearchTool, this);
-    registerCoreTool(DirectWebFetchTool, this);
-
-    let profileManager = this.getProfileManager();
-    if (!profileManager) {
-      const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
-      profileManager = new ProfileManager(profilesDir);
-      this.setProfileManager(profileManager);
+    if (!this.subagentManager && result.subagentManager) {
+      this.setSubagentManager(result.subagentManager);
     }
-
-    let subagentManager = this.getSubagentManager();
-    if (!subagentManager && profileManager) {
-      const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
-      subagentManager = new SubagentManager(subagentsDir, profileManager);
-      this.setSubagentManager(subagentManager);
-    }
-
-    // Handle TaskTool with dependency checking
-    const taskToolArgs = {
-      profileManager,
-      subagentManager,
-      schedulerFactoryProvider: () =>
-        this.getInteractiveSubagentSchedulerFactory(),
-      getAsyncTaskManager: () => this.getAsyncTaskManager(),
-    };
-
-    if (profileManager && subagentManager) {
-      registerCoreTool(TaskTool, this, taskToolArgs);
-    } else {
-      // Record TaskTool as unregistered due to missing dependencies
-      const taskToolRecord = {
-        toolClass: TaskTool,
-        toolName: 'TaskTool',
-        displayName: TaskTool.Name || 'TaskTool',
-        isRegistered: false,
-        reason:
-          !profileManager && !subagentManager
-            ? 'requires profile manager and subagent manager'
-            : !profileManager
-              ? 'requires profile manager'
-              : 'requires subagent manager',
-        args: [this, taskToolArgs],
-      };
-      this.allPotentialTools.push(taskToolRecord);
-    }
-
-    // Handle ListSubagentsTool with dependency checking
-    const listSubagentsArgs = {
-      getSubagentManager: () => this.getSubagentManager(),
-    };
-
-    if (subagentManager) {
-      registerCoreTool(ListSubagentsTool, this, listSubagentsArgs);
-    } else {
-      // Record ListSubagentsTool as unregistered due to missing subagent manager
-      const listSubagentsRecord = {
-        toolClass: ListSubagentsTool,
-        toolName: 'ListSubagentsTool',
-        displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
-        isRegistered: false,
-        reason: 'requires subagent manager',
-        args: [this, listSubagentsArgs],
-      };
-      this.allPotentialTools.push(listSubagentsRecord);
-    }
-
-    // @plan PLAN-20260130-ASYNCTASK.P14
-    // Register CheckAsyncTasksTool
-    const checkAsyncTasksArgs = {
-      getAsyncTaskManager: () => this.getAsyncTaskManager(),
-    };
-    registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
-
-    await registry.discoverAllTools();
-    registry.sortTools();
-    return registry;
+    return result.registry;
   }
 
   /**
@@ -2798,259 +2211,22 @@ ${trimmed}
   }
 
   /**
-   * Register MCP navigation tools from LSP service.
-   * @plan PLAN-20250212-LSP.P33
-   * @requirement REQ-NAV-055, REQ-CFG-070
-   */
-  private async registerMcpNavigationTools(streams: {
-    readable: import('node:stream').Readable;
-    writable: import('node:stream').Writable;
-  }): Promise<void> {
-    type JSONRPCMessage =
-      import('@modelcontextprotocol/sdk/types.js').JSONRPCMessage;
-    type Transport =
-      import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
-
-    const cleanup = async () => {
-      this.toolRegistry.removeMcpToolsByServer('lsp-navigation');
-
-      if (this.lspMcpClient) {
-        try {
-          await this.lspMcpClient.close();
-        } catch {
-          // Close errors are non-fatal during cleanup.
-        }
-      }
-      this.lspMcpClient = undefined;
-
-      if (this.lspMcpTransport) {
-        try {
-          await this.lspMcpTransport.close();
-        } catch {
-          // Close errors are non-fatal during cleanup.
-        }
-      }
-      this.lspMcpTransport = undefined;
-    };
-
-    try {
-      const { Client } = await import(
-        '@modelcontextprotocol/sdk/client/index.js'
-      );
-      const { DiscoveredMCPTool } = await import('../tools/mcp-tool.js');
-
-      let readBuffer = '';
-      let started = false;
-      const transport: Transport = {
-        onclose: undefined,
-        onerror: undefined,
-        onmessage: undefined,
-        start: async () => {
-          if (started) {
-            return;
-          }
-          started = true;
-
-          const onData = (chunk: Buffer | string) => {
-            const text =
-              typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-            readBuffer += text;
-
-            while (true) {
-              const newlineIndex = readBuffer.indexOf('\n');
-              if (newlineIndex === -1) {
-                break;
-              }
-
-              const line = readBuffer.slice(0, newlineIndex).trim();
-              readBuffer = readBuffer.slice(newlineIndex + 1);
-              if (!line) {
-                continue;
-              }
-
-              try {
-                const message = JSON.parse(line) as JSONRPCMessage;
-                transport.onmessage?.(message);
-              } catch {
-                // Ignore malformed transport messages.
-              }
-            }
-          };
-
-          const onError = (error: Error) => {
-            transport.onerror?.(error);
-          };
-
-          const onClose = () => {
-            transport.onclose?.();
-          };
-
-          streams.readable.on('data', onData);
-          streams.readable.on('error', onError);
-          streams.readable.on('close', onClose);
-          streams.readable.on('end', onClose);
-
-          const closeTransport = async () => {
-            if (!started) {
-              return;
-            }
-            started = false;
-            streams.readable.off('data', onData);
-            streams.readable.off('error', onError);
-            streams.readable.off('close', onClose);
-            streams.readable.off('end', onClose);
-            streams.writable.end();
-          };
-
-          transport.close = closeTransport;
-        },
-        send: async (message: JSONRPCMessage) => {
-          streams.writable.write(`${JSON.stringify(message)}\n`);
-        },
-        close: async () => {
-          if (!started) {
-            return;
-          }
-          started = false;
-          streams.writable.end();
-        },
-      };
-
-      this.lspMcpTransport = transport;
-
-      const client = new Client(
-        {
-          name: 'lsp-navigation-client',
-          version: '1.0.0',
-        },
-        { capabilities: {} },
-      );
-      this.lspMcpClient = client;
-
-      const requestTimeoutMs = 250;
-      await client.connect(transport, { timeout: requestTimeoutMs });
-
-      const capabilities = client.getServerCapabilities?.();
-      if (!capabilities?.tools) {
-        await cleanup();
-        return;
-      }
-
-      const toolsResponse = await client.listTools(undefined, {
-        timeout: requestTimeoutMs,
-      });
-      const toolDefs = toolsResponse.tools ?? [];
-      if (toolDefs.length === 0) {
-        await cleanup();
-        return;
-      }
-
-      class LspNavigationCallableTool implements CallableTool {
-        constructor(
-          private readonly mcpClient: import('@modelcontextprotocol/sdk/client/index.js').Client,
-          private readonly toolDef: {
-            name: string;
-            description?: string;
-            inputSchema?: unknown;
-          },
-        ) {}
-
-        async tool(): Promise<Tool> {
-          return {
-            functionDeclarations: [
-              {
-                name: this.toolDef.name,
-                description: this.toolDef.description,
-                parametersJsonSchema: this.toolDef.inputSchema,
-              },
-            ],
-          };
-        }
-
-        async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
-          if (functionCalls.length !== 1) {
-            throw new Error(
-              'LspNavigationCallableTool only supports single function call',
-            );
-          }
-          const call = functionCalls[0];
-          const result = await this.mcpClient.callTool(
-            {
-              name: call.name ?? this.toolDef.name,
-              arguments: call.args ?? {},
-            },
-            undefined,
-            { timeout: requestTimeoutMs },
-          );
-
-          return [
-            {
-              functionResponse: {
-                name: call.name,
-                response: result,
-              },
-            },
-          ];
-        }
-      }
-
-      for (const toolDef of toolDefs) {
-        const callableTool = new LspNavigationCallableTool(client, toolDef);
-
-        const discoveredTool = new DiscoveredMCPTool(
-          callableTool,
-          'lsp-navigation',
-          toolDef.name,
-          toolDef.description ?? '',
-          toolDef.inputSchema ?? { type: 'object', properties: {} },
-          true,
-          undefined,
-          this,
-        );
-
-        this.toolRegistry.registerTool(discoveredTool);
-      }
-
-      this.toolRegistry.sortTools();
-    } catch {
-      await cleanup();
-    }
-  }
-
-  /**
    * Shutdown LSP service if running.
    * @plan PLAN-20250212-LSP.P33
    * @requirement REQ-GRACE-020, REQ-GRACE-040
    */
   async shutdownLspService(): Promise<void> {
-    this.toolRegistry.removeMcpToolsByServer('lsp-navigation');
-
-    if (this.lspMcpClient) {
-      try {
-        await this.lspMcpClient.close();
-      } catch {
-        // Close errors are non-fatal
-      }
-    }
+    await shutdownLsp(
+      {
+        lspServiceClient: this.lspServiceClient,
+        lspMcpClient: this.lspMcpClient,
+        lspMcpTransport: this.lspMcpTransport,
+      },
+      this.toolRegistry,
+    );
+    this.lspServiceClient = undefined;
     this.lspMcpClient = undefined;
-
-    if (this.lspMcpTransport) {
-      try {
-        await this.lspMcpTransport.close();
-      } catch {
-        // Close errors are non-fatal
-      }
-    }
     this.lspMcpTransport = undefined;
-
-    if (this.lspServiceClient) {
-      try {
-        await this.lspServiceClient.shutdown();
-      } catch {
-        // Shutdown failure is non-fatal
-      }
-      this.lspServiceClient = undefined;
-    }
   }
 }
 
