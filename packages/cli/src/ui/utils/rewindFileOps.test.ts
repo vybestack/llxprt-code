@@ -381,7 +381,13 @@ describe('rewindFileOps', () => {
       };
 
       mockConversation.messages = [
-        { type: 'user', role: 'user' as const, content: 'start', id: '1', timestamp: '1' },
+        {
+          type: 'user',
+          role: 'user' as const,
+          content: 'start',
+          id: '1',
+          timestamp: '1',
+        },
         toolMsg,
       ];
       vi.mocked(fs.readFile).mockResolvedValue(userModified);
@@ -431,7 +437,13 @@ describe('rewindFileOps', () => {
       };
 
       mockConversation.messages = [
-        { type: 'user', role: 'user' as const, content: 'start', id: '1', timestamp: '1' },
+        {
+          type: 'user',
+          role: 'user' as const,
+          content: 'start',
+          id: '1',
+          timestamp: '1',
+        },
         toolMsg,
       ];
       vi.mocked(fs.readFile).mockResolvedValue(userModified);
@@ -472,7 +484,13 @@ describe('rewindFileOps', () => {
       };
 
       mockConversation.messages = [
-        { type: 'user', role: 'user' as const, content: 'start', id: '1', timestamp: '1' },
+        {
+          type: 'user',
+          role: 'user' as const,
+          content: 'start',
+          id: '1',
+          timestamp: '1',
+        },
         toolMsg,
       ];
       // Simulate a generic file read error

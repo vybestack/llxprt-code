@@ -19,8 +19,6 @@ import type {
   ProviderPerformanceMetrics,
 } from '../providers/types.js';
 
-
-
 export enum ToolCallDecision {
   ACCEPT = 'accept',
   REJECT = 'reject',

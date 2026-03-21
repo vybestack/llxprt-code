@@ -571,4 +571,167 @@ describe('useAtCompletion', () => {
       ).toBe(true);
     });
   });
+
+  describe('Subagent Suggestions', () => {
+    it('should include subagent names in suggestions when SubagentManager is available', async () => {
+      testRootDir = await createTmpDir({});
+
+      const subagentConfig = {
+        ...mockConfig,
+        getSubagentManager: () => ({
+          listSubagents: () =>
+            Promise.resolve([
+              'codeanalyzer',
+              'deepthinker',
+              'typescriptexpert',
+            ]),
+        }),
+      } as unknown as Config;
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(true, '', subagentConfig, testRootDir),
+      );
+
+      await waitFor(() => {
+        expect(result.current.suggestions.length).toBeGreaterThan(0);
+      });
+
+      const subagentSuggestions = result.current.suggestions.filter(
+        (s) => s.description === 'subagent',
+      );
+      expect(subagentSuggestions.length).toBe(3);
+      expect(subagentSuggestions.map((s) => s.value)).toEqual(
+        expect.arrayContaining([
+          'codeanalyzer',
+          'deepthinker',
+          'typescriptexpert',
+        ]),
+      );
+    });
+
+    it('should filter subagent suggestions by pattern', async () => {
+      testRootDir = await createTmpDir({});
+
+      const subagentConfig = {
+        ...mockConfig,
+        getSubagentManager: () => ({
+          listSubagents: () =>
+            Promise.resolve([
+              'codeanalyzer',
+              'deepthinker',
+              'typescriptexpert',
+            ]),
+        }),
+      } as unknown as Config;
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(
+          true,
+          'deep',
+          subagentConfig,
+          testRootDir,
+        ),
+      );
+
+      await waitFor(() => {
+        expect(result.current.suggestions.length).toBeGreaterThan(0);
+      });
+
+      const subagentSuggestions = result.current.suggestions.filter(
+        (s) => s.description === 'subagent',
+      );
+      expect(subagentSuggestions.length).toBe(1);
+      expect(subagentSuggestions[0].value).toBe('deepthinker');
+    });
+
+    it('should show subagent suggestions after file suggestions', async () => {
+      const structure: FileSystemStructure = {
+        'deep-file.txt': '',
+      };
+      testRootDir = await createTmpDir(structure);
+
+      const subagentConfig = {
+        ...mockConfig,
+        getSubagentManager: () => ({
+          listSubagents: () => Promise.resolve(['deepthinker']),
+        }),
+      } as unknown as Config;
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(
+          true,
+          'deep',
+          subagentConfig,
+          testRootDir,
+        ),
+      );
+
+      await waitFor(() => {
+        expect(result.current.suggestions.length).toBeGreaterThan(0);
+      });
+
+      // File suggestions should appear before subagent suggestions
+      const fileSuggestionIndex = result.current.suggestions.findIndex(
+        (s) => s.value === 'deep-file.txt',
+      );
+      const subagentSuggestionIndex = result.current.suggestions.findIndex(
+        (s) => s.value === 'deepthinker',
+      );
+
+      expect(fileSuggestionIndex).toBeGreaterThanOrEqual(0);
+      expect(subagentSuggestionIndex).toBeGreaterThan(fileSuggestionIndex);
+    });
+
+    it('should not show subagent suggestions when SubagentManager is unavailable', async () => {
+      testRootDir = await createTmpDir({});
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+      );
+
+      await waitFor(() => {
+        expect(result.current.suggestions.length).toBeGreaterThanOrEqual(0);
+      });
+
+      const subagentSuggestions = result.current.suggestions.filter(
+        (s) => s.description === 'subagent',
+      );
+      expect(subagentSuggestions.length).toBe(0);
+    });
+
+    it('should handle gracefully when listSubagents() rejects', async () => {
+      testRootDir = await createTmpDir({ 'file.txt': '' });
+
+      const failingSubagentConfig = {
+        ...mockConfig,
+        getSubagentManager: () => ({
+          listSubagents: () => Promise.reject(new Error('Failed to list')),
+        }),
+      } as unknown as Config;
+
+      const { result } = renderHook(() =>
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          failingSubagentConfig,
+          testRootDir,
+        ),
+      );
+
+      await waitFor(() => {
+        expect(result.current.suggestions.length).toBeGreaterThan(0);
+      });
+
+      // File suggestions should still work
+      expect(
+        result.current.suggestions.some((s) => s.value === 'file.txt'),
+      ).toBe(true);
+
+      // No subagent suggestions due to error
+      const subagentSuggestions = result.current.suggestions.filter(
+        (s) => s.description === 'subagent',
+      );
+      expect(subagentSuggestions.length).toBe(0);
+    });
+  });
 });

@@ -100,6 +100,11 @@ interface ResourceSuggestionCandidate {
   suggestion: Suggestion;
 }
 
+interface SubagentSuggestionCandidate {
+  searchKey: string;
+  suggestion: Suggestion;
+}
+
 function buildResourceCandidates(
   config?: Config,
 ): ResourceSuggestionCandidate[] {
@@ -134,6 +139,29 @@ function buildResourceCandidates(
     });
 }
 
+async function buildSubagentCandidates(
+  config?: Config,
+): Promise<SubagentSuggestionCandidate[]> {
+  const subagentManager = config?.getSubagentManager?.();
+  if (!subagentManager) {
+    return [];
+  }
+
+  try {
+    const names = await subagentManager.listSubagents();
+    return names.map((name) => ({
+      searchKey: name.toLowerCase(),
+      suggestion: {
+        label: name,
+        value: name,
+        description: 'subagent',
+      },
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function searchResourceCandidates(
   pattern: string,
   candidates: ResourceSuggestionCandidate[],
@@ -158,6 +186,33 @@ async function searchResourceCandidates(
 
   return results.map(
     (result: { item: ResourceSuggestionCandidate }) => result.item.suggestion,
+  );
+}
+
+async function searchSubagentCandidates(
+  pattern: string,
+  candidates: SubagentSuggestionCandidate[],
+): Promise<Suggestion[]> {
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const normalizedPattern = pattern.toLowerCase();
+  if (!normalizedPattern) {
+    return candidates
+      .slice(0, MAX_SUGGESTIONS_TO_SHOW)
+      .map((candidate) => candidate.suggestion);
+  }
+
+  const fzf = new AsyncFzf(candidates, {
+    selector: (candidate: SubagentSuggestionCandidate) => candidate.searchKey,
+  });
+  const results = await fzf.find(normalizedPattern, {
+    limit: MAX_SUGGESTIONS_TO_SHOW * 3,
+  });
+
+  return results.map(
+    (result: { item: SubagentSuggestionCandidate }) => result.item.suggestion,
   );
 }
 
@@ -294,9 +349,19 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           resourceCandidates,
         );
 
+        const subagentCandidates = await buildSubagentCandidates(config);
+        const subagentSuggestions = await searchSubagentCandidates(
+          state.pattern ?? '',
+          subagentCandidates,
+        );
+
         dispatch({
           type: 'SEARCH_SUCCESS',
-          payload: [...fileSuggestions, ...resourceSuggestions],
+          payload: [
+            ...fileSuggestions,
+            ...resourceSuggestions,
+            ...subagentSuggestions,
+          ],
         });
       } catch (error) {
         if (!(error instanceof Error && error.name === 'AbortError')) {
