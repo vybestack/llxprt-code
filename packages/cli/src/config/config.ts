@@ -1181,10 +1181,8 @@ export async function loadCliConfig(
     }
     // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
     // allowed since disableYoloMode specifically targets YOLO mode only.
-  }
-
-  if (approvalMode === ApprovalMode.YOLO) {
-    logger.warn(
+  } else if (approvalMode === ApprovalMode.YOLO) {
+    debugLogger.warn(
       'YOLO mode is enabled. All tool calls will be automatically approved.',
     );
   }
