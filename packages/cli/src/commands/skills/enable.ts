@@ -4,6 +4,7 @@ import type { CommandModule } from 'yargs';
 import { exitCli } from '../utils.js';
 import { enableSkill } from '../../utils/skillSettings.js';
 import { renderSkillActionFeedback } from '../../utils/skillUtils.js';
+import chalk from 'chalk';
 
 interface EnableArgs {
   name: string;
@@ -15,7 +16,14 @@ export async function handleEnable(args: EnableArgs) {
   const settings = loadSettings(workspaceDir);
 
   const result = enableSkill(settings, name);
-  debugLogger.log(renderSkillActionFeedback(result, (label, _path) => label));
+  let feedback = renderSkillActionFeedback(
+    result,
+    (label, path) => `${chalk.bold(label)} (${chalk.dim(path)})`,
+  );
+  if (result.status === 'success') {
+    feedback += ' Restart required to take effect.';
+  }
+  debugLogger.log(feedback);
 }
 
 export const enableCommand: CommandModule = {
