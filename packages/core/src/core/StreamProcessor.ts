@@ -261,8 +261,14 @@ export class StreamProcessor {
     streamResponse: AsyncGenerator<GenerateContentResponse>,
     userInput: Content | Content[],
   ): AsyncGenerator<GenerateContentResponse> {
-    const { modelResponseParts, finishReason, hasToolCall, allChunks } =
-      await this._aggregateStreamChunks(streamResponse);
+    const {
+      modelResponseParts,
+      finishReason,
+      hasToolCall,
+      hasTextResponse,
+      hasThinkingResponse,
+      allChunks,
+    } = await this._aggregateStreamChunks(streamResponse);
 
     // Yield all chunks to the UI immediately
     for (const chunk of allChunks) {
@@ -273,13 +279,15 @@ export class StreamProcessor {
     const consolidatedParts = this._consolidateTextParts(modelResponseParts);
     const responseText = this._extractResponseText(consolidatedParts);
 
-    // Validate stream completion
+    // Validate stream completion using pre-computed flags from raw (unfiltered)
+    // parts, since modelResponseParts may have thoughts stripped out.
     this._validateStreamCompletion(
       userInput,
       hasToolCall,
+      hasTextResponse,
+      hasThinkingResponse,
       finishReason,
       responseText,
-      modelResponseParts,
     );
 
     // Record history with usage metadata
@@ -391,25 +399,14 @@ export class StreamProcessor {
   private _validateStreamCompletion(
     userInput: Content | Content[],
     hasToolCall: boolean,
+    hasTextResponse: boolean,
+    hasThinkingResponse: boolean,
     finishReason: FinishReason | undefined,
     responseText: string,
-    modelResponseParts: Part[],
   ): void {
     const isToolContinuationInput = Array.isArray(userInput)
       ? userInput.some(isFunctionResponse)
       : isFunctionResponse(userInput);
-
-    const hasThinkingResponse = modelResponseParts.some((part) =>
-      isThoughtPart(part),
-    );
-
-    const hasTextResponse = modelResponseParts.some(
-      (part) =>
-        part.text &&
-        typeof part.text === 'string' &&
-        part.text.trim() !== '' &&
-        !isThoughtPart(part),
-    );
 
     // Enhanced stream validation logic: A stream is considered successful if:
     // 1. There's a tool call (tool calls can end without explicit finish reasons), OR

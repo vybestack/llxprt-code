@@ -416,6 +416,8 @@ export class TurnProcessor {
         const cacheWrites =
           iContent.metadata?.usage?.cache_creation_input_tokens || 0;
         this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
+        this.compressionHandler.lastPromptTokenCount =
+          this.lastPromptTokenCount;
       }
       lastResponse = iContent;
     }
