@@ -152,9 +152,6 @@ describe('AST Tools', () => {
     });
 
     it('should prioritize important symbols', () => {
-      const tool = new ASTReadFileTool(mockConfig);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Accessing internal method for testing
-      const collector = (tool as any).contextCollector;
       const decls: EnhancedDeclaration[] = [
         {
           name: 'MyClass',
@@ -366,8 +363,12 @@ describe('AST Tools', () => {
 
         // If we got here, no cycles
         expect(true).toBe(true);
-      } catch (err: any) {
-        if (err.code === 'ENOENT') {
+      } catch (err: unknown) {
+        if (
+          err instanceof Error &&
+          'code' in err &&
+          (err as NodeJS.ErrnoException).code === 'ENOENT'
+        ) {
           // Directory doesn't exist yet - test passes
           expect(true).toBe(true);
         } else {
