@@ -11,6 +11,7 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 5)
  */
 
+import { isOpus46Plus } from './AnthropicModelData.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '../../services/history/IContent.js';
 import type { Config } from '../../config/config.js';
@@ -391,7 +392,7 @@ function buildThinkingAndRequestBody(params: {
 
   // Map effort levels for thinking configuration
   // Only allow max for Opus 4.6+; downgrade xhigh/max to high for older models
-  const isOpus46Plus = currentModel.includes('claude-opus-4-6');
+  const opus46Plus = isOpus46Plus(currentModel);
   let mappedEffort: 'low' | 'medium' | 'high' | 'max' | undefined;
   if (rawEffort) {
     if (rawEffort === 'minimal' || rawEffort === 'low') {
@@ -401,7 +402,7 @@ function buildThinkingAndRequestBody(params: {
     } else if (rawEffort === 'high') {
       mappedEffort = 'high';
     } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
-      mappedEffort = isOpus46Plus ? 'max' : 'high';
+      mappedEffort = opus46Plus ? 'max' : 'high';
     }
   }
 

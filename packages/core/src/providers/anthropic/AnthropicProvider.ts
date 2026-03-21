@@ -546,7 +546,10 @@ export class AnthropicProvider extends BaseProvider {
       cacheLogger: requestContext.cacheLogger,
     });
 
-    // Proactive rate limit throttling
+    // Proactive rate limit throttling — ephemeral settings:
+    //   rate-limit-throttle: 'on' | 'off' (default 'on')
+    //   rate-limit-throttle-threshold: number (default 5, percentage remaining)
+    //   rate-limit-max-wait: number (default 60000, milliseconds)
     const rateLimitLogger = this.getRateLimitLogger();
     const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
       throttleEnabled:
@@ -562,7 +565,7 @@ export class AnthropicProvider extends BaseProvider {
     });
     if (waitDecision.shouldWait) {
       rateLimitLogger.debug(() => waitDecision.reason);
-      await new Promise((resolve) => setTimeout(resolve, waitDecision.waitMs));
+      await this.sleep(waitDecision.waitMs);
     }
 
     // Create reusable API call closure (used for both initial call and stream retries)
@@ -625,5 +628,13 @@ export class AnthropicProvider extends BaseProvider {
         cacheLogger: requestContext.cacheLogger,
       });
     }
+  }
+
+  /**
+   * Mockable sleep for rate-limit throttling.
+   * Tests spy on this method to avoid real delays.
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -84,6 +84,17 @@ export function parseAnthropicResponse(
         sourceField: 'thinking',
         signature: thinkingContentBlock.signature,
       } as ThinkingBlock);
+    } else if (contentBlock.type === 'redacted_thinking') {
+      const redactedBlock = contentBlock as {
+        type: 'redacted_thinking';
+        data: string;
+      };
+      blocks.push({
+        type: 'thinking',
+        thought: '[redacted]',
+        sourceField: 'thinking',
+        signature: redactedBlock.data,
+      } as ThinkingBlock);
     }
   }
 

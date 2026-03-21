@@ -211,10 +211,11 @@ export async function executeAnthropicApiCall(
       rateLimitInfo = extractRateLimitHeaders(responseHeaders, rateLimitLogger);
 
       if (rateLimitInfo) {
-        rateLimitLogger.debug(() => formatRateLimitSummary(rateLimitInfo!));
+        const info = rateLimitInfo;
+        rateLimitLogger.debug(() => formatRateLimitSummary(info));
 
         // Check and warn if approaching limits
-        checkRateLimits(rateLimitInfo, rateLimitLogger);
+        checkRateLimits(info, rateLimitLogger);
       }
     }
   } catch (error) {

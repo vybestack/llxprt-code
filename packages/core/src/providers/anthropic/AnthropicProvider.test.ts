@@ -2905,6 +2905,10 @@ describe('AnthropicProvider', () => {
       });
 
       it('should work with proactive throttling when streaming', async () => {
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined as never);
+
         settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
         settingsService.setProviderSetting(
           'anthropic',
@@ -2989,6 +2993,14 @@ describe('AnthropicProvider', () => {
         // Since we established rate limit at 4% remaining (below 5% threshold),
         // throttling should have occurred
         expect(secondWithResponse).toHaveBeenCalled();
+
+        // Verify sleep was called for throttling
+        expect(sleepSpy).toHaveBeenCalled();
+        const sleepDuration = sleepSpy.mock.calls[0][0] as number;
+        expect(sleepDuration).toBeGreaterThan(0);
+        expect(sleepDuration).toBeLessThanOrEqual(5000);
+
+        sleepSpy.mockRestore();
       });
 
       it('should handle partial rate limit headers', async () => {
@@ -3104,6 +3116,18 @@ describe('AnthropicProvider', () => {
     });
 
     describe('Rate limit throttling', () => {
+      let sleepSpy: ReturnType<typeof vi.spyOn>;
+
+      beforeEach(() => {
+        sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined as never);
+      });
+
+      afterEach(() => {
+        sleepSpy.mockRestore();
+      });
+
       it('should wait when requests remaining is below threshold', async () => {
         const mockResponse = {
           content: [{ type: 'text', text: 'response' }],

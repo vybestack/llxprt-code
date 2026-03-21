@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Anthropic Message Normalization Module
  * Converts IContent[] to AnthropicMessage[] format for the Anthropic API
  *
@@ -318,6 +324,13 @@ function convertContentToMessages(
       );
 
     if (toolResponseBlocks.length > 0) {
+      if (toolResponseBlocks.length > 1) {
+        options.logger.debug(
+          () =>
+            `IContent with speaker='tool' has ${toolResponseBlocks.length} tool_response blocks (expected 1)`,
+        );
+      }
+
       const mediaBlocks = c.blocks.filter(
         (b): b is MediaBlock => b.type === 'media',
       );

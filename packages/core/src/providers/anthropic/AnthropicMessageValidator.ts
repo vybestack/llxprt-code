@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Anthropic Message Validation Module
  * Validates and fixes message sequences for the Anthropic API
  *
@@ -316,17 +322,13 @@ export function ensureValidMessageSequence(
   shouldIncludeThinking: boolean,
   logger: { debug: (fn: () => string) => void },
 ): AnthropicMessage[] {
-  const result = [...messages];
+  let result = [...messages];
 
-  result.splice(0, result.length, ...mergeConsecutiveMessages(result));
-  result.splice(0, result.length, ...ensureStartsWithUser(result, logger));
-  result.splice(0, result.length, ...ensureNotEmpty(result));
-  result.splice(0, result.length, ...sanitizeEmptyMessages(result));
-  result.splice(
-    0,
-    result.length,
-    ...ensureNoTrailingAssistant(result, shouldIncludeThinking, logger),
-  );
+  result = mergeConsecutiveMessages(result);
+  result = ensureStartsWithUser(result, logger);
+  result = ensureNotEmpty(result);
+  result = sanitizeEmptyMessages(result);
+  result = ensureNoTrailingAssistant(result, shouldIncludeThinking, logger);
 
   return result;
 }

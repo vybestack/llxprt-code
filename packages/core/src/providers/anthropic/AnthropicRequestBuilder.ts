@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Anthropic Request Building Module
  * Handles system prompt construction, prompt caching, thinking config, and request body assembly
  *
@@ -10,6 +16,7 @@ import type {
   AnthropicImageBlock,
   AnthropicToolResultContent,
 } from './AnthropicMessageNormalizer.js';
+import { isOpus46Plus } from './AnthropicModelData.js';
 
 /**
  * Discriminated union of Anthropic content block types that support cache_control.
@@ -36,6 +43,45 @@ export type CacheableAnthropicBlock =
 export type CachedAnthropicBlock = CacheableAnthropicBlock & {
   cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
 };
+
+/**
+ * Content block type union for message arrays that may carry optional cache_control.
+ * Used when attaching prompt caching markers to message content.
+ */
+type CacheableContentBlock =
+  | {
+      type: 'text';
+      text: string;
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    }
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: AnthropicToolResultContent;
+      is_error?: boolean;
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    }
+  | (AnthropicImageBlock & {
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    })
+  | {
+      type: 'thinking';
+      thinking: string;
+      signature?: string;
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    }
+  | {
+      type: 'redacted_thinking';
+      data: string;
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    };
 
 /**
  * Sanitize a content block before attaching cache_control.
@@ -166,70 +212,13 @@ export function attachPromptCaching(
           text: lastMessage.content,
           cache_control: { type: 'ephemeral', ttl },
         },
-      ] as Array<
-        | {
-            type: 'text';
-            text: string;
-            cache_control: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-          }
-        | {
-            type: 'tool_use';
-            id: string;
-            name: string;
-            input: unknown;
-            cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-          }
-        | {
-            type: 'tool_result';
-            tool_use_id: string;
-            content: AnthropicToolResultContent;
-            is_error?: boolean;
-            cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-          }
-        | (AnthropicImageBlock & {
-            cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-          })
-      >;
+      ] as CacheableContentBlock[];
       logger.debug(
         () => `Added cache_control to last message (converted string to array)`,
       );
     }
   } else if (Array.isArray(lastMessage.content)) {
-    const content = lastMessage.content as Array<
-      | {
-          type: 'text';
-          text: string;
-          cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-        }
-      | {
-          type: 'tool_use';
-          id: string;
-          name: string;
-          input: unknown;
-          cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-        }
-      | {
-          type: 'tool_result';
-          tool_use_id: string;
-          content: AnthropicToolResultContent;
-          is_error?: boolean;
-          cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-        }
-      | (AnthropicImageBlock & {
-          cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-        })
-      | {
-          type: 'thinking';
-          thinking: string;
-          signature?: string;
-          cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-        }
-      | {
-          type: 'redacted_thinking';
-          data: string;
-          cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-        }
-    >;
+    const content = lastMessage.content as CacheableContentBlock[];
 
     let lastNonThinkingIndex = -1;
     for (let i = content.length - 1; i >= 0; i--) {
@@ -283,10 +272,10 @@ export function buildThinkingConfig(options: {
     return {};
   }
 
-  const isOpus46Plus = options.model.includes('claude-opus-4-6');
+  const opus46Plus = isOpus46Plus(options.model);
 
   if (
-    isOpus46Plus &&
+    opus46Plus &&
     !options.reasoningBudgetTokens &&
     options.adaptiveThinking !== false
   ) {
