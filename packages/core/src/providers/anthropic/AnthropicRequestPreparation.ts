@@ -246,6 +246,125 @@ function resolveRequestSettings(
   };
 }
 
+async function buildOAuthSystemContext(params: {
+  currentModel: string;
+  userMemory: string | undefined;
+  mcpInstructions: string | undefined;
+  toolNamesForPrompt: string[] | undefined;
+  includeSubagentDelegation: boolean;
+  interactionMode: 'interactive' | 'non-interactive';
+  anthropicMessages: readonly AnthropicMessage[];
+  wantCaching: boolean;
+  ttl: '5m' | '1h';
+  cacheLogger: { debug: (fn: () => string) => void };
+}): Promise<SystemContextResult> {
+  const {
+    currentModel,
+    userMemory,
+    mcpInstructions,
+    toolNamesForPrompt,
+    includeSubagentDelegation,
+    interactionMode,
+    anthropicMessages,
+    wantCaching,
+    ttl,
+    cacheLogger,
+  } = params;
+
+  const messages = [...anthropicMessages];
+  const corePrompt = await getCoreSystemPromptAsync({
+    userMemory,
+    mcpInstructions,
+    model: currentModel,
+    tools: toolNamesForPrompt,
+    includeSubagentDelegation,
+    interactionMode,
+  });
+
+  if (corePrompt) {
+    if (wantCaching) {
+      messages.unshift({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `<system>
+${corePrompt}
+</system>
+
+User provided conversation begins here:`,
+            cache_control: { type: 'ephemeral', ttl },
+          } as {
+            type: 'text';
+            text: string;
+            cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
+          },
+        ],
+      });
+      cacheLogger.debug(() => 'Added cache_control to OAuth system message');
+    } else {
+      messages.unshift({
+        role: 'user',
+        content: `<system>
+${corePrompt}
+</system>
+
+User provided conversation begins here:`,
+      });
+    }
+  }
+
+  const oauthSystemField = buildAnthropicSystemPrompt({
+    isOAuth: true,
+    wantCaching,
+    ttl,
+  });
+
+  return { systemField: oauthSystemField, messages };
+}
+
+async function buildNonOAuthSystemContext(params: {
+  currentModel: string;
+  userMemory: string | undefined;
+  mcpInstructions: string | undefined;
+  toolNamesForPrompt: string[] | undefined;
+  includeSubagentDelegation: boolean;
+  interactionMode: 'interactive' | 'non-interactive';
+  anthropicMessages: readonly AnthropicMessage[];
+  wantCaching: boolean;
+  ttl: '5m' | '1h';
+}): Promise<SystemContextResult> {
+  const {
+    currentModel,
+    userMemory,
+    mcpInstructions,
+    toolNamesForPrompt,
+    includeSubagentDelegation,
+    interactionMode,
+    anthropicMessages,
+    wantCaching,
+    ttl,
+  } = params;
+
+  const systemPrompt = await getCoreSystemPromptAsync({
+    userMemory,
+    mcpInstructions,
+    model: currentModel,
+    tools: toolNamesForPrompt,
+    includeSubagentDelegation,
+    interactionMode,
+  });
+
+  const systemFieldValue = buildAnthropicSystemPrompt({
+    corePromptText: systemPrompt,
+    isOAuth: false,
+    wantCaching,
+    ttl,
+  });
+
+  return { systemField: systemFieldValue, messages: [...anthropicMessages] };
+}
+
 /**
  * Build system context with OAuth or regular system field
  */
@@ -262,91 +381,40 @@ async function buildSystemContext(params: {
   ttl: '5m' | '1h';
   cacheLogger: { debug: (fn: () => string) => void };
 }): Promise<SystemContextResult> {
-  const {
-    isOAuth,
-    currentModel,
-    userMemory,
-    mcpInstructions,
-    toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
-    anthropicMessages,
-    wantCaching,
-    ttl,
-    cacheLogger,
-  } = params;
+  if (params.isOAuth) {
+    return buildOAuthSystemContext(params);
+  }
+  return buildNonOAuthSystemContext(params);
+}
 
-  // Create a mutable copy to allow modification
-  const messages = [...anthropicMessages];
-
-  // For OAuth mode, inject core system prompt as the first human message
-  if (isOAuth) {
-    const corePrompt = await getCoreSystemPromptAsync({
-      userMemory,
-      mcpInstructions,
-      model: currentModel,
-      tools: toolNamesForPrompt,
-      includeSubagentDelegation,
-      interactionMode,
-    });
-    if (corePrompt) {
-      if (wantCaching) {
-        messages.unshift({
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `<system>
-${corePrompt}
-</system>
-
-User provided conversation begins here:`,
-              cache_control: { type: 'ephemeral', ttl },
-            } as {
-              type: 'text';
-              text: string;
-              cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
-            },
-          ],
-        });
-        cacheLogger.debug(() => 'Added cache_control to OAuth system message');
-      } else {
-        messages.unshift({
-          role: 'user',
-          content: `<system>
-${corePrompt}
-</system>
-
-User provided conversation begins here:`,
-        });
-      }
-    }
-    const oauthSystemField = buildAnthropicSystemPrompt({
-      isOAuth: true,
-      wantCaching,
-      ttl,
-    });
-    return { systemField: oauthSystemField, messages };
+function mapEffortLevel(
+  rawEffort:
+    | 'minimal'
+    | 'low'
+    | 'medium'
+    | 'high'
+    | 'xhigh'
+    | 'max'
+    | undefined,
+  currentModel: string,
+): 'low' | 'medium' | 'high' | 'max' | undefined {
+  if (!rawEffort) {
+    return undefined;
   }
 
-  // Build system field with caching support (for non-OAuth)
-  const systemPrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model: currentModel,
-    tools: toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
-  });
+  const opus46Plus = isOpus46Plus(currentModel);
 
-  const systemFieldValue = buildAnthropicSystemPrompt({
-    corePromptText: systemPrompt,
-    isOAuth,
-    wantCaching,
-    ttl,
-  });
+  if (rawEffort === 'minimal' || rawEffort === 'low') {
+    return 'low';
+  } else if (rawEffort === 'medium') {
+    return 'medium';
+  } else if (rawEffort === 'high') {
+    return 'high';
+  } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
+    return opus46Plus ? 'max' : 'high';
+  }
 
-  return { systemField: systemFieldValue, messages };
+  return undefined;
 }
 
 /**
@@ -395,23 +463,8 @@ function buildThinkingAndRequestBody(params: {
     requestOverrides,
   } = params;
 
-  // Map effort levels for thinking configuration
-  // Only allow max for Opus 4.6+; downgrade xhigh/max to high for older models
-  const opus46Plus = isOpus46Plus(currentModel);
-  let mappedEffort: 'low' | 'medium' | 'high' | 'max' | undefined;
-  if (rawEffort) {
-    if (rawEffort === 'minimal' || rawEffort === 'low') {
-      mappedEffort = 'low';
-    } else if (rawEffort === 'medium') {
-      mappedEffort = 'medium';
-    } else if (rawEffort === 'high') {
-      mappedEffort = 'high';
-    } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
-      mappedEffort = opus46Plus ? 'max' : 'high';
-    }
-  }
+  const mappedEffort = mapEffortLevel(rawEffort, currentModel);
 
-  // Build thinking configuration
   const thinkingConfig = buildThinkingConfig({
     reasoningEnabled: shouldIncludeThinking,
     reasoningBudgetTokens,
@@ -420,7 +473,6 @@ function buildThinkingAndRequestBody(params: {
     model: currentModel,
   });
 
-  // Build request body
   return buildAnthropicRequestBody({
     model: currentModel,
     messages: anthropicMessages,
@@ -584,89 +636,31 @@ function logRequestDebugInfo(params: {
   }
 }
 
-/**
- * Prepare complete Anthropic API request context
- */
-export async function prepareAnthropicRequest(
-  params: PrepareRequestParams,
-): Promise<AnthropicRequestContext> {
+function buildRequestContext(params: {
+  reasoningSettings: ReasoningSettings;
+  requestSettings: RequestSettings;
+  anthropicTools:
+    | Array<{ name: string; input_schema: { properties?: unknown } }>
+    | undefined;
+  systemContext: SystemContextResult;
+  getMaxTokensForModel: (model: string) => number;
+  shouldIncludeThinking: boolean;
+  cacheLogger: { debug: (fn: () => string) => void };
+  toolsLogger: DebugLogger;
+  logger: DebugLogger;
+}): AnthropicRequestContext {
   const {
-    content,
-    tools,
-    options,
-    isOAuth,
-    providerName,
-    config,
+    reasoningSettings,
+    requestSettings,
+    anthropicTools,
+    systemContext,
     getMaxTokensForModel,
-    unprefixToolName,
-    providerConfig,
-    logger,
-    toolsLogger,
+    shouldIncludeThinking,
     cacheLogger,
+    toolsLogger,
+    logger,
   } = params;
 
-  // 1. Resolve reasoning settings
-  const reasoningSettings = resolveReasoningSettings(options);
-
-  logger.debug(
-    () =>
-      `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningSettings.reasoningEnabled)}, budgetTokens=${String(reasoningSettings.reasoningBudgetTokens)}, stripFromContext=${String(reasoningSettings.stripFromContext)}, includeInContext=${String(reasoningSettings.includeInContext)}`,
-  );
-
-  const shouldIncludeThinking = reasoningSettings.reasoningEnabled === true;
-
-  // 2. Convert messages and tools
-  const configForMessages = config ?? options.runtime?.config;
-  const { anthropicMessages, anthropicTools, toolNamesForPrompt } =
-    convertMessagesAndTools({
-      content,
-      tools,
-      isOAuth,
-      reasoningSettings,
-      config: configForMessages,
-      unprefixToolName,
-      logger,
-    });
-
-  // 3. Resolve request settings
-  const requestSettings = resolveRequestSettings(
-    options,
-    providerConfig,
-    providerName,
-  );
-
-  if (requestSettings.wantCaching) {
-    cacheLogger.debug(
-      () => `Prompt caching enabled with TTL: ${requestSettings.ttl}`,
-    );
-  }
-
-  // 4. Resolve user memory
-  const userMemory = await resolveUserMemory(
-    options.userMemory,
-    () => options.invocation?.userMemory,
-  );
-
-  // 5. Determine MCP and subagent configuration
-  const { mcpInstructions, includeSubagentDelegation, interactionMode } =
-    await resolveMcpAndSubagentConfig({ config, toolNamesForPrompt });
-
-  // 6. Build system context
-  const systemContext = await buildSystemContext({
-    isOAuth,
-    currentModel: requestSettings.currentModel,
-    userMemory,
-    mcpInstructions,
-    toolNamesForPrompt,
-    includeSubagentDelegation,
-    interactionMode,
-    anthropicMessages,
-    wantCaching: requestSettings.wantCaching,
-    ttl: requestSettings.ttl,
-    cacheLogger,
-  });
-
-  // 7. Attach prompt caching to last message if enabled
   if (requestSettings.wantCaching) {
     attachPromptCaching(
       systemContext.messages,
@@ -675,7 +669,6 @@ export async function prepareAnthropicRequest(
     );
   }
 
-  // 8. Build request body with thinking configuration
   const requestBody = buildThinkingAndRequestBody({
     currentModel: requestSettings.currentModel,
     rawEffort: reasoningSettings.rawEffort,
@@ -690,7 +683,6 @@ export async function prepareAnthropicRequest(
     requestOverrides: requestSettings.requestOverrides,
   });
 
-  // 9. Log debug information
   logRequestDebugInfo({
     anthropicTools,
     requestBody,
@@ -699,7 +691,6 @@ export async function prepareAnthropicRequest(
     logger,
   });
 
-  // 10. Get retry configuration
   const { maxAttempts, initialDelayMs } = getRetryConfig(
     requestSettings.configEphemerals,
   );
@@ -715,4 +706,79 @@ export async function prepareAnthropicRequest(
     initialDelayMs,
     cacheLogger,
   };
+}
+
+/**
+ * Prepare complete Anthropic API request context
+ */
+export async function prepareAnthropicRequest(
+  params: PrepareRequestParams,
+): Promise<AnthropicRequestContext> {
+  const reasoningSettings = resolveReasoningSettings(params.options);
+
+  params.logger.debug(
+    () =>
+      `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningSettings.reasoningEnabled)}, budgetTokens=${String(reasoningSettings.reasoningBudgetTokens)}, stripFromContext=${String(reasoningSettings.stripFromContext)}, includeInContext=${String(reasoningSettings.includeInContext)}`,
+  );
+
+  const configForMessages = params.config ?? params.options.runtime?.config;
+  const { anthropicMessages, anthropicTools, toolNamesForPrompt } =
+    convertMessagesAndTools({
+      content: params.content,
+      tools: params.tools,
+      isOAuth: params.isOAuth,
+      reasoningSettings,
+      config: configForMessages,
+      unprefixToolName: params.unprefixToolName,
+      logger: params.logger,
+    });
+
+  const requestSettings = resolveRequestSettings(
+    params.options,
+    params.providerConfig,
+    params.providerName,
+  );
+
+  if (requestSettings.wantCaching) {
+    params.cacheLogger.debug(
+      () => `Prompt caching enabled with TTL: ${requestSettings.ttl}`,
+    );
+  }
+
+  const userMemory = await resolveUserMemory(
+    params.options.userMemory,
+    () => params.options.invocation?.userMemory,
+  );
+
+  const { mcpInstructions, includeSubagentDelegation, interactionMode } =
+    await resolveMcpAndSubagentConfig({
+      config: params.config,
+      toolNamesForPrompt,
+    });
+
+  const systemContext = await buildSystemContext({
+    isOAuth: params.isOAuth,
+    currentModel: requestSettings.currentModel,
+    userMemory,
+    mcpInstructions,
+    toolNamesForPrompt,
+    includeSubagentDelegation,
+    interactionMode,
+    anthropicMessages,
+    wantCaching: requestSettings.wantCaching,
+    ttl: requestSettings.ttl,
+    cacheLogger: params.cacheLogger,
+  });
+
+  return buildRequestContext({
+    reasoningSettings,
+    requestSettings,
+    anthropicTools,
+    systemContext,
+    getMaxTokensForModel: params.getMaxTokensForModel,
+    shouldIncludeThinking: reasoningSettings.reasoningEnabled === true,
+    cacheLogger: params.cacheLogger,
+    toolsLogger: params.toolsLogger,
+    logger: params.logger,
+  });
 }

@@ -50,43 +50,9 @@ export type CachedAnthropicBlock = CacheableAnthropicBlock & {
  * Content block type union for message arrays that may carry optional cache_control.
  * Used when attaching prompt caching markers to message content.
  */
-type CacheableContentBlock =
-  | {
-      type: 'text';
-      text: string;
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    }
-  | {
-      type: 'tool_use';
-      id: string;
-      name: string;
-      input: unknown;
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    }
-  | {
-      type: 'tool_result';
-      tool_use_id: string;
-      content: AnthropicToolResultContent;
-      is_error?: boolean;
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    }
-  | (AnthropicImageBlock & {
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    })
-  | (AnthropicDocumentBlock & {
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    })
-  | {
-      type: 'thinking';
-      thinking: string;
-      signature?: string;
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    }
-  | {
-      type: 'redacted_thinking';
-      data: string;
-      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
-    };
+type CacheableContentBlock = CacheableAnthropicBlock & {
+  cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+};
 
 /**
  * Sanitize a content block before attaching cache_control.

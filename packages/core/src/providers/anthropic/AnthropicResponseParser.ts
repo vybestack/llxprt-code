@@ -30,19 +30,14 @@ export type ResponseParserOptions = {
   cacheLogger: { debug: (fn: () => string) => void };
 };
 
-/**
- * Parses a non-streaming Anthropic response into IContent
- * Processes text, tool calls, and thinking blocks
- */
-export function parseAnthropicResponse(
-  message: Anthropic.Message,
+function parseContentBlocks(
+  content: Anthropic.Message['content'],
   options: ResponseParserOptions,
-): IContent {
-  const { isOAuth, tools, unprefixToolName, findToolSchema, cacheLogger } =
-    options;
+): ContentBlock[] {
+  const { isOAuth, tools, unprefixToolName, findToolSchema } = options;
   const blocks: ContentBlock[] = [];
 
-  for (const contentBlock of message.content) {
+  for (const contentBlock of content) {
     if (contentBlock.type === 'text') {
       blocks.push({ type: 'text', text: contentBlock.text } as TextBlock);
     } else if (contentBlock.type === 'tool_use') {
@@ -98,46 +93,82 @@ export function parseAnthropicResponse(
     }
   }
 
+  return blocks;
+}
+
+function extractUsageMetadata(
+  usage:
+    | {
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      }
+    | undefined,
+  cacheLogger: { debug: (fn: () => string) => void },
+): IContent['metadata'] {
+  if (!usage) {
+    return undefined;
+  }
+
+  const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
+  cacheLogger.debug(
+    () =>
+      `[AnthropicProvider non-streaming] Setting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+  );
+
+  if (cacheRead > 0 || cacheCreation > 0) {
+    cacheLogger.debug(() => {
+      const hitRate =
+        cacheRead + usage.input_tokens > 0
+          ? (cacheRead / (cacheRead + usage.input_tokens)) * 100
+          : 0;
+      return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
+    });
+  }
+
+  return {
+    usage: {
+      promptTokens: usage.input_tokens,
+      completionTokens: usage.output_tokens,
+      totalTokens: usage.input_tokens + usage.output_tokens,
+      cache_read_input_tokens: cacheRead,
+      cache_creation_input_tokens: cacheCreation,
+    },
+  };
+}
+
+/**
+ * Parses a non-streaming Anthropic response into IContent
+ * Processes text, tool calls, and thinking blocks
+ */
+export function parseAnthropicResponse(
+  message: Anthropic.Message,
+  options: ResponseParserOptions,
+): IContent {
+  const blocks = parseContentBlocks(message.content, options);
+
   const result: IContent = {
     speaker: 'ai',
     blocks,
   };
 
-  if (message.usage) {
-    const usage = message.usage as {
-      input_tokens: number;
-      output_tokens: number;
-      cache_read_input_tokens?: number;
-      cache_creation_input_tokens?: number;
-    };
+  const metadata = extractUsageMetadata(
+    message.usage as
+      | {
+          input_tokens: number;
+          output_tokens: number;
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        }
+      | undefined,
+    options.cacheLogger,
+  );
 
-    const cacheRead = usage.cache_read_input_tokens ?? 0;
-    const cacheCreation = usage.cache_creation_input_tokens ?? 0;
-
-    cacheLogger.debug(
-      () =>
-        `[AnthropicProvider non-streaming] Setting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
-    );
-
-    if (cacheRead > 0 || cacheCreation > 0) {
-      cacheLogger.debug(() => {
-        const hitRate =
-          cacheRead + usage.input_tokens > 0
-            ? (cacheRead / (cacheRead + usage.input_tokens)) * 100
-            : 0;
-        return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
-      });
-    }
-
-    result.metadata = {
-      usage: {
-        promptTokens: usage.input_tokens,
-        completionTokens: usage.output_tokens,
-        totalTokens: usage.input_tokens + usage.output_tokens,
-        cache_read_input_tokens: cacheRead,
-        cache_creation_input_tokens: cacheCreation,
-      },
-    };
+  if (metadata) {
+    result.metadata = metadata;
   }
 
   return result;

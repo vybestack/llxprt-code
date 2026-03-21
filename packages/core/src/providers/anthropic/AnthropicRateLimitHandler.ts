@@ -157,6 +157,52 @@ export function checkRateLimits(
   }
 }
 
+function checkBucketThreshold(
+  remaining: number | undefined,
+  limit: number | undefined,
+  resetDate: Date | undefined,
+  bucketName: string,
+  options: {
+    thresholdPercentage: number;
+    maxWaitMs: number;
+    now: number;
+  },
+): WaitDecision | undefined {
+  if (remaining === undefined || limit === undefined) {
+    return undefined;
+  }
+
+  const percentage = (remaining / limit) * 100;
+
+  if (percentage >= options.thresholdPercentage) {
+    return undefined;
+  }
+
+  if (!resetDate) {
+    return {
+      shouldWait: false,
+      waitMs: 0,
+      reason: `Rate limit warning: ${bucketName} at ${percentage.toFixed(1)}% (${remaining}/${limit}), no reset time available`,
+    };
+  }
+
+  const resetTime = resetDate.getTime();
+  const waitMs = resetTime - options.now;
+
+  if (waitMs <= 0) {
+    return undefined;
+  }
+
+  const actualWaitMs = Math.min(waitMs, options.maxWaitMs);
+  const cappedMsg =
+    waitMs > options.maxWaitMs ? ` (capped from ${waitMs}ms)` : '';
+  return {
+    shouldWait: true,
+    waitMs: actualWaitMs,
+    reason: `Rate limit throttle: ${bucketName} at ${percentage.toFixed(1)}% (${remaining}/${limit}), waiting ${actualWaitMs}ms until reset${cappedMsg}`,
+  };
+}
+
 /**
  * Calculate wait time based on rate limit state
  * This is the pure decision logic extracted from waitForRateLimitIfNeeded
@@ -167,89 +213,55 @@ export function calculateWaitTime(
     throttleEnabled: string;
     thresholdPercentage: number;
     maxWaitMs: number;
-    now?: number; // for testing, defaults to Date.now()
+    now?: number;
   },
 ): WaitDecision {
-  // No rate limit data yet - skip throttling
   if (!info) {
     return { shouldWait: false, waitMs: 0, reason: 'No rate limit data' };
   }
 
-  // Check if throttling is enabled
   if (options.throttleEnabled === 'off') {
     return { shouldWait: false, waitMs: 0, reason: 'Throttling disabled' };
   }
 
   const now = options.now ?? Date.now();
+  const bucketOptions = {
+    thresholdPercentage: options.thresholdPercentage,
+    maxWaitMs: options.maxWaitMs,
+    now,
+  };
 
-  // Check requests remaining
-  if (
-    info.requestsRemaining !== undefined &&
-    info.requestsLimit !== undefined &&
-    info.requestsReset
-  ) {
-    const percentage = (info.requestsRemaining / info.requestsLimit) * 100;
-
-    if (percentage < options.thresholdPercentage) {
-      const resetTime = info.requestsReset.getTime();
-      const waitMs = resetTime - now;
-
-      // Only wait if reset time is in the future
-      if (waitMs > 0) {
-        const actualWaitMs = Math.min(waitMs, options.maxWaitMs);
-        const cappedMsg =
-          waitMs > options.maxWaitMs ? ` (capped from ${waitMs}ms)` : '';
-        return {
-          shouldWait: true,
-          waitMs: actualWaitMs,
-          reason: `Rate limit throttle: requests at ${percentage.toFixed(1)}% (${info.requestsRemaining}/${info.requestsLimit}), waiting ${actualWaitMs}ms until reset${cappedMsg}`,
-        };
-      }
-    }
+  const requestsDecision = checkBucketThreshold(
+    info.requestsRemaining,
+    info.requestsLimit,
+    info.requestsReset,
+    'requests',
+    bucketOptions,
+  );
+  if (requestsDecision) {
+    return requestsDecision;
   }
 
-  // Check tokens remaining
-  if (
-    info.tokensRemaining !== undefined &&
-    info.tokensLimit !== undefined &&
-    info.tokensReset
-  ) {
-    const percentage = (info.tokensRemaining / info.tokensLimit) * 100;
-
-    if (percentage < options.thresholdPercentage) {
-      const resetTime = info.tokensReset.getTime();
-      const waitMs = resetTime - now;
-
-      // Only wait if reset time is in the future
-      if (waitMs > 0) {
-        const actualWaitMs = Math.min(waitMs, options.maxWaitMs);
-        const cappedMsg =
-          waitMs > options.maxWaitMs ? ` (capped from ${waitMs}ms)` : '';
-        return {
-          shouldWait: true,
-          waitMs: actualWaitMs,
-          reason: `Rate limit throttle: tokens at ${percentage.toFixed(1)}% (${info.tokensRemaining}/${info.tokensLimit}), waiting ${actualWaitMs}ms until reset${cappedMsg}`,
-        };
-      }
-    }
+  const tokensDecision = checkBucketThreshold(
+    info.tokensRemaining,
+    info.tokensLimit,
+    info.tokensReset,
+    'tokens',
+    bucketOptions,
+  );
+  if (tokensDecision) {
+    return tokensDecision;
   }
 
-  // Check input tokens remaining (no reset time available)
-  if (
-    info.inputTokensRemaining !== undefined &&
-    info.inputTokensLimit !== undefined
-  ) {
-    const percentage =
-      (info.inputTokensRemaining / info.inputTokensLimit) * 100;
-
-    if (percentage < options.thresholdPercentage) {
-      // For input tokens, we don't have a reset time, so we only log a warning
-      return {
-        shouldWait: false,
-        waitMs: 0,
-        reason: `Rate limit warning: input tokens at ${percentage.toFixed(1)}% (${info.inputTokensRemaining}/${info.inputTokensLimit}), no reset time available`,
-      };
-    }
+  const inputTokensDecision = checkBucketThreshold(
+    info.inputTokensRemaining,
+    info.inputTokensLimit,
+    undefined,
+    'input tokens',
+    bucketOptions,
+  );
+  if (inputTokensDecision) {
+    return inputTokensDecision;
   }
 
   return { shouldWait: false, waitMs: 0, reason: 'No throttling needed' };

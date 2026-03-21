@@ -146,6 +146,54 @@ function filterOrphanedToolResponses(contents: IContent[]): IContent[] {
   return contents.slice(startIndex);
 }
 
+function mergeThinkingOnlyChain(
+  contents: IContent[],
+  startIndex: number,
+  currentThinking: ContentBlock[],
+): { merged: IContent; endIndex: number } {
+  let endIndex = startIndex;
+  while (
+    endIndex + 1 < contents.length &&
+    contents[endIndex + 1].speaker === 'ai'
+  ) {
+    endIndex++;
+  }
+
+  const thinkingBlocks: ThinkingBlock[] = [
+    ...(currentThinking as ThinkingBlock[]),
+  ];
+  const textBlocks: Array<TextBlock | CodeBlock> = [];
+  const toolCallBlocks: ToolCallBlock[] = [];
+  const otherBlocks: ContentBlock[] = [];
+
+  for (let j = startIndex + 1; j <= endIndex; j++) {
+    for (const block of contents[j].blocks) {
+      if (block.type === 'thinking' && block.sourceField === 'thinking') {
+        thinkingBlocks.push(block);
+      } else if (block.type === 'text' || block.type === 'code') {
+        textBlocks.push(block);
+      } else if (block.type === 'tool_call') {
+        toolCallBlocks.push(block);
+      } else {
+        otherBlocks.push(block);
+      }
+    }
+  }
+
+  return {
+    merged: {
+      ...contents[endIndex],
+      blocks: [
+        ...thinkingBlocks,
+        ...textBlocks,
+        ...otherBlocks,
+        ...toolCallBlocks,
+      ],
+    },
+    endIndex,
+  };
+}
+
 function mergeConsecutiveAIMessages(
   contents: IContent[],
   reasoningEnabled: boolean,
@@ -170,37 +218,14 @@ function mergeConsecutiveAIMessages(
       );
 
       if (currentThinking.length > 0 && currentOther.length === 0) {
-        let endIndex = i;
-        while (
-          endIndex + 1 < contents.length &&
-          contents[endIndex + 1].speaker === 'ai'
-        ) {
-          endIndex++;
-        }
+        const { merged, endIndex } = mergeThinkingOnlyChain(
+          contents,
+          i,
+          currentThinking,
+        );
 
         if (endIndex > i) {
-          const thinkingBlocks: ThinkingBlock[] = [
-            ...(currentThinking as ThinkingBlock[]),
-          ];
-          const textBlocks: Array<TextBlock | CodeBlock> = [];
-          const toolCallBlocks: ToolCallBlock[] = [];
-          const otherBlocks: ContentBlock[] = [];
-
           for (let j = i + 1; j <= endIndex; j++) {
-            for (const block of contents[j].blocks) {
-              if (
-                block.type === 'thinking' &&
-                block.sourceField === 'thinking'
-              ) {
-                thinkingBlocks.push(block);
-              } else if (block.type === 'text' || block.type === 'code') {
-                textBlocks.push(block);
-              } else if (block.type === 'tool_call') {
-                toolCallBlocks.push(block);
-              } else {
-                otherBlocks.push(block);
-              }
-            }
             consumedIndices.add(j);
           }
 
@@ -209,15 +234,7 @@ function mergeConsecutiveAIMessages(
               `Merging ${endIndex - i + 1} consecutive AI messages (thinking-only followed by ${endIndex - i} message(s))`,
           );
 
-          result.push({
-            ...contents[endIndex],
-            blocks: [
-              ...thinkingBlocks,
-              ...textBlocks,
-              ...otherBlocks,
-              ...toolCallBlocks,
-            ],
-          });
+          result.push(merged);
           consumedIndices.add(i);
           continue;
         }
@@ -287,6 +304,120 @@ function blocksToText(blocks: ContentBlock[]): string {
   return combined.trimStart();
 }
 
+function buildToolResults(
+  c: IContent,
+  toolResponseBlocks: ToolResponseBlock[],
+  nonToolResponseBlocks: ContentBlock[],
+  options: {
+    config: unknown;
+    logger: { debug: (fn: () => string) => void };
+  },
+): Array<{
+  type: 'tool_result';
+  tool_use_id: string;
+  content: AnthropicToolResultContent;
+  is_error?: boolean;
+}> {
+  const results: Array<{
+    type: 'tool_result';
+    tool_use_id: string;
+    content: AnthropicToolResultContent;
+    is_error?: boolean;
+  }> = [];
+
+  if (toolResponseBlocks.length > 1) {
+    options.logger.debug(
+      () =>
+        `IContent with speaker='tool' has ${toolResponseBlocks.length} tool_response blocks (expected 1)`,
+    );
+  }
+
+  const toolTextContent = toolResponseBlocks.length
+    ? blocksToText(nonToolResponseBlocks)
+    : '';
+  const mediaBlocks = c.blocks.filter(
+    (b): b is MediaBlock => b.type === 'media',
+  );
+
+  for (const toolResponseBlock of toolResponseBlocks) {
+    const payload = buildToolResponsePayload(
+      toolResponseBlock,
+      options.config as Parameters<typeof buildToolResponsePayload>[1],
+    );
+    let contentPayload = toolTextContent
+      ? `${toolTextContent}\n${payload.result}`
+      : payload.result;
+
+    if (payload.limitMessage) {
+      contentPayload = contentPayload
+        ? `${contentPayload}\n${payload.limitMessage}`
+        : payload.limitMessage;
+    }
+
+    if (!contentPayload) {
+      contentPayload = '[empty tool result]';
+    }
+
+    const toolResultContent: AnthropicToolResultContent =
+      mediaBlocks.length > 0
+        ? [
+            { type: 'text' as const, text: contentPayload },
+            ...mediaBlocks.map((mb) => {
+              const category = classifyMediaBlock(mb);
+              if (category === 'image') {
+                return mediaBlockToAnthropicImage(mb);
+              }
+              if (category === 'pdf') {
+                return mediaBlockToAnthropicDocument(mb);
+              }
+              return {
+                type: 'text' as const,
+                text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
+              };
+            }),
+          ]
+        : contentPayload;
+
+    const toolResult: {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: AnthropicToolResultContent;
+      is_error?: boolean;
+    } = {
+      type: 'tool_result',
+      tool_use_id: normalizeToAnthropicToolId(toolResponseBlock.callId),
+      content: toolResultContent,
+    };
+
+    if (payload.status === 'error') {
+      toolResult.is_error = true;
+    }
+
+    results.push(toolResult);
+  }
+
+  return results;
+}
+
+function processHumanContent(
+  c: IContent,
+  blocks: ContentBlock[],
+): AnthropicMessage | undefined {
+  const hasMedia = blocks.some((b) => b.type === 'media');
+
+  if (hasMedia) {
+    const parts = convertHumanMessageWithMedia(blocks);
+    if (parts.length > 0) {
+      return { role: 'user', content: parts };
+    }
+  } else {
+    const text = concatenateTextAndCodeBlocks(blocks);
+    return { role: 'user', content: text };
+  }
+
+  return undefined;
+}
+
 function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
@@ -324,9 +455,6 @@ function convertContentToMessages(
     const nonToolResponseBlocks = c.blocks.filter(
       (b) => b.type !== 'tool_response',
     );
-    const toolTextContent = toolResponseBlocks.length
-      ? blocksToText(nonToolResponseBlocks)
-      : '';
     const onlyToolResponseContent =
       toolResponseBlocks.length > 0 &&
       nonToolResponseBlocks.every(
@@ -334,73 +462,13 @@ function convertContentToMessages(
       );
 
     if (toolResponseBlocks.length > 0) {
-      if (toolResponseBlocks.length > 1) {
-        options.logger.debug(
-          () =>
-            `IContent with speaker='tool' has ${toolResponseBlocks.length} tool_response blocks (expected 1)`,
-        );
-      }
-
-      const mediaBlocks = c.blocks.filter(
-        (b): b is MediaBlock => b.type === 'media',
+      const results = buildToolResults(
+        c,
+        toolResponseBlocks,
+        nonToolResponseBlocks,
+        options,
       );
-
-      for (const toolResponseBlock of toolResponseBlocks) {
-        const payload = buildToolResponsePayload(
-          toolResponseBlock,
-          options.config as Parameters<typeof buildToolResponsePayload>[1],
-        );
-        let contentPayload = toolTextContent
-          ? `${toolTextContent}\n${payload.result}`
-          : payload.result;
-
-        if (payload.limitMessage) {
-          contentPayload = contentPayload
-            ? `${contentPayload}\n${payload.limitMessage}`
-            : payload.limitMessage;
-        }
-
-        if (!contentPayload) {
-          contentPayload = '[empty tool result]';
-        }
-
-        const toolResultContent: AnthropicToolResultContent =
-          mediaBlocks.length > 0
-            ? [
-                { type: 'text' as const, text: contentPayload },
-                ...mediaBlocks.map((mb) => {
-                  const category = classifyMediaBlock(mb);
-                  if (category === 'image') {
-                    return mediaBlockToAnthropicImage(mb);
-                  }
-                  if (category === 'pdf') {
-                    return mediaBlockToAnthropicDocument(mb);
-                  }
-                  return {
-                    type: 'text' as const,
-                    text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
-                  };
-                }),
-              ]
-            : contentPayload;
-
-        const toolResult: {
-          type: 'tool_result';
-          tool_use_id: string;
-          content: AnthropicToolResultContent;
-          is_error?: boolean;
-        } = {
-          type: 'tool_result',
-          tool_use_id: normalizeToAnthropicToolId(toolResponseBlock.callId),
-          content: toolResultContent,
-        };
-
-        if (payload.status === 'error') {
-          toolResult.is_error = true;
-        }
-
-        pendingToolResults.push(toolResult);
-      }
+      pendingToolResults.push(...results);
     }
 
     if (c.speaker === 'human') {
@@ -411,16 +479,9 @@ function convertContentToMessages(
         continue;
       }
 
-      const hasMedia = c.blocks.some((b) => b.type === 'media');
-
-      if (hasMedia) {
-        const parts = convertHumanMessageWithMedia(c.blocks);
-        if (parts.length > 0) {
-          messages.push({ role: 'user', content: parts });
-        }
-      } else {
-        const text = concatenateTextAndCodeBlocks(c.blocks);
-        messages.push({ role: 'user', content: text });
+      const message = processHumanContent(c, c.blocks);
+      if (message) {
+        messages.push(message);
       }
     } else if (c.speaker === 'ai') {
       flushToolResults();
@@ -526,6 +587,61 @@ function convertAIMessage(
   }
 }
 
+function convertThinkingBlockToAnthropic(
+  block: ThinkingBlock,
+  contentIndex: number,
+  shouldRedactThinkingBase: boolean,
+  options: {
+    logger: { debug: (fn: () => string) => void };
+  },
+):
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | undefined {
+  if (block.sourceField !== 'thinking') {
+    if (block.thought) {
+      return { type: 'text', text: block.thought };
+    }
+    return undefined;
+  }
+
+  if (!block.signature) {
+    if (!block.thought) {
+      return undefined;
+    }
+    options.logger.debug(
+      () =>
+        `Including thinking block without signature at index ${contentIndex} (unsigned provider)`,
+    );
+    if (shouldRedactThinkingBase) {
+      return { type: 'text', text: block.thought };
+    } else {
+      return {
+        type: 'thinking',
+        thinking: block.thought,
+      };
+    }
+  }
+
+  const shouldRedact =
+    shouldRedactThinkingBase &&
+    block.sourceField === 'thinking' &&
+    block.signature;
+  if (shouldRedact) {
+    return {
+      type: 'redacted_thinking',
+      data: block.signature,
+    };
+  } else {
+    return {
+      type: 'thinking',
+      thinking: block.thought,
+      signature: block.signature,
+    };
+  }
+}
+
 function buildAIMessageContent(
   blocks: ContentBlock[],
   contentIndex: number,
@@ -550,54 +666,16 @@ function buildAIMessageContent(
 
   const shouldRedactThinkingBase = redactedIndices.has(contentIndex);
 
-  const shouldRedactBlock = (block: ThinkingBlock): boolean => {
-    if (block.sourceField !== 'thinking' || !block.signature) {
-      return false;
-    }
-    if (!shouldRedactThinkingBase) {
-      return false;
-    }
-    return true;
-  };
-
   for (const block of blocks) {
     if (block.type === 'thinking') {
-      const thinkingBlock = block;
-      if (thinkingBlock.sourceField !== 'thinking') {
-        if (thinkingBlock.thought) {
-          contentArray.push({ type: 'text', text: thinkingBlock.thought });
-        }
-        continue;
-      }
-      if (!thinkingBlock.signature) {
-        if (!thinkingBlock.thought) {
-          continue;
-        }
-        options.logger.debug(
-          () =>
-            `Including thinking block without signature at index ${contentIndex} (unsigned provider)`,
-        );
-        if (shouldRedactThinkingBase) {
-          contentArray.push({ type: 'text', text: thinkingBlock.thought });
-        } else {
-          contentArray.push({
-            type: 'thinking',
-            thinking: thinkingBlock.thought,
-          });
-        }
-        continue;
-      }
-      if (shouldRedactBlock(thinkingBlock)) {
-        contentArray.push({
-          type: 'redacted_thinking',
-          data: thinkingBlock.signature,
-        });
-      } else {
-        contentArray.push({
-          type: 'thinking',
-          thinking: thinkingBlock.thought,
-          signature: thinkingBlock.signature,
-        });
+      const converted = convertThinkingBlockToAnthropic(
+        block,
+        contentIndex,
+        shouldRedactThinkingBase,
+        options,
+      );
+      if (converted) {
+        contentArray.push(converted);
       }
       continue;
     }

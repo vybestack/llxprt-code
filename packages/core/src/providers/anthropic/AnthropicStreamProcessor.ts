@@ -47,6 +47,96 @@ export type StreamProcessorOptions = {
   onRateLimitInfo?: (info: AnthropicRateLimitInfo) => void;
 };
 
+async function* processStreamEvents(
+  stream: AsyncIterable<Anthropic.MessageStreamEvent>,
+  options: StreamProcessorOptions,
+  state: { hasYieldedContent: boolean },
+): AsyncGenerator<IContent> {
+  const {
+    isOAuth,
+    tools,
+    unprefixToolName,
+    findToolSchema,
+    logger,
+    cacheLogger,
+  } = options;
+
+  let currentToolCall: { id: string; name: string; input: string } | undefined;
+  let currentThinkingBlock:
+    | { thinking: string; signature?: string }
+    | undefined;
+
+  for await (const chunk of stream) {
+    if (chunk.type === 'message_start') {
+      yield* handleMessageStart(chunk, cacheLogger);
+    } else if (chunk.type === 'content_block_start') {
+      handleContentBlockStart(chunk, logger);
+      if (chunk.content_block.type === 'tool_use') {
+        const toolBlock = chunk.content_block as ToolUseBlock;
+        currentToolCall = {
+          id: toolBlock.id,
+          name: unprefixToolName(toolBlock.name, isOAuth),
+          input: '',
+        };
+      } else if (chunk.content_block.type === 'thinking') {
+        currentThinkingBlock = {
+          thinking: '',
+          signature: chunk.content_block.signature,
+        };
+      } else if (chunk.content_block.type === 'redacted_thinking') {
+        const redactedBlock = chunk.content_block as {
+          type: 'redacted_thinking';
+          data: string;
+        };
+        state.hasYieldedContent = true;
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: '[redacted]',
+              sourceField: 'thinking',
+              signature: redactedBlock.data,
+            } as ThinkingBlock,
+          ],
+        } as IContent;
+      }
+    } else if (chunk.type === 'content_block_delta') {
+      const deltaResult = handleContentBlockDelta(
+        chunk,
+        currentToolCall,
+        currentThinkingBlock,
+        logger,
+      );
+      if (deltaResult.textDelta) {
+        state.hasYieldedContent = true;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: deltaResult.textDelta }],
+        } as IContent;
+      }
+    } else if (chunk.type === 'content_block_stop') {
+      const stopResult = handleContentBlockStop(
+        chunk,
+        currentToolCall,
+        currentThinkingBlock,
+        tools,
+        isOAuth,
+        findToolSchema,
+        logger,
+      );
+      if (stopResult.content) {
+        state.hasYieldedContent = true;
+        yield stopResult.content;
+      }
+      currentToolCall = stopResult.currentToolCall;
+      currentThinkingBlock = stopResult.currentThinkingBlock;
+    } else if (chunk.type === 'message_delta' && chunk.usage) {
+      yield* handleMessageDelta(chunk, logger);
+    }
+  }
+}
+
 /**
  * Processes an Anthropic streaming response with retry logic for network errors
  * Yields IContent blocks as they arrive from the stream
@@ -55,17 +145,7 @@ export async function* processAnthropicStream(
   response: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
 ): AsyncGenerator<IContent> {
-  const {
-    isOAuth,
-    tools,
-    unprefixToolName,
-    findToolSchema,
-    maxAttempts,
-    initialDelayMs,
-    apiCallWithResponse,
-    logger,
-    cacheLogger,
-  } = options;
+  const { maxAttempts, initialDelayMs, apiCallWithResponse, logger } = options;
 
   const streamRetryMaxDelayMs = 30000;
   let streamingAttempt = 0;
@@ -75,13 +155,7 @@ export async function* processAnthropicStream(
   while (streamingAttempt < maxAttempts) {
     streamingAttempt++;
 
-    let currentToolCall:
-      | { id: string; name: string; input: string }
-      | undefined;
-    let currentThinkingBlock:
-      | { thinking: string; signature?: string }
-      | undefined;
-    let hasYieldedContent = false;
+    const state = { hasYieldedContent: false };
 
     try {
       if (streamingAttempt > 1) {
@@ -98,58 +172,7 @@ export async function* processAnthropicStream(
         currentResponse as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
 
       logger.debug(() => 'Processing streaming response');
-      for await (const chunk of stream) {
-        if (chunk.type === 'message_start') {
-          yield* handleMessageStart(chunk, cacheLogger);
-        } else if (chunk.type === 'content_block_start') {
-          handleContentBlockStart(chunk, logger);
-          if (chunk.content_block.type === 'tool_use') {
-            const toolBlock = chunk.content_block as ToolUseBlock;
-            currentToolCall = {
-              id: toolBlock.id,
-              name: unprefixToolName(toolBlock.name, isOAuth),
-              input: '',
-            };
-          } else if (chunk.content_block.type === 'thinking') {
-            currentThinkingBlock = {
-              thinking: '',
-              signature: chunk.content_block.signature,
-            };
-          }
-        } else if (chunk.type === 'content_block_delta') {
-          const deltaResult = handleContentBlockDelta(
-            chunk,
-            currentToolCall,
-            currentThinkingBlock,
-            logger,
-          );
-          if (deltaResult.textDelta) {
-            hasYieldedContent = true;
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: deltaResult.textDelta }],
-            } as IContent;
-          }
-        } else if (chunk.type === 'content_block_stop') {
-          const stopResult = handleContentBlockStop(
-            chunk,
-            currentToolCall,
-            currentThinkingBlock,
-            tools,
-            isOAuth,
-            findToolSchema,
-            logger,
-          );
-          if (stopResult.content) {
-            hasYieldedContent = true;
-            yield stopResult.content;
-          }
-          currentToolCall = stopResult.currentToolCall;
-          currentThinkingBlock = stopResult.currentThinkingBlock;
-        } else if (chunk.type === 'message_delta' && chunk.usage) {
-          yield* handleMessageDelta(chunk, logger);
-        }
-      }
+      yield* processStreamEvents(stream, options, state);
       return;
     } catch (error) {
       const canRetryStream = isNetworkTransientError(error);
@@ -158,7 +181,7 @@ export async function* processAnthropicStream(
           `Stream attempt ${streamingAttempt}/${maxAttempts} error: ${error}`,
       );
 
-      if (hasYieldedContent) {
+      if (state.hasYieldedContent) {
         logger.debug(
           () =>
             `Stream error after content was already yielded to consumer, cannot safely retry: ${error}`,
@@ -247,6 +270,8 @@ function handleContentBlockStart(
     logger.debug(() => `Starting tool use: ${toolBlock.name}`);
   } else if (chunk.content_block.type === 'thinking') {
     logger.debug(() => 'Starting thinking block');
+  } else if (chunk.content_block.type === 'redacted_thinking') {
+    logger.debug(() => 'Starting redacted thinking block');
   }
 }
 
@@ -293,6 +318,91 @@ function handleContentBlockDelta(
   return {};
 }
 
+function completeToolCall(
+  currentToolCall: { id: string; name: string; input: string },
+  tools: ProviderToolset | undefined,
+  isOAuth: boolean,
+  findToolSchema: (
+    tools: ProviderToolset | undefined,
+    name: string,
+    isOAuth: boolean,
+  ) => unknown,
+  logger: { debug: (fn: () => string) => void },
+): IContent {
+  logger.debug(() => `Completed tool use: ${currentToolCall.name}`);
+
+  let processedParameters = processToolParameters(
+    currentToolCall.input,
+    currentToolCall.name,
+    'anthropic',
+  );
+
+  const toolSchema = findToolSchema(tools, currentToolCall.name, isOAuth);
+  if (
+    toolSchema &&
+    processedParameters &&
+    typeof processedParameters === 'object' &&
+    typeof toolSchema === 'object'
+  ) {
+    processedParameters = coerceParametersToSchema(
+      processedParameters,
+      toolSchema as Record<string, unknown>,
+    );
+  }
+
+  return {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: normalizeToHistoryToolId(currentToolCall.id),
+        name: currentToolCall.name,
+        parameters: processedParameters,
+      },
+    ],
+  } as IContent;
+}
+
+function completeThinkingBlock(
+  currentThinkingBlock: { thinking: string; signature?: string },
+  chunk: Anthropic.MessageStreamEvent & { type: 'content_block_stop' },
+  logger: { debug: (fn: () => string) => void },
+): IContent {
+  logger.debug(
+    () =>
+      `Completed thinking block: ${currentThinkingBlock.thinking.length} chars`,
+  );
+  logger.debug(
+    () =>
+      `Thinking block completed (${currentThinkingBlock.thinking.length} chars total)`,
+  );
+
+  const contentBlock = (
+    chunk as unknown as {
+      content_block?: {
+        type: string;
+        thinking?: string;
+        signature?: string;
+      };
+    }
+  ).content_block;
+  if (contentBlock?.signature) {
+    currentThinkingBlock.signature = contentBlock.signature;
+  }
+
+  return {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: currentThinkingBlock.thinking,
+        sourceField: 'thinking',
+        signature: currentThinkingBlock.signature,
+      } as ThinkingBlock,
+    ],
+  } as IContent;
+}
+
 function handleContentBlockStop(
   chunk: Anthropic.MessageStreamEvent & { type: 'content_block_stop' },
   currentToolCall: { id: string; name: string; input: string } | undefined,
@@ -311,79 +421,20 @@ function handleContentBlockStop(
   currentThinkingBlock?: { thinking: string; signature?: string };
 } {
   if (currentToolCall) {
-    const activeToolCall = currentToolCall;
-    logger.debug(() => `Completed tool use: ${activeToolCall.name}`);
-
-    let processedParameters = processToolParameters(
-      activeToolCall.input,
-      activeToolCall.name,
-      'anthropic',
-    );
-
-    const toolSchema = findToolSchema(tools, activeToolCall.name, isOAuth);
-    if (
-      toolSchema &&
-      processedParameters &&
-      typeof processedParameters === 'object' &&
-      typeof toolSchema === 'object'
-    ) {
-      processedParameters = coerceParametersToSchema(
-        processedParameters,
-        toolSchema as Record<string, unknown>,
-      );
-    }
-
     return {
-      content: {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: normalizeToHistoryToolId(activeToolCall.id),
-            name: activeToolCall.name,
-            parameters: processedParameters,
-          },
-        ],
-      } as IContent,
+      content: completeToolCall(
+        currentToolCall,
+        tools,
+        isOAuth,
+        findToolSchema,
+        logger,
+      ),
       currentToolCall: undefined,
       currentThinkingBlock,
     };
   } else if (currentThinkingBlock) {
-    const activeThinkingBlock = currentThinkingBlock;
-    logger.debug(
-      () =>
-        `Completed thinking block: ${activeThinkingBlock.thinking.length} chars`,
-    );
-    logger.debug(
-      () =>
-        `Thinking block completed (${activeThinkingBlock.thinking.length} chars total)`,
-    );
-
-    const contentBlock = (
-      chunk as unknown as {
-        content_block?: {
-          type: string;
-          thinking?: string;
-          signature?: string;
-        };
-      }
-    ).content_block;
-    if (contentBlock?.signature) {
-      activeThinkingBlock.signature = contentBlock.signature;
-    }
-
     return {
-      content: {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: activeThinkingBlock.thinking,
-            sourceField: 'thinking',
-            signature: activeThinkingBlock.signature,
-          } as ThinkingBlock,
-        ],
-      } as IContent,
+      content: completeThinkingBlock(currentThinkingBlock, chunk, logger),
       currentToolCall,
       currentThinkingBlock: undefined,
     };
