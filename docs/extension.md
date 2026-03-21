@@ -355,6 +355,105 @@ A warning is emitted whenever you install from an `sso://` URL to remind you to
 configure the helper. If you do not control the helper, fall back to `https://`
 or SSH URLs instead.
 
+## Hooks in Extensions
+
+Extensions can bundle [hooks](./hooks/index.md) alongside MCP servers, prompts, and custom commands. When you install an extension that includes hooks, those hooks are loaded automatically when the extension is enabled.
+
+### How Extension Hooks Work
+
+An extension's `llxprt-extension.json` (or `gemini-extension.json`) can include a `hooks` key with hook definitions that follow the same schema as hooks in [`settings.json`](./cli/configuration.md):
+
+```json
+{
+  "name": "my-security-extension",
+  "version": "1.0.0",
+  "description": "Adds security policy enforcement",
+  "hooks": {
+    "BeforeTool": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${extensionPath}${/}hooks${/}validate-tool.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Note:** Use the `${extensionPath}` variable to reference scripts within your extension directory. See [Variables](#variables) below.
+
+### Hook Scope and Precedence
+
+When multiple hooks are configured across different scopes, LLxprt Code applies them in this order:
+
+1. **System hooks** (configured by system administrators)
+2. **User hooks** (in `~/.llxprt/settings.json`)
+3. **Extension hooks** (from enabled extensions)
+4. **Project hooks** (in `.llxprt/settings.json`)
+
+Hooks at each level are executed in sequence. If any hook blocks an operation (e.g., returns `"decision": "deny"`), the operation is blocked regardless of subsequent hooks.
+
+For more details on hook precedence and execution flow, see [Hooks Best Practices](./hooks/best-practices.md).
+
+### Security Considerations for Extension Hooks
+
+> [!WARNING] **Extension hooks execute with your user privileges.**
+
+Extension hooks have the same capabilities as any other hook — they can read files, execute commands, modify tool inputs, and interact with external services. When installing an extension that includes hooks:
+
+- **Review the hooks** before installation. Check the `hooks` section in the extension's `llxprt-extension.json` and examine any referenced scripts.
+- **Verify the source.** Install extensions only from authors and repositories you trust.
+- **Understand what the hooks do.** Read the extension's documentation and inspect the hook scripts to understand their behavior.
+- **Check for consent prompts.** When an extension with new or modified hooks is first loaded, LLxprt Code will prompt you to trust those hooks (same as project-level hooks). Review the details carefully before approving.
+
+Extension hooks are particularly useful for:
+
+- **Organization-wide security policies**: Deploy a security extension across your team that enforces consistent rules.
+- **Compliance and auditing**: Automatically log all tool calls for regulatory compliance.
+- **Custom workflows**: Add project-specific automation that travels with the extension.
+
+However, malicious extension hooks can:
+
+- **Exfiltrate data**: Read sensitive files (`.env`, SSH keys) and send them to remote servers.
+- **Modify operations**: Change tool inputs to perform unintended actions.
+- **Consume resources**: Run expensive operations or create infinite loops.
+
+See [Using Hooks Securely](./hooks/best-practices.md#using-hooks-securely) for a detailed threat model and mitigation strategies.
+
+### Enabling and Disabling Extension Hooks
+
+Extension hooks are active when the extension is enabled and inactive when the extension is disabled. You can control this with the `llxprt extensions` commands:
+
+```bash
+# Disable an extension globally (hooks will not run)
+llxprt extensions disable my-security-extension
+
+# Re-enable the extension (hooks will run again)
+llxprt extensions enable my-security-extension
+
+# Disable only for the current workspace
+llxprt extensions disable my-security-extension --scope workspace
+```
+
+Disabling an extension immediately stops its hooks from running (takes effect on the next LLxprt session).
+
+### Hook Consent and Trust
+
+When LLxprt Code loads an extension with hooks for the first time (or detects that the hooks have changed), it will:
+
+1. **Identify the hooks** by generating a unique identity based on the hook's `name` and `command`.
+2. **Check trust status.** If the hooks are not yet trusted, LLxprt Code will prompt you to review and approve them.
+3. **Require explicit approval.** Extension hooks are **not auto-trusted** — you must explicitly approve them before they will run.
+
+This consent flow is identical to the one used for project-level hooks. Once you trust an extension's hooks, they will run automatically whenever the extension is enabled. If the extension updates its hooks, you will be prompted again.
+
+For more details on hook consent and trust, see [Hooks Best Practices](./hooks/best-practices.md#project-hook-security).
+
+
 ## Variables
 
 LLxprt Code extensions allow variable substitution in `llxprt-extension.json`.

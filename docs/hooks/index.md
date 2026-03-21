@@ -147,6 +147,13 @@ LLxprt Code supports these hook events:
 | `BeforeAgent`         | Before agent processes prompt | Prompt preprocessing                               |
 | `AfterAgent`          | After agent completes         | Response postprocessing                            |
 
+## Hooks in Extensions
+
+Extensions can bundle hooks alongside MCP servers and prompts. When you install an extension that includes hooks, those hooks are loaded automatically when the extension is enabled.
+
+For details on how extension hooks work, including scope precedence and security considerations, see [Hooks in Extensions](../extension.md#hooks-in-extensions).
+
+
 ## Next Steps
 
 - **[Architecture Guide](./architecture.md)** - Understand how hooks work internally
