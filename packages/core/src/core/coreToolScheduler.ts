@@ -22,7 +22,6 @@ import {
   type AnyDeclarativeTool,
   type AnyToolInvocation,
   type ContextAwareTool,
-  BaseToolInvocation,
 } from '../index.js';
 import { randomUUID } from 'node:crypto';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -31,6 +30,12 @@ import {
   type ToolConfirmationResponse,
 } from '../confirmation-bus/types.js';
 import { PolicyDecision } from '../policy/types.js';
+import {
+  getPolicyContextFromInvocation,
+  evaluatePolicyDecision,
+  handlePolicyDenial,
+  publishConfirmationRequest,
+} from '../policy/policy-helpers.js';
 
 interface QueuedRequest {
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -39,7 +44,7 @@ interface QueuedRequest {
   reject: (reason?: Error) => void;
 }
 import { DEFAULT_AGENT_ID } from './turn.js';
-import { type Part, type FunctionCall } from '@google/genai';
+import { type Part } from '@google/genai';
 import {
   isModifiableDeclarativeTool,
   type ModifyContext,
@@ -129,12 +134,6 @@ export type WaitingToolCall = {
   confirmationDetails: ToolCallConfirmationDetails;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
-};
-
-type PolicyContext = {
-  toolName: string;
-  args: Record<string, unknown>;
-  serverName?: string;
 };
 
 export type Status = ToolCall['status'];
@@ -841,7 +840,11 @@ export class CoreToolScheduler {
             continue;
           }
 
-          const evaluation = this.evaluatePolicyDecision(invocation, reqInfo);
+          const evaluation = evaluatePolicyDecision(
+            invocation,
+            reqInfo,
+            this.config.getPolicyEngine(),
+          );
           const policyContext = evaluation.context;
 
           if (evaluation.decision === PolicyDecision.ALLOW) {
@@ -850,7 +853,12 @@ export class CoreToolScheduler {
           }
 
           if (evaluation.decision === PolicyDecision.DENY) {
-            this.handlePolicyDenial(reqInfo, evaluation.context);
+            handlePolicyDenial(
+              reqInfo,
+              evaluation.context,
+              this.setStatusInternal.bind(this),
+              this.messageBus,
+            );
             continue;
           }
 
@@ -925,7 +933,7 @@ export class CoreToolScheduler {
 
             const context =
               policyContext ??
-              this.getPolicyContextFromInvocation(invocation, reqInfo);
+              getPolicyContextFromInvocation(invocation, reqInfo);
 
             // Fire Notification hook before showing confirmation dialog
             void triggerToolNotificationHook(
@@ -933,7 +941,7 @@ export class CoreToolScheduler {
               wrappedConfirmationDetails,
             );
 
-            this.publishConfirmationRequest(correlationId, context);
+            publishConfirmationRequest(correlationId, context, this.messageBus);
 
             this.setStatusInternal(
               reqInfo.callId,
@@ -1063,11 +1071,11 @@ export class CoreToolScheduler {
         // Remove from processedConfirmations so the tool can be confirmed again
         // after editor modification
         this.processedConfirmations.delete(callId);
-        const context = this.getPolicyContextFromInvocation(
+        const context = getPolicyContextFromInvocation(
           waitingToolCall.invocation,
           waitingToolCall.request,
         );
-        this.publishConfirmationRequest(newCorrelationId, context);
+        publishConfirmationRequest(newCorrelationId, context, this.messageBus);
         this.setStatusInternal(callId, 'awaiting_approval', updatedDetails);
 
         // Mark the old correlationId as stale to handle race condition with UI
@@ -1139,82 +1147,6 @@ export class CoreToolScheduler {
   private approveToolCall(callId: string): void {
     this.setToolCallOutcome(callId, ToolConfirmationOutcome.ProceedAlways);
     this.setStatusInternal(callId, 'scheduled');
-  }
-
-  private getPolicyContextFromInvocation(
-    invocation: AnyToolInvocation,
-    request: ToolCallRequestInfo,
-  ): PolicyContext {
-    if (invocation instanceof BaseToolInvocation) {
-      const context = invocation.getPolicyContext();
-      if (context.toolName === 'unknown' || !context.toolName) {
-        return {
-          ...context,
-          toolName: request.name,
-        };
-      }
-      return context;
-    }
-    return {
-      toolName: request.name,
-      args: request.args,
-    };
-  }
-
-  private evaluatePolicyDecision(
-    invocation: AnyToolInvocation,
-    request: ToolCallRequestInfo,
-  ): { decision: PolicyDecision; context: PolicyContext } {
-    const context = this.getPolicyContextFromInvocation(invocation, request);
-    const policyEngine = this.config.getPolicyEngine();
-    const decision = policyEngine.evaluate(
-      context.toolName,
-      context.args,
-      context.serverName,
-    );
-    return { decision, context };
-  }
-
-  private handlePolicyDenial(
-    request: ToolCallRequestInfo,
-    context: PolicyContext,
-  ): void {
-    const message = `Policy denied execution of tool "${context.toolName}".`;
-    const error = new Error(message);
-    const response = createErrorResponse(
-      request,
-      error,
-      ToolErrorType.POLICY_VIOLATION,
-    );
-    this.setStatusInternal(request.callId, 'error', response);
-
-    const toolCall: FunctionCall = {
-      name: context.toolName,
-      args: context.args,
-    };
-    this.messageBus.publish({
-      type: MessageBusType.TOOL_POLICY_REJECTION,
-      toolCall,
-      correlationId: randomUUID(),
-      reason: message,
-      serverName: context.serverName,
-    });
-  }
-
-  private publishConfirmationRequest(
-    correlationId: string,
-    context: PolicyContext,
-  ): void {
-    const toolCall: FunctionCall = {
-      name: context.toolName,
-      args: context.args,
-    };
-    this.messageBus.publish({
-      type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      toolCall,
-      correlationId,
-      serverName: context.serverName,
-    });
   }
 
   /**

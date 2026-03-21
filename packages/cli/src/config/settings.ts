@@ -106,6 +106,16 @@ export type LoadableSettingScope =
   | SettingScope.Workspace
   | SettingScope.System;
 
+export function isLoadableSettingScope(
+  scope: SettingScope,
+): scope is LoadableSettingScope {
+  return (
+    scope === SettingScope.User ||
+    scope === SettingScope.Workspace ||
+    scope === SettingScope.System
+  );
+}
+
 export interface CheckpointingSettings {
   enabled?: boolean;
 }
