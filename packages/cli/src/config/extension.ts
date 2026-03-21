@@ -66,6 +66,7 @@ export interface ResolvedExtensionSetting {
   value: string;
   description?: string;
   sensitive?: boolean;
+  source?: 'user' | 'workspace' | 'default';
 }
 
 /**
@@ -378,6 +379,71 @@ export function loadExtension(
     );
     return null;
   }
+}
+
+/**
+ * Resolves extension settings with provenance information.
+ * This async function loads settings from both user and workspace scopes,
+ * determines which scope provides the effective value, and returns settings
+ * enriched with source metadata.
+ *
+ * @param extensionName - The extension name
+ * @param extensionPath - The extension directory path
+ * @param settings - The extension's declared settings from manifest
+ * @returns Promise resolving to array of resolved settings with source metadata
+ */
+export async function resolveExtensionSettingsWithSource(
+  extensionName: string,
+  extensionPath: string,
+  settings: ExtensionSetting[],
+): Promise<ResolvedExtensionSetting[]> {
+  if (settings.length === 0) {
+    return [];
+  }
+
+  const { getScopedEnvContents, ExtensionSettingScope } = await import(
+    './extensions/settingsIntegration.js'
+  );
+
+  const userValues = await getScopedEnvContents(
+    extensionName,
+    extensionPath,
+    ExtensionSettingScope.USER,
+  );
+  const workspaceValues = await getScopedEnvContents(
+    extensionName,
+    extensionPath,
+    ExtensionSettingScope.WORKSPACE,
+  );
+
+  return settings.map((setting) => {
+    const workspaceValue = workspaceValues[setting.envVar];
+    const userValue = userValues[setting.envVar];
+
+    let value: string;
+    let source: 'user' | 'workspace' | 'default';
+
+    // Workspace overrides user when workspace value is explicitly set
+    if (workspaceValue !== undefined && workspaceValue !== '') {
+      value = setting.sensitive ? '[value stored in keychain]' : workspaceValue;
+      source = 'workspace';
+    } else if (userValue !== undefined && userValue !== '') {
+      value = setting.sensitive ? '[value stored in keychain]' : userValue;
+      source = 'user';
+    } else {
+      value = '[not set]';
+      source = 'default';
+    }
+
+    return {
+      name: setting.name,
+      envVar: setting.envVar,
+      value,
+      description: setting.description,
+      sensitive: setting.sensitive ?? false,
+      source,
+    };
+  });
 }
 
 export function loadExtensionByName(

@@ -651,4 +651,213 @@ describe('settingsIntegration', () => {
       expect(serviceName1).toBe(serviceName2);
     });
   });
+
+  describe('resolveExtensionSettingsWithSource', () => {
+    it('should return user source when only user scope has value', async () => {
+      // Create manifest
+      const manifestPath = path.join(tempDir, 'llxprt-extension.json');
+      const manifest = {
+        name: 'test-ext',
+        version: '1.0.0',
+        settings: [
+          {
+            name: 'API Key',
+            envVar: 'API_KEY',
+            sensitive: false,
+          },
+        ] as ExtensionSetting[],
+      };
+
+      await fs.promises.writeFile(
+        manifestPath,
+        JSON.stringify(manifest),
+        'utf-8',
+      );
+
+      // Create user .env file
+      const envPath = path.join(tempDir, '.env');
+      await fs.promises.writeFile(envPath, 'API_KEY=user-value\n', 'utf-8');
+
+      const { resolveExtensionSettingsWithSource } = await import(
+        '../extension.js'
+      );
+
+      const resolved = await resolveExtensionSettingsWithSource(
+        'test-ext',
+        tempDir,
+        manifest.settings,
+      );
+
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0]).toEqual({
+        name: 'API Key',
+        envVar: 'API_KEY',
+        value: 'user-value',
+        description: undefined,
+        sensitive: false,
+        source: 'user',
+      });
+    });
+
+    it('should return workspace source when workspace overrides user', async () => {
+      vi.mocked(getWorkspaceIdentity).mockReturnValue(tempDir);
+
+      // Create manifest
+      const manifestPath = path.join(tempDir, 'llxprt-extension.json');
+      const manifest = {
+        name: 'test-ext',
+        version: '1.0.0',
+        settings: [
+          {
+            name: 'API Key',
+            envVar: 'API_KEY',
+            sensitive: false,
+          },
+        ] as ExtensionSetting[],
+      };
+
+      await fs.promises.writeFile(
+        manifestPath,
+        JSON.stringify(manifest),
+        'utf-8',
+      );
+
+      // Create user .env file
+      const userEnvPath = path.join(tempDir, '.env');
+      await fs.promises.writeFile(userEnvPath, 'API_KEY=user-value\n', 'utf-8');
+
+      // Create workspace .env file
+      const workspaceDir = path.join(
+        tempDir,
+        '.llxprt',
+        'extensions',
+        'test-ext',
+      );
+      await fs.promises.mkdir(workspaceDir, { recursive: true });
+      const workspaceEnvPath = path.join(workspaceDir, '.env');
+      await fs.promises.writeFile(
+        workspaceEnvPath,
+        'API_KEY=workspace-value\n',
+        'utf-8',
+      );
+
+      const { resolveExtensionSettingsWithSource } = await import(
+        '../extension.js'
+      );
+
+      const resolved = await resolveExtensionSettingsWithSource(
+        'test-ext',
+        tempDir,
+        manifest.settings,
+      );
+
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0]).toEqual({
+        name: 'API Key',
+        envVar: 'API_KEY',
+        value: 'workspace-value',
+        description: undefined,
+        sensitive: false,
+        source: 'workspace',
+      });
+    });
+
+    it('should return default source when no value is set', async () => {
+      // Create manifest
+      const manifestPath = path.join(tempDir, 'llxprt-extension.json');
+      const manifest = {
+        name: 'test-ext',
+        version: '1.0.0',
+        settings: [
+          {
+            name: 'API Key',
+            envVar: 'API_KEY',
+            sensitive: false,
+          },
+        ] as ExtensionSetting[],
+      };
+
+      await fs.promises.writeFile(
+        manifestPath,
+        JSON.stringify(manifest),
+        'utf-8',
+      );
+
+      const { resolveExtensionSettingsWithSource } = await import(
+        '../extension.js'
+      );
+
+      const resolved = await resolveExtensionSettingsWithSource(
+        'test-ext',
+        tempDir,
+        manifest.settings,
+      );
+
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0]).toEqual({
+        name: 'API Key',
+        envVar: 'API_KEY',
+        value: '[not set]',
+        description: undefined,
+        sensitive: false,
+        source: 'default',
+      });
+    });
+
+    it('should mask sensitive values and report default source when not set', async () => {
+      // Create manifest
+      const manifestPath = path.join(tempDir, 'llxprt-extension.json');
+      const manifest = {
+        name: 'test-ext',
+        version: '1.0.0',
+        settings: [
+          {
+            name: 'Secret',
+            envVar: 'SECRET',
+            sensitive: true,
+          },
+        ] as ExtensionSetting[],
+      };
+
+      await fs.promises.writeFile(
+        manifestPath,
+        JSON.stringify(manifest),
+        'utf-8',
+      );
+
+      const { resolveExtensionSettingsWithSource } = await import(
+        '../extension.js'
+      );
+
+      const resolved = await resolveExtensionSettingsWithSource(
+        'test-ext',
+        tempDir,
+        manifest.settings,
+      );
+
+      expect(resolved).toHaveLength(1);
+      expect(resolved[0]).toEqual({
+        name: 'Secret',
+        envVar: 'SECRET',
+        value: '[not set]',
+        description: undefined,
+        sensitive: true,
+        source: 'default',
+      });
+    });
+
+    it('should return empty array when no settings', async () => {
+      const { resolveExtensionSettingsWithSource } = await import(
+        '../extension.js'
+      );
+
+      const resolved = await resolveExtensionSettingsWithSource(
+        'test-ext',
+        tempDir,
+        [],
+      );
+
+      expect(resolved).toEqual([]);
+    });
+  });
 });
