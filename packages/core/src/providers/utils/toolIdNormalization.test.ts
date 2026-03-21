@@ -112,8 +112,8 @@ describe('normalizeToAnthropicToolId', () => {
     expect(normalizeToAnthropicToolId('ghi012')).toBe('toolu_ghi012');
   });
 
-  it('returns toolu_ with generated fallback for empty input', () => {
-    expect(normalizeToAnthropicToolId('')).toMatch(/^toolu_[a-f0-9]{16}$/);
+  it('returns deterministic toolu_empty for empty input and logs error', () => {
+    expect(normalizeToAnthropicToolId('')).toBe('toolu_empty');
   });
 
   it('replaces invalid characters with hyphens in suffix', () => {

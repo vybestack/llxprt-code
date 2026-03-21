@@ -18,7 +18,7 @@
  * Shared utility for normalizing tool IDs between provider formats and history format.
  */
 
-import { createHash } from 'node:crypto';
+import { debugLogger } from '../../utils/debugLogger.js';
 
 const SANITIZE_PATTERN = /[^a-zA-Z0-9_-]/g;
 
@@ -97,12 +97,10 @@ export function normalizeToHistoryToolId(id: string): string {
  */
 export function normalizeToAnthropicToolId(id: string): string {
   if (!id) {
-    const timestamp = Date.now().toString();
-    const hash = createHash('sha256')
-      .update(timestamp + Math.random())
-      .digest('hex')
-      .substring(0, 16);
-    return `toolu_${hash}`;
+    debugLogger.error(
+      'normalizeToAnthropicToolId called with empty ID — tool_use/tool_result pairing will likely fail. This indicates a provider returned a tool call with no ID.',
+    );
+    return 'toolu_empty';
   }
 
   if (id.startsWith('toolu_')) {
