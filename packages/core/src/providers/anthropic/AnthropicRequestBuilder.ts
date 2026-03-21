@@ -14,6 +14,7 @@
 import type {
   AnthropicMessage,
   AnthropicImageBlock,
+  AnthropicDocumentBlock,
   AnthropicToolResultContent,
 } from './AnthropicMessageNormalizer.js';
 import { isOpus46Plus } from './AnthropicModelData.js';
@@ -33,6 +34,7 @@ export type CacheableAnthropicBlock =
       is_error?: boolean;
     }
   | AnthropicImageBlock
+  | AnthropicDocumentBlock
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
@@ -69,6 +71,9 @@ type CacheableContentBlock =
       cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
     }
   | (AnthropicImageBlock & {
+      cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
+    })
+  | (AnthropicDocumentBlock & {
       cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
     })
   | {
@@ -142,6 +147,17 @@ export function sanitizeBlockForCacheControl(
         source: block.source,
         cache_control: cacheControl,
       };
+    case 'document': {
+      const doc: CachedAnthropicBlock & { type: 'document' } = {
+        type: 'document',
+        source: block.source,
+        cache_control: cacheControl,
+      };
+      if (block.title !== undefined) {
+        doc.title = block.title;
+      }
+      return doc;
+    }
     default: {
       const unknown = block as { type: string };
       return {

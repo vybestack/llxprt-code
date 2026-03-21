@@ -44,7 +44,9 @@ export type AnthropicImageBlock = {
 
 export type AnthropicDocumentBlock = {
   type: 'document';
-  source: { type: 'base64'; media_type: string; data: string };
+  source:
+    | { type: 'base64'; media_type: string; data: string }
+    | { type: 'url'; url: string };
   title?: string;
 };
 
@@ -107,6 +109,14 @@ export function mediaBlockToAnthropicImage(
 export function mediaBlockToAnthropicDocument(
   media: MediaBlock,
 ): AnthropicDocumentBlock {
+  if (media.encoding === 'url') {
+    return {
+      type: 'document',
+      source: { type: 'url', url: media.data },
+      ...(media.filename ? { title: media.filename } : {}),
+    };
+  }
+
   const rawData =
     media.data.startsWith('data:') && media.data.includes(';base64,')
       ? media.data.split(';base64,')[1]
@@ -409,8 +419,8 @@ function convertContentToMessages(
           messages.push({ role: 'user', content: parts });
         }
       } else {
-        const textBlock = c.blocks.find((b) => b.type === 'text');
-        messages.push({ role: 'user', content: textBlock?.text || '' });
+        const text = concatenateTextAndCodeBlocks(c.blocks);
+        messages.push({ role: 'user', content: text });
       }
     } else if (c.speaker === 'ai') {
       flushToolResults();
@@ -429,6 +439,19 @@ function convertContentToMessages(
 
   flushToolResults();
   return messages;
+}
+
+function concatenateTextAndCodeBlocks(blocks: ContentBlock[]): string {
+  const segments: string[] = [];
+  for (const block of blocks) {
+    if (block.type === 'text' && block.text) {
+      segments.push(block.text);
+    } else if (block.type === 'code') {
+      const language = block.language ? block.language : '';
+      segments.push(`\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`);
+    }
+  }
+  return segments.join('') || '';
 }
 
 function convertHumanMessageWithMedia(
