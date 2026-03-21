@@ -755,7 +755,10 @@ export class TestRig {
           await run.kill();
         } catch (error) {
           if (env['VERBOSE'] === 'true') {
-            console.warn('Failed to kill interactive run during cleanup:', error);
+            console.warn(
+              'Failed to kill interactive run during cleanup:',
+              error,
+            );
           }
         }
       }

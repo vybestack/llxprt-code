@@ -688,7 +688,7 @@ export async function installOrUpdateExtension(
 
       if (missingSettings.length > 0) {
         const settingNames = missingSettings.map((s) => s.name).join(', ');
-        const message = `Extension "${newExtensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions settings ${newExtensionConfig.name} <setting-name>" to configure them.`;
+        const message = `Extension "${newExtensionConfig.name}" has missing settings: ${settingNames}. Please run "llxprt extensions config ${newExtensionConfig.name}" to configure them.`;
         console.warn(message);
       }
     }
