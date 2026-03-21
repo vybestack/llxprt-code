@@ -1897,7 +1897,7 @@ export const SETTINGS_SCHEMA = {
             requiresRestart: false,
             default: true,
             description:
-              'If false, disallows extensions from being installed or used. (Not enforced yet)',
+              'If false, disallows extensions from being installed or used.',
             showInDialog: false,
             mergeStrategy: MergeStrategy.REPLACE,
           },

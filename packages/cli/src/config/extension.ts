@@ -172,6 +172,12 @@ export function loadExtensions(
   workspaceDir: string = process.cwd(),
 ): GeminiCLIExtension[] {
   const settings = loadSettings(workspaceDir).merged;
+
+  // Admin-level extension disable enforcement
+  if (settings.admin?.extensions?.enabled === false) {
+    return [];
+  }
+
   const allExtensions = [...loadUserExtensions()];
 
   if ((isWorkspaceTrusted(settings) ?? true) && !settings.extensionManagement) {

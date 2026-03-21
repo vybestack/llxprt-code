@@ -109,6 +109,17 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
+const mockLoadSettings = vi.fn();
+
+vi.mock('./settings.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./settings.js')>();
+  return {
+    ...actual,
+    loadSettings: mockLoadSettings,
+  };
+});
+
+
 const EXTENSIONS_DIRECTORY_NAME = path.join(GEMINI_DIR, 'extensions');
 
 describe('extension tests', () => {
@@ -138,6 +149,16 @@ describe('extension tests', () => {
     vi.mocked(ExtensionUninstallEvent).mockClear();
     vi.mocked(ExtensionDisableEvent).mockClear();
     vi.mocked(ExtensionEnableEvent).mockClear();
+    // Default: extensions are enabled
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        admin: {
+          extensions: {
+            enabled: true,
+          },
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -518,6 +539,71 @@ describe('extension tests', () => {
       expect(extensions).toHaveLength(1);
       expect(extensions[0].mcpServers?.['test-server'].trust).toBeUndefined();
     });
+
+    it('should return empty array when admin disables extensions', () => {
+      // Create a test extension
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'test-extension',
+        version: '1.0.0',
+      });
+
+      // Mock loadSettings to return admin.extensions.enabled = false
+      mockLoadSettings.mockReturnValueOnce({
+        merged: {
+          admin: {
+            extensions: {
+              enabled: false,
+            },
+          },
+        },
+      });
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+      );
+
+      expect(extensions).toHaveLength(0);
+    });
+
+    it('should load extensions normally when admin.extensions.enabled is true', () => {
+      // Create a test extension
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'test-extension',
+        version: '1.0.0',
+      });
+
+      // The default mock returns admin.extensions.enabled = true
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+      );
+
+      expect(extensions).toHaveLength(1);
+      expect(extensions[0].name).toBe('test-extension');
+    });
+
+    it('should load extensions normally when admin.extensions.enabled is undefined', () => {
+      // Create a test extension
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'test-extension',
+        version: '1.0.0',
+      });
+
+      // Mock loadSettings without admin.extensions setting (undefined)
+      mockLoadSettings.mockReturnValueOnce({
+        merged: {},
+      });
+
+      const extensions = loadExtensions(
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+      );
+
+      expect(extensions).toHaveLength(1);
+      expect(extensions[0].name).toBe('test-extension');
+    });
+
 
     it('should throw an error for invalid extension names', () => {
       const consoleSpy = vi
