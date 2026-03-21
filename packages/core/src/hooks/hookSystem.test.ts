@@ -167,6 +167,100 @@ describe('HookSystem', () => {
     });
   });
 
+  describe('fire* wrapper methods', () => {
+    it('should throw HookSystemNotInitializedError when fireBeforeToolEvent called before initialization', async () => {
+      // @requirement:HOOK-005 - Wrappers inherit getEventHandler() guard
+      await expect(
+        hookSystem.fireBeforeToolEvent('TestTool', {}),
+      ).rejects.toThrow(HookSystemNotInitializedError);
+    });
+
+    it('should delegate fireBeforeToolEvent to HookEventHandler', async () => {
+      // @requirement:HOOK-006 - Simplifies caller code
+      await hookSystem.initialize();
+
+      const eventHandler = hookSystem.getEventHandler();
+      const spy = vi.spyOn(eventHandler, 'fireBeforeToolEvent');
+
+      const toolInput = { param: 'value' };
+      await hookSystem.fireBeforeToolEvent('TestTool', toolInput);
+
+      expect(spy).toHaveBeenCalledWith('TestTool', toolInput);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delegate fireBeforeModelEvent to HookEventHandler', async () => {
+      // @requirement:HOOK-006 - Simplifies caller code
+      await hookSystem.initialize();
+
+      const eventHandler = hookSystem.getEventHandler();
+      const spy = vi.spyOn(eventHandler, 'fireBeforeModelEvent');
+
+      const llmRequest = { model: 'test-model' };
+      await hookSystem.fireBeforeModelEvent(llmRequest);
+
+      expect(spy).toHaveBeenCalledWith(llmRequest);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delegate fireSessionStartEvent to HookEventHandler', async () => {
+      // @requirement:HOOK-006 - Simplifies caller code
+      await hookSystem.initialize();
+
+      const eventHandler = hookSystem.getEventHandler();
+      const spy = vi.spyOn(eventHandler, 'fireSessionStartEvent');
+
+      const context = { source: 'startup' as const };
+      await hookSystem.fireSessionStartEvent(context);
+
+      expect(spy).toHaveBeenCalledWith(context);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should delegate fireNotificationEvent to HookEventHandler', async () => {
+      // @requirement:HOOK-006 - Simplifies caller code
+      await hookSystem.initialize();
+
+      const eventHandler = hookSystem.getEventHandler();
+      const spy = vi.spyOn(eventHandler, 'fireNotificationEvent');
+
+      // Import NotificationType to use its enum value
+      const { NotificationType } = await import('./types.js');
+      const details = { toolName: 'TestTool' };
+      await hookSystem.fireNotificationEvent(
+        NotificationType.ToolPermission,
+        'Test message',
+        details,
+      );
+
+      expect(spy).toHaveBeenCalledWith(
+        NotificationType.ToolPermission,
+        'Test message',
+        details,
+      );
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return result from HookEventHandler wrapper', async () => {
+      // @requirement:HOOK-006 - Wrappers pass through return values
+      await hookSystem.initialize();
+
+      const eventHandler = hookSystem.getEventHandler();
+      const mockResult = {
+        success: true,
+        hookResults: [],
+        finalOutput: undefined,
+      };
+      vi.spyOn(eventHandler, 'fireBeforeModelEvent').mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await hookSystem.fireBeforeModelEvent({ model: 'test' });
+
+      expect(result).toEqual(mockResult);
+    });
+  });
+
   describe('with configured hooks', () => {
     it('should report correct hook count after initialization', async () => {
       // Setup mock with hooks configuration BEFORE creating HookSystem

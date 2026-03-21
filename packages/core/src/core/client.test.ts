@@ -1083,7 +1083,6 @@ sub memory
     });
   });
 
-
   describe('sendMessageStream', () => {
     beforeEach(() => {
       (

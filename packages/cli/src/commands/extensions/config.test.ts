@@ -54,10 +54,9 @@ vi.mock('node:readline', () => ({
 }));
 
 vi.mock('../../config/extensions/settingsIntegration.js', async () => {
-  const actual =
-    await vi.importActual<typeof settingsIntegrationModule>(
-      '../../config/extensions/settingsIntegration.js',
-    );
+  const actual = await vi.importActual<typeof settingsIntegrationModule>(
+    '../../config/extensions/settingsIntegration.js',
+  );
   return {
     updateSetting: mockUpdateSetting,
     getScopedEnvContents: mockGetScopedEnvContents,
@@ -71,10 +70,9 @@ vi.mock('./utils.js', () => ({
 }));
 
 vi.mock('../../config/extension.js', async () => {
-  const actual =
-    await vi.importActual<typeof extensionModule>(
-      '../../config/extension.js',
-    );
+  const actual = await vi.importActual<typeof extensionModule>(
+    '../../config/extension.js',
+  );
   return {
     ...actual,
     loadUserExtensions: mockLoadUserExtensions,
