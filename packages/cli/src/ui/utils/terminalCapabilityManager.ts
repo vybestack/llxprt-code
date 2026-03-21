@@ -45,14 +45,15 @@ export class TerminalCapabilityManager {
   // eslint-disable-next-line no-control-regex
   private static readonly MODIFY_OTHER_KEYS_REGEX = /\x1b\[>4;(\d+)m/;
 
+  private detectionComplete = false;
   private terminalBackgroundColor: TerminalBackgroundColor;
   private kittySupported = false;
   private kittyEnabled = false;
-  private modifyOtherKeysSupported = false;
+  private modifyOtherKeysSupported?: boolean;
   private modifyOtherKeysEnabled = false;
   private bracketedPasteEnabled = false;
-  private detectionComplete = false;
   private terminalName: string | undefined;
+  private deviceAttributesSupported = false;
   private cleanupOnExitHandler?: () => void;
   private disableKittyProtocolOnExitHandler?: () => void;
 
@@ -199,6 +200,7 @@ export class TerminalCapabilityManager {
           );
           if (match) {
             deviceAttributesReceived = true;
+            this.deviceAttributesSupported = true;
             cleanup();
           }
         }
@@ -226,13 +228,17 @@ export class TerminalCapabilityManager {
       if (this.kittySupported) {
         enableKittyKeyboardProtocol();
         this.kittyEnabled = true;
-      } else if (this.modifyOtherKeysSupported) {
+      } else if (
+        this.modifyOtherKeysSupported === true ||
+        // If device attributes were received it's safe to try enabling
+        // anyways, since it will be ignored if unsupported
+        (this.modifyOtherKeysSupported === undefined &&
+          this.deviceAttributesSupported)
+      ) {
         enableModifyOtherKeys();
-        this.modifyOtherKeysEnabled = true;
       }
       // Always enable bracketed paste since it'll be ignored if unsupported.
       enableBracketedPasteMode();
-      this.bracketedPasteEnabled = true;
     } catch (e) {
       debugLogger.warn('Failed to enable keyboard protocols:', e);
     }

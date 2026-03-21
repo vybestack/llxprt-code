@@ -40,12 +40,6 @@ vi.mock('../contexts/UIStateContext.js', () => ({
 const mockToggleVimEnabled = vi.fn();
 const mockSetVimMode = vi.fn();
 
-vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: () => ({
-    mainAreaWidth: 100, // Fixed width for consistent snapshots
-  }),
-}));
-
 enum TerminalKeys {
   ENTER = '\u000D',
   TAB = '\t',

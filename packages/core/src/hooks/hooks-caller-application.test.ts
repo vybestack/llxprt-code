@@ -759,7 +759,9 @@ describe('Hook Caller Application', () => {
       // Check that AgentExecutionBlockedError constructor accepts systemMessage
       const hasSystemMessageInBlockedError =
         sourceCode.includes('AgentExecutionBlockedError') &&
-        sourceCode.match(/class\s+AgentExecutionBlockedError[\s\S]*?systemMessage\?:/);
+        sourceCode.match(
+          /class\s+AgentExecutionBlockedError[\s\S]*?systemMessage\?:/,
+        );
       expect(hasSystemMessageInBlockedError).toBeTruthy();
 
       // Check that systemMessage is passed when throwing AgentExecutionBlockedError

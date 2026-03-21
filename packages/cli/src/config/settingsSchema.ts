@@ -467,7 +467,7 @@ export const SETTINGS_SCHEMA = {
         category: 'General',
         requiresRestart: false,
         default: 'text',
-        description: 'The format of the CLI output.',
+        description: 'The format of the CLI output. Can be `text` or `json`.',
         showInDialog: true,
         options: [
           { value: 'text', label: 'Text' },
@@ -856,9 +856,27 @@ export const SETTINGS_SCHEMA = {
     default: {},
     description: 'IDE integration settings.',
     showInDialog: false,
-    properties: {},
+    properties: {
+      enabled: {
+        type: 'boolean',
+        label: 'IDE Mode',
+        category: 'IDE',
+        requiresRestart: true,
+        default: false,
+        description: 'Enable IDE integration mode.',
+        showInDialog: true,
+      },
+      hasSeenNudge: {
+        type: 'boolean',
+        label: 'Has Seen IDE Integration Nudge',
+        category: 'IDE',
+        requiresRestart: false,
+        default: false,
+        description: 'Whether the user has seen the IDE integration nudge.',
+        showInDialog: false,
+      },
+    },
   },
-
   showStatusInTitle: {
     type: 'boolean',
     label: 'Show Status in Title',

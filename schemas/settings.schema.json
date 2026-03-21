@@ -234,8 +234,8 @@
       "properties": {
         "format": {
           "title": "Output Format",
-          "description": "The format of the CLI output.",
-          "markdownDescription": "The format of the CLI output.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `text`",
+          "description": "The format of the CLI output. Can be `text` or `json`.",
+          "markdownDescription": "The format of the CLI output. Can be `text` or `json`.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `text`",
           "default": "text",
           "type": "string",
           "enum": ["text", "json"]
@@ -521,8 +521,23 @@
       "markdownDescription": "IDE integration settings.\n\n- Category: `IDE`\n- Requires restart: `yes`\n- Default: `{}`",
       "default": {},
       "type": "object",
-      "additionalProperties": false
-    },
+      "properties": {
+        "enabled": {
+          "title": "IDE Mode",
+          "description": "Enable IDE integration mode.",
+          "markdownDescription": "Enable IDE integration mode.\n\n- Category: `IDE`\n- Requires restart: `yes`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        },
+        "hasSeenNudge": {
+          "title": "Has Seen IDE Integration Nudge",
+          "description": "Whether the user has seen the IDE integration nudge.",
+          "markdownDescription": "Whether the user has seen the IDE integration nudge.\n\n- Category: `IDE`\n- Requires restart: `no`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        }
+      },
+
     "showStatusInTitle": {
       "title": "Show Status in Title",
       "description": "Show LLxprt status and thoughts in the terminal window title",
@@ -586,43 +601,6 @@
         "$ref": "#/$defs/SummarizeToolOutputSettings"
       }
     },
-    "dnsResolutionOrder": {
-      "title": "DNS Resolution Order",
-      "description": "The DNS resolution order.",
-      "markdownDescription": "The DNS resolution order.\n\n- Category: `Advanced`\n- Requires restart: `yes`",
-      "type": "string"
-    },
-    "tools": {
-      "title": "Tools",
-      "description": "Settings for built-in and custom tools.",
-      "markdownDescription": "Settings for built-in and custom tools.\n\n- Category: `Tools`\n- Requires restart: `yes`\n- Default: `{}`",
-      "default": {},
-      "type": "object",
-      "properties": {
-        "sandbox": {
-          "title": "Sandbox",
-          "description": "Sandbox execution environment. Set to a boolean to enable or disable the sandbox, or provide a string path to a sandbox profile.",
-          "markdownDescription": "Sandbox execution environment. Set to a boolean to enable or disable the sandbox, or provide a string path to a sandbox profile.\n\n- Category: `Tools`\n- Requires restart: `yes`",
-          "$ref": "#/$defs/BooleanOrString"
-        },
-        "autoAccept": {
-          "title": "Auto Accept",
-          "description": "Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).",
-          "markdownDescription": "Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).\n\n- Category: `Tools`\n- Requires restart: `no`\n- Default: `false`",
-          "default": false,
-          "type": "boolean"
-        },
-        "core": {
-          "title": "Core Tools",
-          "description": "Paths to core tool definitions.",
-          "markdownDescription": "Paths to core tool definitions.\n\n- Category: `Tools`\n- Requires restart: `yes`",
-          "type": "array",
-          "items": {}
-        },
-        "allowed": {
-          "title": "Allowed Tools",
-          "description": "A list of tool names that will bypass the confirmation dialog.",
-          "markdownDescription": "A list of tool names that will bypass the confirmation dialog.\n\n- Category: `Advanced`\n- Requires restart: `yes`",
           "type": "array",
           "items": {}
         },
