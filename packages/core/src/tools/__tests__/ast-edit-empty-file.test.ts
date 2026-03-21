@@ -12,6 +12,17 @@ import { ASTEditTool } from '../ast-edit.js';
 import type { Config } from '../../config/config.js';
 import { ApprovalMode } from '../../config/config.js';
 
+// Define typed interface for private API access in tests
+type TestableASTEditTool = {
+  createInvocation(params: Record<string, unknown>): {
+    execute(signal: AbortSignal): Promise<Record<string, unknown>>;
+  };
+};
+
+type ToolReturnDisplay = {
+  newContent?: string;
+};
+
 describe('empty-file characterization tests', () => {
   let mockConfig: Config;
 
@@ -43,7 +54,9 @@ describe('empty-file characterization tests', () => {
   describe('Preview mode: empty old_string behavior', () => {
     it('nonexistent file + empty old_string → may error or preview', async () => {
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/nonexistent.ts',
         old_string: '',
         new_string: 'const x = 1;',
@@ -56,7 +69,7 @@ describe('empty-file characterization tests', () => {
       expect(result).toBeDefined();
       if (!result.error) {
         expect(result.llmContent).toContain('LLXPRT EDIT PREVIEW');
-        const display = result.returnDisplay as any;
+        const display = result.returnDisplay as ToolReturnDisplay;
         expect(display.newContent).toBe('const x = 1;');
       } else {
         // Error case - file doesn't exist
@@ -66,7 +79,9 @@ describe('empty-file characterization tests', () => {
 
     it('empty existing file + empty old_string → newContent equals new_string (same as nonexistent!)', async () => {
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/empty.ts',
         old_string: '',
         new_string: 'const x = 1;',
@@ -76,7 +91,7 @@ describe('empty-file characterization tests', () => {
       const result = await invocation.execute(new AbortController().signal);
       // Should behave identically to nonexistent file in preview
       expect(result.llmContent).toContain('LLXPRT EDIT PREVIEW');
-      const display = result.returnDisplay as any;
+      const display = result.returnDisplay as ToolReturnDisplay;
       expect(display.newContent).toBe('const x = 1;');
     });
   });
@@ -85,7 +100,9 @@ describe('empty-file characterization tests', () => {
     it('nonexistent file with empty old_string → may create or error', async () => {
       mockConfig.getApprovalMode = () => ApprovalMode.AUTO_EDIT;
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/nonexistent.ts',
         old_string: '',
         new_string: 'const x = 1;',
@@ -106,7 +123,9 @@ describe('empty-file characterization tests', () => {
     it('empty existing file with empty old_string → no-change error', async () => {
       mockConfig.getApprovalMode = () => ApprovalMode.AUTO_EDIT;
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/empty.ts',
         old_string: '',
         new_string: 'const x = 1;',

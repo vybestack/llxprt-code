@@ -10,8 +10,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ASTEditTool } from '../ast-edit.js';
 import type { Config } from '../../config/config.js';
-import { ToolErrorType } from '../tool-error.js';
 import { ApprovalMode } from '../../config/config.js';
+
+// Define typed interface for private API access in tests
+type TestableASTEditTool = {
+  createInvocation(params: Record<string, unknown>): {
+    execute(signal: AbortSignal): Promise<Record<string, unknown>>;
+  };
+};
+
+type ToolReturnDisplay = {
+  metadata?: {
+    astValidation?: {
+      valid: boolean;
+      errors: unknown[];
+    };
+  };
+};
 
 describe('calculateEdit characterization tests', () => {
   let mockConfig: Config;
@@ -41,7 +56,9 @@ describe('calculateEdit characterization tests', () => {
     it('nonexistent file + empty old_string → may create or error', async () => {
       mockConfig.getApprovalMode = () => ApprovalMode.AUTO_EDIT;
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/nonexistent.ts',
         old_string: '',
         new_string: 'const x = 1;',
@@ -55,7 +72,9 @@ describe('calculateEdit characterization tests', () => {
 
     it('nonexistent file + non-empty old_string → error', async () => {
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/nonexistent.ts',
         old_string: 'const x = 1;',
         new_string: 'const x = 2;',
@@ -76,17 +95,19 @@ describe('calculateEdit characterization tests', () => {
       vi.spyOn(fsPromises, 'stat').mockResolvedValue({
         mtime: new Date(currentTime),
         mtimeMs: currentTime,
-      } as any);
+      } as unknown as import('fs').Stats);
 
       mockConfig.getFileSystemService = () =>
         ({
           readTextFile: async () => 'const x = 1;',
           writeTextFile: async () => {},
           fileExists: async () => true,
-        }) as any;
+        }) as unknown as ReturnType<Config['getFileSystemService']>;
 
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/sample.ts',
         old_string: 'const x = 1;',
         new_string: 'const x = 2;',
@@ -109,7 +130,9 @@ describe('calculateEdit characterization tests', () => {
       });
 
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/sample.ts',
         old_string: 'const y = 2;', // Not present in file
         new_string: 'const z = 3;',
@@ -122,7 +145,9 @@ describe('calculateEdit characterization tests', () => {
 
     it('no change → error or success', async () => {
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/sample.ts',
         old_string: 'const x = 1;',
         new_string: 'const x = 1;',
@@ -145,7 +170,9 @@ describe('calculateEdit characterization tests', () => {
       mockConfig.getApprovalMode = () => ApprovalMode.AUTO_EDIT;
 
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/sample.ts',
         old_string: 'const x = 1;\nconst y = 2;\n', // LF instead of CRLF
         new_string: 'const x = 3;\nconst y = 4;\n',
@@ -161,7 +188,9 @@ describe('calculateEdit characterization tests', () => {
   describe('AST validation generation', () => {
     it('should generate AST validation on success for .ts file', async () => {
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/sample.ts',
         old_string: 'const x = 1;',
         new_string: 'const x = 2;',
@@ -169,10 +198,10 @@ describe('calculateEdit characterization tests', () => {
       });
 
       const result = await invocation.execute(new AbortController().signal);
-      const display = result.returnDisplay as any;
-      expect(display.metadata.astValidation).toBeDefined();
-      expect(display.metadata.astValidation).toHaveProperty('valid');
-      expect(display.metadata.astValidation).toHaveProperty('errors');
+      const display = result.returnDisplay as ToolReturnDisplay;
+      expect(display.metadata?.astValidation).toBeDefined();
+      expect(display.metadata?.astValidation).toHaveProperty('valid');
+      expect(display.metadata?.astValidation).toHaveProperty('errors');
     });
 
     it('should skip AST validation for unknown language (.xyz → valid: true, errors: [])', async () => {
@@ -183,7 +212,9 @@ describe('calculateEdit characterization tests', () => {
       });
 
       const tool = new ASTEditTool(mockConfig);
-      const invocation = (tool as any).createInvocation({
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
         file_path: '/test/sample.xyz', // Unknown extension
         old_string: 'some content',
         new_string: 'new content',
@@ -191,9 +222,9 @@ describe('calculateEdit characterization tests', () => {
       });
 
       const result = await invocation.execute(new AbortController().signal);
-      const display = result.returnDisplay as any;
-      expect(display.metadata.astValidation.valid).toBe(true);
-      expect(display.metadata.astValidation.errors).toEqual([]);
+      const display = result.returnDisplay as ToolReturnDisplay;
+      expect(display.metadata?.astValidation?.valid).toBe(true);
+      expect(display.metadata?.astValidation?.errors).toEqual([]);
     });
   });
 });
