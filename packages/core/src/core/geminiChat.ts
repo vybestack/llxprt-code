@@ -401,11 +401,13 @@ export class EmptyStreamError extends Error {
  */
 export class AgentExecutionStoppedError extends Error {
   readonly reason: string;
+  readonly systemMessage?: string;
 
-  constructor(reason: string) {
-    super(`Agent execution stopped: ${reason}`);
+  constructor(reason: string, systemMessage?: string) {
+    super(`Agent execution stopped: ${systemMessage || reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
+    this.systemMessage = systemMessage;
   }
 }
 
@@ -414,12 +416,18 @@ export class AgentExecutionStoppedError extends Error {
  */
 export class AgentExecutionBlockedError extends Error {
   readonly reason: string;
+  readonly systemMessage?: string;
   readonly syntheticResponse?: GenerateContentResponse;
 
-  constructor(reason: string, syntheticResponse?: GenerateContentResponse) {
-    super(`Agent execution blocked: ${reason}`);
+  constructor(
+    reason: string,
+    syntheticResponse?: GenerateContentResponse,
+    systemMessage?: string,
+  ) {
+    super(`Agent execution blocked: ${systemMessage || reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
+    this.systemMessage = systemMessage;
     this.syntheticResponse = syntheticResponse;
   }
 }
@@ -1506,6 +1514,7 @@ export class GeminiChat {
               throw new AgentExecutionStoppedError(
                 beforeModelResult.getEffectiveReason() ||
                   'Execution stopped by BeforeModel hook',
+                beforeModelResult.systemMessage,
               );
             }
 
@@ -1603,6 +1612,7 @@ export class GeminiChat {
               throw new AgentExecutionStoppedError(
                 afterModelResult.getEffectiveReason() ||
                   'Execution stopped by AfterModel hook',
+                afterModelResult.systemMessage,
               );
             }
 
@@ -1790,6 +1800,7 @@ export class GeminiChat {
           throw new AgentExecutionStoppedError(
             beforeModelResult.getEffectiveReason() ||
               'Execution stopped by BeforeModel hook',
+            beforeModelResult.systemMessage,
           );
         }
 
@@ -1880,6 +1891,7 @@ export class GeminiChat {
               throw new AgentExecutionStoppedError(
                 afterModelResult.getEffectiveReason() ||
                   'Execution stopped by AfterModel hook',
+                afterModelResult.systemMessage,
               );
             }
 
@@ -1891,6 +1903,7 @@ export class GeminiChat {
                 afterModelResult.getEffectiveReason() ||
                   'Execution blocked by AfterModel hook',
                 syntheticResponse,
+                afterModelResult.systemMessage,
               );
             }
 

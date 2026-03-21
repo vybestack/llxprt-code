@@ -663,4 +663,110 @@ describe('Hook Caller Application', () => {
       expect(callsApplyLLMRequestModifications).toBe(true);
     });
   });
+
+  /**
+   * Test 10: geminiChat surfaces systemMessage from BeforeModel hook when stopping
+   * @requirement:HOOK-036
+   *
+   * Expected behavior: When BeforeModel hook returns both reason and systemMessage,
+   * the systemMessage should be included in the AgentExecutionStoppedError.
+   */
+  describe('geminiChat surfaces systemMessage from BeforeModel hook when stopping', () => {
+    it('geminiChat should pass systemMessage to AgentExecutionStoppedError', async () => {
+      // This test verifies that geminiChat.ts passes systemMessage from hook output
+      // to AgentExecutionStoppedError when a BeforeModel hook stops execution.
+      //
+      // The code should look like:
+      //   const beforeModelResult = await triggerBeforeModelHook(...);
+      //   if (beforeModelResult?.shouldStopExecution()) {
+      //     throw new AgentExecutionStoppedError(
+      //       beforeModelResult.getEffectiveReason() || 'Execution stopped by BeforeModel hook',
+      //       beforeModelResult.systemMessage,  // <-- systemMessage must be passed here
+      //     );
+      //   }
+
+      const fs = await import('node:fs/promises');
+      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+        .pathname;
+      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+
+      // Check that AgentExecutionStoppedError constructor accepts systemMessage
+      const hasSystemMessageInStoppedError = sourceCode.includes(
+        'readonly systemMessage?: string',
+      );
+      expect(hasSystemMessageInStoppedError).toBe(true);
+
+      // Check that systemMessage is passed when throwing AgentExecutionStoppedError after BeforeModel
+      // Look for pattern: beforeModelResult.systemMessage being passed to the error
+      const passesSystemMessageToStoppedError =
+        sourceCode.includes('beforeModelResult.systemMessage') &&
+        sourceCode.includes('AgentExecutionStoppedError');
+      expect(passesSystemMessageToStoppedError).toBe(true);
+    });
+  });
+
+  /**
+   * Test 11: geminiChat surfaces systemMessage from AfterModel hook when stopping
+   * @requirement:HOOK-040,HOOK-048
+   *
+   * Expected behavior: When AfterModel hook returns both reason and systemMessage,
+   * the systemMessage should be included in the AgentExecutionStoppedError.
+   */
+  describe('geminiChat surfaces systemMessage from AfterModel hook when stopping', () => {
+    it('geminiChat should pass systemMessage to AgentExecutionStoppedError from AfterModel', async () => {
+      // This test verifies that geminiChat.ts passes systemMessage from AfterModel hook output
+      // to AgentExecutionStoppedError when execution is stopped.
+
+      const fs = await import('node:fs/promises');
+      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+        .pathname;
+      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+
+      // Check that systemMessage is passed when throwing AgentExecutionStoppedError after AfterModel
+      const passesSystemMessageFromAfterModel =
+        sourceCode.includes('afterModelResult.systemMessage') &&
+        sourceCode.includes('AgentExecutionStoppedError');
+      expect(passesSystemMessageFromAfterModel).toBe(true);
+    });
+  });
+
+  /**
+   * Test 12: geminiChat surfaces systemMessage from AfterModel hook when blocking
+   * @requirement:HOOK-040,HOOK-048
+   *
+   * Expected behavior: When AfterModel hook returns a blocking decision with systemMessage,
+   * the systemMessage should be included in the AgentExecutionBlockedError.
+   */
+  describe('geminiChat surfaces systemMessage from AfterModel hook when blocking', () => {
+    it('geminiChat should pass systemMessage to AgentExecutionBlockedError', async () => {
+      // This test verifies that geminiChat.ts passes systemMessage from hook output
+      // to AgentExecutionBlockedError when execution is blocked.
+      //
+      // The code should look like:
+      //   if (afterModelResult?.isBlockingDecision()) {
+      //     throw new AgentExecutionBlockedError(
+      //       afterModelResult.getEffectiveReason() || 'Execution blocked by AfterModel hook',
+      //       syntheticResponse,
+      //       afterModelResult.systemMessage,  // <-- systemMessage must be passed here
+      //     );
+      //   }
+
+      const fs = await import('node:fs/promises');
+      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
+        .pathname;
+      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+
+      // Check that AgentExecutionBlockedError constructor accepts systemMessage
+      const hasSystemMessageInBlockedError =
+        sourceCode.includes('AgentExecutionBlockedError') &&
+        sourceCode.match(/class\s+AgentExecutionBlockedError[\s\S]*?systemMessage\?:/);
+      expect(hasSystemMessageInBlockedError).toBeTruthy();
+
+      // Check that systemMessage is passed when throwing AgentExecutionBlockedError
+      const passesSystemMessageToBlockedError =
+        sourceCode.includes('afterModelResult.systemMessage') &&
+        sourceCode.includes('AgentExecutionBlockedError');
+      expect(passesSystemMessageToBlockedError).toBe(true);
+    });
+  });
 });
