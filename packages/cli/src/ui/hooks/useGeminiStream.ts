@@ -1176,6 +1176,24 @@ export const useGeminiStream = (
           case ServerGeminiEventType.InvalidStream:
             // Will add the missing logic later
             break;
+          case ServerGeminiEventType.AgentExecutionStopped:
+            addItem(
+              {
+                type: MessageType.INFO,
+                text: `Execution stopped by hook: ${(event as unknown as { reason: string }).reason}`,
+              },
+              userMessageTimestamp,
+            );
+            break;
+          case ServerGeminiEventType.AgentExecutionBlocked:
+            addItem(
+              {
+                type: MessageType.INFO,
+                text: `Execution blocked by hook: ${(event as unknown as { reason: string }).reason}`,
+              },
+              userMessageTimestamp,
+            );
+            break;
           default:
             break;
         }

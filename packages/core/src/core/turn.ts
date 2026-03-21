@@ -76,6 +76,8 @@ export enum GeminiEventType {
   InvalidStream = 'invalid_stream',
   ContextWindowWillOverflow = 'context_window_will_overflow',
   ModelInfo = 'model_info',
+  AgentExecutionStopped = 'agent_execution_stopped',
+  AgentExecutionBlocked = 'agent_execution_blocked',
 }
 
 export type ServerGeminiRetryEvent = {
@@ -238,6 +240,16 @@ export type ServerGeminiModelInfoEvent = {
   value: ModelInfo;
 };
 
+export type ServerGeminiAgentExecutionStoppedEvent = {
+  type: GeminiEventType.AgentExecutionStopped;
+  reason: string;
+};
+
+export type ServerGeminiAgentExecutionBlockedEvent = {
+  type: GeminiEventType.AgentExecutionBlocked;
+  reason: string;
+};
+
 // The original union type, now composed of the individual types
 export type ServerGeminiStreamEvent =
   | ServerGeminiContentEvent
@@ -256,6 +268,8 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiCitationEvent
   | ServerGeminiRetryEvent
   | ServerGeminiInvalidStreamEvent
+  | ServerGeminiAgentExecutionStoppedEvent
+  | ServerGeminiAgentExecutionBlockedEvent
   | ServerGeminiContextWindowWillOverflowEvent
   | ServerGeminiModelInfoEvent;
 
@@ -352,6 +366,24 @@ export class Turn {
         // Handle the RETRY event
         if (streamEvent.type === StreamEventType.RETRY) {
           yield { type: GeminiEventType.Retry };
+          continue;
+        }
+
+        // Handle AGENT_EXECUTION_STOPPED event
+        if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
+          yield {
+            type: GeminiEventType.AgentExecutionStopped,
+            reason: streamEvent.reason,
+          };
+          return;
+        }
+
+        // Handle AGENT_EXECUTION_BLOCKED event
+        if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
+          yield {
+            type: GeminiEventType.AgentExecutionBlocked,
+            reason: streamEvent.reason,
+          };
           continue;
         }
 

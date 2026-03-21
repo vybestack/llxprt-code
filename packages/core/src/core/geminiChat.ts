@@ -82,11 +82,17 @@ export enum StreamEventType {
   /** A signal that a retry is about to happen. The UI should discard any partial
    * content from the attempt that just failed. */
   RETRY = 'retry',
+  /** Agent execution was stopped by a hook. */
+  AGENT_EXECUTION_STOPPED = 'agent_execution_stopped',
+  /** Agent execution was blocked by a hook. */
+  AGENT_EXECUTION_BLOCKED = 'agent_execution_blocked',
 }
 
 export type StreamEvent =
   | { type: StreamEventType.CHUNK; value: GenerateContentResponse }
-  | { type: StreamEventType.RETRY };
+  | { type: StreamEventType.RETRY }
+  | { type: StreamEventType.AGENT_EXECUTION_STOPPED; reason: string }
+  | { type: StreamEventType.AGENT_EXECUTION_BLOCKED; reason: string };
 
 type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {
   cache_read_input_tokens?: number;
@@ -387,6 +393,34 @@ export class EmptyStreamError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'EmptyStreamError';
+  }
+}
+
+/**
+ * Error thrown when agent execution is stopped by a hook.
+ */
+export class AgentExecutionStoppedError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(`Agent execution stopped: ${reason}`);
+    this.name = 'AgentExecutionStoppedError';
+    this.reason = reason;
+  }
+}
+
+/**
+ * Error thrown when agent execution is blocked by a hook.
+ */
+export class AgentExecutionBlockedError extends Error {
+  readonly reason: string;
+  readonly syntheticResponse?: GenerateContentResponse;
+
+  constructor(reason: string, syntheticResponse?: GenerateContentResponse) {
+    super(`Agent execution blocked: ${reason}`);
+    this.name = 'AgentExecutionBlockedError';
+    this.reason = reason;
+    this.syntheticResponse = syntheticResponse;
   }
 }
 
@@ -1262,6 +1296,32 @@ export class GeminiChat {
             lastError = null;
             break;
           } catch (error) {
+            // Handle hook execution control errors before retry logic
+            if (error instanceof AgentExecutionStoppedError) {
+              yield {
+                type: StreamEventType.AGENT_EXECUTION_STOPPED,
+                reason: error.reason,
+              };
+              lastError = null;
+              break;
+            }
+
+            if (error instanceof AgentExecutionBlockedError) {
+              yield {
+                type: StreamEventType.AGENT_EXECUTION_BLOCKED,
+                reason: error.reason,
+              };
+              // If there's a synthetic response, yield it as a chunk
+              if (error.syntheticResponse) {
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: error.syntheticResponse,
+                };
+              }
+              lastError = null;
+              break;
+            }
+
             lastError = error;
             const isContentError =
               error instanceof InvalidStreamError ||
@@ -1441,6 +1501,14 @@ export class GeminiChat {
               requestForHook,
             );
 
+            // Check for stop first (non-streaming path)
+            if (beforeModelResult?.shouldStopExecution()) {
+              throw new AgentExecutionStoppedError(
+                beforeModelResult.getEffectiveReason() ||
+                  'Execution stopped by BeforeModel hook',
+              );
+            }
+
             // Check for blocking decision with synthetic response
             if (beforeModelResult?.isBlockingDecision()) {
               const syntheticResponse =
@@ -1530,7 +1598,15 @@ export class GeminiChat {
               lastResponse,
             );
 
-            // Check if hook wants to stop execution or modify response
+            // Check for stop first (non-streaming path)
+            if (afterModelResult?.shouldStopExecution()) {
+              throw new AgentExecutionStoppedError(
+                afterModelResult.getEffectiveReason() ||
+                  'Execution stopped by AfterModel hook',
+              );
+            }
+
+            // Check if hook wants to modify response
             if (afterModelResult) {
               const modifiedResponse = afterModelResult.getModifiedResponse();
               if (modifiedResponse) {
@@ -1697,6 +1773,65 @@ export class GeminiChat {
           }
         : baseRuntimeContext;
 
+      // Trigger BeforeModel hook for streaming path
+      const configForHooks = this.runtimeContext.providerRuntime.config;
+      if (configForHooks) {
+        const requestForHook = {
+          contents: requestContents,
+          tools: tools as ProviderToolset | undefined,
+        };
+        const beforeModelResult = await triggerBeforeModelHook(
+          configForHooks,
+          requestForHook,
+        );
+
+        // Check for stop first
+        if (beforeModelResult?.shouldStopExecution()) {
+          throw new AgentExecutionStoppedError(
+            beforeModelResult.getEffectiveReason() ||
+              'Execution stopped by BeforeModel hook',
+          );
+        }
+
+        // Check for blocking decision with synthetic response
+        if (beforeModelResult?.isBlockingDecision()) {
+          let syntheticResponse = beforeModelResult.getSyntheticResponse();
+          // Ensure synthetic response has finishReason to avoid invalid-stream handling
+          if (syntheticResponse) {
+            const candidate = syntheticResponse.candidates?.[0];
+            if (candidate && !candidate.finishReason) {
+              syntheticResponse = {
+                ...syntheticResponse,
+                candidates: [
+                  {
+                    ...candidate,
+                    finishReason: FinishReason.STOP,
+                  },
+                ],
+              } as GenerateContentResponse;
+            }
+          }
+          throw new AgentExecutionBlockedError(
+            beforeModelResult.getEffectiveReason() ||
+              'Request blocked by BeforeModel hook',
+            syntheticResponse,
+          );
+        }
+
+        // Apply request modifications from BeforeModel hook
+        if (beforeModelResult) {
+          const modifiedRequest =
+            beforeModelResult.applyLLMRequestModifications({
+              model: this.runtimeState.model || '',
+              contents: requestContents as unknown as Content[],
+            });
+          // If hook modified contents, update requestContents
+          if (modifiedRequest && modifiedRequest.contents) {
+            requestContents = modifiedRequest.contents as unknown as IContent[];
+          }
+        }
+      }
+
       const streamResponse = provider.generateChatCompletion({
         contents: requestContents,
         tools: tools as ProviderToolset | undefined,
@@ -1728,7 +1863,46 @@ export class GeminiChat {
             );
             instance.lastPromptTokenCount = combinedPromptTokens;
           }
-          yield instance.convertIContentToResponse(iContent);
+
+          // Convert current chunk to GenerateContentResponse
+          const convertedChunk = instance.convertIContentToResponse(iContent);
+
+          // Trigger AfterModel hook per streamed chunk
+          const hookConfig = instance.runtimeContext.providerRuntime.config;
+          if (hookConfig) {
+            const afterModelResult = await triggerAfterModelHook(
+              hookConfig,
+              iContent,
+            );
+
+            // Check for stop
+            if (afterModelResult?.shouldStopExecution()) {
+              throw new AgentExecutionStoppedError(
+                afterModelResult.getEffectiveReason() ||
+                  'Execution stopped by AfterModel hook',
+              );
+            }
+
+            // Check for blocking decision
+            if (afterModelResult?.isBlockingDecision()) {
+              const modifiedResponse = afterModelResult.getModifiedResponse();
+              const syntheticResponse = modifiedResponse || convertedChunk;
+              throw new AgentExecutionBlockedError(
+                afterModelResult.getEffectiveReason() ||
+                  'Execution blocked by AfterModel hook',
+                syntheticResponse,
+              );
+            }
+
+            // Apply modified response if available
+            const modifiedResponse = afterModelResult?.getModifiedResponse();
+            if (modifiedResponse) {
+              yield modifiedResponse;
+              continue;
+            }
+          }
+
+          yield convertedChunk;
         }
       })(this);
     };
