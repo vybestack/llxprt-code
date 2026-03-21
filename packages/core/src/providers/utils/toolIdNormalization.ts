@@ -90,7 +90,7 @@ export function normalizeToHistoryToolId(id: string): string {
  * - hist_tool_xxx → toolu_xxx
  * - call_xxx → toolu_xxx
  * - unknown → toolu_unknown
- * - empty → toolu_{generated_hash}
+ * - empty → toolu_empty (with error log)
  *
  * Note: Unlike OpenAI normalization (which removes invalid chars),
  * Anthropic normalization replaces invalid chars with hyphens.

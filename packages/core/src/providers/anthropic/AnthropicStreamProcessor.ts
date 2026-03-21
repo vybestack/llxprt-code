@@ -75,18 +75,6 @@ export async function* processAnthropicStream(
   while (streamingAttempt < maxAttempts) {
     streamingAttempt++;
 
-    if (streamingAttempt > 1) {
-      logger.debug(
-        () =>
-          `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Making fresh API call`,
-      );
-      const retryResult = await apiCallWithResponse();
-      currentResponse =
-        retryResult.data as AsyncIterable<Anthropic.MessageStreamEvent>;
-    }
-
-    const stream =
-      currentResponse as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
     let currentToolCall:
       | { id: string; name: string; input: string }
       | undefined;
@@ -95,9 +83,21 @@ export async function* processAnthropicStream(
       | undefined;
     let hasYieldedContent = false;
 
-    logger.debug(() => 'Processing streaming response');
-
     try {
+      if (streamingAttempt > 1) {
+        logger.debug(
+          () =>
+            `Stream retry attempt ${streamingAttempt}/${maxAttempts}: Making fresh API call`,
+        );
+        const retryResult = await apiCallWithResponse();
+        currentResponse =
+          retryResult.data as AsyncIterable<Anthropic.MessageStreamEvent>;
+      }
+
+      const stream =
+        currentResponse as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
+
+      logger.debug(() => 'Processing streaming response');
       for await (const chunk of stream) {
         if (chunk.type === 'message_start') {
           yield* handleMessageStart(chunk, cacheLogger);
@@ -287,8 +287,7 @@ function handleContentBlockDelta(
     };
     currentThinkingBlock.thinking += thinkingDelta.thinking;
     logger.debug(
-      () =>
-        `Thinking delta chunk (${thinkingDelta.thinking.length} chars): ${thinkingDelta.thinking}`,
+      () => `Thinking delta chunk (${thinkingDelta.thinking.length} chars)`,
     );
   } else if (chunk.delta.type === 'signature_delta' && currentThinkingBlock) {
     const signatureDelta = chunk.delta as {
@@ -297,7 +296,7 @@ function handleContentBlockDelta(
     };
     logger.debug(
       () =>
-        `Received signature_delta: ${signatureDelta.signature.substring(0, 50)}...`,
+        `Received signature_delta (${signatureDelta.signature.length} chars)`,
     );
     currentThinkingBlock.signature = signatureDelta.signature;
   }

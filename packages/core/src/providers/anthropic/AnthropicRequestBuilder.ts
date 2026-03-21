@@ -327,8 +327,9 @@ export function buildThinkingConfig(options: {
 }
 
 /**
- * Sort object keys alphabetically for stable JSON serialization
- * This prevents cache invalidation due to key order changes
+ * Sort top-level object keys alphabetically for stable JSON serialization.
+ * Nested objects are not sorted; tool schemas are expected to have
+ * consistent nested structure from the schema converter.
  */
 export function sortObjectKeys<T extends Record<string, unknown>>(obj: T): T {
   const sorted = Object.keys(obj)

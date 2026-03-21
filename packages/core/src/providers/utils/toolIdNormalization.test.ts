@@ -112,7 +112,7 @@ describe('normalizeToAnthropicToolId', () => {
     expect(normalizeToAnthropicToolId('ghi012')).toBe('toolu_ghi012');
   });
 
-  it('returns deterministic toolu_empty for empty input and logs error', () => {
+  it('returns deterministic toolu_empty for empty input', () => {
     expect(normalizeToAnthropicToolId('')).toBe('toolu_empty');
   });
 
