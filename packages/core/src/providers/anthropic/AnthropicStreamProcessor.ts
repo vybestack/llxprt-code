@@ -93,6 +93,7 @@ export async function* processAnthropicStream(
     let currentThinkingBlock:
       | { thinking: string; signature?: string }
       | undefined;
+    let hasYieldedContent = false;
 
     logger.debug(() => 'Processing streaming response');
 
@@ -130,6 +131,7 @@ export async function* processAnthropicStream(
             logger,
           );
           if (deltaResult.textDelta) {
+            hasYieldedContent = true;
             yield {
               speaker: 'ai',
               blocks: [{ type: 'text', text: deltaResult.textDelta }],
@@ -146,6 +148,7 @@ export async function* processAnthropicStream(
             logger,
           );
           if (stopResult.content) {
+            hasYieldedContent = true;
             yield stopResult.content;
           }
           currentToolCall = stopResult.currentToolCall;
@@ -161,6 +164,14 @@ export async function* processAnthropicStream(
         () =>
           `Stream attempt ${streamingAttempt}/${maxAttempts} error: ${error}`,
       );
+
+      if (hasYieldedContent) {
+        logger.debug(
+          () =>
+            `Stream error after content was already yielded to consumer, cannot safely retry: ${error}`,
+        );
+        throw error;
+      }
 
       if (!canRetryStream || streamingAttempt >= maxAttempts) {
         logger.debug(
