@@ -153,7 +153,6 @@ Extensions can bundle hooks alongside MCP servers and prompts. When you install 
 
 For details on how extension hooks work, including scope precedence and security considerations, see [Hooks in Extensions](../extension.md#hooks-in-extensions).
 
-
 ## Next Steps
 
 - **[Architecture Guide](./architecture.md)** - Understand how hooks work internally

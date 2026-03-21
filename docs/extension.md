@@ -453,7 +453,6 @@ This consent flow is identical to the one used for project-level hooks. Once you
 
 For more details on hook consent and trust, see [Hooks Best Practices](./hooks/best-practices.md#project-hook-security).
 
-
 ## Variables
 
 LLxprt Code extensions allow variable substitution in `llxprt-extension.json`.
