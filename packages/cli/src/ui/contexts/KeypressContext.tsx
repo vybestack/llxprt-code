@@ -20,7 +20,7 @@ import {
 import { ESC } from '../utils/input.js';
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
 import { parseMouseEvent } from '../utils/mouse.js';
-import { TerminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
+
 
 export const BACKSLASH_ENTER_TIMEOUT = 5;
 export const ESC_TIMEOUT = 100;
@@ -207,24 +207,6 @@ function bufferBackslashEnter(
  * Will flush the buffer if no data is received for PASTE_TIMEOUT ms or
  * when a null key is received.
  */
-function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
-  let lastKeyTime = 0;
-  return (key: Key) => {
-    const now = Date.now();
-    if (key.name === 'return' && now - lastKeyTime <= FAST_RETURN_TIMEOUT) {
-      keypressHandler({
-        ...key,
-        name: '',
-        sequence: '\r',
-        insertable: true,
-      });
-    } else {
-      keypressHandler(key);
-    }
-    lastKeyTime = now;
-  };
-}
-
 function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
     while (true) {
@@ -721,9 +703,6 @@ export function KeypressProvider({
     let processor = nonKeyboardEventFilter(handleDragDropAndBroadcast);
     processor = bufferBackslashEnter(processor);
     processor = bufferPaste(processor);
-    if (!TerminalCapabilityManager.getInstance().isBracketedPasteEnabled()) {
-      processor = bufferFastReturn(processor);
-    }
     const dataListener = createDataListener(processor);
 
     stdin.on('data', dataListener);
