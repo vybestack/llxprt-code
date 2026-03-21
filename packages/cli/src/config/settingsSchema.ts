@@ -2267,13 +2267,19 @@ export function getSettingsSchema(): SettingsSchemaType {
 }
 
 /**
+ * Determines if hooks UI should be visible (commands, status indicators).
+ * Gated only by the experimental tools.enableHooks flag.
+ */
+export function getEnableHooksUI(settings: Settings): boolean {
+  return settings.tools?.enableHooks ?? true;
+}
+
+/**
  * Determines if hooks should be enabled based on both experimental flag and user setting.
  * Both tools.enableHooks (experimental gate) and hooks.enabled (user toggle) must be true.
  */
 export function getEnableHooks(settings: Settings): boolean {
-  const experimentalGate = settings.tools?.enableHooks ?? true;
-  const userToggle = settings.hooks?.enabled ?? false;
-  return experimentalGate && userToggle;
+  return getEnableHooksUI(settings) && (settings.hooks?.enabled ?? false);
 }
 
 type InferSettings<T extends SettingsSchema> = {

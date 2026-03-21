@@ -176,7 +176,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       todoCommand,
       setupCommand,
       ...tasksCommands,
-      hooksCommand,
+      ...(this.config?.getEnableHooksUI() ? [hooksCommand] : []),
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */

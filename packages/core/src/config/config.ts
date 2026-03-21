@@ -516,6 +516,7 @@ export interface ConfigParameters {
   continueSession?: boolean | string;
   disableYoloMode?: boolean;
   enableHooks?: boolean;
+  enableHooksUI?: boolean;
   hooks?: {
     [K in HookEventName]?: HookDefinition[];
   };
@@ -741,6 +742,7 @@ export class Config {
   private readonly continueSession: boolean | string;
   private readonly disableYoloMode: boolean;
   private readonly enableHooks: boolean;
+  private readonly enableHooksUI: boolean;
   private readonly hooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
@@ -927,6 +929,7 @@ export class Config {
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
+    this.enableHooksUI = params.enableHooksUI ?? true;
     this.jitContextEnabled = params.jitContextEnabled ?? true;
     this.hooks = params.hooks;
     this.projectHooks = params.projectHooks;
@@ -2658,6 +2661,10 @@ ${trimmed}
 
   getEnableHooks(): boolean {
     return this.enableHooks;
+  }
+
+  getEnableHooksUI(): boolean {
+    return this.enableHooksUI;
   }
 
   /**

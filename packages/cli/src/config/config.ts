@@ -44,7 +44,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings, loadSettings } from './settings.js';
-import { getEnableHooks } from './settingsSchema.js';
+import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { createPolicyEngineConfig } from './policy.js';
 
 import { annotateActiveExtensions } from './extension.js';
@@ -596,9 +596,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
     })
     // Register MCP subcommands
-    .command(mcpCommand)
-    // Register hooks subcommands
-    .command(hooksCommand);
+    .command(mcpCommand);
+
+  if (getEnableHooksUI(settings)) {
+    yargsInstance.command(hooksCommand);
+  }
 
   if (settings?.extensionManagement ?? false) {
     yargsInstance.command(extensionsCommand);
@@ -1509,6 +1511,7 @@ export async function loadCliConfig(
     // TODO: loading of hooks based on workspace trust
     jitContextEnabled,
     enableHooks: getEnableHooks(effectiveSettings),
+    enableHooksUI: getEnableHooksUI(effectiveSettings),
     hooks: (() => {
       const hooksConfig = effectiveSettings.hooks || {};
       // Filter out the 'disabled' property from hooks config as it's handled separately

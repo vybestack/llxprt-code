@@ -1749,6 +1749,22 @@ describe('Config getHookSystem', () => {
     expect(config.getHookSystem()).toBeUndefined();
   });
 
+  it('getEnableHooksUI returns true while getEnableHooks returns false and getHookSystem returns undefined', () => {
+    const config = new Config({
+      ...baseParams,
+      enableHooksUI: true,
+      enableHooks: false,
+    });
+    expect(config.getEnableHooksUI()).toBe(true);
+    expect(config.getEnableHooks()).toBe(false);
+    expect(config.getHookSystem()).toBeUndefined();
+  });
+
+  it('getEnableHooksUI defaults to true when not specified', () => {
+    const config = new Config(baseParams);
+    expect(config.getEnableHooksUI()).toBe(true);
+  });
+
   describe('reloadSkills', () => {
     it('should call onReload, update disabledSkills, discover, and apply disabled list', async () => {
       const mockOnReload = vi.fn().mockResolvedValue({

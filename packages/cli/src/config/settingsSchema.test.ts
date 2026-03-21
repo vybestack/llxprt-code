@@ -13,6 +13,7 @@ import {
   SETTINGS_SCHEMA,
   Settings,
   getEnableHooks,
+  getEnableHooksUI,
 } from './settingsSchema.js';
 
 describe('SettingsSchema', () => {
@@ -368,6 +369,18 @@ describe('getEnableHooks', () => {
         tools: { enableHooks: true },
         hooks: { enabled: false },
       } as Settings),
+    ).toBe(false);
+  });
+});
+
+describe('getEnableHooksUI', () => {
+  it('returns true when no settings are provided (tools.enableHooks defaults to true)', () => {
+    expect(getEnableHooksUI({} as Settings)).toBe(true);
+  });
+
+  it('returns false when tools.enableHooks is explicitly false', () => {
+    expect(
+      getEnableHooksUI({ tools: { enableHooks: false } } as Settings),
     ).toBe(false);
   });
 });
