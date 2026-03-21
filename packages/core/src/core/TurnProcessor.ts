@@ -373,16 +373,10 @@ export class TurnProcessor {
     const tools = this.generationConfig.tools;
     this._logToolDiagnostics(provider, tools, providerBaseUrl);
 
-    const baseRuntimeContext = this.providerRuntimeBuilder(
+    const runtimeContext = this.providerRuntimeBuilder(
       'TurnProcessor.executeProviderCall',
       { toolCount: tools?.length ?? 0 },
     );
-    const runtimeContext = params.config
-      ? {
-          ...baseRuntimeContext,
-          config: { ...baseRuntimeContext.config, ...params.config },
-        }
-      : baseRuntimeContext;
 
     const streamResponse = provider.generateChatCompletion({
       contents: requestContents,
