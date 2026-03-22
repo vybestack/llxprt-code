@@ -1880,7 +1880,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     if (paddedTitle !== lastTitleRef.current) {
       lastTitleRef.current = paddedTitle;
-      stdout.write(`\x1b]2;${paddedTitle}\x07`);
+      stdout.write(`\x1b]0;${paddedTitle}\x07`);
     }
   }, [
     streamingState,
