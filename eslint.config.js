@@ -61,6 +61,8 @@ export default tseslint.config(
       'packages/opentui/**',
       'packages/ui/**',
       'packages/lsp/**',
+      'evals/**',
+      'packages/test-utils/**',
     ],
   },
   eslint.configs.recommended,

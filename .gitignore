@@ -90,3 +90,7 @@ packages/core/.llxprt/debug/*.jsonl
 
 # GHA credentials
 gha-creds-*.json
+
+# Evals output
+evals/logs/
+.evals/
