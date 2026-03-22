@@ -6,7 +6,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type Config, debugLogger } from '@vybestack/llxprt-code-core';
+import { homedir } from 'node:os';
+import { type Config, debugLogger, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
 
@@ -29,7 +30,68 @@ export interface CleanupResult {
   deleted: number;
   skipped: number;
   failed: number;
+  debugLogsDeleted?: number;
 }
+/**
+ * Attempts to cleanup debug log files associated with a session ID.
+ * Debug logs may reside in ~/.llxprt/debug/ with filenames containing the session ID.
+ * This is a best-effort cleanup that silently handles missing files or directories.
+ * 
+ * @param sessionId - The session ID to look for in debug log filenames
+ * @returns The number of debug log files successfully deleted
+ */
+async function cleanupDebugLogsForSession(sessionId: string): Promise<number> {
+  try {
+    const home = homedir();
+    if (!home) {
+      return 0;
+    }
+
+    const debugDir = path.join(home, LLXPRT_DIR, 'debug');
+    
+    // Check if debug directory exists
+    try {
+      await fs.access(debugDir);
+    } catch {
+      // Debug directory doesn't exist, nothing to clean
+      return 0;
+    }
+
+    // Read all files in the debug directory
+    const files = await fs.readdir(debugDir);
+    
+    // Filter for files that contain the session ID in their name
+    // Debug log format: llxprt-debug-{runId}-{timestamp}.jsonl
+    // where runId might be a session ID
+    const matchingFiles = files.filter(file => 
+      file.includes(sessionId) && file.endsWith('.jsonl')
+    );
+
+    if (matchingFiles.length === 0) {
+      return 0;
+    }
+
+    let deletedCount = 0;
+    for (const file of matchingFiles) {
+      try {
+        await fs.unlink(path.join(debugDir, file));
+        deletedCount++;
+        debugLogger.debug('Deleted debug log file', { file, sessionId });
+      } catch (error) {
+        // Ignore errors (file might have been deleted already, permissions, etc.)
+        debugLogger.debug('Failed to delete debug log file', { file, error });
+      }
+    }
+
+    return deletedCount;
+  } catch (error) {
+    // Silently handle any errors during debug log cleanup
+    debugLogger.debug('Error during debug log cleanup', { sessionId, error });
+    return 0;
+  }
+}
+
+
 
 /**
  * Main entry point for session cleanup during CLI startup
@@ -98,6 +160,21 @@ export async function cleanupExpiredSessions(
           }
         }
         result.deleted++;
+
+        // Also attempt to cleanup any related debug log files
+        if (sessionToDelete.sessionInfo !== null) {
+          const debugLogsDeleted = await cleanupDebugLogsForSession(
+            sessionToDelete.sessionInfo.id,
+          );
+          if (debugLogsDeleted > 0) {
+            result.debugLogsDeleted = (result.debugLogsDeleted ?? 0) + debugLogsDeleted;
+            if (config.getDebugMode()) {
+              debugLogger.debug(
+                `Deleted ${debugLogsDeleted} debug log file(s) for session ${sessionToDelete.sessionInfo.id}`,
+              );
+            }
+          }
+        }
       } catch (error) {
         // Ignore ENOENT errors (file already deleted)
         if (
