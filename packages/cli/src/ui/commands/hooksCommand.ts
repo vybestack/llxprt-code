@@ -49,7 +49,7 @@ async function listHooks(context: CommandContext): Promise<void> {
     hooks: allHooks,
   };
 
-  context.ui.addItem(historyItem, Date.now());
+  context.ui.addItem(historyItem);
 }
 
 /**
@@ -257,7 +257,7 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
     type: MessageType.HOOKS_LIST,
     hooks: allHooks,
   };
-  context.ui.addItem(historyItem, Date.now());
+  context.ui.addItem(historyItem);
 }
 
 /**
@@ -327,7 +327,7 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     type: MessageType.HOOKS_LIST,
     hooks: allHooks,
   };
-  context.ui.addItem(historyItem, Date.now());
+  context.ui.addItem(historyItem);
 }
 
 async function completeHookNames(

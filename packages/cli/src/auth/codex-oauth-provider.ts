@@ -49,7 +49,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   private tokenStore: TokenStore;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
   private initializationState = InitializationState.NotStarted;
   private initializationPromise?: Promise<void>;
@@ -59,7 +59,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     tokenStore: TokenStore,
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ) {
     this.deviceFlow = new CodexDeviceFlow();
@@ -74,7 +74,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   setAddItem(
     addItem: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ): void {
     this.addItem = addItem;
@@ -229,7 +229,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     };
     const addItem = this.addItem || globalOAuthUI.getAddItem();
     if (addItem) {
-      addItem(historyItem, Date.now());
+      addItem(historyItem);
     }
 
     // Also show plain URL for copying (pastable)
@@ -349,14 +349,14 @@ export class CodexOAuthProvider implements OAuthProvider {
       // Try instance addItem first, fallback to global
       const addItem = this.addItem || globalOAuthUI.getAddItem();
       if (addItem) {
-        addItem(urlHistoryItem, Date.now());
+        addItem(urlHistoryItem);
 
         // Show the user code prominently - this is what the user needs to copy!
         const codeMessage: HistoryItemWithoutId = {
           type: 'info',
           text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
         };
-        addItem(codeMessage, Date.now());
+        addItem(codeMessage);
       } else {
         // Fallback for non-interactive mode - write to stdout
         process.stdout.write('\nCodex Device Authorization\n');
@@ -416,7 +416,7 @@ export class CodexOAuthProvider implements OAuthProvider {
         text: 'Successfully authenticated with Codex!',
       };
       if (addItem) {
-        addItem(successMessage, Date.now());
+        addItem(successMessage);
       } else {
         process.stdout.write('Successfully authenticated with Codex!\n');
       }

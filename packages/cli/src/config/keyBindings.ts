@@ -60,7 +60,7 @@ export enum Command {
   SHOW_ERROR_DETAILS = 'showErrorDetails',
   TOGGLE_TOOL_DESCRIPTIONS = 'toggleToolDescriptions',
   TOGGLE_TODO_DIALOG = 'toggleTodoDialog',
-  TOGGLE_IDE_CONTEXT_DETAIL = 'toggleIDEContextDetail',
+  SHOW_IDE_CONTEXT_DETAIL = 'showIDEContextDetail',
   TOGGLE_MARKDOWN = 'toggleMarkdown',
   TOGGLE_COPY_MODE = 'toggleCopyMode',
   TOGGLE_YOLO = 'toggleYolo',
@@ -89,8 +89,8 @@ export enum Command {
 
   // Additional commands from keyboard shortcuts autogen
   TOGGLE_SHELL_INPUT_FOCUS = 'toggleShellInputFocus',
-  TOGGLE_SHELL_INPUT_FOCUS_IN = 'toggleShellInputFocusIn',
-  TOGGLE_SHELL_INPUT_FOCUS_OUT = 'toggleShellInputFocusOut',
+  FOCUS_SHELL_INPUT = 'focusShellInput',
+  UNFOCUS_SHELL_INPUT = 'unfocusShellInput',
   EXPAND_SUGGESTION = 'expandSuggestion',
   COLLAPSE_SUGGESTION = 'collapseSuggestion',
 }
@@ -250,7 +250,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
   [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
-  [Command.TOGGLE_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
+  [Command.SHOW_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.TOGGLE_MARKDOWN]: [{ key: 'm', command: true }],
   [Command.TOGGLE_COPY_MODE]: [{ key: 's', ctrl: true }],
   [Command.TOGGLE_YOLO]: [{ key: 'y', ctrl: true }],
@@ -280,8 +280,8 @@ export const defaultKeyBindings: KeyBindingConfig = {
   // an interactive shell is attached, even though Ctrl+F is otherwise commonly
   // used for cursor-forward behavior in readline-style input editing.
   [Command.TOGGLE_SHELL_INPUT_FOCUS]: [{ key: 'f', ctrl: true }],
-  [Command.TOGGLE_SHELL_INPUT_FOCUS_IN]: [{ key: 'tab', shift: false }],
-  [Command.TOGGLE_SHELL_INPUT_FOCUS_OUT]: [
+  [Command.FOCUS_SHELL_INPUT]: [{ key: 'tab', shift: false }],
+  [Command.UNFOCUS_SHELL_INPUT]: [
     { key: 'tab', shift: false },
     { key: 'tab', shift: true },
   ],
@@ -384,14 +384,14 @@ export const commandCategories: readonly CommandCategory[] = [
     title: 'App Controls',
     commands: [
       Command.SHOW_ERROR_DETAILS,
-      Command.TOGGLE_IDE_CONTEXT_DETAIL,
+      Command.SHOW_IDE_CONTEXT_DETAIL,
       Command.TOGGLE_MARKDOWN,
       Command.TOGGLE_COPY_MODE,
       Command.TOGGLE_YOLO,
       Command.TOGGLE_AUTO_EDIT,
       Command.SHOW_MORE_LINES,
-      Command.TOGGLE_SHELL_INPUT_FOCUS_IN,
-      Command.TOGGLE_SHELL_INPUT_FOCUS_OUT,
+      Command.FOCUS_SHELL_INPUT,
+      Command.UNFOCUS_SHELL_INPUT,
     ],
   },
   {
@@ -455,7 +455,7 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
-  [Command.TOGGLE_IDE_CONTEXT_DETAIL]: 'Toggle IDE context details.',
+  [Command.SHOW_IDE_CONTEXT_DETAIL]: 'Toggle IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]:
     'Toggle copy mode when the terminal is using the alternate buffer.',
@@ -474,9 +474,9 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.TOGGLE_MOUSE_EVENTS]: 'Toggle mouse event tracking.',
   [Command.TOGGLE_SHELL_INPUT_FOCUS]:
     'Toggle focus between the shell and LLxprt input when an interactive shell is attached.',
-  [Command.TOGGLE_SHELL_INPUT_FOCUS_IN]:
+  [Command.FOCUS_SHELL_INPUT]:
     'Toggle focus into the interactive shell from LLxprt input.',
-  [Command.TOGGLE_SHELL_INPUT_FOCUS_OUT]:
+  [Command.UNFOCUS_SHELL_INPUT]:
     'Toggle focus out of the interactive shell and into LLxprt input.',
   [Command.EXPAND_SUGGESTION]:
     'Expand an inline suggestion when suggestion text is available.',

@@ -70,7 +70,7 @@ async function listAction(
     showDescriptions: useShowDescriptions,
   };
 
-  context.ui.addItem(skillsListItem, Date.now());
+  context.ui.addItem(skillsListItem);
 }
 
 async function disableAction(

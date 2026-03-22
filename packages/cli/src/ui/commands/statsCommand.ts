@@ -431,7 +431,7 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
     quotaLines: quotaLines.length > 0 ? quotaLines : undefined,
   };
 
-  context.ui.addItem(statsItem, Date.now());
+  context.ui.addItem(statsItem);
 
   // Session recording section (stub - result currently discarded)
   // @plan PLAN-20260214-SESSIONBROWSER.P24

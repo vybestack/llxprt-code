@@ -1731,7 +1731,7 @@ export const AppContainer = (props: AppContainerProps) => {
           return newValue;
         });
       } else if (
-        keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
+        keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
         config.getIdeMode() &&
         ideContextState
       ) {
@@ -1766,7 +1766,7 @@ export const AppContainer = (props: AppContainerProps) => {
           });
         }
       } else if (
-        keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS_OUT](key) &&
+        keyMatchers[Command.UNFOCUS_SHELL_INPUT](key) &&
         activeShellPtyId &&
         embeddedShellFocused
       ) {
@@ -1812,7 +1812,7 @@ export const AppContainer = (props: AppContainerProps) => {
           Date.now(),
         );
       } else if (
-        keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS_IN](key) &&
+        keyMatchers[Command.FOCUS_SHELL_INPUT](key) &&
         activeShellPtyId &&
         !embeddedShellFocused
       ) {

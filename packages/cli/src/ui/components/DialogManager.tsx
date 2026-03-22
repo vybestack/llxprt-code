@@ -140,7 +140,7 @@ export const DialogManager = ({
 
           // Show all messages
           for (const msg of messages) {
-            addItem({ type: 'info', text: msg }, Date.now());
+            addItem({ type: 'info', text: msg });
           }
 
           commandContext.recordingIntegration?.recordProviderSwitch(
@@ -224,13 +224,13 @@ export const DialogManager = ({
 
       if (!resumeResult.ok) {
         // Show error but keep dialog open for retry
-        addItem({ type: 'error', text: resumeResult.error }, Date.now());
+        addItem({ type: 'error', text: resumeResult.error });
         return resumeResult;
       }
 
       // Log warnings
       for (const warning of resumeResult.warnings) {
-        addItem({ type: 'info', text: `Warning: ${warning}` }, Date.now());
+        addItem({ type: 'info', text: `Warning: ${warning}` });
       }
 
       // Restore history to gemini client

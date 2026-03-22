@@ -318,7 +318,7 @@ describe('keyMatchers', () => {
       negative: [createKey('q'), createKey('t', { ctrl: true })],
     },
     {
-      command: Command.TOGGLE_IDE_CONTEXT_DETAIL,
+      command: Command.SHOW_IDE_CONTEXT_DETAIL,
       positive: [createKey('g', { ctrl: true })],
       negative: [createKey('g'), createKey('t', { ctrl: true })],
     },
@@ -381,12 +381,12 @@ describe('keyMatchers', () => {
       negative: [createKey('f'), createKey('tab')],
     },
     {
-      command: Command.TOGGLE_SHELL_INPUT_FOCUS_IN,
+      command: Command.FOCUS_SHELL_INPUT,
       positive: [createKey('tab')],
       negative: [createKey('f', { ctrl: true }), createKey('f')],
     },
     {
-      command: Command.TOGGLE_SHELL_INPUT_FOCUS_OUT,
+      command: Command.UNFOCUS_SHELL_INPUT,
       positive: [createKey('tab'), createKey('tab', { shift: true })],
       negative: [createKey('f', { ctrl: true })],
     },

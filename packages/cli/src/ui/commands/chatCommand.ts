@@ -104,7 +104,7 @@ const listCommand: SlashCommand = {
       chats: chatDetails,
     };
 
-    context.ui.addItem(item, Date.now());
+    context.ui.addItem(item);
   },
 };
 

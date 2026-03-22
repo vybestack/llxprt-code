@@ -40,7 +40,7 @@ import {
 export interface SessionContextType {
   // History management
   history: HistoryItem[];
-  addItem: (itemData: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
+  addItem: (itemData: Omit<HistoryItem, 'id'>, baseTimestamp?: number) => number;
   updateItem: (
     id: number,
     updates:

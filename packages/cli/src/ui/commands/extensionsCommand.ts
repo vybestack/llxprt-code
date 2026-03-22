@@ -64,7 +64,7 @@ async function listAction(context: CommandContext) {
     extensions,
   };
 
-  context.ui.addItem(historyItem, Date.now());
+  context.ui.addItem(historyItem);
 }
 
 function updateAction(context: CommandContext, args: string): Promise<void> {
@@ -113,7 +113,7 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
       );
     }
 
-    context.ui.addItem(historyItem, Date.now());
+    context.ui.addItem(historyItem);
     context.ui.setPendingItem(null);
   });
 
@@ -262,7 +262,7 @@ async function restartAction(
     type: MessageType.INFO,
     text: `Restarting ${extensionsToRestart.length} extension${s}...`,
   };
-  context.ui.addItem(restartingMessage, Date.now());
+  context.ui.addItem(restartingMessage);
 
   const results = await Promise.allSettled(
     extensionsToRestart.map(async (extension: GeminiCLIExtension) => {

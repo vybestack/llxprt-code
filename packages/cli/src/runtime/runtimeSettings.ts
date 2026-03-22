@@ -533,7 +533,7 @@ export function getCliProviderManager(
     settings?: LoadedSettings;
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number;
   } = {},
 ): ProviderManager {
@@ -555,7 +555,7 @@ export function getCliProviderManager(
           setAddItem?: (
             callback: (
               itemData: Omit<HistoryItemWithoutId, 'id'>,
-              baseTimestamp: number,
+              baseTimestamp?: number,
             ) => number,
           ) => void;
         };
@@ -1658,7 +1658,7 @@ export async function switchActiveProvider(
     skipModelDefaults?: boolean;
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number;
   } = {},
 ): Promise<ProviderSwitchResult> {

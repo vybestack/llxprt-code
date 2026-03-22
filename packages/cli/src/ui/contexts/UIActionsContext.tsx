@@ -20,7 +20,7 @@ import type { SubagentView } from '../components/SubagentManagement/types.js';
  */
 export interface UIActions {
   // History actions
-  addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => number;
+  addItem: (item: Omit<HistoryItem, 'id'>, timestamp?: number) => number;
   clearItems: () => void;
   loadHistory: (newHistory: HistoryItem[]) => void;
   refreshStatic: () => void;
