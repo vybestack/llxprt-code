@@ -52,7 +52,8 @@ describe('chatCommand', () => {
       | 'delete'
       | 'rename'
       | 'clear'
-      | 'restore',
+      | 'restore'
+      | 'debug',
   ): SlashCommand => {
     const subCommand = chatCommand.subCommands?.find(
       (cmd) => cmd.name === name,
@@ -111,7 +112,7 @@ describe('chatCommand', () => {
   it('should have the correct main command definition', () => {
     expect(chatCommand.name).toBe('chat');
     expect(chatCommand.description).toBe('Manage conversation checkpoints');
-    expect(chatCommand.subCommands).toHaveLength(7);
+    expect(chatCommand.subCommands).toHaveLength(8);
   });
 
   describe('list subcommand', () => {
@@ -506,6 +507,87 @@ describe('chatCommand', () => {
           'alpha',
         ]);
       });
+  });
+
+    });
+
+  describe('debug subcommand', () => {
+    let debugCommand: SlashCommand;
+
+    beforeEach(() => {
+      debugCommand = getSubCommand('debug');
+    });
+
+    it('should show chat initialized and history when chat is active', async () => {
+      const mockHistory = [
+        { role: 'user', parts: [{ text: 'setup' }] },
+        { role: 'user', parts: [{ text: 'hello' }] },
+        { role: 'model', parts: [{ text: 'hi' }] },
+      ];
+      mockGetHistory.mockReturnValue(mockHistory);
+
+      const result = await debugCommand?.action?.(mockContext, '');
+
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+      });
+      expect(result?.content).toContain('Chat initialized: true');
+      expect(result?.content).toContain('History entries: 3');
+      expect(result?.content).toContain('Current model:');
+      expect(result?.content).toContain('Checkpoint directory:');
+    });
+
+    it('should show chat not initialized when no chat exists', async () => {
+      const mockContextNoChat = createMockCommandContext({
+        services: {
+          config: {
+            getProjectRoot: () => '/project/root',
+            getGeminiClient: () =>
+              ({
+                hasChatInitialized: vi.fn().mockReturnValue(false),
+              }) as unknown as GeminiClient,
+            getModel: () => 'test-model',
+            storage: {
+              getProjectTempDir: () => '/project/root/.gemini/tmp/mockhash',
+            },
+          },
+          logger: {
+            initialize: vi.fn().mockResolvedValue(undefined),
+          },
+        },
+      });
+
+      const result = await debugCommand?.action?.(mockContextNoChat, '');
+
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+      });
+      expect(result?.content).toContain('Chat initialized: false');
+      expect(result?.content).toContain('History entries: 0 (chat not initialized)');
+    });
+
+    it('should handle missing config gracefully', async () => {
+      const mockContextNoConfig = createMockCommandContext({
+        services: {
+          config: null,
+          logger: {
+            initialize: vi.fn().mockResolvedValue(undefined),
+          },
+        },
+      });
+
+      const result = await debugCommand?.action?.(mockContextNoConfig, '');
+
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+      });
+      expect(result?.content).toContain('Chat initialized: false');
+      expect(result?.content).toContain('Current model: unavailable (config not initialized)');
+      expect(result?.content).toContain('Checkpoint directory: unavailable');
     });
   });
 });
+

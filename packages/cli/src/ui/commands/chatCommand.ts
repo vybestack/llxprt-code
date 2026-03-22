@@ -503,6 +503,61 @@ const restoreCommand: SlashCommand = {
   },
 };
 
+const debugCommand: SlashCommand = {
+  name: 'debug',
+  description: 'Show chat diagnostics and debug information',
+  kind: CommandKind.BUILT_IN,
+  action: async (context): Promise<SlashCommandActionReturn> => {
+    const { config } = context.services;
+    const client = config?.getGeminiClient();
+
+    const debugInfo: string[] = [];
+
+    // Chat initialization status
+    const chatInitialized = client?.hasChatInitialized() ?? false;
+    debugInfo.push(`Chat initialized: ${chatInitialized}`);
+
+    // History information
+    if (chatInitialized && client) {
+      try {
+        const chat = client.getChat();
+        const history = chat.getHistory();
+        debugInfo.push(`History entries: ${history.length}`);
+      } catch (_err) {
+        debugInfo.push('History entries: unavailable');
+      }
+    } else {
+      debugInfo.push('History entries: 0 (chat not initialized)');
+    }
+
+    // Model information
+    if (config) {
+      try {
+        const model = config.getModel();
+        debugInfo.push(`Current model: ${model}`);
+      } catch (_err) {
+        debugInfo.push('Current model: unavailable');
+      }
+    } else {
+      debugInfo.push('Current model: unavailable (config not initialized)');
+    }
+
+    // Checkpoint directory information
+    const checkpointDir = config?.storage?.getProjectTempDir();
+    if (checkpointDir) {
+      debugInfo.push(`Checkpoint directory: ${checkpointDir}`);
+    } else {
+      debugInfo.push('Checkpoint directory: unavailable');
+    }
+
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Chat Debug Information:\n${debugInfo.map((line) => `• ${line}`).join('\n')}`,
+    };
+  },
+};
+
 export const chatCommand: SlashCommand = {
   name: 'chat',
   description: 'Manage conversation checkpoints',
@@ -515,6 +570,7 @@ export const chatCommand: SlashCommand = {
     renameCommand,
     clearCommand,
     restoreCommand,
+    debugCommand,
   ],
   action: async (): Promise<MessageActionReturn> => ({
     type: 'message',
@@ -526,6 +582,7 @@ export const chatCommand: SlashCommand = {
 • delete <tag> [--force] - Delete a saved checkpoint
 • rename <old_tag> <new_tag> - Rename a checkpoint
 • clear - Clear current conversation history
-• restore <number> - Restore conversation to N turns ago`,
+• restore <number> - Restore conversation to N turns ago
+• debug - Show chat diagnostics and debug information`,
   }),
 };
