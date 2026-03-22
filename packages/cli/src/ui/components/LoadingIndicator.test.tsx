@@ -239,4 +239,43 @@ describe('<LoadingIndicator />', () => {
     // The text should be present (truncated by Ink's wrap="truncate-end")
     expect(output).toContain('This is an extremely long loading phrase');
   });
+
+  it('should prioritize action-required phrase over thought.subject when WaitingForConfirmation', () => {
+    const props = {
+      thought: {
+        subject: 'Some thought subject',
+        description: 'A description',
+      },
+      currentLoadingPhrase: 'Waiting for user confirmation...',
+      elapsedTime: 10,
+    };
+    const { lastFrame } = renderWithContext(
+      <LoadingIndicator {...props} />,
+      StreamingState.WaitingForConfirmation,
+    );
+    const output = lastFrame();
+    expect(output).toContain('Waiting for user confirmation...');
+    expect(output).not.toContain('Some thought subject');
+  });
+
+  it('should prioritize shell focus hint phrase over thought.subject', () => {
+    const props = {
+      thought: {
+        subject: 'Some thought subject',
+        description: 'A description',
+      },
+      currentLoadingPhrase:
+        'Interactive shell awaiting input... press tab to focus shell',
+      elapsedTime: 5,
+    };
+    const { lastFrame } = renderWithContext(
+      <LoadingIndicator {...props} />,
+      StreamingState.Responding,
+    );
+    const output = lastFrame();
+    expect(output).toContain(
+      'Interactive shell awaiting input... press tab to focus shell',
+    );
+    expect(output).not.toContain('Some thought subject');
+  });
 });
