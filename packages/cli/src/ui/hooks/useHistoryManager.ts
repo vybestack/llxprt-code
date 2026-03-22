@@ -86,7 +86,7 @@ export function useHistory(
     (
       itemData: Omit<HistoryItem, 'id'>,
       baseTimestamp: number = Date.now(),
-      isResuming: boolean = false,
+      _isResuming: boolean = false,
     ): number => {
       const id = getNextMessageId(baseTimestamp);
       const newItem: HistoryItem = { ...itemData, id } as HistoryItem;

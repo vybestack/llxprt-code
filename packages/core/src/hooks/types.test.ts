@@ -9,7 +9,6 @@ import {
   HookEventName,
   HookType,
   AfterModelHookOutput,
-  defaultHookTranslator,
 } from './types.js';
 import type { LLMResponse } from './types.js';
 

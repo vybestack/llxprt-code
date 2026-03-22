@@ -64,13 +64,13 @@ export function sanitizeTranscript(text: string): string {
 
   // Redact Bearer tokens
   sanitized = sanitized.replace(
-    /Bearer\s+[a-zA-Z0-9_\-\.]+/gi,
+    /Bearer\s+[a-zA-Z0-9_.-]+/gi,
     'Bearer [REDACTED]',
   );
 
   // Redact generic API keys in common formats
   sanitized = sanitized.replace(
-    /api[_-]?key["\s:=]+[a-zA-Z0-9_\-\.]{20,}/gi,
+    /api[_-]?key["\s:=]+[a-zA-Z0-9_.-]{20,}/gi,
     'api_key=[REDACTED]',
   );
 

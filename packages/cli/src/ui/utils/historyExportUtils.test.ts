@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import {
   sanitizeTranscript,
   exportHistoryForBugReport,
@@ -131,7 +132,7 @@ describe('historyExportUtils', () => {
       exportedFilePath = result.filePath;
 
       expect(result.filePath).toMatch(/llxprt-bug-report-.*\.md$/);
-      expect(result.filePath).toContain(require('node:os').tmpdir());
+      expect(result.filePath).toContain(tmpdir());
 
       // Verify file was created
       const fileContent = await readFile(result.filePath, 'utf-8');

@@ -2953,7 +2953,7 @@ describe('useGeminiStream', () => {
             };
           })(),
         );
-        result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
       });
 
       await waitFor(() => {
@@ -2981,7 +2981,7 @@ describe('useGeminiStream', () => {
             };
           })(),
         );
-        result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
       });
 
       await waitFor(() => {
@@ -3009,7 +3009,7 @@ describe('useGeminiStream', () => {
             };
           })(),
         );
-        result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
       });
 
       await waitFor(() => {
@@ -3032,7 +3032,7 @@ describe('useGeminiStream', () => {
             };
           })(),
         );
-        result.current.submitQuery('test query');
+        void result.current.submitQuery('test query');
       });
 
       await waitFor(() => {

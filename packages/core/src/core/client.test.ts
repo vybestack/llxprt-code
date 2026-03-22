@@ -58,17 +58,6 @@ import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
-import { ChatCompressionService } from '../services/chatCompressionService.js';
-import type { ChatRecordingService } from '../services/chatRecordingService.js';
-import { createAvailabilityServiceMock } from '../availability/testUtils.js';
-import type { ModelAvailabilityService } from '../availability/modelAvailabilityService.js';
-import type {
-  ModelConfigKey,
-  ResolvedModelConfig,
-} from '../services/modelConfigService.js';
-import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
-import * as policyCatalog from '../availability/policyCatalog.js';
-import { partToString } from '../utils/partUtils.js';
 import { coreEvents } from '../utils/events.js';
 
 // --- Mocks ---
