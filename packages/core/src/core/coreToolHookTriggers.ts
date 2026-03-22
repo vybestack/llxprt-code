@@ -56,9 +56,8 @@ export async function triggerBeforeToolHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireBeforeToolEvent(
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireBeforeToolEvent(
       toolName,
       toolInput,
       mcpContext,
@@ -115,15 +114,14 @@ export async function triggerAfterToolHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
+    // Fire the event using HookSystem facade
     const toolResponse = {
       llmContent: toolOutput.llmContent,
       returnDisplay: toolOutput.returnDisplay,
       ...(toolOutput.metadata && { metadata: toolOutput.metadata }),
       ...(toolOutput.error && { error: toolOutput.error }),
     };
-    const result = await eventHandler.fireAfterToolEvent(
+    const result = await hookSystem.fireAfterToolEvent(
       toolName,
       toolInput,
       toolResponse,
@@ -275,11 +273,10 @@ export async function triggerToolNotificationHook(
   try {
     await hookSystem.initialize();
 
-    const eventHandler = hookSystem.getEventHandler();
     const message = getNotificationMessage(confirmationDetails);
     const serializedDetails = toSerializableDetails(confirmationDetails);
 
-    await eventHandler.fireNotificationEvent(
+    await hookSystem.fireNotificationEvent(
       NotificationType.ToolPermission,
       message,
       serializedDetails,

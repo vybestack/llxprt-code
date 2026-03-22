@@ -29,6 +29,8 @@ describe('geminiChatHookTriggers', () => {
     mockHookSystem = {
       initialize: vi.fn(async () => {}),
       getEventHandler: vi.fn(() => mockEventHandler),
+      fireBeforeModelEvent: vi.fn(),
+      fireAfterModelEvent: vi.fn(),
     } as unknown as HookSystem;
     mockConfig = {
       getHookSystem: vi.fn(() => mockHookSystem),
@@ -51,7 +53,7 @@ describe('geminiChatHookTriggers', () => {
     });
 
     it('should return undefined when hook execution fails', async () => {
-      mockEventHandler.fireBeforeModelEvent = vi.fn(() => {
+      mockHookSystem.fireBeforeModelEvent = vi.fn(() => {
         throw new Error('Hook execution failed');
       });
 
@@ -68,7 +70,7 @@ describe('geminiChatHookTriggers', () => {
         reason: 'Test stop reason',
       };
 
-      mockEventHandler.fireBeforeModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireBeforeModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
@@ -97,7 +99,7 @@ describe('geminiChatHookTriggers', () => {
         },
       };
 
-      mockEventHandler.fireBeforeModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireBeforeModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
@@ -114,7 +116,7 @@ describe('geminiChatHookTriggers', () => {
     it('should handle no-op hook (no special actions)', async () => {
       const hookOutput = {};
 
-      mockEventHandler.fireBeforeModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireBeforeModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
@@ -148,7 +150,7 @@ describe('geminiChatHookTriggers', () => {
     });
 
     it('should return undefined when hook execution fails', async () => {
-      mockEventHandler.fireAfterModelEvent = vi.fn(() => {
+      mockHookSystem.fireAfterModelEvent = vi.fn(() => {
         throw new Error('Hook execution failed');
       });
 
@@ -168,7 +170,7 @@ describe('geminiChatHookTriggers', () => {
         reason: 'Test stop after model',
       };
 
-      mockEventHandler.fireAfterModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
@@ -190,7 +192,7 @@ describe('geminiChatHookTriggers', () => {
         reason: 'Test block after model',
       };
 
-      mockEventHandler.fireAfterModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
@@ -220,7 +222,7 @@ describe('geminiChatHookTriggers', () => {
         },
       };
 
-      mockEventHandler.fireAfterModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
@@ -242,7 +244,7 @@ describe('geminiChatHookTriggers', () => {
     it('should handle no-op hook (no modifications)', async () => {
       const hookOutput = {};
 
-      mockEventHandler.fireAfterModelEvent = vi.fn(async () => ({
+      mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
         finalOutput: hookOutput,
       }));
 
