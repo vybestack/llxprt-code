@@ -355,7 +355,11 @@ const listCommand: SlashCommand = {
     for (const name of names) {
       try {
         const config = await manager.loadSubagent(name);
-        lines.push(`  • ${name} (profile: ${config.profile})`);
+        let line = `  • ${name} (profile: ${config.profile})`;
+        if (config.source === 'extension') {
+          line += ` [ext: ${config.sourceExtension}]`;
+        }
+        lines.push(line);
       } catch {
         lines.push(`  • ${name}`);
       }
@@ -463,6 +467,30 @@ const deleteCommand: SlashCommand = {
       };
     }
 
+    // Check if it's an extension-only subagent
+    try {
+      const config = await subagentManager.loadSubagent(name);
+      if (config.source === 'extension') {
+        // Check if user has a disk override
+        const diskExists = await (subagentManager as any)._diskSubagentExists(
+          name,
+        );
+        if (!diskExists) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Cannot delete extension-provided subagent '${name}'. It is managed by extension '${config.sourceExtension}'.`,
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error checking subagent: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
     return {
       type: 'dialog',
       dialog: 'subagent',
@@ -514,6 +542,30 @@ const editCommand: SlashCommand = {
         type: 'message',
         messageType: 'error',
         content: `Subagent '${name}' not found.`,
+      };
+    }
+
+    // Check if it's an extension-only subagent
+    try {
+      const config = await subagentManager.loadSubagent(name);
+      if (config.source === 'extension') {
+        // Check if user has a disk override
+        const diskExists = await (subagentManager as any)._diskSubagentExists(
+          name,
+        );
+        if (!diskExists) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Cannot edit extension-provided subagent '${name}'. It is managed by extension '${config.sourceExtension}'.`,
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error checking subagent: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
 

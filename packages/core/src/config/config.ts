@@ -252,6 +252,11 @@ export interface GeminiCLIExtension {
   skills?: SkillDefinition[];
   settings?: Array<Record<string, unknown>>;
   resolvedSettings?: Array<Record<string, unknown>>;
+  subagents?: Array<{
+    name: string;
+    profile: string;
+    systemPrompt: string;
+  }>;
 }
 
 export interface ExtensionInstallMetadata {
@@ -1103,6 +1108,20 @@ export class Config {
         this.getToolRegistry().registerTool(
           new ActivateSkillTool(this, initializationMessageBus),
         );
+      }
+    }
+
+    // Register extension-contributed subagents (after skill discovery, before GeminiClient creation)
+    const subagentMgr = this.getSubagentManager();
+    if (subagentMgr) {
+      subagentMgr.clearExtensionSubagents();
+      for (const extension of this.getExtensions()) {
+        if (extension.isActive && extension.subagents?.length) {
+          subagentMgr.registerExtensionSubagents(
+            extension.name,
+            extension.subagents,
+          );
+        }
       }
     }
 

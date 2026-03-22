@@ -84,6 +84,11 @@ export interface ExtensionConfig {
   excludeTools?: string[];
   hooks?: Hooks;
   settings?: ExtensionSetting[];
+  subagents?: Array<{
+    name: string;
+    profile: string;
+    systemPrompt: string;
+  }>;
 }
 
 export interface ExtensionInstallMetadata {
@@ -358,6 +363,8 @@ export function loadExtension(
         ) as unknown as SkillDefinition,
     );
 
+    const subagents = config.subagents ?? [];
+
     return {
       name: config.name,
       version: config.version,
@@ -367,6 +374,7 @@ export function loadExtension(
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
       skills,
+      subagents,
       isActive: true, // Barring any other signals extensions should be considered Active.
       settings: config.settings as Array<Record<string, unknown>> | undefined,
       resolvedSettings: resolvedSettings as unknown as Array<

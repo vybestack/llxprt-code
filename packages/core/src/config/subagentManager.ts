@@ -49,6 +49,7 @@ const ERROR_MESSAGES = {
 export class SubagentManager {
   private readonly baseDir: string;
   private readonly profileManager: ProfileManager;
+  private extensionSubagents: Map<string, SubagentConfig> = new Map();
 
   /**
    * @param baseDir Directory where subagent configs are stored (e.g., ~/.llxprt/subagents/)
@@ -61,6 +62,52 @@ export class SubagentManager {
   constructor(baseDir: string, profileManager: ProfileManager) {
     this.baseDir = baseDir;
     this.profileManager = profileManager;
+  }
+
+  /**
+   * Register extension-contributed subagents in memory
+   */
+  registerExtensionSubagents(
+    extensionName: string,
+    subagents: Array<{ name: string; profile: string; systemPrompt: string }>,
+  ): void {
+    for (const sa of subagents) {
+      // Warn if another extension already registered this name (cross-extension conflict)
+      const existing = this.extensionSubagents.get(sa.name);
+      if (existing && existing.sourceExtension !== extensionName) {
+        console.warn(
+          `Extension '${extensionName}' overrides subagent '${sa.name}' previously registered by extension '${existing.sourceExtension}'. Last-registered wins.`,
+        );
+      }
+      const now = new Date().toISOString();
+      this.extensionSubagents.set(sa.name, {
+        name: sa.name,
+        profile: sa.profile,
+        systemPrompt: sa.systemPrompt,
+        createdAt: now,
+        updatedAt: now,
+        source: 'extension',
+        sourceExtension: extensionName,
+      });
+    }
+  }
+
+  /**
+   * Clear ALL extension subagents (used during full re-initialization)
+   */
+  clearExtensionSubagents(): void {
+    this.extensionSubagents.clear();
+  }
+
+  /**
+   * Remove subagents contributed by a specific extension (used when an extension is unloaded)
+   */
+  removeExtensionSubagents(extensionName: string): void {
+    for (const [name, config] of this.extensionSubagents) {
+      if (config.sourceExtension === extensionName) {
+        this.extensionSubagents.delete(name);
+      }
+    }
   }
 
   /**
@@ -170,6 +217,30 @@ export class SubagentManager {
    * @pseudocode SubagentManager.md lines 129-180
    */
   async loadSubagent(name: string): Promise<SubagentConfig> {
+    // Try disk-backed (user) subagent first
+    try {
+      const config = await this._loadDiskSubagent(name);
+      return { ...config, source: 'user' };
+    } catch (error) {
+      // Only fall through to extension lookup if the error is "not found"
+      // All other errors (corrupt JSON, missing fields, etc.) should propagate
+      if (error instanceof Error && !error.message.includes('not found')) {
+        throw error;
+      }
+      // Fall through to extension lookup
+    }
+    // Check extension-contributed subagents
+    const extSubagent = this.extensionSubagents.get(name);
+    if (extSubagent) {
+      return extSubagent;
+    }
+    throw new Error(ERROR_MESSAGES.SUBAGENT_NOT_FOUND.replace('{name}', name));
+  }
+
+  /**
+   * Load a subagent configuration from disk (private helper)
+   */
+  private async _loadDiskSubagent(name: string): Promise<SubagentConfig> {
     // Validate input via private helper
     const filePath = this.getSubagentPath(name);
 
@@ -267,6 +338,19 @@ export class SubagentManager {
    * @pseudocode SubagentManager.md lines 181-209
    */
   async listSubagents(): Promise<string[]> {
+    // Get disk-backed user subagents
+    const userSubagents = await this._listDiskSubagents();
+    // Merge extension subagents (only names not already in user list)
+    const extensionNames = [...this.extensionSubagents.keys()].filter(
+      (name) => !userSubagents.includes(name),
+    );
+    return [...userSubagents, ...extensionNames].sort();
+  }
+
+  /**
+   * List disk-backed subagent names (private helper)
+   */
+  private async _listDiskSubagents(): Promise<string[]> {
     try {
       // Ensure directory exists
       await this.ensureDirectory();
@@ -316,8 +400,16 @@ export class SubagentManager {
    * @returns true if deleted, false if not found
    */
   async deleteSubagent(name: string): Promise<boolean> {
-    // Validate input via private helper
-    const filePath = this.getSubagentPath(name);
+    // Check if this is an extension subagent
+    if (this.extensionSubagents.has(name)) {
+      const diskExists = await this._diskSubagentExists(name);
+      if (!diskExists) {
+        throw new Error(
+          `Cannot delete extension-provided subagent '${name}'. It is managed by extension '${this.extensionSubagents.get(name)!.sourceExtension}'.`,
+        );
+      }
+      // If user has a disk override AND extension has it, delete the user override
+    }
 
     // Check if subagent exists
     const exists = await this.subagentExists(name);
@@ -326,6 +418,14 @@ export class SubagentManager {
     }
 
     // Delete file
+    return this._deleteDiskSubagent(name);
+  }
+
+  /**
+   * Delete a disk-backed subagent (private helper)
+   */
+  private async _deleteDiskSubagent(name: string): Promise<boolean> {
+    const filePath = this.getSubagentPath(name);
     try {
       await fsPromises.unlink(filePath);
       return true;
@@ -361,6 +461,15 @@ export class SubagentManager {
    * @pseudocode SubagentManager.md lines 237-262
    */
   async subagentExists(name: string): Promise<boolean> {
+    const diskExists = await this._diskSubagentExists(name);
+    if (diskExists) return true;
+    return this.extensionSubagents.has(name);
+  }
+
+  /**
+   * Check if a disk-backed subagent exists (private helper)
+   */
+  private async _diskSubagentExists(name: string): Promise<boolean> {
     // Validate input via private helper
     // This check will return false for empty or invalid names.
     let filePath: string;
