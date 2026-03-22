@@ -204,70 +204,102 @@ export const DefaultAppLayout = ({
   }
 
   if (useAlternateBuffer) {
-    const headerElement = (
-      <AppHeader
-        config={config}
-        settings={settings}
-        version={version}
-        nightly={nightly}
-        terminalWidth={terminalWidth}
-      />
+    const headerElement = React.useMemo(
+      () => (
+        <AppHeader
+          config={config}
+          settings={settings}
+          version={version}
+          nightly={nightly}
+          terminalWidth={terminalWidth}
+        />
+      ),
+      [config, settings, version, nightly, terminalWidth],
     );
 
-    const pendingElement = (
-      <OverflowProvider>
-        <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
-          {pendingHistoryItems.map((item, i) => (
+    const pendingElement = React.useMemo(
+      () => (
+        <OverflowProvider>
+          <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
+            {pendingHistoryItems.map((item, i) => (
+              <HistoryItemDisplay
+                key={i}
+                availableTerminalHeight={
+                  constrainHeight ? effectiveAvailableHeight : undefined
+                }
+                terminalWidth={mainAreaWidth}
+                item={{ ...item, id: 0 }}
+                isPending={true}
+                config={config}
+                isFocused={!uiState.isEditorDialogOpen}
+                slashCommands={slashCommands}
+                showTodoPanel={showTodoPanelSetting}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
+              />
+            ))}
+            <ShowMoreLines constrainHeight={constrainHeight} />
+          </Box>
+        </OverflowProvider>
+      ),
+      [
+        uiState.pendingHistoryItemRef,
+        pendingHistoryItems,
+        constrainHeight,
+        effectiveAvailableHeight,
+        mainAreaWidth,
+        config,
+        uiState.isEditorDialogOpen,
+        slashCommands,
+        showTodoPanelSetting,
+        activeShellPtyId,
+        embeddedShellFocused,
+      ],
+    );
+
+    const listItems: ScrollableMainContentItem[] = React.useMemo(
+      () => [
+        {
+          key: 'header',
+          estimatedHeight: 100,
+          element: <Box flexDirection="column">{headerElement}</Box>,
+        },
+        ...history.map((h) => ({
+          key: `history-${h.id}`,
+          estimatedHeight: 100,
+          element: (
             <HistoryItemDisplay
-              key={i}
-              availableTerminalHeight={
-                constrainHeight ? effectiveAvailableHeight : undefined
-              }
               terminalWidth={mainAreaWidth}
-              item={{ ...item, id: 0 }}
-              isPending={true}
+              availableTerminalHeight={staticAreaMaxItemHeight}
+              item={h}
+              isPending={false}
               config={config}
-              isFocused={!uiState.isEditorDialogOpen}
               slashCommands={slashCommands}
               showTodoPanel={showTodoPanelSetting}
               activeShellPtyId={activeShellPtyId}
               embeddedShellFocused={embeddedShellFocused}
             />
-          ))}
-          <ShowMoreLines constrainHeight={constrainHeight} />
-        </Box>
-      </OverflowProvider>
+          ),
+        })),
+        {
+          key: 'pending',
+          estimatedHeight: 100,
+          element: pendingElement,
+        },
+      ],
+      [
+        headerElement,
+        history,
+        mainAreaWidth,
+        staticAreaMaxItemHeight,
+        config,
+        slashCommands,
+        showTodoPanelSetting,
+        activeShellPtyId,
+        embeddedShellFocused,
+        pendingElement,
+      ],
     );
-
-    const listItems: ScrollableMainContentItem[] = [
-      {
-        key: 'header',
-        estimatedHeight: 100,
-        element: <Box flexDirection="column">{headerElement}</Box>,
-      },
-      ...history.map((h) => ({
-        key: `history-${h.id}`,
-        estimatedHeight: 100,
-        element: (
-          <HistoryItemDisplay
-            terminalWidth={mainAreaWidth}
-            availableTerminalHeight={staticAreaMaxItemHeight}
-            item={h}
-            isPending={false}
-            config={config}
-            slashCommands={slashCommands}
-            showTodoPanel={showTodoPanelSetting}
-            activeShellPtyId={activeShellPtyId}
-            embeddedShellFocused={embeddedShellFocused}
-          />
-        ),
-      })),
-      {
-        key: 'pending',
-        estimatedHeight: 100,
-        element: pendingElement,
-      },
-    ];
 
     return (
       <StreamingContext.Provider value={streamingState}>
@@ -453,57 +485,89 @@ export const DefaultAppLayout = ({
     );
   }
 
+  const staticItems = React.useMemo(
+    () => [
+      <AppHeader
+        key="header"
+        config={config}
+        settings={settings}
+        version={version}
+        nightly={nightly}
+        terminalWidth={terminalWidth}
+      />,
+      ...history.map((h) => (
+        <HistoryItemDisplay
+          terminalWidth={mainAreaWidth}
+          availableTerminalHeight={staticAreaMaxItemHeight}
+          key={h.id}
+          item={h}
+          isPending={false}
+          config={config}
+          slashCommands={slashCommands}
+          showTodoPanel={showTodoPanelSetting}
+          activeShellPtyId={activeShellPtyId}
+          embeddedShellFocused={embeddedShellFocused}
+        />
+      )),
+    ],
+    [
+      config,
+      settings,
+      version,
+      nightly,
+      terminalWidth,
+      history,
+      mainAreaWidth,
+      staticAreaMaxItemHeight,
+      slashCommands,
+      showTodoPanelSetting,
+      activeShellPtyId,
+      embeddedShellFocused,
+    ],
+  );
+
+  const pendingItems = React.useMemo(
+    () =>
+      pendingHistoryItems.map((item, i) => (
+        <HistoryItemDisplay
+          key={i}
+          availableTerminalHeight={
+            constrainHeight ? effectiveAvailableHeight : undefined
+          }
+          terminalWidth={mainAreaWidth}
+          item={{ ...item, id: 0 }}
+          isPending={true}
+          config={config}
+          isFocused={!uiState.isEditorDialogOpen}
+          slashCommands={slashCommands}
+          showTodoPanel={showTodoPanelSetting}
+          activeShellPtyId={activeShellPtyId}
+          embeddedShellFocused={embeddedShellFocused}
+        />
+      )),
+    [
+      pendingHistoryItems,
+      constrainHeight,
+      effectiveAvailableHeight,
+      mainAreaWidth,
+      config,
+      uiState.isEditorDialogOpen,
+      slashCommands,
+      showTodoPanelSetting,
+      activeShellPtyId,
+      embeddedShellFocused,
+    ],
+  );
+
   return (
     <StreamingContext.Provider value={streamingState}>
       <Box flexDirection="column" width="90%" ref={uiState.rootUiRef}>
-        <Static
-          key={staticKey}
-          items={[
-            <AppHeader
-              key="header"
-              config={config}
-              settings={settings}
-              version={version}
-              nightly={nightly}
-              terminalWidth={terminalWidth}
-            />,
-            ...history.map((h) => (
-              <HistoryItemDisplay
-                terminalWidth={mainAreaWidth}
-                availableTerminalHeight={staticAreaMaxItemHeight}
-                key={h.id}
-                item={h}
-                isPending={false}
-                config={config}
-                slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
-                activeShellPtyId={activeShellPtyId}
-                embeddedShellFocused={embeddedShellFocused}
-              />
-            )),
-          ]}
-        >
+        <Static key={staticKey} items={staticItems}>
           {(item) => item}
         </Static>
         <OverflowProvider>
           <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
-            {pendingHistoryItems.map((item, i) => (
-              <HistoryItemDisplay
-                key={i}
-                availableTerminalHeight={
-                  constrainHeight ? effectiveAvailableHeight : undefined
-                }
-                terminalWidth={mainAreaWidth}
-                item={{ ...item, id: 0 }}
-                isPending={true}
-                config={config}
-                isFocused={!uiState.isEditorDialogOpen}
-                slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
-                activeShellPtyId={activeShellPtyId}
-                embeddedShellFocused={embeddedShellFocused}
-              />
-            ))}
+            {pendingItems}
             <ShowMoreLines constrainHeight={constrainHeight} />
           </Box>
         </OverflowProvider>
