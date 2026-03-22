@@ -110,6 +110,8 @@ import * as fs from 'fs';
 import { type AppState, type AppAction } from './reducers/appReducer.js';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
+import { basename } from 'node:path';
+import { computeTerminalTitle } from '../utils/windowTitle.js';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
@@ -151,9 +153,13 @@ import {
 } from './utils/terminalSequences.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 import { iContentToHistoryItems } from './utils/iContentToHistoryItems.js';
+import {
+  QUEUE_ERROR_DISPLAY_DURATION_MS,
+  SHELL_ACTION_REQUIRED_TITLE_DELAY_MS,
+} from './constants.js';
+import { useInactivityTimer } from './hooks/useInactivityTimer.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
-const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
@@ -224,6 +230,10 @@ export const AppContainer = (props: AppContainerProps) => {
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
   const hasSeededResumedHistory = useRef(false);
+
+  // Layout measurements for dynamic title
+  const lastTitleRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (hasSeededResumedHistory.current) {
       return;
@@ -1482,6 +1492,13 @@ export const AppContainer = (props: AppContainerProps) => {
   // Use the activeShellPtyId from useGeminiStream (which gets it from useShellCommandProcessor)
   const activeShellPtyId = geminiActiveShellPtyId;
 
+  const isShellAwaitingFocus = !!activeShellPtyId && !embeddedShellFocused;
+  const showShellActionRequired = useInactivityTimer(
+    isShellAwaitingFocus,
+    isShellAwaitingFocus,
+    SHELL_ACTION_REQUIRED_TITLE_DELAY_MS,
+  );
+
   // Auto-reset embeddedShellFocused when no shell tool is executing.
   // Without this, cancelling a shell while focused (embeddedShellFocused=true)
   // leaves the input prompt permanently disabled.
@@ -1843,6 +1860,40 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [config, config.getLlxprtMdFileCount]);
 
   const logger = useLogger(config.storage);
+
+  // Update terminal window title based on streaming state
+  useEffect(() => {
+    // Respect hideWindowTitle settings
+    if (settings.merged.ui?.hideWindowTitle) return;
+
+    const paddedTitle = computeTerminalTitle({
+      streamingState,
+      thoughtSubject: thought?.subject,
+      isConfirming:
+        !!shellConfirmationRequest ||
+        !!confirmationRequest ||
+        showShellActionRequired,
+      folderName: basename(config.getTargetDir()),
+      showThoughts: !!settings.merged.ui?.showStatusInTitle,
+      useDynamicTitle: settings.merged.ui?.dynamicWindowTitle ?? true,
+    });
+
+    if (paddedTitle !== lastTitleRef.current) {
+      lastTitleRef.current = paddedTitle;
+      stdout.write(`\x1b]2;${paddedTitle}\x07`);
+    }
+  }, [
+    streamingState,
+    thought,
+    shellConfirmationRequest,
+    confirmationRequest,
+    showShellActionRequired,
+    config,
+    settings.merged.ui?.showStatusInTitle,
+    settings.merged.ui?.dynamicWindowTitle,
+    settings.merged.ui?.hideWindowTitle,
+    stdout,
+  ]);
 
   // Initialize independent input history from logger
   useEffect(() => {
