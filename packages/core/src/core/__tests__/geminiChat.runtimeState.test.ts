@@ -132,6 +132,16 @@ function createMockHistoryService(): HistoryService {
   return {
     getHistory: vi.fn().mockResolvedValue([]),
     addToHistory: vi.fn(),
+    add: vi.fn(),
+    getAll: vi.fn().mockReturnValue([]),
+    getCurated: vi.fn().mockReturnValue([]),
+    getCuratedForProvider: vi.fn().mockReturnValue([]),
+    clear: vi.fn(),
+    generateTurnKey: vi.fn().mockReturnValue('test-turn-key'),
+    getIdGeneratorCallback: vi.fn().mockReturnValue(() => 'test-id'),
+    findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+    syncTotalTokens: vi.fn(),
   } as unknown as HistoryService;
 }
 

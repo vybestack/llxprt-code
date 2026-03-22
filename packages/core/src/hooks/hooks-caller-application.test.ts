@@ -516,18 +516,21 @@ describe('Hook Caller Application', () => {
   describe('geminiChat uses synthetic response from hook', () => {
     it('geminiChat should use getSyntheticResponse from hook (currently ignores)', async () => {
       // This test verifies the CALLER behavior by checking the source code.
-      // geminiChat should have code like:
+      // The hook handling code should have:
       //   const hookResult = await triggerBeforeModelHook(...);
       //   const synthetic = hookResult?.getSyntheticResponse();
       //   if (synthetic) { return synthetic; }
+      // After decomposition, this logic lives in DirectMessageProcessor.ts
 
       const fs = await import('node:fs/promises');
-      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
-        .pathname;
-      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+      const directMessageProcessorPath = new URL(
+        '../core/DirectMessageProcessor.ts',
+        import.meta.url,
+      ).pathname;
+      const sourceCode = await fs.readFile(directMessageProcessorPath, 'utf-8');
 
-      // The test FAILS if geminiChat doesn't call getSyntheticResponse
-      // The test PASSES when geminiChat checks for and uses synthetic responses
+      // The test FAILS if the hook handler doesn't call getSyntheticResponse
+      // The test PASSES when it checks for and uses synthetic responses
       const handlesSyntheticResponse = sourceCode.includes(
         'getSyntheticResponse',
       );
@@ -627,33 +630,19 @@ describe('Hook Caller Application', () => {
    */
   describe('geminiChat applies request modifications from BeforeModel hook', () => {
     it('geminiChat should call applyLLMRequestModifications (currently does not)', async () => {
-      // This test verifies that geminiChat.ts calls applyLLMRequestModifications
+      // This test verifies that the hook handler calls applyLLMRequestModifications
       // after getting a BeforeModel hook result (when not blocking/synthetic).
-      //
-      // The current code path is:
-      //   const beforeModelResult = await triggerBeforeModelHook(...);
-      //   if (beforeModelResult?.isBlockingDecision()) { ... return synthetic }
-      //   const syntheticResponse = beforeModelResult?.getSyntheticResponse();
-      //   if (syntheticResponse) { return syntheticResponse; }
-      //   // MISSING: beforeModelResult.applyLLMRequestModifications(request)
-      //   provider.generateChatCompletion({ ...originalRequest... })
-      //
-      // This MUST be fixed to:
-      //   const beforeModelResult = await triggerBeforeModelHook(...);
-      //   if (beforeModelResult?.isBlockingDecision()) { ... return synthetic }
-      //   const syntheticResponse = beforeModelResult?.getSyntheticResponse();
-      //   if (syntheticResponse) { return syntheticResponse; }
-      //   // Apply request modifications before calling API
-      //   const modifiedRequest = beforeModelResult?.applyLLMRequestModifications(request) ?? request;
-      //   provider.generateChatCompletion({ ...modifiedRequest... })
+      // After decomposition, this logic lives in DirectMessageProcessor.ts
 
       const fs = await import('node:fs/promises');
-      const geminiChatPath = new URL('../core/geminiChat.ts', import.meta.url)
-        .pathname;
-      const sourceCode = await fs.readFile(geminiChatPath, 'utf-8');
+      const directMessageProcessorPath = new URL(
+        '../core/DirectMessageProcessor.ts',
+        import.meta.url,
+      ).pathname;
+      const sourceCode = await fs.readFile(directMessageProcessorPath, 'utf-8');
 
-      // The test FAILS if geminiChat doesn't call applyLLMRequestModifications
-      // The test PASSES when geminiChat applies request modifications from hook
+      // The test FAILS if the hook handler doesn't call applyLLMRequestModifications
+      // The test PASSES when it applies request modifications from hook
       const callsApplyLLMRequestModifications = sourceCode.includes(
         'applyLLMRequestModifications',
       );
