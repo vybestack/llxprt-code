@@ -14,9 +14,9 @@ Post-implementation reconciliation. Update continuously as batches complete.
 
 ## Execution Status
 
-- Batch execution has **not started** yet.
-- `PROGRESS.md` is still fully unstarted (`TODO` for all 55 batches).
-- `LLxprt Commit(s)` fields below are intentionally blank until each batch lands.
+- Batch execution is **COMPLETE**.
+- 55 batches planned, 52 produced commits, 3 were execution-time no-ops (B15, B28, B54).
+- Final verification passed: typecheck, build, format, smoke test.
 
 ## Audit Update Rules
 
@@ -29,87 +29,87 @@ Post-implementation reconciliation. Update continuously as batches complete.
 
 | # | Upstream SHA | Decision | LLxprt Commit(s) | Notes |
 |---|-------------|----------|-------------------|-------|
-| 1 | `da85e3f8f23` | PICKED | | Batch B1 |
-| 4 | `982eee63b61` | PICKED | | Batch B1 |
-| 5 | `a26463b056d` | PICKED | | Batch B1 |
-| 7 | `2d683bb6f8a` | PICKED | | Batch B1 |
-| 10 | `8f9bb6bccc6` | PICKED | | Batch B4 |
-| 14 | `57012ae5b33` | PICKED | | Batch B6 |
-| 28 | `1bd4f9d8b6f` | PICKED | | Batch B10 |
-| 31 | `d48c934357c` | PICKED | | Batch B10 |
-| 33 | `3e2f4eb8ba1` | PICKED | | Batch B10 |
-| 34 | `722c4933dc3` | PICKED | | Batch B10 |
-| 46 | `1a4ae413978` | PICKED | | Batch B15 |
-| 47 | `f8138262fa7` | PICKED | | Batch B16 |
-| 48 | `fbfad06307c` | PICKED | | Batch B16 |
-| 50 | `01d2d437372` | PICKED | | Batch B16 |
-| 54 | `e5f7a9c4240` | PICKED | | Batch B16 |
-| 61 | `4ab1b9895ad` | PICKED | | Batch B16 |
-| 67 | `88f1ec8d0ae` | PICKED | | Batch B20 |
-| 71 | `8bc3cfe29a6` | PICKED | | Batch B22 |
-| 72 | `c1401682ed0` | PICKED | | Batch B22 |
-| 75 | `14f0cb45389` | PICKED | | Batch B22 |
-| 78 | `ea7393f7fd5` | PICKED | | Batch B24 |
-| 79 | `e04a5f0cb0e` | PICKED | | Batch B24 |
-| 81 | `1fb55dcb2e0` | PICKED | | Batch B24 |
-| 96 | `93b57b82c10` | PICKED | | Batch B28 |
-| 100 | `64c75cb767c` | PICKED | | Batch B30 |
-| 106 | `15891721ad0` | PICKED | | Batch B33 |
-| 108 | `64cde8d4395` | PICKED | | Batch B34 |
-| 109 | `3b678a4da0f` | PICKED | | Batch B35 |
-| 113 | `8437ce940a1` | PICKED | | Batch B35 |
-| 114 | `e049d5e4e8f` | PICKED | | Batch B35 |
-| 117 | `95d9a339966` | PICKED | | Batch B36 |
-| 118 | `2e8c6cfdbb8` | PICKED | | Batch B37 |
-| 119 | `ca6786a28bd` | PICKED | | Batch B38 |
-| 120 | `e9c9dd1d672` | PICKED | | Batch B39 |
-| 123 | `8d3e93cdb0d` | PICKED | | Batch B40 |
-| 125 | `2fc61685a32` | PICKED | | Batch B42 |
-| 127 | `6adae9f7756` | PICKED | | Batch B43 |
-| 133 | `91fcca3b1c7` | PICKED | | Batch B47 |
-| 134 | `e931ebe581b` | PICKED | | Batch B47 |
-| 137 | `e8be252b755` | PICKED | | Batch B49 |
-| 142 | `c7c409c68fb` | PICKED | | Batch B49 |
-| 143 | `778de55fd8c` | PICKED | | Batch B49 |
-| 144 | `8dbaa2bceaf` | PICKED | | Batch B49 |
-| 145 | `eda47f587cf` | PICKED | | Batch B50 |
-| 152 | `bb6c5741443` | PICKED | | Batch B53 |
-| 157 | `f6a5fa0e03a` | PICKED | | Batch B53 |
-| 158 | `ea0e3de4302` | PICKED | | Batch B54 |
-| 163 | `217f2775805` | PICKED | | Batch B55 |
+| 1 | `da85e3f8f23` | PICKED | `038c71bef` | Batch B1 |
+| 4 | `982eee63b61` | PICKED | `038c71bef` | Batch B1 |
+| 5 | `a26463b056d` | PICKED | `038c71bef` | Batch B1 |
+| 7 | `2d683bb6f8a` | PICKED | `038c71bef` | Batch B1 |
+| 10 | `8f9bb6bccc6` | PICKED | `6c7d9f5f9` | Batch B4 |
+| 14 | `57012ae5b33` | PICKED | `b46303b74` | Batch B6 |
+| 28 | `1bd4f9d8b6f` | PICKED | `71a198932` | Batch B10 |
+| 31 | `d48c934357c` | PICKED | `71a198932` | Batch B10 |
+| 33 | `3e2f4eb8ba1` | PICKED | `71a198932` | Batch B10 |
+| 34 | `722c4933dc3` | PICKED | `71a198932` | Batch B10 |
+| 46 | `1a4ae413978` | PICKED | — | Batch B15 — NO-OP at execution time, fix already present |
+| 47 | `f8138262fa7` | PICKED | `ff9313d45` | Batch B16 |
+| 48 | `fbfad06307c` | PICKED | `ff9313d45` | Batch B16 |
+| 50 | `01d2d437372` | PICKED | `ff9313d45` | Batch B16 |
+| 54 | `e5f7a9c4240` | PICKED | `ff9313d45` | Batch B16 |
+| 61 | `4ab1b9895ad` | PICKED | `ff9313d45` | Batch B16 |
+| 67 | `88f1ec8d0ae` | PICKED | `80ff528c7` | Batch B20 |
+| 71 | `8bc3cfe29a6` | PICKED | `fb79ec9e8` | Batch B22 |
+| 72 | `c1401682ed0` | PICKED | `fb79ec9e8` | Batch B22 |
+| 75 | `14f0cb45389` | PICKED | `fb79ec9e8` | Batch B22 |
+| 78 | `ea7393f7fd5` | PICKED | `21f8c93ec` | Batch B24 |
+| 79 | `e04a5f0cb0e` | PICKED | `21f8c93ec` | Batch B24 |
+| 81 | `1fb55dcb2e0` | PICKED | `21f8c93ec` | Batch B24 |
+| 96 | `93b57b82c10` | PICKED | — | Batch B28 — NO-OP, upstream .gemini path absent |
+| 100 | `64c75cb767c` | PICKED | `9a7c9eb3e` | Batch B30 |
+| 106 | `15891721ad0` | PICKED | `fa7dc3f2e` | Batch B33 |
+| 108 | `64cde8d4395` | PICKED | `ef85f6f7d` | Batch B34 |
+| 109 | `3b678a4da0f` | PICKED | `b7703e68b` | Batch B35 |
+| 113 | `8437ce940a1` | PICKED | `b7703e68b` | Batch B35 |
+| 114 | `e049d5e4e8f` | PICKED | `b7703e68b` | Batch B35 |
+| 117 | `95d9a339966` | PICKED | `3af99a975` | Batch B36 |
+| 118 | `2e8c6cfdbb8` | PICKED | `831bde6ac` | Batch B37 |
+| 119 | `ca6786a28bd` | PICKED | `7e2666f8e` | Batch B38 |
+| 120 | `e9c9dd1d672` | PICKED | `cdbe30f82` | Batch B39 |
+| 123 | `8d3e93cdb0d` | PICKED | `f2f4824be` | Batch B40 |
+| 125 | `2fc61685a32` | PICKED | `864d3827a` | Batch B42 |
+| 127 | `6adae9f7756` | PICKED | `1a988e681` | Batch B43 |
+| 133 | `91fcca3b1c7` | PICKED | `87de1333d` | Batch B47 |
+| 134 | `e931ebe581b` | PICKED | `87de1333d` | Batch B47 |
+| 137 | `e8be252b755` | PICKED | `b5e030da0` | Batch B49 |
+| 142 | `c7c409c68fb` | PICKED | `b5e030da0` | Batch B49 |
+| 143 | `778de55fd8c` | PICKED | `b5e030da0` | Batch B49 |
+| 144 | `8dbaa2bceaf` | PICKED | `b5e030da0` | Batch B49 |
+| 145 | `eda47f587cf` | PICKED | `59657e9fb` | Batch B50 |
+| 152 | `bb6c5741443` | PICKED | `1118595e3` | Batch B53 |
+| 157 | `f6a5fa0e03a` | PICKED | `1118595e3` | Batch B53 |
+| 158 | `ea0e3de4302` | PICKED | — | Batch B54 — NO-OP, ModelInfo dedup not applicable to LLxprt |
+| 163 | `217f2775805` | PICKED | `787da2234` | Batch B55 |
 
 ## REIMPLEMENT Commits (28)
 
 | # | Upstream SHA | Decision | LLxprt Commit(s) | Notes |
 |---|-------------|----------|-------------------|-------|
-| 8 | `5fe5d1da467` | REIMPLEMENTED | | Batch B2 — see `5fe5d1da467-plan.md` |
-| 9 | `416d243027d` | REIMPLEMENTED | | Batch B3 — see `416d243027d-plan.md` |
-| 12 | `97b31c4eefa` | REIMPLEMENTED | | Batch B5 — see `97b31c4eefa-plan.md` |
-| 15 | `c64b5ec4a3a` | REIMPLEMENTED | | Batch B7 — see `c64b5ec4a3a-plan.md` |
-| 17 | `4c961df3136` | REIMPLEMENTED | | Batch B8 — see `4c961df3136-plan.md` |
-| 18 | `17b3eb730a9` | REIMPLEMENTED | | Batch B9 — see `17b3eb730a9-plan.md` |
-| 35 | `030847a80a4` | REIMPLEMENTED | | Batch B11 — see `030847a80a4-plan.md` |
-| 39 | `97ad3d97cba` | REIMPLEMENTED | | Batch B12 — see `97ad3d97cba-plan.md` |
-| 40 | `660368f2490` | REIMPLEMENTED | | Batch B13 — see `660368f2490-plan.md` |
-| 41 | `eb3f3cfdb8a` | REIMPLEMENTED | | Batch B14 — see `eb3f3cfdb8a-plan.md` |
-| 63 | `18dd399cb57` | REIMPLEMENTED | | Batch B17 — see `18dd399cb57-plan.md` |
-| 64 | `e1e3efc9d04` | REIMPLEMENTED | | Batch B18 — see `e1e3efc9d04-plan.md` |
-| 65 | `41e627a7ee4` | REIMPLEMENTED | | Batch B19 — see `41e627a7ee4-plan.md` |
-| 70 | `77e226c55fe` | REIMPLEMENTED | | Batch B21 — see `77e226c55fe-plan.md` |
-| 77 | `c7d17dda49d` | REIMPLEMENTED | | Batch B23 — see `c7d17dda49d-plan.md` |
-| 84 | `b08b0d715b5` | REIMPLEMENTED | | Batch B25 — see `b08b0d715b5-plan.md` |
-| 86 | `461c277bf2d` | REIMPLEMENTED | | Batch B26 — see `461c277bf2d-plan.md` |
-| 95 | `0e955da1710` | REIMPLEMENTED | | Batch B27 — see `0e955da1710-plan.md` |
-| 97 | `9703fe73cf9` | REIMPLEMENTED | | Batch B29 — see `9703fe73cf9-plan.md` |
-| 101 | `950244f6b00` | REIMPLEMENTED | | Batch B31 — see `950244f6b00-plan.md` |
-| 105 | `8a2e0fac0d8` | REIMPLEMENTED | | Batch B32 — see `8a2e0fac0d8-plan.md` |
-| 124 | `c572b9e9ac6` | REIMPLEMENTED | | Batch B41 — see `c572b9e9ac6-plan.md` |
-| 128 | `304caa4e43a` | REIMPLEMENTED | | Batch B44 — see `304caa4e43a-plan.md` |
-| 129 | `a6dca02344b` | REIMPLEMENTED | | Batch B45 — see `a6dca02344b-plan.md` |
-| 132 | `aa524625503` | REIMPLEMENTED | | Batch B46 — see `aa524625503-plan.md` |
-| 135 | `92e31e3c4ae` | REIMPLEMENTED | | Batch B48 — see `92e31e3c4ae-plan.md` |
-| 150 | `8030404b08b` | REIMPLEMENTED | | Batch B51 — see `8030404b08b-plan.md` |
-| 151 | `66e7b479ae4` | REIMPLEMENTED | | Batch B52 — see `66e7b479ae4-plan.md` |
+| 8 | `5fe5d1da467` | REIMPLEMENTED | `75b9d97f2` | Batch B2 — see `5fe5d1da467-plan.md` |
+| 9 | `416d243027d` | REIMPLEMENTED | `e1c147aa4` | Batch B3 — see `416d243027d-plan.md` |
+| 12 | `97b31c4eefa` | REIMPLEMENTED | `768253cf9` | Batch B5 — see `97b31c4eefa-plan.md` |
+| 15 | `c64b5ec4a3a` | REIMPLEMENTED | `8a58abd7c` | Batch B7 — see `c64b5ec4a3a-plan.md` |
+| 17 | `4c961df3136` | REIMPLEMENTED | `a4b6dfa45` | Batch B8 — see `4c961df3136-plan.md` |
+| 18 | `17b3eb730a9` | REIMPLEMENTED | `0f80e3619` | Batch B9 — see `17b3eb730a9-plan.md` |
+| 35 | `030847a80a4` | REIMPLEMENTED | `7b271af05` | Batch B11 — see `030847a80a4-plan.md` |
+| 39 | `97ad3d97cba` | REIMPLEMENTED | `deed5406a` | Batch B12 — see `97ad3d97cba-plan.md` |
+| 40 | `660368f2490` | REIMPLEMENTED | `6b0624949` | Batch B13 — see `660368f2490-plan.md` |
+| 41 | `eb3f3cfdb8a` | REIMPLEMENTED | `e882743f2` | Batch B14 — see `eb3f3cfdb8a-plan.md` |
+| 63 | `18dd399cb57` | REIMPLEMENTED | `229ece80f` | Batch B17 — see `18dd399cb57-plan.md` |
+| 64 | `e1e3efc9d04` | REIMPLEMENTED | `482b5073d` | Batch B18 — see `e1e3efc9d04-plan.md` |
+| 65 | `41e627a7ee4` | REIMPLEMENTED | `f45f9f6ff` | Batch B19 — see `41e627a7ee4-plan.md` |
+| 70 | `77e226c55fe` | REIMPLEMENTED | `2c1b33b8e` | Batch B21 — see `77e226c55fe-plan.md` |
+| 77 | `c7d17dda49d` | REIMPLEMENTED | `ebd8e7aee` | Batch B23 — see `c7d17dda49d-plan.md` |
+| 84 | `b08b0d715b5` | REIMPLEMENTED | `82da1fee9` | Batch B25 — see `b08b0d715b5-plan.md` |
+| 86 | `461c277bf2d` | REIMPLEMENTED | `7431b1f8b` | Batch B26 — see `461c277bf2d-plan.md` |
+| 95 | `0e955da1710` | REIMPLEMENTED | `48098fcab` | Batch B27 — see `0e955da1710-plan.md` |
+| 97 | `9703fe73cf9` | REIMPLEMENTED | `9209b0252` | Batch B29 — see `9703fe73cf9-plan.md` |
+| 101 | `950244f6b00` | REIMPLEMENTED | `320eed1c1` | Batch B31 — see `950244f6b00-plan.md` |
+| 105 | `8a2e0fac0d8` | REIMPLEMENTED | `1bed4abf6` | Batch B32 — see `8a2e0fac0d8-plan.md` |
+| 124 | `c572b9e9ac6` | REIMPLEMENTED | `57690669f` | Batch B41 — see `c572b9e9ac6-plan.md` |
+| 128 | `304caa4e43a` | REIMPLEMENTED | `ef06be74c` | Batch B44 — see `304caa4e43a-plan.md` |
+| 129 | `a6dca02344b` | REIMPLEMENTED | `95f2204a4` | Batch B45 — see `a6dca02344b-plan.md` |
+| 132 | `aa524625503` | REIMPLEMENTED | `419b7aea3` | Batch B46 — see `aa524625503-plan.md` |
+| 135 | `92e31e3c4ae` | REIMPLEMENTED | `8dbec5745` | Batch B48 — see `92e31e3c4ae-plan.md` |
+| 150 | `8030404b08b` | REIMPLEMENTED | `108324fc8` | Batch B51 — see `8030404b08b-plan.md` |
+| 151 | `66e7b479ae4` | REIMPLEMENTED | `62b7b1034` | Batch B52 — see `66e7b479ae4-plan.md` |
 
 ## SKIP Commits (78)
 

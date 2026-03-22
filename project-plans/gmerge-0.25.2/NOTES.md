@@ -30,3 +30,36 @@ Running notes captured during batch execution. Append after each batch.
 ---
 
 <!-- Append batch notes below this line during execution -->
+
+## Execution Summary
+
+All 55 batches executed. 52 produced commits, 3 were no-ops (B15, B28, B54).
+
+### Notable Conflicts & Decisions
+
+- **B15 (yolo redirect)**: Cherry-pick produced no diff — LLxprt already had the fix. Skipped.
+- **B16 (5 commits)**: Large batch with conflicts in terminalSetup.ts, fileDiffUtils.ts. Resolved preserving LLxprt `ai_added_lines`/`ai_removed_lines` field names.
+- **B24 (3 commits)**: Heaviest conflict resolution. `settingsSchema.ts` was initially mangled by subagent (500+ TS errors), had to restore from HEAD and carefully re-apply IDE properties. `gitIgnoreParser.ts` refactored away `loadGitRepoPatterns()`/`loadPatterns()` requiring `fileDiscoveryService.ts` callers to be updated.
+- **B28 (format pr-creator)**: Upstream formatted `.gemini/skills/pr-creator/SKILL.md` which doesn't exist in LLxprt. No-op.
+- **B33 (useRewindLogic)**: Heavy conflict with LLxprt's DefaultAppLayout.tsx. Integrated rewind state management while preserving LLxprt's `BaseMessageRecord`, provider-neutral streaming, and compression architecture.
+- **B46 (subagents as extensions)**: Adapted upstream's agent-as-extension system to LLxprt's SubagentManager architecture instead of upstream's AgentRegistry.
+- **B48 (agents in settings.json)**: Mapped upstream's agent configuration to LLxprt's subagent settings system. Preserved `SubagentManager` integration.
+- **B53 (admin settings)**: Cherry-pick introduced duplicate properties and references to upstream `AgentSettings` type and `enableAgents` setting that don't exist in LLxprt. Fixed by removing upstream agent system references.
+- **B54 (ModelInfo dedup)**: Cherry-pick resolved to no-op — LLxprt doesn't emit ModelInfo events, so deduplication logic was irrelevant.
+- **B55 (currentSequenceModel)**: Cherry-pick brought in upstream model routing imports and `ResumedSessionData` type. Cleaned up to use only LLxprt's existing APIs.
+
+### Architecture Preservation Verified
+
+- No `@google/gemini-cli` references introduced
+- No `USE_GEMINI` auth type introduced
+- No `delegate_to_agent` / `AgentRegistry` references introduced
+- SubagentManager preserved throughout
+- Multi-provider architecture maintained
+- LLxprt branding consistent
+
+### Final Verification
+
+- `npm run typecheck`: PASS (all 3 packages)
+- `npm run build`: PASS
+- `npm run format`: Applied (committed as `3f797b777`)
+- Smoke test: PASS
