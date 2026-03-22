@@ -30,6 +30,7 @@ import { VimModeProvider } from '../contexts/VimModeContext.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { act } from 'react';
 import { saveModifiedSettings } from '../../utils/settingsUtils.js';
+import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 
 // Mock useUIState since we don't wrap in UIStateProvider
 vi.mock('../contexts/UIStateContext.js', () => ({
@@ -37,7 +38,7 @@ vi.mock('../contexts/UIStateContext.js', () => ({
 }));
 
 // Mock the VimModeContext
-const mockToggleVimEnabled = vi.fn();
+const mockToggleVimEnabled = vi.fn().mockResolvedValue(undefined);
 const mockSetVimMode = vi.fn();
 
 enum TerminalKeys {
@@ -128,7 +129,12 @@ const renderDialog = (
 
 describe('SettingsDialog', () => {
   beforeEach(() => {
-    mockToggleVimEnabled.mockResolvedValue(true);
+    vi.clearAllMocks();
+    vi.spyOn(
+      terminalCapabilityManager,
+      'isKittyProtocolEnabled',
+    ).mockReturnValue(true);
+    mockToggleVimEnabled.mockRejectedValue(undefined);
   });
 
   afterEach(() => {

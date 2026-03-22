@@ -19,7 +19,9 @@ import {
   // SS3_END,
   SINGLE_QUOTE,
   DOUBLE_QUOTE,
+  FAST_RETURN_TIMEOUT,
 } from './KeypressContext.js';
+import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 
 // Alias for backwards compatibility with tests
 const KITTY_SEQUENCE_TIMEOUT_MS = ESC_TIMEOUT;
@@ -157,6 +159,53 @@ describe('KeypressContext - Kitty Protocol', () => {
         expect.objectContaining({
           name: 'return',
           kittyProtocol: true,
+        }),
+      );
+    });
+  });
+
+  describe('Fast return buffering', () => {
+    let kittySpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      kittySpy = vi
+        .spyOn(terminalCapabilityManager, 'isKittyProtocolEnabled')
+        .mockReturnValue(false);
+    });
+
+    afterEach(() => kittySpy.mockRestore());
+
+    it('should buffer return key pressed quickly after another key', async () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('a'));
+      expect(keyHandler).toHaveBeenLastCalledWith(
+        expect.objectContaining({ name: 'a' }),
+      );
+
+      act(() => stdin.write('\r'));
+
+      expect(keyHandler).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          name: '',
+          sequence: '\r',
+          insertable: true,
+        }),
+      );
+    });
+
+    it('should NOT buffer return key if delay is long enough', async () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('a'));
+
+      vi.advanceTimersByTime(FAST_RETURN_TIMEOUT + 1);
+
+      act(() => stdin.write('\r'));
+
+      expect(keyHandler).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          name: 'return',
         }),
       );
     });
