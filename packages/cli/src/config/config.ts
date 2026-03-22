@@ -1374,7 +1374,8 @@ export async function loadCliConfig(
 
   // Calculate mcpEnabled based on admin settings
   const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
-  const extensionsEnabled = effectiveSettings.admin?.extensions?.enabled ?? true;
+  const extensionsEnabled =
+    effectiveSettings.admin?.extensions?.enabled ?? true;
   const adminSkillsEnabled = effectiveSettings.admin?.skills?.enabled ?? true;
 
   const config = new Config({

@@ -550,7 +550,6 @@ export interface ConfigParameters {
   onModelChange?: (model: string) => void;
   mcpEnabled?: boolean;
   extensionsEnabled?: boolean;
-
 }
 
 export class Config {
@@ -773,7 +772,10 @@ export class Config {
 
   private readonly sanitizationConfig?: EnvironmentSanitizationConfig;
   private readonly _onReload:
-    | (() => Promise<{ disabledSkills?: string[]; adminSkillsEnabled?: boolean }>)
+    | (() => Promise<{
+        disabledSkills?: string[];
+        adminSkillsEnabled?: boolean;
+      }>)
     | undefined;
   private readonly outputSettings: OutputSettings;
   private readonly codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
@@ -956,7 +958,6 @@ export class Config {
     this.disabledSkills = params.disabledSkills ?? [];
     this.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
     this.skillManager.setAdminSettings(this.adminSkillsEnabled);
-
 
     this.sanitizationConfig = params.sanitizationConfig;
     this._onReload = params.onReload;
@@ -1457,7 +1458,6 @@ export class Config {
         this.adminSkillsEnabled = result.adminSkillsEnabled;
         this.skillManager.setAdminSettings(this.adminSkillsEnabled);
       }
-
     }
     await this.skillManager.discoverSkills(this.storage, this.getExtensions());
     this.skillManager.setDisabledSkills(this.disabledSkills);
