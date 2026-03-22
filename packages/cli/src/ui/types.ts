@@ -11,9 +11,10 @@ import {
   ToolResultDisplay,
   type ThinkingBlock,
   type SkillDefinition,
+  type SkillSource,
 } from '@vybestack/llxprt-code-core';
 
-export type { SkillDefinition };
+export type { SkillDefinition, SkillSource };
 
 // ActiveHook interface for hook display
 export interface ActiveHook {

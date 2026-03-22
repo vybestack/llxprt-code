@@ -23,12 +23,19 @@ async function listAction(
   context: CommandContext,
   args: string,
 ): Promise<void | SlashCommandActionReturn> {
-  const subCommand = args.trim();
+  const subCommand = args.trim().toLowerCase();
 
-  // Default to SHOWING descriptions. The user can hide them with 'nodesc'.
+  // Parse arguments: 'nodesc', 'all', or both
+  const parts = subCommand.split(/\s+/).filter((p) => p.length > 0);
   let useShowDescriptions = true;
-  if (subCommand === 'nodesc') {
-    useShowDescriptions = false;
+  let showAll = false;
+
+  for (const part of parts) {
+    if (part === 'nodesc') {
+      useShowDescriptions = false;
+    } else if (part === 'all') {
+      showAll = true;
+    }
   }
 
   const skillManager = context.services.config?.getSkillManager();
@@ -43,7 +50,12 @@ async function listAction(
     return;
   }
 
-  const skills = skillManager.getAllSkills();
+  let skills = skillManager.getAllSkills();
+
+  // By default, filter out built-in skills unless 'all' is specified
+  if (!showAll) {
+    skills = skills.filter((skill) => skill.source !== 'builtin');
+  }
 
   const skillsListItem: HistoryItemSkillsList = {
     type: MessageType.SKILLS_LIST,
@@ -53,6 +65,7 @@ async function listAction(
       disabled: skill.disabled,
       location: skill.location,
       body: skill.body,
+      source: skill.source,
     })),
     showDescriptions: useShowDescriptions,
   };
@@ -278,7 +291,8 @@ export const skillsCommand: SlashCommand = {
   subCommands: [
     {
       name: 'list',
-      description: 'List available agent skills. Usage: /skills list [nodesc]',
+      description:
+        'List available agent skills. Usage: /skills list [all] [nodesc]',
       kind: CommandKind.BUILT_IN,
       action: listAction,
     },

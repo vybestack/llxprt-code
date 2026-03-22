@@ -44,7 +44,24 @@ describe('skillLoader', () => {
     expect(skills[0].description).toBe('A test skill');
     expect(skills[0].location).toBe(skillFile);
     expect(skills[0].body).toBe('# Instructions\nDo something.');
+    expect(skills[0].source).toBeUndefined();
     expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
+  });
+
+  it('should load skills with the specified source', async () => {
+    const skillDir = path.join(testRootDir, 'builtin-skill');
+    await fs.mkdir(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    await fs.writeFile(
+      skillFile,
+      `---\nname: builtin-skill\ndescription: A built-in skill\n---\n# Instructions\nDo something.\n`,
+    );
+
+    const skills = await loadSkillsFromDir(testRootDir, 'builtin');
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].name).toBe('builtin-skill');
+    expect(skills[0].source).toBe('builtin');
   });
 
   it('should emit feedback when no valid skills are found in a non-empty directory', async () => {

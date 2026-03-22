@@ -5,10 +5,15 @@
  */
 
 import { Storage } from '../config/storage.js';
-import { type SkillDefinition, loadSkillsFromDir } from './skillLoader.js';
+import {
+  type SkillDefinition,
+  type SkillSource,
+  loadSkillsFromDir,
+  getBuiltinSkillsDir,
+} from './skillLoader.js';
 import type { GeminiCLIExtension } from '../config/config.js';
 
-export { type SkillDefinition };
+export { type SkillDefinition, type SkillSource };
 
 export class SkillManager {
   private skills: SkillDefinition[] = [];
@@ -22,8 +27,8 @@ export class SkillManager {
   }
 
   /**
-   * Discovers skills from standard user and project locations, as well as extensions.
-   * Precedence: Extensions (lowest) -> User -> Project (highest).
+   * Discovers skills from built-in, extension, user and project locations.
+   * Precedence: Built-in (lowest) -> Extensions -> User -> Project (highest).
    */
   async discoverSkills(
     storage: Storage,
@@ -31,20 +36,37 @@ export class SkillManager {
   ): Promise<void> {
     this.clearSkills();
 
-    // 1. Extension skills (lowest precedence)
+    // 1. Built-in skills (lowest precedence)
+    // Gracefully handle the case where the builtin directory doesn't exist yet
+    const builtinSkills = await loadSkillsFromDir(
+      getBuiltinSkillsDir(),
+      'builtin',
+    );
+    this.addSkillsWithPrecedence(builtinSkills);
+
+    // 2. Extension skills
     for (const extension of extensions) {
       if (extension.isActive && extension.skills) {
-        this.addSkillsWithPrecedence(extension.skills);
+        // Mark extension skills with source if not already set
+        const extensionSkills = extension.skills.map((skill) => ({
+          ...skill,
+          source: skill.source ?? ('extension' as const),
+        }));
+        this.addSkillsWithPrecedence(extensionSkills);
       }
     }
 
-    // 2. User skills
-    const userSkills = await loadSkillsFromDir(Storage.getUserSkillsDir());
+    // 3. User skills
+    const userSkills = await loadSkillsFromDir(
+      Storage.getUserSkillsDir(),
+      'user',
+    );
     this.addSkillsWithPrecedence(userSkills);
 
-    // 3. Project skills (highest precedence)
+    // 4. Project skills (highest precedence)
     const projectSkills = await loadSkillsFromDir(
       storage.getProjectSkillsDir(),
+      'project',
     );
     this.addSkillsWithPrecedence(projectSkills);
   }

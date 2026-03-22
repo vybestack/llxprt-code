@@ -13,6 +13,11 @@ import { debugLogger } from '../utils/debugLogger.js';
 import { coreEvents } from '../utils/events.js';
 
 /**
+ * The source/origin of a skill.
+ */
+export type SkillSource = 'builtin' | 'extension' | 'user' | 'project';
+
+/**
  * Represents the definition of an Agent Skill.
  */
 export interface SkillDefinition {
@@ -26,6 +31,8 @@ export interface SkillDefinition {
   body: string;
   /** Whether the skill is currently disabled. */
   disabled?: boolean;
+  /** The source/origin of this skill. */
+  source?: SkillSource;
 }
 
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)/;
@@ -35,6 +42,7 @@ const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)/;
  */
 export async function loadSkillsFromDir(
   dir: string,
+  source?: SkillSource,
 ): Promise<SkillDefinition[]> {
   const discoveredSkills: SkillDefinition[] = [];
 
@@ -52,7 +60,7 @@ export async function loadSkillsFromDir(
     });
 
     for (const skillFile of skillFiles) {
-      const metadata = await loadSkillFromFile(skillFile);
+      const metadata = await loadSkillFromFile(skillFile, source);
       if (metadata) {
         discoveredSkills.push(metadata);
       }
@@ -82,6 +90,7 @@ export async function loadSkillsFromDir(
  */
 export async function loadSkillFromFile(
   filePath: string,
+  source?: SkillSource,
 ): Promise<SkillDefinition | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
@@ -105,6 +114,7 @@ export async function loadSkillFromFile(
       description,
       location: filePath,
       body: match[2].trim(),
+      source,
     };
   } catch (error) {
     debugLogger.log(`Error parsing skill file ${filePath}:`, error);
@@ -112,7 +122,10 @@ export async function loadSkillFromFile(
   }
 }
 
-function loadSkillFromFileSync(filePath: string): SkillDefinition | null {
+function loadSkillFromFileSync(
+  filePath: string,
+  source?: SkillSource,
+): SkillDefinition | null {
   try {
     const content = fsSync.readFileSync(filePath, 'utf-8');
     const match = content.match(FRONTMATTER_REGEX);
@@ -135,6 +148,7 @@ function loadSkillFromFileSync(filePath: string): SkillDefinition | null {
       description,
       location: filePath,
       body: match[2].trim(),
+      source,
     };
   } catch (error) {
     debugLogger.log(`Error parsing skill file ${filePath}:`, error);
@@ -142,7 +156,10 @@ function loadSkillFromFileSync(filePath: string): SkillDefinition | null {
   }
 }
 
-export function loadSkillsFromDirSync(dir: string): SkillDefinition[] {
+export function loadSkillsFromDirSync(
+  dir: string,
+  source?: SkillSource,
+): SkillDefinition[] {
   const discoveredSkills: SkillDefinition[] = [];
 
   try {
@@ -165,7 +182,7 @@ export function loadSkillsFromDirSync(dir: string): SkillDefinition[] {
       if (!fsSync.existsSync(skillFile)) {
         continue;
       }
-      const skill = loadSkillFromFileSync(skillFile);
+      const skill = loadSkillFromFileSync(skillFile, source);
       if (skill) {
         discoveredSkills.push(skill);
       }
@@ -175,4 +192,14 @@ export function loadSkillsFromDirSync(dir: string): SkillDefinition[] {
   }
 
   return discoveredSkills;
+}
+
+/**
+ * Returns the path to the built-in skills directory.
+ * The built-in skills are shipped with the CLI in the core package.
+ */
+export function getBuiltinSkillsDir(): string {
+  // The built-in skills directory is located at packages/core/src/skills/builtin
+  // At runtime, this will be resolved relative to this file's location
+  return path.join(path.dirname(new URL(import.meta.url).pathname), 'builtin');
 }

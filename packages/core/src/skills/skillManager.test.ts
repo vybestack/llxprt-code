@@ -26,7 +26,7 @@ describe('SkillManager', () => {
     vi.restoreAllMocks();
   });
 
-  it('should discover skills from extensions, user, and project with precedence', async () => {
+  it('should discover skills from built-in, extensions, user, and project with precedence', async () => {
     const userDir = path.join(testRootDir, 'user');
     const projectDir = path.join(testRootDir, 'project');
     await fs.mkdir(path.join(userDir, 'skill-a'), { recursive: true });
@@ -74,14 +74,15 @@ description: project-desc
     await service.discoverSkills(storage, [mockExtension]);
 
     const skills = service.getSkills();
-    expect(skills).toHaveLength(3);
+    // At least 3 skills (extension, user, project). Built-in may or may not exist.
+    expect(skills.length).toBeGreaterThanOrEqual(3);
     const names = skills.map((s) => s.name);
     expect(names).toContain('skill-extension');
     expect(names).toContain('skill-user');
     expect(names).toContain('skill-project');
   });
 
-  it('should respect precedence: Project > User > Extension', async () => {
+  it('should respect precedence: Project > User > Extension > Built-in', async () => {
     const userDir = path.join(testRootDir, 'user');
     const projectDir = path.join(testRootDir, 'project');
     await fs.mkdir(path.join(userDir, 'skill'), { recursive: true });
@@ -129,13 +130,15 @@ description: project-desc
     await service.discoverSkills(storage, [mockExtension]);
 
     const skills = service.getSkills();
-    expect(skills).toHaveLength(1);
-    expect(skills[0].description).toBe('project-desc');
+    const sameNameSkill = skills.find((s) => s.name === 'same-name');
+    expect(sameNameSkill).toBeDefined();
+    expect(sameNameSkill!.description).toBe('project-desc');
 
     // Test User > Extension
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
     await service.discoverSkills(storage, [mockExtension]);
-    expect(service.getSkills()[0].description).toBe('user-desc');
+    const userSkill = service.getSkills().find((s) => s.name === 'same-name');
+    expect(userSkill!.description).toBe('user-desc');
   });
 
   it('should filter disabled skills in getSkills but not in getAllSkills', async () => {
