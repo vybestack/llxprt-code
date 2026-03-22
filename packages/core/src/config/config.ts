@@ -533,13 +533,24 @@ export interface ConfigParameters {
   skillsSupport?: boolean;
   disabledSkills?: string[];
   sanitizationConfig?: EnvironmentSanitizationConfig;
-  onReload?: () => Promise<{ disabledSkills?: string[] }>;
+  onReload?: () => Promise<{
+    disabledSkills?: string[];
+    adminSkillsEnabled?: boolean;
+  }>;
+
   outputSettings?: OutputSettings;
   codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
 
   jitContextEnabled?: boolean;
+  adminSkillsEnabled?: boolean;
+  experimentalJitContext?: boolean;
+  disableLLMCorrection?: boolean;
+  onModelChange?: (model: string) => void;
+  mcpEnabled?: boolean;
+  extensionsEnabled?: boolean;
+
 }
 
 export class Config {
@@ -758,9 +769,11 @@ export class Config {
   private skillManager!: SkillManager;
   private readonly skillsSupport: boolean;
   private disabledSkills: string[];
+  private adminSkillsEnabled: boolean;
+
   private readonly sanitizationConfig?: EnvironmentSanitizationConfig;
   private readonly _onReload:
-    | (() => Promise<{ disabledSkills?: string[] }>)
+    | (() => Promise<{ disabledSkills?: string[]; adminSkillsEnabled?: boolean }>)
     | undefined;
   private readonly outputSettings: OutputSettings;
   private readonly codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
@@ -941,6 +954,10 @@ export class Config {
     this.skillManager = new SkillManager();
     this.skillsSupport = params.skillsSupport ?? false;
     this.disabledSkills = params.disabledSkills ?? [];
+    this.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
+    this.skillManager.setAdminSettings(this.adminSkillsEnabled);
+
+
     this.sanitizationConfig = params.sanitizationConfig;
     this._onReload = params.onReload;
     this.outputSettings = params.outputSettings ?? {
@@ -1436,6 +1453,11 @@ export class Config {
       if (result.disabledSkills) {
         this.disabledSkills = result.disabledSkills;
       }
+      if (result.adminSkillsEnabled !== undefined) {
+        this.adminSkillsEnabled = result.adminSkillsEnabled;
+        this.skillManager.setAdminSettings(this.adminSkillsEnabled);
+      }
+
     }
     await this.skillManager.discoverSkills(this.storage, this.getExtensions());
     this.skillManager.setDisabledSkills(this.disabledSkills);

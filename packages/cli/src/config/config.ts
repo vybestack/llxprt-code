@@ -1374,6 +1374,8 @@ export async function loadCliConfig(
 
   // Calculate mcpEnabled based on admin settings
   const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
+  const extensionsEnabled = effectiveSettings.admin?.extensions?.enabled ?? true;
+  const adminSkillsEnabled = effectiveSettings.admin?.skills?.enabled ?? true;
 
   const config = new Config({
     sessionId,
@@ -1396,6 +1398,12 @@ export async function loadCliConfig(
       ? effectiveSettings.mcpServerCommand
       : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
+    mcpEnabled,
+    extensionsEnabled,
+    adminSkillsEnabled,
+    allowedMcpServers: mcpEnabled
+      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
+      : undefined,
 
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
@@ -1458,9 +1466,6 @@ export async function loadCliConfig(
     extensions: allExtensions,
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
-    allowedMcpServers: mcpEnabled
-      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
-      : undefined,
     blockedMcpServers: undefined, // Extension-based blocking handled elsewhere
 
     sanitizationConfig: {
@@ -1482,7 +1487,7 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
-    chatCompression: settings.chatCompression,
+    chatCompression: effectiveSettings.chatCompression,
     interactive,
     folderTrust,
     trustedFolder,
@@ -1523,6 +1528,8 @@ export async function loadCliConfig(
       const refreshedSettings = loadSettings(cwd);
       return {
         disabledSkills: refreshedSettings.merged.skills?.disabled,
+        adminSkillsEnabled:
+          refreshedSettings.merged.admin?.skills?.enabled ?? adminSkillsEnabled,
       };
     },
   });

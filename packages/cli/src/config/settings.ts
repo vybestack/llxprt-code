@@ -472,6 +472,8 @@ export class LoadedSettings {
     return this.merged.oauthEnabledProviders || {};
   }
 
+  // Note: setRemoteAdminSettings from upstream omitted - not applicable to LLxprt (no Google admin integration)
+
   setOAuthEnabledProvider(providerName: string, enabled: boolean): void {
     const oauthEnabledProviders = this.getOAuthEnabledProviders();
     oauthEnabledProviders[providerName] = enabled;
