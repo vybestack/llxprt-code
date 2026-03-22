@@ -177,7 +177,9 @@ export function countOccurrences(
 
 /**
  * Validates AST syntax for the given file path and content.
- * Returns validation result with errors if any.
+ * Inspects the tree-sitter parse tree for ERROR nodes rather than
+ * relying on thrown exceptions (tree-sitter is error-recovering and
+ * never throws on syntax errors).
  *
  * @param filePath - File path (used to detect language)
  * @param content - File content to validate
@@ -187,14 +189,24 @@ export function validateASTSyntax(
   filePath: string,
   content: string,
 ): { valid: boolean; errors: string[] } {
-  const extension = path.extname(filePath).substring(1);
+  const extension = path.extname(filePath).substring(1).toLowerCase();
   const lang = LANGUAGE_MAP[extension];
   if (!lang) {
     return { valid: true, errors: [] };
   }
 
   try {
-    parse(lang, content);
+    const tree = parse(lang, content);
+    const errorNode = tree.root().find({ rule: { kind: 'ERROR' } });
+    if (errorNode) {
+      const pos = errorNode.range().start;
+      return {
+        valid: false,
+        errors: [
+          `Syntax error at line ${pos.line + 1}, column ${pos.column + 1}`,
+        ],
+      };
+    }
     return { valid: true, errors: [] };
   } catch (error) {
     return {
