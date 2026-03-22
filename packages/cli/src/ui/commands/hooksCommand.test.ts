@@ -63,15 +63,13 @@ describe('hooksCommand', () => {
     mockGetDisabledHooks = vi.fn().mockReturnValue(['hook3']);
     mockSetDisabledHooks = vi.fn();
     mockSetHookEnabled = vi.fn();
-    mockGetHookName = vi
-      .fn()
-      .mockImplementation((entry: HookRegistryEntry) => {
-        const hookName = entry.config.name;
-        if (!hookName) {
-          throw new Error('Hook must have a name for testing');
-        }
-        return hookName;
-      });
+    mockGetHookName = vi.fn().mockImplementation((entry: HookRegistryEntry) => {
+      const hookName = entry.config.name;
+      if (!hookName) {
+        throw new Error('Hook must have a name for testing');
+      }
+      return hookName;
+    });
 
     const mockRegistry = {
       getAllHooks: vi.fn().mockReturnValue(mockHooks),

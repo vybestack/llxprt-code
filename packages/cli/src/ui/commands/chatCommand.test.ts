@@ -507,9 +507,8 @@ describe('chatCommand', () => {
           'alpha',
         ]);
       });
-  });
-
     });
+  });
 
   describe('debug subcommand', () => {
     let debugCommand: SlashCommand;
@@ -565,7 +564,9 @@ describe('chatCommand', () => {
         messageType: 'info',
       });
       expect(result?.content).toContain('Chat initialized: false');
-      expect(result?.content).toContain('History entries: 0 (chat not initialized)');
+      expect(result?.content).toContain(
+        'History entries: 0 (chat not initialized)',
+      );
     });
 
     it('should handle missing config gracefully', async () => {
@@ -585,9 +586,10 @@ describe('chatCommand', () => {
         messageType: 'info',
       });
       expect(result?.content).toContain('Chat initialized: false');
-      expect(result?.content).toContain('Current model: unavailable (config not initialized)');
+      expect(result?.content).toContain(
+        'Current model: unavailable (config not initialized)',
+      );
       expect(result?.content).toContain('Checkpoint directory: unavailable');
     });
   });
 });
-
