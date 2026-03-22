@@ -1400,6 +1400,11 @@ export const AppContainer = (props: AppContainerProps) => {
     [inputWidth],
   );
 
+  const getPreferredEditorType = useCallback(
+    () => settings.merged.ui?.preferredEditor as EditorType,
+    [settings.merged.ui?.preferredEditor],
+  );
+
   const buffer = useTextBuffer({
     initialText: '',
     viewport,
@@ -1407,6 +1412,7 @@ export const AppContainer = (props: AppContainerProps) => {
     setRawMode,
     isValidPath,
     shellModeActive,
+    getPreferredEditor: getPreferredEditorType,
   });
 
   // Independent input history management (unaffected by /clear)

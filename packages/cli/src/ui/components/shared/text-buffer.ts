@@ -15,6 +15,9 @@ import {
   CoreEvent,
   unescapePath,
   debugLogger,
+  type EditorType,
+  getEditorCommand,
+  isGuiEditor,
 } from '@vybestack/llxprt-code-core';
 import {
   toCodePoints,
@@ -567,6 +570,7 @@ interface UseTextBufferProps {
   shellModeActive?: boolean; // Whether the text buffer is in shell mode
   inputFilter?: (text: string) => string; // Optional filter for input text
   singleLine?: boolean;
+  getPreferredEditor?: () => EditorType | undefined;
 }
 
 interface UndoHistoryEntry {
@@ -1818,6 +1822,7 @@ export function useTextBuffer({
   shellModeActive = false,
   inputFilter,
   singleLine = false,
+  getPreferredEditor,
 }: UseTextBufferProps): TextBuffer {
   const initialState = useMemo((): TextBufferState => {
     const lines = initialText.split('\n');
@@ -2138,52 +2143,64 @@ export function useTextBuffer({
     dispatch({ type: 'vim_escape_insert_mode' });
   }, []);
 
-  const openInExternalEditor = useCallback(
-    async (opts: { editor?: string } = {}): Promise<void> => {
-      const editor =
-        opts.editor ??
-        process.env['VISUAL'] ??
-        process.env['EDITOR'] ??
-        (process.platform === 'win32' ? 'notepad' : 'vi');
-      const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'gemini-edit-'));
-      const filePath = pathMod.join(tmpDir, 'buffer.txt');
-      fs.writeFileSync(filePath, text, 'utf8');
+  const openInExternalEditor = useCallback(async (): Promise<void> => {
+    const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'llxprt-edit-'));
+    const filePath = pathMod.join(tmpDir, 'buffer.txt');
+    fs.writeFileSync(filePath, text, 'utf8');
 
-      dispatch({ type: 'create_undo_snapshot' });
+    let command: string | undefined = undefined;
+    const args = [filePath];
 
-      const wasRaw = stdin?.isRaw ?? false;
-      try {
-        setRawMode?.(false);
-        const { status, error } = spawnSync(editor, [filePath], {
-          stdio: 'inherit',
-        });
-        if (error) throw error;
-        if (typeof status === 'number' && status !== 0)
-          throw new Error(`External editor exited with status ${status}`);
-
-        let newText = fs.readFileSync(filePath, 'utf8');
-        newText = newText.replace(/\r\n?/g, '\n');
-        dispatch({ type: 'set_text', payload: newText, pushToUndo: false });
-      } catch (err) {
-        debugLogger.error('[useTextBuffer] external editor error', err);
-      } finally {
-        terminalCapabilityManager.enableKittyProtocol();
-        coreEvents.emit(CoreEvent.ExternalEditorClosed);
-        if (wasRaw) setRawMode?.(true);
-        try {
-          fs.unlinkSync(filePath);
-        } catch {
-          /* ignore */
-        }
-        try {
-          fs.rmdirSync(tmpDir);
-        } catch {
-          /* ignore */
-        }
+    const preferredEditorType = getPreferredEditor?.();
+    if (!command && preferredEditorType) {
+      command = getEditorCommand(preferredEditorType);
+      if (isGuiEditor(preferredEditorType)) {
+        args.unshift('--wait');
       }
-    },
-    [text, stdin, setRawMode],
-  );
+    }
+
+    if (!command) {
+      command =
+        (process.env['VISUAL'] ??
+        process.env['EDITOR'] ??
+        process.platform === 'win32')
+          ? 'notepad'
+          : 'vi';
+    }
+
+    dispatch({ type: 'create_undo_snapshot' });
+
+    const wasRaw = stdin?.isRaw ?? false;
+    try {
+      setRawMode?.(false);
+      const { status, error } = spawnSync(command, args, {
+        stdio: 'inherit',
+      });
+      if (error) throw error;
+      if (typeof status === 'number' && status !== 0)
+        throw new Error(`External editor exited with status ${status}`);
+
+      let newText = fs.readFileSync(filePath, 'utf8');
+      newText = newText.replace(/\r\n?/g, '\n');
+      dispatch({ type: 'set_text', payload: newText, pushToUndo: false });
+    } catch (err) {
+      debugLogger.error('[useTextBuffer] external editor error', err);
+    } finally {
+      terminalCapabilityManager.enableKittyProtocol();
+      coreEvents.emit(CoreEvent.ExternalEditorClosed);
+      if (wasRaw) setRawMode?.(true);
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        /* ignore */
+      }
+      try {
+        fs.rmdirSync(tmpDir);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [text, stdin, setRawMode, getPreferredEditor]);
 
   const handleInput = useCallback(
     (key: Key): void => {
@@ -2574,7 +2591,7 @@ export interface TextBuffer {
    * continuing.  This mirrors Git's behaviour and simplifies downstream
    * control‑flow (callers can simply `await` the Promise).
    */
-  openInExternalEditor: (opts?: { editor?: string }) => Promise<void>;
+  openInExternalEditor: () => Promise<void>;
 
   replaceRangeByOffset: (
     startOffset: number,

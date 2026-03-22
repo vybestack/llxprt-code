@@ -17,12 +17,21 @@ vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 import { debugLogger } from '@vybestack/llxprt-code-core';
-import { handleUninstall } from './uninstall.js';
+import { handleUninstall, uninstallCommand } from './uninstall.js';
 
 describe('skill uninstall command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+  });
+
+  describe('uninstallCommand', () => {
+    it('should have correct command and describe', () => {
+      expect(uninstallCommand.command).toBe('uninstall <name> [--scope]');
+      expect(uninstallCommand.describe).toBe(
+        'Uninstalls an agent skill by name.',
+      );
+    });
   });
 
   it('should call uninstallSkill with correct arguments for user scope', async () => {
