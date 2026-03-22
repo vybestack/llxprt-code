@@ -345,8 +345,11 @@ export class StreamProcessor {
       }
 
       if (chunk.usageMetadata?.promptTokenCount !== undefined) {
+        const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
         this.compressionHandler.lastPromptTokenCount =
-          chunk.usageMetadata.promptTokenCount;
+          chunk.usageMetadata.promptTokenCount +
+          (chunkUsage.cache_read_input_tokens || 0) +
+          (chunkUsage.cache_creation_input_tokens || 0);
       }
       allChunks.push(chunk);
     }

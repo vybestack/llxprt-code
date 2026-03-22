@@ -470,10 +470,10 @@ export class TurnProcessor {
     const curatedHistory = this.historyService.getCurated();
     const index = ContentConverters.toGeminiContents(curatedHistory).length;
     const newEntries = afcHistory.slice(index) ?? [];
+    const matcher = this.makePositionMatcher();
     for (const content of newEntries) {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      const matcher = this.makePositionMatcher();
       this.historyService.add(
         ContentConverters.toIContent(content, idGen, matcher, turnKey),
         currentModel,
@@ -486,10 +486,10 @@ export class TurnProcessor {
     currentModel: string | undefined,
   ): void {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
+    const matcher = this.makePositionMatcher();
     for (const content of contents) {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      const matcher = this.makePositionMatcher();
       this.historyService.add(
         ContentConverters.toIContent(content, idGen, matcher, turnKey),
         currentModel,
@@ -560,21 +560,11 @@ export class TurnProcessor {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
       }
-    } else {
-      const usage = (
-        response.data as { metadata?: { usage?: unknown } } | undefined
-      )?.metadata?.usage as
-        | {
-            cache_read_input_tokens?: number;
-            cache_creation_input_tokens?: number;
-          }
-        | undefined;
-      const combined =
-        (this.lastPromptTokenCount ?? 0) +
-        (usage?.cache_read_input_tokens || 0) +
-        (usage?.cache_creation_input_tokens || 0);
-      if (combined > 0) {
-        this.historyService.syncTotalTokens(combined);
+    } else if (this.lastPromptTokenCount) {
+      // lastPromptTokenCount is already cache-adjusted (includes
+      // cache_read + cache_creation tokens) from the provider call path
+      if (this.lastPromptTokenCount > 0) {
+        this.historyService.syncTotalTokens(this.lastPromptTokenCount);
         await this.historyService.waitForTokenUpdates();
       }
     }
