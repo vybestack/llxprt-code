@@ -355,6 +355,173 @@ describe('Lifecycle Hook Triggers', () => {
     });
   });
 
+  describe('BeforeAgent hook output normalization', () => {
+    it('should support blocking decisions via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          decision: 'block',
+          reason: 'Test blocking reason',
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
+
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.isBlockingDecision()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Test blocking reason');
+    });
+
+    it('should support stop execution via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: false,
+          stopReason: 'Test stop reason',
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
+
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.shouldStopExecution()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Test stop reason');
+    });
+
+    it('should support additional context via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: true,
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+            additionalContext: 'Context from hook',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
+
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.getAdditionalContext()).toBe('Context from hook');
+    });
+  });
+
+  describe('AfterAgent hook output normalization', () => {
+    it('should support blocking decisions via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          decision: 'block',
+          reason: 'Continue with this',
+          hookSpecificOutput: {
+            hookEventName: 'AfterAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerAfterAgentHook(
+        mockConfig,
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.isBlockingDecision()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Continue with this');
+    });
+
+    it('should support stop execution via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: false,
+          stopReason: 'Force continuation',
+          hookSpecificOutput: {
+            hookEventName: 'AfterAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerAfterAgentHook(
+        mockConfig,
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.shouldStopExecution()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Force continuation');
+    });
+
+    it('should support additional context via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: true,
+          hookSpecificOutput: {
+            hookEventName: 'AfterAgent',
+            additionalContext: 'Post-turn context',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerAfterAgentHook(
+        mockConfig,
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.getAdditionalContext()).toBe('Post-turn context');
+    });
+  });
+
   /**
    * @plan PLAN-20250219-GMERGE021.R4.P02
    * @requirement REQ-P02-1
