@@ -1671,6 +1671,13 @@ export class CoreToolScheduler {
     );
 
     if (this.toolCalls.length > 0 && allCallsAreTerminal) {
+      // If we are already finalizing, another concurrent call to
+      // checkAndNotifyCompletion will just return. The ongoing finalized loop
+      // will handle the completion.
+      if (this.isFinalizingToolCalls) {
+        return;
+      }
+
       const completedCalls = [...this.toolCalls] as CompletedToolCall[];
       this.toolCalls = [];
 
