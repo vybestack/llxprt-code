@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Part } from '@google/genai';
+import {
+  type PartListUnion,
+  type Part,
+  type GenerateContentResponse,
+} from '@google/genai';
 
 /**
  * Converts a PartListUnion into a string.
@@ -62,4 +66,33 @@ export function partToString(
   }
 
   return part.text ?? '';
+}
+
+/**
+ * Safely extracts text from a GenerateContentResponse.
+ * Unlike the .text getter on GenerateContentResponse, this function
+ * handles cases where the response has no candidates or is safety-blocked
+ * without throwing errors.
+ *
+ * @param response - The GenerateContentResponse to extract text from
+ * @returns The concatenated text from the first candidate's parts, or null if unavailable
+ */
+export function getResponseText(
+  response: GenerateContentResponse,
+): string | null {
+  if (response.candidates && response.candidates.length > 0) {
+    const candidate = response.candidates[0];
+
+    if (
+      candidate.content &&
+      candidate.content.parts &&
+      candidate.content.parts.length > 0
+    ) {
+      return candidate.content.parts
+        .filter((part) => part.text)
+        .map((part) => part.text)
+        .join('');
+    }
+  }
+  return null;
 }

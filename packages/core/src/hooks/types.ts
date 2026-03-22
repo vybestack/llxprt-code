@@ -390,22 +390,6 @@ export class AfterModelHookOutput extends DefaultHookOutput {
       }
     }
 
-    // If hook wants to stop execution, create a synthetic stop response
-    if (this.shouldStopExecution()) {
-      const stopResponse: LLMResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [this.getEffectiveReason() || 'Execution stopped by hook'],
-            },
-            finishReason: 'STOP',
-          },
-        ],
-      };
-      return defaultHookTranslator.fromHookLLMResponse(stopResponse);
-    }
-
     return undefined;
   }
 }
@@ -443,10 +427,24 @@ export class SessionEndHookOutput extends DefaultHookOutput {
 
 /**
  * Specific hook output class for BeforeAgent events
+ *
+ * Follows the normalized hook output contract:
+ * - Supports blocking decisions via isBlockingDecision() / decision field
+ * - Supports stop execution via shouldStopExecution() / continue field
+ * - Supports additional context via getAdditionalContext()
+ * - Provides effective reason via getEffectiveReason()
+ *
+ * When a BeforeAgent hook blocks or stops execution:
+ * - The turn is blocked and an error is yielded to the caller
+ * - The blocking reason from getEffectiveReason() is included in the error
+ *
+ * When a BeforeAgent hook provides additional context:
+ * - The context is appended to the request before the model call
  */
 export class BeforeAgentHookOutput extends DefaultHookOutput {
   /**
    * Get additional context if provided by hook
+   * This context will be appended to the user's prompt before the model call
    */
   override getAdditionalContext(): string | undefined {
     return super.getAdditionalContext();
@@ -455,14 +453,38 @@ export class BeforeAgentHookOutput extends DefaultHookOutput {
 
 /**
  * Specific hook output class for AfterAgent events
+ *
+ * Follows the normalized hook output contract:
+ * - Supports blocking decisions via isBlockingDecision() / decision field
+ * - Supports stop execution via shouldStopExecution() / continue field
+ * - Supports additional context via getAdditionalContext()
+ * - Provides effective reason via getEffectiveReason()
+ *
+ * When an AfterAgent hook blocks or stops execution:
+ * - The runtime interprets this as a continuation request
+ * - A new turn is initiated with the effective reason as the prompt
+ * - This allows hooks to guide multi-turn interactions
+ *
+ * When an AfterAgent hook provides additional context:
+ * - The context is available for logging or other post-turn processing
  */
 export class AfterAgentHookOutput extends DefaultHookOutput {
   /**
    * Get additional context if provided by hook
+   * This context is available for post-turn processing
    */
   override getAdditionalContext(): string | undefined {
     return super.getAdditionalContext();
   }
+}
+
+/**
+ * MCP context information for tool hooks.
+ * Present when the tool originates from an MCP server.
+ */
+export interface McpContext {
+  server_name: string;
+  server_uri?: string;
 }
 
 /**
@@ -471,6 +493,7 @@ export class AfterAgentHookOutput extends DefaultHookOutput {
 export interface BeforeToolInput extends HookInput {
   tool_name: string;
   tool_input: Record<string, unknown>;
+  mcp_context?: McpContext;
 }
 
 /**
@@ -492,6 +515,7 @@ export interface AfterToolInput extends HookInput {
   tool_name: string;
   tool_input: Record<string, unknown>;
   tool_response: Record<string, unknown>;
+  mcp_context?: McpContext;
 }
 
 /**
@@ -552,6 +576,15 @@ export interface AfterAgentInput extends HookInput {
   prompt: string;
   prompt_response: string;
   stop_hook_active: boolean;
+}
+/**
+ * AfterAgent hook output
+ */
+export interface AfterAgentOutput extends HookOutput {
+  hookSpecificOutput?: {
+    hookEventName: 'AfterAgent';
+    additionalContext?: string;
+  };
 }
 
 /**

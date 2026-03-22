@@ -110,6 +110,8 @@ import * as fs from 'fs';
 import { type AppState, type AppAction } from './reducers/appReducer.js';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
+import { basename } from 'node:path';
+import { computeTerminalTitle } from '../utils/windowTitle.js';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
@@ -151,9 +153,13 @@ import {
 } from './utils/terminalSequences.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 import { iContentToHistoryItems } from './utils/iContentToHistoryItems.js';
+import {
+  QUEUE_ERROR_DISPLAY_DURATION_MS,
+  SHELL_ACTION_REQUIRED_TITLE_DELAY_MS,
+} from './constants.js';
+import { useInactivityTimer } from './hooks/useInactivityTimer.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
-const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
@@ -224,6 +230,10 @@ export const AppContainer = (props: AppContainerProps) => {
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
   const hasSeededResumedHistory = useRef(false);
+
+  // Layout measurements for dynamic title
+  const lastTitleRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (hasSeededResumedHistory.current) {
       return;
@@ -1390,6 +1400,11 @@ export const AppContainer = (props: AppContainerProps) => {
     [inputWidth],
   );
 
+  const getPreferredEditorType = useCallback(
+    () => settings.merged.ui?.preferredEditor as EditorType,
+    [settings.merged.ui?.preferredEditor],
+  );
+
   const buffer = useTextBuffer({
     initialText: '',
     viewport,
@@ -1397,6 +1412,7 @@ export const AppContainer = (props: AppContainerProps) => {
     setRawMode,
     isValidPath,
     shellModeActive,
+    getPreferredEditor: getPreferredEditorType,
   });
 
   // Independent input history management (unaffected by /clear)
@@ -1468,6 +1484,12 @@ export const AppContainer = (props: AppContainerProps) => {
     runtimeMessageBus,
   );
 
+  // Track last output time for Tab focus switching logic
+  const lastOutputTimeRef = useRef(0);
+  useEffect(() => {
+    lastOutputTimeRef.current = lastOutputTime;
+  }, [lastOutputTime]);
+
   const pendingHistoryItems = useMemo(
     () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
     [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
@@ -1475,6 +1497,13 @@ export const AppContainer = (props: AppContainerProps) => {
 
   // Use the activeShellPtyId from useGeminiStream (which gets it from useShellCommandProcessor)
   const activeShellPtyId = geminiActiveShellPtyId;
+
+  const isShellAwaitingFocus = !!activeShellPtyId && !embeddedShellFocused;
+  const showShellActionRequired = useInactivityTimer(
+    isShellAwaitingFocus,
+    isShellAwaitingFocus,
+    SHELL_ACTION_REQUIRED_TITLE_DELAY_MS,
+  );
 
   // Auto-reset embeddedShellFocused when no shell tool is executing.
   // Without this, cancelling a shell while focused (embeddedShellFocused=true)
@@ -1554,6 +1583,9 @@ export const AppContainer = (props: AppContainerProps) => {
     handleFinalSubmit,
     todos,
   });
+
+  // Tab focus timeout ref for shell focus switching
+  const tabFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
@@ -1705,7 +1737,7 @@ export const AppContainer = (props: AppContainerProps) => {
           return newValue;
         });
       } else if (
-        keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
+        keyMatchers[Command.SHOW_IDE_CONTEXT_DETAIL](key) &&
         config.getIdeMode() &&
         ideContextState
       ) {
@@ -1724,6 +1756,7 @@ export const AppContainer = (props: AppContainerProps) => {
         keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key) &&
         config.getEnableInteractiveShell()
       ) {
+        // LLxprt's original Ctrl+F toggle behavior
         const lastPtyId = ShellExecutionService.getLastActivePtyId();
         debug.log(
           'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
@@ -1738,6 +1771,59 @@ export const AppContainer = (props: AppContainerProps) => {
             return !prev;
           });
         }
+      } else if (
+        keyMatchers[Command.UNFOCUS_SHELL_INPUT](key) &&
+        activeShellPtyId &&
+        embeddedShellFocused
+      ) {
+        // Upstream Tab-based focus switching (when focused OUT of shell)
+        if (key.name === 'tab' && key.shift) {
+          // Shift+Tab always changes focus out
+          setEmbeddedShellFocused(false);
+          return;
+        }
+
+        // Tab key: check if shell is idle before switching focus
+        const now = Date.now();
+        // If the shell hasn't produced output in the last 100ms, it's considered idle.
+        const isIdle = now - lastOutputTimeRef.current >= 100;
+        if (isIdle) {
+          if (tabFocusTimeoutRef.current) {
+            clearTimeout(tabFocusTimeoutRef.current);
+          }
+          tabFocusTimeoutRef.current = setTimeout(() => {
+            tabFocusTimeoutRef.current = null;
+            // If the shell produced output since the tab press, we assume it handled the tab
+            // (e.g. autocomplete) so we should not toggle focus.
+            if (lastOutputTimeRef.current > now) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: 'Press Shift+Tab to focus out of the shell.',
+                },
+                Date.now(),
+              );
+              return;
+            }
+            setEmbeddedShellFocused(false);
+          }, 100);
+          return;
+        }
+        // Shell is actively producing output, don't switch focus
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Press Shift+Tab to focus out of the shell.',
+          },
+          Date.now(),
+        );
+      } else if (
+        keyMatchers[Command.FOCUS_SHELL_INPUT](key) &&
+        activeShellPtyId &&
+        !embeddedShellFocused
+      ) {
+        // Tab to focus into shell (when not already focused)
+        setEmbeddedShellFocused(true);
       }
     },
     [
@@ -1764,6 +1850,7 @@ export const AppContainer = (props: AppContainerProps) => {
       copyModeEnabled,
       settings.merged.ui?.useAlternateBuffer,
       activeShellPtyId,
+      embeddedShellFocused,
     ],
   );
 
@@ -1779,6 +1866,40 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [config, config.getLlxprtMdFileCount]);
 
   const logger = useLogger(config.storage);
+
+  // Update terminal window title based on streaming state
+  useEffect(() => {
+    // Respect hideWindowTitle settings
+    if (settings.merged.ui?.hideWindowTitle) return;
+
+    const paddedTitle = computeTerminalTitle({
+      streamingState,
+      thoughtSubject: thought?.subject,
+      isConfirming:
+        !!shellConfirmationRequest ||
+        !!confirmationRequest ||
+        showShellActionRequired,
+      folderName: basename(config.getTargetDir()),
+      showThoughts: !!settings.merged.ui?.showStatusInTitle,
+      useDynamicTitle: settings.merged.ui?.dynamicWindowTitle ?? true,
+    });
+
+    if (paddedTitle !== lastTitleRef.current) {
+      lastTitleRef.current = paddedTitle;
+      stdout.write(`\x1b]0;${paddedTitle}\x07`);
+    }
+  }, [
+    streamingState,
+    thought,
+    shellConfirmationRequest,
+    confirmationRequest,
+    showShellActionRequired,
+    config,
+    settings.merged.ui?.showStatusInTitle,
+    settings.merged.ui?.dynamicWindowTitle,
+    settings.merged.ui?.hideWindowTitle,
+    stdout,
+  ]);
 
   // Initialize independent input history from logger
   useEffect(() => {

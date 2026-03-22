@@ -14,6 +14,7 @@ import {
   type SlashCommand,
   CommandKind,
 } from './types.js';
+import { loadSettings } from '../../config/settings.js';
 
 function showMessageIfNoExtensions(
   context: CommandContext,
@@ -37,6 +38,23 @@ async function listAction(context: CommandContext) {
     ? listExtensions(context.services.config)
     : [];
 
+  // Check if extensions are disabled by admin
+  if (extensions.length === 0) {
+    const settings = loadSettings().merged;
+    const adminDisabled = settings.admin?.extensions?.enabled === false;
+
+    if (adminDisabled) {
+      context.ui.addItem(
+        {
+          type: MessageType.INFO,
+          text: 'Extensions are disabled by your administrator.',
+        },
+        Date.now(),
+      );
+      return;
+    }
+  }
+
   if (showMessageIfNoExtensions(context, extensions)) {
     return;
   }
@@ -46,7 +64,7 @@ async function listAction(context: CommandContext) {
     extensions,
   };
 
-  context.ui.addItem(historyItem, Date.now());
+  context.ui.addItem(historyItem);
 }
 
 function updateAction(context: CommandContext, args: string): Promise<void> {
@@ -95,7 +113,7 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
       );
     }
 
-    context.ui.addItem(historyItem, Date.now());
+    context.ui.addItem(historyItem);
     context.ui.setPendingItem(null);
   });
 
@@ -244,7 +262,7 @@ async function restartAction(
     type: MessageType.INFO,
     text: `Restarting ${extensionsToRestart.length} extension${s}...`,
   };
-  context.ui.addItem(restartingMessage, Date.now());
+  context.ui.addItem(restartingMessage);
 
   const results = await Promise.allSettled(
     extensionsToRestart.map(async (extension: GeminiCLIExtension) => {

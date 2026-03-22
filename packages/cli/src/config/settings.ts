@@ -105,6 +105,16 @@ export type LoadableSettingScope =
   | SettingScope.Workspace
   | SettingScope.System;
 
+export function isLoadableSettingScope(
+  scope: SettingScope,
+): scope is LoadableSettingScope {
+  return (
+    scope === SettingScope.User ||
+    scope === SettingScope.Workspace ||
+    scope === SettingScope.System
+  );
+}
+
 export interface CheckpointingSettings {
   enabled?: boolean;
 }
@@ -460,6 +470,8 @@ export class LoadedSettings {
   getOAuthEnabledProviders(): Record<string, boolean> {
     return this.merged.oauthEnabledProviders || {};
   }
+
+  // Note: setRemoteAdminSettings from upstream omitted - not applicable to LLxprt (no Google admin integration)
 
   setOAuthEnabledProvider(providerName: string, enabled: boolean): void {
     const oauthEnabledProviders = this.getOAuthEnabledProviders();

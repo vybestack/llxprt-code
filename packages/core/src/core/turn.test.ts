@@ -10,9 +10,15 @@ import {
   GeminiEventType,
   ServerGeminiToolCallRequestEvent,
   ServerGeminiErrorEvent,
+  ServerGeminiStreamEvent,
   DEFAULT_AGENT_ID,
 } from './turn.js';
-import { GenerateContentResponse, Part, Content } from '@google/genai';
+import {
+  GenerateContentResponse,
+  Part,
+  Content,
+  FinishReason,
+} from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
 import {
   GeminiChat,
@@ -664,6 +670,106 @@ describe('Turn', () => {
         // consume stream
       }
       expect(turn.getDebugResponses()).toEqual([resp1, resp2]);
+    });
+  });
+
+  describe('hook execution control events', () => {
+    it('should yield AgentExecutionStopped event and terminate when hook stops execution', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_STOPPED,
+          reason: 'Hook stopped execution',
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: GeminiEventType[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event.type);
+      }
+      expect(events).toEqual([GeminiEventType.AgentExecutionStopped]);
+    });
+
+    it('should yield AgentExecutionBlocked event and continue processing', async () => {
+      const resp = {
+        candidates: [
+          {
+            content: { parts: [{ text: 'Synthetic response after block' }] },
+            finishReason: 'STOP' as FinishReason,
+          },
+        ],
+      } as GenerateContentResponse;
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_BLOCKED,
+          reason: 'Hook blocked execution',
+        };
+        yield { type: StreamEventType.CHUNK, value: resp };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: GeminiEventType[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event.type);
+      }
+      expect(events).toContain(GeminiEventType.AgentExecutionBlocked);
+      expect(events).toContain(GeminiEventType.Content);
+      expect(events).toContain(GeminiEventType.Finished);
+    });
+
+    it('should include reason in AgentExecutionStopped event', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_STOPPED,
+          reason: 'Custom stop reason',
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(GeminiEventType.AgentExecutionStopped);
+      expect((events[0] as { reason: string }).reason).toBe(
+        'Custom stop reason',
+      );
+    });
+
+    it('should include reason in AgentExecutionBlocked event', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_BLOCKED,
+          reason: 'Custom block reason',
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+      expect(events.length).toBeGreaterThan(0);
+      const blockedEvent = events.find(
+        (e) => e.type === GeminiEventType.AgentExecutionBlocked,
+      );
+      expect(blockedEvent).toBeDefined();
+      expect((blockedEvent as { reason: string }).reason).toBe(
+        'Custom block reason',
+      );
     });
   });
 });

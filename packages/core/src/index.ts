@@ -107,6 +107,7 @@ export * from './utils/editor.js';
 export * from './utils/quotaErrorDetection.js';
 export * from './utils/fileUtils.js';
 export * from './utils/delay.js';
+export * from './utils/fileDiffUtils.js';
 export * from './utils/retry.js';
 export * from './utils/shell-utils.js';
 export * from './utils/systemEncoding.js';
@@ -482,6 +483,8 @@ export type { SubagentConfig } from './config/types.js';
 export {
   SESSION_FILE_PREFIX,
   type ConversationRecord,
+  type BaseMessageRecord,
+  type ToolCallRecord,
 } from './storage/sessionTypes.js';
 
 // @plan PLAN-20260211-SESSIONRECORDING.P03

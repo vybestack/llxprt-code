@@ -252,6 +252,11 @@ export interface GeminiCLIExtension {
   skills?: SkillDefinition[];
   settings?: Array<Record<string, unknown>>;
   resolvedSettings?: Array<Record<string, unknown>>;
+  subagents?: Array<{
+    name: string;
+    profile: string;
+    systemPrompt: string;
+  }>;
 }
 
 export interface ExtensionInstallMetadata {
@@ -516,6 +521,7 @@ export interface ConfigParameters {
   continueSession?: boolean | string;
   disableYoloMode?: boolean;
   enableHooks?: boolean;
+  enableHooksUI?: boolean;
   hooks?: {
     [K in HookEventName]?: HookDefinition[];
   };
@@ -527,13 +533,23 @@ export interface ConfigParameters {
   skillsSupport?: boolean;
   disabledSkills?: string[];
   sanitizationConfig?: EnvironmentSanitizationConfig;
-  onReload?: () => Promise<{ disabledSkills?: string[] }>;
+  onReload?: () => Promise<{
+    disabledSkills?: string[];
+    adminSkillsEnabled?: boolean;
+  }>;
+
   outputSettings?: OutputSettings;
   codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
 
   jitContextEnabled?: boolean;
+  adminSkillsEnabled?: boolean;
+  experimentalJitContext?: boolean;
+  disableLLMCorrection?: boolean;
+  onModelChange?: (model: string) => void;
+  mcpEnabled?: boolean;
+  extensionsEnabled?: boolean;
 }
 
 export class Config {
@@ -741,6 +757,7 @@ export class Config {
   private readonly continueSession: boolean | string;
   private readonly disableYoloMode: boolean;
   private readonly enableHooks: boolean;
+  private readonly enableHooksUI: boolean;
   private readonly hooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
@@ -751,9 +768,14 @@ export class Config {
   private skillManager!: SkillManager;
   private readonly skillsSupport: boolean;
   private disabledSkills: string[];
+  private adminSkillsEnabled: boolean;
+
   private readonly sanitizationConfig?: EnvironmentSanitizationConfig;
   private readonly _onReload:
-    | (() => Promise<{ disabledSkills?: string[] }>)
+    | (() => Promise<{
+        disabledSkills?: string[];
+        adminSkillsEnabled?: boolean;
+      }>)
     | undefined;
   private readonly outputSettings: OutputSettings;
   private readonly codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
@@ -927,12 +949,16 @@ export class Config {
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
+    this.enableHooksUI = params.enableHooksUI ?? true;
     this.jitContextEnabled = params.jitContextEnabled ?? true;
     this.hooks = params.hooks;
     this.projectHooks = params.projectHooks;
     this.skillManager = new SkillManager();
     this.skillsSupport = params.skillsSupport ?? false;
     this.disabledSkills = params.disabledSkills ?? [];
+    this.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
+    this.skillManager.setAdminSettings(this.adminSkillsEnabled);
+
     this.sanitizationConfig = params.sanitizationConfig;
     this._onReload = params.onReload;
     this.outputSettings = params.outputSettings ?? {
@@ -1096,9 +1122,39 @@ export class Config {
 
       // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
       if (this.getSkillManager().getSkills().length > 0) {
+        this.getToolRegistry().unregisterTool(ActivateSkillTool.Name);
         this.getToolRegistry().registerTool(
           new ActivateSkillTool(this, initializationMessageBus),
         );
+      }
+    }
+
+    // Register extension-contributed subagents (after skill discovery, before GeminiClient creation)
+    const subagentMgr = this.getSubagentManager();
+    if (subagentMgr) {
+      subagentMgr.clearExtensionSubagents();
+      for (const extension of this.getExtensions()) {
+        if (extension.isActive && extension.subagents?.length) {
+          subagentMgr.registerExtensionSubagents(
+            extension.name,
+            extension.subagents,
+          );
+        }
+      }
+    }
+
+    // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
+    if (subagentMgr) {
+      const allSettings = this.settingsService.getAllGlobalSettings();
+      const subagentsSettings = allSettings?.['subagents'] as
+        | Record<string, unknown>
+        | undefined;
+      const definitions = subagentsSettings?.['definitions'] as
+        | Record<string, { profile: string; systemPrompt: string }>
+        | undefined;
+      if (definitions && typeof definitions === 'object') {
+        subagentMgr.clearSettingsSubagents();
+        subagentMgr.registerSettingsSubagents(definitions);
       }
     }
 
@@ -1397,6 +1453,10 @@ export class Config {
       const result = await this._onReload();
       if (result.disabledSkills) {
         this.disabledSkills = result.disabledSkills;
+      }
+      if (result.adminSkillsEnabled !== undefined) {
+        this.adminSkillsEnabled = result.adminSkillsEnabled;
+        this.skillManager.setAdminSettings(this.adminSkillsEnabled);
       }
     }
     await this.skillManager.discoverSkills(this.storage, this.getExtensions());
@@ -2660,6 +2720,10 @@ ${trimmed}
     return this.enableHooks;
   }
 
+  getEnableHooksUI(): boolean {
+    return this.enableHooksUI;
+  }
+
   /**
    * Get hooks configuration
    */
@@ -3050,6 +3114,13 @@ ${trimmed}
         // Shutdown failure is non-fatal
       }
       this.lspServiceClient = undefined;
+    }
+  }
+
+  async dispose(): Promise<void> {
+    this.geminiClient?.dispose();
+    if (this.mcpClientManager) {
+      await this.mcpClientManager.stop();
     }
   }
 }

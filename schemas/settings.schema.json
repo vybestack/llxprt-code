@@ -226,8 +226,8 @@
       "properties": {
         "format": {
           "title": "Output Format",
-          "description": "The format of the CLI output.",
-          "markdownDescription": "The format of the CLI output.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `text`",
+          "description": "The format of the CLI output. Can be `text` or `json`.",
+          "markdownDescription": "The format of the CLI output. Can be `text` or `json`.\n\n- Category: `General`\n- Requires restart: `no`\n- Default: `text`",
           "default": "text",
           "type": "string",
           "enum": ["text", "json"]
@@ -266,10 +266,24 @@
           "type": "boolean"
         },
         "showStatusInTitle": {
-          "title": "Show Status in Title",
-          "description": "Show LLxprt Code status and thoughts in the terminal window title",
-          "markdownDescription": "Show LLxprt Code status and thoughts in the terminal window title\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `false`",
+          "title": "Show Thoughts in Title",
+          "description": "Show LLxprt model thoughts in the terminal window title during the working phase",
+          "markdownDescription": "Show LLxprt model thoughts in the terminal window title during the working phase\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `false`",
           "default": false,
+          "type": "boolean"
+        },
+        "dynamicWindowTitle": {
+          "title": "Dynamic Window Title",
+          "description": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )",
+          "markdownDescription": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
+        "showHomeDirectoryWarning": {
+          "title": "Show Home Directory Warning",
+          "description": "Show a warning when running LLxprt CLI in the home directory.",
+          "markdownDescription": "Show a warning when running LLxprt CLI in the home directory.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "hideTips": {
@@ -506,6 +520,22 @@
       "markdownDescription": "IDE integration settings.\n\n- Category: `IDE`\n- Requires restart: `yes`\n- Default: `{}`",
       "default": {},
       "type": "object",
+      "properties": {
+        "enabled": {
+          "title": "IDE Mode",
+          "description": "Enable IDE integration mode.",
+          "markdownDescription": "Enable IDE integration mode.\n\n- Category: `IDE`\n- Requires restart: `yes`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        },
+        "hasSeenNudge": {
+          "title": "Has Seen IDE Integration Nudge",
+          "description": "Whether the user has seen the IDE integration nudge.",
+          "markdownDescription": "Whether the user has seen the IDE integration nudge.\n\n- Category: `IDE`\n- Requires restart: `no`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        }
+      },
       "additionalProperties": false
     },
     "showStatusInTitle": {
@@ -724,6 +754,16 @@
           "default": 5,
           "type": "number",
           "minimum": -1
+        },
+        "definitions": {
+          "title": "Subagent Definitions",
+          "description": "Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.",
+          "markdownDescription": "Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.\n\n- Category: `Subagents`\n- Requires restart: `yes`\n- Default: `{}`",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SubagentDefinition"
+          }
         }
       },
       "additionalProperties": false
@@ -1285,8 +1325,8 @@
           "properties": {
             "enabled": {
               "title": "Extensions Enabled",
-              "description": "If false, disallows extensions from being installed or used. (Not enforced yet)",
-              "markdownDescription": "If false, disallows extensions from being installed or used. (Not enforced yet)\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `true`",
+              "description": "If false, disallows extensions from being installed or used.",
+              "markdownDescription": "If false, disallows extensions from being installed or used.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `true`",
               "default": true,
               "type": "boolean"
             }
@@ -1304,6 +1344,23 @@
               "title": "MCP Enabled",
               "description": "If false, disallows MCP servers from being used.",
               "markdownDescription": "If false, disallows MCP servers from being used.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `true`",
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "skills": {
+          "title": "Skills Settings",
+          "description": "Agent Skills-specific admin settings.",
+          "markdownDescription": "Agent Skills-specific admin settings.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `{}`",
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "title": "Skills Enabled",
+              "description": "If false, disallows agent skills from being used.",
+              "markdownDescription": "If false, disallows agent skills from being used.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `true`",
               "default": true,
               "type": "boolean"
             }
@@ -1718,6 +1775,9 @@
           }
         }
       ]
+    },
+    "SubagentDefinition": {
+      "description": "Definition for SubagentDefinition"
     }
   }
 }

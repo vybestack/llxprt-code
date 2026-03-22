@@ -73,7 +73,7 @@ interface ProviderManagerFactoryOptions {
   settings?: LoadedSettings;
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
   runtimeMessageBus?: MessageBus;
 }
@@ -144,7 +144,7 @@ function attachAddItemToOAuthProviders(
   oauthManager: OAuthManager,
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number,
 ): void {
   if (!addItem) {
@@ -449,7 +449,7 @@ export function getProviderManager(
   settings?: LoadedSettings,
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number,
 ): ProviderManager {
   void config;

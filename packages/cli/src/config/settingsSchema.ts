@@ -452,7 +452,7 @@ export const SETTINGS_SCHEMA = {
         category: 'General',
         requiresRestart: false,
         default: 'text',
-        description: 'The format of the CLI output.',
+        description: 'The format of the CLI output. Can be `text` or `json`.',
         showInDialog: true,
         options: [
           { value: 'text', label: 'Text' },
@@ -504,12 +504,32 @@ export const SETTINGS_SCHEMA = {
       },
       showStatusInTitle: {
         type: 'boolean',
-        label: 'Show Status in Title',
+        label: 'Show Thoughts in Title',
         category: 'UI',
         requiresRestart: false,
         default: false,
         description:
-          'Show LLxprt Code status and thoughts in the terminal window title',
+          'Show LLxprt model thoughts in the terminal window title during the working phase',
+        showInDialog: true,
+      },
+      dynamicWindowTitle: {
+        type: 'boolean',
+        label: 'Dynamic Window Title',
+        category: 'UI',
+        requiresRestart: false,
+        default: true,
+        description:
+          'Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )',
+        showInDialog: true,
+      },
+      showHomeDirectoryWarning: {
+        type: 'boolean',
+        label: 'Show Home Directory Warning',
+        category: 'UI',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Show a warning when running LLxprt CLI in the home directory.',
         showInDialog: true,
       },
       hideTips: {
@@ -831,9 +851,27 @@ export const SETTINGS_SCHEMA = {
     default: {},
     description: 'IDE integration settings.',
     showInDialog: false,
-    properties: {},
+    properties: {
+      enabled: {
+        type: 'boolean',
+        label: 'IDE Mode',
+        category: 'IDE',
+        requiresRestart: true,
+        default: false,
+        description: 'Enable IDE integration mode.',
+        showInDialog: true,
+      },
+      hasSeenNudge: {
+        type: 'boolean',
+        label: 'Has Seen IDE Integration Nudge',
+        category: 'IDE',
+        requiresRestart: false,
+        default: false,
+        description: 'Whether the user has seen the IDE integration nudge.',
+        showInDialog: false,
+      },
+    },
   },
-
   showStatusInTitle: {
     type: 'boolean',
     label: 'Show Status in Title',
@@ -1145,6 +1183,23 @@ export const SETTINGS_SCHEMA = {
         description:
           'Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.',
         showInDialog: true,
+      },
+      definitions: {
+        type: 'object',
+        label: 'Subagent Definitions',
+        category: 'Subagents',
+        requiresRestart: true,
+        default: {} as Record<
+          string,
+          { profile: string; systemPrompt: string }
+        >,
+        description:
+          'Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.',
+        showInDialog: false,
+        additionalProperties: {
+          type: 'object',
+          ref: 'SubagentDefinition',
+        },
       },
     },
   },
@@ -1882,7 +1937,7 @@ export const SETTINGS_SCHEMA = {
             requiresRestart: false,
             default: true,
             description:
-              'If false, disallows extensions from being installed or used. (Not enforced yet)',
+              'If false, disallows extensions from being installed or used.',
             showInDialog: false,
             mergeStrategy: MergeStrategy.REPLACE,
           },
@@ -1905,6 +1960,28 @@ export const SETTINGS_SCHEMA = {
             requiresRestart: false,
             default: true,
             description: 'If false, disallows MCP servers from being used.',
+            showInDialog: false,
+            mergeStrategy: MergeStrategy.REPLACE,
+          },
+        },
+      },
+      skills: {
+        type: 'object',
+        label: 'Skills Settings',
+        category: 'Admin',
+        requiresRestart: false,
+        default: {},
+        description: 'Agent Skills-specific admin settings.',
+        showInDialog: false,
+        mergeStrategy: MergeStrategy.REPLACE,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'Skills Enabled',
+            category: 'Admin',
+            requiresRestart: false,
+            default: true,
+            description: 'If false, disallows agent skills from being used.',
             showInDialog: false,
             mergeStrategy: MergeStrategy.REPLACE,
           },
@@ -2252,13 +2329,19 @@ export function getSettingsSchema(): SettingsSchemaType {
 }
 
 /**
+ * Determines if hooks UI should be visible (commands, status indicators).
+ * Gated only by the experimental tools.enableHooks flag.
+ */
+export function getEnableHooksUI(settings: Settings): boolean {
+  return settings.tools?.enableHooks ?? true;
+}
+
+/**
  * Determines if hooks should be enabled based on both experimental flag and user setting.
  * Both tools.enableHooks (experimental gate) and hooks.enabled (user toggle) must be true.
  */
 export function getEnableHooks(settings: Settings): boolean {
-  const experimentalGate = settings.tools?.enableHooks ?? true;
-  const userToggle = settings.hooks?.enabled ?? false;
-  return experimentalGate && userToggle;
+  return getEnableHooksUI(settings) && (settings.hooks?.enabled ?? false);
 }
 
 type InferSettings<T extends SettingsSchema> = {

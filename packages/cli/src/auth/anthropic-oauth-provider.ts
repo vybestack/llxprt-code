@@ -55,7 +55,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private currentAuthAttemptId?: string;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
 
   /**
@@ -69,7 +69,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     private _tokenStore?: TokenStore,
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ) {
     this.deviceFlow = new AnthropicDeviceFlow();
@@ -99,7 +99,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   setAddItem(
     addItem: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ): void {
     this.addItem = addItem;
@@ -250,7 +250,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         // Try instance addItem first, fallback to global
         const addItem = this.addItem || globalOAuthUI.getAddItem();
         if (addItem) {
-          addItem(historyItem, Date.now());
+          addItem(historyItem);
         }
 
         debugLogger.log('Visit the following URL to authorize:');

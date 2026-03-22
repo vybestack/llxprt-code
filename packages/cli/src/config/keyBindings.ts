@@ -60,9 +60,20 @@ export enum Command {
   SHOW_ERROR_DETAILS = 'showErrorDetails',
   TOGGLE_TOOL_DESCRIPTIONS = 'toggleToolDescriptions',
   TOGGLE_TODO_DIALOG = 'toggleTodoDialog',
-  TOGGLE_IDE_CONTEXT_DETAIL = 'toggleIDEContextDetail',
+  SHOW_IDE_CONTEXT_DETAIL = 'showIDEContextDetail',
   TOGGLE_MARKDOWN = 'toggleMarkdown',
   TOGGLE_COPY_MODE = 'toggleCopyMode',
+  TOGGLE_YOLO = 'toggleYolo',
+  TOGGLE_AUTO_EDIT = 'toggleAutoEdit',
+  UNDO = 'undo',
+  REDO = 'redo',
+  MOVE_LEFT = 'moveLeft',
+  MOVE_RIGHT = 'moveRight',
+  MOVE_WORD_LEFT = 'moveWordLeft',
+  MOVE_WORD_RIGHT = 'moveWordRight',
+  DELETE_CHAR_LEFT = 'deleteCharLeft',
+  DELETE_CHAR_RIGHT = 'deleteCharRight',
+  DELETE_WORD_FORWARD = 'deleteWordForward',
   QUIT = 'quit',
   EXIT = 'exit',
   SHOW_MORE_LINES = 'showMoreLines',
@@ -78,6 +89,8 @@ export enum Command {
 
   // Additional commands from keyboard shortcuts autogen
   TOGGLE_SHELL_INPUT_FOCUS = 'toggleShellInputFocus',
+  FOCUS_SHELL_INPUT = 'focusShellInput',
+  UNFOCUS_SHELL_INPUT = 'unfocusShellInput',
   EXPAND_SUGGESTION = 'expandSuggestion',
   COLLAPSE_SUGGESTION = 'collapseSuggestion',
 }
@@ -128,6 +141,37 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.DELETE_WORD_BACKWARD]: [
     { key: 'backspace', ctrl: true },
     { key: 'backspace', command: true },
+    { sequence: '\x7f', ctrl: true },
+    { sequence: '\x7f', command: true },
+    { key: 'w', ctrl: true },
+  ],
+  [Command.MOVE_LEFT]: [
+    { key: 'left', ctrl: false, command: false },
+    { key: 'b', ctrl: true },
+  ],
+  [Command.MOVE_RIGHT]: [
+    { key: 'right', ctrl: false, command: false },
+    { key: 'f', ctrl: true },
+  ],
+  [Command.MOVE_WORD_LEFT]: [
+    { key: 'left', ctrl: true },
+    { key: 'left', command: true },
+    { key: 'b', command: true },
+  ],
+  [Command.MOVE_WORD_RIGHT]: [
+    { key: 'right', ctrl: true },
+    { key: 'right', command: true },
+    { key: 'f', command: true },
+  ],
+  [Command.DELETE_CHAR_LEFT]: [
+    { key: 'backspace' },
+    { sequence: '\x7f' },
+    { key: 'h', ctrl: true },
+  ],
+  [Command.DELETE_CHAR_RIGHT]: [{ key: 'delete' }, { key: 'd', ctrl: true }],
+  [Command.DELETE_WORD_FORWARD]: [
+    { key: 'delete', ctrl: true },
+    { key: 'delete', command: true },
   ],
 
   // Screen control
@@ -206,9 +250,13 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
   [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
-  [Command.TOGGLE_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
+  [Command.SHOW_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.TOGGLE_MARKDOWN]: [{ key: 'm', command: true }],
-  [Command.TOGGLE_COPY_MODE]: [{ key: 'y', ctrl: true }],
+  [Command.TOGGLE_COPY_MODE]: [{ key: 's', ctrl: true }],
+  [Command.TOGGLE_YOLO]: [{ key: 'y', ctrl: true }],
+  [Command.TOGGLE_AUTO_EDIT]: [{ key: 'tab', shift: true }],
+  [Command.UNDO]: [{ key: 'z', ctrl: true, shift: false }],
+  [Command.REDO]: [{ key: 'z', ctrl: true, shift: true }],
   [Command.QUIT]: [{ key: 'c', ctrl: true }],
   [Command.EXIT]: [{ key: 'd', ctrl: true }],
   [Command.SHOW_MORE_LINES]: [{ key: 's', ctrl: true }],
@@ -232,6 +280,12 @@ export const defaultKeyBindings: KeyBindingConfig = {
   // an interactive shell is attached, even though Ctrl+F is otherwise commonly
   // used for cursor-forward behavior in readline-style input editing.
   [Command.TOGGLE_SHELL_INPUT_FOCUS]: [{ key: 'f', ctrl: true }],
+  [Command.FOCUS_SHELL_INPUT]: [{ key: 'tab', shift: false }],
+  [Command.UNFOCUS_SHELL_INPUT]: [
+    { key: 'tab', shift: false },
+    { key: 'tab', shift: true },
+  ],
+  // Suggestion expansion
   [Command.EXPAND_SUGGESTION]: [{ key: 'right' }],
   [Command.COLLAPSE_SUGGESTION]: [{ key: 'left' }],
 };
@@ -251,7 +305,14 @@ export const commandCategories: readonly CommandCategory[] = [
   },
   {
     title: 'Cursor Movement',
-    commands: [Command.HOME, Command.END],
+    commands: [
+      Command.HOME,
+      Command.END,
+      Command.MOVE_LEFT,
+      Command.MOVE_RIGHT,
+      Command.MOVE_WORD_LEFT,
+      Command.MOVE_WORD_RIGHT,
+    ],
   },
   {
     title: 'Editing',
@@ -260,6 +321,11 @@ export const commandCategories: readonly CommandCategory[] = [
       Command.KILL_LINE_LEFT,
       Command.CLEAR_INPUT,
       Command.DELETE_WORD_BACKWARD,
+      Command.DELETE_WORD_FORWARD,
+      Command.DELETE_CHAR_LEFT,
+      Command.DELETE_CHAR_RIGHT,
+      Command.UNDO,
+      Command.REDO,
     ],
   },
   {
@@ -318,11 +384,14 @@ export const commandCategories: readonly CommandCategory[] = [
     title: 'App Controls',
     commands: [
       Command.SHOW_ERROR_DETAILS,
-      Command.TOGGLE_IDE_CONTEXT_DETAIL,
+      Command.SHOW_IDE_CONTEXT_DETAIL,
       Command.TOGGLE_MARKDOWN,
       Command.TOGGLE_COPY_MODE,
+      Command.TOGGLE_YOLO,
+      Command.TOGGLE_AUTO_EDIT,
       Command.SHOW_MORE_LINES,
-      Command.TOGGLE_SHELL_INPUT_FOCUS,
+      Command.FOCUS_SHELL_INPUT,
+      Command.UNFOCUS_SHELL_INPUT,
     ],
   },
   {
@@ -347,11 +416,20 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.ESCAPE]: 'Dismiss dialogs or cancel the current focus.',
   [Command.HOME]: 'Move the cursor to the start of the line.',
   [Command.END]: 'Move the cursor to the end of the line.',
+  [Command.MOVE_LEFT]: 'Move the cursor one character to the left.',
+  [Command.MOVE_RIGHT]: 'Move the cursor one character to the right.',
+  [Command.MOVE_WORD_LEFT]: 'Move the cursor one word to the left.',
+  [Command.MOVE_WORD_RIGHT]: 'Move the cursor one word to the right.',
   [Command.KILL_LINE_RIGHT]: 'Delete from the cursor to the end of the line.',
   [Command.KILL_LINE_LEFT]: 'Delete from the cursor to the start of the line.',
   [Command.CLEAR_INPUT]:
     'Clear all text in the input field (when the input prompt is focused).',
   [Command.DELETE_WORD_BACKWARD]: 'Delete the previous word.',
+  [Command.DELETE_WORD_FORWARD]: 'Delete the next word.',
+  [Command.DELETE_CHAR_LEFT]: 'Delete the character to the left.',
+  [Command.DELETE_CHAR_RIGHT]: 'Delete the character to the right.',
+  [Command.UNDO]: 'Undo the most recent text edit.',
+  [Command.REDO]: 'Redo the most recent undone text edit.',
   [Command.CLEAR_SCREEN]: 'Clear the terminal screen and redraw the UI.',
   [Command.SCROLL_UP]: 'Scroll up one line.',
   [Command.SCROLL_DOWN]: 'Scroll down one line.',
@@ -377,10 +455,12 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.SHOW_ERROR_DETAILS]: 'Toggle detailed error information.',
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: 'Toggle tool descriptions display.',
   [Command.TOGGLE_TODO_DIALOG]: 'Toggle the TODO dialog visibility.',
-  [Command.TOGGLE_IDE_CONTEXT_DETAIL]: 'Toggle IDE context details.',
+  [Command.SHOW_IDE_CONTEXT_DETAIL]: 'Toggle IDE context details.',
   [Command.TOGGLE_MARKDOWN]: 'Toggle Markdown rendering.',
   [Command.TOGGLE_COPY_MODE]:
     'Toggle copy mode when the terminal is using the alternate buffer.',
+  [Command.TOGGLE_YOLO]: 'Toggle YOLO (auto-approval) mode for tool calls.',
+  [Command.TOGGLE_AUTO_EDIT]: 'Toggle Auto Edit (auto-accept edits) mode.',
   [Command.QUIT]:
     'Cancel the current request or quit the CLI (global app shortcut).',
   [Command.EXIT]: 'Exit the CLI when the input buffer is empty.',
@@ -394,6 +474,10 @@ export const commandDescriptions: Readonly<Record<Command, string>> = {
   [Command.TOGGLE_MOUSE_EVENTS]: 'Toggle mouse event tracking.',
   [Command.TOGGLE_SHELL_INPUT_FOCUS]:
     'Toggle focus between the shell and LLxprt input when an interactive shell is attached.',
+  [Command.FOCUS_SHELL_INPUT]:
+    'Toggle focus into the interactive shell from LLxprt input.',
+  [Command.UNFOCUS_SHELL_INPUT]:
+    'Toggle focus out of the interactive shell and into LLxprt input.',
   [Command.EXPAND_SUGGESTION]:
     'Expand an inline suggestion when suggestion text is available.',
   [Command.COLLAPSE_SUGGESTION]:

@@ -26,6 +26,7 @@ export const EDITOR_DISPLAY_NAMES: Record<EditorType, string> = {
   vim: 'Vim',
   emacs: 'Emacs',
   neovim: 'Neovim',
+  hx: 'Helix',
 };
 
 class EditorSettingsManager {
