@@ -49,13 +49,10 @@ export function extractRateLimitHeaders(
     info.requestsRemaining = parseInt(requestsRemaining, 10);
   }
   if (requestsReset) {
-    try {
-      const date = new Date(requestsReset);
-      // Only set if the date is valid
-      if (!isNaN(date.getTime())) {
-        info.requestsReset = date;
-      }
-    } catch (_error) {
+    const date = new Date(requestsReset);
+    if (!Number.isNaN(date.getTime())) {
+      info.requestsReset = date;
+    } else {
       logger.debug(
         () => `Failed to parse requests reset date: ${requestsReset}`,
       );
@@ -74,13 +71,10 @@ export function extractRateLimitHeaders(
     info.tokensRemaining = parseInt(tokensRemaining, 10);
   }
   if (tokensReset) {
-    try {
-      const date = new Date(tokensReset);
-      // Only set if the date is valid
-      if (!isNaN(date.getTime())) {
-        info.tokensReset = date;
-      }
-    } catch (_error) {
+    const date = new Date(tokensReset);
+    if (!Number.isNaN(date.getTime())) {
+      info.tokensReset = date;
+    } else {
       logger.debug(() => `Failed to parse tokens reset date: ${tokensReset}`);
     }
   }
@@ -231,37 +225,40 @@ export function calculateWaitTime(
     now,
   };
 
-  const requestsDecision = checkBucketThreshold(
-    info.requestsRemaining,
-    info.requestsLimit,
-    info.requestsReset,
-    'requests',
-    bucketOptions,
-  );
-  if (requestsDecision) {
-    return requestsDecision;
+  const decisions = [
+    checkBucketThreshold(
+      info.requestsRemaining,
+      info.requestsLimit,
+      info.requestsReset,
+      'requests',
+      bucketOptions,
+    ),
+    checkBucketThreshold(
+      info.tokensRemaining,
+      info.tokensLimit,
+      info.tokensReset,
+      'tokens',
+      bucketOptions,
+    ),
+    checkBucketThreshold(
+      info.inputTokensRemaining,
+      info.inputTokensLimit,
+      undefined,
+      'input tokens',
+      bucketOptions,
+    ),
+  ];
+
+  // Prefer any bucket that requires waiting over warning-only decisions
+  const waitDecision = decisions.find((d) => d !== undefined && d.shouldWait);
+  if (waitDecision) {
+    return waitDecision;
   }
 
-  const tokensDecision = checkBucketThreshold(
-    info.tokensRemaining,
-    info.tokensLimit,
-    info.tokensReset,
-    'tokens',
-    bucketOptions,
-  );
-  if (tokensDecision) {
-    return tokensDecision;
-  }
-
-  const inputTokensDecision = checkBucketThreshold(
-    info.inputTokensRemaining,
-    info.inputTokensLimit,
-    undefined,
-    'input tokens',
-    bucketOptions,
-  );
-  if (inputTokensDecision) {
-    return inputTokensDecision;
+  // Fall back to first warning-only decision if no bucket requires waiting
+  const warningDecision = decisions.find((d) => d !== undefined);
+  if (warningDecision) {
+    return warningDecision;
   }
 
   return { shouldWait: false, waitMs: 0, reason: 'No throttling needed' };
