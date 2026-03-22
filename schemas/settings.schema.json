@@ -282,8 +282,8 @@
         },
         "dynamicWindowTitle": {
           "title": "Dynamic Window Title",
-          "description": "Update the terminal window title with current status icons (Ready: ◇, Action Required: ✋, Working: ✦)",
-          "markdownDescription": "Update the terminal window title with current status icons (Ready: ◇, Action Required: ✋, Working: ✦)\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
+          "description": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )",
+          "markdownDescription": "Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )\n\n- Category: `UI`\n- Requires restart: `no`\n- Default: `true`",
           "default": true,
           "type": "boolean"
         },
@@ -544,7 +544,8 @@
           "type": "boolean"
         }
       },
-
+      "additionalProperties": false
+    },
     "showStatusInTitle": {
       "title": "Show Status in Title",
       "description": "Show LLxprt status and thoughts in the terminal window title",
@@ -608,6 +609,43 @@
         "$ref": "#/$defs/SummarizeToolOutputSettings"
       }
     },
+    "dnsResolutionOrder": {
+      "title": "DNS Resolution Order",
+      "description": "The DNS resolution order.",
+      "markdownDescription": "The DNS resolution order.\n\n- Category: `Advanced`\n- Requires restart: `yes`",
+      "type": "string"
+    },
+    "tools": {
+      "title": "Tools",
+      "description": "Settings for built-in and custom tools.",
+      "markdownDescription": "Settings for built-in and custom tools.\n\n- Category: `Tools`\n- Requires restart: `yes`\n- Default: `{}`",
+      "default": {},
+      "type": "object",
+      "properties": {
+        "sandbox": {
+          "title": "Sandbox",
+          "description": "Sandbox execution environment. Set to a boolean to enable or disable the sandbox, or provide a string path to a sandbox profile.",
+          "markdownDescription": "Sandbox execution environment. Set to a boolean to enable or disable the sandbox, or provide a string path to a sandbox profile.\n\n- Category: `Tools`\n- Requires restart: `yes`",
+          "$ref": "#/$defs/BooleanOrString"
+        },
+        "autoAccept": {
+          "title": "Auto Accept",
+          "description": "Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).",
+          "markdownDescription": "Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).\n\n- Category: `Tools`\n- Requires restart: `no`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        },
+        "core": {
+          "title": "Core Tools",
+          "description": "Paths to core tool definitions.",
+          "markdownDescription": "Paths to core tool definitions.\n\n- Category: `Tools`\n- Requires restart: `yes`",
+          "type": "array",
+          "items": {}
+        },
+        "allowed": {
+          "title": "Allowed Tools",
+          "description": "A list of tool names that will bypass the confirmation dialog.",
+          "markdownDescription": "A list of tool names that will bypass the confirmation dialog.\n\n- Category: `Advanced`\n- Requires restart: `yes`",
           "type": "array",
           "items": {}
         },
@@ -724,6 +762,16 @@
           "default": 5,
           "type": "number",
           "minimum": -1
+        },
+        "definitions": {
+          "title": "Subagent Definitions",
+          "description": "Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.",
+          "markdownDescription": "Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.\n\n- Category: `Subagents`\n- Requires restart: `yes`\n- Default: `{}`",
+          "default": {},
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/SubagentDefinition"
+          }
         }
       },
       "additionalProperties": false
@@ -1285,8 +1333,8 @@
           "properties": {
             "enabled": {
               "title": "Extensions Enabled",
-              "description": "If false, disallows extensions from being installed or used. (Not enforced yet)",
-              "markdownDescription": "If false, disallows extensions from being installed or used. (Not enforced yet)\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `true`",
+              "description": "If false, disallows extensions from being installed or used.",
+              "markdownDescription": "If false, disallows extensions from being installed or used.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `true`",
               "default": true,
               "type": "boolean"
             }
@@ -1735,6 +1783,9 @@
           }
         }
       ]
+    },
+    "SubagentDefinition": {
+      "description": "Definition for SubagentDefinition"
     }
   }
 }
