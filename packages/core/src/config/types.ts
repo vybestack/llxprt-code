@@ -20,8 +20,8 @@ export interface SubagentConfig {
   /** ISO 8601 timestamp when subagent was last updated */
   updatedAt: string;
 
-  /** Provenance: 'user' (default, disk-backed) or 'extension' */
-  source?: 'user' | 'extension';
+  /** Provenance: 'user' (default, disk-backed), 'extension', or 'settings' */
+  source?: 'user' | 'extension' | 'settings';
 
   /** Extension name if source === 'extension' */
   sourceExtension?: string;

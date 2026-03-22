@@ -356,9 +356,20 @@ const listCommand: SlashCommand = {
       try {
         const config = await manager.loadSubagent(name);
         let line = `  • ${name} (profile: ${config.profile})`;
-        if (config.source === 'extension') {
+
+        // Show provenance for non-user subagents and user overrides
+        if (config.source === 'settings') {
+          line += ` [settings]`;
+        } else if (config.source === 'extension') {
           line += ` [ext: ${config.sourceExtension}]`;
+        } else if (
+          config.source === 'user' &&
+          manager.hasSettingsSubagent(name)
+        ) {
+          // User override of settings subagent
+          line += ` [settings, user override]`;
         }
+
         lines.push(line);
       } catch {
         lines.push(`  • ${name}`);
@@ -467,9 +478,16 @@ const deleteCommand: SlashCommand = {
       };
     }
 
-    // Check if it's an extension-only subagent
+    // Check if it's a settings-only or extension-only subagent
     try {
       const config = await subagentManager.loadSubagent(name);
+      if (config.source === 'settings') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Cannot delete settings-defined subagent '${name}'. Modify it in settings.json instead.`,
+        };
+      }
       if (config.source === 'extension') {
         // Check if user has a disk override
         const diskExists = await (subagentManager as any)._diskSubagentExists(
@@ -545,9 +563,16 @@ const editCommand: SlashCommand = {
       };
     }
 
-    // Check if it's an extension-only subagent
+    // Check if it's a settings-only or extension-only subagent
     try {
       const config = await subagentManager.loadSubagent(name);
+      if (config.source === 'settings') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Cannot edit settings-defined subagent '${name}'. Modify it in settings.json instead.`,
+        };
+      }
       if (config.source === 'extension') {
         // Check if user has a disk override
         const diskExists = await (subagentManager as any)._diskSubagentExists(

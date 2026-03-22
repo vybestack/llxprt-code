@@ -1199,6 +1199,23 @@ export const SETTINGS_SCHEMA = {
           'Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.',
         showInDialog: true,
       },
+      definitions: {
+        type: 'object',
+        label: 'Subagent Definitions',
+        category: 'Subagents',
+        requiresRestart: true,
+        default: {} as Record<
+          string,
+          { profile: string; systemPrompt: string }
+        >,
+        description:
+          'Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.',
+        showInDialog: false,
+        additionalProperties: {
+          type: 'object',
+          ref: 'SubagentDefinition',
+        },
+      },
     },
   },
   security: {

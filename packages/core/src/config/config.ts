@@ -1125,6 +1125,21 @@ export class Config {
       }
     }
 
+    // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
+    if (subagentMgr) {
+      const allSettings = this.settingsService.getAllGlobalSettings();
+      const subagentsSettings = allSettings?.['subagents'] as
+        | Record<string, unknown>
+        | undefined;
+      const definitions = subagentsSettings?.['definitions'] as
+        | Record<string, { profile: string; systemPrompt: string }>
+        | undefined;
+      if (definitions && typeof definitions === 'object') {
+        subagentMgr.clearSettingsSubagents();
+        subagentMgr.registerSettingsSubagents(definitions);
+      }
+    }
+
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this, this.runtimeState);
