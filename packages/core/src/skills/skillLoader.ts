@@ -53,7 +53,7 @@ export async function loadSkillsFromDir(
       return [];
     }
 
-    const skillFiles = await glob('*/SKILL.md', {
+    const skillFiles = await glob(['SKILL.md', '*/SKILL.md'], {
       cwd: absoluteSearchPath,
       absolute: true,
       nodir: true,
