@@ -13,12 +13,16 @@ import { MessageType } from '../types.js';
 
 export interface UseAutoAcceptIndicatorArgs {
   config: Config;
-  addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
+  addItem?: (item: HistoryItemWithoutId, timestamp: number) => void;
+  onApprovalModeChange?: (mode: ApprovalMode) => void;
+  isActive?: boolean;
 }
 
 export function useAutoAcceptIndicator({
   config,
   addItem,
+  onApprovalModeChange,
+  isActive = true,
 }: UseAutoAcceptIndicatorArgs): ApprovalMode {
   const currentConfigValue = config.getApprovalMode();
   const [showAutoAcceptIndicator, setShowAutoAcceptIndicator] =
@@ -49,8 +53,10 @@ export function useAutoAcceptIndicator({
           config.setApprovalMode(nextApprovalMode);
           // Update local state immediately for responsiveness
           setShowAutoAcceptIndicator(nextApprovalMode);
+          // Notify callback if provided
+          onApprovalModeChange?.(nextApprovalMode);
         } catch (e) {
-          addItem(
+          addItem?.(
             {
               type: MessageType.INFO,
               text: (e as Error).message,
@@ -60,7 +66,7 @@ export function useAutoAcceptIndicator({
         }
       }
     },
-    { isActive: true },
+    { isActive },
   );
 
   return showAutoAcceptIndicator;

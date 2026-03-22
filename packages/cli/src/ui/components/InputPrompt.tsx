@@ -786,6 +786,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
+      // Tab to focus into shell is handled in AppContainer (global keypress handler)
+      // to avoid dependency on activeShellPtyId/setEmbeddedShellFocused which aren't props
+
       // Fall back to the text buffer's default input handling for all other keys
       buffer.handleInput(key);
 

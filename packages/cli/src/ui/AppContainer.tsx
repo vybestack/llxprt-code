@@ -1468,6 +1468,12 @@ export const AppContainer = (props: AppContainerProps) => {
     runtimeMessageBus,
   );
 
+  // Track last output time for Tab focus switching logic
+  const lastOutputTimeRef = useRef(0);
+  useEffect(() => {
+    lastOutputTimeRef.current = lastOutputTime;
+  }, [lastOutputTime]);
+
   const pendingHistoryItems = useMemo(
     () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
     [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
@@ -1554,6 +1560,9 @@ export const AppContainer = (props: AppContainerProps) => {
     handleFinalSubmit,
     todos,
   });
+
+  // Tab focus timeout ref for shell focus switching
+  const tabFocusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
@@ -1724,6 +1733,7 @@ export const AppContainer = (props: AppContainerProps) => {
         keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key) &&
         config.getEnableInteractiveShell()
       ) {
+        // LLxprt's original Ctrl+F toggle behavior
         const lastPtyId = ShellExecutionService.getLastActivePtyId();
         debug.log(
           'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
@@ -1738,6 +1748,59 @@ export const AppContainer = (props: AppContainerProps) => {
             return !prev;
           });
         }
+      } else if (
+        keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS_OUT](key) &&
+        activeShellPtyId &&
+        embeddedShellFocused
+      ) {
+        // Upstream Tab-based focus switching (when focused OUT of shell)
+        if (key.name === 'tab' && key.shift) {
+          // Shift+Tab always changes focus out
+          setEmbeddedShellFocused(false);
+          return;
+        }
+
+        // Tab key: check if shell is idle before switching focus
+        const now = Date.now();
+        // If the shell hasn't produced output in the last 100ms, it's considered idle.
+        const isIdle = now - lastOutputTimeRef.current >= 100;
+        if (isIdle) {
+          if (tabFocusTimeoutRef.current) {
+            clearTimeout(tabFocusTimeoutRef.current);
+          }
+          tabFocusTimeoutRef.current = setTimeout(() => {
+            tabFocusTimeoutRef.current = null;
+            // If the shell produced output since the tab press, we assume it handled the tab
+            // (e.g. autocomplete) so we should not toggle focus.
+            if (lastOutputTimeRef.current > now) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: 'Press Shift+Tab to focus out of the shell.',
+                },
+                Date.now(),
+              );
+              return;
+            }
+            setEmbeddedShellFocused(false);
+          }, 100);
+          return;
+        }
+        // Shell is actively producing output, don't switch focus
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Press Shift+Tab to focus out of the shell.',
+          },
+          Date.now(),
+        );
+      } else if (
+        keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS_IN](key) &&
+        activeShellPtyId &&
+        !embeddedShellFocused
+      ) {
+        // Tab to focus into shell (when not already focused)
+        setEmbeddedShellFocused(true);
       }
     },
     [
@@ -1764,6 +1827,7 @@ export const AppContainer = (props: AppContainerProps) => {
       copyModeEnabled,
       settings.merged.ui?.useAlternateBuffer,
       activeShellPtyId,
+      embeddedShellFocused,
     ],
   );
 
