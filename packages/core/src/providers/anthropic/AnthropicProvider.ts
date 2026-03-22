@@ -614,9 +614,6 @@ export class AnthropicProvider extends BaseProvider {
           logger: this.getStreamingLogger(),
           cacheLogger: requestContext.cacheLogger,
           rateLimitLogger,
-          onRateLimitInfo: (info) => {
-            this.lastRateLimitInfo = info;
-          },
         },
       );
     } else {

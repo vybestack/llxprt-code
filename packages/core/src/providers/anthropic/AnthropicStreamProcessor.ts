@@ -24,7 +24,6 @@ import {
 import { coerceParametersToSchema } from '../../utils/parameterCoercion.js';
 import { isNetworkTransientError } from '../../utils/retry.js';
 import { delay } from '../../utils/delay.js';
-import type { AnthropicRateLimitInfo } from './AnthropicRateLimitHandler.js';
 
 export type StreamProcessorOptions = {
   isOAuth: boolean;
@@ -44,7 +43,6 @@ export type StreamProcessorOptions = {
   logger: { debug: (fn: () => string) => void };
   cacheLogger: { debug: (fn: () => string) => void };
   rateLimitLogger: { debug: (fn: () => string) => void };
-  onRateLimitInfo?: (info: AnthropicRateLimitInfo) => void;
 };
 
 async function* processStreamEvents(

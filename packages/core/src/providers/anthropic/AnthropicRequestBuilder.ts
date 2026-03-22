@@ -13,36 +13,15 @@
 
 import type {
   AnthropicMessage,
-  AnthropicImageBlock,
-  AnthropicDocumentBlock,
-  AnthropicToolResultContent,
+  AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
 import { isOpus46Plus } from './AnthropicModelData.js';
 
 /**
- * Discriminated union of Anthropic content block types that support cache_control.
- * Each variant lists only the Anthropic-permitted keys for its block type.
+ * A content block with cache_control attached.
  * @issue #1414
  */
-export type CacheableAnthropicBlock =
-  | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | {
-      type: 'tool_result';
-      tool_use_id: string;
-      content: AnthropicToolResultContent;
-      is_error?: boolean;
-    }
-  | AnthropicImageBlock
-  | AnthropicDocumentBlock
-  | { type: 'thinking'; thinking: string; signature?: string }
-  | { type: 'redacted_thinking'; data: string };
-
-/**
- * A cacheable block with cache_control attached.
- * @issue #1414
- */
-export type CachedAnthropicBlock = CacheableAnthropicBlock & {
+export type CachedAnthropicBlock = AnthropicMessageBlock & {
   cache_control: { type: 'ephemeral'; ttl: '5m' | '1h' };
 };
 
@@ -50,7 +29,7 @@ export type CachedAnthropicBlock = CacheableAnthropicBlock & {
  * Content block type union for message arrays that may carry optional cache_control.
  * Used when attaching prompt caching markers to message content.
  */
-type CacheableContentBlock = CacheableAnthropicBlock & {
+type CacheableContentBlock = AnthropicMessageBlock & {
   cache_control?: { type: 'ephemeral'; ttl?: '5m' | '1h' };
 };
 
@@ -64,7 +43,7 @@ type CacheableContentBlock = CacheableAnthropicBlock & {
  * @issue #1414
  */
 export function sanitizeBlockForCacheControl(
-  block: CacheableAnthropicBlock,
+  block: AnthropicMessageBlock,
   ttl: '5m' | '1h',
 ): CachedAnthropicBlock {
   const cacheControl = { type: 'ephemeral' as const, ttl };
@@ -308,31 +287,6 @@ export function sortObjectKeys<T extends Record<string, unknown>>(obj: T): T {
       {} as Record<string, unknown>,
     );
   return sorted as T;
-}
-
-/**
- * Remove empty thinking blocks from messages (issue #1545 handling)
- */
-export function removeEmptyThinkingBlocks(
-  messages: AnthropicMessage[],
-): AnthropicMessage[] {
-  return messages.map((msg) => {
-    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-      const filteredContent = msg.content.filter((block) => {
-        if (block.type === 'thinking') {
-          return (block as { thinking?: string }).thinking?.trim() !== '';
-        }
-        return true;
-      });
-
-      if (filteredContent.length === 0) {
-        return { ...msg, content: '' };
-      }
-
-      return { ...msg, content: filteredContent };
-    }
-    return msg;
-  });
 }
 
 /**
