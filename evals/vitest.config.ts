@@ -10,7 +10,10 @@ export default defineConfig({
   test: {
     testTimeout: 300000, // 5 minutes
     globalSetup: './globalSetup.ts',
-    reporters: ['default'],
+    reporters: ['default', 'json'],
+    outputFile: {
+      json: 'evals/logs/report.json',
+    },
     include: ['**/*.eval.ts'],
   },
 });

@@ -10,7 +10,6 @@ import { evalTest, validateModelOutput } from './test-helper.js';
 describe('save_memory', () => {
   evalTest('ALWAYS_PASSES', {
     name: 'should be able to save to memory',
-    log: true,
     params: {
       settings: { tools: { core: ['save_memory'] } },
     },
