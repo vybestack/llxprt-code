@@ -3116,6 +3116,13 @@ ${trimmed}
       this.lspServiceClient = undefined;
     }
   }
+
+  async dispose(): Promise<void> {
+    this.geminiClient?.dispose();
+    if (this.mcpClientManager) {
+      await this.mcpClientManager.stop();
+    }
+  }
 }
 
 // Re-export scheduler types for external use

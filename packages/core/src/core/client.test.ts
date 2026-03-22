@@ -58,6 +58,18 @@ import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
+import { ChatCompressionService } from '../services/chatCompressionService.js';
+import type { ChatRecordingService } from '../services/chatRecordingService.js';
+import { createAvailabilityServiceMock } from '../availability/testUtils.js';
+import type { ModelAvailabilityService } from '../availability/modelAvailabilityService.js';
+import type {
+  ModelConfigKey,
+  ResolvedModelConfig,
+} from '../services/modelConfigService.js';
+import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
+import * as policyCatalog from '../availability/policyCatalog.js';
+import { partToString } from '../utils/partUtils.js';
+import { coreEvents } from '../utils/events.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -458,6 +470,7 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   afterEach(() => {
+    client.dispose();
     vi.restoreAllMocks();
   });
 
@@ -1773,6 +1786,205 @@ sub memory
 
       // Turn.run should be called (processing should continue)
       expect(mockTurnRunFn).toHaveBeenCalled();
+    });
+=======
+    describe('Model Routing', () => {
+      let mockRouterService: { route: Mock };
+
+      beforeEach(() => {
+        mockRouterService = {
+          route: vi
+            .fn()
+            .mockResolvedValue({ model: 'routed-model', reason: 'test' }),
+        };
+        vi.mocked(mockConfig.getModelRouterService).mockReturnValue(
+          mockRouterService as unknown as ModelRouterService,
+        );
+
+        mockTurnRunFn.mockReturnValue(
+          (async function* () {
+            yield { type: 'content', value: 'Hello' };
+          })(),
+        );
+
+        const mockChat: Partial<GeminiChat> = {
+          addHistory: vi.fn(),
+          getHistory: vi.fn().mockReturnValue([]),
+          getLastPromptTokenCount: vi.fn(),
+        };
+        client['chat'] = mockChat as GeminiChat;
+      });
+
+      it('should use the model router service to select a model on the first turn', async () => {
+        const stream = client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-1',
+        );
+        await fromAsync(stream); // consume stream
+
+        expect(mockConfig.getModelRouterService).toHaveBeenCalled();
+        expect(mockRouterService.route).toHaveBeenCalled();
+        expect(mockTurnRunFn).toHaveBeenCalledWith(
+          { model: 'routed-model' },
+          [{ text: 'Hi' }],
+          expect.any(AbortSignal),
+        );
+      });
+
+      it('should use the same model for subsequent turns in the same prompt (stickiness)', async () => {
+        // First turn
+        let stream = client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-1',
+        );
+        await fromAsync(stream);
+
+        expect(mockRouterService.route).toHaveBeenCalledTimes(1);
+        expect(mockTurnRunFn).toHaveBeenCalledWith(
+          { model: 'routed-model' },
+          [{ text: 'Hi' }],
+          expect.any(AbortSignal),
+        );
+
+        // Second turn
+        stream = client.sendMessageStream(
+          [{ text: 'Continue' }],
+          new AbortController().signal,
+          'prompt-1',
+        );
+        await fromAsync(stream);
+
+        // Router should not be called again
+        expect(mockRouterService.route).toHaveBeenCalledTimes(1);
+        // Should stick to the first model
+        expect(mockTurnRunFn).toHaveBeenCalledWith(
+          { model: 'routed-model' },
+          [{ text: 'Continue' }],
+          expect.any(AbortSignal),
+        );
+      });
+
+      it('should reset the sticky model and re-route when the prompt_id changes', async () => {
+        // First prompt
+        let stream = client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-1',
+        );
+        await fromAsync(stream);
+
+        expect(mockRouterService.route).toHaveBeenCalledTimes(1);
+        expect(mockTurnRunFn).toHaveBeenCalledWith(
+          { model: 'routed-model' },
+          [{ text: 'Hi' }],
+          expect.any(AbortSignal),
+        );
+
+        // New prompt
+        mockRouterService.route.mockResolvedValue({
+          model: 'new-routed-model',
+          reason: 'test',
+        });
+        stream = client.sendMessageStream(
+          [{ text: 'A new topic' }],
+          new AbortController().signal,
+          'prompt-2',
+        );
+        await fromAsync(stream);
+
+        // Router should be called again for the new prompt
+        expect(mockRouterService.route).toHaveBeenCalledTimes(2);
+        // Should use the newly routed model
+        expect(mockTurnRunFn).toHaveBeenCalledWith(
+          { model: 'new-routed-model' },
+          [{ text: 'A new topic' }],
+          expect.any(AbortSignal),
+        );
+      });
+
+      it('should re-route within the same prompt when the configured model changes', async () => {
+        mockTurnRunFn.mockClear();
+        mockTurnRunFn.mockImplementation(async function* () {
+          yield { type: 'content', value: 'Hello' };
+        });
+
+        mockRouterService.route.mockResolvedValueOnce({
+          model: 'original-model',
+          reason: 'test',
+        });
+
+        let stream = client.sendMessageStream(
+          [{ text: 'Hi' }],
+          new AbortController().signal,
+          'prompt-1',
+        );
+        await fromAsync(stream);
+
+        expect(mockRouterService.route).toHaveBeenCalledTimes(1);
+        expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+          1,
+          { model: 'original-model' },
+          [{ text: 'Hi' }],
+          expect.any(AbortSignal),
+        );
+
+        mockRouterService.route.mockResolvedValue({
+          model: 'fallback-model',
+          reason: 'test',
+        });
+        vi.mocked(mockConfig.getModel).mockReturnValue('gemini-2.5-flash');
+        coreEvents.emitModelChanged('gemini-2.5-flash');
+
+        stream = client.sendMessageStream(
+          [{ text: 'Continue' }],
+          new AbortController().signal,
+          'prompt-1',
+        );
+        await fromAsync(stream);
+
+        expect(mockRouterService.route).toHaveBeenCalledTimes(2);
+        expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+          2,
+          { model: 'fallback-model' },
+          [{ text: 'Continue' }],
+          expect.any(AbortSignal),
+        );
+      });
+    });
+
+    it('should use getGlobalMemory for system instruction when JIT is enabled', async () => {
+      vi.mocked(mockConfig.isJitContextEnabled).mockReturnValue(true);
+      vi.mocked(mockConfig.getGlobalMemory).mockReturnValue(
+        'Global JIT Memory',
+      );
+      vi.mocked(mockConfig.getUserMemory).mockReturnValue('Full JIT Memory');
+
+      const { getCoreSystemPrompt } = await import('./prompts.js');
+      const mockGetCoreSystemPrompt = vi.mocked(getCoreSystemPrompt);
+
+      await client.updateSystemInstruction();
+
+      expect(mockGetCoreSystemPrompt).toHaveBeenCalledWith(
+        mockConfig,
+        'Global JIT Memory',
+      );
+    });
+
+    it('should use getUserMemory for system instruction when JIT is disabled', async () => {
+      vi.mocked(mockConfig.isJitContextEnabled).mockReturnValue(false);
+      vi.mocked(mockConfig.getUserMemory).mockReturnValue('Legacy Memory');
+
+      const { getCoreSystemPrompt } = await import('./prompts.js');
+      const mockGetCoreSystemPrompt = vi.mocked(getCoreSystemPrompt);
+
+      await client.updateSystemInstruction();
+
+      expect(mockGetCoreSystemPrompt).toHaveBeenCalledWith(
+        mockConfig,
+        'Legacy Memory',
+      );
     });
 
     it('should recursively call sendMessageStream with "Please continue." when InvalidStream event is received', async () => {
