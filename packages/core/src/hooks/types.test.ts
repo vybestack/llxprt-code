@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  HookEventName,
-  HookType,
-  AfterModelHookOutput,
-} from './types.js';
+import { HookEventName, HookType, AfterModelHookOutput } from './types.js';
 import type { LLMResponse } from './types.js';
 
 describe('Hook Types', () => {

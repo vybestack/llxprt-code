@@ -376,7 +376,6 @@ export const DefaultAppLayout = ({
   }
 
   if (useAlternateBuffer) {
-
     return (
       <StreamingContext.Provider value={streamingState}>
         <Box
