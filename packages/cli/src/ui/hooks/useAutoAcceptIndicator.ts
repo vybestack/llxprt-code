@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
 import { useKeypress } from './useKeypress.js';
+import { keyMatchers, Command } from '../keyMatchers.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 
@@ -31,12 +32,12 @@ export function useAutoAcceptIndicator({
     (key) => {
       let nextApprovalMode: ApprovalMode | undefined;
 
-      if (key.ctrl && key.name === 'y') {
+      if (keyMatchers[Command.TOGGLE_YOLO](key)) {
         nextApprovalMode =
           config.getApprovalMode() === ApprovalMode.YOLO
             ? ApprovalMode.DEFAULT
             : ApprovalMode.YOLO;
-      } else if (key.shift && key.name === 'tab') {
+      } else if (keyMatchers[Command.TOGGLE_AUTO_EDIT](key)) {
         nextApprovalMode =
           config.getApprovalMode() === ApprovalMode.AUTO_EDIT
             ? ApprovalMode.DEFAULT

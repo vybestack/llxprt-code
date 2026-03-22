@@ -74,7 +74,7 @@ describe('keyMatchers', () => {
     [Command.TOGGLE_IDE_CONTEXT_DETAIL]: (key: Key) =>
       key.ctrl && key.name === 'g',
     [Command.TOGGLE_MARKDOWN]: (key: Key) => key.meta && key.name === 'm',
-    [Command.TOGGLE_COPY_MODE]: (key: Key) => key.ctrl && key.name === 'y',
+    [Command.TOGGLE_COPY_MODE]: (key: Key) => key.ctrl && key.name === 's',
     [Command.QUIT]: (key: Key) => key.ctrl && key.name === 'c',
     [Command.EXIT]: (key: Key) => key.ctrl && key.name === 'd',
     [Command.SHOW_MORE_LINES]: (key: Key) => key.ctrl && key.name === 's',
@@ -85,6 +85,8 @@ describe('keyMatchers', () => {
       key.name === 'tab',
     [Command.TOGGLE_SHELL_INPUT_FOCUS]: (key: Key) =>
       key.ctrl && key.name === 'f',
+    [Command.TOGGLE_YOLO]: (key: Key) => key.ctrl && key.name === 'y',
+    [Command.TOGGLE_AUTO_EDIT]: (key: Key) => key.shift && key.name === 'tab',
     [Command.EXPAND_SUGGESTION]: (key: Key) => key.name === 'right',
     [Command.COLLAPSE_SUGGESTION]: (key: Key) => key.name === 'left',
   };
@@ -334,6 +336,11 @@ describe('keyMatchers', () => {
       negative: [createKey('m'), createKey('m', { shift: true })],
     },
     {
+      command: Command.TOGGLE_COPY_MODE,
+      positive: [createKey('s', { ctrl: true })],
+      negative: [createKey('s'), createKey('c', { ctrl: true })],
+    },
+    {
       command: Command.QUIT,
       positive: [createKey('c', { ctrl: true })],
       negative: [createKey('c'), createKey('d', { ctrl: true })],
@@ -375,6 +382,16 @@ describe('keyMatchers', () => {
         createKey('', { sequence: '\x1c' }),
       ],
       negative: [createKey('\\'), createKey('r', { ctrl: true })],
+    },
+    {
+      command: Command.TOGGLE_YOLO,
+      positive: [createKey('y', { ctrl: true })],
+      negative: [createKey('y'), createKey('y', { meta: true })],
+    },
+    {
+      command: Command.TOGGLE_AUTO_EDIT,
+      positive: [createKey('tab', { shift: true })],
+      negative: [createKey('tab')],
     },
   ];
 
