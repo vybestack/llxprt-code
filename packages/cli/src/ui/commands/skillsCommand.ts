@@ -205,7 +205,7 @@ async function reloadAction(
   const pendingTimeout = setTimeout(() => {
     context.ui.setPendingItem({
       type: MessageType.INFO,
-      text: 'Reloading agent skills...',
+      text: 'Reloading skills...',
     });
     pendingItemSet = true;
   }, 100);
