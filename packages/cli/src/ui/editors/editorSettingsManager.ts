@@ -43,6 +43,7 @@ class EditorSettingsManager {
       'vim',
       'emacs',
       'neovim',
+      'hx',
     ];
     this.availableEditors = [
       {

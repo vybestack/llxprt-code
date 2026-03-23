@@ -15,11 +15,17 @@ import {
 } from '../config/trustedFolders.js';
 
 // Mock os.homedir to control the home directory in tests
-vi.mock('os', async (importOriginal) => {
+const mockHomedir = vi.hoisted(() => vi.fn());
+
+vi.mock('node:os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
   return {
     ...actualOs,
-    homedir: vi.fn(),
+    default: {
+      ...actualOs.default,
+      homedir: mockHomedir,
+    },
+    homedir: mockHomedir,
   };
 });
 
@@ -35,7 +41,7 @@ describe('getUserStartupWarnings', () => {
     testRootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'warnings-test-'));
     homeDir = path.join(testRootDir, 'home');
     await fs.mkdir(homeDir, { recursive: true });
-    vi.mocked(os.homedir).mockReturnValue(homeDir);
+    mockHomedir.mockReturnValue(homeDir);
     vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
     vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
   });
@@ -50,7 +56,7 @@ describe('getUserStartupWarnings', () => {
       const warnings = await getUserStartupWarnings({}, homeDir);
       expect(warnings).toContainEqual(
         expect.stringContaining(
-          'Warning you are running Gemini CLI in your home directory',
+          'Warning you are running LLxprt CLI in your home directory',
         ),
       );
       expect(warnings).toContainEqual(

@@ -222,6 +222,23 @@ describe('useCommandCompletion', () => {
     });
   }
 
+  // Helper to render useCommandCompletion hook with text and cursor offset
+  function renderCommandCompletionHook(text: string, cursorOffset?: number) {
+    return renderHook(() => {
+      const textBuffer = useTextBufferForTest(text, cursorOffset);
+      const completion = useCommandCompletion(
+        textBuffer,
+        testRootDir,
+        [],
+        mockCommandContext,
+        false,
+        false,
+        mockConfig,
+      );
+      return { ...completion, textBuffer };
+    });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset to default mocks before each test
@@ -943,10 +960,16 @@ describe('useCommandCompletion', () => {
       renderCommandCompletionHook(text);
 
       await waitFor(() => {
+        // useSlashCompletion now takes positional args; 6th arg is reverseSearchActive
+        // false means slash completion is enabled
         expect(useSlashCompletion).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            enabled: true,
-          }),
+          expect.anything(), // buffer
+          expect.anything(), // dirs
+          expect.anything(), // cwd
+          expect.anything(), // slashCommands
+          expect.anything(), // commandContext
+          false, // reverseSearchActive (false = slash completion enabled)
+          expect.anything(), // config
         );
       });
     });

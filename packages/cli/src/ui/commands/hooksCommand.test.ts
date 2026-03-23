@@ -108,7 +108,6 @@ describe('hooksCommand', () => {
           type: MessageType.HOOKS_LIST,
           hooks: mockHooks,
         }),
-        expect.any(Number),
       );
     });
 
@@ -274,7 +273,6 @@ describe('hooksCommand', () => {
           type: MessageType.HOOKS_LIST,
           hooks: mockHooks,
         }),
-        expect.any(Number),
       );
     });
 
@@ -386,7 +384,6 @@ describe('hooksCommand', () => {
           type: MessageType.HOOKS_LIST,
           hooks: mockHooks,
         }),
-        expect.any(Number),
       );
     });
 
@@ -518,7 +515,6 @@ describe('hooksCommand', () => {
           type: MessageType.HOOKS_LIST,
           hooks: mockHooks,
         }),
-        expect.any(Number),
       );
     });
 
@@ -530,7 +526,6 @@ describe('hooksCommand', () => {
           type: MessageType.HOOKS_LIST,
           hooks: mockHooks,
         }),
-        expect.any(Number),
       );
     });
   });

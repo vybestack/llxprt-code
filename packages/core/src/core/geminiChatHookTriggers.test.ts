@@ -11,6 +11,7 @@ import {
   triggerAfterModelHook,
 } from './geminiChatHookTriggers.js';
 import { HookSystem } from '../hooks/HookSystem.js';
+import { BeforeModelHookOutput, AfterModelHookOutput } from '../hooks/types.js';
 import type { IContent } from '@vybestack/llxprt-code-providers';
 
 describe('geminiChatHookTriggers', () => {
@@ -29,13 +30,20 @@ describe('geminiChatHookTriggers', () => {
     mockHookSystem = {
       initialize: vi.fn(async () => {}),
       getEventHandler: vi.fn(() => mockEventHandler),
-      fireBeforeModelEvent: vi.fn(),
-      fireAfterModelEvent: vi.fn(),
+      fireBeforeModelEvent: vi.fn(async () => ({})),
+      fireAfterModelEvent: vi.fn(async () => ({})),
     } as unknown as HookSystem;
     mockConfig = {
       getHookSystem: vi.fn(() => mockHookSystem),
       getEnableHooks: vi.fn(() => true),
       getModel: vi.fn(() => 'test-model'),
+      getSettingsService: vi.fn(() => ({
+        get: vi.fn(),
+        getAllGlobalSettings: vi.fn(() => ({})),
+      })),
+      getSubagentManager: vi.fn(() => ({
+        removeExtensionSubagents: vi.fn(),
+      })),
     } as unknown as Config;
   });
 
@@ -66,12 +74,12 @@ describe('geminiChatHookTriggers', () => {
 
     it('should preserve stop semantics from hook output', async () => {
       const hookOutput = {
-        stopExecution: true,
-        reason: 'Test stop reason',
+        continue: false,
+        stopReason: 'Test stop reason',
       };
 
       mockHookSystem.fireBeforeModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new BeforeModelHookOutput(hookOutput),
       }));
 
       const result = await triggerBeforeModelHook(mockConfig, {
@@ -85,22 +93,24 @@ describe('geminiChatHookTriggers', () => {
 
     it('should preserve block semantics from hook output', async () => {
       const hookOutput = {
-        blockDecision: true,
+        decision: 'block' as const,
         reason: 'Test block reason',
-        synthetic_response: {
-          candidates: [
-            {
-              content: {
-                role: 'model' as const,
-                parts: [{ text: 'Blocked response' }],
+        hookSpecificOutput: {
+          llm_response: {
+            candidates: [
+              {
+                content: {
+                  role: 'model' as const,
+                  parts: [{ text: 'Blocked response' }],
+                },
               },
-            },
-          ],
+            ],
+          },
         },
       };
 
       mockHookSystem.fireBeforeModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new BeforeModelHookOutput(hookOutput),
       }));
 
       const result = await triggerBeforeModelHook(mockConfig, {
@@ -117,7 +127,7 @@ describe('geminiChatHookTriggers', () => {
       const hookOutput = {};
 
       mockHookSystem.fireBeforeModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new BeforeModelHookOutput(hookOutput),
       }));
 
       const result = await triggerBeforeModelHook(mockConfig, {
@@ -166,12 +176,12 @@ describe('geminiChatHookTriggers', () => {
 
     it('should preserve stop semantics from hook output', async () => {
       const hookOutput = {
-        stopExecution: true,
-        reason: 'Test stop after model',
+        continue: false,
+        stopReason: 'Test stop after model',
       };
 
       mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new AfterModelHookOutput(hookOutput),
       }));
 
       const mockIContent: IContent = {
@@ -188,12 +198,12 @@ describe('geminiChatHookTriggers', () => {
 
     it('should preserve block semantics from hook output', async () => {
       const hookOutput = {
-        blockDecision: true,
+        decision: 'block' as const,
         reason: 'Test block after model',
       };
 
       mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new AfterModelHookOutput(hookOutput),
       }));
 
       const mockIContent: IContent = {
@@ -210,20 +220,22 @@ describe('geminiChatHookTriggers', () => {
 
     it('should preserve modified response from hook output', async () => {
       const hookOutput = {
-        llm_response: {
-          candidates: [
-            {
-              content: {
-                role: 'model' as const,
-                parts: ['Modified response'],
+        hookSpecificOutput: {
+          llm_response: {
+            candidates: [
+              {
+                content: {
+                  role: 'model' as const,
+                  parts: ['Modified response'],
+                },
               },
-            },
-          ],
+            ],
+          },
         },
       };
 
       mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new AfterModelHookOutput(hookOutput),
       }));
 
       const mockIContent: IContent = {
@@ -245,7 +257,7 @@ describe('geminiChatHookTriggers', () => {
       const hookOutput = {};
 
       mockHookSystem.fireAfterModelEvent = vi.fn(async () => ({
-        finalOutput: hookOutput,
+        finalOutput: new AfterModelHookOutput(hookOutput),
       }));
 
       const mockIContent: IContent = {

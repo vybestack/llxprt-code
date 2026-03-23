@@ -34,12 +34,12 @@ describe('fileDiffUtils', () => {
 
     it('returns the FileDiff object if structure is valid', () => {
       const validDiffStat = {
-        model_added_lines: 1,
-        model_removed_lines: 2,
+        ai_added_lines: 1,
+        ai_removed_lines: 2,
         user_added_lines: 3,
         user_removed_lines: 4,
-        model_added_chars: 10,
-        model_removed_chars: 20,
+        ai_added_chars: 10,
+        ai_removed_chars: 20,
         user_added_chars: 30,
         user_removed_chars: 40,
       };
@@ -65,12 +65,12 @@ describe('fileDiffUtils', () => {
 
     it('correctly sums added and removed lines from stats', () => {
       const stats: FileDiff['diffStat'] = {
-        model_added_lines: 10,
-        model_removed_lines: 5,
+        ai_added_lines: 10,
+        ai_removed_lines: 5,
         user_added_lines: 2,
         user_removed_lines: 1,
-        model_added_chars: 100,
-        model_removed_chars: 50,
+        ai_added_chars: 100,
+        ai_removed_chars: 50,
         user_added_chars: 20,
         user_removed_chars: 10,
       };
@@ -84,12 +84,12 @@ describe('fileDiffUtils', () => {
 
     it('handles zero values correctly', () => {
       const stats: FileDiff['diffStat'] = {
-        model_added_lines: 0,
-        model_removed_lines: 0,
+        ai_added_lines: 0,
+        ai_removed_lines: 0,
         user_added_lines: 0,
         user_removed_lines: 0,
-        model_added_chars: 0,
-        model_removed_chars: 0,
+        ai_added_chars: 0,
+        ai_removed_chars: 0,
         user_added_chars: 0,
         user_removed_chars: 0,
       };

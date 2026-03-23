@@ -168,12 +168,16 @@ describe('KeypressContext - Kitty Protocol', () => {
     let kittySpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
+      vi.useFakeTimers();
       kittySpy = vi
         .spyOn(terminalCapabilityManager, 'isKittyProtocolEnabled')
         .mockReturnValue(false);
     });
 
-    afterEach(() => kittySpy.mockRestore());
+    afterEach(() => {
+      vi.useRealTimers();
+      kittySpy.mockRestore();
+    });
 
     it('should buffer return key pressed quickly after another key', async () => {
       const { keyHandler } = setupKeypressTest();

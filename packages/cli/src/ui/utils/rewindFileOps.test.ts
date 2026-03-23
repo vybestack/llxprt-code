@@ -99,8 +99,8 @@ describe('rewindFileOps', () => {
               newContent: 'new',
               isNewFile: false,
               diffStat: {
-                model_added_lines: 5,
-                model_removed_lines: 2,
+                ai_added_lines: 5,
+                ai_removed_lines: 2,
                 user_added_lines: 0,
                 user_removed_lines: 0,
                 model_added_chars: 100,
@@ -162,8 +162,8 @@ describe('rewindFileOps', () => {
               newContent: 'new',
               isNewFile: false,
               diffStat: {
-                model_added_lines: 5,
-                model_removed_lines: 2,
+                ai_added_lines: 5,
+                ai_removed_lines: 2,
                 user_added_lines: 0,
                 user_removed_lines: 0,
                 model_added_chars: 0,
@@ -205,8 +205,8 @@ describe('rewindFileOps', () => {
               newContent: 'new',
               isNewFile: false,
               diffStat: {
-                model_added_lines: 3,
-                model_removed_lines: 1,
+                ai_added_lines: 3,
+                ai_removed_lines: 1,
                 user_added_lines: 0,
                 user_removed_lines: 0,
                 model_added_chars: 0,
@@ -237,8 +237,8 @@ describe('rewindFileOps', () => {
 
   describe('revertFileChanges', () => {
     const mockDiffStat = {
-      model_added_lines: 1,
-      model_removed_lines: 1,
+      ai_added_lines: 1,
+      ai_removed_lines: 1,
       user_added_lines: 0,
       user_removed_lines: 0,
       model_added_chars: 1,

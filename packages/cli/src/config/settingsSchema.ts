@@ -2157,6 +2157,22 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
       },
     },
   },
+  SubagentDefinition: {
+    type: 'object',
+    description: 'Definition of a subagent configuration.',
+    additionalProperties: false,
+    properties: {
+      profile: {
+        type: 'string',
+        description: 'Reference to profile name in ~/.llxprt/profiles/',
+      },
+      systemPrompt: {
+        type: 'string',
+        description: 'System prompt text for this subagent.',
+      },
+    },
+    required: ['profile', 'systemPrompt'],
+  },
   BugCommandSettings: {
     type: 'object',
     description: 'Configuration for the bug report helper command.',

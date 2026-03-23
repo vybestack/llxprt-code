@@ -44,6 +44,7 @@ import { ToolErrorType } from '../tools/tool-error.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { ToolCallBlock } from '../services/history/IContent.js';
+import { HookSystem } from '../hooks/hookSystem.js';
 
 // Test constants for tool output truncation
 const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 30000;
@@ -67,6 +68,33 @@ function createMockPolicyEngine() {
     evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
     checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
   };
+}
+
+// Helper function to create a mock Config
+function createMockConfig(overrides: Partial<Config> = {}): Config {
+  const defaults = {
+    getSessionId: () => 'test-session-id',
+    getUsageStatisticsEnabled: () => true,
+    getDebugMode: () => false,
+    getApprovalMode: () => ApprovalMode.YOLO,
+    getEphemeralSettings: () => ({}),
+    getAllowedTools: () => [],
+    getContentGeneratorConfig: () => ({
+      model: 'test-model',
+    }),
+    getToolRegistry: () => ({
+      getFunctionDeclarations: vi.fn().mockReturnValue([]),
+      getTool: vi.fn().mockReturnValue(null),
+      getAllTools: vi.fn().mockReturnValue([]),
+    }),
+    getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+    getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
+    getEnableHooks: () => false,
+    getHookSystem: () => null,
+    getModel: () => DEFAULT_GEMINI_MODEL,
+    isInteractive: () => false,
+  };
+  return { ...defaults, ...overrides } as unknown as Config;
 }
 
 class AbortDuringConfirmationInvocation extends BaseToolInvocation<
@@ -3889,6 +3917,8 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
     });
@@ -3954,9 +3984,12 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
       getApprovalMode: () => ApprovalMode.YOLO,
       isInteractive: () => false,
     });
+    const mockMessageBus = createMockMessageBus();
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
+      messageBus: mockMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
     });

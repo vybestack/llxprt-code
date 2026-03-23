@@ -150,6 +150,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     off: vi.fn(),
     emit: vi.fn(),
     getProviderSettings: vi.fn(() => ({})),
+    getAllGlobalSettings: vi.fn(() => ({})),
   };
   return {
     getSettingsService: vi.fn(() => mockSettingsService),
@@ -1862,8 +1863,8 @@ describe('Config getHookSystem', () => {
         onReload: mockOnReload,
       };
 
-      config = new Config(params);
-      await config.initialize();
+      const config = new Config(params);
+      await initializeTestConfig(config);
 
       const skillManager = config.getSkillManager();
       vi.spyOn(skillManager, 'setAdminSettings');

@@ -110,7 +110,7 @@ describe('computeTerminalTitle', () => {
     });
 
     expect(title).not.toContain('(my-project)');
-    expect(title).toContain('✦  AAAAAAAAAAAAAAAA');
+    expect(title).toContain('  AAAAAAAAAAAAAAAA');
     expect(title.length).toBe(80);
   });
 
@@ -127,7 +127,8 @@ describe('computeTerminalTitle', () => {
 
     expect(title.length).toBe(80);
     expect(title).toContain('…');
-    expect(title.trimEnd().length).toBe(80);
+    // The truncation character takes up the last position before padding
+    expect(title.trim().endsWith('…')).toBe(true);
   });
 
   it('should strip control characters from the title', () => {

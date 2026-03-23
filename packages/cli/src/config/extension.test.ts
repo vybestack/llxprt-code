@@ -109,15 +109,15 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-const mockLoadSettings = vi.fn();
+const mockLoadSettings = vi.hoisted(() => vi.fn());
 
-vi.mock('./settings.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./settings.js')>();
-  return {
-    ...actual,
-    loadSettings: mockLoadSettings,
-  };
-});
+vi.mock('./settings.js', () => ({
+  loadSettings: mockLoadSettings,
+  SettingScope: {
+    User: 'User',
+    Workspace: 'Workspace',
+  },
+}));
 
 const EXTENSIONS_DIRECTORY_NAME = path.join(GEMINI_DIR, 'extensions');
 

@@ -40,7 +40,7 @@ describe('Hook Types', () => {
   describe('AfterModelHookOutput.getModifiedResponse', () => {
     it('should return undefined when stop is requested and no llm_response', () => {
       const hookOutput = new AfterModelHookOutput({
-        stopExecution: true,
+        continue: false,
         reason: 'Test stop',
       });
 
@@ -63,7 +63,9 @@ describe('Hook Types', () => {
       };
 
       const hookOutput = new AfterModelHookOutput({
-        llm_response: llmResponse,
+        hookSpecificOutput: {
+          llm_response: llmResponse,
+        },
       });
 
       const modifiedResponse = hookOutput.getModifiedResponse();
@@ -86,9 +88,11 @@ describe('Hook Types', () => {
       };
 
       const hookOutput = new AfterModelHookOutput({
-        stopExecution: true,
+        continue: false,
         reason: 'Test stop',
-        llm_response: llmResponse,
+        hookSpecificOutput: {
+          llm_response: llmResponse,
+        },
       });
 
       const modifiedResponse = hookOutput.getModifiedResponse();

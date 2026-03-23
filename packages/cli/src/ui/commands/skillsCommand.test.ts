@@ -51,6 +51,7 @@ describe('skillsCommand', () => {
               .mockImplementation(
                 (name: string) => skills.find((s) => s.name === name) ?? null,
               ),
+            isAdminEnabled: vi.fn().mockReturnValue(true),
           }),
         } as unknown as Config,
         settings: {
@@ -91,7 +92,6 @@ describe('skillsCommand', () => {
         ],
         showDescriptions: true,
       }),
-      expect.any(Number),
     );
   });
 
@@ -120,7 +120,6 @@ describe('skillsCommand', () => {
         ],
         showDescriptions: true,
       }),
-      expect.any(Number),
     );
   });
 
@@ -132,7 +131,6 @@ describe('skillsCommand', () => {
       expect.objectContaining({
         showDescriptions: false,
       }),
-      expect.any(Number),
     );
   });
 

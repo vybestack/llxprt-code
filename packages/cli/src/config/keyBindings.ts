@@ -390,6 +390,7 @@ export const commandCategories: readonly CommandCategory[] = [
       Command.TOGGLE_YOLO,
       Command.TOGGLE_AUTO_EDIT,
       Command.SHOW_MORE_LINES,
+      Command.TOGGLE_SHELL_INPUT_FOCUS,
       Command.FOCUS_SHELL_INPUT,
       Command.UNFOCUS_SHELL_INPUT,
     ],

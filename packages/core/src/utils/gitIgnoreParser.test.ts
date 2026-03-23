@@ -36,7 +36,7 @@ describe('GitIgnoreParser', () => {
   describe('initialization', () => {
     it('should initialize without errors when no .gitignore exists', async () => {
       await setupGitRepo();
-      expect(() => parser.loadGitRepoPatterns()).not.toThrow();
+      expect(() => parser.isIgnored('test.txt')).not.toThrow();
     });
 
     it('should load .gitignore patterns when file exists', async () => {
@@ -50,15 +50,7 @@ node_modules/
 `;
       await createTestFile('.gitignore', gitignoreContent);
 
-      parser.loadGitRepoPatterns();
-
-      expect(parser.getPatterns()).toEqual([
-        '.git',
-        'node_modules/',
-        '*.log',
-        '/dist',
-        '.env',
-      ]);
+      // Trigger lazy loading by calling isIgnored
       expect(parser.isIgnored(path.join('node_modules', 'some-lib'))).toBe(
         true,
       );
@@ -74,24 +66,24 @@ node_modules/
         'temp/\n*.tmp',
       );
 
-      parser.loadGitRepoPatterns();
-      expect(parser.getPatterns()).toEqual(['.git', 'temp/', '*.tmp']);
+      // Trigger lazy loading and verify behavior
       expect(parser.isIgnored(path.join('temp', 'file.txt'))).toBe(true);
       expect(parser.isIgnored(path.join('src', 'file.tmp'))).toBe(true);
     });
 
     it('should handle custom patterns file name', async () => {
-      // No .git directory for this test
+      // No .git directory for this test - create parser with patterns from .llxprtignore
       await createTestFile('.llxprtignore', 'temp/\n*.tmp');
 
-      parser.loadPatterns('.llxprtignore');
-      expect(parser.getPatterns()).toEqual(['temp/', '*.tmp']);
+      // The new API doesn't have loadPatterns(), but we can test with extraPatterns
+      parser = new GitIgnoreParser(projectRoot, ['temp/', '*.tmp']);
       expect(parser.isIgnored(path.join('temp', 'file.txt'))).toBe(true);
       expect(parser.isIgnored(path.join('src', 'file.tmp'))).toBe(true);
     });
 
     it('should initialize without errors when no .llxprtignore exists', async () => {
-      expect(() => parser.loadPatterns('.llxprtignore')).not.toThrow();
+      parser = new GitIgnoreParser(projectRoot);
+      expect(() => parser.isIgnored('test.txt')).not.toThrow();
     });
   });
 
@@ -107,7 +99,6 @@ src/*.tmp
 !src/important.tmp
 `;
       await createTestFile('.gitignore', gitignoreContent);
-      parser.loadGitRepoPatterns();
     });
 
     it('should always ignore .git directory', () => {
@@ -205,8 +196,6 @@ src/*.tmp
     });
 
     it('should handle nested .gitignore files correctly', async () => {
-      parser.loadGitRepoPatterns();
-
       // From root .gitignore
       expect(parser.isIgnored('root-ignored.txt')).toBe(true);
       expect(parser.isIgnored('a/root-ignored.txt')).toBe(true);
@@ -231,20 +220,25 @@ src/*.tmp
       expect(parser.isIgnored('a/f/g')).toBe(false);
     });
 
-    it('should correctly transform patterns from nested gitignore files', () => {
-      parser.loadGitRepoPatterns();
-      const patterns = parser.getPatterns();
-
+    it('should correctly handle patterns from nested gitignore files', () => {
+      // Test the actual behavior rather than internal pattern representation
       // From root .gitignore
-      expect(patterns).toContain('root-ignored.txt');
+      expect(parser.isIgnored('root-ignored.txt')).toBe(true);
+      expect(parser.isIgnored('a/root-ignored.txt')).toBe(true);
 
-      // From a/.gitignore
-      expect(patterns).toContain('/a/b'); // /b becomes /a/b
-      expect(patterns).toContain('/a/**/c'); // c becomes /a/**/c
+      // From a/.gitignore: /b becomes /a/b
+      expect(parser.isIgnored('a/b')).toBe(true);
 
-      // From a/d/.gitignore
-      expect(patterns).toContain('/a/d/**/e.txt'); // e.txt becomes /a/d/**/e.txt
-      expect(patterns).toContain('/a/d/f/g'); // f/g becomes /a/d/f/g
+      // From a/.gitignore: c becomes /a/**/c
+      expect(parser.isIgnored('a/c')).toBe(true);
+      expect(parser.isIgnored('a/x/y/c')).toBe(true);
+
+      // From a/d/.gitignore: e.txt becomes /a/d/**/e.txt
+      expect(parser.isIgnored('a/d/e.txt')).toBe(true);
+      expect(parser.isIgnored('a/d/x/e.txt')).toBe(true);
+
+      // From a/d/.gitignore: f/g becomes /a/d/f/g
+      expect(parser.isIgnored('a/d/f/g')).toBe(true);
     });
   });
 
@@ -256,8 +250,6 @@ src/*.tmp
       // But make an exception in the root .gitignore
       await createTestFile('.gitignore', '!important.log');
 
-      parser.loadGitRepoPatterns();
-
       expect(parser.isIgnored('some.log')).toBe(true);
       expect(parser.isIgnored('important.log')).toBe(false);
       expect(parser.isIgnored(path.join('subdir', 'some.log'))).toBe(true);
@@ -267,14 +259,15 @@ src/*.tmp
     });
   });
 
-  describe('getIgnoredPatterns', () => {
-    it('should return the raw patterns added', async () => {
+  describe('pattern behavior', () => {
+    it('should handle patterns and negation correctly', async () => {
       await setupGitRepo();
       const gitignoreContent = '*.log\n!important.log';
       await createTestFile('.gitignore', gitignoreContent);
 
-      parser.loadGitRepoPatterns();
-      expect(parser.getPatterns()).toEqual(['.git', '*.log', '!important.log']);
+      // Test the actual behavior instead of checking internal patterns
+      expect(parser.isIgnored('test.log')).toBe(true);
+      expect(parser.isIgnored('important.log')).toBe(false);
     });
   });
 
@@ -290,7 +283,6 @@ src/*.tmp
       await createTestFile('bla/!bar', 'content');
 
       // Need to reload patterns after creating .gitignore
-      parser.loadGitRepoPatterns();
 
       // These should be ignored based on the escaped patterns
       expect(parser.isIgnored('bla/#foo')).toBe(true);
@@ -310,7 +302,6 @@ src/*.tmp
       await createTestFile('bar ', 'content');
 
       // Need to reload patterns after creating .gitignore
-      parser.loadGitRepoPatterns();
 
       // 'foo\ ' should match 'foo '
       expect(parser.isIgnored('foo ')).toBe(true);
@@ -331,7 +322,7 @@ src/*.tmp
 
       const extraPatterns = ['!important.txt', 'temp/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
-      parser.loadGitRepoPatterns(); // Need to load patterns for isIgnored to work
+      // Need to load patterns for isIgnored to work
 
       expect(parser.isIgnored('file.txt')).toBe(true);
       expect(parser.isIgnored('important.txt')).toBe(false); // Un-ignored by extraPatterns
@@ -343,7 +334,7 @@ src/*.tmp
 
       const extraPatterns = ['!foo/', '!a/*/c/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
-      parser.loadGitRepoPatterns(); // Need to load patterns for isIgnored to work
+      // Need to load patterns for isIgnored to work
 
       expect(parser.isIgnored('foo/bar/file.txt')).toBe(false);
       expect(parser.isIgnored('a/b/c/file.txt')).toBe(false);
@@ -355,7 +346,7 @@ src/*.tmp
 
       const extraPatterns = ['!foo/'];
       parser = new GitIgnoreParser(projectRoot, extraPatterns);
-      parser.loadGitRepoPatterns(); // Need to load patterns for isIgnored to work
+      // Need to load patterns for isIgnored to work
 
       expect(parser.isIgnored('foo/bar/file.txt')).toBe(true);
       expect(parser.isIgnored('foo/bar/file2.txt')).toBe(false);

@@ -13,6 +13,7 @@ import {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
   isRipgrepAvailable,
+  ApprovalMode,
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments } from './config.js';
 import type { Settings } from './settings.js';
@@ -2210,7 +2211,6 @@ describe('loadCliConfig disableYoloMode', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.spyOn(ExtensionManager.prototype, 'getExtensions').mockReturnValue([]);
     vi.mocked(isWorkspaceTrusted).mockReturnValue({
       isTrusted: true,
       source: undefined,
@@ -2269,7 +2269,6 @@ describe('loadCliConfig secureModeEnabled', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-    vi.spyOn(ExtensionManager.prototype, 'getExtensions').mockReturnValue([]);
     vi.mocked(isWorkspaceTrusted).mockReturnValue({
       isTrusted: true,
       source: undefined,
