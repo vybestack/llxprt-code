@@ -124,6 +124,38 @@ describe('calculateEdit characterization tests', () => {
       expect(result.error).toBeDefined();
       expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
     });
+
+    it('file deleted between read and stat → conflict error', async () => {
+      const { promises: fsPromises } = await import('fs');
+      const currentTime = Date.now();
+
+      // stat throws ENOENT (file deleted after readTextFile succeeded)
+      const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoentError.code = 'ENOENT';
+      vi.spyOn(fsPromises, 'stat').mockRejectedValue(enoentError);
+
+      mockConfig.getFileSystemService = () =>
+        ({
+          readTextFile: async () => 'const x = 1;',
+          writeTextFile: async () => {},
+          fileExists: async () => true,
+        }) as unknown as ReturnType<Config['getFileSystemService']>;
+
+      const tool = new ASTEditTool(mockConfig);
+      const invocation = (
+        tool as unknown as TestableASTEditTool
+      ).createInvocation({
+        file_path: '/test/sample.ts',
+        old_string: 'const x = 1;',
+        new_string: 'const x = 2;',
+        last_modified: currentTime - 10000,
+        force: true,
+      });
+
+      const result = await invocation.execute(new AbortController().signal);
+      expect(result.error).toBeDefined();
+      expect(result.error?.type).toBe(ToolErrorType.FILE_MODIFIED_CONFLICT);
+    });
   });
 
   describe('Occurrence errors', () => {

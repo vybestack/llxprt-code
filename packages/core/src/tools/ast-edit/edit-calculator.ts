@@ -70,9 +70,9 @@ export async function calculateEdit(
   const currentMtime = await getFileLastModified(params.file_path);
 
   if (
-    params.last_modified &&
-    currentMtime &&
-    currentMtime > params.last_modified
+    params.last_modified != null &&
+    ((fileExists && currentMtime == null) ||
+      (currentMtime != null && currentMtime > params.last_modified))
   ) {
     error = {
       display: `File has been modified since it was last read. Please read the file again to get the latest content.`,
@@ -229,7 +229,10 @@ export async function getFileLastModified(
   try {
     const stats = await fsPromises.stat(filePath);
     return stats.mtime.getTime();
-  } catch (_error) {
-    return null;
+  } catch (error: unknown) {
+    if (isNodeError(error) && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
 }
