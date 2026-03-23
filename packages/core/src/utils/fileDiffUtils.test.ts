@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2026 Google LLC
+ * Copyright Vybestack LLC, 2026
  * SPDX-License-Identifier: Apache-2.0
  */
 

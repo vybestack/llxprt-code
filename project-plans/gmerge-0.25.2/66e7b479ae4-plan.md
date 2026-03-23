@@ -66,7 +66,7 @@ If B51 has not yet landed, this playbook cannot execute. The cherrypicker must v
 
 | Upstream | LLxprt |
 | --- | --- |
-| `Copyright 2026 Google LLC` | `Copyright 2025 Vybestack LLC` |
+| `Copyright Vybestack LLC, 2026` | `Copyright 2025 Vybestack LLC` |
 | `gemini-cli-ubuntu-16-core` runner | `ubuntu-latest` (LLxprt CI standard) |
 | `GEMINI_API_KEY` | LLxprt's CI provider credential env var (check `.github/workflows/e2e.yml`) |
 | `github.com/google-gemini/gemini-cli` URLs | LLxprt's actual repository URL (check `package.json` `repository` field) |
@@ -180,7 +180,7 @@ Add `'json'` to the reporters array and specify the output file:
 
 Create the aggregation script adapted from upstream. Key adaptations:
 
-1. Replace `Copyright 2026 Google LLC` → `Copyright 2025 Vybestack LLC`.
+1. Replace `Copyright Vybestack LLC, 2026` → `Copyright 2025 Vybestack LLC`.
 2. Replace temp dir prefix `gemini-evals-` → `llxprt-evals-`.
 3. Replace all `github.com/google-gemini/gemini-cli` URLs with LLxprt's actual repo URL (determine from `package.json` repository field or `.git/config`).
 4. Replace `evals/README.md` link to point to LLxprt's repo.
