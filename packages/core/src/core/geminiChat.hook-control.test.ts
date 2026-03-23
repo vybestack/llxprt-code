@@ -157,18 +157,6 @@ describe('GeminiChat hook execution control', () => {
 
   describe('BeforeModel hook block', () => {
     it('should emit blocked event then chunk when BeforeModel hook blocks with synthetic response', async () => {
-      const syntheticResponse = {
-        candidates: [
-          {
-            content: {
-              role: 'model' as const,
-              parts: [{ text: 'Synthetic blocked response' }],
-            },
-            finishReason: 'STOP' as const,
-          },
-        ],
-      };
-
       (
         mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
       ).mockResolvedValueOnce({
