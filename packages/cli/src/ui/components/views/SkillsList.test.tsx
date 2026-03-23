@@ -106,5 +106,3 @@ describe('SkillsList Component', () => {
     unmount();
   });
 });
-;
-});

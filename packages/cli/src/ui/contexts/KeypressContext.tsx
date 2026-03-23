@@ -20,7 +20,6 @@ import {
 import { ESC } from '../utils/input.js';
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
 import { parseMouseEvent } from '../utils/mouse.js';
-import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 
 export const BACKSLASH_ENTER_TIMEOUT = 5;
 export const ESC_TIMEOUT = 100;
