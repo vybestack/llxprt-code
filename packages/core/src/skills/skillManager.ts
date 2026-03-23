@@ -7,7 +7,9 @@
 import * as fs from 'node:fs/promises';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Storage } from '../config/storage.js';
+
 import {
   type SkillDefinition,
   type SkillSource,
@@ -17,6 +19,9 @@ import {
 import type { GeminiCLIExtension } from '../config/config.js';
 
 export { type SkillDefinition, type SkillSource };
+
+// ESM-compatible __dirname equivalent
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Configuration for a built-in skill using config.json format.
