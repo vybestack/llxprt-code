@@ -90,7 +90,7 @@ export class TerminalCapabilityManager {
       const cleanupOnExit = () => {
         disableKittyKeyboardProtocol();
         disableModifyOtherKeys();
-        disableBracketedPasteMode();
+        this.disableBracketedPasteMode();
       };
       this.cleanupOnExitHandler = cleanupOnExit;
       process.on('exit', cleanupOnExit);
@@ -238,10 +238,20 @@ export class TerminalCapabilityManager {
         enableModifyOtherKeys();
       }
       // Always enable bracketed paste since it'll be ignored if unsupported.
-      enableBracketedPasteMode();
+      this.enableBracketedPasteMode();
     } catch (e) {
       debugLogger.warn('Failed to enable keyboard protocols:', e);
     }
+  }
+
+  enableBracketedPasteMode(): void {
+    enableBracketedPasteMode();
+    this.bracketedPasteEnabled = true;
+  }
+
+  disableBracketedPasteMode(): void {
+    disableBracketedPasteMode();
+    this.bracketedPasteEnabled = false;
   }
 
   getTerminalBackgroundColor(): TerminalBackgroundColor {
@@ -332,12 +342,11 @@ export class TerminalCapabilityManager {
         this.kittyEnabled = false;
       }
       disableModifyOtherKeys();
-      disableBracketedPasteMode();
+      this.disableBracketedPasteMode();
     } catch {
       // Ignore teardown failures in tests.
     }
     this.modifyOtherKeysEnabled = false;
-    this.bracketedPasteEnabled = false;
   }
 
   private parseColor(rHex: string, gHex: string, bHex: string): string {

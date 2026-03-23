@@ -179,7 +179,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       kittySpy.mockRestore();
     });
 
-    it('should buffer return key pressed quickly after another key', async () => {
+    it('should always buffer return key pressed quickly after another key (unconditional)', async () => {
       const { keyHandler } = setupKeypressTest();
 
       act(() => stdin.write('a'));
@@ -189,6 +189,29 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       act(() => stdin.write('\r'));
 
+      expect(keyHandler).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          name: '',
+          sequence: '\r',
+          insertable: true,
+        }),
+      );
+    });
+
+    it('should buffer return key even when kitty protocol is enabled', async () => {
+      // Override the spy to return true for kitty enabled
+      kittySpy.mockReturnValue(true);
+
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('a'));
+      expect(keyHandler).toHaveBeenLastCalledWith(
+        expect.objectContaining({ name: 'a' }),
+      );
+
+      act(() => stdin.write('\r'));
+
+      // Now bufferFastReturn is always applied, so return should be buffered
       expect(keyHandler).toHaveBeenLastCalledWith(
         expect.objectContaining({
           name: '',

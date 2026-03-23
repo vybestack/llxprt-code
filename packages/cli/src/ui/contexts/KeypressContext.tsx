@@ -726,9 +726,7 @@ export function KeypressProvider({
     process.stdin.setEncoding('utf8'); // Make data events emit strings
 
     let processor = nonKeyboardEventFilter(handleDragDropAndBroadcast);
-    if (!terminalCapabilityManager.isKittyProtocolEnabled()) {
-      processor = bufferFastReturn(processor);
-    }
+    processor = bufferFastReturn(processor);
     processor = bufferBackslashEnter(processor);
     processor = bufferPaste(processor);
     const dataListener = createDataListener(processor);

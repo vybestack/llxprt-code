@@ -424,4 +424,44 @@ describe('TerminalCapabilityManager', () => {
 
     expect(enableModifyOtherKeys).toHaveBeenCalled();
   });
+
+  describe('bracketed paste state', () => {
+    it('state is true after enableBracketedPasteMode', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      // Complete detection with DA1 (enables bracketed paste)
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+      await promise;
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+    });
+
+    it('state is false after disableBracketedPasteMode', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+      await promise;
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+
+      manager.disableBracketedPasteMode();
+      expect(manager.isBracketedPasteEnabled()).toBe(false);
+    });
+
+    it('state remains true on repeated enable calls', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+      await promise;
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+
+      // Call enable again - should remain true
+      manager.enableBracketedPasteMode();
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+    });
+  });
 });

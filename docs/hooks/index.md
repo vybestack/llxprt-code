@@ -14,9 +14,9 @@ Hooks are external scripts (bash, Python, or any executable) that LLxprt Code ca
 
 ## Coming from Other Tools?
 
-### From Gemini CLI
+### From Gemini CLI (Compatibility)
 
-LLxprt Code's hook system is similar to Gemini CLI's hook configuration. The key differences:
+LLxprt Code's hook system is compatible with Gemini CLI's hook configuration. The key points:
 
 - Configuration uses the same `settings.json` format under the `hooks` key
 - Event names are similar: `BeforeTool`, `AfterTool`, `BeforeModel`, `AfterModel`
