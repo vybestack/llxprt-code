@@ -1,6 +1,7 @@
 /**
  * Tests for validateASTSyntax — verifies it detects tree-sitter ERROR nodes
- * rather than relying on thrown exceptions (tree-sitter is error-recovering).
+ * and zero-width phantom nodes (MISSING tokens from error recovery) rather
+ * than relying on thrown exceptions (tree-sitter is error-recovering).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -77,5 +78,38 @@ describe('validateASTSyntax', () => {
     const result = validateASTSyntax(TS_PATH, 'function foo() } { return 1; {');
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it('should detect missing closing brace via zero-width phantom node', () => {
+    const result = validateASTSyntax(TS_PATH, 'function foo() {');
+    expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0]).toMatch(SYNTAX_ERROR_PATTERN);
+  });
+
+  it('should detect missing closing brace in interface', () => {
+    const code = ['interface Foo {', '  bar: string;', ''].join(
+      String.fromCharCode(10),
+    );
+    const result = validateASTSyntax(TS_PATH, code);
+    expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it('should pass valid multi-line TypeScript', () => {
+    const lines = [
+      'interface Foo {',
+      '  bar: string;',
+      '  baz: number;',
+      '}',
+      '',
+      'function greet(name: string): string {',
+      '  return "Hello " + name;',
+      '}',
+    ];
+    const code = lines.join(String.fromCharCode(10));
+    const result = validateASTSyntax(TS_PATH, code);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toStrictEqual([]);
   });
 });

@@ -177,7 +177,8 @@ export function countOccurrences(
 
 /**
  * Validates AST syntax for the given file path and content.
- * Inspects the tree-sitter parse tree for ERROR nodes rather than
+ * Inspects the tree-sitter parse tree for ERROR nodes and zero-width
+ * phantom nodes (MISSING tokens inserted by error recovery) rather than
  * relying on thrown exceptions (tree-sitter is error-recovering and
  * never throws on syntax errors).
  *
@@ -197,7 +198,10 @@ export function validateASTSyntax(
 
   try {
     const tree = parse(lang, content);
-    const errorNode = tree.root().find({ rule: { kind: 'ERROR' } });
+    const root = tree.root();
+
+    // Check for explicit ERROR nodes (garbled/unparseable tokens)
+    const errorNode = root.find({ rule: { kind: 'ERROR' } });
     if (errorNode) {
       const pos = errorNode.range().start;
       return {
@@ -207,6 +211,23 @@ export function validateASTSyntax(
         ],
       };
     }
+
+    // Check for zero-width phantom nodes (MISSING tokens from error recovery).
+    // Tree-sitter inserts these when expected delimiters are absent (e.g., missing }).
+    // ast-grep doesn't expose isMissing() or kind:'MISSING', but zero-width leaf
+    // nodes in non-empty content reliably indicate recovered syntax errors.
+    if (content.length > 0) {
+      const missingNode = findZeroWidthNode(root);
+      if (missingNode) {
+        return {
+          valid: false,
+          errors: [
+            `Syntax error at line ${missingNode.line + 1}, column ${missingNode.column + 1}`,
+          ],
+        };
+      }
+    }
+
     return { valid: true, errors: [] };
   } catch (error) {
     return {
@@ -214,6 +235,25 @@ export function validateASTSyntax(
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
+}
+
+/**
+ * Walks the parse tree to find zero-width leaf nodes, which indicate
+ * MISSING tokens inserted by tree-sitter's error recovery (e.g., a phantom
+ * closing brace). Skips the root node to avoid false positives on empty content.
+ */
+function findZeroWidthNode(
+  node: ReturnType<ReturnType<typeof parse>['root']>,
+): { line: number; column: number } | null {
+  for (const child of node.children()) {
+    const range = child.range();
+    if (range.start.index === range.end.index && child.isLeaf()) {
+      return { line: range.start.line, column: range.start.column };
+    }
+    const found = findZeroWidthNode(child);
+    if (found) return found;
+  }
+  return null;
 }
 
 /**
