@@ -212,4 +212,191 @@ description: desc1
     expect(service.getAllSkills()).toHaveLength(1);
     expect(service.getAllSkills()[0].disabled).toBe(true);
   });
+
+  describe('discoverBuiltinSkills', () => {
+    it('discovers skills from nested directories using config.json', async () => {
+      const builtinDir = path.join(testRootDir, 'builtin');
+      const prCreatorDir = path.join(builtinDir, 'pr-creator');
+      const nestedSkillDir = path.join(builtinDir, 'category', 'nested-skill');
+      
+      await fs.mkdir(prCreatorDir, { recursive: true });
+      await fs.mkdir(nestedSkillDir, { recursive: true });
+
+      // Create config.json files
+      await fs.writeFile(
+        path.join(prCreatorDir, 'config.json'),
+        JSON.stringify({ name: 'pr-creator', description: 'PR creator skill' }),
+      );
+      await fs.writeFile(
+        path.join(nestedSkillDir, 'config.json'),
+        JSON.stringify({ name: 'nested-skill', description: 'Nested skill' }),
+      );
+
+      const service = new SkillManager();
+      // Mock resolveBuiltinSkillsDir to return our test directory
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
+
+      const skills = await service.discoverBuiltinSkills();
+
+      expect(skills).toHaveLength(2);
+      expect(skills.map((s) => s.name)).toContain('pr-creator');
+      expect(skills.map((s) => s.name)).toContain('nested-skill');
+      expect(skills.every((s) => s.source === 'builtin')).toBe(true);
+    });
+
+    it('returns empty array when builtin directory does not exist', async () => {
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
+        '/non-existent-path',
+      );
+
+      const skills = await service.discoverBuiltinSkills();
+
+      expect(skills).toHaveLength(0);
+    });
+
+    it('continues on malformed config.json and only loads valid skills', async () => {
+      const builtinDir = path.join(testRootDir, 'builtin');
+      const goodDir = path.join(builtinDir, 'good-skill');
+      const badDir = path.join(builtinDir, 'bad-skill');
+
+      await fs.mkdir(goodDir, { recursive: true });
+      await fs.mkdir(badDir, { recursive: true });
+
+      await fs.writeFile(
+        path.join(goodDir, 'config.json'),
+        JSON.stringify({ name: 'good-skill', description: 'Good skill' }),
+      );
+      await fs.writeFile(
+        path.join(badDir, 'config.json'),
+        'not valid json',
+      );
+
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
+
+      const skills = await service.discoverBuiltinSkills();
+
+      // Should only have the good skill, malformed one is silently skipped
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe('good-skill');
+    });
+
+    it('loads skill body from SKILL.md when present', async () => {
+      const builtinDir = path.join(testRootDir, 'builtin');
+      const skillDir = path.join(builtinDir, 'test-skill');
+
+      await fs.mkdir(skillDir, { recursive: true });
+
+      await fs.writeFile(
+        path.join(skillDir, 'config.json'),
+        JSON.stringify({ name: 'test-skill', description: 'Test' }),
+      );
+      await fs.writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        `---
+name: test-skill
+description: Test
+---
+This is the skill body content.`,
+      );
+
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
+
+      const skills = await service.discoverBuiltinSkills();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].body).toBe('This is the skill body content.');
+    });
+
+    it('uses directory name when config.json lacks name field', async () => {
+      const builtinDir = path.join(testRootDir, 'builtin');
+      const skillDir = path.join(builtinDir, 'auto-named-skill');
+
+      await fs.mkdir(skillDir, { recursive: true });
+
+      await fs.writeFile(
+        path.join(skillDir, 'config.json'),
+        JSON.stringify({ description: 'Auto-named skill' }),
+      );
+
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
+
+      const skills = await service.discoverBuiltinSkills();
+
+      expect(skills).toHaveLength(1);
+      expect(skills[0].name).toBe('auto-named-skill');
+    });
+  });
+
+  describe('resolveBuiltinSkillsDir', () => {
+    it('uses LLXPRT_CLI_ROOT environment variable when set and path exists', async () => {
+      const builtinDir = path.join(testRootDir, 'skills', 'builtin');
+      await fs.mkdir(builtinDir, { recursive: true });
+
+      process.env.LLXPRT_CLI_ROOT = testRootDir;
+
+      const service = new SkillManager();
+      const resolved = service.resolveBuiltinSkillsDir();
+
+      expect(resolved).toBe(builtinDir);
+
+      delete process.env.LLXPRT_CLI_ROOT;
+    });
+
+    it('falls back to other strategies when LLXPRT_CLI_ROOT path does not exist', async () => {
+      process.env.LLXPRT_CLI_ROOT = '/non-existent';
+
+      const service = new SkillManager();
+      const resolved = service.resolveBuiltinSkillsDir();
+
+      // Should fall back to getBuiltinSkillsDir() result
+      expect(resolved).toBeDefined();
+
+      delete process.env.LLXPRT_CLI_ROOT;
+    });
+  });
+
+  describe('user skills override builtin', () => {
+    it('user skills override builtin skills with same name', async () => {
+      const builtinDir = path.join(testRootDir, 'builtin');
+      const userDir = path.join(testRootDir, 'user');
+
+      await fs.mkdir(path.join(builtinDir, 'test-skill'), { recursive: true });
+      await fs.mkdir(path.join(userDir, 'test-skill'), { recursive: true });
+
+      // Create builtin skill
+      await fs.writeFile(
+        path.join(builtinDir, 'test-skill', 'config.json'),
+        JSON.stringify({ name: 'test-skill', description: 'Builtin desc' }),
+      );
+
+      // Create user skill with same name
+      await fs.writeFile(
+        path.join(userDir, 'test-skill', 'SKILL.md'),
+        `---
+name: test-skill
+description: User desc
+---
+`,
+      );
+
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
+      vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
+
+      const storage = new Storage('/dummy');
+      vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
+
+      await service.discoverSkills(storage);
+
+      const skills = service.getSkills();
+      const testSkill = skills.find((s) => s.name === 'test-skill');
+      expect(testSkill).toBeDefined();
+      expect(testSkill!.description).toBe('User desc');
+      expect(testSkill!.source).toBe('user');
+    });
+  });
 });
