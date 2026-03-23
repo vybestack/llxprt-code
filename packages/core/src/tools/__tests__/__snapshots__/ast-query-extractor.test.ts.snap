@@ -1,18 +1,18 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`AST Tools > AST extraction logic > should extract Python declarations correctly 1`] = `
+exports[`ASTQueryExtractor > should extract Python declarations correctly 1`] = `
 [
   {
-    "column": 8,
+    "column": 6,
     "line": 3,
     "name": "my_func",
     "range": {
       "end": {
-        "column": 16,
+        "column": 14,
         "line": 4,
       },
       "start": {
-        "column": 8,
+        "column": 6,
         "line": 3,
       },
     },
@@ -21,16 +21,16 @@ exports[`AST Tools > AST extraction logic > should extract Python declarations c
     "visibility": "public",
   },
   {
-    "column": 12,
+    "column": 10,
     "line": 6,
     "name": "__init__",
     "range": {
       "end": {
-        "column": 20,
+        "column": 18,
         "line": 7,
       },
       "start": {
-        "column": 12,
+        "column": 10,
         "line": 6,
       },
     },
@@ -39,16 +39,16 @@ exports[`AST Tools > AST extraction logic > should extract Python declarations c
     "visibility": "public",
   },
   {
-    "column": 8,
+    "column": 6,
     "line": 5,
     "name": "PythonClass",
     "range": {
       "end": {
-        "column": 20,
+        "column": 18,
         "line": 7,
       },
       "start": {
-        "column": 8,
+        "column": 6,
         "line": 5,
       },
     },
@@ -59,19 +59,19 @@ exports[`AST Tools > AST extraction logic > should extract Python declarations c
 ]
 `;
 
-exports[`AST Tools > AST extraction logic > should extract TypeScript declarations correctly 1`] = `
+exports[`ASTQueryExtractor > should extract TypeScript declarations correctly 1`] = `
 [
   {
-    "column": 8,
+    "column": 6,
     "line": 4,
     "name": "hello",
     "range": {
       "end": {
-        "column": 9,
+        "column": 7,
         "line": 6,
       },
       "start": {
-        "column": 8,
+        "column": 6,
         "line": 4,
       },
     },
@@ -80,35 +80,17 @@ exports[`AST Tools > AST extraction logic > should extract TypeScript declaratio
     "visibility": "public",
   },
   {
-    "column": 10,
+    "column": 8,
     "line": 8,
     "name": "constructor",
     "range": {
       "end": {
-        "column": 26,
+        "column": 24,
         "line": 8,
       },
       "start": {
-        "column": 10,
+        "column": 8,
         "line": 8,
-      },
-    },
-    "signature": "()",
-    "type": "function",
-    "visibility": "public",
-  },
-  {
-    "column": 10,
-    "line": 9,
-    "name": "method",
-    "range": {
-      "end": {
-        "column": 28,
-        "line": 9,
-      },
-      "start": {
-        "column": 10,
-        "line": 9,
       },
     },
     "signature": "()",
@@ -117,15 +99,33 @@ exports[`AST Tools > AST extraction logic > should extract TypeScript declaratio
   },
   {
     "column": 8,
+    "line": 9,
+    "name": "method",
+    "range": {
+      "end": {
+        "column": 26,
+        "line": 9,
+      },
+      "start": {
+        "column": 8,
+        "line": 9,
+      },
+    },
+    "signature": "()",
+    "type": "function",
+    "visibility": "public",
+  },
+  {
+    "column": 6,
     "line": 7,
     "name": "MyClass",
     "range": {
       "end": {
-        "column": 9,
+        "column": 7,
         "line": 11,
       },
       "start": {
-        "column": 8,
+        "column": 6,
         "line": 7,
       },
     },
@@ -134,16 +134,16 @@ exports[`AST Tools > AST extraction logic > should extract TypeScript declaratio
     "visibility": "public",
   },
   {
-    "column": 14,
+    "column": 12,
     "line": 3,
     "name": "x",
     "range": {
       "end": {
-        "column": 28,
+        "column": 26,
         "line": 3,
       },
       "start": {
-        "column": 14,
+        "column": 12,
         "line": 3,
       },
     },
@@ -152,16 +152,16 @@ exports[`AST Tools > AST extraction logic > should extract TypeScript declaratio
     "visibility": "public",
   },
   {
-    "column": 8,
+    "column": 6,
     "line": 2,
     "name": ""./bar"",
     "range": {
       "end": {
-        "column": 36,
+        "column": 34,
         "line": 2,
       },
       "start": {
-        "column": 8,
+        "column": 6,
         "line": 2,
       },
     },
