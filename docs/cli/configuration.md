@@ -220,7 +220,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 #### `output`
 
 - **`output.format`** (enum):
-  - **Description:** The format of the CLI output.
+  - **Description:** The format of the CLI output. Can be `text` or `json`.
   - **Default:** `"text"`
   - **Values:** `"text"`, `"json"`
 
@@ -240,8 +240,17 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Requires restart:** Yes
 
 - **`ui.showStatusInTitle`** (boolean):
-  - **Description:** Show LLxprt Code status and thoughts in the terminal window title
+  - **Description:** Show LLxprt model thoughts in the terminal window title during the working phase
   - **Default:** `false`
+
+- **`ui.dynamicWindowTitle`** (boolean):
+  - **Description:** Update the terminal window title with current status icons (Ready: ◇, Action Required: , Working: )
+  - **Default:** `true`
+
+- **`ui.showHomeDirectoryWarning`** (boolean):
+  - **Description:** Show a warning when running LLxprt CLI in the home directory.
+  - **Default:** `true`
+  - **Requires restart:** Yes
 
 - **`ui.hideTips`** (boolean):
   - **Description:** Hide helpful tips in the UI
@@ -376,10 +385,14 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 #### `ide`
 
-- **`ide`** (object):
-  - **Description:** IDE integration settings.
-  - **Default:** `{}`
+- **`ide.enabled`** (boolean):
+  - **Description:** Enable IDE integration mode.
+  - **Default:** `false`
   - **Requires restart:** Yes
+
+- **`ide.hasSeenNudge`** (boolean):
+  - **Description:** Whether the user has seen the IDE integration nudge.
+  - **Default:** `false`
 
 #### `showStatusInTitle`
 
@@ -528,6 +541,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 - **`subagents.maxAsync`** (number):
   - **Description:** Maximum concurrent async tasks. Profile setting (task-max-async) can limit but not exceed this value. Use -1 for unlimited.
   - **Default:** `5`
+
+- **`subagents.definitions`** (object):
+  - **Description:** Inline subagent definitions keyed by name. Each value must contain profile and systemPrompt.
+  - **Default:** `{}`
+  - **Requires restart:** Yes
 
 #### `security`
 
@@ -819,11 +837,15 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
 
 - **`admin.extensions.enabled`** (boolean):
-  - **Description:** If false, disallows extensions from being installed or used. (Not enforced yet)
+  - **Description:** If false, disallows extensions from being installed or used.
   - **Default:** `true`
 
 - **`admin.mcp.enabled`** (boolean):
   - **Description:** If false, disallows MCP servers from being used.
+  - **Default:** `true`
+
+- **`admin.skills.enabled`** (boolean):
+  - **Description:** If false, disallows agent skills from being used.
   - **Default:** `true`
   <!-- SETTINGS-AUTOGEN:END -->
 

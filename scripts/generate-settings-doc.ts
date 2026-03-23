@@ -47,7 +47,7 @@ export async function main(argv = process.argv.slice(2)) {
     path.dirname(fileURLToPath(import.meta.url)),
     '..',
   );
-  const docPath = path.join(repoRoot, 'docs/get-started/configuration.md');
+  const docPath = path.join(repoRoot, 'docs/cli/configuration.md');
   const cliSettingsDocPath = path.join(repoRoot, 'docs/cli/settings.md');
 
   const { getSettingsSchema } = await loadSettingsSchemaModule();
@@ -61,7 +61,12 @@ export async function main(argv = process.argv.slice(2)) {
   const generatedTableBlock = renderTableSections(filteredSettingsSections);
 
   await updateFile(docPath, generatedBlock, checkOnly);
-  await updateFile(cliSettingsDocPath, generatedTableBlock, checkOnly);
+  try {
+    await readFile(cliSettingsDocPath, 'utf8');
+    await updateFile(cliSettingsDocPath, generatedTableBlock, checkOnly);
+  } catch {
+    // docs/cli/settings.md does not exist in LLxprt — skip silently
+  }
 }
 
 async function updateFile(
