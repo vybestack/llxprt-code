@@ -161,7 +161,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
           ? [
               {
                 name: 'skills',
-                description: 'Manage agent skills',
+                description: 'Manage skills',
                 kind: CommandKind.BUILT_IN,
                 autoExecute: false,
                 subCommands: [],
@@ -170,7 +170,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
                 ): Promise<MessageActionReturn> => ({
                   type: 'message',
                   messageType: 'error',
-                  content: 'Agent skills are disabled by your admin.',
+                  content: 'Skills are disabled by your admin.',
                 }),
               },
             ]

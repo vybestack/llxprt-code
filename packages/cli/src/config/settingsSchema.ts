@@ -1465,11 +1465,11 @@ export const SETTINGS_SCHEMA = {
       },
       skills: {
         type: 'boolean',
-        label: 'Agent Skills',
+        label: 'Skills',
         category: 'Experimental',
         requiresRestart: true,
         default: false,
-        description: 'Enable Agent Skills (experimental).',
+        description: 'Enable skills (experimental).',
         showInDialog: true,
       },
       codebaseInvestigatorSettings: {
@@ -1853,7 +1853,7 @@ export const SETTINGS_SCHEMA = {
     category: 'Advanced',
     requiresRestart: true,
     default: {},
-    description: 'Settings for agent skills.',
+    description: 'Settings for skills.',
     showInDialog: false,
     properties: {
       disabled: {
@@ -1986,7 +1986,7 @@ export const SETTINGS_SCHEMA = {
         category: 'Admin',
         requiresRestart: false,
         default: {},
-        description: 'Agent Skills-specific admin settings.',
+        description: 'Skills-specific admin settings.',
         showInDialog: false,
         mergeStrategy: MergeStrategy.REPLACE,
         properties: {

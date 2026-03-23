@@ -15,7 +15,7 @@ import { initializeOutputListenersAndFlush } from '../gemini.js';
 export const skillsCommand: CommandModule = {
   command: 'skills <command>',
   aliases: ['skill'],
-  describe: 'Manage agent skills.',
+  describe: 'Manage skills.',
   builder: (yargs) =>
     yargs
       .middleware(() => initializeOutputListenersAndFlush())

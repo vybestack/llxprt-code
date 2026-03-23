@@ -93,7 +93,7 @@ async function disableAction(
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Agent skills are disabled by your admin.',
+        text: 'Skills are disabled by your admin.',
       },
       Date.now(),
     );
@@ -156,7 +156,7 @@ async function enableAction(
     context.ui.addItem(
       {
         type: MessageType.ERROR,
-        text: 'Agent skills are disabled by your admin.',
+        text: 'Skills are disabled by your admin.',
       },
       Date.now(),
     );
@@ -235,7 +235,7 @@ async function reloadAction(
       (name) => !afterNames.has(name),
     ).length;
 
-    let successText = 'Agent skills reloaded successfully.';
+    let successText = 'Skills reloaded successfully.';
     const details: string[] = [];
 
     if (added.length > 0) {
@@ -308,7 +308,7 @@ async function enableCompletion(
 export const skillsCommand: SlashCommand = {
   name: 'skills',
   description:
-    'List, enable, disable, or reload LLxprt Code agent skills. Usage: /skills [list | disable <name> | enable <name> | reload]',
+      'List, enable, disable, or reload LLxprt Code skills. Usage: /skills [list | disable <name> | enable <name> | reload]',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   subCommands: [

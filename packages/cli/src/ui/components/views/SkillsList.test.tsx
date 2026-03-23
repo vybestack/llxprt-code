@@ -40,7 +40,7 @@ describe('SkillsList Component', () => {
     );
     const output = lastFrame();
 
-    expect(output).toContain('Available Agent Skills:');
+    expect(output).toContain('Available Skills:');
     expect(output).toContain('skill1');
     expect(output).toContain('description 1');
     expect(output).toContain('skill3');
@@ -80,14 +80,14 @@ describe('SkillsList Component', () => {
     unmount();
   });
 
-  it('should only render Available Agent Skills section when all skills are enabled', () => {
+  it('should only render Available Skills section when all skills are enabled', () => {
     const enabledOnly = mockSkills.filter((s) => !s.disabled);
     const { lastFrame, unmount } = render(
       <SkillsList skills={enabledOnly} showDescriptions={true} />,
     );
     const output = lastFrame();
 
-    expect(output).toContain('Available Agent Skills:');
+    expect(output).toContain('Available Skills:');
     expect(output).not.toContain('Disabled Skills:');
 
     unmount();
@@ -100,9 +100,11 @@ describe('SkillsList Component', () => {
     );
     const output = lastFrame();
 
-    expect(output).not.toContain('Available Agent Skills:');
+    expect(output).not.toContain('Available Skills:');
     expect(output).toContain('Disabled Skills:');
 
     unmount();
   });
+});
+;
 });

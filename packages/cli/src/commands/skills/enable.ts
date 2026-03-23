@@ -28,7 +28,7 @@ export async function handleEnable(args: EnableArgs) {
 
 export const enableCommand: CommandModule = {
   command: 'enable <name>',
-  describe: 'Enables an agent skill.',
+  describe: 'Enables a skill.',
   builder: (yargs) =>
     yargs.positional('name', {
       describe: 'The name of the skill to enable.',

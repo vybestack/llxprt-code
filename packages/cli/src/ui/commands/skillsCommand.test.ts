@@ -293,7 +293,7 @@ describe('skillsCommand', () => {
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Reloading agent skills...',
+          text: 'Reloading skills...',
         }),
       );
 
@@ -310,7 +310,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully.',
+          text: 'Skills reloaded successfully.',
         }),
         expect.any(Number),
       );
@@ -336,7 +336,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully. 1 newly available skill.',
+          text: 'Skills reloaded successfully. 1 newly available skill.',
         }),
         expect.any(Number),
       );
@@ -360,7 +360,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully. 1 skill no longer available.',
+          text: 'Skills reloaded successfully. 1 skill no longer available.',
         }),
         expect.any(Number),
       );
@@ -385,7 +385,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully. 1 newly available skill and 1 skill no longer available.',
+          text: 'Skills reloaded successfully. 1 newly available skill and 1 skill no longer available.',
         }),
         expect.any(Number),
       );

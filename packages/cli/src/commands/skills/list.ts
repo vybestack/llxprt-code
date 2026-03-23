@@ -60,7 +60,7 @@ export async function handleList(showAll = false) {
     return;
   }
 
-  debugLogger.log(chalk.bold('Discovered Agent Skills:'));
+  debugLogger.log(chalk.bold('Discovered Skills:'));
   debugLogger.log('');
 
   for (const skill of skills) {
@@ -85,7 +85,7 @@ export async function handleList(showAll = false) {
 
 export const listCommand: CommandModule = {
   command: 'list [--all]',
-  describe: 'Lists discovered agent skills.',
+  describe: 'Lists discovered skills.',
   builder: (yargs) =>
     yargs.option('all', {
       type: 'boolean',

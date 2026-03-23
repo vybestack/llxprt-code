@@ -104,7 +104,7 @@ describe('skills list command', () => {
 
       expect(emitConsoleLog).toHaveBeenCalledWith(
         'log',
-        chalk.bold('Discovered Agent Skills:'),
+        chalk.bold('Discovered Skills:'),
       );
       expect(emitConsoleLog).toHaveBeenCalledWith(
         'log',
@@ -136,7 +136,7 @@ describe('skills list command', () => {
 
     it('should have correct command and describe', () => {
       expect(command.command).toBe('list [--all]');
-      expect(command.describe).toBe('Lists discovered agent skills.');
+      expect(command.describe).toBe('Lists discovered skills.');
     });
   });
 });

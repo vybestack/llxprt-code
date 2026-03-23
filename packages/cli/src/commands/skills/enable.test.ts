@@ -151,7 +151,7 @@ describe('skills enable command', () => {
   describe('enableCommand', () => {
     it('should have correct command and describe', () => {
       expect(enableCommand.command).toBe('enable <name>');
-      expect(enableCommand.describe).toBe('Enables an agent skill.');
+      expect(enableCommand.describe).toBe('Enables a skill.');
     });
   });
 });

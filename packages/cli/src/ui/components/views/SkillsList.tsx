@@ -68,7 +68,7 @@ export const SkillsList: React.FC<SkillsListProps> = ({
       {enabledSkills.length > 0 && (
         <Box flexDirection="column">
           <Text bold color={theme.text.primary}>
-            Available Agent Skills:
+            Available Skills:
           </Text>
           <Box height={1} />
           {enabledSkills.map(renderSkill)}
