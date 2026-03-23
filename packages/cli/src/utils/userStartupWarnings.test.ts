@@ -18,13 +18,21 @@ import {
 const mockHomedir = vi.hoisted(() => vi.fn());
 
 vi.mock('node:os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
+  const actualOs = await importOriginal<
+    typeof import('node:os') & { default?: unknown }
+  >();
   return {
     ...actualOs,
-    default: {
-      ...actualOs.default,
-      homedir: mockHomedir,
-    },
+    ...(actualOs.default &&
+    typeof actualOs.default === 'object' &&
+    actualOs.default !== null
+      ? {
+          default: {
+            ...(actualOs.default as Record<string, unknown>),
+            homedir: mockHomedir,
+          },
+        }
+      : {}),
     homedir: mockHomedir,
   };
 });
