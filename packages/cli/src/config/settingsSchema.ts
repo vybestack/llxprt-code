@@ -128,7 +128,6 @@ export interface SettingsSchema {
 
 export type MemoryImportFormat = 'tree' | 'flat';
 export type DnsResolutionOrder = 'ipv4first' | 'verbatim';
-export type ToolCallProcessingMode = 'legacy' | 'pipeline';
 export type ToolEnabledState = 'enabled' | 'disabled';
 
 const DEFAULT_EXTENSION_AUTO_UPDATE = {
@@ -404,20 +403,6 @@ export const SETTINGS_SCHEMA = {
     default: undefined as string | undefined,
     description: 'Command to run for tool calls.',
     showInDialog: false,
-  },
-  toolCallProcessingMode: {
-    type: 'enum',
-    label: 'Tool Call Processing Mode',
-    category: 'Advanced',
-    requiresRestart: true,
-    default: 'legacy' as ToolCallProcessingMode,
-    description:
-      'Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.',
-    showInDialog: true,
-    options: [
-      { value: 'legacy', label: 'Legacy' },
-      { value: 'pipeline', label: 'Pipeline' },
-    ] as const,
   },
 
   mcpServerCommand: {

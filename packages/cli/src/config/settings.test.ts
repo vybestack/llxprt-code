@@ -270,7 +270,6 @@ describe('Settings Loading and Merging', () => {
 
         showStatusInTitle: false,
         textToolCallModels: [],
-        toolCallProcessingMode: 'legacy',
         tools: {},
         ui: {
           customThemes: {},
@@ -1265,7 +1264,6 @@ describe('Settings Loading and Merging', () => {
 
           showStatusInTitle: false,
           textToolCallModels: [],
-          toolCallProcessingMode: 'legacy',
           tools: {},
           ui: {
             customThemes: {},

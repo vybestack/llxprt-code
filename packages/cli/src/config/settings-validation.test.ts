@@ -97,7 +97,6 @@ describe('settings-validation', () => {
     it('should accept complex valid settings', () => {
       const validSettings = {
         disableAutoUpdate: false,
-        toolCallProcessingMode: 'pipeline',
         ui: {
           theme: 'DefaultDark',
           hideWindowTitle: true,
@@ -350,24 +349,6 @@ describe('settings-validation', () => {
   });
 
   describe('validateSettings - LLxprt-specific settings', () => {
-    it('should accept valid enum values', () => {
-      for (const value of ['legacy', 'pipeline']) {
-        const result = validateSettings({ toolCallProcessingMode: value });
-        expect(result.success).toBe(true);
-      }
-    });
-
-    it('should reject invalid enum value', () => {
-      const invalidSettings = { toolCallProcessingMode: 'invalid-mode' };
-      const result = validateSettings(invalidSettings);
-      expect(result.success).toBe(false);
-      if (result.error) {
-        expect(result.error.issues[0]?.path).toEqual([
-          'toolCallProcessingMode',
-        ]);
-      }
-    });
-
     it('should accept lsp as boolean false', () => {
       const validSettings = { lsp: false };
       const result = validateSettings(validSettings);

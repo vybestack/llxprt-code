@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
 import type { SettingsService } from '../../settings/SettingsService.js';
@@ -82,7 +83,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
    * buildMessagesWithReasoning can attach reasoning_content to the assistant
    * message that has tool_calls.
    */
-  it('yields reasoning_content ThinkingBlock and tool_calls in the same IContent (legacy path)', async () => {
+  it('yields reasoning_content ThinkingBlock and tool_calls in the same IContent', async () => {
     // Simulate DeepSeek-reasoner streaming: first reasoning_content chunks,
     // then a tool_call chunk, then finish.
     const chunks = [
@@ -344,38 +345,28 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
       ],
     };
 
-    // Call buildMessagesWithReasoning (private — accessed via type cast)
-    const buildMessages = (
-      provider as unknown as {
-        buildMessagesWithReasoning: (
-          contents: IContent[],
-          options: {
-            settings: { get: (k: string) => unknown };
-            invocation: object;
-            resolved: object;
-            metadata: object;
-            config: { getModel?: () => string };
+    // Call buildMessagesWithReasoning (now a standalone function)
+    const messages = buildMessagesWithReasoning(
+      [combinedContent],
+      {
+        settings: {
+          get: (key: string) => {
+            if (key === 'reasoning.includeInContext') return true;
+            if (key === 'reasoning.stripFromContext') return 'none';
+            return undefined;
           },
-        ) => Array<Record<string, unknown>>;
-      }
-    ).buildMessagesWithReasoning;
-
-    const messages = buildMessages.call(provider, [combinedContent], {
-      settings: {
-        get: (key: string) => {
-          if (key === 'reasoning.includeInContext') return true;
-          if (key === 'reasoning.stripFromContext') return 'none';
-          return undefined;
         },
+        invocation: { requestId: 'test', timestamp: Date.now() },
+        resolved: {
+          model: 'deepseek-reasoner',
+          authToken: { token: 'test', type: 'api-key' },
+        },
+        metadata: {},
+        config: {},
       },
-      invocation: { requestId: 'test', timestamp: Date.now() },
-      resolved: {
-        model: 'deepseek-reasoner',
-        authToken: { token: 'test', type: 'api-key' },
-      },
-      metadata: {},
-      config: {},
-    });
+      'deepseek',
+      undefined,
+    );
 
     // Must produce exactly one assistant message
     expect(messages).toHaveLength(1);
@@ -421,23 +412,7 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
       ],
     };
 
-    const buildMessages = (
-      provider as unknown as {
-        buildMessagesWithReasoning: (
-          contents: IContent[],
-          options: {
-            settings: { get: (k: string) => unknown };
-            invocation: object;
-            resolved: object;
-            metadata: object;
-            config: { getModel?: () => string };
-          },
-        ) => Array<Record<string, unknown>>;
-      }
-    ).buildMessagesWithReasoning;
-
-    const messages = buildMessages.call(
-      provider,
+    const messages = buildMessagesWithReasoning(
       [thinkingContent, toolCallContent],
       {
         settings: {

@@ -12,3 +12,6 @@ export { OneShotStrategy } from './OneShotStrategy.js';
 /** @plan PLAN-20260211-HIGHDENSITY.P09 */
 export { HighDensityStrategy } from './HighDensityStrategy.js';
 export * from './compressionStrategyFactory.js';
+/** @plan PLAN-20260220-DECOMPOSE.P03 */
+export { CompressionHandler } from './CompressionHandler.js';
+export * from './compressionBudgeting.js';

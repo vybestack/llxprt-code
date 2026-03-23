@@ -88,15 +88,11 @@ type RuntimeContextShape = {
 interface OpenAIRegistrationContext {
   apiKey?: string;
   baseUrl?: string;
-  providerConfig: ProviderConfigWithToolMode;
+  providerConfig: IProviderConfig;
   oauthManager: OAuthManager;
   config?: Config;
   authOnlyEnabled?: boolean;
 }
-
-type ProviderConfigWithToolMode = IProviderConfig & {
-  toolCallProcessingMode?: 'pipeline' | 'legacy';
-};
 
 /**
  * Set a custom file system implementation (mainly for testing).
@@ -368,12 +364,11 @@ export function createProviderManager(
   // Debug logging removed - was using debugLogger.log which violates project guidelines
   // Use DebugLogger if detailed logging is needed here
 
-  const openaiProviderConfig: ProviderConfigWithToolMode = {
+  const openaiProviderConfig: IProviderConfig = {
     enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
     textToolCallModels: settingsData.textToolCallModels,
     providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
     openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
-    toolCallProcessingMode: settingsData.toolCallProcessingMode,
     allowBrowserEnvironment,
     getEphemeralSettings: config
       ? () => config.getEphemeralSettings()

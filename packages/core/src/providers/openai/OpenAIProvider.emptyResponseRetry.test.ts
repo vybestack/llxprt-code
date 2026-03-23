@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
@@ -7,6 +8,7 @@ import { resetSettingsService } from '../../settings/settingsServiceInstance.js'
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
 import type { SettingsService } from '../../settings/SettingsService.js';
 import type { IContent } from '../IMessage.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -80,7 +82,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
                   id: 'call_123',
                   type: 'function',
                   function: {
-                    name: 'FindFiles',
+                    name: 'findfiles',
                     arguments: '{"pattern":"**/*.ts"}',
                   },
                 },
@@ -641,20 +643,15 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(toolMessage).toMatchObject({
       role: 'tool',
       tool_call_id: 'call_mistral_1',
-      name: 'FindFiles',
       content: '[Tool call acknowledged - awaiting execution]',
     });
   });
 
-  it('should keep private method test coupling explicit for buildMessagesWithReasoning', () => {
-    // This test intentionally exercises a private helper through type assertion.
-    // If the method signature changes, this test should fail loudly so we can
+  it('should keep extracted function test coupling explicit for buildMessagesWithReasoning', () => {
+    // This test intentionally checks that the extracted function is available.
+    // If the function signature changes, this test should fail loudly so we can
     // update strict gateway payload assertions in lockstep.
-    const privateAccessor = provider as unknown as {
-      buildMessagesWithReasoning: OpenAIProvider['buildMessagesWithReasoning'];
-    };
-
-    expect(typeof privateAccessor.buildMessagesWithReasoning).toBe('function');
+    expect(typeof buildMessagesWithReasoning).toBe('function');
   });
 
   it('should not attach reasoning_content to assistant tool_call messages for strict OpenAI gateways', () => {
@@ -712,16 +709,9 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
         model: 'MiniMaxAI/MiniMax-M2.1-TEE',
         authToken: 'test-key',
       },
-    } as Parameters<OpenAIProvider['buildMessagesWithReasoning']>[1];
+    } as unknown as NormalizedGenerateChatOptions;
 
-    const buildMessagesWithReasoning = (
-      provider as unknown as {
-        buildMessagesWithReasoning: OpenAIProvider['buildMessagesWithReasoning'];
-      }
-    ).buildMessagesWithReasoning;
-
-    const messages = buildMessagesWithReasoning.call(
-      provider,
+    const messages = buildMessagesWithReasoning(
       contentHistory,
       options,
       'openai',

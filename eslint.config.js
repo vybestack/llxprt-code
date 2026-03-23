@@ -251,6 +251,88 @@ export default tseslint.config(
       'sonarjs/no-wildcard-import': 'off',
       'sonarjs/file-header': 'off',
 
+      // Irrelevant SonarJS rules for this Node.js CLI codebase
+
+      // AWS infrastructure rules — no CloudFormation/Terraform/CDK usage
+      'sonarjs/aws-apigateway-public-api': 'off',
+      'sonarjs/aws-ec2-rds-dms-public': 'off',
+      'sonarjs/aws-ec2-unencrypted-ebs-volume': 'off',
+      'sonarjs/aws-efs-unencrypted': 'off',
+      'sonarjs/aws-iam-all-privileges': 'off',
+      'sonarjs/aws-iam-all-resources-accessible': 'off',
+      'sonarjs/aws-iam-privilege-escalation': 'off',
+      'sonarjs/aws-iam-public-access': 'off',
+      'sonarjs/aws-opensearchservice-domain': 'off',
+      'sonarjs/aws-rds-unencrypted-databases': 'off',
+      'sonarjs/aws-restricted-ip-admin-access': 'off',
+      'sonarjs/aws-s3-bucket-granted-access': 'off',
+      'sonarjs/aws-s3-bucket-insecure-http': 'off',
+      'sonarjs/aws-s3-bucket-public-access': 'off',
+      'sonarjs/aws-s3-bucket-server-encryption': 'off',
+      'sonarjs/aws-s3-bucket-versioning': 'off',
+      'sonarjs/aws-sagemaker-unencrypted-notebook': 'off',
+      'sonarjs/aws-sns-unencrypted-topics': 'off',
+      'sonarjs/aws-sqs-unencrypted-queue': 'off',
+
+      // Web security / browser / HTTP rules — CLI does not serve HTTP, set cookies, or render HTML
+      'sonarjs/certificate-transparency': 'off',
+      'sonarjs/content-length': 'off',
+      'sonarjs/content-security-policy': 'off',
+      'sonarjs/cookie-no-httponly': 'off',
+      'sonarjs/cookies': 'off',
+      'sonarjs/cors': 'off',
+      'sonarjs/csrf': 'off',
+      'sonarjs/disabled-auto-escaping': 'off',
+      'sonarjs/disabled-resource-integrity': 'off',
+      'sonarjs/dns-prefetching': 'off',
+      'sonarjs/frame-ancestors': 'off',
+      'sonarjs/hidden-files': 'off',
+      'sonarjs/insecure-cookie': 'off',
+      'sonarjs/link-with-target-blank': 'off',
+      'sonarjs/no-clear-text-protocols': 'off',
+      'sonarjs/no-ip-forward': 'off',
+      'sonarjs/no-mime-sniff': 'off',
+      'sonarjs/no-mixed-content': 'off',
+      'sonarjs/no-referrer-policy': 'off',
+      'sonarjs/no-session-cookies-on-static-assets': 'off',
+      'sonarjs/post-message': 'off',
+      'sonarjs/session-regeneration': 'off',
+      'sonarjs/strict-transport-security': 'off',
+      'sonarjs/unverified-certificate': 'off',
+      'sonarjs/unverified-hostname': 'off',
+      'sonarjs/weak-ssl': 'off',
+      'sonarjs/x-powered-by': 'off',
+
+      // HTML/DOM/Accessibility rules — no server-rendered HTML or DOM manipulation
+      'sonarjs/no-table-as-layout': 'off',
+      'sonarjs/object-alt-content': 'off',
+      'sonarjs/table-header': 'off',
+      'sonarjs/table-header-reference': 'off',
+      'sonarjs/no-intrusive-permissions': 'off',
+
+      // Framework-specific rules — Angular/Vue not used; React SonarJS rules overlap with eslint-plugin-react
+      'sonarjs/no-angular-bypass-sanitization': 'off',
+      'sonarjs/no-vue-bypass-sanitization': 'off',
+      'sonarjs/chai-determinate-assertion': 'off',
+      'sonarjs/no-hook-setter-in-body': 'off',
+      'sonarjs/no-useless-react-setstate': 'off',
+      'sonarjs/prefer-read-only-props': 'off',
+      'sonarjs/no-uniq-key': 'off',
+      'sonarjs/jsx-no-leaked-render': 'off',
+
+      // Database/SQL rules — no SQL or database usage
+      'sonarjs/sql-queries': 'off',
+      'sonarjs/web-sql-database': 'off',
+
+      // Other irrelevant rules
+      'sonarjs/review-blockchain-mnemonic': 'off',
+      'sonarjs/xml-parser-xxe': 'off',
+      'sonarjs/xpath': 'off',
+      'sonarjs/file-uploads': 'off',
+
+      // Expensive heuristic — NLP analysis on comments with no value for this codebase
+      'sonarjs/no-commented-code': 'off',
+
       // ESLint comments (recommended rules downgraded to warn)
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(

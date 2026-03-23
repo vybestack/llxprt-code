@@ -215,6 +215,8 @@ jobs:
           git diff --exit-code -- . ':!project-plans/' ':!packages/ui/bun.lock'
 
       - name: 'Run linter'
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
         run: |-
           npm run lint:ci
 
