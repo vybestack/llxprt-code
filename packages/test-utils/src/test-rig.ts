@@ -5,7 +5,7 @@
  */
 
 import { expect } from 'vitest';
-import { execSync, spawn } from 'node:child_process';
+import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,240 @@ import * as pty from '@lydell/node-pty';
 import stripAnsi from 'strip-ansi';
 import * as os from 'node:os';
 import { LLXPRT_DIR } from '@vybestack/llxprt-code-core';
+
+/**
+ * Options for running a command with timeout support.
+ */
+export interface InteractiveRunOptions {
+  /** Maximum time to wait for the command to complete (default: 30000ms) */
+  timeout?: number;
+  /** Time to wait after SIGTERM before sending SIGKILL (default: 5000ms) */
+  gracefulKillTimeout?: number;
+}
+
+/**
+ * Result of running a command.
+ */
+export interface InteractiveRunResult {
+  /** The exit code of the process, or null if it was killed */
+  exitCode: number | null;
+  /** Standard output from the process */
+  stdout: string;
+  /** Standard error from the process */
+  stderr: string;
+  /** Whether the process timed out */
+  timedOut: boolean;
+  /** Whether the process was killed */
+  killed: boolean;
+}
+
+/**
+ * Command-based InteractiveRun for non-PTY process management.
+ * Supports timeout, graceful kill escalation, and cross-platform handling.
+ */
+export class CommandRun {
+  private _process: ChildProcess | null = null;
+  private _stdout = '';
+  private _stderr = '';
+  private _exitCode: number | null = null;
+  private _killed = false;
+  private _timedOut = false;
+  private _exited = false;
+
+  /**
+   * Get the process ID if running.
+   */
+  get pid(): number | undefined {
+    return this._process?.pid;
+  }
+
+  /**
+   * Get the exit code after process completes.
+   */
+  get exitCode(): number | null {
+    return this._exitCode;
+  }
+
+  /**
+   * Check if the process was killed.
+   */
+  get killed(): boolean {
+    return this._killed;
+  }
+
+  /**
+   * Run a command with optional timeout.
+   */
+  async run(
+    command: string,
+    args: string[],
+    options?: InteractiveRunOptions,
+  ): Promise<InteractiveRunResult> {
+    const timeout = options?.timeout ?? 30000;
+    const cwd = process.cwd();
+
+    return new Promise((resolve, reject) => {
+      this._process = spawn(command, args, {
+        cwd,
+        stdio: 'pipe',
+      });
+
+      this._process.stdout?.on('data', (data: Buffer) => {
+        this._stdout += data.toString();
+      });
+
+      this._process.stderr?.on('data', (data: Buffer) => {
+        this._stderr += data.toString();
+      });
+
+      this._process.on('error', (error) => {
+        // Handle spawn failures with actionable error
+        const err = new Error(
+          `Failed to spawn '${command}': ${error.message} (errno: ${(error as NodeJS.ErrnoException).errno ?? 'unknown'})`,
+        );
+        reject(err);
+      });
+
+      this._process.on('close', (code) => {
+        this._exited = true;
+        this._exitCode = code;
+        resolve({
+          exitCode: this._exitCode,
+          stdout: this._stdout,
+          stderr: this._stderr,
+          timedOut: this._timedOut,
+          killed: this._killed,
+        });
+      });
+
+      // Set up timeout
+      const timer = setTimeout(() => {
+        this._timedOut = true;
+        this.kill(options?.gracefulKillTimeout ?? 5000).catch(() => {
+          // Ignore kill errors on timeout
+        });
+      }, timeout);
+
+      // Clean up timer on completion
+      this._process.on('close', () => {
+        clearTimeout(timer);
+      });
+    });
+  }
+
+  /**
+   * Kill the process with graceful escalation.
+   * First sends SIGTERM, then SIGKILL after timeout.
+   * On Windows, uses taskkill with /T flag for process tree.
+   */
+  async kill(gracefulTimeout?: number): Promise<void> {
+    if (this._exited || !this._process) {
+      return;
+    }
+
+    const timeout = gracefulTimeout ?? 5000;
+    this._killed = true;
+    const pid = this._process.pid;
+
+    if (pid === undefined) {
+      return;
+    }
+
+    if (process.platform === 'win32') {
+      // Windows: use taskkill with /T flag for process tree
+      await this._killWindows(pid, timeout);
+    } else {
+      // Darwin/Linux: standard SIGTERM/SIGKILL
+      await this._killUnix(pid, timeout);
+    }
+  }
+
+  private async _killWindows(pid: number, _timeout: number): Promise<void> {
+    try {
+      // Use taskkill with /T to kill process tree
+      execSync(`taskkill /pid ${pid} /T /F`, {
+        timeout: 10000,
+      });
+    } catch (error) {
+      // Check if process already exited (ESRCH equivalent on Windows)
+      const err = error as NodeJS.ErrnoException;
+      if (
+        err.message?.includes('not found') ||
+        err.message?.includes('no running instance')
+      ) {
+        // Process already exited - treat as success
+        return;
+      }
+      // Permission denied or other error
+      if (err.message?.includes('Access is denied')) {
+        throw new Error(
+          `Permission denied when trying to kill process ${pid}. Try running with elevated privileges.`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async _killUnix(pid: number, timeout: number): Promise<void> {
+    try {
+      // Send SIGTERM first
+      process.kill(pid, 'SIGTERM');
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      // ESRCH: no such process - already exited, no error
+      if (err.code === 'ESRCH') {
+        return;
+      }
+      // EPERM: permission denied
+      if (err.code === 'EPERM') {
+        throw new Error(
+          `Permission denied when trying to kill process ${pid}. Try running with elevated privileges.`,
+        );
+      }
+      throw error;
+    }
+
+    // Wait for graceful shutdown
+    const startTime = Date.now();
+    const exited = await new Promise<boolean>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (this._exited) {
+          clearInterval(checkInterval);
+          resolve(true);
+          return;
+        }
+
+        // Check if process still exists
+        try {
+          process.kill(pid, 0); // Signal 0 = check if process exists
+        } catch {
+          // Process no longer exists
+          clearInterval(checkInterval);
+          resolve(true);
+          return;
+        }
+
+        if (Date.now() - startTime >= timeout) {
+          clearInterval(checkInterval);
+          resolve(false);
+        }
+      }, 100);
+    });
+
+    // If still running after timeout, send SIGKILL
+    if (!exited) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException;
+        // ESRCH is fine - process already exited
+        if (err.code !== 'ESRCH') {
+          throw error;
+        }
+      }
+    }
+  }
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BUNDLE_PATH = join(__dirname, '..', '..', '..', 'bundle/llxprt.js');
@@ -181,6 +415,8 @@ export class InteractiveRun {
   ptyProcess: pty.IPty;
   public output = '';
   private _exited = false;
+  private _exitCode: number | null = null;
+  private _killed = false;
 
   constructor(ptyProcess: pty.IPty) {
     this.ptyProcess = ptyProcess;
@@ -190,9 +426,31 @@ export class InteractiveRun {
         process.stdout.write(data);
       }
     });
-    ptyProcess.onExit(() => {
+    ptyProcess.onExit(({ exitCode }) => {
       this._exited = true;
+      this._exitCode = exitCode;
     });
+  }
+
+  /**
+   * Get the process ID of the PTY process.
+   */
+  get pid(): number | undefined {
+    return this.ptyProcess.pid;
+  }
+
+  /**
+   * Get the exit code after the process exits.
+   */
+  get exitCode(): number | null {
+    return this._exitCode;
+  }
+
+  /**
+   * Check if the process was killed.
+   */
+  get killed(): boolean {
+    return this._killed;
   }
 
   async expectText(text: string, timeout?: number) {
@@ -248,8 +506,44 @@ export class InteractiveRun {
     }
   }
 
+  /**
+   * Kill the process with graceful escalation.
+   * First sends SIGTERM, then SIGKILL after gracePeriodMs.
+   * On Windows, uses taskkill with /T flag for process tree.
+   * @param gracePeriodMs - Time to wait after SIGTERM before SIGKILL (default: 5000ms)
+   */
   async kill(gracePeriodMs = 5000): Promise<void> {
     if (this._exited) return;
+    this._killed = true;
+
+    if (process.platform === 'win32') {
+      await this._killWindows(gracePeriodMs);
+    } else {
+      await this._killUnix(gracePeriodMs);
+    }
+  }
+
+  private async _killWindows(_gracePeriodMs: number): Promise<void> {
+    try {
+      // Windows: use taskkill with /T flag for process tree
+      const pid = this.ptyProcess.pid;
+      execSync(`taskkill /pid ${pid} /T /F`, { timeout: 10000 });
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      // Process may already be dead — ignore
+      if (
+        !err.message?.includes('not found') &&
+        !err.message?.includes('no running instance')
+      ) {
+        // Log but don't throw for cleanup
+        if (env['VERBOSE'] === 'true') {
+          console.warn('Failed to kill PTY process:', err.message);
+        }
+      }
+    }
+  }
+
+  private async _killUnix(gracePeriodMs: number): Promise<void> {
     try {
       this.ptyProcess.kill('SIGTERM');
       const exited = await poll(() => this._exited, gracePeriodMs, 100);
