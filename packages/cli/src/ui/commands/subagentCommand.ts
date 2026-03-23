@@ -490,11 +490,7 @@ const deleteCommand: SlashCommand = {
       }
       if (config.source === 'extension') {
         // Check if user has a disk override
-        const diskExists = await (
-          subagentManager as unknown as {
-            _diskSubagentExists(name: string): Promise<boolean>;
-          }
-        )._diskSubagentExists(name);
+        const diskExists = await subagentManager.subagentExistsOnDisk(name);
         if (!diskExists) {
           return {
             type: 'message',
@@ -577,11 +573,7 @@ const editCommand: SlashCommand = {
       }
       if (config.source === 'extension') {
         // Check if user has a disk override
-        const diskExists = await (
-          subagentManager as unknown as {
-            _diskSubagentExists(name: string): Promise<boolean>;
-          }
-        )._diskSubagentExists(name);
+        const diskExists = await subagentManager.subagentExistsOnDisk(name);
         if (!diskExists) {
           return {
             type: 'message',

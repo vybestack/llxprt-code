@@ -166,6 +166,28 @@ export class SubagentManager {
   }
 
   /**
+   * Check if a subagent exists on disk (public wrapper for _diskSubagentExists)
+   *
+   * @license
+   * Copyright 2026 Vybestack LLC
+   * SPDX-License-Identifier: Apache-2.0
+   */
+  async subagentExistsOnDisk(name: string): Promise<boolean> {
+    return this._diskSubagentExists(name);
+  }
+
+  /**
+   * Check if a subagent is defined in settings (vs disk or extension)
+   *
+   * @license
+   * Copyright 2026 Vybestack LLC
+   * SPDX-License-Identifier: Apache-2.0
+   */
+  isSettingsSubagent(name: string): boolean {
+    return this.settingsSubagents.has(name);
+  }
+
+  /**
    * Save or update a subagent configuration
    *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
