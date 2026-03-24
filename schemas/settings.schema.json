@@ -961,9 +961,9 @@
           "type": "boolean"
         },
         "skills": {
-          "title": "Agent Skills",
-          "description": "Enable Agent Skills (experimental).",
-          "markdownDescription": "Enable Agent Skills (experimental).\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `false`",
+          "title": "Skills",
+          "description": "Enable skills (experimental).",
+          "markdownDescription": "Enable skills (experimental).\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `false`",
           "default": false,
           "type": "boolean"
         },
@@ -1252,8 +1252,8 @@
     },
     "skills": {
       "title": "Skills",
-      "description": "Settings for agent skills.",
-      "markdownDescription": "Settings for agent skills.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `{}`",
+      "description": "Settings for skills.",
+      "markdownDescription": "Settings for skills.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `{}`",
       "default": {},
       "type": "object",
       "properties": {
@@ -1352,8 +1352,8 @@
         },
         "skills": {
           "title": "Skills Settings",
-          "description": "Agent Skills-specific admin settings.",
-          "markdownDescription": "Agent Skills-specific admin settings.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `{}`",
+          "description": "Skills-specific admin settings.",
+          "markdownDescription": "Skills-specific admin settings.\n\n- Category: `Admin`\n- Requires restart: `no`\n- Default: `{}`",
           "default": {},
           "type": "object",
           "properties": {

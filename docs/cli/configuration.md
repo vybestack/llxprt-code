@@ -655,7 +655,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Requires restart:** Yes
 
 - **`experimental.skills`** (boolean):
-  - **Description:** Enable Agent Skills (experimental).
+  - **Description:** Enable skills (experimental).
   - **Default:** `false`
   - **Requires restart:** Yes
 
