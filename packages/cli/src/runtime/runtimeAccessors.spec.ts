@@ -125,7 +125,7 @@ describe('runtimeAccessors', () => {
 
   describe('getCliRuntimeServices', () => {
     it('should throw descriptive error when no runtime is registered', () => {
-      expect(() => getCliRuntimeServices()).toThrow();
+      expect(() => getCliRuntimeServices()).toThrow(/runtime|registered|initialized/i);
     });
 
     it('should return services object with config, settingsService, providerManager', () => {
@@ -193,6 +193,11 @@ describe('runtimeAccessors', () => {
 
       // Clear active model param
       clearActiveModelParam('temperature');
+      expect(mockSettingsService.setProviderSetting).toHaveBeenCalledWith(
+        expect.any(String),
+        'temperature',
+        undefined,
+      );
     });
   });
 
