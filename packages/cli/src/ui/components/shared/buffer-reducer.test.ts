@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import '../../../test-utils/customMatchers.js';
 import { textBufferReducer } from './text-buffer.js';
 import type { TextBufferState, TextBufferAction } from './text-buffer.js';
 

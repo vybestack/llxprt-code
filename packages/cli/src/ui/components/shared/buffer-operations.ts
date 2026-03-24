@@ -11,6 +11,7 @@
  */
 
 import type { TextBufferState } from './buffer-types.js';
+import { historyLimit } from './buffer-types.js';
 import { cpLen } from '../../utils/textUtils.js';
 
 /**
@@ -176,12 +177,6 @@ export const getLineRangeOffsets = (
 
   return { startOffset, endOffset };
 };
-
-/**
- * Maximum number of undo/redo history entries to keep.
- */
-const historyLimit = 100;
-
 /**
  * Pushes the current state onto the undo stack.
  * Creates a snapshot of the current lines and cursor position.

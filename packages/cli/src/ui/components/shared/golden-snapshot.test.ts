@@ -5,9 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import '../../../test-utils/customMatchers.js';
 import { textBufferReducer } from './text-buffer.js';
-import type { TextBufferState, TextBufferAction } from './text-buffer.js';
+import type {
+  TextBufferState,
+  TextBufferAction,
+  Direction,
+} from './text-buffer.js';
 
 // Import action corpus
 import { readFileSync } from 'node:fs';
@@ -70,7 +73,7 @@ function parseAction(actionStr: string): TextBufferAction {
     case 'delete':
       return { type: 'delete' };
     case 'move':
-      return { type: 'move', payload: { dir: payload as any } };
+      return { type: 'move', payload: { dir: payload as Direction } };
     case 'delete_word_left':
       return { type: 'delete_word_left' };
     case 'delete_word_right':
@@ -183,7 +186,10 @@ function parseAction(actionStr: string): TextBufferAction {
       const parts = payload.split(':');
       return {
         type: 'vim_change_movement',
-        payload: { movement: parts[0] as any, count: Number(parts[1]) || 1 },
+        payload: {
+          movement: parts[0] as 'h' | 'j' | 'k' | 'l',
+          count: Number(parts[1]) || 1,
+        },
       };
     }
     default:

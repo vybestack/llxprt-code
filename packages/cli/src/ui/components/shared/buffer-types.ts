@@ -261,7 +261,6 @@ export interface TextBuffer {
    * @param endRow The ending row index (inclusive).
    * @param endCol The ending column index (exclusive, code-point based).
    * @param text The new text to insert.
-   * @returns True if the buffer was modified, false otherwise.
    */
   replaceRange: (
     startRow: number,

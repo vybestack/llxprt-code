@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import '../../../test-utils/customMatchers.js';
 import type { VisualLayout } from './text-buffer.js';
 
 describe('visual-layout', () => {
