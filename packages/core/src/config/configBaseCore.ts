@@ -195,9 +195,14 @@ export abstract class ConfigBaseCore {
   protected skillManager!: SkillManager;
   protected readonly skillsSupport!: boolean;
   protected disabledSkills!: string[];
+  protected readonly enableHooksUI!: boolean;
+  protected adminSkillsEnabled: boolean = true;
   protected readonly sanitizationConfig?: EnvironmentSanitizationConfig;
   protected readonly _onReload:
-    | (() => Promise<{ disabledSkills?: string[] }>)
+    | (() => Promise<{
+        disabledSkills?: string[];
+        adminSkillsEnabled?: boolean;
+      }>)
     | undefined;
   protected readonly outputSettings!: OutputSettings;
   protected readonly codebaseInvestigatorSettings!: CodebaseInvestigatorSettings;
@@ -640,6 +645,9 @@ export abstract class ConfigBaseCore {
   }
   getEnableHooks(): boolean {
     return this.enableHooks;
+  }
+  getEnableHooksUI(): boolean {
+    return this.enableHooksUI;
   }
   getHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.hooks;

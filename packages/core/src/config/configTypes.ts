@@ -143,6 +143,11 @@ export interface GeminiCLIExtension {
   skills?: SkillDefinition[];
   settings?: Array<Record<string, unknown>>;
   resolvedSettings?: Array<Record<string, unknown>>;
+  subagents?: Array<{
+    name: string;
+    profile: string;
+    systemPrompt: string;
+  }>;
 }
 
 export interface ExtensionInstallMetadata {
@@ -408,11 +413,21 @@ export interface ConfigParameters {
   skillsSupport?: boolean;
   disabledSkills?: string[];
   sanitizationConfig?: EnvironmentSanitizationConfig;
-  onReload?: () => Promise<{ disabledSkills?: string[] }>;
+  onReload?: () => Promise<{
+    disabledSkills?: string[];
+    adminSkillsEnabled?: boolean;
+  }>;
   outputSettings?: OutputSettings;
   codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
 
   jitContextEnabled?: boolean;
+  adminSkillsEnabled?: boolean;
+  enableHooksUI?: boolean;
+  experimentalJitContext?: boolean;
+  disableLLMCorrection?: boolean;
+  onModelChange?: (model: string) => void;
+  mcpEnabled?: boolean;
+  extensionsEnabled?: boolean;
 }

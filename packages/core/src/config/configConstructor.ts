@@ -178,8 +178,15 @@ export interface ConfigConstructorTarget {
   skillManager: SkillManager;
   skillsSupport: boolean;
   disabledSkills: string[];
+  enableHooksUI: boolean;
+  adminSkillsEnabled: boolean;
   sanitizationConfig: EnvironmentSanitizationConfig | undefined;
-  _onReload: (() => Promise<{ disabledSkills?: string[] }>) | undefined;
+  _onReload:
+    | (() => Promise<{
+        disabledSkills?: string[];
+        adminSkillsEnabled?: boolean;
+      }>)
+    | undefined;
   outputSettings: OutputSettings;
   codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
   introspectionAgentSettings: IntrospectionAgentSettings;
@@ -349,6 +356,9 @@ export function applyConfigParams(config: ConfigConstructorTarget, params: Confi
   config.skillManager = new SkillManager();
   config.skillsSupport = params.skillsSupport ?? false;
   config.disabledSkills = params.disabledSkills ?? [];
+  config.enableHooksUI = params.enableHooksUI ?? true;
+  config.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
+  config.skillManager.setAdminSettings(config.adminSkillsEnabled);
   config.sanitizationConfig = params.sanitizationConfig;
   config._onReload = params.onReload;
   config.outputSettings = params.outputSettings ?? {
