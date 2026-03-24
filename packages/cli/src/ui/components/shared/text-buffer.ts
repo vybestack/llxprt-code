@@ -21,7 +21,6 @@ import {
   coreEvents,
   CoreEvent,
   debugLogger,
-  type EditorType,
   getEditorCommand,
   isGuiEditor,
 } from '@vybestack/llxprt-code-core';
