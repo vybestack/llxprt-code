@@ -1498,10 +1498,13 @@ export const AppContainer = (props: AppContainerProps) => {
   // Use the activeShellPtyId from useGeminiStream (which gets it from useShellCommandProcessor)
   const activeShellPtyId = geminiActiveShellPtyId;
 
-  const isShellAwaitingFocus = !!activeShellPtyId && !embeddedShellFocused;
+  const isShellAwaitingFocus =
+    !!activeShellPtyId &&
+    !embeddedShellFocused &&
+    config.getEnableInteractiveShell();
   const showShellActionRequired = useInactivityTimer(
     isShellAwaitingFocus,
-    isShellAwaitingFocus,
+    lastOutputTime,
     SHELL_ACTION_REQUIRED_TITLE_DELAY_MS,
   );
 

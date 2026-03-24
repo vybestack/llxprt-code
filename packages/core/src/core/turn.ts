@@ -243,11 +243,13 @@ export type ServerGeminiModelInfoEvent = {
 export type ServerGeminiAgentExecutionStoppedEvent = {
   type: GeminiEventType.AgentExecutionStopped;
   reason: string;
+  systemMessage?: string;
 };
 
 export type ServerGeminiAgentExecutionBlockedEvent = {
   type: GeminiEventType.AgentExecutionBlocked;
   reason: string;
+  systemMessage?: string;
 };
 
 // The original union type, now composed of the individual types
@@ -374,6 +376,7 @@ export class Turn {
           yield {
             type: GeminiEventType.AgentExecutionStopped,
             reason: streamEvent.reason,
+            systemMessage: streamEvent.systemMessage,
           };
           return;
         }
@@ -383,6 +386,7 @@ export class Turn {
           yield {
             type: GeminiEventType.AgentExecutionBlocked,
             reason: streamEvent.reason,
+            systemMessage: streamEvent.systemMessage,
           };
           continue;
         }

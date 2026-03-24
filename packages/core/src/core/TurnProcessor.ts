@@ -178,6 +178,7 @@ export class TurnProcessor {
             yield {
               type: StreamEventType.AGENT_EXECUTION_STOPPED,
               reason: error.reason,
+              systemMessage: error.systemMessage,
             };
             lastError = null;
             break;
@@ -187,6 +188,7 @@ export class TurnProcessor {
             yield {
               type: StreamEventType.AGENT_EXECUTION_BLOCKED,
               reason: error.reason,
+              systemMessage: error.systemMessage,
             };
             // If there's a synthetic response, yield it as a chunk
             if (error.syntheticResponse) {

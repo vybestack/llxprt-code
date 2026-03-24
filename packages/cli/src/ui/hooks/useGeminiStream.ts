@@ -264,6 +264,8 @@ export const useGeminiStream = (
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
   const [pendingHistoryItem, pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
+  const [lastGeminiActivityTime, setLastGeminiActivityTime] =
+    useState<number>(0);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
   const queuedSubmissionsRef = useRef<QueuedSubmission[]>([]);
   const submitQueryRef = useRef<
@@ -1069,6 +1071,7 @@ export const useGeminiStream = (
           case ServerGeminiEventType.Thought:
             // @plan:PLAN-20251202-THINKING-UI.P08
             // @requirement:REQ-THINK-UI-001
+            setLastGeminiActivityTime(Date.now());
             setThought(event.value);
 
             // Accumulate as ThinkingBlock for history
@@ -1120,6 +1123,7 @@ export const useGeminiStream = (
             }
             break;
           case ServerGeminiEventType.Content:
+            setLastGeminiActivityTime(Date.now());
             geminiMessageBuffer = handleContentEvent(
               event.value,
               geminiMessageBuffer,
@@ -1180,7 +1184,7 @@ export const useGeminiStream = (
             addItem(
               {
                 type: MessageType.INFO,
-                text: `Execution stopped by hook: ${(event as unknown as { reason: string }).reason}`,
+                text: `Execution stopped by hook: ${event.systemMessage?.trim() || event.reason}`,
               },
               userMessageTimestamp,
             );
@@ -1189,7 +1193,7 @@ export const useGeminiStream = (
             addItem(
               {
                 type: MessageType.INFO,
-                text: `Execution blocked by hook: ${(event as unknown as { reason: string }).reason}`,
+                text: `Execution blocked by hook: ${event.systemMessage?.trim() || event.reason}`,
               },
               userMessageTimestamp,
             );
@@ -1904,6 +1908,7 @@ export const useGeminiStream = (
   const lastOutputTime = Math.max(
     lastToolOutputTime ?? 0,
     lastShellOutputTime ?? 0,
+    lastGeminiActivityTime,
   );
 
   return {

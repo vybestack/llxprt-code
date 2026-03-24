@@ -23,8 +23,16 @@ export enum StreamEventType {
 export type StreamEvent =
   | { type: StreamEventType.CHUNK; value: GenerateContentResponse }
   | { type: StreamEventType.RETRY }
-  | { type: StreamEventType.AGENT_EXECUTION_STOPPED; reason: string }
-  | { type: StreamEventType.AGENT_EXECUTION_BLOCKED; reason: string };
+  | {
+      type: StreamEventType.AGENT_EXECUTION_STOPPED;
+      reason: string;
+      systemMessage?: string;
+    }
+  | {
+      type: StreamEventType.AGENT_EXECUTION_BLOCKED;
+      reason: string;
+      systemMessage?: string;
+    };
 
 export type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {
   cache_read_input_tokens?: number;
