@@ -36,7 +36,10 @@ import {
   type SchedulerOptions,
 } from './schedulerSingleton.js';
 import { initializeLsp } from './lspIntegration.js';
-import { applyConfigParams, type ConfigConstructorTarget } from './configConstructor.js';
+import {
+  applyConfigParams,
+  type ConfigConstructorTarget,
+} from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
 
 import {
@@ -789,9 +792,7 @@ export class Config extends ConfigBase {
     }
   }
 }
-
 // Re-export scheduler types for external use
 export { type SchedulerCallbacks, type SchedulerOptions };
-
 // Export model constants for use in CLI
 export { DEFAULT_GEMINI_FLASH_MODEL };

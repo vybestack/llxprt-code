@@ -37,7 +37,10 @@ import { FileExclusions } from '../utils/ignorePatterns.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { setGlobalProxy } from '../utils/fetch.js';
 import { coreEvents } from '../utils/events.js';
-import { SimpleExtensionLoader, type ExtensionLoader } from '../utils/extensionLoader.js';
+import {
+  SimpleExtensionLoader,
+  type ExtensionLoader,
+} from '../utils/extensionLoader.js';
 import { SkillManager } from '../skills/skillManager.js';
 import { setLlxprtMdFilename } from '../tools/memoryTool.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -48,7 +51,10 @@ import {
 } from '../telemetry/index.js';
 import { OutputFormat } from '../utils/output-format.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
-import { StandardFileSystemService, type FileSystemService } from '../services/fileSystemService.js';
+import {
+  StandardFileSystemService,
+  type FileSystemService,
+} from '../services/fileSystemService.js';
 import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
@@ -203,7 +209,10 @@ export interface ConfigConstructorTarget {
  * This function is the extracted body of Config.constructor().
  * It mutates the config instance directly via field assignment.
  */
-export function applyConfigParams(config: ConfigConstructorTarget, params: ConfigParameters): void {
+export function applyConfigParams(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   // Settings service resolution
   const providedSettingsService = params.settingsService;
   if (providedSettingsService) {
@@ -346,7 +355,9 @@ export function applyConfigParams(config: ConfigConstructorTarget, params: Confi
 
   // Policy engine and runtime state
   config.policyEngine = new PolicyEngine(params.policyEngineConfig);
-  config.runtimeState = createAgentRuntimeStateFromConfig(config as unknown as Config);
+  config.runtimeState = createAgentRuntimeStateFromConfig(
+    config as unknown as Config,
+  );
   config.disableYoloMode = params.disableYoloMode ?? false;
   config.enableHooks = params.enableHooks ?? false;
   config.jitContextEnabled = params.jitContextEnabled ?? true;
@@ -408,5 +419,8 @@ export function applyConfigParams(config: ConfigConstructorTarget, params: Confi
     }
   }
 
-  logCliConfiguration(config as unknown as Config, new StartSessionEvent(config as unknown as Config));
+  logCliConfiguration(
+    config as unknown as Config,
+    new StartSessionEvent(config as unknown as Config),
+  );
 }
