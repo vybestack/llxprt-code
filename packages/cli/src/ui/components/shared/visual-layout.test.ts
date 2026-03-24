@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { VisualLayout } from './text-buffer.js';
+import type { VisualLayout } from './buffer-types.js';
 
 describe('visual-layout', () => {
   describe('VisualLayout type', () => {

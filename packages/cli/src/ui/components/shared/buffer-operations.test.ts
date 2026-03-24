@@ -10,8 +10,8 @@ import {
   pushUndo,
   offsetToLogicalPos,
   logicalPosToOffset,
-} from './text-buffer.js';
-import type { TextBufferState } from './text-buffer.js';
+} from './buffer-operations.js';
+import type { TextBufferState } from './buffer-types.js';
 
 /**
  * Phase 2.3: Buffer Operations Tests

@@ -10,7 +10,7 @@ import {
   calculateTransformationsForLine,
   calculateTransformations,
   getTransformUnderCursor,
-} from './text-buffer.js';
+} from './transformations.js';
 
 /**
  * Phase 2.4: Transformations Tests

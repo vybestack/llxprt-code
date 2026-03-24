@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { textBufferReducer } from './text-buffer.js';
+import { textBufferReducer } from './buffer-reducer.js';
 import type {
   TextBufferState,
   TextBufferAction,
   Direction,
-} from './text-buffer.js';
+} from './buffer-types.js';
 
 // Import action corpus
 import { readFileSync } from 'node:fs';

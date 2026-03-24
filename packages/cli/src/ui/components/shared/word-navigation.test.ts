@@ -15,7 +15,7 @@ import {
   findWordEndInLine,
   findNextWordAcrossLines,
   findPrevWordAcrossLines,
-} from './text-buffer.js';
+} from './word-navigation.js';
 
 /**
  * Phase 2.2: Word Navigation Tests

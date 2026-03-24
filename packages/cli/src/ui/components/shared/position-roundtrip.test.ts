@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { offsetToLogicalPos, logicalPosToOffset } from './text-buffer.js';
+import { offsetToLogicalPos, logicalPosToOffset } from './buffer-operations.js';
 
 /**
  * Phase 1.1: Position Round-Trip Property Tests

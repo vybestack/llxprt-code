@@ -4,12 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Re-export everything from the new modules for backward compatibility
-export * from './buffer-types.js';
-export * from './word-navigation.js';
-export * from './buffer-operations.js';
-export * from './transformations.js';
-export * from './visual-layout.js';
+// Type re-exports — public API surface only
+export type {
+  Direction,
+  Viewport,
+  Transformation,
+  VisualLayout,
+  TextBufferState,
+  TextBufferAction,
+  TextBufferOptions,
+  TextBuffer,
+  UndoHistoryEntry,
+  UseTextBufferProps,
+} from './buffer-types.js';
+export { historyLimit } from './buffer-types.js';
+
+// Function re-exports consumed by production code outside this directory
+export { logicalPosToOffset, offsetToLogicalPos } from './buffer-operations.js';
 
 // Import dependencies for the useTextBuffer hook and reducer
 import { spawnSync } from 'node:child_process';
@@ -57,6 +68,233 @@ export {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+// ── Extracted helper functions (reduce useTextBuffer hook complexity) ──
+
+/** Factory creating all vim dispatch callbacks. Stable when dispatch is stable. */
+function createVimCallbacks(dispatch: (action: TextBufferAction) => void) {
+  return {
+    vimDeleteWordForward: (count: number) =>
+      dispatch({ type: 'vim_delete_word_forward', payload: { count } }),
+    vimDeleteWordBackward: (count: number) =>
+      dispatch({ type: 'vim_delete_word_backward', payload: { count } }),
+    vimDeleteWordEnd: (count: number) =>
+      dispatch({ type: 'vim_delete_word_end', payload: { count } }),
+    vimChangeWordForward: (count: number) =>
+      dispatch({ type: 'vim_change_word_forward', payload: { count } }),
+    vimChangeWordBackward: (count: number) =>
+      dispatch({ type: 'vim_change_word_backward', payload: { count } }),
+    vimChangeWordEnd: (count: number) =>
+      dispatch({ type: 'vim_change_word_end', payload: { count } }),
+    vimDeleteLine: (count: number) =>
+      dispatch({ type: 'vim_delete_line', payload: { count } }),
+    vimChangeLine: (count: number) =>
+      dispatch({ type: 'vim_change_line', payload: { count } }),
+    vimDeleteToEndOfLine: () => dispatch({ type: 'vim_delete_to_end_of_line' }),
+    vimChangeToEndOfLine: () => dispatch({ type: 'vim_change_to_end_of_line' }),
+    vimChangeMovement: (movement: 'h' | 'j' | 'k' | 'l', count: number) =>
+      dispatch({ type: 'vim_change_movement', payload: { movement, count } }),
+    vimMoveLeft: (count: number) =>
+      dispatch({ type: 'vim_move_left', payload: { count } }),
+    vimMoveRight: (count: number) =>
+      dispatch({ type: 'vim_move_right', payload: { count } }),
+    vimMoveUp: (count: number) =>
+      dispatch({ type: 'vim_move_up', payload: { count } }),
+    vimMoveDown: (count: number) =>
+      dispatch({ type: 'vim_move_down', payload: { count } }),
+    vimMoveWordForward: (count: number) =>
+      dispatch({ type: 'vim_move_word_forward', payload: { count } }),
+    vimMoveWordBackward: (count: number) =>
+      dispatch({ type: 'vim_move_word_backward', payload: { count } }),
+    vimMoveWordEnd: (count: number) =>
+      dispatch({ type: 'vim_move_word_end', payload: { count } }),
+    vimDeleteChar: (count: number) =>
+      dispatch({ type: 'vim_delete_char', payload: { count } }),
+    vimInsertAtCursor: () => dispatch({ type: 'vim_insert_at_cursor' }),
+    vimAppendAtCursor: () => dispatch({ type: 'vim_append_at_cursor' }),
+    vimOpenLineBelow: () => dispatch({ type: 'vim_open_line_below' }),
+    vimOpenLineAbove: () => dispatch({ type: 'vim_open_line_above' }),
+    vimAppendAtLineEnd: () => dispatch({ type: 'vim_append_at_line_end' }),
+    vimInsertAtLineStart: () => dispatch({ type: 'vim_insert_at_line_start' }),
+    vimMoveToLineStart: () => dispatch({ type: 'vim_move_to_line_start' }),
+    vimMoveToLineEnd: () => dispatch({ type: 'vim_move_to_line_end' }),
+    vimMoveToFirstNonWhitespace: () =>
+      dispatch({ type: 'vim_move_to_first_nonwhitespace' }),
+    vimMoveToFirstLine: () => dispatch({ type: 'vim_move_to_first_line' }),
+    vimMoveToLastLine: () => dispatch({ type: 'vim_move_to_last_line' }),
+    vimMoveToLine: (lineNumber: number) =>
+      dispatch({ type: 'vim_move_to_line', payload: { lineNumber } }),
+    vimEscapeInsertMode: () => dispatch({ type: 'vim_escape_insert_mode' }),
+  };
+}
+
+/** Process pasted text: detect drag-and-drop paths, handle DEL characters. */
+function processInsertText(
+  rawText: string,
+  dispatch: (action: TextBufferAction) => void,
+  opts: {
+    singleLine: boolean;
+    shellModeActive: boolean;
+    isValidPath: (path: string) => boolean;
+    paste: boolean;
+  },
+): void {
+  let textToInsert = rawText;
+
+  if (!opts.singleLine && /[\n\r]/.test(textToInsert)) {
+    dispatch({ type: 'insert', payload: textToInsert });
+    return;
+  }
+
+  const minLengthToInferAsDragDrop = 3;
+  if (
+    textToInsert.length >= minLengthToInferAsDragDrop &&
+    !opts.shellModeActive &&
+    opts.paste
+  ) {
+    let potentialPath = textToInsert.trim();
+    const quoteMatch = potentialPath.match(/^'(.*)'$/);
+    if (quoteMatch) {
+      potentialPath = quoteMatch[1];
+    }
+    potentialPath = potentialPath.trim();
+    const processed = parsePastedPaths(potentialPath, opts.isValidPath);
+    if (processed) {
+      textToInsert = processed;
+    }
+  }
+
+  let bufferedText = '';
+  for (const char of toCodePoints(textToInsert)) {
+    if (char.codePointAt(0) === 127) {
+      if (bufferedText.length > 0) {
+        dispatch({ type: 'insert', payload: bufferedText });
+        bufferedText = '';
+      }
+      dispatch({ type: 'backspace' });
+    } else {
+      bufferedText += char;
+    }
+  }
+  if (bufferedText.length > 0) {
+    dispatch({ type: 'insert', payload: bufferedText });
+  }
+}
+
+/** Resolve visual (row, col) to logical cursor position for click/mouse handling. */
+function resolveVisualToLogical(
+  layout: {
+    visualLines: string[];
+    visualToLogicalMap: Array<[number, number]>;
+  },
+  visRow: number,
+  visCol: number,
+): { cursorRow: number; cursorCol: number; preferredCol: number } | null {
+  const clampedVisRow = Math.max(
+    0,
+    Math.min(visRow, layout.visualLines.length - 1),
+  );
+  const visualLine = layout.visualLines[clampedVisRow] || '';
+  const mapping = layout.visualToLogicalMap[clampedVisRow];
+
+  if (!mapping) return null;
+
+  const [logRow, logStartCol] = mapping;
+  const codePoints = toCodePoints(visualLine);
+  let currentVisX = 0;
+  let charOffset = 0;
+
+  for (const char of codePoints) {
+    const charWidth = getCachedStringWidth(char);
+    if (visCol < currentVisX + charWidth) {
+      if (charWidth > 1 && visCol >= currentVisX + charWidth / 2) {
+        charOffset++;
+      }
+      break;
+    }
+    currentVisX += charWidth;
+    charOffset++;
+  }
+
+  charOffset = Math.min(charOffset, codePoints.length);
+  return {
+    cursorRow: logRow,
+    cursorCol: logStartCol + charOffset,
+    preferredCol: charOffset,
+  };
+}
+
+/** Launch an external editor for the buffer content. */
+async function runExternalEditor(params: {
+  text: string;
+  stdin: NodeJS.ReadStream | null | undefined;
+  setRawMode: ((mode: boolean) => void) | undefined;
+  getPreferredEditor: UseTextBufferProps['getPreferredEditor'];
+  dispatch: (action: TextBufferAction) => void;
+}): Promise<void> {
+  const {
+    text,
+    stdin,
+    setRawMode,
+    getPreferredEditor: getPrefEditor,
+    dispatch,
+  } = params;
+  const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'llxprt-edit-'));
+  const filePath = pathMod.join(tmpDir, 'buffer.txt');
+  fs.writeFileSync(filePath, text, 'utf8');
+
+  let command: string | undefined = undefined;
+  const args = [filePath];
+
+  const preferredEditorType = getPrefEditor?.();
+  if (!command && preferredEditorType) {
+    command = getEditorCommand(preferredEditorType);
+    if (isGuiEditor(preferredEditorType)) {
+      args.unshift('--wait');
+    }
+  }
+
+  if (!command) {
+    command =
+      (process.env['VISUAL'] ??
+      process.env['EDITOR'] ??
+      process.platform === 'win32')
+        ? 'notepad'
+        : 'vi';
+  }
+
+  dispatch({ type: 'create_undo_snapshot' });
+
+  const wasRaw = stdin?.isRaw ?? false;
+  try {
+    setRawMode?.(false);
+    const { status, error } = spawnSync(command, args, { stdio: 'inherit' });
+    if (error) throw error;
+    if (typeof status === 'number' && status !== 0)
+      throw new Error(`External editor exited with status ${status}`);
+
+    let newText = fs.readFileSync(filePath, 'utf8');
+    newText = newText.replace(/\r\n?/g, '\n');
+
+    dispatch({ type: 'set_text', payload: newText, pushToUndo: false });
+  } catch (err) {
+    debugLogger.error('[useTextBuffer] external editor error', err);
+  } finally {
+    terminalCapabilityManager.enableKittyProtocol();
+    coreEvents.emit(CoreEvent.ExternalEditorClosed);
+    if (wasRaw) setRawMode?.(true);
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmdirSync(tmpDir);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export function useTextBuffer({
@@ -164,48 +402,12 @@ export function useTextBuffer({
 
   const insert = useCallback(
     (rawText: string, { paste = false }: { paste?: boolean } = {}): void => {
-      let textToInsert = rawText;
-
-      if (!singleLine && /[\n\r]/.test(textToInsert)) {
-        dispatch({ type: 'insert', payload: textToInsert });
-        return;
-      }
-
-      const minLengthToInferAsDragDrop = 3;
-      if (
-        textToInsert.length >= minLengthToInferAsDragDrop &&
-        !shellModeActive &&
-        paste
-      ) {
-        let potentialPath = textToInsert.trim();
-        const quoteMatch = potentialPath.match(/^'(.*)'$/);
-        if (quoteMatch) {
-          potentialPath = quoteMatch[1];
-        }
-
-        potentialPath = potentialPath.trim();
-
-        const processed = parsePastedPaths(potentialPath, isValidPath);
-        if (processed) {
-          textToInsert = processed;
-        }
-      }
-
-      let bufferedText = '';
-      for (const char of toCodePoints(textToInsert)) {
-        if (char.codePointAt(0) === 127) {
-          if (bufferedText.length > 0) {
-            dispatch({ type: 'insert', payload: bufferedText });
-            bufferedText = '';
-          }
-          dispatch({ type: 'backspace' });
-        } else {
-          bufferedText += char;
-        }
-      }
-      if (bufferedText.length > 0) {
-        dispatch({ type: 'insert', payload: bufferedText });
-      }
+      processInsertText(rawText, dispatch, {
+        singleLine,
+        shellModeActive,
+        isValidPath,
+        paste,
+      });
     },
     [dispatch, isValidPath, shellModeActive, singleLine],
   );
@@ -260,197 +462,20 @@ export function useTextBuffer({
     dispatch({ type: 'kill_line_left' });
   }, []);
 
-  // Vim-specific operations
-  const vimDeleteWordForward = useCallback((count: number): void => {
-    dispatch({ type: 'vim_delete_word_forward', payload: { count } });
-  }, []);
+  // Vim callbacks — dispatch is stable from useReducer, so useMemo computes once.
+  const vimCallbacks = useMemo(() => createVimCallbacks(dispatch), [dispatch]);
 
-  const vimDeleteWordBackward = useCallback((count: number): void => {
-    dispatch({ type: 'vim_delete_word_backward', payload: { count } });
-  }, []);
-
-  const vimDeleteWordEnd = useCallback((count: number): void => {
-    dispatch({ type: 'vim_delete_word_end', payload: { count } });
-  }, []);
-
-  const vimChangeWordForward = useCallback((count: number): void => {
-    dispatch({ type: 'vim_change_word_forward', payload: { count } });
-  }, []);
-
-  const vimChangeWordBackward = useCallback((count: number): void => {
-    dispatch({ type: 'vim_change_word_backward', payload: { count } });
-  }, []);
-
-  const vimChangeWordEnd = useCallback((count: number): void => {
-    dispatch({ type: 'vim_change_word_end', payload: { count } });
-  }, []);
-
-  const vimDeleteLine = useCallback((count: number): void => {
-    dispatch({ type: 'vim_delete_line', payload: { count } });
-  }, []);
-
-  const vimChangeLine = useCallback((count: number): void => {
-    dispatch({ type: 'vim_change_line', payload: { count } });
-  }, []);
-
-  const vimDeleteToEndOfLine = useCallback((): void => {
-    dispatch({ type: 'vim_delete_to_end_of_line' });
-  }, []);
-
-  const vimChangeToEndOfLine = useCallback((): void => {
-    dispatch({ type: 'vim_change_to_end_of_line' });
-  }, []);
-
-  const vimChangeMovement = useCallback(
-    (movement: 'h' | 'j' | 'k' | 'l', count: number): void => {
-      dispatch({ type: 'vim_change_movement', payload: { movement, count } });
-    },
-    [],
+  const openInExternalEditor = useCallback(
+    async () =>
+      runExternalEditor({
+        text,
+        stdin,
+        setRawMode,
+        getPreferredEditor,
+        dispatch,
+      }),
+    [text, stdin, setRawMode, getPreferredEditor],
   );
-
-  // New vim navigation and operation methods
-  const vimMoveLeft = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_left', payload: { count } });
-  }, []);
-
-  const vimMoveRight = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_right', payload: { count } });
-  }, []);
-
-  const vimMoveUp = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_up', payload: { count } });
-  }, []);
-
-  const vimMoveDown = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_down', payload: { count } });
-  }, []);
-
-  const vimMoveWordForward = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_word_forward', payload: { count } });
-  }, []);
-
-  const vimMoveWordBackward = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_word_backward', payload: { count } });
-  }, []);
-
-  const vimMoveWordEnd = useCallback((count: number): void => {
-    dispatch({ type: 'vim_move_word_end', payload: { count } });
-  }, []);
-
-  const vimDeleteChar = useCallback((count: number): void => {
-    dispatch({ type: 'vim_delete_char', payload: { count } });
-  }, []);
-
-  const vimInsertAtCursor = useCallback((): void => {
-    dispatch({ type: 'vim_insert_at_cursor' });
-  }, []);
-
-  const vimAppendAtCursor = useCallback((): void => {
-    dispatch({ type: 'vim_append_at_cursor' });
-  }, []);
-
-  const vimOpenLineBelow = useCallback((): void => {
-    dispatch({ type: 'vim_open_line_below' });
-  }, []);
-
-  const vimOpenLineAbove = useCallback((): void => {
-    dispatch({ type: 'vim_open_line_above' });
-  }, []);
-
-  const vimAppendAtLineEnd = useCallback((): void => {
-    dispatch({ type: 'vim_append_at_line_end' });
-  }, []);
-
-  const vimInsertAtLineStart = useCallback((): void => {
-    dispatch({ type: 'vim_insert_at_line_start' });
-  }, []);
-
-  const vimMoveToLineStart = useCallback((): void => {
-    dispatch({ type: 'vim_move_to_line_start' });
-  }, []);
-
-  const vimMoveToLineEnd = useCallback((): void => {
-    dispatch({ type: 'vim_move_to_line_end' });
-  }, []);
-
-  const vimMoveToFirstNonWhitespace = useCallback((): void => {
-    dispatch({ type: 'vim_move_to_first_nonwhitespace' });
-  }, []);
-
-  const vimMoveToFirstLine = useCallback((): void => {
-    dispatch({ type: 'vim_move_to_first_line' });
-  }, []);
-
-  const vimMoveToLastLine = useCallback((): void => {
-    dispatch({ type: 'vim_move_to_last_line' });
-  }, []);
-
-  const vimMoveToLine = useCallback((lineNumber: number): void => {
-    dispatch({ type: 'vim_move_to_line', payload: { lineNumber } });
-  }, []);
-
-  const vimEscapeInsertMode = useCallback((): void => {
-    dispatch({ type: 'vim_escape_insert_mode' });
-  }, []);
-
-  const openInExternalEditor = useCallback(async (): Promise<void> => {
-    const tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'llxprt-edit-'));
-    const filePath = pathMod.join(tmpDir, 'buffer.txt');
-    fs.writeFileSync(filePath, text, 'utf8');
-
-    let command: string | undefined = undefined;
-    const args = [filePath];
-
-    const preferredEditorType = getPreferredEditor?.();
-    if (!command && preferredEditorType) {
-      command = getEditorCommand(preferredEditorType);
-      if (isGuiEditor(preferredEditorType)) {
-        args.unshift('--wait');
-      }
-    }
-
-    if (!command) {
-      command =
-        (process.env['VISUAL'] ??
-        process.env['EDITOR'] ??
-        process.platform === 'win32')
-          ? 'notepad'
-          : 'vi';
-    }
-
-    dispatch({ type: 'create_undo_snapshot' });
-
-    const wasRaw = stdin?.isRaw ?? false;
-    try {
-      setRawMode?.(false);
-      const { status, error } = spawnSync(command, args, {
-        stdio: 'inherit',
-      });
-      if (error) throw error;
-      if (typeof status === 'number' && status !== 0)
-        throw new Error(`External editor exited with status ${status}`);
-
-      let newText = fs.readFileSync(filePath, 'utf8');
-      newText = newText.replace(/\r\n?/g, '\n');
-      dispatch({ type: 'set_text', payload: newText, pushToUndo: false });
-    } catch (err) {
-      debugLogger.error('[useTextBuffer] external editor error', err);
-    } finally {
-      terminalCapabilityManager.enableKittyProtocol();
-      coreEvents.emit(CoreEvent.ExternalEditorClosed);
-      if (wasRaw) setRawMode?.(true);
-      try {
-        fs.unlinkSync(filePath);
-      } catch {
-        /* ignore */
-      }
-      try {
-        fs.rmdirSync(tmpDir);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [text, stdin, setRawMode, getPreferredEditor]);
 
   const handleInput = useCallback(
     (key: Key): void => {
@@ -539,49 +564,9 @@ export function useTextBuffer({
 
   const moveToVisualPosition = useCallback(
     (visRow: number, visCol: number): void => {
-      const { visualLines, visualToLogicalMap } = visualLayout;
-      // Clamp visRow to valid range
-      const clampedVisRow = Math.max(
-        0,
-        Math.min(visRow, visualLines.length - 1),
-      );
-      const visualLine = visualLines[clampedVisRow] || '';
-
-      if (visualToLogicalMap[clampedVisRow]) {
-        const [logRow, logStartCol] = visualToLogicalMap[clampedVisRow];
-
-        const codePoints = toCodePoints(visualLine);
-        let currentVisX = 0;
-        let charOffset = 0;
-
-        for (const char of codePoints) {
-          const charWidth = getCachedStringWidth(char);
-          // If the click is within this character
-          if (visCol < currentVisX + charWidth) {
-            // Check if we clicked the second half of a wide character
-            if (charWidth > 1 && visCol >= currentVisX + charWidth / 2) {
-              charOffset++;
-            }
-            break;
-          }
-          currentVisX += charWidth;
-          charOffset++;
-        }
-
-        // Clamp charOffset to length
-        charOffset = Math.min(charOffset, codePoints.length);
-
-        const newCursorRow = logRow;
-        const newCursorCol = logStartCol + charOffset;
-
-        dispatch({
-          type: 'set_cursor',
-          payload: {
-            cursorRow: newCursorRow,
-            cursorCol: newCursorCol,
-            preferredCol: charOffset,
-          },
-        });
+      const pos = resolveVisualToLogical(visualLayout, visRow, visCol);
+      if (pos) {
+        dispatch({ type: 'set_cursor', payload: pos });
       }
     },
     [visualLayout],
@@ -623,44 +608,11 @@ export function useTextBuffer({
       moveToVisualPosition,
       deleteWordLeft,
       deleteWordRight,
-
       killLineRight,
       killLineLeft,
       handleInput,
       openInExternalEditor,
-      // Vim-specific operations
-      vimDeleteWordForward,
-      vimDeleteWordBackward,
-      vimDeleteWordEnd,
-      vimChangeWordForward,
-      vimChangeWordBackward,
-      vimChangeWordEnd,
-      vimDeleteLine,
-      vimChangeLine,
-      vimDeleteToEndOfLine,
-      vimChangeToEndOfLine,
-      vimChangeMovement,
-      vimMoveLeft,
-      vimMoveRight,
-      vimMoveUp,
-      vimMoveDown,
-      vimMoveWordForward,
-      vimMoveWordBackward,
-      vimMoveWordEnd,
-      vimDeleteChar,
-      vimInsertAtCursor,
-      vimAppendAtCursor,
-      vimOpenLineBelow,
-      vimOpenLineAbove,
-      vimAppendAtLineEnd,
-      vimInsertAtLineStart,
-      vimMoveToLineStart,
-      vimMoveToLineEnd,
-      vimMoveToFirstNonWhitespace,
-      vimMoveToFirstLine,
-      vimMoveToLastLine,
-      vimMoveToLine,
-      vimEscapeInsertMode,
+      ...vimCallbacks,
     }),
     [
       lines,
@@ -693,38 +645,7 @@ export function useTextBuffer({
       killLineLeft,
       handleInput,
       openInExternalEditor,
-      vimDeleteWordForward,
-      vimDeleteWordBackward,
-      vimDeleteWordEnd,
-      vimChangeWordForward,
-      vimChangeWordBackward,
-      vimChangeWordEnd,
-      vimDeleteLine,
-      vimChangeLine,
-      vimDeleteToEndOfLine,
-      vimChangeToEndOfLine,
-      vimChangeMovement,
-      vimMoveLeft,
-      vimMoveRight,
-      vimMoveUp,
-      vimMoveDown,
-      vimMoveWordForward,
-      vimMoveWordBackward,
-      vimMoveWordEnd,
-      vimDeleteChar,
-      vimInsertAtCursor,
-      vimAppendAtCursor,
-      vimOpenLineBelow,
-      vimOpenLineAbove,
-      vimAppendAtLineEnd,
-      vimInsertAtLineStart,
-      vimMoveToLineStart,
-      vimMoveToLineEnd,
-      vimMoveToFirstNonWhitespace,
-      vimMoveToFirstLine,
-      vimMoveToLastLine,
-      vimMoveToLine,
-      vimEscapeInsertMode,
+      vimCallbacks,
       state.transformationsByLine,
     ],
   );
