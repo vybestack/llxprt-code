@@ -44,7 +44,6 @@ export default tseslint.config(
       'bundle/**',
       'packages/cli/src/test-*.ts',
       'packages/cli/src/test-*.tsx',
-      'packages/cli/src/generated/**/*.d.ts',
       'packages/cli/src/debug-*.ts',
       'packages/cli/src/debug-*.tsx',
       'debug-*.js',
