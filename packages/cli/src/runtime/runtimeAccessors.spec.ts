@@ -18,7 +18,6 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 
-// These imports will fail until runtimeAccessors.ts is created
 import {
   getCliRuntimeServices,
   getActiveModelName,
