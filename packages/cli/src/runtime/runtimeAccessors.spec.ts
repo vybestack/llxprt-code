@@ -125,7 +125,9 @@ describe('runtimeAccessors', () => {
 
   describe('getCliRuntimeServices', () => {
     it('should throw descriptive error when no runtime is registered', () => {
-      expect(() => getCliRuntimeServices()).toThrow(/runtime|registered|initialized/i);
+      expect(() => getCliRuntimeServices()).toThrow(
+        /runtime|registered|initialized/i,
+      );
     });
 
     it('should return services object with config, settingsService, providerManager', () => {
