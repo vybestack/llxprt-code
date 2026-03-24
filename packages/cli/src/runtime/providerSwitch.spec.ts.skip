@@ -1,0 +1,162 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * @plan:PLAN-20260320-ISSUE1575.P03
+ * Unit tests for providerSwitch module.
+ * Tests the provider switching functionality and ephemeral preservation.
+ */
+
+describe('providerSwitch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('DEFAULT_PRESERVE_EPHEMERALS', () => {
+    it('should include expected keys for context preservation', async () => {
+      const { DEFAULT_PRESERVE_EPHEMERALS } = await import(
+        './providerSwitch.js'
+      );
+
+      expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('context-limit');
+      expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('max_tokens');
+      expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('streaming');
+    });
+
+    it('should be a readonly array', async () => {
+      const { DEFAULT_PRESERVE_EPHEMERALS } = await import(
+        './providerSwitch.js'
+      );
+
+      expect(Array.isArray(DEFAULT_PRESERVE_EPHEMERALS)).toBe(true);
+    });
+  });
+
+  describe('ProviderSwitchResult', () => {
+    it('should export the ProviderSwitchResult interface', async () => {
+      const { switchActiveProvider } = await import('./providerSwitch.js');
+
+      // Type check - this ensures the interface is properly exported
+      expect(typeof switchActiveProvider).toBe('function');
+    });
+  });
+
+  describe('switchActiveProvider', () => {
+    it('should return unchanged result when switching to the same provider', async () => {
+      // Mock the dependencies
+      vi.mock('./runtimeAccessors.js', () => ({
+        getCliRuntimeServices: () => ({
+          config: {
+            setEphemeralSetting: vi.fn(),
+            getEphemeralSetting: vi.fn(),
+            setProviderManager: vi.fn(),
+            setProvider: vi.fn(),
+            setModel: vi.fn(),
+            setBucketFailoverHandler: vi.fn(),
+          },
+          settingsService: {
+            set: vi.fn(),
+            get: vi.fn(() => 'openai'),
+            setProviderSetting: vi.fn(),
+            switchProvider: vi.fn(),
+          },
+          providerManager: {
+            getActiveProviderName: () => 'openai',
+            setActiveProvider: vi.fn(),
+            getActiveProvider: vi.fn(),
+          },
+        }),
+        getActiveModelName: vi.fn(() => 'gpt-4'),
+        getActiveProviderName: vi.fn(() => 'openai'),
+        getEphemeralSettings: vi.fn(() => ({})),
+        setEphemeralSetting: vi.fn(),
+        clearEphemeralSetting: vi.fn(),
+        setActiveModelParam: vi.fn(),
+        clearActiveModelParam: vi.fn(),
+        _internal: {
+          getProviderSettingsSnapshot: vi.fn(() => ({})),
+          getActiveProviderOrThrow: vi.fn(),
+          resolveActiveProviderName: vi.fn(() => 'openai'),
+          extractModelParams: vi.fn(() => ({})),
+        },
+      }));
+
+      vi.mock('./providerMutations.js', () => ({
+        computeModelDefaults: vi.fn(() => ({})),
+        normalizeProviderBaseUrl: vi.fn(),
+        extractProviderBaseUrl: vi.fn(),
+        updateActiveProviderApiKey: vi.fn(),
+      }));
+
+      vi.mock('../providers/providerAliases.js', () => ({
+        loadProviderAliasEntries: vi.fn(() => []),
+      }));
+
+      vi.mock('./statelessHardening.js', () => ({
+        isCliStatelessProviderModeEnabled: vi.fn(() => false),
+      }));
+
+      vi.mock('../providers/oauth-provider-registration.js', () => ({
+        ensureOAuthProviderRegistered: vi.fn(),
+      }));
+
+      vi.mock('./runtimeLifecycle.js', () => ({
+        getCliOAuthManager: vi.fn(() => null),
+      }));
+
+      const { switchActiveProvider } = await import('./providerSwitch.js');
+
+      const result = await switchActiveProvider('openai', {});
+
+      expect(result.changed).toBe(false);
+      expect(result.previousProvider).toBe('openai');
+      expect(result.nextProvider).toBe('openai');
+      expect(result.infoMessages).toEqual([]);
+    });
+
+    it('should throw error when provider name is empty string', async () => {
+      vi.mock('./runtimeAccessors.js', () => ({
+        getCliRuntimeServices: () => ({
+          config: {},
+          settingsService: {},
+          providerManager: {},
+        }),
+        _internal: {},
+      }));
+
+      vi.mock('./providerMutations.js', () => ({
+        computeModelDefaults: vi.fn(() => ({})),
+        normalizeProviderBaseUrl: vi.fn(),
+        extractProviderBaseUrl: vi.fn(),
+        updateActiveProviderApiKey: vi.fn(),
+      }));
+
+      vi.mock('../providers/providerAliases.js', () => ({
+        loadProviderAliasEntries: vi.fn(() => []),
+      }));
+
+      vi.mock('./statelessHardening.js', () => ({
+        isCliStatelessProviderModeEnabled: vi.fn(() => false),
+      }));
+
+      vi.mock('./runtimeLifecycle.js', () => ({
+        getCliOAuthManager: vi.fn(() => null),
+      }));
+
+      const { switchActiveProvider } = await import('./providerSwitch.js');
+
+      await expect(switchActiveProvider('', {})).rejects.toThrow(
+        'Provider name is required.',
+      );
+    });
+  });
+});

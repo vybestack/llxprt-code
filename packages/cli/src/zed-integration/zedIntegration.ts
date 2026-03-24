@@ -52,13 +52,13 @@ import {
   setProviderBaseUrl,
 } from '../providers/providerConfigUtils.js';
 import {
-  setCliRuntimeContext,
-  switchActiveProvider,
-  setActiveModelParam,
   clearActiveModelParam,
   getActiveModelParams,
+  setActiveModelParam,
   getActiveProfileName,
   loadProfileByName,
+  setCliRuntimeContext,
+  switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 
