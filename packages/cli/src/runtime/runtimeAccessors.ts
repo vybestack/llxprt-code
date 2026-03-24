@@ -177,7 +177,7 @@ export function getCliProviderManager(
     settings?: { get: (key: string) => unknown };
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number;
   } = {},
 ): ProviderManager {
@@ -199,7 +199,7 @@ export function getCliProviderManager(
           setAddItem?: (
             callback: (
               itemData: Omit<HistoryItemWithoutId, 'id'>,
-              baseTimestamp: number,
+              baseTimestamp?: number,
             ) => number,
           ) => void;
         };

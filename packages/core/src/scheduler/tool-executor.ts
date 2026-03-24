@@ -76,6 +76,10 @@ export class ToolExecutor {
     let invocation = scheduledCall.invocation;
     let effectiveArgs = args;
 
+    // Extract MCP context if tool originates from an MCP server
+    const serverName = (invocation as { _serverName?: string })._serverName;
+    const mcpContext = serverName ? { server_name: serverName } : undefined;
+
     // ============================================================
     // EXTRACTED CODE STARTS HERE (from launchToolExecution lines 1691-1858)
     // ============================================================
@@ -86,6 +90,7 @@ export class ToolExecutor {
       this.config,
       toolName,
       args,
+      mcpContext,
     );
 
     // Check if hook wants to stop execution (higher priority per upstream 05049b5a)
@@ -149,6 +154,7 @@ export class ToolExecutor {
           toolName,
           effectiveArgs,
           toolResult,
+          mcpContext,
         );
 
         // Check if AfterTool hook wants to stop execution (per upstream 05049b5a)

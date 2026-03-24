@@ -44,7 +44,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings, loadSettings } from './settings.js';
-import { getEnableHooks } from './settingsSchema.js';
+import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
 import { createPolicyEngineConfig } from './policy.js';
 
 import { annotateActiveExtensions } from './extension.js';
@@ -594,9 +594,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
     })
     // Register MCP subcommands
-    .command(mcpCommand)
-    // Register hooks subcommands
-    .command(hooksCommand);
+    .command(mcpCommand);
+
+  if (getEnableHooksUI(settings)) {
+    yargsInstance.command(hooksCommand);
+  }
 
   if (settings?.extensionManagement ?? false) {
     yargsInstance.command(extensionsCommand);
@@ -1177,10 +1179,8 @@ export async function loadCliConfig(
     }
     // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
     // allowed since disableYoloMode specifically targets YOLO mode only.
-  }
-
-  if (approvalMode === ApprovalMode.YOLO) {
-    logger.warn(
+  } else if (approvalMode === ApprovalMode.YOLO) {
+    debugLogger.warn(
       'YOLO mode is enabled. All tool calls will be automatically approved.',
     );
   }
@@ -1372,6 +1372,9 @@ export async function loadCliConfig(
 
   // Calculate mcpEnabled based on admin settings
   const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
+  const extensionsEnabled =
+    effectiveSettings.admin?.extensions?.enabled ?? true;
+  const adminSkillsEnabled = effectiveSettings.admin?.skills?.enabled ?? true;
 
   const config = new Config({
     sessionId,
@@ -1394,6 +1397,12 @@ export async function loadCliConfig(
       ? effectiveSettings.mcpServerCommand
       : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
+    mcpEnabled,
+    extensionsEnabled,
+    adminSkillsEnabled,
+    allowedMcpServers: mcpEnabled
+      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
+      : undefined,
 
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
@@ -1456,9 +1465,6 @@ export async function loadCliConfig(
     extensions: allExtensions,
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
-    allowedMcpServers: mcpEnabled
-      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
-      : undefined,
     blockedMcpServers: undefined, // Extension-based blocking handled elsewhere
 
     sanitizationConfig: {
@@ -1480,7 +1486,7 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
-    chatCompression: settings.chatCompression,
+    chatCompression: effectiveSettings.chatCompression,
     interactive,
     folderTrust,
     trustedFolder,
@@ -1507,6 +1513,7 @@ export async function loadCliConfig(
     // TODO: loading of hooks based on workspace trust
     jitContextEnabled,
     enableHooks: getEnableHooks(effectiveSettings),
+    enableHooksUI: getEnableHooksUI(effectiveSettings),
     hooks: (() => {
       const hooksConfig = effectiveSettings.hooks || {};
       // Filter out the 'disabled' property from hooks config as it's handled separately
@@ -1520,6 +1527,8 @@ export async function loadCliConfig(
       const refreshedSettings = loadSettings(cwd);
       return {
         disabledSkills: refreshedSettings.merged.skills?.disabled,
+        adminSkillsEnabled:
+          refreshedSettings.merged.admin?.skills?.enabled ?? adminSkillsEnabled,
       };
     },
   });

@@ -153,6 +153,6 @@ export const aboutCommand: SlashCommand = {
       baseURL,
     };
 
-    context.ui.addItem(aboutItem, Date.now());
+    context.ui.addItem(aboutItem);
   },
 };

@@ -51,7 +51,7 @@ interface ProviderSwitchOptions {
   skipModelDefaults?: boolean;
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
 }
 
@@ -85,7 +85,7 @@ interface ProviderSwitchContext {
   infoMessages: string[];
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
 }
 

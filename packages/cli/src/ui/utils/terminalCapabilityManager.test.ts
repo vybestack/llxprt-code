@@ -17,6 +17,14 @@ vi.mock('node:fs', () => ({
 vi.mock('@vybestack/llxprt-code-core', () => ({
   enableKittyKeyboardProtocol: vi.fn(),
   disableKittyKeyboardProtocol: vi.fn(),
+  enableModifyOtherKeys: vi.fn(),
+  disableModifyOtherKeys: vi.fn(),
+  enableBracketedPasteMode: vi.fn(),
+  disableBracketedPasteMode: vi.fn(),
+  DebugLogger: vi.fn(() => ({
+    log: vi.fn(),
+    warn: vi.fn(),
+  })),
 }));
 
 describe('TerminalCapabilityManager', () => {
@@ -182,6 +190,40 @@ describe('TerminalCapabilityManager', () => {
     expect(manager.getTerminalName()).toBeUndefined();
   });
 
+  it('should detect modifyOtherKeys support level 2', async () => {
+    const { enableModifyOtherKeys } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    // Simulate modifyOtherKeys response: CSI > 4 ; 2 m
+    stdin.emit('data', Buffer.from('\x1b[>4;2m'));
+    // Complete detection with DA1
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+
+    expect(enableModifyOtherKeys).toHaveBeenCalled();
+  });
+
+  it('should not enable modifyOtherKeys for level 1', async () => {
+    const { enableModifyOtherKeys } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    // Simulate modifyOtherKeys response: CSI > 4 ; 1 m
+    stdin.emit('data', Buffer.from('\x1b[>4;1m'));
+    // Complete detection with DA1
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+
+    expect(enableModifyOtherKeys).not.toHaveBeenCalled();
+  });
+
   it('should handle OSC 11 response with BEL terminator', async () => {
     const manager = TerminalCapabilityManager.getInstance();
     const promise = manager.detectCapabilities();
@@ -198,7 +240,7 @@ describe('TerminalCapabilityManager', () => {
   });
 
   it('should enable Kitty protocol when supported', async () => {
-    const { enableKittyKeyboardProtocol } = await import(
+    const { enableKittyKeyboardProtocol, enableModifyOtherKeys } = await import(
       '@vybestack/llxprt-code-core'
     );
     const manager = TerminalCapabilityManager.getInstance();
@@ -208,10 +250,10 @@ describe('TerminalCapabilityManager', () => {
     stdin.emit('data', Buffer.from('\x1b[?62c'));
 
     await promise;
-
-    // Detection should auto-enable
     expect(manager.isKittyProtocolEnabled()).toBe(true);
+
     expect(enableKittyKeyboardProtocol).toHaveBeenCalled();
+    expect(enableModifyOtherKeys).not.toHaveBeenCalled();
   });
 
   it('should disable Kitty protocol (simple)', async () => {
@@ -231,6 +273,39 @@ describe('TerminalCapabilityManager', () => {
     expect(manager.isKittyProtocolEnabled()).toBe(false);
 
     expect(disableKittyKeyboardProtocol).toHaveBeenCalled();
+  });
+
+  it('should enable modifyOtherKeys when Kitty is not supported', async () => {
+    const { enableModifyOtherKeys } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    // Simulate only modifyOtherKeys level 2 response (no Kitty)
+    stdin.emit('data', Buffer.from('\x1b[>4;2m'));
+    // Complete detection with DA1
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+
+    expect(manager.isKittyProtocolEnabled()).toBe(false);
+    expect(enableModifyOtherKeys).toHaveBeenCalled();
+  });
+
+  it('should enable modifyOtherKeys when only DA1 is received', async () => {
+    const { enableModifyOtherKeys } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    // Simulate only DA1 response (no Kitty, no explicit MOK response)
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+
+    expect(enableModifyOtherKeys).toHaveBeenCalled();
   });
 
   it('should disable Kitty protocol on exit synchronously on TTY', async () => {
@@ -310,5 +385,83 @@ describe('TerminalCapabilityManager', () => {
     await promise2;
 
     expect(manager.isKittyProtocolEnabled()).toBe(false);
+  });
+
+  it('should detect terminal with background color, name, and enable modifyOtherKeys', async () => {
+    const { enableModifyOtherKeys } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    // Simulate tmux terminal with background color
+    stdin.emit('data', Buffer.from('\x1b]11;rgb:1a1a/1a1a/1a1a\x1b\\'));
+    stdin.emit('data', Buffer.from('\x1bP>|tmux\x1b\\'));
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+
+    expect(manager.getTerminalBackgroundColor()).toBe('#1a1a1a');
+    expect(manager.getTerminalName()).toBe('tmux');
+
+    expect(enableModifyOtherKeys).toHaveBeenCalled();
+  });
+
+  it('should infer modifyOtherKeys support from Device Attributes (DA1) alone', async () => {
+    const { enableModifyOtherKeys } = await import(
+      '@vybestack/llxprt-code-core'
+    );
+    const manager = TerminalCapabilityManager.getInstance();
+    const promise = manager.detectCapabilities();
+
+    // Simulate only DA1 response (no specific MOK or Kitty response)
+    stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+    await promise;
+
+    expect(manager.isKittyProtocolEnabled()).toBe(false);
+    // It should fall back to modifyOtherKeys because DA1 proves it's an ANSI terminal
+
+    expect(enableModifyOtherKeys).toHaveBeenCalled();
+  });
+
+  describe('bracketed paste state', () => {
+    it('state is true after enableBracketedPasteMode', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      // Complete detection with DA1 (enables bracketed paste)
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+      await promise;
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+    });
+
+    it('state is false after disableBracketedPasteMode', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+      await promise;
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+
+      manager.disableBracketedPasteMode();
+      expect(manager.isBracketedPasteEnabled()).toBe(false);
+    });
+
+    it('state remains true on repeated enable calls', async () => {
+      const manager = TerminalCapabilityManager.getInstance();
+      const promise = manager.detectCapabilities();
+
+      stdin.emit('data', Buffer.from('\x1b[?62c'));
+
+      await promise;
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+
+      // Call enable again - should remain true
+      manager.enableBracketedPasteMode();
+      expect(manager.isBracketedPasteEnabled()).toBe(true);
+    });
   });
 });

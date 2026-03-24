@@ -93,8 +93,8 @@ Goal: produce a complete, chronological list of upstream commits in the requeste
 Commands:
 
 ```bash
-git log --reverse --date=short --format="%H %ad %s" <from-tag>..<to-tag> > /tmp/upstream-range.txt
-wc -l /tmp/upstream-range.txt
+git log --reverse --date=short --format="%H %ad %s" <from-tag>..<to-tag> > ./tmp/upstream-range.txt
+wc -l ./tmp/upstream-range.txt
 ```
 
 For each upstream commit you will need:

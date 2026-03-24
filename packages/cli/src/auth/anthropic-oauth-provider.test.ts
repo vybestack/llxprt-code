@@ -140,7 +140,6 @@ describe('AnthropicOAuthProvider', () => {
           'Please visit the following URL to authorize with Anthropic Claude',
         ),
       }),
-      expect.any(Number),
     );
   });
 
@@ -214,7 +213,6 @@ describe('AnthropicOAuthProvider', () => {
           'Please visit the following URL to authorize with Anthropic Claude',
         ),
       }),
-      expect.any(Number),
     );
   });
 
@@ -241,7 +239,6 @@ describe('AnthropicOAuthProvider', () => {
           'Please visit the following URL to authorize with Anthropic Claude',
         ),
       }),
-      expect.any(Number),
     );
   });
 

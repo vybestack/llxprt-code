@@ -148,9 +148,15 @@ Your key is missing or revoked. Check:
 
 **`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`**
 
-You're behind a corporate proxy that intercepts TLS. Set:
+You may be on a corporate network with a firewall that intercepts and inspects SSL/TLS traffic. This often requires a custom root CA certificate to be trusted by Node.js.
+
+First try setting `NODE_USE_SYSTEM_CA`; if that does not resolve the issue, set `NODE_EXTRA_CA_CERTS`:
 
 ```bash
+# Try this first - use OS native certificate store
+export NODE_USE_SYSTEM_CA=1
+
+# If that doesn't work, point to your corporate CA cert
 export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt
 ```
 

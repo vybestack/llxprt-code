@@ -42,7 +42,7 @@ describe('Lifecycle Hook Triggers', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    // Create mock event handler
+    // Create mock event handler (kept for type compatibility but not used)
     mockEventHandler = {
       fireSessionStartEvent: vi.fn(),
       fireSessionEndEvent: vi.fn(),
@@ -51,10 +51,15 @@ describe('Lifecycle Hook Triggers', () => {
       firePreCompressEvent: vi.fn(),
     } as unknown as HookEventHandler;
 
-    // Create mock hook system
+    // Create mock hook system with facade methods
     mockHookSystem = {
       initialize: vi.fn().mockResolvedValue(undefined),
       getEventHandler: vi.fn().mockReturnValue(mockEventHandler),
+      fireSessionStartEvent: vi.fn(),
+      fireSessionEndEvent: vi.fn(),
+      fireBeforeAgentEvent: vi.fn(),
+      fireAfterAgentEvent: vi.fn(),
+      firePreCompressEvent: vi.fn(),
     } as unknown as HookSystem;
 
     // Create mock config
@@ -86,7 +91,7 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockEventHandler.fireSessionStartEvent).mockResolvedValue(
+      vi.mocked(mockHookSystem.fireSessionStartEvent).mockResolvedValue(
         mockResult,
       );
 
@@ -97,7 +102,7 @@ describe('Lifecycle Hook Triggers', () => {
 
       expect(result).toBeInstanceOf(SessionStartHookOutput);
       expect(mockHookSystem.initialize).toHaveBeenCalled();
-      expect(mockEventHandler.fireSessionStartEvent).toHaveBeenCalledWith(
+      expect(mockHookSystem.fireSessionStartEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           source: SessionStartSource.Startup,
         }),
@@ -113,7 +118,7 @@ describe('Lifecycle Hook Triggers', () => {
       );
 
       expect(result).toBeUndefined();
-      expect(mockEventHandler.fireSessionStartEvent).not.toHaveBeenCalled();
+      expect(mockHookSystem.fireSessionStartEvent).not.toHaveBeenCalled();
     });
 
     it('should return undefined when hook system is not available', async () => {
@@ -128,7 +133,7 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockEventHandler.fireSessionStartEvent).mockRejectedValue(
+      vi.mocked(mockHookSystem.fireSessionStartEvent).mockRejectedValue(
         new Error('Hook failed'),
       );
 
@@ -155,7 +160,7 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockEventHandler.fireSessionEndEvent).mockResolvedValue(
+      vi.mocked(mockHookSystem.fireSessionEndEvent).mockResolvedValue(
         mockResult,
       );
 
@@ -166,7 +171,7 @@ describe('Lifecycle Hook Triggers', () => {
 
       expect(result).toBeInstanceOf(SessionEndHookOutput);
       expect(mockHookSystem.initialize).toHaveBeenCalled();
-      expect(mockEventHandler.fireSessionEndEvent).toHaveBeenCalledWith(
+      expect(mockHookSystem.fireSessionEndEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           reason: SessionEndReason.Exit,
         }),
@@ -182,7 +187,7 @@ describe('Lifecycle Hook Triggers', () => {
       );
 
       expect(result).toBeUndefined();
-      expect(mockEventHandler.fireSessionEndEvent).not.toHaveBeenCalled();
+      expect(mockHookSystem.fireSessionEndEvent).not.toHaveBeenCalled();
     });
 
     it('should return undefined when hook system is not available', async () => {
@@ -197,7 +202,7 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockEventHandler.fireSessionEndEvent).mockRejectedValue(
+      vi.mocked(mockHookSystem.fireSessionEndEvent).mockRejectedValue(
         new Error('Hook failed'),
       );
 
@@ -225,7 +230,7 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockEventHandler.fireBeforeAgentEvent).mockResolvedValue(
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
         mockResult,
       );
 
@@ -236,7 +241,7 @@ describe('Lifecycle Hook Triggers', () => {
 
       expect(result).toBeInstanceOf(BeforeAgentHookOutput);
       expect(mockHookSystem.initialize).toHaveBeenCalled();
-      expect(mockEventHandler.fireBeforeAgentEvent).toHaveBeenCalledWith(
+      expect(mockHookSystem.fireBeforeAgentEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           prompt: 'User prompt text',
         }),
@@ -249,7 +254,7 @@ describe('Lifecycle Hook Triggers', () => {
       const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
 
       expect(result).toBeUndefined();
-      expect(mockEventHandler.fireBeforeAgentEvent).not.toHaveBeenCalled();
+      expect(mockHookSystem.fireBeforeAgentEvent).not.toHaveBeenCalled();
     });
 
     it('should return undefined when hook system is not available', async () => {
@@ -261,7 +266,7 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockEventHandler.fireBeforeAgentEvent).mockRejectedValue(
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockRejectedValue(
         new Error('Hook failed'),
       );
 
@@ -285,7 +290,7 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockEventHandler.fireAfterAgentEvent).mockResolvedValue(
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
         mockResult,
       );
 
@@ -298,7 +303,7 @@ describe('Lifecycle Hook Triggers', () => {
 
       expect(result).toBeInstanceOf(AfterAgentHookOutput);
       expect(mockHookSystem.initialize).toHaveBeenCalled();
-      expect(mockEventHandler.fireAfterAgentEvent).toHaveBeenCalledWith(
+      expect(mockHookSystem.fireAfterAgentEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           prompt: 'User prompt',
           prompt_response: 'Agent response',
@@ -318,7 +323,7 @@ describe('Lifecycle Hook Triggers', () => {
       );
 
       expect(result).toBeUndefined();
-      expect(mockEventHandler.fireAfterAgentEvent).not.toHaveBeenCalled();
+      expect(mockHookSystem.fireAfterAgentEvent).not.toHaveBeenCalled();
     });
 
     it('should return undefined when hook system is not available', async () => {
@@ -335,7 +340,7 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error', async () => {
-      vi.mocked(mockEventHandler.fireAfterAgentEvent).mockRejectedValue(
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockRejectedValue(
         new Error('Hook failed'),
       );
 
@@ -347,6 +352,173 @@ describe('Lifecycle Hook Triggers', () => {
       );
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('BeforeAgent hook output normalization', () => {
+    it('should support blocking decisions via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          decision: 'block',
+          reason: 'Test blocking reason',
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
+
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.isBlockingDecision()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Test blocking reason');
+    });
+
+    it('should support stop execution via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: false,
+          stopReason: 'Test stop reason',
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
+
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.shouldStopExecution()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Test stop reason');
+    });
+
+    it('should support additional context via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: true,
+          hookSpecificOutput: {
+            hookEventName: 'BeforeAgent',
+            additionalContext: 'Context from hook',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireBeforeAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerBeforeAgentHook(mockConfig, 'prompt');
+
+      expect(result).toBeInstanceOf(BeforeAgentHookOutput);
+      expect(result?.getAdditionalContext()).toBe('Context from hook');
+    });
+  });
+
+  describe('AfterAgent hook output normalization', () => {
+    it('should support blocking decisions via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          decision: 'block',
+          reason: 'Continue with this',
+          hookSpecificOutput: {
+            hookEventName: 'AfterAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerAfterAgentHook(
+        mockConfig,
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.isBlockingDecision()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Continue with this');
+    });
+
+    it('should support stop execution via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: false,
+          stopReason: 'Force continuation',
+          hookSpecificOutput: {
+            hookEventName: 'AfterAgent',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerAfterAgentHook(
+        mockConfig,
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.shouldStopExecution()).toBe(true);
+      expect(result?.getEffectiveReason()).toBe('Force continuation');
+    });
+
+    it('should support additional context via shared hook output contract', async () => {
+      const mockResult: AggregatedHookResult = {
+        success: true,
+        finalOutput: {
+          continue: true,
+          hookSpecificOutput: {
+            hookEventName: 'AfterAgent',
+            additionalContext: 'Post-turn context',
+          },
+        },
+        allOutputs: [],
+        errors: [],
+        totalDuration: 100,
+      };
+      vi.mocked(mockHookSystem.fireAfterAgentEvent).mockResolvedValue(
+        mockResult,
+      );
+
+      const result = await triggerAfterAgentHook(
+        mockConfig,
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result?.getAdditionalContext()).toBe('Post-turn context');
     });
   });
 
@@ -364,7 +536,7 @@ describe('Lifecycle Hook Triggers', () => {
       );
 
       expect(result).toBeUndefined();
-      expect(mockEventHandler.firePreCompressEvent).not.toHaveBeenCalled();
+      expect(mockHookSystem.firePreCompressEvent).not.toHaveBeenCalled();
     });
 
     it('should return undefined when hook system is not available', async () => {
@@ -391,14 +563,14 @@ describe('Lifecycle Hook Triggers', () => {
         errors: [],
         totalDuration: 100,
       };
-      vi.mocked(mockEventHandler.firePreCompressEvent).mockResolvedValue(
+      vi.mocked(mockHookSystem.firePreCompressEvent).mockResolvedValue(
         mockResult,
       );
 
       await triggerPreCompressHook(mockConfig, PreCompressTrigger.Manual);
 
       expect(mockHookSystem.initialize).toHaveBeenCalled();
-      expect(mockEventHandler.firePreCompressEvent).toHaveBeenCalledWith(
+      expect(mockHookSystem.firePreCompressEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           trigger: PreCompressTrigger.Manual,
         }),
@@ -406,7 +578,7 @@ describe('Lifecycle Hook Triggers', () => {
     });
 
     it('should return undefined and not throw on hook error (fail-open)', async () => {
-      vi.mocked(mockEventHandler.firePreCompressEvent).mockRejectedValue(
+      vi.mocked(mockHookSystem.firePreCompressEvent).mockRejectedValue(
         new Error('Hook failed'),
       );
 

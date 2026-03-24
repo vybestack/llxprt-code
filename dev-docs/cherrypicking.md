@@ -92,6 +92,8 @@ git cherry-pick <commit-hash>
 - **ClearcutLogger (Google telemetry) commits** - All ClearcutLogger functionality has been completely removed from llxprt to prevent data collection
 - Gemini-specific release commits
 - **Emoji-related commits** - LLxprt is emoji-free by design. Skip any commits that add, fix, or modify emoji handling (e.g., `a64394a4f`, `348fa6c7c`)
+- **Automatic model routing** - LLxprt does not do automatic model routing/selection. Developers explicitly configure and choose models via profiles. Skip any commits that add `model: "auto"`, `ModelRouterService`, or automatic model selection for subagents/agents.
+- **Upstream agent/subagent architecture** - LLxprt has its own subagent system (`SubagentManager`, `~/.llxprt/subagents/`, `task()` tool, `/subagent` command) that is completely different from upstream's `AgentRegistry`, `DelegateToAgentTool`, `/agents` command, and filesystem-scanned `.gemini/agents/` definitions. Skip upstream agent discovery/management commits. Upstream A2A (Agent-to-Agent) remote agent features are tracked separately in issue #1675.
 
 #### Features Reimplemented (Don't Cherry-pick):
 

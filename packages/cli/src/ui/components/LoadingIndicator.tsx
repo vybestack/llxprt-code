@@ -35,7 +35,10 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
 
   const isShellFocusHint =
     currentLoadingPhrase === INTERACTIVE_SHELL_WAITING_PHRASE;
-  const primaryText = isShellFocusHint
+  const isActionRequired =
+    streamingState === StreamingState.WaitingForConfirmation ||
+    isShellFocusHint;
+  const primaryText = isActionRequired
     ? currentLoadingPhrase
     : thought?.subject || currentLoadingPhrase;
 

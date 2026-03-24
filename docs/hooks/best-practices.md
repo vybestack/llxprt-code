@@ -121,7 +121,7 @@ For maximum security, consider running untrusted hooks in isolated environments:
 ```bash
 # Run hook in Docker container
 docker run --rm \
-  -v "$GEMINI_PROJECT_DIR:/workspace:ro" \
+  -v "$LLXPRT_PROJECT_DIR:/workspace:ro" \
   -i untrusted-hook-image \
   /hook-script.sh < input.json
 ```
@@ -442,7 +442,7 @@ Add descriptions to help others understand your hooks:
           {
             "name": "secret-scanner",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/.llxprt/hooks/block-secrets.sh",
+            "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/block-secrets.sh",
             "description": "Scans code changes for API keys, passwords, and other secrets before writing"
           }
         ]
@@ -508,10 +508,10 @@ chmod +x .llxprt/hooks/my-hook.sh
 
 ```bash
 # Check path expansion
-echo "$GEMINI_PROJECT_DIR/.llxprt/hooks/my-hook.sh"
+echo "$LLXPRT_PROJECT_DIR/.llxprt/hooks/my-hook.sh"
 
 # Verify file exists
-test -f "$GEMINI_PROJECT_DIR/.llxprt/hooks/my-hook.sh" && echo "File exists"
+test -f "$LLXPRT_PROJECT_DIR/.llxprt/hooks/my-hook.sh" && echo "File exists"
 ```
 
 ### Hook timing out
@@ -678,8 +678,8 @@ trap cleanup EXIT
 ```bash
 #!/usr/bin/env bash
 
-if [ -z "$GEMINI_PROJECT_DIR" ]; then
-  echo "GEMINI_PROJECT_DIR not set" >&2
+if [ -z "$LLXPRT_PROJECT_DIR" ]; then
+  echo "LLXPRT_PROJECT_DIR not set" >&2
   exit 1
 fi
 
@@ -698,9 +698,9 @@ fi
 env > .llxprt/hook-env.log
 
 # Check specific variables
-echo "GEMINI_PROJECT_DIR: $GEMINI_PROJECT_DIR" >> .llxprt/hook-env.log
-echo "GEMINI_SESSION_ID: $GEMINI_SESSION_ID" >> .llxprt/hook-env.log
-echo "GEMINI_API_KEY: ${GEMINI_API_KEY:+<set>}" >> .llxprt/hook-env.log
+echo "LLXPRT_PROJECT_DIR: $LLXPRT_PROJECT_DIR" >> .llxprt/hook-env.log
+echo "LLXPRT_SESSION_ID: $LLXPRT_SESSION_ID" >> .llxprt/hook-env.log
+echo "LLXPRT_API_KEY: ${LLXPRT_API_KEY:+<set>}" >> .llxprt/hook-env.log
 ```
 
 **Use .env files:**
@@ -709,8 +709,8 @@ echo "GEMINI_API_KEY: ${GEMINI_API_KEY:+<set>}" >> .llxprt/hook-env.log
 #!/usr/bin/env bash
 
 # Load .env file if it exists
-if [ -f "$GEMINI_PROJECT_DIR/.env" ]; then
-  source "$GEMINI_PROJECT_DIR/.env"
+if [ -f "$LLXPRT_PROJECT_DIR/.env" ]; then
+  source "$LLXPRT_PROJECT_DIR/.env"
 fi
 ```
 
@@ -762,7 +762,7 @@ outputs are excluded. Use this when:
 **Disable via environment variable:**
 
 ```bash
-export GEMINI_TELEMETRY_LOG_PROMPTS=false
+export LLXPRT_TELEMETRY_LOG_PROMPTS=false
 ```
 
 ### Sensitive data in hooks

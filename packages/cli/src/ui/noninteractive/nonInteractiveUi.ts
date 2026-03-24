@@ -15,7 +15,7 @@ export function createNonInteractiveUI(): CommandContext['ui'] {
   return {
     addItem: (
       _item: Parameters<CommandContext['ui']['addItem']>[0],
-      _timestamp: number,
+      _timestamp?: number,
     ) => 0,
     clear: () => {},
     setDebugMessage: (_message: string) => {},

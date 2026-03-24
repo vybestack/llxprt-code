@@ -20,7 +20,6 @@ import {
 import { ESC } from '../utils/input.js';
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
 import { parseMouseEvent } from '../utils/mouse.js';
-import { TerminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 
 export const BACKSLASH_ENTER_TIMEOUT = 5;
 export const ESC_TIMEOUT = 100;
@@ -155,6 +154,30 @@ function nonKeyboardEventFilter(
 }
 
 /**
+ * Converts return keys pressed quickly after other keys into plain
+ * insertable return characters.
+ *
+ * This is to accommodate older terminals that paste text without bracketing.
+ */
+function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
+  let lastKeyTime = 0;
+  return (key: Key) => {
+    const now = Date.now();
+    if (key.name === 'return' && now - lastKeyTime <= FAST_RETURN_TIMEOUT) {
+      keypressHandler({
+        ...key,
+        name: '',
+        sequence: '\r',
+        insertable: true,
+      });
+    } else {
+      keypressHandler(key);
+    }
+    lastKeyTime = now;
+  };
+}
+
+/**
  * Buffers "/" keys to see if they are followed return.
  * Will flush the buffer if no data is received for BACKSLASH_ENTER_TIMEOUT ms
  * or when a null key is received.
@@ -207,24 +230,6 @@ function bufferBackslashEnter(
  * Will flush the buffer if no data is received for PASTE_TIMEOUT ms or
  * when a null key is received.
  */
-function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
-  let lastKeyTime = 0;
-  return (key: Key) => {
-    const now = Date.now();
-    if (key.name === 'return' && now - lastKeyTime <= FAST_RETURN_TIMEOUT) {
-      keypressHandler({
-        ...key,
-        name: '',
-        sequence: '\r',
-        insertable: true,
-      });
-    } else {
-      keypressHandler(key);
-    }
-    lastKeyTime = now;
-  };
-}
-
 function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
     while (true) {
@@ -514,6 +519,7 @@ function* emitKeys(
         }
         if (name === 'space' && !ctrl && !meta) {
           sequence = ' ';
+          insertable = true;
         }
       } else {
         name = 'undefined';
@@ -719,11 +725,9 @@ export function KeypressProvider({
     process.stdin.setEncoding('utf8'); // Make data events emit strings
 
     let processor = nonKeyboardEventFilter(handleDragDropAndBroadcast);
+    processor = bufferFastReturn(processor);
     processor = bufferBackslashEnter(processor);
     processor = bufferPaste(processor);
-    if (!TerminalCapabilityManager.getInstance().isBracketedPasteEnabled()) {
-      processor = bufferFastReturn(processor);
-    }
     const dataListener = createDataListener(processor);
 
     stdin.on('data', dataListener);

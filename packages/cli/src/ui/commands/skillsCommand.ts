@@ -16,17 +16,26 @@ import {
   type HistoryItemInfo,
 } from '../types.js';
 import { SettingScope } from '../../config/settings.js';
+import { enableSkill, disableSkill } from '../../utils/skillSettings.js';
+import { renderSkillActionFeedback } from '../../utils/skillUtils.js';
 
 async function listAction(
   context: CommandContext,
   args: string,
 ): Promise<void | SlashCommandActionReturn> {
-  const subCommand = args.trim();
+  const subCommand = args.trim().toLowerCase();
 
-  // Default to SHOWING descriptions. The user can hide them with 'nodesc'.
+  // Parse arguments: 'nodesc', 'all', or both
+  const parts = subCommand.split(/\s+/).filter((p) => p.length > 0);
   let useShowDescriptions = true;
-  if (subCommand === 'nodesc') {
-    useShowDescriptions = false;
+  let showAll = false;
+
+  for (const part of parts) {
+    if (part === 'nodesc') {
+      useShowDescriptions = false;
+    } else if (part === 'all') {
+      showAll = true;
+    }
   }
 
   const skillManager = context.services.config?.getSkillManager();
@@ -41,7 +50,12 @@ async function listAction(
     return;
   }
 
-  const skills = skillManager.getAllSkills();
+  let skills = skillManager.getAllSkills();
+
+  // By default, filter out built-in skills unless 'all' is specified
+  if (!showAll) {
+    skills = skills.filter((skill) => skill.source !== 'builtin');
+  }
 
   const skillsListItem: HistoryItemSkillsList = {
     type: MessageType.SKILLS_LIST,
@@ -51,11 +65,12 @@ async function listAction(
       disabled: skill.disabled,
       location: skill.location,
       body: skill.body,
+      source: skill.source,
     })),
     showDescriptions: useShowDescriptions,
   };
 
-  context.ui.addItem(skillsListItem, Date.now());
+  context.ui.addItem(skillsListItem);
 }
 
 async function disableAction(
@@ -74,6 +89,17 @@ async function disableAction(
     return;
   }
   const skillManager = context.services.config?.getSkillManager();
+  if (skillManager?.isAdminEnabled() === false) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Skills are disabled by your admin.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
   const skill = skillManager?.getSkill(skillName);
   if (!skill) {
     context.ui.addItem(
@@ -86,29 +112,24 @@ async function disableAction(
     return;
   }
 
-  const currentDisabled =
-    context.services.settings.merged.skills?.disabled ?? [];
-  if (currentDisabled.includes(skillName)) {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: `Skill "${skillName}" is already disabled.`,
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  const newDisabled = [...currentDisabled, skillName];
   const scope = context.services.settings.workspace.path
     ? SettingScope.Workspace
     : SettingScope.User;
 
-  context.services.settings.setValue(scope, 'skills.disabled', newDisabled);
+  const result = disableSkill(context.services.settings, skillName, scope);
+
+  let feedback = renderSkillActionFeedback(
+    result,
+    (label, path) => `${label} (${path})`,
+  );
+  if (result.status === 'success') {
+    feedback += ' Use "/skills reload" for it to take effect.';
+  }
+
   context.ui.addItem(
     {
       type: MessageType.INFO,
-      text: `Skill "${skillName}" disabled in ${scope} settings. Use "/skills reload" for it to take effect.`,
+      text: feedback,
     },
     Date.now(),
   );
@@ -130,29 +151,32 @@ async function enableAction(
     return;
   }
 
-  const currentDisabled =
-    context.services.settings.merged.skills?.disabled ?? [];
-  if (!currentDisabled.includes(skillName)) {
+  const skillManager = context.services.config?.getSkillManager();
+  if (skillManager?.isAdminEnabled() === false) {
     context.ui.addItem(
       {
-        type: MessageType.INFO,
-        text: `Skill "${skillName}" is not disabled.`,
+        type: MessageType.ERROR,
+        text: 'Skills are disabled by your admin.',
       },
       Date.now(),
     );
     return;
   }
 
-  const newDisabled = currentDisabled.filter((name) => name !== skillName);
-  const scope = context.services.settings.workspace.path
-    ? SettingScope.Workspace
-    : SettingScope.User;
+  const result = enableSkill(context.services.settings, skillName);
 
-  context.services.settings.setValue(scope, 'skills.disabled', newDisabled);
+  let feedback = renderSkillActionFeedback(
+    result,
+    (label, path) => `${label} (${path})`,
+  );
+  if (result.status === 'success') {
+    feedback += ' Use "/skills reload" for it to take effect.';
+  }
+
   context.ui.addItem(
     {
       type: MessageType.INFO,
-      text: `Skill "${skillName}" enabled in ${scope} settings. Use "/skills reload" for it to take effect.`,
+      text: feedback,
     },
     Date.now(),
   );
@@ -181,7 +205,7 @@ async function reloadAction(
   const pendingTimeout = setTimeout(() => {
     context.ui.setPendingItem({
       type: MessageType.INFO,
-      text: 'Reloading agent skills...',
+      text: 'Reloading skills...',
     });
     pendingItemSet = true;
   }, 100);
@@ -211,7 +235,7 @@ async function reloadAction(
       (name) => !afterNames.has(name),
     ).length;
 
-    let successText = 'Agent skills reloaded successfully.';
+    let successText = 'Skills reloaded successfully.';
     const details: string[] = [];
 
     if (added.length > 0) {
@@ -284,13 +308,14 @@ async function enableCompletion(
 export const skillsCommand: SlashCommand = {
   name: 'skills',
   description:
-    'List, enable, disable, or reload LLxprt Code agent skills. Usage: /skills [list | disable <name> | enable <name> | reload]',
+    'List, enable, disable, or reload LLxprt Code skills. Usage: /skills [list | disable <name> | enable <name> | reload]',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   subCommands: [
     {
       name: 'list',
-      description: 'List available agent skills. Usage: /skills list [nodesc]',
+      description:
+        'List available agent skills. Usage: /skills list [all] [nodesc]',
       kind: CommandKind.BUILT_IN,
       action: listAction,
     },

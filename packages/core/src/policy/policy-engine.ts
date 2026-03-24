@@ -73,7 +73,8 @@ export class PolicyEngine {
           if (subCommands.length > 1) {
             let aggregateDecision = PolicyDecision.ALLOW;
 
-            for (const subCmd of subCommands) {
+            for (const rawSubCmd of subCommands) {
+              const subCmd = rawSubCmd.trim();
               // Prevent infinite recursion
               if (subCmd === command) continue;
 
@@ -120,14 +121,46 @@ export class PolicyEngine {
     }
 
     // No matching rule - use default decision
+    let defaultResult = this.defaultDecision;
+
+    // Security: even with no matching rule, still validate shell subcommands
+    // to catch compound commands like "git commit && git push" where a subcommand
+    // may match a DENY rule
     if (
-      this.nonInteractive &&
-      this.defaultDecision === PolicyDecision.ASK_USER
+      toolName &&
+      SHELL_TOOL_NAMES.includes(toolName) &&
+      defaultResult !== PolicyDecision.DENY
     ) {
+      const command = (args as { command?: string })?.command;
+      if (command) {
+        const subCommands = splitCommands(command);
+
+        if (subCommands.length > 1) {
+          for (const rawSubCmd of subCommands) {
+            const subCmd = rawSubCmd.trim();
+            if (subCmd === command) continue;
+
+            const subResult = this.evaluate(
+              toolName,
+              { ...args, command: subCmd },
+              serverName,
+            );
+
+            if (subResult === PolicyDecision.DENY) {
+              return PolicyDecision.DENY;
+            } else if (subResult === PolicyDecision.ASK_USER) {
+              defaultResult = PolicyDecision.ASK_USER;
+            }
+          }
+        }
+      }
+    }
+
+    if (this.nonInteractive && defaultResult === PolicyDecision.ASK_USER) {
       return PolicyDecision.DENY;
     }
 
-    return this.defaultDecision;
+    return defaultResult;
   }
 
   /**

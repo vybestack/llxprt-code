@@ -79,7 +79,7 @@ export const compressCommand: SlashCommand = {
           compressionStatus,
         },
       };
-      ui.addItem(compressionResult, Date.now());
+      ui.addItem(compressionResult);
     } catch (e) {
       ui.addItem(
         {

@@ -93,7 +93,6 @@ describe('QwenOAuthProvider', () => {
           'Please visit the following URL to authorize with Qwen',
         ),
       }),
-      expect.any(Number),
     );
   });
 
@@ -140,7 +139,6 @@ describe('QwenOAuthProvider', () => {
           'Please visit the following URL to authorize with Qwen',
         ),
       }),
-      expect.any(Number),
     );
   });
 });

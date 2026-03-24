@@ -229,7 +229,7 @@ export const toolsCommand: SlashCommand = {
         allowed,
         showDescriptions,
       );
-      context.ui.addItem({ type: MessageType.INFO, text: message }, Date.now());
+      context.ui.addItem({ type: MessageType.INFO, text: message });
       return;
     }
 
@@ -307,6 +307,6 @@ export const toolsCommand: SlashCommand = {
     }
 
     const message = formatListMessage(tools, disabled, allowed, false);
-    context.ui.addItem({ type: MessageType.INFO, text: message }, Date.now());
+    context.ui.addItem({ type: MessageType.INFO, text: message });
   },
 };

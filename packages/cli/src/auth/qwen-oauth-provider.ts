@@ -51,7 +51,7 @@ export class QwenOAuthProvider implements OAuthProvider {
   private logger: DebugLogger;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
 
   /**
@@ -65,7 +65,7 @@ export class QwenOAuthProvider implements OAuthProvider {
     private tokenStore?: TokenStore,
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ) {
     // Line 7: SET this.tokenStore = tokenStore
@@ -107,7 +107,7 @@ export class QwenOAuthProvider implements OAuthProvider {
   setAddItem(
     addItem: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ): void {
     this.addItem = addItem;
@@ -207,7 +207,7 @@ export class QwenOAuthProvider implements OAuthProvider {
           url: authUrl,
         };
         if (addItem) {
-          addItem(historyItem, Date.now());
+          addItem(historyItem);
         } else {
           // Lines 37-38: PRINT
           debugLogger.log('\nQwen OAuth Authentication');

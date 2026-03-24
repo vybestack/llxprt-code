@@ -890,13 +890,14 @@ describe('Density Optimization Orchestration (P19)', () => {
      * This is a structural verification via code analysis.
      */
     it('ensureDensityOptimized is only called from ensureCompressionBeforeSend and enforceContextWindow', async () => {
-      // Read the source file and verify call sites
+      // Read the CompressionHandler source file and verify call sites
+      // (compression methods were extracted to CompressionHandler in Phase 03)
       const fs = await import('fs');
       const source = fs.readFileSync(
-        new URL('../../core/geminiChat.ts', import.meta.url).pathname.replace(
-          /^\/([A-Z]:)/,
-          '$1',
-        ),
+        new URL(
+          '../../core/compression/CompressionHandler.ts',
+          import.meta.url,
+        ).pathname.replace(/^\/([A-Z]:)/, '$1'),
         'utf-8',
       );
 
@@ -906,13 +907,12 @@ describe('Density Optimization Orchestration (P19)', () => {
         .filter(
           (line) =>
             line.includes('ensureDensityOptimized') &&
-            !line.includes('private async ensureDensityOptimized') &&
+            !line.includes('async ensureDensityOptimized') &&
             !line.includes('@pseudocode') &&
             !line.includes('* '),
         );
 
       // Should have exactly 2 call sites (ensureCompressionBeforeSend + enforceContextWindow)
-      // plus the early return check line
       const awaitCalls = callSites.filter((line) =>
         line.includes('await this.ensureDensityOptimized()'),
       );

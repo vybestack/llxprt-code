@@ -112,6 +112,7 @@ describe('BuiltinCommandLoader', () => {
       getFolderTrust: vi.fn().mockReturnValue(true),
       getEnableExtensionReloading: () => false,
       getEnableHooks: () => false,
+      getEnableHooksUI: () => false,
       isSkillsSupportEnabled: vi.fn().mockReturnValue(false),
       getSkillManager: vi.fn().mockReturnValue({
         getAllSkills: vi.fn().mockReturnValue([]),
@@ -182,6 +183,7 @@ describe('BuiltinCommandLoader', () => {
     const mockConfigWithMessageBus = {
       ...mockConfig,
       getEnableHooks: () => false,
+      getEnableHooksUI: () => false,
     } as unknown as Config;
     const loader = new BuiltinCommandLoader(mockConfigWithMessageBus);
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -200,6 +202,7 @@ describe('BuiltinCommandLoader profile', () => {
       getCheckpointingEnabled: () => false,
       getEnableExtensionReloading: () => false,
       getEnableHooks: () => false,
+      getEnableHooksUI: () => false,
       isSkillsSupportEnabled: vi.fn().mockReturnValue(false),
       getSkillManager: vi.fn().mockReturnValue({
         getAllSkills: vi.fn().mockReturnValue([]),

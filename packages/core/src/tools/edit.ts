@@ -7,7 +7,6 @@
 /* @plan PLAN-20250212-LSP.P31 */
 /* @requirement REQ-DIAG-010, REQ-GRACE-050, REQ-GRACE-055 */
 
-import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import * as Diff from 'diff';
 import process from 'node:process';
@@ -40,6 +39,7 @@ import { fuzzyReplace } from './fuzzy-replacer.js';
 import { EDIT_TOOL_NAME } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { ensureParentDirectoriesExist } from './ensure-dirs.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -704,7 +704,7 @@ class EditToolInvocation extends BaseToolInvocation<
 
     const filePath = this.getFilePath();
     try {
-      await this.ensureParentDirectoriesExist(filePath);
+      await ensureParentDirectoriesExist(filePath);
       await this.config
         .getFileSystemService()
         .writeTextFile(filePath, editData.newContent);
@@ -749,9 +749,11 @@ class EditToolInvocation extends BaseToolInvocation<
       const displayResult = {
         fileDiff,
         fileName,
+        filePath: this.params.file_path,
         originalContent: editData.currentContent,
         newContent: editData.newContent,
         diffStat,
+        isNewFile: editData.isNewFile,
       };
 
       const llmSuccessMessageParts = [
@@ -813,18 +815,6 @@ class EditToolInvocation extends BaseToolInvocation<
           type: ToolErrorType.FILE_WRITE_FAILURE,
         },
       };
-    }
-  }
-
-  /**
-   * Creates parent directories if they don't exist
-   */
-  private async ensureParentDirectoriesExist(filePath: string): Promise<void> {
-    const dirName = path.dirname(filePath);
-    try {
-      await fsPromises.access(dirName);
-    } catch {
-      await fsPromises.mkdir(dirName, { recursive: true });
     }
   }
 }

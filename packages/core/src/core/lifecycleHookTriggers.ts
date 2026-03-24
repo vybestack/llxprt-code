@@ -56,9 +56,8 @@ export async function triggerSessionStartHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireSessionStartEvent({ source });
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireSessionStartEvent({ source });
 
     debugLogger.debug('SessionStart hook executed', { source });
 
@@ -101,9 +100,8 @@ export async function triggerSessionEndHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireSessionEndEvent({ reason });
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireSessionEndEvent({ reason });
 
     debugLogger.debug('SessionEnd hook executed', { reason });
 
@@ -146,9 +144,8 @@ export async function triggerBeforeAgentHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireBeforeAgentEvent({ prompt });
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireBeforeAgentEvent({ prompt });
 
     debugLogger.debug('BeforeAgent hook executed');
 
@@ -195,9 +192,8 @@ export async function triggerAfterAgentHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireAfterAgentEvent({
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireAfterAgentEvent({
       prompt,
       prompt_response: promptResponse,
       stop_hook_active: stopHookActive,
@@ -247,9 +243,8 @@ export async function triggerPreCompressHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.firePreCompressEvent({ trigger });
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.firePreCompressEvent({ trigger });
 
     debugLogger.debug('PreCompress hook executed', { trigger });
 

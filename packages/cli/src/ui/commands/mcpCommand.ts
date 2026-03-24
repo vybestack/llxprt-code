@@ -488,7 +488,7 @@ const authCommand: SlashCommand = {
     // The authentication process will discover OAuth requirements automatically
 
     const displayListener = (message: string) => {
-      context.ui.addItem({ type: 'info', text: message }, Date.now());
+      context.ui.addItem({ type: 'info', text: message });
     };
 
     appEvents.on(AppEvent.OauthDisplayMessage, displayListener);
