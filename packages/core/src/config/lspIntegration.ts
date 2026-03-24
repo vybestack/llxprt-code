@@ -7,6 +7,7 @@
 
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { CallableTool, Tool, Part, FunctionCall } from '@google/genai';
+import type { Config } from './config.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
@@ -316,8 +317,9 @@ async function registerMcpNavigationTools(
         toolDef.inputSchema ?? { type: 'object', properties: {} },
         true,
         undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        host as any,
+        // LspHost is a strict subset of Config; the runtime value is always a
+        // full Config instance, but this module only depends on the narrow interface.
+        host as unknown as Config,
       );
 
       registry.registerTool(discoveredTool);

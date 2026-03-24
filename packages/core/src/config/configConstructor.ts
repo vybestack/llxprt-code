@@ -15,16 +15,29 @@ import {
   normalizeShellReplacement,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  type AccessibilitySettings,
+  type BugCommandSettings,
+  type ChatCompressionSettings,
+  type SummarizeToolOutputSettings,
+  type ComplexityAnalyzerSettings,
+  type OutputSettings,
+  type CodebaseInvestigatorSettings,
+  type IntrospectionAgentSettings,
+  type TelemetrySettings,
+  type MCPServerConfig,
+  type SandboxConfig,
+  type ActiveExtension,
+  type ShellReplacementMode,
 } from './configTypes.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
-import { parseLspConfig } from './lspIntegration.js';
+import { parseLspConfig, type LspState } from './lspIntegration.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from './storage.js';
 import { FileExclusions } from '../utils/ignorePatterns.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { setGlobalProxy } from '../utils/fetch.js';
 import { coreEvents } from '../utils/events.js';
-import { SimpleExtensionLoader } from '../utils/extensionLoader.js';
+import { SimpleExtensionLoader, type ExtensionLoader } from '../utils/extensionLoader.js';
 import { SkillManager } from '../skills/skillManager.js';
 import { setLlxprtMdFilename } from '../tools/memoryTool.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -35,11 +48,146 @@ import {
 } from '../telemetry/index.js';
 import { OutputFormat } from '../utils/output-format.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
-import { StandardFileSystemService } from '../services/fileSystemService.js';
+import { StandardFileSystemService, type FileSystemService } from '../services/fileSystemService.js';
 import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { peekActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { logCliConfiguration, StartSessionEvent } from '../telemetry/index.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
+import type { HookDefinition, HookEventName } from '../hooks/types.js';
+import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
+import type { EventEmitter } from 'node:events';
+import type { Config } from './config.js';
+
+/**
+ * Typed target interface for applyConfigParams — lists every field
+ * that the function assigns plus getProxy() which it calls.
+ *
+ * All fields are public so the interface can be satisfied by Config,
+ * whose base class declares them as protected.
+ */
+export interface ConfigConstructorTarget {
+  // Settings service
+  settingsService: SettingsService;
+
+  // Core identity and workspace
+  sessionId: string;
+  embeddingModel: string | undefined;
+  fileSystemService: FileSystemService;
+  sandbox: SandboxConfig | undefined;
+  targetDir: string;
+  workspaceContext: WorkspaceContext;
+  debugMode: boolean;
+  outputFormat: OutputFormat;
+  question: string | undefined;
+
+  // Tool governance
+  coreTools: string[] | undefined;
+  allowedTools: string[] | undefined;
+  excludeTools: string[] | undefined;
+  toolDiscoveryCommand: string | undefined;
+  toolCallCommand: string | undefined;
+  mcpServerCommand: string | undefined;
+  mcpServers: Record<string, MCPServerConfig> | undefined;
+  allowedMcpServers: string[];
+  blockedMcpServers: Array<{ name: string; extensionName: string }>;
+
+  // LSP
+  _lspState: LspState;
+
+  // Memory and context
+  userMemory: string;
+  llxprtMdFileCount: number;
+  llxprtMdFilePaths: string[];
+  approvalMode: ApprovalMode;
+  showMemoryUsage: boolean;
+  accessibility: AccessibilitySettings;
+
+  // Telemetry
+  telemetrySettings: TelemetrySettings;
+  usageStatisticsEnabled: boolean;
+
+  // File filtering
+  fileFiltering: {
+    respectGitIgnore: boolean;
+    respectLlxprtIgnore: boolean;
+    enableRecursiveFileSearch: boolean;
+    disableFuzzySearch: boolean;
+  };
+
+  // Feature flags and runtime settings
+  checkpointing: boolean;
+  dumpOnError: boolean;
+  proxy: string | undefined;
+  cwd: string;
+  fileDiscoveryService: FileDiscoveryService | null;
+  bugCommand: BugCommandSettings | undefined;
+  model: string;
+  originalModel: string;
+  extensionContextFilePaths: string[];
+  maxSessionTurns: number;
+  experimentalZedIntegration: boolean;
+  listExtensions: boolean;
+  _activeExtensions: ActiveExtension[];
+  providerManager: ProviderManager | undefined;
+  provider: string | undefined;
+  _extensionLoader: ExtensionLoader;
+  noBrowser: boolean;
+  summarizeToolOutput: Record<string, SummarizeToolOutputSettings> | undefined;
+  folderTrust: boolean;
+  ideMode: boolean;
+  complexityAnalyzerSettings: ComplexityAnalyzerSettings;
+  loadMemoryFromIncludeDirectories: boolean;
+  chatCompression: ChatCompressionSettings | undefined;
+  interactive: boolean;
+  shellReplacement: ShellReplacementMode;
+  trustedFolder: boolean | undefined;
+  useRipgrep: boolean;
+  shouldUseNodePtyShell: boolean;
+  allowPtyThemeOverride: boolean;
+  ptyScrollbackLimit: number;
+  ptyTerminalWidth: number | undefined;
+  ptyTerminalHeight: number | undefined;
+  skipNextSpeakerCheck: boolean;
+  truncateToolOutputThreshold: number;
+  truncateToolOutputLines: number;
+  enableToolOutputTruncation: boolean;
+  continueOnFailedApiCall: boolean;
+  enableShellOutputEfficiency: boolean;
+  continueSession: boolean | string;
+  extensionManagement: boolean;
+  enableExtensionReloading: boolean;
+  storage: Storage;
+  fileExclusions: FileExclusions;
+  enablePromptCompletion: boolean;
+  eventEmitter: EventEmitter | undefined;
+
+  // Policy engine and runtime state
+  policyEngine: PolicyEngine;
+  runtimeState: AgentRuntimeState;
+  disableYoloMode: boolean;
+  enableHooks: boolean;
+  jitContextEnabled: boolean | undefined;
+  hooks: { [K in HookEventName]?: HookDefinition[] } | undefined;
+  projectHooks:
+    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
+    | undefined;
+  disabledHooks: string[];
+  skillManager: SkillManager;
+  skillsSupport: boolean;
+  disabledSkills: string[];
+  sanitizationConfig: EnvironmentSanitizationConfig | undefined;
+  _onReload: (() => Promise<{ disabledSkills?: string[] }>) | undefined;
+  outputSettings: OutputSettings;
+  codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
+  introspectionAgentSettings: IntrospectionAgentSettings;
+  useWriteTodos: boolean;
+
+  // Called at end of applyConfigParams
+  getProxy(): string | undefined;
+}
 
 /**
  * Applies ConfigParameters to a Config instance's fields and
@@ -48,8 +196,7 @@ import { logCliConfiguration, StartSessionEvent } from '../telemetry/index.js';
  * This function is the extracted body of Config.constructor().
  * It mutates the config instance directly via field assignment.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function applyConfigParams(config: any, params: ConfigParameters): void {
+export function applyConfigParams(config: ConfigConstructorTarget, params: ConfigParameters): void {
   // Settings service resolution
   const providedSettingsService = params.settingsService;
   if (providedSettingsService) {
@@ -186,18 +333,19 @@ export function applyConfigParams(config: any, params: ConfigParameters): void {
   config.extensionManagement = params.extensionManagement ?? false;
   config.enableExtensionReloading = params.enableExtensionReloading ?? false;
   config.storage = new Storage(config.targetDir);
-  config.fileExclusions = new FileExclusions(config);
+  config.fileExclusions = new FileExclusions(config as unknown as Config);
   config.enablePromptCompletion = params.enablePromptCompletion ?? false;
   config.eventEmitter = params.eventEmitter;
 
   // Policy engine and runtime state
   config.policyEngine = new PolicyEngine(params.policyEngineConfig);
-  config.runtimeState = createAgentRuntimeStateFromConfig(config);
+  config.runtimeState = createAgentRuntimeStateFromConfig(config as unknown as Config);
   config.disableYoloMode = params.disableYoloMode ?? false;
   config.enableHooks = params.enableHooks ?? false;
   config.jitContextEnabled = params.jitContextEnabled ?? true;
   config.hooks = params.hooks;
   config.projectHooks = params.projectHooks;
+  config.disabledHooks = params.disabledHooks ?? [];
   config.skillManager = new SkillManager();
   config.skillsSupport = params.skillsSupport ?? false;
   config.disabledSkills = params.disabledSkills ?? [];
@@ -231,7 +379,7 @@ export function applyConfigParams(config: any, params: ConfigParameters): void {
     if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
       debugLogger.log(`[CONFIG] Initializing telemetry`);
     }
-    initializeTelemetry(config);
+    initializeTelemetry(config as unknown as Config);
   } else if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
     debugLogger.log(`[CONFIG] Telemetry disabled`);
   }
@@ -250,5 +398,5 @@ export function applyConfigParams(config: any, params: ConfigParameters): void {
     }
   }
 
-  logCliConfiguration(config, new StartSessionEvent(config));
+  logCliConfiguration(config as unknown as Config, new StartSessionEvent(config as unknown as Config));
 }

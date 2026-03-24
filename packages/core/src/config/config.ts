@@ -36,7 +36,7 @@ import {
   type SchedulerOptions,
 } from './schedulerSingleton.js';
 import { initializeLsp } from './lspIntegration.js';
-import { applyConfigParams } from './configConstructor.js';
+import { applyConfigParams, type ConfigConstructorTarget } from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
 
 import {
@@ -93,7 +93,7 @@ import type { ShellExecutionConfig } from '../services/shellExecutionService.js'
 export class Config extends ConfigBase {
   constructor(params: ConfigParameters) {
     super();
-    applyConfigParams(this, params);
+    applyConfigParams(this as unknown as ConfigConstructorTarget, params);
   }
 
   /**
