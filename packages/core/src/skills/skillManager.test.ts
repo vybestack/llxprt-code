@@ -218,7 +218,7 @@ description: desc1
       const builtinDir = path.join(testRootDir, 'builtin');
       const prCreatorDir = path.join(builtinDir, 'pr-creator');
       const nestedSkillDir = path.join(builtinDir, 'category', 'nested-skill');
-      
+
       await fs.mkdir(prCreatorDir, { recursive: true });
       await fs.mkdir(nestedSkillDir, { recursive: true });
 
@@ -267,10 +267,7 @@ description: desc1
         path.join(goodDir, 'config.json'),
         JSON.stringify({ name: 'good-skill', description: 'Good skill' }),
       );
-      await fs.writeFile(
-        path.join(badDir, 'config.json'),
-        'not valid json',
-      );
+      await fs.writeFile(path.join(badDir, 'config.json'), 'not valid json');
 
       const service = new SkillManager();
       vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);

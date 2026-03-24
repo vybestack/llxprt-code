@@ -506,7 +506,9 @@ async function main() {
   }
 
   // Embed the prompt (uses LLXPRT_API_KEY; GEMINI_API_KEY also supported for compatibility)
-  const genai = new GoogleGenerativeAI(process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY);
+  const genai = new GoogleGenerativeAI(
+    process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
+  );
   const model = genai.getGenerativeModel({ model: 'text-embedding-004' });
   const result = await model.embedContent(prompt);
 
@@ -587,7 +589,9 @@ async function main() {
     .join('\n');
 
   // Use fast model to extract task keywords
-  const genai = new GoogleGenerativeAI(process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY);
+  const genai = new GoogleGenerativeAI(
+    process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
+  );
   const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const result = await model.generateContent(
@@ -855,7 +859,9 @@ async function main() {
   }
 
   // Extract memories using LLM
-  const genai = new GoogleGenerativeAI(process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY);
+  const genai = new GoogleGenerativeAI(
+    process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
+  );
   const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = `Extract important project learnings from this session.

@@ -47,8 +47,7 @@ export async function handleInstall(args: InstallArgs) {
 
 export const installCommand: CommandModule = {
   command: 'install <source> [--scope] [--path]',
-  describe:
-    'Installs a skill from a git repository URL or a local path.',
+  describe: 'Installs a skill from a git repository URL or a local path.',
   builder: (yargs) =>
     yargs
       .positional('source', {

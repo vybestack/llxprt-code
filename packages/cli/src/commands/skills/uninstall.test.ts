@@ -28,9 +28,7 @@ describe('skill uninstall command', () => {
   describe('uninstallCommand', () => {
     it('should have correct command and describe', () => {
       expect(uninstallCommand.command).toBe('uninstall <name> [--scope]');
-      expect(uninstallCommand.describe).toBe(
-        'Uninstalls a skill by name.',
-      );
+      expect(uninstallCommand.describe).toBe('Uninstalls a skill by name.');
     });
   });
 

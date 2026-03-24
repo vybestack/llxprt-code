@@ -77,10 +77,7 @@ export class SkillManager {
     let builtinSkills = await this.discoverBuiltinSkills();
     if (builtinSkills.length === 0) {
       // Fall back to existing SKILL.md-based discovery
-      builtinSkills = await loadSkillsFromDir(
-        getBuiltinSkillsDir(),
-        'builtin',
-      );
+      builtinSkills = await loadSkillsFromDir(getBuiltinSkillsDir(), 'builtin');
     }
     this.addSkillsWithPrecedence(builtinSkills);
 
@@ -240,7 +237,11 @@ export class SkillManager {
   resolveBuiltinSkillsDir(): string {
     // Strategy 1: CLI root from environment (production)
     if (process.env.LLXPRT_CLI_ROOT) {
-      const envPath = path.join(process.env.LLXPRT_CLI_ROOT, 'skills', 'builtin');
+      const envPath = path.join(
+        process.env.LLXPRT_CLI_ROOT,
+        'skills',
+        'builtin',
+      );
       if (fsSync.existsSync(envPath)) return envPath;
     }
 
@@ -249,7 +250,15 @@ export class SkillManager {
     if (fsSync.existsSync(devPath)) return devPath;
 
     // Strategy 3: Project root skills directory (development - monorepo root)
-    const projectRoot = path.join(__dirname, '..', '..', '..', '..', 'skills', 'builtin');
+    const projectRoot = path.join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      '..',
+      'skills',
+      'builtin',
+    );
     if (fsSync.existsSync(projectRoot)) return projectRoot;
 
     // Strategy 4: Packaged assets location
