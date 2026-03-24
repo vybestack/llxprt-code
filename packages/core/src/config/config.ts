@@ -601,13 +601,8 @@ export class Config extends ConfigBase {
     return result.files
       .map((f) => {
         const trimmed = f.content.trim();
-        if (!trimmed) {
-          const emptyContext = null;
-          return emptyContext;
-        }
-        return `--- JIT Context from: ${f.path} ---
-${trimmed}
---- End of JIT Context from: ${f.path} ---`;
+        if (!trimmed) return null;
+        return `--- JIT Context from: ${f.path} ---\n${trimmed}\n--- End of JIT Context from: ${f.path} ---`;
       })
       .filter((block): block is string => block !== null)
       .join('\n\n');

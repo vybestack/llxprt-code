@@ -49,7 +49,7 @@ async function listHooks(context: CommandContext): Promise<void> {
     hooks: allHooks,
   };
 
-  context.ui.addItem(historyItem, Date.now());
+  context.ui.addItem(historyItem);
 }
 
 /**
@@ -192,6 +192,144 @@ async function disableHook(
   );
 }
 
+/**
+ * Enable all hooks
+ */
+async function enableAllHooks(context: CommandContext): Promise<void> {
+  const { config } = context.services;
+  if (!config) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Config not loaded.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const hookSystem = config.getHookSystem();
+  if (!hookSystem) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Hooks system is not enabled.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  await hookSystem.initialize();
+  const hookRegistry = hookSystem.getRegistry();
+  const allHooks = hookRegistry.getAllHooks();
+
+  if (allHooks.length === 0) {
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: 'No hooks registered.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  // Clear disabled hooks list
+  config.setDisabledHooks([]);
+
+  // Enable all hooks in registry
+  for (const hook of allHooks) {
+    const hookName = hookRegistry.getHookName(hook);
+    hookRegistry.setHookEnabled(hookName, true);
+  }
+
+  context.ui.addItem(
+    {
+      type: MessageType.INFO,
+      text: `Enabled all ${allHooks.length} hook(s).`,
+    },
+    Date.now(),
+  );
+
+  // Show updated list
+  const historyItem: HistoryItemHooksList = {
+    type: MessageType.HOOKS_LIST,
+    hooks: allHooks,
+  };
+  context.ui.addItem(historyItem);
+}
+
+/**
+ * Disable all hooks
+ */
+async function disableAllHooks(context: CommandContext): Promise<void> {
+  const { config } = context.services;
+  if (!config) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Config not loaded.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  const hookSystem = config.getHookSystem();
+  if (!hookSystem) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Hooks system is not enabled.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  await hookSystem.initialize();
+  const hookRegistry = hookSystem.getRegistry();
+  const allHooks = hookRegistry.getAllHooks();
+
+  if (allHooks.length === 0) {
+    context.ui.addItem(
+      {
+        type: MessageType.INFO,
+        text: 'No hooks registered.',
+      },
+      Date.now(),
+    );
+    return;
+  }
+
+  // Build list of all hook names
+  const allHookNames = allHooks.map((hook) => hookRegistry.getHookName(hook));
+
+  // Set all hooks as disabled in config
+  config.setDisabledHooks(allHookNames);
+
+  // Disable all hooks in registry
+  for (const hookName of allHookNames) {
+    hookRegistry.setHookEnabled(hookName, false);
+  }
+
+  context.ui.addItem(
+    {
+      type: MessageType.INFO,
+      text: `Disabled all ${allHooks.length} hook(s).`,
+    },
+    Date.now(),
+  );
+
+  // Show updated list
+  const historyItem: HistoryItemHooksList = {
+    type: MessageType.HOOKS_LIST,
+    hooks: allHooks,
+  };
+  context.ui.addItem(historyItem);
+}
+
 async function completeHookNames(
   context: CommandContext,
   partialArg: string,
@@ -268,11 +406,37 @@ const disableCommand: SlashCommand = {
   completion: completeHookNames,
 };
 
+const enableAllCommand: SlashCommand = {
+  name: 'enable-all',
+  description: 'Enable all registered hooks',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  action: async (context: CommandContext) => {
+    await enableAllHooks(context);
+  },
+};
+
+const disableAllCommand: SlashCommand = {
+  name: 'disable-all',
+  description: 'Disable all registered hooks',
+  kind: CommandKind.BUILT_IN,
+  autoExecute: true,
+  action: async (context: CommandContext) => {
+    await disableAllHooks(context);
+  },
+};
+
 export const hooksCommand: SlashCommand = {
   name: 'hooks',
   description: 'View, enable, or disable hooks',
   kind: CommandKind.BUILT_IN,
-  subCommands: [listCommand, enableCommand, disableCommand],
+  subCommands: [
+    listCommand,
+    enableCommand,
+    disableCommand,
+    enableAllCommand,
+    disableAllCommand,
+  ],
   action: async (context: CommandContext, args: string) => {
     // Default action when no subcommand is provided - show the list
     if (!args || args.trim() === '') {
@@ -283,9 +447,13 @@ export const hooksCommand: SlashCommand = {
       const subCommandName = tokens[0];
       const subArgs = tokens.slice(1).join(' ');
 
-      const subCommand = [listCommand, enableCommand, disableCommand].find(
-        (cmd) => cmd.name === subCommandName,
-      );
+      const subCommand = [
+        listCommand,
+        enableCommand,
+        disableCommand,
+        enableAllCommand,
+        disableAllCommand,
+      ].find((cmd) => cmd.name === subCommandName);
 
       if (subCommand && subCommand.action) {
         await subCommand.action(context, subArgs);

@@ -18,7 +18,7 @@ export const INSTALL_WARNING_MESSAGE = chalk.yellow(
 );
 
 export const SKILLS_WARNING_MESSAGE = chalk.yellow(
-  "Agent skills inject specialized instructions and domain-specific knowledge into the agent's system prompt. This can change how the agent interprets your requests and interacts with your environment. Review the skill definitions at the location(s) provided below to ensure they meet your security standards.",
+  "Skills inject specialized instructions and domain-specific knowledge into the agent's system prompt. This can change how the agent interprets your requests and interacts with your environment. Review the skill definitions at the location(s) provided below to ensure they meet your security standards.",
 );
 
 /**
@@ -289,9 +289,9 @@ async function extensionConsentString(
     );
   }
   if (skills.length > 0) {
-    output.push(`\n${chalk.bold('Agent Skills:')}`);
+    output.push(`\n${chalk.bold('Skills:')}`);
     output.push(SKILLS_WARNING_MESSAGE);
-    output.push('This extension will install the following agent skills:');
+    output.push('This extension will install the following skills:');
     for (const skill of skills) {
       output.push(`  * ${chalk.bold(skill.name)}: ${skill.description}`);
       const skillDir = path.dirname(skill.location);

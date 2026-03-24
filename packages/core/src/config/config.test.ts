@@ -150,6 +150,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     off: vi.fn(),
     emit: vi.fn(),
     getProviderSettings: vi.fn(() => ({})),
+    getAllGlobalSettings: vi.fn(() => ({})),
   };
   return {
     getSettingsService: vi.fn(() => mockSettingsService),
@@ -1749,6 +1750,22 @@ describe('Config getHookSystem', () => {
     expect(config.getHookSystem()).toBeUndefined();
   });
 
+  it('getEnableHooksUI returns true while getEnableHooks returns false and getHookSystem returns undefined', () => {
+    const config = new Config({
+      ...baseParams,
+      enableHooksUI: true,
+      enableHooks: false,
+    });
+    expect(config.getEnableHooksUI()).toBe(true);
+    expect(config.getEnableHooks()).toBe(false);
+    expect(config.getHookSystem()).toBeUndefined();
+  });
+
+  it('getEnableHooksUI defaults to true when not specified', () => {
+    const config = new Config(baseParams);
+    expect(config.getEnableHooksUI()).toBe(true);
+  });
+
   describe('reloadSkills', () => {
     it('should call onReload, update disabledSkills, discover, and apply disabled list', async () => {
       const mockOnReload = vi.fn().mockResolvedValue({
@@ -1830,6 +1847,31 @@ describe('Config getHookSystem', () => {
 
       // disabledSkills undefined is falsy, so original value is preserved
       expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill1']);
+    });
+
+    it('should update admin settings from onReload', async () => {
+      const mockOnReload = vi.fn().mockResolvedValue({
+        adminSkillsEnabled: false,
+      });
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+        onReload: mockOnReload,
+      };
+
+      const config = new Config(params);
+      await initializeTestConfig(config);
+
+      const skillManager = config.getSkillManager();
+      vi.spyOn(skillManager, 'setAdminSettings');
+
+      await config.reloadSkills();
+
+      expect(skillManager.setAdminSettings).toHaveBeenCalledWith(false);
     });
   });
 });

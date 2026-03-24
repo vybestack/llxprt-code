@@ -74,6 +74,7 @@ import type {
   BeforeAgentHookOutput,
   AfterAgentHookOutput,
 } from '../hooks/types.js';
+import { coreEvents, CoreEvent } from '../utils/events.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -313,9 +314,16 @@ export class GeminiClient {
       complexitySettings.suggestionCooldownMs ?? 300000;
 
     this.todoReminderService = new TodoReminderService();
+
+    coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
   }
 
+  private handleModelChanged = () => {
+    this.currentSequenceModel = null;
+  };
+
   dispose(): void {
+    coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
     if (this._unsubscribe) {
       this._unsubscribe();
       this._unsubscribe = undefined;
@@ -918,6 +926,10 @@ ${jitMemory}`
     this.updateTelemetryTokenCount();
     // Clear the stored history as well
     this._previousHistory = [];
+  }
+
+  async resumeChat(history: Content[]): Promise<void> {
+    this.chat = await this.startChat(history);
   }
 
   /**

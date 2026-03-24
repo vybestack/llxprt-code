@@ -112,22 +112,19 @@ describe('aboutCommand', () => {
 
     await aboutCommand.action(mockContext, '');
 
-    expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: MessageType.ABOUT,
-        cliVersion: 'test-version',
-        osVersion: 'test-os',
-        sandboxEnv: 'no sandbox',
-        modelVersion: 'test-model',
-        gcpProject: 'test-gcp-project',
-        keyfile: '',
-        key: '',
-        ideClient: 'test-ide',
-        provider: 'Unknown',
-        baseURL: '',
-      },
-      expect.any(Number),
-    );
+    expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+      type: MessageType.ABOUT,
+      cliVersion: 'test-version',
+      osVersion: 'test-os',
+      sandboxEnv: 'no sandbox',
+      modelVersion: 'test-model',
+      gcpProject: 'test-gcp-project',
+      keyfile: '',
+      key: '',
+      ideClient: 'test-ide',
+      provider: 'Unknown',
+      baseURL: '',
+    });
   });
 
   it('should show the correct sandbox environment variable', async () => {
@@ -142,7 +139,6 @@ describe('aboutCommand', () => {
       expect.objectContaining({
         sandboxEnv: 'gemini-sandbox',
       }),
-      expect.any(Number),
     );
   });
 
@@ -159,7 +155,6 @@ describe('aboutCommand', () => {
       expect.objectContaining({
         sandboxEnv: 'sandbox-exec (test-profile)',
       }),
-      expect.any(Number),
     );
   });
 
@@ -187,7 +182,6 @@ describe('aboutCommand', () => {
         provider: 'Unknown',
         baseURL: '',
       }),
-      expect.any(Number),
     );
   });
 });

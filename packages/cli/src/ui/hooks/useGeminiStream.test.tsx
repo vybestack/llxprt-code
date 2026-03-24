@@ -2939,4 +2939,108 @@ describe('useGeminiStream', () => {
       });
     });
   });
+
+  describe('Hook Execution Control Events', () => {
+    it('should add info message when AgentExecutionStopped event is received', async () => {
+      const { result } = renderHook(() => useGeminiStream(mockConfig));
+
+      await act(async () => {
+        mockTurnRun.mockReturnValue(
+          (async function* () {
+            yield {
+              type: ServerGeminiEventType.AgentExecutionStopped,
+              reason: 'Test stop reason',
+            };
+          })(),
+        );
+        void result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Idle);
+      });
+
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: 'Execution stopped by hook: Test stop reason',
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should add info message when AgentExecutionBlocked event is received', async () => {
+      const { result } = renderHook(() => useGeminiStream(mockConfig));
+
+      await act(async () => {
+        mockTurnRun.mockReturnValue(
+          (async function* () {
+            yield {
+              type: ServerGeminiEventType.AgentExecutionBlocked,
+              reason: 'Test block reason',
+            };
+          })(),
+        );
+        void result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Idle);
+      });
+
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: 'Execution blocked by hook: Test block reason',
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should not crash when processing AgentExecutionStopped event', async () => {
+      const { result } = renderHook(() => useGeminiStream(mockConfig));
+
+      await act(async () => {
+        mockTurnRun.mockReturnValue(
+          (async function* () {
+            yield {
+              type: ServerGeminiEventType.AgentExecutionStopped,
+              reason: 'Hook stopped execution',
+            };
+          })(),
+        );
+        void result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Idle);
+      });
+
+      // Verify no errors thrown and state is clean
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
+
+    it('should not crash when processing AgentExecutionBlocked event', async () => {
+      const { result } = renderHook(() => useGeminiStream(mockConfig));
+
+      await act(async () => {
+        mockTurnRun.mockReturnValue(
+          (async function* () {
+            yield {
+              type: ServerGeminiEventType.AgentExecutionBlocked,
+              reason: 'Hook blocked execution',
+            };
+          })(),
+        );
+        void result.current.submitQuery('test query');
+      });
+
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Idle);
+      });
+
+      // Verify no errors thrown and state is clean
+      expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
+  });
 });

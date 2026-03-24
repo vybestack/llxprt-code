@@ -56,14 +56,11 @@ describe('statsCommand', () => {
     const expectedDuration = formatDuration(
       endTime.getTime() - startTime.getTime(),
     );
-    expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-      {
-        type: MessageType.STATS,
-        duration: expectedDuration,
-        quotaLines: undefined,
-      },
-      expect.any(Number),
-    );
+    expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+      type: MessageType.STATS,
+      duration: expectedDuration,
+      quotaLines: undefined,
+    });
   });
 
   it('should display model stats when using the "model" subcommand', () => {

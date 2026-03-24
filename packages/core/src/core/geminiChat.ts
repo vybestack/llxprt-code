@@ -57,6 +57,42 @@ import type { StreamEvent } from './geminiChatTypes.js';
 import type { CompressionContext } from './compression/types.js';
 
 /**
+ * Error thrown when agent execution is stopped by a hook.
+ */
+export class AgentExecutionStoppedError extends Error {
+  readonly reason: string;
+  readonly systemMessage?: string;
+
+  constructor(reason: string, systemMessage?: string) {
+    super(`Agent execution stopped: ${systemMessage || reason}`);
+    this.name = 'AgentExecutionStoppedError';
+    this.reason = reason;
+    this.systemMessage = systemMessage;
+  }
+}
+
+/**
+ * Error thrown when agent execution is blocked by a hook.
+ */
+export class AgentExecutionBlockedError extends Error {
+  readonly reason: string;
+  readonly systemMessage?: string;
+  readonly syntheticResponse?: GenerateContentResponse;
+
+  constructor(
+    reason: string,
+    syntheticResponse?: GenerateContentResponse,
+    systemMessage?: string,
+  ) {
+    super(`Agent execution blocked: ${systemMessage || reason}`);
+    this.name = 'AgentExecutionBlockedError';
+    this.reason = reason;
+    this.systemMessage = systemMessage;
+    this.syntheticResponse = syntheticResponse;
+  }
+}
+
+/**
  * Chat session that enables sending messages to the model with previous
  * conversation context.
  *

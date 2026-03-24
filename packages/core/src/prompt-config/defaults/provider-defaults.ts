@@ -280,5 +280,8 @@ export const PROVIDER_DEFAULTS: Record<string, string> = {
   'providers/gemini/models/gemini-3-pro-preview/core.md': loadMarkdownFile(
     'providers/gemini/models/gemini-3-pro-preview/core.md',
   ),
+  'providers/gemini/models/gemini-3-flash-preview/core.md': loadMarkdownFile(
+    'providers/gemini/models/gemini-3-flash-preview/core.md',
+  ),
   // Future provider-specific defaults can be added here
 };

@@ -241,6 +241,66 @@ describe('Shell Safety Policy - SECURITY', () => {
     });
   });
 
+  describe('R2: No-Rule Shell Compound Command Security', () => {
+    it('SHOULD DENY compound command subpart even with no top-level rule match', () => {
+      // Setup: DENY for "git push", but no rule matches "git commit"
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'run_shell_command',
+            argsPattern: /"command":"git push(?:[\s"]|$)/,
+            decision: PolicyDecision.DENY,
+            priority: 1.01,
+          },
+        ],
+        defaultDecision: PolicyDecision.ALLOW,
+      });
+
+      // "git commit && git push" should be DENY because "git push" is DENY
+      const result = engine.evaluate(
+        'run_shell_command',
+        { command: 'git commit && git push' },
+        undefined,
+      );
+      expect(result).toBe(PolicyDecision.DENY);
+    });
+
+    it('SHOULD ASK_USER for compound command when subpart is unknown', () => {
+      // Default is ALLOW, but subcommand validation still applies
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'run_shell_command',
+            argsPattern: /"command":"git log(?:[\s"]|$)/,
+            decision: PolicyDecision.ALLOW,
+            priority: 1.01,
+          },
+        ],
+        defaultDecision: PolicyDecision.ASK_USER,
+      });
+
+      // "ls && rm -rf /" — no rule matches at top level, so default=ASK_USER
+      // but subcommands should still be checked; "rm -rf /" → ASK_USER
+      const result = engine.evaluate(
+        'run_shell_command',
+        { command: 'ls && rm -rf /' },
+        undefined,
+      );
+      expect(result).toBe(PolicyDecision.ASK_USER);
+    });
+
+    it('SHOULD handle trimmed subcommands in compound commands', () => {
+      // Verify that whitespace in split commands doesn't break matching
+      const result = policyEngine.evaluate(
+        'run_shell_command',
+        { command: 'git log  &&  echo test' },
+        undefined,
+      );
+      // "git log" → ALLOW, "echo test" → ASK_USER (no rule)
+      expect(result).toBe(PolicyDecision.ASK_USER);
+    });
+  });
+
   describe('R2: Non-Interactive Mode Interaction', () => {
     beforeEach(() => {
       policyEngine = new PolicyEngine({

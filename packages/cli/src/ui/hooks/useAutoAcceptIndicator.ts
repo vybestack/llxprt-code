@@ -7,17 +7,22 @@
 import { useState, useEffect } from 'react';
 import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
 import { useKeypress } from './useKeypress.js';
+import { keyMatchers, Command } from '../keyMatchers.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 
 export interface UseAutoAcceptIndicatorArgs {
   config: Config;
-  addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
+  addItem?: (item: HistoryItemWithoutId, timestamp: number) => void;
+  onApprovalModeChange?: (mode: ApprovalMode) => void;
+  isActive?: boolean;
 }
 
 export function useAutoAcceptIndicator({
   config,
   addItem,
+  onApprovalModeChange,
+  isActive = true,
 }: UseAutoAcceptIndicatorArgs): ApprovalMode {
   const currentConfigValue = config.getApprovalMode();
   const [showAutoAcceptIndicator, setShowAutoAcceptIndicator] =
@@ -31,12 +36,12 @@ export function useAutoAcceptIndicator({
     (key) => {
       let nextApprovalMode: ApprovalMode | undefined;
 
-      if (key.ctrl && key.name === 'y') {
+      if (keyMatchers[Command.TOGGLE_YOLO](key)) {
         nextApprovalMode =
           config.getApprovalMode() === ApprovalMode.YOLO
             ? ApprovalMode.DEFAULT
             : ApprovalMode.YOLO;
-      } else if (key.shift && key.name === 'tab') {
+      } else if (keyMatchers[Command.TOGGLE_AUTO_EDIT](key)) {
         nextApprovalMode =
           config.getApprovalMode() === ApprovalMode.AUTO_EDIT
             ? ApprovalMode.DEFAULT
@@ -48,8 +53,10 @@ export function useAutoAcceptIndicator({
           config.setApprovalMode(nextApprovalMode);
           // Update local state immediately for responsiveness
           setShowAutoAcceptIndicator(nextApprovalMode);
+          // Notify callback if provided
+          onApprovalModeChange?.(nextApprovalMode);
         } catch (e) {
-          addItem(
+          addItem?.(
             {
               type: MessageType.INFO,
               text: (e as Error).message,
@@ -59,7 +66,7 @@ export function useAutoAcceptIndicator({
         }
       }
     },
-    { isActive: true },
+    { isActive },
   );
 
   return showAutoAcceptIndicator;

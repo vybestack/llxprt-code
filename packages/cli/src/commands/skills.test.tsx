@@ -23,7 +23,7 @@ describe('skillsCommand', () => {
   it('should have correct command and aliases', () => {
     expect(skillsCommand.command).toBe('skills <command>');
     expect(skillsCommand.aliases).toEqual(['skill']);
-    expect(skillsCommand.describe).toBe('Manage agent skills.');
+    expect(skillsCommand.describe).toBe('Manage skills.');
   });
 
   it('should register all subcommands in builder', () => {

@@ -16,6 +16,7 @@ import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
+import { exportHistoryForBugReport } from '../utils/historyExportUtils.js';
 
 export const bugCommand: SlashCommand = {
   name: 'bug',
@@ -62,6 +63,38 @@ export const bugCommand: SlashCommand = {
 `;
     if (ideClient) {
       info += `* **IDE Client:** ${ideClient}\n`;
+    }
+
+    // Export conversation history if available
+    const client = config?.getGeminiClient();
+    if (client?.hasChatInitialized()) {
+      try {
+        const chat = client.getChat();
+        const history = chat?.getHistory();
+
+        if (history && history.length > 0) {
+          const { filePath } = await exportHistoryForBugReport(history);
+          info += `* **Conversation Transcript:** Exported to \`${filePath}\` (please attach to your bug report)\n`;
+
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Conversation history exported to: ${filePath}`,
+            },
+            Date.now(),
+          );
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        context.ui.addItem(
+          {
+            type: MessageType.WARNING,
+            text: `Warning: Could not export conversation history: ${errorMessage}`,
+          },
+          Date.now(),
+        );
+      }
     }
 
     let bugReportUrl =

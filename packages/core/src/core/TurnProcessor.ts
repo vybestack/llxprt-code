@@ -35,6 +35,10 @@ import {
   INVALID_CONTENT_RETRY_OPTIONS,
   type UsageMetadataWithCache,
 } from './geminiChatTypes.js';
+import {
+  AgentExecutionStoppedError,
+  AgentExecutionBlockedError,
+} from './geminiChat.js';
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 
@@ -169,6 +173,34 @@ export class TurnProcessor {
           lastError = null;
           break;
         } catch (error) {
+          // Handle hook execution control errors before retry logic
+          if (error instanceof AgentExecutionStoppedError) {
+            yield {
+              type: StreamEventType.AGENT_EXECUTION_STOPPED,
+              reason: error.reason,
+              systemMessage: error.systemMessage,
+            };
+            lastError = null;
+            break;
+          }
+
+          if (error instanceof AgentExecutionBlockedError) {
+            yield {
+              type: StreamEventType.AGENT_EXECUTION_BLOCKED,
+              reason: error.reason,
+              systemMessage: error.systemMessage,
+            };
+            // If there's a synthetic response, yield it as a chunk
+            if (error.syntheticResponse) {
+              yield {
+                type: StreamEventType.CHUNK,
+                value: error.syntheticResponse,
+              };
+            }
+            lastError = null;
+            break;
+          }
+
           lastError = error;
           if (
             (error instanceof InvalidStreamError ||

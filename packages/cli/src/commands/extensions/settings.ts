@@ -28,7 +28,7 @@ interface ListArgs {
 /**
  * Prompts for a setting value using readline.
  */
-async function promptForSetting(
+export async function promptForSetting(
   prompt: string,
   sensitive: boolean,
 ): Promise<string> {

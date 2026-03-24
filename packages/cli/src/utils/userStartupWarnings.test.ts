@@ -6,19 +6,41 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getUserStartupWarnings } from './userStartupWarnings.js';
-import * as os from 'os';
-import fs from 'fs/promises';
-import path from 'path';
+import * as os from 'node:os';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {
+  isFolderTrustEnabled,
+  isWorkspaceTrusted,
+} from '../config/trustedFolders.js';
 
 // Mock os.homedir to control the home directory in tests
-vi.mock('os', async (importOriginal) => {
-  const actualOs = await importOriginal<typeof os>();
+const mockHomedir = vi.hoisted(() => vi.fn());
+
+vi.mock('node:os', async (importOriginal) => {
+  const actualOs = await importOriginal<
+    typeof import('node:os') & { default?: unknown }
+  >();
   return {
     ...actualOs,
-    homedir: vi.fn(),
+    ...(actualOs.default &&
+    typeof actualOs.default === 'object' &&
+    actualOs.default !== null
+      ? {
+          default: {
+            ...(actualOs.default as Record<string, unknown>),
+            homedir: mockHomedir,
+          },
+        }
+      : {}),
+    homedir: mockHomedir,
   };
 });
 
+vi.mock('../config/trustedFolders.js', () => ({
+  isFolderTrustEnabled: vi.fn(),
+  isWorkspaceTrusted: vi.fn(),
+}));
 describe('getUserStartupWarnings', () => {
   let testRootDir: string;
   let homeDir: string;
@@ -27,7 +49,9 @@ describe('getUserStartupWarnings', () => {
     testRootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'warnings-test-'));
     homeDir = path.join(testRootDir, 'home');
     await fs.mkdir(homeDir, { recursive: true });
-    vi.mocked(os.homedir).mockReturnValue(homeDir);
+    mockHomedir.mockReturnValue(homeDir);
+    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
+    vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
   });
 
   afterEach(async () => {
@@ -37,16 +61,41 @@ describe('getUserStartupWarnings', () => {
 
   describe('home directory check', () => {
     it('should return a warning when running in home directory', async () => {
-      const warnings = await getUserStartupWarnings(homeDir);
+      const warnings = await getUserStartupWarnings({}, homeDir);
       expect(warnings).toContainEqual(
-        expect.stringContaining('home directory'),
+        expect.stringContaining(
+          'Warning you are running LLxprt CLI in your home directory',
+        ),
+      );
+      expect(warnings).toContainEqual(
+        expect.stringContaining('warning can be disabled in /settings'),
       );
     });
 
     it('should not return a warning when running in a project directory', async () => {
       const projectDir = path.join(testRootDir, 'project');
       await fs.mkdir(projectDir);
-      const warnings = await getUserStartupWarnings(projectDir);
+      const warnings = await getUserStartupWarnings({}, projectDir);
+      expect(warnings).not.toContainEqual(
+        expect.stringContaining('home directory'),
+      );
+    });
+
+    it('should not return a warning when showHomeDirectoryWarning is false', async () => {
+      const warnings = await getUserStartupWarnings(
+        { ui: { showHomeDirectoryWarning: false } },
+        homeDir,
+      );
+      expect(warnings).not.toContainEqual(
+        expect.stringContaining('home directory'),
+      );
+    });
+
+    it('should not return a warning when folder trust is enabled and workspace is trusted', async () => {
+      vi.mocked(isFolderTrustEnabled).mockReturnValue(true);
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+
+      const warnings = await getUserStartupWarnings({}, homeDir);
       expect(warnings).not.toContainEqual(
         expect.stringContaining('home directory'),
       );
@@ -56,7 +105,7 @@ describe('getUserStartupWarnings', () => {
   describe('root directory check', () => {
     it('should return a warning when running in a root directory', async () => {
       const rootDir = path.parse(testRootDir).root;
-      const warnings = await getUserStartupWarnings(rootDir);
+      const warnings = await getUserStartupWarnings({}, rootDir);
       expect(warnings).toContainEqual(
         expect.stringContaining('root directory'),
       );
@@ -68,7 +117,7 @@ describe('getUserStartupWarnings', () => {
     it('should not return a warning when running in a non-root directory', async () => {
       const projectDir = path.join(testRootDir, 'project');
       await fs.mkdir(projectDir);
-      const warnings = await getUserStartupWarnings(projectDir);
+      const warnings = await getUserStartupWarnings({}, projectDir);
       expect(warnings).not.toContainEqual(
         expect.stringContaining('root directory'),
       );
@@ -78,7 +127,7 @@ describe('getUserStartupWarnings', () => {
   describe('error handling', () => {
     it('should handle errors when checking directory', async () => {
       const nonExistentPath = path.join(testRootDir, 'non-existent');
-      const warnings = await getUserStartupWarnings(nonExistentPath);
+      const warnings = await getUserStartupWarnings({}, nonExistentPath);
       const expectedWarning =
         'Could not verify the current directory due to a file system error.';
       expect(warnings).toEqual([expectedWarning, expectedWarning]);

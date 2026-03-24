@@ -10,11 +10,24 @@
 export const SESSION_FILE_PREFIX = 'session-';
 
 /**
+ * Recorded tool call within a message (minimal for rewind purposes)
+ */
+export interface ToolCallRecord {
+  toolName: string;
+  args?: Record<string, unknown>;
+  resultDisplay?: unknown;
+}
+
+/**
  * Base message record structure (minimal for session cleanup purposes)
  */
 export interface BaseMessageRecord {
+  id?: string;
   timestamp: string;
   role: 'user' | 'model';
+  type?: string;
+  content?: string;
+  toolCalls?: ToolCallRecord[];
 }
 
 /**

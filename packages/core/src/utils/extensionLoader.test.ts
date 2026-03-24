@@ -41,6 +41,12 @@ describe('SimpleExtensionLoader', () => {
       getEnableExtensionReloading: () => extensionReloadingEnabled,
       refreshMemory: vi.fn(),
       getHookSystem: () => undefined,
+      getSubagentManager: vi.fn().mockReturnValue({
+        removeExtensionSubagents: vi.fn(),
+      }),
+      on: vi.fn(),
+      off: vi.fn(),
+      emit: vi.fn(),
     } as unknown as Config;
   });
 
@@ -170,6 +176,9 @@ describe('SimpleExtensionLoader', () => {
         getHookSystem: () => ({
           initialize: mockHookSystemInit,
         }),
+        getSubagentManager: vi.fn(() => ({
+          removeExtensionSubagents: vi.fn(),
+        })),
       } as unknown as Config;
 
       const extensionWithHooks = {

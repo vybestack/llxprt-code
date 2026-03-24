@@ -34,7 +34,7 @@ export function ensureOAuthProviderRegistered(
   tokenStore?: TokenStore,
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number,
 ): void {
   if (!oauthManager) {

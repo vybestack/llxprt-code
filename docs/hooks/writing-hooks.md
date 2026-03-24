@@ -55,7 +55,7 @@ Add the hook configuration to `.llxprt/settings.json`:
           {
             "name": "tool-logger",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/.llxprt/hooks/log-tools.sh",
+            "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/log-tools.sh",
             "description": "Log all tool executions"
           }
         ]
@@ -115,7 +115,7 @@ exit 0
           {
             "name": "secret-scanner",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/.llxprt/hooks/block-secrets.sh",
+            "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/block-secrets.sh",
             "description": "Prevent committing secrets"
           }
         ]
@@ -172,7 +172,7 @@ exit 0
           {
             "name": "auto-test",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/.llxprt/hooks/auto-test.sh",
+            "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/auto-test.sh",
             "description": "Run tests after code changes"
           }
         ]
@@ -217,7 +217,7 @@ EOF
           {
             "name": "git-context",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/.llxprt/hooks/inject-context.sh",
+            "command": "$LLXPRT_PROJECT_DIR/.llxprt/hooks/inject-context.sh",
             "description": "Inject git commit history"
           }
         ]
@@ -345,7 +345,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "init-assistant",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/init.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/init.js",
             "description": "Initialize Smart Workflow Assistant"
           }
         ]
@@ -358,7 +358,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "inject-memories",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/inject-memories.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/inject-memories.js",
             "description": "Inject relevant project memories"
           }
         ]
@@ -371,7 +371,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "rag-filter",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/rag-filter.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/rag-filter.js",
             "description": "Filter tools using RAG"
           }
         ]
@@ -384,7 +384,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "security-check",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/security.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/security.js",
             "description": "Prevent committing secrets"
           }
         ]
@@ -397,7 +397,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "auto-test",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/auto-test.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/auto-test.js",
             "description": "Run tests after code changes"
           }
         ]
@@ -410,7 +410,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "record-interaction",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/record.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/record.js",
             "description": "Record interaction for learning"
           }
         ]
@@ -423,7 +423,7 @@ chmod +x .llxprt/hooks/*.js
           {
             "name": "consolidate-memories",
             "type": "command",
-            "command": "node $GEMINI_PROJECT_DIR/.llxprt/hooks/consolidate.js",
+            "command": "node $LLXPRT_PROJECT_DIR/.llxprt/hooks/consolidate.js",
             "description": "Extract and store session learnings"
           }
         ]
@@ -446,7 +446,7 @@ const path = require('path');
 const fs = require('fs');
 
 async function main() {
-  const projectDir = process.env.GEMINI_PROJECT_DIR;
+  const projectDir = process.env.LLXPRT_PROJECT_DIR;
   const chromaPath = path.join(projectDir, '.llxprt', 'chroma');
 
   // Ensure chroma directory exists
@@ -505,13 +505,15 @@ async function main() {
     return;
   }
 
-  // Embed the prompt
-  const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  // Embed the prompt (uses LLXPRT_API_KEY; GEMINI_API_KEY also supported for compatibility)
+  const genai = new GoogleGenerativeAI(
+    process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
+  );
   const model = genai.getGenerativeModel({ model: 'text-embedding-004' });
   const result = await model.embedContent(prompt);
 
   // Search memories
-  const projectDir = process.env.GEMINI_PROJECT_DIR;
+  const projectDir = process.env.LLXPRT_PROJECT_DIR;
   const client = new ChromaClient({
     path: path.join(projectDir, '.llxprt', 'chroma'),
   });
@@ -587,8 +589,10 @@ async function main() {
     .join('\n');
 
   // Use fast model to extract task keywords
-  const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const genai = new GoogleGenerativeAI(
+    process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
+  );
+  const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const result = await model.generateContent(
     `Extract 3-5 keywords describing needed tool capabilities from this request:\n\n${recentMessages}\n\nKeywords (comma-separated):`,
@@ -765,8 +769,8 @@ const path = require('path');
 async function main() {
   const input = JSON.parse(await readStdin());
   const { llm_request, llm_response } = input;
-  const projectDir = process.env.GEMINI_PROJECT_DIR;
-  const sessionId = process.env.GEMINI_SESSION_ID;
+  const projectDir = process.env.LLXPRT_PROJECT_DIR;
+  const sessionId = process.env.LLXPRT_SESSION_ID;
 
   const tempFile = path.join(
     projectDir,
@@ -825,8 +829,8 @@ const { ChromaClient } = require('chromadb');
 
 async function main() {
   const input = JSON.parse(await readStdin());
-  const projectDir = process.env.GEMINI_PROJECT_DIR;
-  const sessionId = process.env.GEMINI_SESSION_ID;
+  const projectDir = process.env.LLXPRT_PROJECT_DIR;
+  const sessionId = process.env.LLXPRT_SESSION_ID;
 
   const tempFile = path.join(
     projectDir,
@@ -855,8 +859,10 @@ async function main() {
   }
 
   // Extract memories using LLM
-  const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const genai = new GoogleGenerativeAI(
+    process.env.LLXPRT_API_KEY || process.env.GEMINI_API_KEY,
+  );
+  const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = `Extract important project learnings from this session.
 Focus on: decisions, conventions, gotchas, patterns.
@@ -929,7 +935,7 @@ readStdin().then(main).catch(console.error);
 ### Example session
 
 ```
-> gemini
+> llxprt
 
 🧠 3 memories loaded
 
@@ -983,7 +989,7 @@ Demonstrates every hook event with practical use cases in a cohesive workflow.
 
 ### Cost efficiency
 
-- Uses `gemini-2.0-flash-exp` for intent extraction (fast, cheap)
+- Uses `gemini-2.0-flash` for intent extraction (fast, cheap)
 - Uses `text-embedding-004` for RAG (inexpensive)
 - Caches tool descriptions (one-time cost)
 - Minimal overhead per request (<500ms typically)

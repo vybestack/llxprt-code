@@ -14,11 +14,25 @@ export enum StreamEventType {
   /** A signal that a retry is about to happen. The UI should discard any partial
    * content from the attempt that just failed. */
   RETRY = 'retry',
+  /** Agent execution was stopped by a hook. */
+  AGENT_EXECUTION_STOPPED = 'agent_execution_stopped',
+  /** Agent execution was blocked by a hook. */
+  AGENT_EXECUTION_BLOCKED = 'agent_execution_blocked',
 }
 
 export type StreamEvent =
   | { type: StreamEventType.CHUNK; value: GenerateContentResponse }
-  | { type: StreamEventType.RETRY };
+  | { type: StreamEventType.RETRY }
+  | {
+      type: StreamEventType.AGENT_EXECUTION_STOPPED;
+      reason: string;
+      systemMessage?: string;
+    }
+  | {
+      type: StreamEventType.AGENT_EXECUTION_BLOCKED;
+      reason: string;
+      systemMessage?: string;
+    };
 
 export type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {
   cache_read_input_tokens?: number;

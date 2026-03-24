@@ -47,6 +47,14 @@ import {
 } from './geminiChatTypes.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
+import {
+  triggerBeforeModelHook,
+  triggerAfterModelHook,
+} from './geminiChatHookTriggers.js';
+import {
+  AgentExecutionStoppedError,
+  AgentExecutionBlockedError,
+} from './geminiChat.js';
 
 /**
  * StreamProcessor handles making API calls and processing streaming responses.
@@ -139,7 +147,7 @@ export class StreamProcessor {
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    const requestContents = this._buildRequestContents(userContent);
+    let requestContents = this._buildRequestContents(userContent);
 
     const tools = this.generationConfig.tools;
     this.logger.debug(
@@ -163,6 +171,65 @@ export class StreamProcessor {
           config: { ...baseRuntimeContext.config, ...params.config },
         }
       : baseRuntimeContext;
+
+    // Trigger BeforeModel hook for streaming path
+    const configForHooks = this.runtimeContext.providerRuntime.config;
+    if (configForHooks) {
+      const requestForHook = {
+        contents: requestContents,
+        tools: tools as ProviderToolset | undefined,
+      };
+      const beforeModelResult = await triggerBeforeModelHook(
+        configForHooks,
+        requestForHook,
+      );
+
+      // Check for stop first
+      if (beforeModelResult?.shouldStopExecution()) {
+        throw new AgentExecutionStoppedError(
+          beforeModelResult.getEffectiveReason() ||
+            'Execution stopped by BeforeModel hook',
+          beforeModelResult.systemMessage,
+        );
+      }
+
+      // Check for blocking decision with synthetic response
+      if (beforeModelResult?.isBlockingDecision()) {
+        let syntheticResponse = beforeModelResult.getSyntheticResponse();
+        // Ensure synthetic response has finishReason to avoid invalid-stream handling
+        if (syntheticResponse) {
+          const candidate = syntheticResponse.candidates?.[0];
+          if (candidate && !candidate.finishReason) {
+            syntheticResponse = {
+              ...syntheticResponse,
+              candidates: [
+                {
+                  ...candidate,
+                  finishReason: FinishReason.STOP,
+                },
+              ],
+            } as GenerateContentResponse;
+          }
+        }
+        throw new AgentExecutionBlockedError(
+          beforeModelResult.getEffectiveReason() ||
+            'Request blocked by BeforeModel hook',
+          syntheticResponse,
+        );
+      }
+
+      // Apply request modifications from BeforeModel hook
+      if (beforeModelResult) {
+        const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
+          model: this.runtimeContext.state.model || '',
+          contents: requestContents as unknown as Content[],
+        });
+        // If hook modified contents, update requestContents
+        if (modifiedRequest && modifiedRequest.contents) {
+          requestContents = modifiedRequest.contents as unknown as IContent[];
+        }
+      }
+    }
 
     const streamResponse = provider.generateChatCompletion({
       contents: requestContents,
@@ -227,6 +294,7 @@ export class StreamProcessor {
   /**
    * Convert IContent stream to GenerateContentResponse stream.
    * Tracks token usage metadata from IContent format.
+   * Triggers AfterModel hook per streamed chunk.
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
@@ -248,7 +316,48 @@ export class StreamProcessor {
         );
         this.compressionHandler.lastPromptTokenCount = combinedPromptTokens;
       }
-      yield convertIContentToResponse(iContent);
+
+      // Convert current chunk to GenerateContentResponse
+      const convertedChunk = convertIContentToResponse(iContent);
+
+      // Trigger AfterModel hook per streamed chunk
+      const hookConfig = this.runtimeContext.providerRuntime.config;
+      if (hookConfig) {
+        const afterModelResult = await triggerAfterModelHook(
+          hookConfig,
+          iContent,
+        );
+
+        // Check for stop
+        if (afterModelResult?.shouldStopExecution()) {
+          throw new AgentExecutionStoppedError(
+            afterModelResult.getEffectiveReason() ||
+              'Execution stopped by AfterModel hook',
+            afterModelResult.systemMessage,
+          );
+        }
+
+        // Check for blocking decision
+        if (afterModelResult?.isBlockingDecision()) {
+          const modifiedResponse = afterModelResult.getModifiedResponse();
+          const syntheticResponse = modifiedResponse || convertedChunk;
+          throw new AgentExecutionBlockedError(
+            afterModelResult.getEffectiveReason() ||
+              'Execution blocked by AfterModel hook',
+            syntheticResponse,
+            afterModelResult.systemMessage,
+          );
+        }
+
+        // Apply modified response if available
+        const modifiedResponse = afterModelResult?.getModifiedResponse();
+        if (modifiedResponse) {
+          yield modifiedResponse;
+          continue;
+        }
+      }
+
+      yield convertedChunk;
     }
   }
 

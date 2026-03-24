@@ -61,9 +61,8 @@ export async function triggerBeforeModelHook(
       model: config.getModel(),
     };
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireBeforeModelEvent(llmRequest);
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireBeforeModelEvent(llmRequest);
 
     debugLogger.debug('BeforeModel hook executed');
 
@@ -121,9 +120,8 @@ export async function triggerAfterModelHook(
       ],
     };
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireAfterModelEvent({}, llmResponse);
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireAfterModelEvent({}, llmResponse);
 
     debugLogger.debug('AfterModel hook executed');
 
@@ -168,9 +166,8 @@ export async function triggerBeforeToolSelectionHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireBeforeToolSelectionEvent({});
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireBeforeToolSelectionEvent({});
 
     debugLogger.debug('BeforeToolSelection hook executed');
 

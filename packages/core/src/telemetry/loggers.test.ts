@@ -463,7 +463,19 @@ describe('loggers', () => {
         response: {
           callId: 'test-call-id',
           responseParts: [{ text: 'test-response' }],
-          resultDisplay: undefined,
+          resultDisplay: {
+            fileDiff: 'diff',
+            fileName: 'file.txt',
+            filePath: 'file.txt',
+            originalContent: 'old content',
+            newContent: 'new content',
+            diffStat: {
+              ai_added_lines: 1,
+              ai_removed_lines: 2,
+              user_added_lines: 5,
+              user_removed_lines: 6,
+            },
+          },
           error: undefined,
           errorType: undefined,
           agentId: 'agent-42',
@@ -498,6 +510,12 @@ describe('loggers', () => {
           prompt_id: 'prompt-id-1',
           tool_type: 'native',
           agent_id: 'agent-42',
+          error: undefined,
+          error_type: undefined,
+          'metadata.ai_added_lines': '1',
+          'metadata.ai_removed_lines': '2',
+          'metadata.user_added_lines': '5',
+          'metadata.user_removed_lines': '6',
         },
       });
 

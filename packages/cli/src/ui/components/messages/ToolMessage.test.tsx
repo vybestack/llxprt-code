@@ -13,6 +13,7 @@ import { StreamingContext } from '../../contexts/StreamingContext.js';
 import { renderWithProviders } from '../../../test-utils/render.js';
 import { Colors } from '../../colors.js';
 import { TOOL_STATUS } from '../../constants.js';
+import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 
 vi.mock('../GeminiRespondingSpinner.js', () => ({
   GeminiRespondingSpinner: ({
@@ -147,5 +148,61 @@ describe('<ToolMessage />', () => {
       );
       expect(lastFrame()).not.toContain("Press 'ctrl+r'");
     });
+  });
+
+  it('renders DiffRenderer for diff results', () => {
+    const diffResult = {
+      fileDiff: '--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new',
+      fileName: 'file.txt',
+      originalContent: 'old',
+      newContent: 'new',
+      filePath: 'file.txt',
+    };
+    const { lastFrame } = renderWithContext(
+      <ToolMessage {...baseProps} resultDisplay={diffResult} />,
+      StreamingState.Idle,
+    );
+    // Check that the output contains the MockDiff content as part of the whole message
+    expect(lastFrame()).toMatchSnapshot();
+  });
+
+  it('renders emphasis correctly', () => {
+    const { lastFrame: highEmphasisFrame } = renderWithContext(
+      <ToolMessage {...baseProps} emphasis="high" />,
+      StreamingState.Idle,
+    );
+    // Check for trailing indicator or specific color if applicable (Colors are not easily testable here)
+    expect(highEmphasisFrame()).toMatchSnapshot();
+
+    const { lastFrame: lowEmphasisFrame } = renderWithContext(
+      <ToolMessage {...baseProps} emphasis="low" />,
+      StreamingState.Idle,
+    );
+    // For low emphasis, the name and description might be dimmed (check for dimColor if possible)
+    // This is harder to assert directly in text output without color checks.
+    // We can at least ensure it doesn't have the high emphasis indicator.
+    expect(lowEmphasisFrame()).toMatchSnapshot();
+  });
+
+  it('renders AnsiOutputText for AnsiOutput results', () => {
+    const ansiResult: AnsiOutput = [
+      [
+        {
+          text: 'hello',
+          fg: '#ffffff',
+          bg: '#000000',
+          bold: false,
+          italic: false,
+          underline: false,
+          dim: false,
+          inverse: false,
+        },
+      ],
+    ];
+    const { lastFrame } = renderWithContext(
+      <ToolMessage {...baseProps} resultDisplay={ansiResult} />,
+      StreamingState.Idle,
+    );
+    expect(lastFrame()).toMatchSnapshot();
   });
 });

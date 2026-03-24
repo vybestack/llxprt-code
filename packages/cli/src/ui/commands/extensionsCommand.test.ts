@@ -48,13 +48,10 @@ describe('extensionsCommand', () => {
       if (!extensionsCommand.action) throw new Error('Action not defined');
       await extensionsCommand.action(mockContext, '');
 
-      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.EXTENSIONS_LIST,
-          extensions: expect.any(Array),
-        },
-        expect.any(Number),
-      );
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+        type: MessageType.EXTENSIONS_LIST,
+        extensions: expect.any(Array),
+      });
     });
 
     it('should show a message if no extensions are installed', async () => {
@@ -145,13 +142,10 @@ describe('extensionsCommand', () => {
         extensions: expect.any(Array),
       });
       expect(mockContext.ui.setPendingItem).toHaveBeenCalledWith(null);
-      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.EXTENSIONS_LIST,
-          extensions: expect.any(Array),
-        },
-        expect.any(Number),
-      );
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+        type: MessageType.EXTENSIONS_LIST,
+        extensions: expect.any(Array),
+      });
     });
 
     it('should call setPendingItem and addItem in a finally block on failure', async () => {
@@ -168,13 +162,10 @@ describe('extensionsCommand', () => {
         extensions: expect.any(Array),
       });
       expect(mockContext.ui.setPendingItem).toHaveBeenCalledWith(null);
-      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.EXTENSIONS_LIST,
-          extensions: expect.any(Array),
-        },
-        expect.any(Number),
-      );
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+        type: MessageType.EXTENSIONS_LIST,
+        extensions: expect.any(Array),
+      });
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {
           type: MessageType.ERROR,
@@ -251,13 +242,10 @@ describe('extensionsCommand', () => {
         extensions: expect.any(Array),
       });
       expect(mockContext.ui.setPendingItem).toHaveBeenCalledWith(null);
-      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.EXTENSIONS_LIST,
-          extensions: expect.any(Array),
-        },
-        expect.any(Number),
-      );
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+        type: MessageType.EXTENSIONS_LIST,
+        extensions: expect.any(Array),
+      });
     });
 
     it('should show a message if no extensions are installed', async () => {

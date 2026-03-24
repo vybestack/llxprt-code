@@ -17,7 +17,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, cpSync } from 'fs';
 import { dirname, join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
@@ -147,5 +147,15 @@ for (const file of policyFiles) {
   if (!existsSync(targetPath)) {
     console.error(`  Failed to copy policy: ${basename(file)}`);
   }
+}
+
+// Copy built-in skills preserving directory structure
+const builtinSkillsSrc = join(root, 'packages/core/src/skills/builtin');
+const builtinSkillsDest = join(bundleDir, 'builtin');
+if (existsSync(builtinSkillsSrc)) {
+  cpSync(builtinSkillsSrc, builtinSkillsDest, {
+    recursive: true,
+    dereference: true,
+  });
 }
 // Assets copied to bundle/

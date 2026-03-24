@@ -132,7 +132,8 @@ import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
-import { computeWindowTitle } from './utils/windowTitle.js';
+import { computeTerminalTitle } from './utils/windowTitle.js';
+import { StreamingState } from './ui/types.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
@@ -1065,7 +1066,7 @@ export async function main() {
   let input = config.getQuestion();
   const startupWarnings = [
     ...(await getStartupWarnings()),
-    ...(await getUserStartupWarnings(workspaceRoot)),
+    ...(await getUserStartupWarnings(settings.merged)),
   ];
 
   // Check if a provider is already active on startup
@@ -1314,11 +1315,18 @@ export async function main() {
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
   if (!settings.merged.ui?.hideWindowTitle) {
-    const windowTitle = computeWindowTitle(title);
-    writeToStdout(`\x1b]2;${windowTitle}\x07`);
+    // Initial state before React loop starts
+    const windowTitle = computeTerminalTitle({
+      streamingState: StreamingState.Idle,
+      isConfirming: false,
+      folderName: title,
+      showThoughts: !!settings.merged.ui?.showStatusInTitle,
+      useDynamicTitle: settings.merged.ui?.dynamicWindowTitle ?? true,
+    });
+    writeToStdout(`\x1b]0;${windowTitle}\x07`);
 
     process.on('exit', () => {
-      writeToStdout(`\x1b]2;\x07`);
+      writeToStdout(`\x1b]0;\x07`);
     });
   }
 }

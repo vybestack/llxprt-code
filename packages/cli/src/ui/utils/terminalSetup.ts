@@ -14,6 +14,7 @@
  * - VS Code: Configures keybindings.json to send \\\r\n
  * - Cursor: Configures keybindings.json to send \\\r\n (VS Code fork)
  * - Windsurf: Configures keybindings.json to send \\\r\n (VS Code fork)
+ * - Antigravity: Configures keybindings.json to send \\\r\n (VS Code fork)
  *
  * For VS Code and its forks:
  * - Shift+Enter: Sends \\\r\n (backslash followed by CRLF)
@@ -49,7 +50,7 @@ export interface TerminalSetupResult {
   requiresRestart?: boolean;
 }
 
-type SupportedTerminal = 'vscode' | 'cursor' | 'windsurf';
+type SupportedTerminal = 'vscode' | 'cursor' | 'windsurf' | 'antigravity';
 
 // Terminal detection
 async function detectTerminal(): Promise<SupportedTerminal | null> {
@@ -67,6 +68,14 @@ async function detectTerminal(): Promise<SupportedTerminal | null> {
   if (process.env.VSCODE_GIT_ASKPASS_MAIN?.toLowerCase().includes('windsurf')) {
     return 'windsurf';
   }
+  // Check for Antigravity-specific indicators
+  if (
+    process.env['VSCODE_GIT_ASKPASS_MAIN']
+      ?.toLowerCase()
+      .includes('antigravity')
+  ) {
+    return 'antigravity';
+  }
   // Check VS Code last since forks may also set VSCODE env vars
   if (termProgram === 'vscode' || process.env.VSCODE_GIT_IPC_HANDLE) {
     return 'vscode';
@@ -81,6 +90,11 @@ async function detectTerminal(): Promise<SupportedTerminal | null> {
       // Check forks before VS Code to avoid false positives
       if (parentName.includes('windsurf') || parentName.includes('Windsurf'))
         return 'windsurf';
+      if (
+        parentName.includes('antigravity') ||
+        parentName.includes('Antigravity')
+      )
+        return 'antigravity';
       if (parentName.includes('cursor') || parentName.includes('Cursor'))
         return 'cursor';
       if (parentName.includes('code') || parentName.includes('Code'))
@@ -286,6 +300,10 @@ async function configureWindsurf(): Promise<TerminalSetupResult> {
   return configureVSCodeStyle('Windsurf', 'Windsurf');
 }
 
+async function configureAntigravity(): Promise<TerminalSetupResult> {
+  return configureVSCodeStyle('Antigravity', 'Antigravity');
+}
+
 /**
  * Main terminal setup function that detects and configures the current terminal.
  *
@@ -321,7 +339,7 @@ export async function terminalSetup(): Promise<TerminalSetupResult> {
     return {
       success: false,
       message:
-        'Could not detect terminal type. Supported terminals: VS Code, Cursor, and Windsurf.',
+        'Could not detect terminal type. Supported terminals: VS Code, Cursor, Windsurf, and Antigravity.',
     };
   }
 
@@ -332,6 +350,8 @@ export async function terminalSetup(): Promise<TerminalSetupResult> {
       return configureCursor();
     case 'windsurf':
       return configureWindsurf();
+    case 'antigravity':
+      return configureAntigravity();
     default:
       return {
         success: false,
