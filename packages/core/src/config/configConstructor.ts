@@ -264,8 +264,11 @@ export function applyConfigParams(
   config.showMemoryUsage = params.showMemoryUsage ?? false;
   config.accessibility = params.accessibility ?? {};
 
-  // Telemetry configuration
+  // Telemetry configuration — spread first to preserve all fields (e.g.
+  // conversationLogPath, customRedactionPatterns, retention settings), then
+  // override core fields with explicit defaults.
   config.telemetrySettings = {
+    ...(params.telemetry ?? {}),
     enabled: params.telemetry?.enabled ?? false,
     target: params.telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
     otlpEndpoint: params.telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
