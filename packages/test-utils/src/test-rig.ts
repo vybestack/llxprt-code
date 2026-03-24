@@ -1217,8 +1217,9 @@ export class TestRig {
     // The console output from Podman is JavaScript object notation, not JSON
     // Look for tool call events in the output
     // Updated regex to handle tool names with hyphens and underscores
+    // Uses [^']* instead of .*? to avoid polynomial backtracking (CodeQL CWE-1333)
     const toolCallPattern =
-      /body:\s*'Tool call:\s*([\w-]+)\..*?Success:\s*(\w+)\..*?Duration:\s*(\d+)ms\.'/g;
+      /body:\s*'Tool call:\s*([\w-]+)\.[^']*Success:\s*(\w+)\.[^']*Duration:\s*(\d+)ms\.'/g;
     const matches = [...stdout.matchAll(toolCallPattern)];
 
     for (const match of matches) {
