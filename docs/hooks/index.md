@@ -14,9 +14,9 @@ Hooks are external scripts (bash, Python, or any executable) that LLxprt Code ca
 
 ## Coming from Other Tools?
 
-### From Gemini CLI
+### From Gemini CLI (Compatibility)
 
-LLxprt Code's hook system is similar to Gemini CLI's hook configuration. The key differences:
+LLxprt Code's hook system is compatible with Gemini CLI's hook configuration. The key points:
 
 - Configuration uses the same `settings.json` format under the `hooks` key
 - Event names are similar: `BeforeTool`, `AfterTool`, `BeforeModel`, `AfterModel`
@@ -146,6 +146,12 @@ LLxprt Code supports these hook events:
 | `SessionEnd`          | When session ends             | Cleanup, final logging                             |
 | `BeforeAgent`         | Before agent processes prompt | Prompt preprocessing                               |
 | `AfterAgent`          | After agent completes         | Response postprocessing                            |
+
+## Hooks in Extensions
+
+Extensions can bundle hooks alongside MCP servers and prompts. When you install an extension that includes hooks, those hooks are loaded automatically when the extension is enabled.
+
+For details on how extension hooks work, including scope precedence and security considerations, see [Hooks in Extensions](../extension.md#hooks-in-extensions).
 
 ## Next Steps
 

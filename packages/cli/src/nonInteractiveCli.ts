@@ -430,6 +430,15 @@ export async function runNonInteractive({
           }
         } else if (event.type === GeminiEventType.Error) {
           throw event.value.error;
+        } else if (event.type === GeminiEventType.AgentExecutionStopped) {
+          const stopMessage = `Agent execution stopped: ${event.systemMessage?.trim() || event.reason}`;
+          process.stderr.write(`${stopMessage}
+`);
+          return;
+        } else if (event.type === GeminiEventType.AgentExecutionBlocked) {
+          const blockMessage = `Agent execution blocked: ${event.systemMessage?.trim() || event.reason}`;
+          process.stderr.write(`[WARNING] ${blockMessage}
+`);
         }
       }
 

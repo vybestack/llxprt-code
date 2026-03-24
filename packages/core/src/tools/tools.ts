@@ -706,11 +706,13 @@ export type ToolResultDisplay = string | FileDiff | FileRead | AnsiOutput;
 export interface FileDiff {
   fileDiff: string;
   fileName: string;
+  filePath?: string;
   originalContent: string | null;
   newContent: string;
   diffStat?: DiffStat;
   metadata?: Record<string, unknown>;
   applied?: boolean;
+  isNewFile?: boolean;
 }
 
 export interface DiffStat {

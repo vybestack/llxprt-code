@@ -12,6 +12,15 @@ import type { CommandContext } from './types.js';
 import type { Config, SkillDefinition } from '@vybestack/llxprt-code-core';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
 
+vi.mock('../../config/settings.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../config/settings.js')>();
+  return {
+    ...actual,
+    isLoadableSettingScope: vi.fn((s) => s === 'User' || s === 'Workspace'),
+  };
+});
+
 describe('skillsCommand', () => {
   let context: CommandContext;
 
@@ -42,6 +51,7 @@ describe('skillsCommand', () => {
               .mockImplementation(
                 (name: string) => skills.find((s) => s.name === name) ?? null,
               ),
+            isAdminEnabled: vi.fn().mockReturnValue(true),
           }),
         } as unknown as Config,
         settings: {
@@ -82,7 +92,6 @@ describe('skillsCommand', () => {
         ],
         showDescriptions: true,
       }),
-      expect.any(Number),
     );
   });
 
@@ -111,7 +120,6 @@ describe('skillsCommand', () => {
         ],
         showDescriptions: true,
       }),
-      expect.any(Number),
     );
   });
 
@@ -123,7 +131,6 @@ describe('skillsCommand', () => {
       expect.objectContaining({
         showDescriptions: false,
       }),
-      expect.any(Number),
     );
   });
 
@@ -133,6 +140,28 @@ describe('skillsCommand', () => {
       (
         context.services.settings as unknown as { workspace: { path: string } }
       ).workspace = {
+        path: '/workspace',
+      };
+
+      interface MockSettings {
+        user: { settings: unknown; path: string };
+        workspace: { settings: unknown; path: string };
+        forScope: unknown;
+      }
+
+      const settings = context.services.settings as unknown as MockSettings;
+
+      settings.forScope = vi.fn((scope) => {
+        if (scope === SettingScope.User) return settings.user;
+        if (scope === SettingScope.Workspace) return settings.workspace;
+        return { settings: {}, path: '' };
+      });
+      settings.user = {
+        settings: {},
+        path: '/user/settings.json',
+      };
+      settings.workspace = {
+        settings: {},
         path: '/workspace',
       };
     });
@@ -151,7 +180,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: expect.stringContaining('Skill "skill1" disabled'),
+          text: 'Skill "skill1" disabled by adding it to the disabled list in project (/workspace) settings. Use "/skills reload" for it to take effect.',
         }),
         expect.any(Number),
       );
@@ -162,6 +191,14 @@ describe('skillsCommand', () => {
         (s) => s.name === 'enable',
       )!;
       context.services.settings.merged.skills = { disabled: ['skill1'] };
+      (
+        context.services.settings as unknown as {
+          workspace: { settings: { skills: { disabled: string[] } } };
+        }
+      ).workspace.settings = {
+        skills: { disabled: ['skill1'] },
+      };
+
       await enableCmd.action!(context, 'skill1');
 
       expect(context.services.settings.setValue).toHaveBeenCalledWith(
@@ -172,7 +209,47 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: expect.stringContaining('Skill "skill1" enabled'),
+          text: 'Skill "skill1" enabled by removing it from the disabled list in project (/workspace) and user (/user/settings.json) settings. Use "/skills reload" for it to take effect.',
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should enable a skill across multiple scopes', async () => {
+      const enableCmd = skillsCommand.subCommands!.find(
+        (s) => s.name === 'enable',
+      )!;
+      (
+        context.services.settings as unknown as {
+          user: { settings: { skills: { disabled: string[] } } };
+        }
+      ).user.settings = {
+        skills: { disabled: ['skill1'] },
+      };
+      (
+        context.services.settings as unknown as {
+          workspace: { settings: { skills: { disabled: string[] } } };
+        }
+      ).workspace.settings = {
+        skills: { disabled: ['skill1'] },
+      };
+
+      await enableCmd.action!(context, 'skill1');
+
+      expect(context.services.settings.setValue).toHaveBeenCalledWith(
+        SettingScope.User,
+        'skills.disabled',
+        [],
+      );
+      expect(context.services.settings.setValue).toHaveBeenCalledWith(
+        SettingScope.Workspace,
+        'skills.disabled',
+        [],
+      );
+      expect(context.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: 'Skill "skill1" enabled by removing it from the disabled list in project (/workspace) and user (/user/settings.json) settings. Use "/skills reload" for it to take effect.',
         }),
         expect.any(Number),
       );
@@ -216,7 +293,7 @@ describe('skillsCommand', () => {
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Reloading agent skills...',
+          text: 'Reloading skills...',
         }),
       );
 
@@ -233,7 +310,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully.',
+          text: 'Skills reloaded successfully.',
         }),
         expect.any(Number),
       );
@@ -259,7 +336,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully. 1 newly available skill.',
+          text: 'Skills reloaded successfully. 1 newly available skill.',
         }),
         expect.any(Number),
       );
@@ -283,7 +360,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully. 1 skill no longer available.',
+          text: 'Skills reloaded successfully. 1 skill no longer available.',
         }),
         expect.any(Number),
       );
@@ -308,7 +385,7 @@ describe('skillsCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Agent skills reloaded successfully. 1 newly available skill and 1 skill no longer available.',
+          text: 'Skills reloaded successfully. 1 newly available skill and 1 skill no longer available.',
         }),
         expect.any(Number),
       );

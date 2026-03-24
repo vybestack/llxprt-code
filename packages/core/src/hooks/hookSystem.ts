@@ -14,11 +14,19 @@ import type { Config } from '../config/config.js';
 import { HookRegistry, type HookRegistryEntry } from './hookRegistry.js';
 import { HookPlanner } from './hookPlanner.js';
 import { HookRunner } from './hookRunner.js';
-import { HookAggregator } from './hookAggregator.js';
+import { HookAggregator, type AggregatedHookResult } from './hookAggregator.js';
 import { HookEventHandler } from './hookEventHandler.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import {
+  type DefaultHookOutput,
+  type SessionStartSource,
+  type SessionEndReason,
+  type PreCompressTrigger,
+  type McpContext,
+  NotificationType,
+} from './types.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
 
@@ -168,6 +176,170 @@ export class HookSystem {
    */
   getAllHooks(): HookRegistryEntry[] {
     return this.registry.getAllHooks();
+  }
+
+  // --- Convenience wrappers delegating to HookEventHandler ---
+
+  /**
+   * Fire BeforeTool event.
+   * Wrapper for getEventHandler().fireBeforeToolEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireBeforeToolEvent(
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    mcpContext?: McpContext,
+  ): Promise<DefaultHookOutput | undefined> {
+    return this.getEventHandler().fireBeforeToolEvent(
+      toolName,
+      toolInput,
+      mcpContext,
+    );
+  }
+
+  /**
+   * Fire AfterTool event.
+   * Wrapper for getEventHandler().fireAfterToolEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireAfterToolEvent(
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    toolResponse: Record<string, unknown>,
+    mcpContext?: McpContext,
+  ): Promise<DefaultHookOutput | undefined> {
+    return this.getEventHandler().fireAfterToolEvent(
+      toolName,
+      toolInput,
+      toolResponse,
+      mcpContext,
+    );
+  }
+
+  /**
+   * Fire BeforeModel event.
+   * Wrapper for getEventHandler().fireBeforeModelEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireBeforeModelEvent(
+    llmRequest: unknown,
+  ): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireBeforeModelEvent(llmRequest);
+  }
+
+  /**
+   * Fire AfterModel event.
+   * Wrapper for getEventHandler().fireAfterModelEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireAfterModelEvent(
+    llmRequest: unknown,
+    llmResponse: unknown,
+  ): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireAfterModelEvent(llmRequest, llmResponse);
+  }
+
+  /**
+   * Fire BeforeToolSelection event.
+   * Wrapper for getEventHandler().fireBeforeToolSelectionEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireBeforeToolSelectionEvent(
+    llmRequest: unknown,
+  ): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireBeforeToolSelectionEvent(llmRequest);
+  }
+
+  /**
+   * Fire SessionStart event.
+   * Wrapper for getEventHandler().fireSessionStartEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireSessionStartEvent(context: {
+    source: SessionStartSource;
+  }): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireSessionStartEvent(context);
+  }
+
+  /**
+   * Fire SessionEnd event.
+   * Wrapper for getEventHandler().fireSessionEndEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireSessionEndEvent(context: {
+    reason: SessionEndReason;
+  }): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireSessionEndEvent(context);
+  }
+
+  /**
+   * Fire PreCompress event.
+   * Wrapper for getEventHandler().firePreCompressEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async firePreCompressEvent(context: {
+    trigger: PreCompressTrigger;
+  }): Promise<AggregatedHookResult> {
+    return this.getEventHandler().firePreCompressEvent(context);
+  }
+
+  /**
+   * Fire BeforeAgent event.
+   * Wrapper for getEventHandler().fireBeforeAgentEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireBeforeAgentEvent(context: {
+    prompt: string;
+  }): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireBeforeAgentEvent(context);
+  }
+
+  /**
+   * Fire AfterAgent event.
+   * Wrapper for getEventHandler().fireAfterAgentEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireAfterAgentEvent(context: {
+    prompt: string;
+    prompt_response: string;
+    stop_hook_active: boolean;
+  }): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireAfterAgentEvent(context);
+  }
+
+  /**
+   * Fire Notification event.
+   * Wrapper for getEventHandler().fireNotificationEvent().
+   *
+   * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
+   * @throws {HookSystemNotInitializedError} if called before initialize()
+   */
+  async fireNotificationEvent(
+    type: NotificationType,
+    message: string,
+    details: Record<string, unknown>,
+  ): Promise<AggregatedHookResult> {
+    return this.getEventHandler().fireNotificationEvent(type, message, details);
   }
 
   /**

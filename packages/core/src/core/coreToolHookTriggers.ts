@@ -16,6 +16,7 @@ import {
   AfterToolHookOutput,
   NotificationType,
 } from '../hooks/types.js';
+import type { McpContext } from '../hooks/types.js';
 import type {
   ToolResult,
   ToolCallConfirmationDetails,
@@ -38,6 +39,7 @@ export async function triggerBeforeToolHook(
   config: Config,
   toolName: string,
   toolInput: Record<string, unknown>,
+  mcpContext?: McpContext,
 ): Promise<BeforeToolHookOutput | undefined> {
   // Check if hooks are enabled
   if (!config.getEnableHooks?.()) {
@@ -54,9 +56,12 @@ export async function triggerBeforeToolHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
-    const result = await eventHandler.fireBeforeToolEvent(toolName, toolInput);
+    // Fire the event using HookSystem facade
+    const result = await hookSystem.fireBeforeToolEvent(
+      toolName,
+      toolInput,
+      mcpContext,
+    );
 
     debugLogger.debug(`BeforeTool hook executed for tool: ${toolName}`);
 
@@ -92,6 +97,7 @@ export async function triggerAfterToolHook(
   toolName: string,
   toolInput: Record<string, unknown>,
   toolOutput: ToolResult,
+  mcpContext?: McpContext,
 ): Promise<AfterToolHookOutput | undefined> {
   // Check if hooks are enabled
   if (!config.getEnableHooks?.()) {
@@ -108,18 +114,18 @@ export async function triggerAfterToolHook(
     // Initialize hook system if needed
     await hookSystem.initialize();
 
-    // Get the event handler and fire the event
-    const eventHandler = hookSystem.getEventHandler();
+    // Fire the event using HookSystem facade
     const toolResponse = {
       llmContent: toolOutput.llmContent,
       returnDisplay: toolOutput.returnDisplay,
       ...(toolOutput.metadata && { metadata: toolOutput.metadata }),
       ...(toolOutput.error && { error: toolOutput.error }),
     };
-    const result = await eventHandler.fireAfterToolEvent(
+    const result = await hookSystem.fireAfterToolEvent(
       toolName,
       toolInput,
       toolResponse,
+      mcpContext,
     );
 
     debugLogger.debug(`AfterTool hook executed for tool: ${toolName}`);
@@ -267,11 +273,10 @@ export async function triggerToolNotificationHook(
   try {
     await hookSystem.initialize();
 
-    const eventHandler = hookSystem.getEventHandler();
     const message = getNotificationMessage(confirmationDetails);
     const serializedDetails = toSerializableDetails(confirmationDetails);
 
-    await eventHandler.fireNotificationEvent(
+    await hookSystem.fireNotificationEvent(
       NotificationType.ToolPermission,
       message,
       serializedDetails,

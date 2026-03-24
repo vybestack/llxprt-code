@@ -49,7 +49,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private logger: DebugLogger;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ) => number;
   private authCodeResolver?: (code: string) => void;
   private authCodeRejecter?: (error: Error) => void;
@@ -58,7 +58,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     tokenStore?: TokenStore,
     addItem?: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ) {
     this.tokenStore = tokenStore;
@@ -85,7 +85,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   setAddItem(
     addItem: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ): void {
     this.addItem = addItem;

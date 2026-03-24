@@ -15,7 +15,7 @@ class GlobalOAuthUI {
   private addItemCallback:
     | ((
         itemData: Omit<HistoryItemWithoutId, 'id'>,
-        baseTimestamp: number,
+        baseTimestamp?: number,
       ) => number)
     | undefined = undefined;
 
@@ -25,7 +25,7 @@ class GlobalOAuthUI {
   setAddItem(
     callback: (
       itemData: Omit<HistoryItemWithoutId, 'id'>,
-      baseTimestamp: number,
+      baseTimestamp?: number,
     ) => number,
   ): void {
     this.addItemCallback = callback;
@@ -44,7 +44,7 @@ class GlobalOAuthUI {
   getAddItem():
     | ((
         itemData: Omit<HistoryItemWithoutId, 'id'>,
-        baseTimestamp: number,
+        baseTimestamp?: number,
       ) => number)
     | undefined {
     return this.addItemCallback;
@@ -55,7 +55,7 @@ class GlobalOAuthUI {
    */
   callAddItem(
     itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp: number,
+    baseTimestamp?: number,
   ): number | undefined {
     return this.addItemCallback?.(itemData, baseTimestamp);
   }

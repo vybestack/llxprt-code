@@ -8,6 +8,7 @@ import React, { useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { Colors } from '../../colors.js';
+import { theme } from '../../semantic-colors.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import {
@@ -161,10 +162,10 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         />
         {isThisShellFocusable && (
           <Box marginLeft={1} flexShrink={0}>
-            <Text color={Colors.AccentCyan}>
+            <Text color={theme.text.accent}>
               {isThisShellFocused
-                ? '(Ctrl+F to return to prompt)'
-                : '(Ctrl+F to send keys to shell)'}
+                ? '(Focused - Tab/Shift+Tab/Ctrl+F to return)'
+                : '(Tab/Ctrl+F to focus)'}
             </Text>
           </Box>
         )}

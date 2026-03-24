@@ -37,6 +37,8 @@ export const createMockCommandContext = (
       config: {
         getEphemeralSetting: vi.fn(),
         setEphemeralSetting: vi.fn(),
+        getGeminiClient: vi.fn(),
+        getSubagentManager: vi.fn(),
       } as unknown as Config,
       settings: { merged: {} } as LoadedSettings,
       git: undefined as GitService | undefined,

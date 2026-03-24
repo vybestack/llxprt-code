@@ -355,7 +355,22 @@ const listCommand: SlashCommand = {
     for (const name of names) {
       try {
         const config = await manager.loadSubagent(name);
-        lines.push(`  • ${name} (profile: ${config.profile})`);
+        let line = `  • ${name} (profile: ${config.profile})`;
+
+        // Show provenance for non-user subagents and user overrides
+        if (config.source === 'settings') {
+          line += ` [settings]`;
+        } else if (config.source === 'extension') {
+          line += ` [ext: ${config.sourceExtension}]`;
+        } else if (
+          config.source === 'user' &&
+          manager.hasSettingsSubagent(name)
+        ) {
+          // User override of settings subagent
+          line += ` [settings, user override]`;
+        }
+
+        lines.push(line);
       } catch {
         lines.push(`  • ${name}`);
       }
@@ -463,6 +478,35 @@ const deleteCommand: SlashCommand = {
       };
     }
 
+    // Check if it's a settings-only or extension-only subagent
+    try {
+      const config = await subagentManager.loadSubagent(name);
+      if (config.source === 'settings') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Cannot delete settings-defined subagent '${name}'. Modify it in settings.json instead.`,
+        };
+      }
+      if (config.source === 'extension') {
+        // Check if user has a disk override
+        const diskExists = await subagentManager.subagentExistsOnDisk(name);
+        if (!diskExists) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Cannot delete extension-provided subagent '${name}'. It is managed by extension '${config.sourceExtension}'.`,
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error checking subagent: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
     return {
       type: 'dialog',
       dialog: 'subagent',
@@ -514,6 +558,35 @@ const editCommand: SlashCommand = {
         type: 'message',
         messageType: 'error',
         content: `Subagent '${name}' not found.`,
+      };
+    }
+
+    // Check if it's a settings-only or extension-only subagent
+    try {
+      const config = await subagentManager.loadSubagent(name);
+      if (config.source === 'settings') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Cannot edit settings-defined subagent '${name}'. Modify it in settings.json instead.`,
+        };
+      }
+      if (config.source === 'extension') {
+        // Check if user has a disk override
+        const diskExists = await subagentManager.subagentExistsOnDisk(name);
+        if (!diskExists) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Cannot edit extension-provided subagent '${name}'. It is managed by extension '${config.sourceExtension}'.`,
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error checking subagent: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
 

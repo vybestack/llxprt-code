@@ -13,6 +13,7 @@ import {
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
   isRipgrepAvailable,
+  ApprovalMode,
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments } from './config.js';
 import type { Settings } from './settings.js';
@@ -2202,5 +2203,102 @@ describe('defaultDisabledTools', () => {
       | undefined;
     // google_web_fetch is in tools.allowed, so it must NOT be added to tools.disabled
     expect(disabled ?? []).not.toContain('google_web_fetch');
+  });
+});
+
+describe('loadCliConfig disableYoloMode', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    vi.mocked(isWorkspaceTrusted).mockReturnValue({
+      isTrusted: true,
+      source: undefined,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('should allow auto_edit mode even if yolo mode is disabled', async () => {
+    process.argv = ['node', 'script.js', '--approval-mode=auto_edit'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      security: { disableYoloMode: true },
+    };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
+  });
+
+  it('should throw if YOLO mode is attempted when disableYoloMode is true', async () => {
+    process.argv = ['node', 'script.js', '--yolo'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      security: { disableYoloMode: true },
+    };
+    await expect(
+      loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      ),
+    ).rejects.toThrow(
+      'Cannot start in YOLO mode since it is disabled by your admin',
+    );
+  });
+});
+
+describe('loadCliConfig secureModeEnabled', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    vi.mocked(isWorkspaceTrusted).mockReturnValue({
+      isTrusted: true,
+      source: undefined,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('should throw an error if YOLO mode is attempted when secureModeEnabled is true', async () => {
+    process.argv = ['node', 'script.js', '--yolo'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      admin: { secureModeEnabled: true },
+    };
+    await expect(
+      loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      ),
+    ).rejects.toThrow(
+      'Cannot start in YOLO mode since it is disabled by your admin',
+    );
   });
 });

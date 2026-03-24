@@ -16,7 +16,7 @@ import {
 import { exitCli } from '../utils.js';
 import chalk from 'chalk';
 
-export async function handleList() {
+export async function handleList(showAll = false) {
   const workspaceDir = process.cwd();
   const settings = loadSettings(workspaceDir);
   const extensionEnablementManager = new ExtensionEnablementManager(
@@ -48,14 +48,19 @@ export async function handleList() {
   ).initialize({ messageBus: sessionMessageBus });
 
   const skillManager = config.getSkillManager();
-  const skills = skillManager.getAllSkills();
+  let skills = skillManager.getAllSkills();
+
+  // By default, filter out built-in skills unless --all is specified
+  if (!showAll) {
+    skills = skills.filter((skill) => skill.source !== 'builtin');
+  }
 
   if (skills.length === 0) {
     debugLogger.log('No skills discovered.');
     return;
   }
 
-  debugLogger.log(chalk.bold('Discovered Agent Skills:'));
+  debugLogger.log(chalk.bold('Discovered Skills:'));
   debugLogger.log('');
 
   for (const skill of skills) {
@@ -63,7 +68,15 @@ export async function handleList() {
       ? chalk.red('[Disabled]')
       : chalk.green('[Enabled]');
 
-    debugLogger.log(`${chalk.bold(skill.name)} ${status}`);
+    // Show source indicator for non-user/project skills
+    let sourceLabel = '';
+    if (skill.source === 'builtin') {
+      sourceLabel = chalk.dim(' [Built-in]');
+    } else if (skill.source === 'extension') {
+      sourceLabel = chalk.dim(' [Extension]');
+    }
+
+    debugLogger.log(`${chalk.bold(skill.name)} ${status}${sourceLabel}`);
     debugLogger.log(`  Description: ${skill.description}`);
     debugLogger.log(`  Location:    ${skill.location}`);
     debugLogger.log('');
@@ -71,11 +84,16 @@ export async function handleList() {
 }
 
 export const listCommand: CommandModule = {
-  command: 'list',
-  describe: 'Lists discovered agent skills.',
-  builder: (yargs) => yargs,
-  handler: async () => {
-    await handleList();
+  command: 'list [--all]',
+  describe: 'Lists discovered skills.',
+  builder: (yargs) =>
+    yargs.option('all', {
+      type: 'boolean',
+      default: false,
+      describe: 'Include built-in skills in the listing',
+    }),
+  handler: async (argv) => {
+    await handleList(argv.all as boolean);
     await exitCli();
   },
 };

@@ -19,6 +19,12 @@ export interface SubagentConfig {
 
   /** ISO 8601 timestamp when subagent was last updated */
   updatedAt: string;
+
+  /** Provenance: 'user' (default, disk-backed), 'extension', or 'settings' */
+  source?: 'user' | 'extension' | 'settings';
+
+  /** Extension name if source === 'extension' */
+  sourceExtension?: string;
 }
 
 // _ = SubagentConfig; // Ensure the interface is considered "used" by the compiler

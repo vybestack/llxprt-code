@@ -71,9 +71,26 @@ The `llxprt skills` command provides management utilities:
 # List all discovered skills
 llxprt skills list
 
-# Enable/disable skills. Can use --scope to specify project or user
+# Install a skill from a Git repository, local directory, or zipped skill file (.skill)
+# Uses the user scope by default (~/.llxprt/skills)
+llxprt skills install https://github.com/user/repo.git
+llxprt skills install /path/to/local/skill
+llxprt skills install /path/to/local/my-expertise.skill
+
+# Install a specific skill from a monorepo or subdirectory using --path
+llxprt skills install https://github.com/my-org/my-skills.git --path skills/frontend-design
+
+# Install to the workspace scope (.llxprt/skills)
+llxprt skills install /path/to/skill --scope workspace
+
+# Uninstall a skill by name
+llxprt skills uninstall my-expertise --scope workspace
+
+# Enable a skill (globally)
 llxprt skills enable my-expertise
-llxprt skills disable my-expertise
+
+# Disable a skill. Can use --scope to specify project or user (defaults to project)
+llxprt skills disable my-expertise --scope project
 ```
 
 ## Creating a Skill
@@ -81,7 +98,20 @@ llxprt skills disable my-expertise
 A skill is a directory containing a `SKILL.md` file at its root. This file uses
 YAML frontmatter for metadata and Markdown for instructions.
 
-### Basic Structure
+### Folder Structure
+
+Skills are self-contained directories. At a minimum, a skill requires a
+`SKILL.md` file, but can include other resources:
+
+```text
+my-skill/
+├── SKILL.md       (Required) Instructions and metadata
+├── scripts/       (Optional) Executable scripts/tools
+├── references/    (Optional) Static documentation and examples
+└── assets/        (Optional) Templates and binary resources
+```
+
+### Basic Structure (SKILL.md)
 
 ```markdown
 ---
@@ -99,6 +129,8 @@ description: <what the skill does and when LLxprt should use it>
   guidance for the model.
 
 ### Example: Team Code Reviewer
+
+Create `~/.llxprt/skills/code-reviewer/SKILL.md`:
 
 ```markdown
 ---

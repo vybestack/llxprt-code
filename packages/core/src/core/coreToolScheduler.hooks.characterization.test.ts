@@ -50,6 +50,8 @@ function createHookSystem(options?: {
   return {
     initialize: vi.fn().mockResolvedValue(undefined),
     getEventHandler: vi.fn().mockReturnValue(eventHandler),
+    fireBeforeToolEvent: vi.fn().mockResolvedValue(options?.beforeToolResult),
+    fireAfterToolEvent: vi.fn().mockResolvedValue(options?.afterToolResult),
     eventHandler,
   };
 }

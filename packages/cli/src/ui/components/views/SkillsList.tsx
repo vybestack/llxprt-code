@@ -26,35 +26,49 @@ export const SkillsList: React.FC<SkillsListProps> = ({
     .filter((s) => s.disabled)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const renderSkill = (skill: SkillDefinition) => (
-    <Box key={skill.name} flexDirection="row">
-      <Text color={theme.text.primary}>{'  '}- </Text>
-      <Box flexDirection="column">
-        <Text
-          bold
-          color={skill.disabled ? theme.text.secondary : theme.text.link}
-        >
-          {skill.name}
-        </Text>
-        {showDescriptions && skill.description && (
-          <Box marginLeft={2}>
-            <Text
-              color={skill.disabled ? theme.text.secondary : theme.text.primary}
-            >
-              {skill.description}
-            </Text>
-          </Box>
-        )}
+  const renderSkill = (skill: SkillDefinition) => {
+    let sourceLabel = '';
+    if (skill.source === 'builtin') {
+      sourceLabel = ' [Built-in]';
+    } else if (skill.source === 'extension') {
+      sourceLabel = ' [Extension]';
+    }
+
+    return (
+      <Box key={skill.name} flexDirection="row">
+        <Text color={theme.text.primary}>{'  '}- </Text>
+        <Box flexDirection="column">
+          <Text
+            bold
+            color={skill.disabled ? theme.text.secondary : theme.text.link}
+          >
+            {skill.name}
+            {sourceLabel && (
+              <Text color={theme.text.secondary}>{sourceLabel}</Text>
+            )}
+          </Text>
+          {showDescriptions && skill.description && (
+            <Box marginLeft={2}>
+              <Text
+                color={
+                  skill.disabled ? theme.text.secondary : theme.text.primary
+                }
+              >
+                {skill.description}
+              </Text>
+            </Box>
+          )}
+        </Box>
       </Box>
-    </Box>
-  );
+    );
+  };
 
   return (
     <Box flexDirection="column" marginBottom={1}>
       {enabledSkills.length > 0 && (
         <Box flexDirection="column">
           <Text bold color={theme.text.primary}>
-            Available Agent Skills:
+            Available Skills:
           </Text>
           <Box height={1} />
           {enabledSkills.map(renderSkill)}

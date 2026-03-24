@@ -9,7 +9,7 @@ import { HistoryItem } from '../types.js';
 export type AppAction =
   | {
       type: 'ADD_ITEM';
-      payload: { itemData: Omit<HistoryItem, 'id'>; baseTimestamp: number };
+      payload: { itemData: Omit<HistoryItem, 'id'>; baseTimestamp?: number };
     }
   | {
       type: 'OPEN_DIALOG';
@@ -72,7 +72,7 @@ export interface AppState {
   };
   lastAddItemAction: {
     itemData: Omit<HistoryItem, 'id'>;
-    baseTimestamp: number;
+    baseTimestamp?: number;
   } | null;
 }
 

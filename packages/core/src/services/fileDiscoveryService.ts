@@ -38,35 +38,27 @@ export class FileDiscoveryService {
       ? this.tryRealpath(gitRootCandidate)
       : null;
 
+    // Read .llxprtignore patterns for both dedicated and combined filters
+    const llxprtPatterns = this.readIgnorePatterns(
+      path.join(this.projectRoot, LLXPRT_IGNORE_FILE_NAME),
+    );
+
     if (resolvedGitRoot) {
-      const parser = new GitIgnoreParser(resolvedGitRoot);
-      try {
-        parser.loadGitRepoPatterns();
-      } catch (_error) {
-        // ignore file not found
-      }
-      this.gitIgnoreFilter = parser;
-    }
+      // GitIgnoreParser lazily discovers .gitignore patterns on isIgnored()
+      this.gitIgnoreFilter = new GitIgnoreParser(resolvedGitRoot);
 
-    const gParser = new GitIgnoreParser(this.projectRoot);
-    try {
-      gParser.loadPatterns(LLXPRT_IGNORE_FILE_NAME);
-    } catch (_error) {
-      // ignore file not found
-    }
-    this.llxprtIgnoreFilter = gParser;
-
-    if (this.gitIgnoreFilter && resolvedGitRoot) {
-      const llxprtPatterns = this.llxprtIgnoreFilter.getPatterns();
-      // Create combined parser: .gitignore + .llxprtignore
-      // Use gitRoot so .gitignore at repo root is found
+      // Combined filter: .gitignore + .llxprtignore via extraPatterns
       this.combinedIgnoreFilter = new GitIgnoreParser(
         resolvedGitRoot,
         llxprtPatterns,
       );
-      // Load git repo patterns so isGitRepo is set correctly
-      this.combinedIgnoreFilter.loadGitRepoPatterns();
     }
+
+    // Dedicated .llxprtignore filter (also passes patterns as extraPatterns)
+    this.llxprtIgnoreFilter = new GitIgnoreParser(
+      this.projectRoot,
+      llxprtPatterns,
+    );
   }
 
   /**
@@ -184,6 +176,17 @@ export class FileDiscoveryService {
       return fs.realpathSync(resolved);
     } catch (_error) {
       return path.normalize(resolved);
+    }
+  }
+
+  private readIgnorePatterns(filePath: string): string[] {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      return content
+        .split('\n')
+        .filter((line) => line.trim() !== '' && !line.startsWith('#'));
+    } catch (_error) {
+      return [];
     }
   }
 

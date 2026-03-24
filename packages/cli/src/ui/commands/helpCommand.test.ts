@@ -29,10 +29,9 @@ describe('helpCommand', () => {
     await helpCommand.action(mockContext, '');
 
     expect(mockAddItem).toHaveBeenCalledTimes(1);
-    const [historyItem, timestamp] = mockAddItem.mock.calls[0];
+    const [historyItem] = mockAddItem.mock.calls[0];
     expect(historyItem.type).toBe(MessageType.HELP);
     expect(historyItem.timestamp).toBeInstanceOf(Date);
-    expect(typeof timestamp).toBe('number');
   });
 
   it("should also be triggered by its alternative name '?'", () => {

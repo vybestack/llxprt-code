@@ -21,19 +21,28 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## Cursor Movement
 
-| Action                                    | Keys                   |
-| ----------------------------------------- | ---------------------- |
-| Move the cursor to the start of the line. | `Ctrl + A`<br />`Home` |
-| Move the cursor to the end of the line.   | `Ctrl + E`<br />`End`  |
+| Action                                      | Keys                                                         |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| Move the cursor to the start of the line.   | `Ctrl + A`<br />`Home`                                       |
+| Move the cursor to the end of the line.     | `Ctrl + E`<br />`End`                                        |
+| Move the cursor one character to the left.  | `Left Arrow (no Ctrl, no Cmd)`<br />`Ctrl + B`               |
+| Move the cursor one character to the right. | `Right Arrow (no Ctrl, no Cmd)`<br />`Ctrl + F`              |
+| Move the cursor one word to the left.       | `Ctrl + Left Arrow`<br />`Cmd + Left Arrow`<br />`Cmd + B`   |
+| Move the cursor one word to the right.      | `Ctrl + Right Arrow`<br />`Cmd + Right Arrow`<br />`Cmd + F` |
 
 ## Editing
 
-| Action                                                                | Keys                                      |
-| --------------------------------------------------------------------- | ----------------------------------------- |
-| Delete from the cursor to the end of the line.                        | `Ctrl + K`                                |
-| Delete from the cursor to the start of the line.                      | `Ctrl + U`                                |
-| Clear all text in the input field (when the input prompt is focused). | `Ctrl + C`                                |
-| Delete the previous word.                                             | `Ctrl + Backspace`<br />`Cmd + Backspace` |
+| Action                                                                | Keys                                                                                         |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Delete from the cursor to the end of the line.                        | `Ctrl + K`                                                                                   |
+| Delete from the cursor to the start of the line.                      | `Ctrl + U`                                                                                   |
+| Clear all text in the input field (when the input prompt is focused). | `Ctrl + C`                                                                                   |
+| Delete the previous word.                                             | `Ctrl + Backspace`<br />`Cmd + Backspace`<br />`Ctrl + ""`<br />`Cmd + ""`<br />`Ctrl + W` |
+| Delete the next word.                                                 | `Ctrl + Delete`<br />`Cmd + Delete`                                                          |
+| Delete the character to the left.                                     | `Backspace`<br />`""`<br />`Ctrl + H`                                                       |
+| Delete the character to the right.                                    | `Delete`<br />`Ctrl + D`                                                                     |
+| Undo the most recent text edit.                                       | `Ctrl + Z (no Shift)`                                                                        |
+| Redo the most recent undone text edit.                                | `Ctrl + Shift + Z`                                                                           |
 
 ## Screen Control
 
@@ -98,14 +107,18 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## App Controls
 
-| Action                                                                                 | Keys       |
-| -------------------------------------------------------------------------------------- | ---------- |
-| Toggle detailed error information.                                                     | `Ctrl + O` |
-| Toggle IDE context details.                                                            | `Ctrl + G` |
-| Toggle Markdown rendering.                                                             | `Cmd + M`  |
-| Toggle copy mode when the terminal is using the alternate buffer.                      | `Ctrl + Y` |
-| Expand a height-constrained response to show additional lines.                         | `Ctrl + S` |
-| Toggle focus between the shell and LLxprt input when an interactive shell is attached. | `Ctrl + F` |
+| Action                                                                                 | Keys                                |
+| -------------------------------------------------------------------------------------- | ----------------------------------- |
+| Toggle detailed error information.                                                     | `Ctrl + O`                          |
+| Toggle IDE context details.                                                            | `Ctrl + G`                          |
+| Toggle Markdown rendering.                                                             | `Cmd + M`                           |
+| Toggle copy mode when the terminal is using the alternate buffer.                      | `Ctrl + S`                          |
+| Toggle YOLO (auto-approval) mode for tool calls.                                       | `Ctrl + Y`                          |
+| Toggle Auto Edit (auto-accept edits) mode.                                             | `Shift + Tab`                       |
+| Expand a height-constrained response to show additional lines.                         | `Ctrl + S`                          |
+| Toggle focus between the shell and LLxprt input when an interactive shell is attached. | `Ctrl + F`                          |
+| Toggle focus into the interactive shell from LLxprt input.                             | `Tab (no Shift)`                    |
+| Toggle focus out of the interactive shell and into LLxprt input.                       | `Tab (no Shift)`<br />`Shift + Tab` |
 
 ## Session Control
 
