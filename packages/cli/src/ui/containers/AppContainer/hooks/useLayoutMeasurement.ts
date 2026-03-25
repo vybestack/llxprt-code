@@ -26,6 +26,7 @@ const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
 export interface UseLayoutMeasurementParams {
   enabled?: boolean;
+  copyShortcutEnabled?: boolean;
   onCopiedText?: (text: string) => void;
   setFooterHeight: (height: number) => void;
   terminalHeight: number;
@@ -41,6 +42,7 @@ export interface UseLayoutMeasurementResult {
 
 export function useLayoutMeasurement({
   enabled = true,
+  copyShortcutEnabled = enabled,
   onCopiedText,
   setFooterHeight,
   terminalHeight,
@@ -66,14 +68,15 @@ export function useLayoutMeasurement({
   });
 
   // Fix for issue #1284: Add keyboard shortcut for Cmd+C/Ctrl+C to copy selection.
-  // Only active when copy mode is enabled to avoid conflicting with Ctrl+C quit.
+  // Keep shortcut separate from mouse-selection enablement so copy mode can still
+  // use keyboard copy even when in-app mouse selection is disabled.
   useKeypress(
     (key: Key) => {
       if (key.name === 'c' && (key.ctrl || key.meta)) {
         void copySelectionToClipboard();
       }
     },
-    { isActive: enabled },
+    { isActive: copyShortcutEnabled },
   );
 
   useLayoutEffect(() => {

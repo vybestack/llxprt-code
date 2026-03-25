@@ -188,7 +188,8 @@ function useLayoutMeasure(p: AppLayoutParams) {
   });
   const { mainControlsRef, pendingHistoryItemRef, rootUiRef } =
     useLayoutMeasurement({
-      enabled: p.copyModeEnabled,
+      enabled: true,
+      copyShortcutEnabled: p.copyModeEnabled,
       setFooterHeight,
       terminalHeight,
       consoleMessages,
