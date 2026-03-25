@@ -177,7 +177,7 @@ describe('ToolDispatcher', () => {
     });
 
     it('includes levenshtein suggestion in error message when tool name is close', () => {
-      const tool = new MockTool('list_files');
+      const _tool = new MockTool('list_files');
       const registry = {
         getTool: vi.fn().mockReturnValue(null),
         getAllToolNames: vi.fn().mockReturnValue(['list_files', 'read_file']),

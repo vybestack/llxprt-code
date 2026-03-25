@@ -59,7 +59,7 @@ function makeEditorCallbacks(): EditorCallbacks {
 }
 
 function makeMessageBus() {
-  const handlers: Map<string, ((msg: unknown) => void)[]> = new Map();
+  const handlers: Map<string, Array<(msg: unknown) => void>> = new Map();
   return {
     subscribe: vi
       .fn()
@@ -95,7 +95,7 @@ function makeMockConfig(overrides: Partial<Config> = {}): Config {
 }
 
 function makeConfirmationDetails(
-  callId = 'call-1',
+  _callId = 'call-1',
   correlationId = 'corr-1',
 ): ToolCallConfirmationDetails {
   return {
