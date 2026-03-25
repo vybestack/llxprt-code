@@ -55,7 +55,10 @@ import type {
   ToolCallsUpdateHandler,
 } from '../scheduler/types.js';
 import { setToolContext } from '../scheduler/utils.js';
-import { applyTransition, buildCancelAllEntry } from '../scheduler/status-transitions.js';
+import {
+  applyTransition,
+  buildCancelAllEntry,
+} from '../scheduler/status-transitions.js';
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 export {
@@ -123,7 +126,10 @@ export class CoreToolScheduler {
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
     this.toolExecutor = new ToolExecutor(this.config);
-    this.toolDispatcher = new ToolDispatcher(options.toolRegistry, options.config);
+    this.toolDispatcher = new ToolDispatcher(
+      options.toolRegistry,
+      options.config,
+    );
     this.setCallbacks(options);
     this.toolContextInteractiveMode =
       options.toolContextInteractiveMode ?? true;
@@ -146,18 +152,12 @@ export class CoreToolScheduler {
         this.setStatusInternal(callId, 'cancelled', reason),
       setAwaitingApproval: (callId, details) =>
         this.setStatusInternal(callId, 'awaiting_approval', details),
-      setScheduled: (callId) =>
-        this.setStatusInternal(callId, 'scheduled'),
-      setExecuting: (callId) =>
-        this.setStatusInternal(callId, 'executing'),
-      setValidating: (callId) =>
-        this.setStatusInternal(callId, 'validating'),
-      setArgs: (callId, args) =>
-        this.setArgsInternal(callId, args),
-      setOutcome: (callId, outcome) =>
-        this.setToolCallOutcome(callId, outcome),
-      approve: (callId) =>
-        this.approveToolCall(callId),
+      setScheduled: (callId) => this.setStatusInternal(callId, 'scheduled'),
+      setExecuting: (callId) => this.setStatusInternal(callId, 'executing'),
+      setValidating: (callId) => this.setStatusInternal(callId, 'validating'),
+      setArgs: (callId, args) => this.setArgsInternal(callId, args),
+      setOutcome: (callId, outcome) => this.setToolCallOutcome(callId, outcome),
+      approve: (callId) => this.approveToolCall(callId),
     };
     const schedulerAccessor: SchedulerAccessor = {
       attemptExecution: (signal) =>
@@ -300,10 +300,7 @@ export class CoreToolScheduler {
 
   // Backward-compat shim: accessed via @ts-expect-error in coreToolScheduler.test.ts.
   // Delegates to ToolDispatcher.getToolSuggestion which owns the implementation.
-  protected getToolSuggestion(
-    unknownToolName: string,
-    topN?: number,
-  ): string {
+  protected getToolSuggestion(unknownToolName: string, topN?: number): string {
     return this.toolDispatcher.getToolSuggestion(unknownToolName, topN);
   }
 
@@ -382,7 +379,11 @@ export class CoreToolScheduler {
     this.confirmationCoordinator.registerSignal(reqInfo.callId, signal);
 
     if (signal.aborted) {
-      this.setStatusInternal(reqInfo.callId, 'cancelled', 'Tool call cancelled by user.');
+      this.setStatusInternal(
+        reqInfo.callId,
+        'cancelled',
+        'Tool call cancelled by user.',
+      );
       return;
     }
 
@@ -394,10 +395,15 @@ export class CoreToolScheduler {
     }
 
     // ASK path — requires async confirmation
-    return this.confirmationCoordinator.evaluateAndRoute(toolCall, signal)
+    return this.confirmationCoordinator
+      .evaluateAndRoute(toolCall, signal)
       .catch((error) => {
         if (signal.aborted) {
-          this.setStatusInternal(reqInfo.callId, 'cancelled', 'Tool call cancelled by user.');
+          this.setStatusInternal(
+            reqInfo.callId,
+            'cancelled',
+            'Tool call cancelled by user.',
+          );
           return;
         }
         this.setStatusInternal(
@@ -429,7 +435,9 @@ export class CoreToolScheduler {
 
       const governance = buildToolGovernance(this.config);
       const newToolCalls = this.toolDispatcher.resolveAndValidate(
-        freshRequests, governance, this.toolContextInteractiveMode,
+        freshRequests,
+        governance,
+        this.toolContextInteractiveMode,
       );
 
       this.toolCalls = this.toolCalls.concat(newToolCalls);
@@ -477,7 +485,6 @@ export class CoreToolScheduler {
     this.setStatusInternal(callId, 'scheduled');
   }
 
-
   /**
    * Launch a single scheduled tool call and wire up result buffering / error handling.
    * @requirement:HOOK-017,HOOK-019,HOOK-129,HOOK-131,HOOK-132,HOOK-134 - Hook result application
@@ -512,26 +519,49 @@ export class CoreToolScheduler {
         },
       })
       .then(async (executionResult) => {
-        this.resultAggregator.bufferResult(callId, toolName, scheduledCall, executionResult.result, executionIndex);
+        this.resultAggregator.bufferResult(
+          callId,
+          toolName,
+          scheduledCall,
+          executionResult.result,
+          executionIndex,
+        );
         await this.publishBufferedResults(signal);
       })
       .catch(async (executionError: Error) => {
         if (signal.aborted) {
-          this.setStatusInternal(callId, 'cancelled', 'User cancelled tool execution.');
-          this.resultAggregator.bufferCancelled(callId, scheduledCall, executionIndex);
+          this.setStatusInternal(
+            callId,
+            'cancelled',
+            'User cancelled tool execution.',
+          );
+          this.resultAggregator.bufferCancelled(
+            callId,
+            scheduledCall,
+            executionIndex,
+          );
           await this.publishBufferedResults(signal);
         } else {
-          this.resultAggregator.bufferError(callId, toolName, scheduledCall, executionError, executionIndex);
+          this.resultAggregator.bufferError(
+            callId,
+            toolName,
+            scheduledCall,
+            executionError,
+            executionIndex,
+          );
           await this.publishBufferedResults(signal);
         }
       })
       .catch((publishError: Error) => {
         if (toolSchedulerLogger.enabled) {
           toolSchedulerLogger.debug(
-            () => `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+            () =>
+              `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
           );
         }
-        const toolCall = this.toolCalls.find((tc) => tc.request.callId === callId);
+        const toolCall = this.toolCalls.find(
+          (tc) => tc.request.callId === callId,
+        );
         if (
           toolCall &&
           toolCall.status !== 'success' &&
@@ -539,10 +569,13 @@ export class CoreToolScheduler {
           toolCall.status !== 'cancelled'
         ) {
           this.setStatusInternal(
-            callId, 'error',
+            callId,
+            'error',
             createErrorResponse(
               scheduledCall.request,
-              new Error(`Failed to publish tool result: ${publishError.message}`),
+              new Error(
+                `Failed to publish tool result: ${publishError.message}`,
+              ),
               ToolErrorType.UNHANDLED_EXCEPTION,
             ),
           );

@@ -75,7 +75,11 @@ export function handlePolicyDenial(
 ): void {
   const message = `Policy denied execution of tool "${context.toolName}".`;
   const error = new Error(message);
-  const response = createErrorResponse(request, error, ToolErrorType.POLICY_VIOLATION);
+  const response = createErrorResponse(
+    request,
+    error,
+    ToolErrorType.POLICY_VIOLATION,
+  );
 
   setStatusFn(request.callId, 'error', response);
 

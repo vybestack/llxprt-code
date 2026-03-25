@@ -242,9 +242,7 @@ export class ResultAggregator {
   // ---- private helpers -----------------------------------------------------
 
   /** Find a buffered entry by its executionIndex. */
-  private findByExecutionIndex(
-    index: number,
-  ): BufferedEntry | undefined {
+  private findByExecutionIndex(index: number): BufferedEntry | undefined {
     for (const entry of this.pendingResults.values()) {
       if (entry.executionIndex === index) {
         return entry;
@@ -308,7 +306,8 @@ export class ResultAggregator {
     if (this.pendingResults.size === 0) {
       return;
     }
-    const hasNext = this.findByExecutionIndex(this.nextPublishIndex) !== undefined;
+    const hasNext =
+      this.findByExecutionIndex(this.nextPublishIndex) !== undefined;
     if (hasNext) {
       setImmediate(() => {
         void this.publishBufferedResults(signal);
@@ -327,7 +326,8 @@ export class ResultAggregator {
     const { result, callId, toolName, scheduledCall } = buffered;
 
     if (result.error === undefined) {
-      const outputConfig = this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
+      const outputConfig =
+        this.batchOutputConfig ?? this.callbacks.getFallbackOutputConfig();
       const responseParts = convertToFunctionResponse(
         toolName,
         callId,
@@ -344,9 +344,7 @@ export class ResultAggregator {
         error: undefined,
         errorType: undefined,
         agentId:
-          metadataAgentId ??
-          scheduledCall.request.agentId ??
-          DEFAULT_AGENT_ID,
+          metadataAgentId ?? scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
         ...(result.suppressDisplay !== undefined && {
           suppressDisplay: result.suppressDisplay,
         }),

@@ -79,7 +79,10 @@ export class ToolDispatcher {
         interactiveMode,
       );
 
-      const invocationOrError = this.buildInvocation(toolInstance, reqInfo.args);
+      const invocationOrError = this.buildInvocation(
+        toolInstance,
+        reqInfo.args,
+      );
       if (invocationOrError instanceof Error) {
         return {
           status: 'error',

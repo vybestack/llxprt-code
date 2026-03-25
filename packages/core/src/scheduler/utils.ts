@@ -18,6 +18,10 @@ export function setToolContext(
   interactiveMode: boolean,
 ): void {
   if ('context' in tool) {
-    (tool as ContextAwareTool).context = { sessionId, agentId, interactiveMode };
+    (tool as ContextAwareTool).context = {
+      sessionId,
+      agentId,
+      interactiveMode,
+    };
   }
 }

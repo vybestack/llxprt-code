@@ -23,9 +23,7 @@ import {
   MessageBusType,
   type ToolConfirmationResponse,
 } from '../confirmation-bus/types.js';
-import {
-  ToolConfirmationOutcome,
-} from '../tools/tools.js';
+import { ToolConfirmationOutcome } from '../tools/tools.js';
 import type { ToolCallConfirmationDetails } from '../tools/tools.js';
 import type { ToolConfirmationPayload } from '../tools/tool-confirmation-types.js';
 import type { ToolCallResponseInfo } from '../core/turn.js';
@@ -58,7 +56,10 @@ export interface StatusMutator {
   setSuccess(callId: string, response: ToolCallResponseInfo): void;
   setError(callId: string, response: ToolCallResponseInfo): void;
   setCancelled(callId: string, reason: string): void;
-  setAwaitingApproval(callId: string, details: ToolCallConfirmationDetails): void;
+  setAwaitingApproval(
+    callId: string,
+    details: ToolCallConfirmationDetails,
+  ): void;
   setScheduled(callId: string): void;
   setExecuting(callId: string): void;
   setValidating(callId: string): void;
@@ -125,10 +126,11 @@ export class ConfirmationCoordinator {
 
   /** Subscribe to MessageBus TOOL_CONFIRMATION_RESPONSE events. */
   subscribe(): void {
-    this.messageBusUnsubscribe = this.messageBus.subscribe<ToolConfirmationResponse>(
-      MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      this.handleMessageBusResponse.bind(this),
-    );
+    this.messageBusUnsubscribe =
+      this.messageBus.subscribe<ToolConfirmationResponse>(
+        MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        this.handleMessageBusResponse.bind(this),
+      );
   }
 
   /** Unsubscribe from MessageBus and reset all state. */
@@ -172,9 +174,7 @@ export class ConfirmationCoordinator {
    * which is critical for tests that rely on all tools reaching 'executing' state
    * within the same microtask as schedule().
    */
-  tryFastApprove(
-    toolCall: ValidatingToolCall,
-  ): boolean {
+  tryFastApprove(toolCall: ValidatingToolCall): boolean {
     const { request: reqInfo, invocation } = toolCall;
 
     const evaluation = evaluatePolicyDecision(
@@ -271,7 +271,11 @@ export class ConfirmationCoordinator {
     toolCall: ValidatingToolCall,
     signal: AbortSignal,
     confirmationDetails: ToolCallConfirmationDetails,
-    policyContext: { toolName: string; args: Record<string, unknown>; serverName?: string },
+    policyContext: {
+      toolName: string;
+      args: Record<string, unknown>;
+      serverName?: string;
+    },
   ): Promise<void> {
     const { request: reqInfo } = toolCall;
 
@@ -399,7 +403,9 @@ export class ConfirmationCoordinator {
     );
   }
 
-  private deriveOutcome(response: ToolConfirmationResponse): ToolConfirmationOutcome {
+  private deriveOutcome(
+    response: ToolConfirmationResponse,
+  ): ToolConfirmationOutcome {
     return (
       response.outcome ??
       (response.confirmed !== undefined
@@ -429,14 +435,17 @@ export class ConfirmationCoordinator {
   ): Promise<void> {
     if (this.processedConfirmations.has(callId)) {
       if (logger.enabled) {
-        logger.debug(() => `Skipping duplicate confirmation for callId=${callId}`);
+        logger.debug(
+          () => `Skipping duplicate confirmation for callId=${callId}`,
+        );
       }
       return;
     }
     this.processedConfirmations.add(callId);
 
     const waitingToolCall = this.findWaitingToolCall(callId);
-    const previousCorrelationId = waitingToolCall?.confirmationDetails?.correlationId;
+    const previousCorrelationId =
+      waitingToolCall?.confirmationDetails?.correlationId;
 
     await originalOnConfirm(outcome, payload);
 
@@ -448,13 +457,27 @@ export class ConfirmationCoordinator {
 
     if (outcome === ToolConfirmationOutcome.Cancel || signal.aborted) {
       await this.handleCancellation(callId);
-    } else if (outcome === ToolConfirmationOutcome.ModifyWithEditor && waitingToolCall) {
+    } else if (
+      outcome === ToolConfirmationOutcome.ModifyWithEditor &&
+      waitingToolCall
+    ) {
       await this.handleModifyWithEditor(callId, waitingToolCall, signal);
     } else {
-      await this.handleApproval(callId, waitingToolCall, outcome, payload, signal);
+      await this.handleApproval(
+        callId,
+        waitingToolCall,
+        outcome,
+        payload,
+        signal,
+      );
     }
 
-    await this.publishOutcome(previousCorrelationId, outcome, payload, skipBusPublish);
+    await this.publishOutcome(
+      previousCorrelationId,
+      outcome,
+      payload,
+      skipBusPublish,
+    );
   }
 
   // ── Sub-handlers ──────────────────────────────────────────────────────────
@@ -713,7 +736,10 @@ export class ConfirmationCoordinator {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   private approveInternal(callId: string): void {
-    this.statusMutator.setOutcome(callId, ToolConfirmationOutcome.ProceedAlways);
+    this.statusMutator.setOutcome(
+      callId,
+      ToolConfirmationOutcome.ProceedAlways,
+    );
     this.statusMutator.setScheduled(callId);
   }
 

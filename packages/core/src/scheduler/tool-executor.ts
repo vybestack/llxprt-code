@@ -57,16 +57,26 @@ export interface ToolExecutionResult {
  * Check a hook result for stop/block decisions and throw if needed.
  */
 function checkHookDecision(
-  hookResult: { shouldStopExecution(): boolean; isBlockingDecision(): boolean; getEffectiveReason(): string | undefined } | undefined,
+  hookResult:
+    | {
+        shouldStopExecution(): boolean;
+        isBlockingDecision(): boolean;
+        getEffectiveReason(): string | undefined;
+      }
+    | undefined,
   hookPhase: string,
 ): void {
   if (hookResult?.shouldStopExecution()) {
-    const stopError = new Error(hookResult.getEffectiveReason() || `Stopped by ${hookPhase} hook`);
+    const stopError = new Error(
+      hookResult.getEffectiveReason() || `Stopped by ${hookPhase} hook`,
+    );
     (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
     throw stopError;
   }
   if (hookResult?.isBlockingDecision()) {
-    throw new Error(hookResult.getEffectiveReason() || `Blocked by ${hookPhase} hook`);
+    throw new Error(
+      hookResult.getEffectiveReason() || `Blocked by ${hookPhase} hook`,
+    );
   }
 }
 
@@ -74,7 +84,13 @@ function checkHookDecision(
  * Apply after-hook modifications (systemMessage, suppressOutput) to a tool result.
  */
 function applyAfterHookModifications(
-  afterResult: { systemMessage?: string; getAdditionalContext(): string | undefined; suppressOutput?: boolean } | undefined,
+  afterResult:
+    | {
+        systemMessage?: string;
+        getAdditionalContext(): string | undefined;
+        suppressOutput?: boolean;
+      }
+    | undefined,
   toolResult: ToolResult,
 ): ToolResult {
   if (!afterResult) return toolResult;
@@ -88,9 +104,12 @@ function applyAfterHookModifications(
       typeof finalResult.llmContent === 'string'
         ? finalResult.llmContent
         : JSON.stringify(finalResult.llmContent);
-    finalResult = { ...finalResult, llmContent: `${existingContent}
+    finalResult = {
+      ...finalResult,
+      llmContent: `${existingContent}
 
-${appendText}` };
+${appendText}`,
+    };
   }
   if (afterResult.suppressOutput) {
     finalResult = { ...finalResult, suppressDisplay: true };
@@ -113,7 +132,12 @@ export class ToolExecutor {
     const serverName = (invocation as { _serverName?: string })._serverName;
     const mcpContext = serverName ? { server_name: serverName } : undefined;
 
-    const beforeResult = await triggerBeforeToolHook(this.config, toolName, args, mcpContext);
+    const beforeResult = await triggerBeforeToolHook(
+      this.config,
+      toolName,
+      args,
+      mcpContext,
+    );
     checkHookDecision(beforeResult, 'BeforeTool');
 
     const modifiedInput = beforeResult?.getModifiedToolInput();
@@ -122,22 +146,35 @@ export class ToolExecutor {
       try {
         invocation = scheduledCall.tool.build(modifiedInput);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        debugLogger.warn(`Failed to rebuild tool invocation after input modification: ${errorMessage}`);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        debugLogger.warn(
+          `Failed to rebuild tool invocation after input modification: ${errorMessage}`,
+        );
       }
     }
 
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
-      ? (outputChunk: string | AnsiOutput) => { onLiveOutput?.(callId, outputChunk); }
+      ? (outputChunk: string | AnsiOutput) => {
+          onLiveOutput?.(callId, outputChunk);
+        }
       : undefined;
-    const setPidCallback = (pid: number) => { onPid?.(callId, pid); };
+    const setPidCallback = (pid: number) => {
+      onPid?.(callId, pid);
+    };
 
     return invocation
       .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
       .then(async (toolResult: ToolResult) => {
         if (signal.aborted) throw new Error('User cancelled tool execution.');
 
-        const afterResult = await triggerAfterToolHook(this.config, toolName, effectiveArgs, toolResult, mcpContext);
+        const afterResult = await triggerAfterToolHook(
+          this.config,
+          toolName,
+          effectiveArgs,
+          toolResult,
+          mcpContext,
+        );
         checkHookDecision(afterResult, 'AfterTool');
 
         return {

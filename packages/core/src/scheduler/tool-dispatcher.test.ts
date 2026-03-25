@@ -71,10 +71,7 @@ class MockInvocation extends BaseToolInvocation<
   Record<string, unknown>,
   ToolResult
 > {
-  constructor(
-    params: Record<string, unknown>,
-    messageBus: MessageBus,
-  ) {
+  constructor(params: Record<string, unknown>, messageBus: MessageBus) {
     super(params, messageBus);
   }
   execute(): Promise<ToolResult> {
@@ -88,7 +85,10 @@ class MockInvocation extends BaseToolInvocation<
   }
 }
 
-class MockTool extends BaseDeclarativeTool<Record<string, unknown>, ToolResult> {
+class MockTool extends BaseDeclarativeTool<
+  Record<string, unknown>,
+  ToolResult
+> {
   constructor(name: string, throwOnBuild = false) {
     super(
       name,
@@ -114,10 +114,7 @@ class MockTool extends BaseDeclarativeTool<Record<string, unknown>, ToolResult> 
   }
 }
 
-class ContextAwareMockTool
-  extends MockTool
-  implements ContextAwareTool
-{
+class ContextAwareMockTool extends MockTool implements ContextAwareTool {
   context?: { sessionId: string; agentId?: string; interactiveMode?: boolean };
 }
 
@@ -129,7 +126,9 @@ function makeRequest(name: string, callId = 'call-1'): ToolCallRequestInfo {
   } as ToolCallRequestInfo;
 }
 
-function makeGovernance(overrides: Partial<ToolGovernance> = {}): ToolGovernance {
+function makeGovernance(
+  overrides: Partial<ToolGovernance> = {},
+): ToolGovernance {
   return {
     allowed: new Set<string>(),
     disabled: new Set<string>(),
@@ -170,7 +169,9 @@ describe('ToolDispatcher', () => {
       const result = results[0];
       expect(result.status).toBe('error');
       if (result.status === 'error') {
-        expect(result.response.errorType).toBe(ToolErrorType.TOOL_NOT_REGISTERED);
+        expect(result.response.errorType).toBe(
+          ToolErrorType.TOOL_NOT_REGISTERED,
+        );
         expect(result.response.responseParts).toBeDefined();
       }
     });
@@ -231,7 +232,9 @@ describe('ToolDispatcher', () => {
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
       if (results[0].status === 'error') {
-        expect(results[0].response.errorType).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+        expect(results[0].response.errorType).toBe(
+          ToolErrorType.INVALID_TOOL_PARAMS,
+        );
       }
     });
 
@@ -274,7 +277,9 @@ describe('ToolDispatcher', () => {
     it('handles multiple requests mixing success and error', () => {
       const goodTool = new MockTool('good_tool');
       const registry = {
-        getTool: vi.fn((name: string) => (name === 'good_tool' ? goodTool : null)),
+        getTool: vi.fn((name: string) =>
+          name === 'good_tool' ? goodTool : null,
+        ),
         getAllToolNames: vi.fn().mockReturnValue(['good_tool']),
       };
       const dispatcher = new ToolDispatcher(registry as never, config);
@@ -295,7 +300,10 @@ describe('ToolDispatcher', () => {
 
   describe('getToolSuggestion()', () => {
     it('returns empty string when registry has no tools', () => {
-      const registry = { getTool: vi.fn(), getAllToolNames: vi.fn().mockReturnValue([]) };
+      const registry = {
+        getTool: vi.fn(),
+        getAllToolNames: vi.fn().mockReturnValue([]),
+      };
       const dispatcher = new ToolDispatcher(registry as never, config);
       expect(dispatcher.getToolSuggestion('anything')).toBe('');
     });
@@ -303,7 +311,9 @@ describe('ToolDispatcher', () => {
     it('returns closest levenshtein match', () => {
       const registry = {
         getTool: vi.fn(),
-        getAllToolNames: vi.fn().mockReturnValue(['list_files', 'read_file', 'write_file']),
+        getAllToolNames: vi
+          .fn()
+          .mockReturnValue(['list_files', 'read_file', 'write_file']),
       };
       const dispatcher = new ToolDispatcher(registry as never, config);
       const suggestion = dispatcher.getToolSuggestion('list_file');

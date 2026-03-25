@@ -34,7 +34,10 @@ import { ToolConfirmationOutcome } from '../index.js';
 interface TransitionContext {
   request: ToolCall['request'];
   tool: Exclude<ToolCall, ErroredToolCall>['tool'];
-  invocation: Exclude<ToolCall, ErroredToolCall | WaitingToolCall>['invocation'];
+  invocation: Exclude<
+    ToolCall,
+    ErroredToolCall | WaitingToolCall
+  >['invocation'];
   startTime?: number;
   outcome?: ToolCall['outcome'];
 }
@@ -61,7 +64,10 @@ function computeDuration(startTime?: number): number | undefined {
   return startTime ? Date.now() - startTime : undefined;
 }
 
-function ensureAgentId(response: ToolCallResponseInfo, request: ToolCall['request']): ToolCallResponseInfo {
+function ensureAgentId(
+  response: ToolCallResponseInfo,
+  request: ToolCall['request'],
+): ToolCallResponseInfo {
   const copy = { ...response };
   if (!copy.agentId) {
     copy.agentId = request.agentId ?? DEFAULT_AGENT_ID;
@@ -181,7 +187,11 @@ export function buildSimpleTransition(
  * path because we don't need to check for edit confirmations or use a reason string.
  */
 export function buildCancelAllEntry(
-  call: ValidatingToolCall | ScheduledToolCall | ExecutingToolCall | WaitingToolCall,
+  call:
+    | ValidatingToolCall
+    | ScheduledToolCall
+    | ExecutingToolCall
+    | WaitingToolCall,
 ): CancelledToolCall {
   return {
     status: 'cancelled',

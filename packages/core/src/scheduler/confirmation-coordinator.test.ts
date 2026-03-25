@@ -61,15 +61,17 @@ function makeEditorCallbacks(): EditorCallbacks {
 function makeMessageBus() {
   const handlers: Map<string, ((msg: unknown) => void)[]> = new Map();
   return {
-    subscribe: vi.fn().mockImplementation((type: string, handler: (msg: unknown) => void) => {
-      if (!handlers.has(type)) handlers.set(type, []);
-      handlers.get(type)!.push(handler);
-      return () => {
-        const arr = handlers.get(type) ?? [];
-        const idx = arr.indexOf(handler);
-        if (idx >= 0) arr.splice(idx, 1);
-      };
-    }),
+    subscribe: vi
+      .fn()
+      .mockImplementation((type: string, handler: (msg: unknown) => void) => {
+        if (!handlers.has(type)) handlers.set(type, []);
+        handlers.get(type)!.push(handler);
+        return () => {
+          const arr = handlers.get(type) ?? [];
+          const idx = arr.indexOf(handler);
+          if (idx >= 0) arr.splice(idx, 1);
+        };
+      }),
     publish: vi.fn(),
     emit: (type: string, msg: unknown) => {
       (handlers.get(type) ?? []).forEach((h) => h(msg));
@@ -113,7 +115,10 @@ function makeWaitingToolCall(
   return {
     status: 'awaiting_approval',
     request: { callId, name: 'testTool', args: {} },
-    tool: { name: 'testTool', displayName: 'Test Tool' } as WaitingToolCall['tool'],
+    tool: {
+      name: 'testTool',
+      displayName: 'Test Tool',
+    } as WaitingToolCall['tool'],
     invocation: {
       shouldConfirmExecute: vi.fn().mockResolvedValue(false),
     } as unknown as WaitingToolCall['invocation'],
@@ -125,7 +130,10 @@ function makeValidatingToolCall(callId = 'call-1') {
   return {
     status: 'validating' as const,
     request: { callId, name: 'testTool', args: {} },
-    tool: { name: 'testTool', displayName: 'Test Tool' } as WaitingToolCall['tool'],
+    tool: {
+      name: 'testTool',
+      displayName: 'Test Tool',
+    } as WaitingToolCall['tool'],
     invocation: {
       shouldConfirmExecute: vi.fn().mockResolvedValue({
         type: 'exec' as const,
@@ -236,8 +244,9 @@ describe('ConfirmationCoordinator', () => {
       coordinator.registerSignal('call-1', signal);
 
       // Simulate pending confirmation
-      (coordinator as unknown as { pendingConfirmations: Map<string, string> })
-        .pendingConfirmations.set('corr-1', 'call-1');
+      (
+        coordinator as unknown as { pendingConfirmations: Map<string, string> }
+      ).pendingConfirmations.set('corr-1', 'call-1');
 
       messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -256,8 +265,9 @@ describe('ConfirmationCoordinator', () => {
         toolCalls: [waitingCall],
       });
       // Do NOT registerSignal for call-1
-      (coordinator as unknown as { pendingConfirmations: Map<string, string> })
-        .pendingConfirmations.set('corr-1', 'call-1');
+      (
+        coordinator as unknown as { pendingConfirmations: Map<string, string> }
+      ).pendingConfirmations.set('corr-1', 'call-1');
 
       messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -277,8 +287,9 @@ describe('ConfirmationCoordinator', () => {
       coordinator.registerSignal('call-1', signal);
       coordinator.deleteSignal('call-1');
 
-      (coordinator as unknown as { pendingConfirmations: Map<string, string> })
-        .pendingConfirmations.set('corr-1', 'call-1');
+      (
+        coordinator as unknown as { pendingConfirmations: Map<string, string> }
+      ).pendingConfirmations.set('corr-1', 'call-1');
 
       messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -294,7 +305,8 @@ describe('ConfirmationCoordinator', () => {
 
   describe('handleMessageBusResponse', () => {
     it('ignores stale correlation IDs', async () => {
-      const { coordinator, messageBus, schedulerAccessor } = createCoordinator();
+      const { coordinator, messageBus, schedulerAccessor } =
+        createCoordinator();
 
       // Manually mark a correlationId as stale
       const timeout = setTimeout(() => {}, 9999);
@@ -339,8 +351,9 @@ describe('ConfirmationCoordinator', () => {
       });
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
-      (coordinator as unknown as { pendingConfirmations: Map<string, string> })
-        .pendingConfirmations.set('corr-1', 'call-1');
+      (
+        coordinator as unknown as { pendingConfirmations: Map<string, string> }
+      ).pendingConfirmations.set('corr-1', 'call-1');
 
       messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -358,8 +371,9 @@ describe('ConfirmationCoordinator', () => {
       });
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
-      (coordinator as unknown as { pendingConfirmations: Map<string, string> })
-        .pendingConfirmations.set('corr-1', 'call-1');
+      (
+        coordinator as unknown as { pendingConfirmations: Map<string, string> }
+      ).pendingConfirmations.set('corr-1', 'call-1');
 
       messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -378,9 +392,10 @@ describe('ConfirmationCoordinator', () => {
   describe('handleConfirmationResponse', () => {
     it('ProceedOnce → sets scheduled status and attempts execution', async () => {
       const waitingCall = makeWaitingToolCall();
-      const { coordinator, statusMutator, schedulerAccessor } = createCoordinator({
-        toolCalls: [waitingCall],
-      });
+      const { coordinator, statusMutator, schedulerAccessor } =
+        createCoordinator({
+          toolCalls: [waitingCall],
+        });
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
 
@@ -534,7 +549,8 @@ describe('ConfirmationCoordinator', () => {
 
       // We need to mock modifyWithEditor — patch the module
       vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
-        const mod = await importOriginal<typeof import('../tools/modifiable-tool.js')>();
+        const mod =
+          await importOriginal<typeof import('../tools/modifiable-tool.js')>();
         return {
           ...mod,
           isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
@@ -569,7 +585,9 @@ describe('ConfirmationCoordinator', () => {
         getFilePath: vi.fn().mockReturnValue('/tmp/test.txt'),
         getCurrentContent: vi.fn().mockResolvedValue('original'),
         getProposedContent: vi.fn().mockResolvedValue('proposed'),
-        createUpdatedParams: vi.fn().mockReturnValue({ content: 'inline-updated' }),
+        createUpdatedParams: vi
+          .fn()
+          .mockReturnValue({ content: 'inline-updated' }),
       };
       const modifiableTool = {
         name: 'testTool',
@@ -595,9 +613,10 @@ describe('ConfirmationCoordinator', () => {
           onConfirm: vi.fn().mockResolvedValue(undefined),
         } as unknown as ToolCallConfirmationDetails,
       };
-      const { coordinator, statusMutator, schedulerAccessor } = createCoordinator({
-        toolCalls: [waitingCall],
-      });
+      const { coordinator, statusMutator, schedulerAccessor } =
+        createCoordinator({
+          toolCalls: [waitingCall],
+        });
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
 
@@ -621,7 +640,9 @@ describe('ConfirmationCoordinator', () => {
       const triggeringCall = makeWaitingToolCall('call-1', 'corr-1');
       const otherCall = makeWaitingToolCall('call-2', 'corr-2');
       // shouldConfirmExecute returns false → auto-approve
-      (otherCall.invocation.shouldConfirmExecute as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (
+        otherCall.invocation.shouldConfirmExecute as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(false);
 
       const statusMutator = makeStatusMutator();
       const accessor = makeSchedulerAccessor([triggeringCall, otherCall]);
@@ -652,7 +673,9 @@ describe('ConfirmationCoordinator', () => {
       const triggeringCall = makeWaitingToolCall('call-1', 'corr-1');
       const otherCall = makeWaitingToolCall('call-2', 'corr-2');
       // shouldConfirmExecute returns details → still needs confirmation
-      (otherCall.invocation.shouldConfirmExecute as ReturnType<typeof vi.fn>).mockResolvedValue({
+      (
+        otherCall.invocation.shouldConfirmExecute as ReturnType<typeof vi.fn>
+      ).mockResolvedValue({
         type: 'exec',
         title: 'Something',
         command: 'cmd',
@@ -661,7 +684,10 @@ describe('ConfirmationCoordinator', () => {
 
       const statusMutator = makeStatusMutator();
       const accessor = makeSchedulerAccessor([triggeringCall, otherCall]);
-      const { coordinator } = createCoordinator({ statusMutator, schedulerAccessor: accessor });
+      const { coordinator } = createCoordinator({
+        statusMutator,
+        schedulerAccessor: accessor,
+      });
       const signal = makeAbortSignal();
 
       await (
@@ -678,11 +704,16 @@ describe('ConfirmationCoordinator', () => {
 
     it('skips the triggering call itself', async () => {
       const waitingCall = makeWaitingToolCall('call-1', 'corr-1');
-      (waitingCall.invocation.shouldConfirmExecute as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      (
+        waitingCall.invocation.shouldConfirmExecute as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(false);
 
       const statusMutator = makeStatusMutator();
       const accessor = makeSchedulerAccessor([waitingCall]);
-      const { coordinator } = createCoordinator({ statusMutator, schedulerAccessor: accessor });
+      const { coordinator } = createCoordinator({
+        statusMutator,
+        schedulerAccessor: accessor,
+      });
       const signal = makeAbortSignal();
 
       await (
@@ -710,7 +741,9 @@ describe('ConfirmationCoordinator', () => {
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
       });
       const validatingCall = makeValidatingToolCall('call-1');
-      validatingCall.invocation.shouldConfirmExecute = vi.fn().mockResolvedValue(false);
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue(false);
 
       const statusMutator = makeStatusMutator();
       const { coordinator } = createCoordinator({ config, statusMutator });
@@ -749,12 +782,14 @@ describe('ConfirmationCoordinator', () => {
         getAllowedTools: vi.fn().mockReturnValue([]),
       });
       const validatingCall = makeValidatingToolCall('call-1');
-      validatingCall.invocation.shouldConfirmExecute = vi.fn().mockResolvedValue({
-        type: 'exec',
-        title: 'Run cmd',
-        command: 'echo',
-        onConfirm: vi.fn(),
-      });
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue({
+          type: 'exec',
+          title: 'Run cmd',
+          command: 'echo',
+          onConfirm: vi.fn(),
+        });
 
       const statusMutator = makeStatusMutator();
       const { coordinator } = createCoordinator({ config, statusMutator });
@@ -775,12 +810,14 @@ describe('ConfirmationCoordinator', () => {
         isInteractive: vi.fn().mockReturnValue(false),
       });
       const validatingCall = makeValidatingToolCall('call-1');
-      validatingCall.invocation.shouldConfirmExecute = vi.fn().mockResolvedValue({
-        type: 'exec',
-        title: 'Run cmd',
-        command: 'echo',
-        onConfirm: vi.fn(),
-      });
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue({
+          type: 'exec',
+          title: 'Run cmd',
+          command: 'echo',
+          onConfirm: vi.fn(),
+        });
 
       const { coordinator } = createCoordinator({ config });
       const signal = makeAbortSignal();
@@ -807,7 +844,9 @@ describe('ConfirmationCoordinator', () => {
         command: 'echo',
         onConfirm: vi.fn().mockResolvedValue(undefined),
       };
-      validatingCall.invocation.shouldConfirmExecute = vi.fn().mockResolvedValue(confirmDetails);
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue(confirmDetails);
 
       const statusMutator = makeStatusMutator();
       const onToolNotification = vi.fn().mockResolvedValue(undefined);
@@ -840,7 +879,9 @@ describe('ConfirmationCoordinator', () => {
         isInteractive: vi.fn().mockReturnValue(true),
       });
       const validatingCall = makeValidatingToolCall('call-1');
-      validatingCall.invocation.shouldConfirmExecute = vi.fn().mockResolvedValue(false);
+      validatingCall.invocation.shouldConfirmExecute = vi
+        .fn()
+        .mockResolvedValue(false);
 
       const statusMutator = makeStatusMutator();
       const { coordinator } = createCoordinator({ config, statusMutator });
@@ -873,7 +914,9 @@ describe('ConfirmationCoordinator', () => {
         tool: modifiableTool as unknown as WaitingToolCall['tool'],
         invocation: {
           shouldConfirmExecute: vi.fn().mockResolvedValue(false),
-          getPolicyContext: vi.fn().mockReturnValue({ toolName: 'testTool', args: {} }),
+          getPolicyContext: vi
+            .fn()
+            .mockReturnValue({ toolName: 'testTool', args: {} }),
         } as unknown as WaitingToolCall['invocation'],
         confirmationDetails: {
           type: 'edit' as const,
@@ -901,7 +944,8 @@ describe('ConfirmationCoordinator', () => {
       coordinator.registerSignal('call-1', signal);
 
       vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
-        const mod = await importOriginal<typeof import('../tools/modifiable-tool.js')>();
+        const mod =
+          await importOriginal<typeof import('../tools/modifiable-tool.js')>();
         return {
           ...mod,
           isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
@@ -920,7 +964,11 @@ describe('ConfirmationCoordinator', () => {
       );
 
       // Verify stale entry was set
-      const staleMap = (coordinator as unknown as { staleCorrelationIds: Map<string, NodeJS.Timeout> }).staleCorrelationIds;
+      const staleMap = (
+        coordinator as unknown as {
+          staleCorrelationIds: Map<string, NodeJS.Timeout>;
+        }
+      ).staleCorrelationIds;
       expect(staleMap.has('old-corr')).toBe(true);
 
       // After 2s grace period, stale entry is cleaned up
@@ -928,7 +976,11 @@ describe('ConfirmationCoordinator', () => {
       expect(staleMap.has('old-corr')).toBe(false);
 
       // Stale bus response is ignored (stale entry was cleaned up after grace period)
-      const statusMutator = (coordinator as unknown as { statusMutator: { approve: ReturnType<typeof vi.fn> } }).statusMutator;
+      const statusMutator = (
+        coordinator as unknown as {
+          statusMutator: { approve: ReturnType<typeof vi.fn> };
+        }
+      ).statusMutator;
       const approveBefore = statusMutator.approve.mock.calls.length;
 
       messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {

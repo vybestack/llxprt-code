@@ -328,7 +328,9 @@ describe('ResultAggregator', () => {
       const base: ToolOutputSettingsProvider = {
         getEphemeralSettings: () => ({ 'tool-output-max-tokens': 10000 }),
       };
-      (callbacks.getFallbackOutputConfig as ReturnType<typeof vi.fn>).mockReturnValue(base);
+      (
+        callbacks.getFallbackOutputConfig as ReturnType<typeof vi.fn>
+      ).mockReturnValue(base);
 
       agg.beginBatch(10); // 10 tools → 1000 tokens each (min floor)
       const calls = Array.from({ length: 10 }, (_, i) =>
