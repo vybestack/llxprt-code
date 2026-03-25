@@ -25,11 +25,32 @@ describe('CommandRegistry', () => {
   };
   const mockExtensionsCommand = vi.fn(() => mockExtensionsCommandInstance);
 
+  const mockRestoreCommandInstance: Command = {
+    name: 'restore',
+    description: 'Restore command.',
+    execute: vi.fn(),
+  };
+  const mockRestoreCommand = vi.fn(() => mockRestoreCommandInstance);
+
+  const mockInitCommandInstance: Command = {
+    name: 'init',
+    description: 'Init command.',
+    execute: vi.fn(),
+  };
+  const mockInitCommand = vi.fn(() => mockInitCommandInstance);
+
   beforeEach(async () => {
     vi.resetModules();
+    vi.clearAllMocks();
     vi.doMock('./extensions.js', () => ({
       ExtensionsCommand: mockExtensionsCommand,
       ListExtensionsCommand: mockListExtensionsCommand,
+    }));
+    vi.doMock('./restore.js', () => ({
+      RestoreCommand: mockRestoreCommand,
+    }));
+    vi.doMock('./init.js', () => ({
+      InitCommand: mockInitCommand,
     }));
   });
 

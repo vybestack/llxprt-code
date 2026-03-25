@@ -221,82 +221,69 @@ describe('retryWithBackoff', () => {
 
   it('should respect maxDelayMs', async () => {
     const mockFn = createFailingFunction(3);
-    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const observedDelays: number[] = [];
+    const delayModule = await import('./delay.js');
 
-    const promise = retryWithBackoff(mockFn, {
+    vi.spyOn(delayModule, 'delay').mockImplementation(async (ms: number) => {
+      observedDelays.push(ms);
+      return Promise.resolve();
+    });
+
+    await retryWithBackoff(mockFn, {
       maxAttempts: 4,
       initialDelayMs: 100,
       maxDelayMs: 250, // Max delay is less than 100 * 2 * 2 = 400
     });
 
-    await vi.advanceTimersByTimeAsync(1000); // Advance well past all delays
-    await promise;
-
-    const delays = setTimeoutSpy.mock.calls.map((call) => call[1] as number);
-
     // Delays should be around initial, initial*2, maxDelay (due to cap)
     // Jitter makes exact assertion hard, so we check ranges / caps
-    expect(delays.length).toBe(3);
-    expect(delays[0]).toBeGreaterThanOrEqual(100 * 0.7);
-    expect(delays[0]).toBeLessThanOrEqual(100 * 1.3);
-    expect(delays[1]).toBeGreaterThanOrEqual(200 * 0.7);
-    expect(delays[1]).toBeLessThanOrEqual(200 * 1.3);
+    expect(observedDelays.length).toBe(3);
+    expect(observedDelays[0]).toBeGreaterThanOrEqual(100 * 0.7);
+    expect(observedDelays[0]).toBeLessThanOrEqual(100 * 1.3);
+    expect(observedDelays[1]).toBeGreaterThanOrEqual(200 * 0.7);
+    expect(observedDelays[1]).toBeLessThanOrEqual(200 * 1.3);
     // The third delay should be capped by maxDelayMs (250ms), accounting for jitter
-    expect(delays[2]).toBeGreaterThanOrEqual(250 * 0.7);
-    expect(delays[2]).toBeLessThanOrEqual(250 * 1.3);
+    expect(observedDelays[2]).toBeGreaterThanOrEqual(250 * 0.7);
+    expect(observedDelays[2]).toBeLessThanOrEqual(250 * 1.3);
   });
 
   it('should handle jitter correctly, ensuring varied delays', async () => {
-    let mockFn = createFailingFunction(5);
-    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const observedDelays: number[] = [];
+    const delayModule = await import('./delay.js');
 
-    // Run retryWithBackoff multiple times to observe jitter
-    const runRetry = () =>
-      retryWithBackoff(mockFn, {
-        maxAttempts: 2, // Only one retry, so one delay
-        initialDelayMs: 100,
-        maxDelayMs: 1000,
-      });
+    vi.spyOn(delayModule, 'delay').mockImplementation(async (ms: number) => {
+      observedDelays.push(ms);
+      return Promise.resolve();
+    });
 
-    // We expect rejections as mockFn fails 5 times
-    const promise1 = runRetry();
-    // Run timers and await expectation in parallel.
-    await Promise.all([
-      expect(promise1).rejects.toThrow(),
-      vi.runAllTimersAsync(),
-    ]);
+    const runRetryWithFixedRandom = async (randomValue: number) => {
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(randomValue);
+      try {
+        const mockFn = createFailingFunction(5);
+        await expect(
+          retryWithBackoff(mockFn, {
+            maxAttempts: 2, // Only one retry, so one delay
+            initialDelayMs: 100,
+            maxDelayMs: 1000,
+          }),
+        ).rejects.toThrow();
+      } finally {
+        randomSpy.mockRestore();
+      }
+    };
 
-    const firstDelaySet = setTimeoutSpy.mock.calls.map(
-      (call) => call[1] as number,
-    );
-    setTimeoutSpy.mockClear(); // Clear calls for the next run
+    await runRetryWithFixedRandom(0);
+    await runRetryWithFixedRandom(1);
 
-    // Reset mockFn to reset its internal attempt counter for the next run
-    mockFn = createFailingFunction(5); // Re-initialize with 5 failures
-
-    const promise2 = runRetry();
-    // Run timers and await expectation in parallel.
-    await Promise.all([
-      expect(promise2).rejects.toThrow(),
-      vi.runAllTimersAsync(),
-    ]);
-
-    const secondDelaySet = setTimeoutSpy.mock.calls.map(
-      (call) => call[1] as number,
-    );
-
-    // Check that the delays are not exactly the same due to jitter
-    // This is a probabilistic test, but with +/-30% jitter, it's highly likely they differ.
-    // Verify delays were captured
-    expect(firstDelaySet.length).toBeGreaterThan(0);
-    expect(secondDelaySet.length).toBeGreaterThan(0);
-    // Check the first delay of each set
-    expect(firstDelaySet[0]).not.toBe(secondDelaySet[0]);
+    expect(observedDelays).toHaveLength(2);
+    expect(observedDelays[0]).toBe(70);
+    expect(observedDelays[1]).toBe(130);
+    expect(observedDelays[0]).not.toBe(observedDelays[1]);
 
     // Ensure delays are within the expected jitter range [70, 130] for initialDelayMs = 100
-    [...firstDelaySet, ...secondDelaySet].forEach((d) => {
-      expect(d).toBeGreaterThanOrEqual(100 * 0.7);
-      expect(d).toBeLessThanOrEqual(100 * 1.3);
+    observedDelays.forEach((delayValue) => {
+      expect(delayValue).toBeGreaterThanOrEqual(100 * 0.7);
+      expect(delayValue).toBeLessThanOrEqual(100 * 1.3);
     });
   });
 

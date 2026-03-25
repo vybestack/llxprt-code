@@ -11,7 +11,7 @@ import {
   type ProviderManager,
 } from '@vybestack/llxprt-code-core';
 import { createProviderManager } from '../providers/providerManagerInstance.js';
-import { registerCliProviderInfrastructure } from '../runtime/runtimeSettings.js';
+import { registerCliProviderInfrastructure } from '../runtime/runtimeLifecycle.js';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 

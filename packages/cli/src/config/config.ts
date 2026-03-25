@@ -65,12 +65,10 @@ import {
 } from './profileBootstrap.js';
 import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-import {
-  applyProfileSnapshot,
-  getCliRuntimeContext,
-  setCliRuntimeContext,
-  switchActiveProvider,
-} from '../runtime/runtimeSettings.js';
+import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
+import { applyProfileSnapshot } from '../runtime/profileSnapshot.js';
+import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
+import { switchActiveProvider } from '../runtime/providerSwitch.js';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 import { loadProviderAliasEntries } from '../providers/providerAliases.js';
@@ -2021,4 +2019,4 @@ export {
   getCliProviderManager,
   getActiveProviderStatus,
   listProviders as listRuntimeProviders,
-} from '../runtime/runtimeSettings.js';
+} from '../runtime/runtimeAccessors.js';
