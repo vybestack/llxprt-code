@@ -127,6 +127,13 @@ describe('readToolList', () => {
   it('returns empty array for empty array input', () => {
     expect(readToolList([])).toEqual([]);
   });
+
+  it('trims whitespace from tool names', () => {
+    expect(readToolList([' bash ', '  read_file  '])).toEqual([
+      'bash',
+      'read_file',
+    ]);
+  });
 });
 
 describe('buildToolDeclarationsFromView', () => {

@@ -49,10 +49,12 @@ export function readToolList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  const filtered = value.filter(
-    (entry): entry is string =>
-      typeof entry === 'string' && entry.trim().length > 0,
-  );
+  const filtered = value
+    .filter(
+      (entry): entry is string =>
+        typeof entry === 'string' && entry.trim().length > 0,
+    )
+    .map((entry) => entry.trim());
   return filtered.length > 0 ? [...filtered] : [];
 }
 

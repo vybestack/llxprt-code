@@ -151,8 +151,8 @@ export async function generateContent(
     const systemInstruction = await buildLightweightSystemPrompt(config, model);
 
     const requestConfig = {
-      abortSignal,
       ...configToUse,
+      abortSignal,
       systemInstruction,
     };
 
