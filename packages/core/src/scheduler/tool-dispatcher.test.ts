@@ -177,7 +177,6 @@ describe('ToolDispatcher', () => {
     });
 
     it('includes levenshtein suggestion in error message when tool name is close', () => {
-      const _tool = new MockTool('list_files');
       const registry = {
         getTool: vi.fn().mockReturnValue(null),
         getAllToolNames: vi.fn().mockReturnValue(['list_files', 'read_file']),
@@ -251,6 +250,7 @@ describe('ToolDispatcher', () => {
 
       expect(tool.context).toBeDefined();
       expect(tool.context?.sessionId).toBe('test-session-id');
+      expect(tool.context?.agentId).toBe('primary');
       expect(tool.context?.interactiveMode).toBe(true);
     });
 
@@ -327,8 +327,11 @@ describe('ToolDispatcher', () => {
       };
       const dispatcher = new ToolDispatcher(registry as never, config);
       const suggestion = dispatcher.getToolSuggestion('a', 3);
-      // Should contain at least one of the close matches
-      expect(suggestion.length).toBeGreaterThan(0);
+      // Should contain the 3 closest matches (ab, ac, ad) but not xyz
+      expect(suggestion).toContain('ab');
+      expect(suggestion).toContain('ac');
+      expect(suggestion).toContain('ad');
+      expect(suggestion).not.toContain('xyz');
     });
   });
 

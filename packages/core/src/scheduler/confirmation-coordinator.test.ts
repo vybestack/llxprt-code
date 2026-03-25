@@ -13,6 +13,21 @@ import {
 } from './confirmation-coordinator.js';
 import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
 import type { ToolCallConfirmationDetails } from '../tools/tools.js';
+
+// Module-scope mock for modifiable-tool — hoisted by vitest before imports.
+// Per-test behavior can be overridden via vi.mocked().
+vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
+  const mod =
+    await importOriginal<typeof import('../tools/modifiable-tool.js')>();
+  return {
+    ...mod,
+    isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
+    modifyWithEditor: vi.fn().mockResolvedValue({
+      updatedParams: { content: 'updated' },
+      updatedDiff: '--- a +++ b @@ updated @@',
+    }),
+  };
+});
 import { MessageBusType } from '../confirmation-bus/types.js';
 import type { ToolConfirmationResponse } from '../confirmation-bus/types.js';
 import { ApprovalMode } from '../config/config.js';
@@ -210,12 +225,21 @@ describe('ConfirmationCoordinator', () => {
       );
     });
 
-    it('dispose unsubscribes from message bus', () => {
-      const { coordinator, messageBus } = createCoordinator();
+    it('dispose unsubscribes from message bus and ignores subsequent responses', () => {
+      const { coordinator, messageBus, statusMutator, schedulerAccessor } =
+        createCoordinator();
+
       coordinator.dispose();
-      // After dispose, emitting a response does nothing (no call to handleConfirmationResponse)
-      // We verify by checking the unsubscribe was invoked via subscribe mock return
-      expect(messageBus.subscribe).toHaveBeenCalledOnce();
+
+      // Emit a response after dispose — the handler should have been removed
+      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+        correlationId: 'corr-1',
+        outcome: ToolConfirmationOutcome.ProceedOnce,
+      } as ToolConfirmationResponse);
+
+      // Nothing should happen because the subscription was removed
+      expect(statusMutator.setScheduled).not.toHaveBeenCalled();
+      expect(schedulerAccessor.attemptExecution).not.toHaveBeenCalled();
     });
 
     it('reset clears all state maps', () => {
@@ -547,19 +571,7 @@ describe('ConfirmationCoordinator', () => {
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
 
-      // We need to mock modifyWithEditor — patch the module
-      vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
-        const mod =
-          await importOriginal<typeof import('../tools/modifiable-tool.js')>();
-        return {
-          ...mod,
-          isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
-          modifyWithEditor: vi.fn().mockResolvedValue({
-            updatedParams: { content: 'updated' },
-            updatedDiff: '--- a\n+++ b\n@@ updated @@',
-          }),
-        };
-      });
+      // modifyWithEditor is mocked at module scope
 
       await coordinator.handleConfirmationResponse(
         'call-1',
@@ -942,18 +954,9 @@ describe('ConfirmationCoordinator', () => {
       const signal = makeAbortSignal();
       coordinator.registerSignal('call-1', signal);
 
-      vi.mock('../tools/modifiable-tool.js', async (importOriginal) => {
-        const mod =
-          await importOriginal<typeof import('../tools/modifiable-tool.js')>();
-        return {
-          ...mod,
-          isModifiableDeclarativeTool: vi.fn().mockReturnValue(true),
-          modifyWithEditor: vi.fn().mockResolvedValue({
-            updatedParams: { content: 'updated' },
-            updatedDiff: '--- updated',
-          }),
-        };
-      });
+      // modifyWithEditor is mocked at module scope
+
+
 
       await coordinator.handleConfirmationResponse(
         'call-1',
