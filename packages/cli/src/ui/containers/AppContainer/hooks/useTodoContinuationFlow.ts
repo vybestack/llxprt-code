@@ -35,6 +35,11 @@ interface UseTodoContinuationFlowOptions {
   history: HistoryItem[];
   pendingHistoryItems: HistoryItemWithoutId[];
   setDebugMessage: (message: string) => void;
+  todoContinuationRef?: React.MutableRefObject<Pick<
+    TodoContinuationHook,
+    'handleTodoPause' | 'clearPause'
+  > | null>;
+  hadToolCallsRef?: React.MutableRefObject<boolean>;
 }
 
 export interface UseTodoContinuationFlowResult {
@@ -51,11 +56,15 @@ export function useTodoContinuationFlow({
   history,
   pendingHistoryItems,
   setDebugMessage,
+  todoContinuationRef: externalTodoContinuationRef,
+  hadToolCallsRef: externalHadToolCallsRef,
 }: UseTodoContinuationFlowOptions): UseTodoContinuationFlowResult {
-  const todoContinuationRef = useRef<Pick<
+  const internalTodoContinuationRef = useRef<Pick<
     TodoContinuationHook,
     'handleTodoPause' | 'clearPause'
   > | null>(null);
+  const todoContinuationRef =
+    externalTodoContinuationRef ?? internalTodoContinuationRef;
 
   /**
    * @plan PLAN-20260129-TODOPERSIST.P12
@@ -81,13 +90,23 @@ export function useTodoContinuationFlow({
    * Track whether tool calls were made during the turn for continuation decision.
    * Tool calls signal the AI made progress, so we don't need continuation.
    */
-  const hadToolCallsRef = useRef<boolean>(false);
+  const internalHadToolCallsRef = useRef<boolean>(false);
+  const hadToolCallsRef = externalHadToolCallsRef ?? internalHadToolCallsRef;
 
   /**
    * @plan PLAN-20260129-TODOPERSIST.P12
    * Track tool calls by detecting tool_group items in history and pending items.
+   * Reset hadToolCallsRef when a new turn starts (streamingState transitions TO Responding)
+   * so that tool calls from previous turns don't suppress continuation prompts.
    */
   useEffect(() => {
+    // Detect transition into Responding (new turn start) and reset the flag.
+    const wasIdle = prevStreamingStateRef.current === StreamingState.Idle;
+    const isNowResponding = streamingState === StreamingState.Responding;
+    if (wasIdle && isNowResponding) {
+      hadToolCallsRef.current = false;
+    }
+
     const hasToolCalls =
       history.some((item) => item.type === 'tool_group') ||
       pendingHistoryItems.some((item) => item.type === 'tool_group');
@@ -99,7 +118,7 @@ export function useTodoContinuationFlow({
     ) {
       hadToolCallsRef.current = true;
     }
-  }, [history, pendingHistoryItems, streamingState]);
+  }, [history, pendingHistoryItems, streamingState, hadToolCallsRef]);
 
   // Detect turn completion (streaming goes idle) for continuation logic
   useEffect(() => {
@@ -122,7 +141,7 @@ export function useTodoContinuationFlow({
 
     // Reset for next turn
     hadToolCallsRef.current = false;
-  }, [streamingState, todoContinuation]);
+  }, [streamingState, todoContinuation, hadToolCallsRef]);
 
   return {
     todoContinuationRef,

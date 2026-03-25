@@ -28,10 +28,10 @@ export function useInitialPromptSubmit({
   geminiClientPresent,
   blockedByDialogs,
 }: UseInitialPromptSubmitParams): void {
-  const initialPromptSubmittedRef = useRef(false);
+  const initialPromptSubmittedRef = useRef<'idle' | 'pending' | 'done'>('idle');
 
   useEffect(() => {
-    if (!initialPrompt || initialPromptSubmittedRef.current) {
+    if (!initialPrompt || initialPromptSubmittedRef.current !== 'idle') {
       return;
     }
 
@@ -49,8 +49,15 @@ export function useInitialPromptSubmit({
       return;
     }
 
-    void submitQuery(initialPrompt);
-    initialPromptSubmittedRef.current = true;
+    initialPromptSubmittedRef.current = 'pending';
+    void submitQuery(initialPrompt).then(
+      () => {
+        initialPromptSubmittedRef.current = 'done';
+      },
+      () => {
+        initialPromptSubmittedRef.current = 'idle';
+      },
+    );
   }, [
     initialPrompt,
     submitQuery,

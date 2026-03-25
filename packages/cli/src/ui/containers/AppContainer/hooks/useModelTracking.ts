@@ -34,15 +34,23 @@ export function useModelTracking({
 
   // Update currentModel when settings change - get it from the SAME place as diagnostics
   useEffect(() => {
+    let disposed = false;
+    let requestSeq = 0;
+
     const updateModel = async () => {
+      const seq = ++requestSeq;
       const settingsService = getSettingsService();
 
       // Try to get from SettingsService first (same as diagnostics does)
       if (settingsService && settingsService.getDiagnosticsData) {
         try {
           const diagnosticsData = await settingsService.getDiagnosticsData();
-          if (diagnosticsData && diagnosticsData.model) {
-            setCurrentModel(diagnosticsData.model);
+          if (!disposed && seq === requestSeq) {
+            if (diagnosticsData && diagnosticsData.model) {
+              setCurrentModel(diagnosticsData.model);
+              return;
+            }
+          } else {
             return;
           }
         } catch {
@@ -51,7 +59,9 @@ export function useModelTracking({
       }
 
       // Otherwise use config (which is what diagnostics falls back to)
-      setCurrentModel(config.getModel());
+      if (!disposed && seq === requestSeq) {
+        setCurrentModel(config.getModel());
+      }
     };
 
     // Update immediately
@@ -63,11 +73,14 @@ export function useModelTracking({
     if (settingsService) {
       settingsService.on('settings-changed', updateModel);
       return () => {
+        disposed = true;
         settingsService.off('settings-changed', updateModel);
       };
     }
 
-    return undefined;
+    return () => {
+      disposed = true;
+    };
   }, [config]);
 
   return {

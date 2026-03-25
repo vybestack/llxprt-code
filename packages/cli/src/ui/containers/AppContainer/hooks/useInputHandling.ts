@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import type { TextBuffer } from '../../../components/shared/text-buffer.js';
 import type { UseInputHistoryStoreReturn } from '../../../hooks/useInputHistoryStore.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
@@ -68,6 +68,10 @@ export function useInputHandling({
     ((shouldRestorePrompt?: boolean) => void) | null
   >(null);
 
+  // Keybinding-triggered cancel: intentionally skips the isToolExecuting() check.
+  // This handler is invoked from keyboard shortcuts (e.g. Ctrl+C) and should always
+  // clear or restore the buffer regardless of tool state. The cancelHandlerRef below
+  // is the programmatic cancel path that guards against tool execution.
   const handleUserCancel = useCallback(
     (shouldRestorePrompt?: boolean) => {
       if (shouldRestorePrompt) {
@@ -82,8 +86,10 @@ export function useInputHandling({
     [buffer, lastSubmittedPromptRef],
   );
 
-  // Update the cancel handler with message queue support
-  cancelHandlerRef.current = useCallback(
+  // Update the cancel handler with message queue support.
+  // The handler is stored in a ref to avoid stale closures, and the assignment
+  // is deferred to useEffect to avoid mutating a ref during render.
+  const cancelHandler = useCallback(
     (shouldRestorePrompt?: boolean) => {
       if (isToolExecuting(pendingHistoryItems)) {
         buffer.setText('');
@@ -101,6 +107,12 @@ export function useInputHandling({
     },
     [buffer, pendingHistoryItems, lastSubmittedPromptRef],
   );
+
+  // useLayoutEffect ensures the ref is updated synchronously after render,
+  // before any event handlers can read it (avoids one-render stale window).
+  useLayoutEffect(() => {
+    cancelHandlerRef.current = cancelHandler;
+  }, [cancelHandlerRef, cancelHandler]);
 
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {

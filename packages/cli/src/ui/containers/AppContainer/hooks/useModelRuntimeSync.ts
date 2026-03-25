@@ -32,10 +32,8 @@ export function useModelRuntimeSync({
     const checkModelChange = () => {
       const configModel = config.getModel();
       const providerModel = getActiveModelName();
-      const effectiveModel =
-        providerModel && providerModel.trim() !== ''
-          ? providerModel
-          : configModel;
+      const trimmed = providerModel?.trim();
+      const effectiveModel = trimmed && trimmed !== '' ? trimmed : configModel;
 
       if (effectiveModel !== currentModel) {
         debugLogger.debug(

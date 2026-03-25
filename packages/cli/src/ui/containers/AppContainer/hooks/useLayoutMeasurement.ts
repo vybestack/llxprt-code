@@ -9,6 +9,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { useMouseSelection } from '../../../hooks/useMouseSelection.js';
 import { useKeypress, Key } from '../../../hooks/useKeypress.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { ConsoleMessageItem } from '../../../types.js';
 
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
@@ -28,7 +29,7 @@ export interface UseLayoutMeasurementParams {
   onCopiedText?: (text: string) => void;
   setFooterHeight: (height: number) => void;
   terminalHeight: number;
-  consoleMessages: unknown;
+  consoleMessages: ConsoleMessageItem[];
   showErrorDetails: boolean;
 }
 

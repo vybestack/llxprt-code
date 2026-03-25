@@ -79,5 +79,6 @@ export function useMemoryRefreshAction({
       );
       debugLogger.error('Error refreshing memory:', error);
     }
+    // settings.merged reference changes when any setting changes, so this dep is correct.
   }, [config, addItem, settings.merged, setLlxprtMdFileCount]);
 }

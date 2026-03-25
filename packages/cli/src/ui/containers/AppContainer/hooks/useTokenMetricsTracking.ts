@@ -65,46 +65,45 @@ function useHistoryTokenListener(
       if (geminiClient?.hasChatInitialized?.()) {
         const historyService = geminiClient.getHistoryService?.();
 
-        if (!historyService && lastHistoryServiceRef.current === null) {
-          tokenLogger.debug(() => 'No history service available yet');
-        }
-
-        if (
-          historyService &&
-          historyService !== lastHistoryServiceRef.current
-        ) {
-          tokenLogger.debug(
-            () => 'Found new history service, setting up listener',
-          );
-
+        // Handle service identity change (including transition to undefined).
+        if (historyService !== lastHistoryServiceRef.current) {
+          // Clean up listener from the old service regardless of whether the
+          // new service is truthy — a reset may have cleared the service.
           if (historyTokenCleanupRef.current) {
             historyTokenCleanupRef.current();
             historyTokenCleanupRef.current = null;
           }
+          lastHistoryServiceRef.current = historyService ?? null;
 
-          lastHistoryServiceRef.current = historyService;
-
-          const handleTokensUpdated = (event: { totalTokens: number }) => {
+          if (historyService) {
             tokenLogger.debug(
-              () =>
-                `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
+              () => 'Found new history service, setting up listener',
             );
-            if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
-              lastPublishedHistoryTokensRef.current = event.totalTokens;
-              updateHistoryTokenCount(event.totalTokens);
-            }
-          };
 
-          historyService.on('tokensUpdated', handleTokensUpdated);
+            const handleTokensUpdated = (event: { totalTokens: number }) => {
+              tokenLogger.debug(
+                () =>
+                  `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
+              );
+              if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
+                lastPublishedHistoryTokensRef.current = event.totalTokens;
+                updateHistoryTokenCount(event.totalTokens);
+              }
+            };
 
-          const currentTokens = historyService.getTotalTokens();
-          tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
-          lastPublishedHistoryTokensRef.current = currentTokens;
-          updateHistoryTokenCount(currentTokens);
+            historyService.on('tokensUpdated', handleTokensUpdated);
 
-          historyTokenCleanupRef.current = () => {
-            historyService.off('tokensUpdated', handleTokensUpdated);
-          };
+            const currentTokens = historyService.getTotalTokens();
+            tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
+            lastPublishedHistoryTokensRef.current = currentTokens;
+            updateHistoryTokenCount(currentTokens);
+
+            historyTokenCleanupRef.current = () => {
+              historyService.off('tokensUpdated', handleTokensUpdated);
+            };
+          } else {
+            tokenLogger.debug(() => 'History service reset to undefined');
+          }
         }
       }
     }, 100); // Check every 100ms
@@ -139,6 +138,11 @@ function useRecordingSubscription(
   const recordingSubscribedServiceRef = useRef<unknown>(null);
 
   useEffect(() => {
+    // The effect bails early when recordingIntegrationRef.current is null at mount
+    // time, but ref identity is stable so the effect never re-runs for late-arriving
+    // recording integrations. The polling interval below handles this: each tick checks
+    // recordingIntegrationRef.current?.onHistoryServiceReplaced, so a recording
+    // integration that arrives after mount is automatically picked up on the next tick.
     if (!recordingIntegrationRef.current) return;
 
     let intervalCleared = false;

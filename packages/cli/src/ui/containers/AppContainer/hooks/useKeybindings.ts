@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback } from 'react';
+import type { MutableRefObject } from 'react';
+import { useCallback, useRef } from 'react';
 import { useKeypress, type Key } from '../../../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../../../keyMatchers.js';
 import {
@@ -90,10 +91,21 @@ export interface UseKeybindingsParams {
  * Handles copy mode toggle keybinding.
  * Returns true if key was handled (should short-circuit).
  */
-function handleCopyModeKey(key: Key, copyMode: CopyModeDeps): boolean {
+function handleCopyModeKey(
+  key: Key,
+  copyMode: CopyModeDeps,
+  mouseStateRef: MutableRefObject<boolean | null>,
+): boolean {
   if (copyMode.copyModeEnabled) {
     copyMode.setCopyModeEnabled(false);
-    enableMouseEvents();
+    // Restore the pre-copy-mode mouse state. If no saved state (e.g. copy mode
+    // was active at mount), fall back to enabling mouse events (previous default).
+    if (mouseStateRef.current === null || mouseStateRef.current) {
+      enableMouseEvents();
+    } else {
+      disableMouseEvents();
+    }
+    mouseStateRef.current = null;
     return true;
   }
 
@@ -101,6 +113,8 @@ function handleCopyModeKey(key: Key, copyMode: CopyModeDeps): boolean {
     copyMode.useAlternateBuffer &&
     keyMatchers[Command.TOGGLE_COPY_MODE](key)
   ) {
+    // Save mouse state before disabling so it can be restored on exit.
+    mouseStateRef.current = isMouseEventsActive();
     copyMode.setCopyModeEnabled(true);
     disableMouseEvents();
     return true;
@@ -234,10 +248,13 @@ function handleIdeAndShellKeys(
 export function useKeybindings(params: UseKeybindingsParams): void {
   const { exit, display, shell, copyMode, ideContext, mcp } = params;
 
+  // Instance-local mouse state tracking for copy mode save/restore.
+  const mouseStateBeforeCopyModeRef = useRef<boolean | null>(null);
+
   const handleGlobalKeypress = useCallback(
     (key: Key) => {
       // Priority 1: Copy mode (highest priority - immediate exit from copy mode)
-      if (handleCopyModeKey(key, copyMode)) {
+      if (handleCopyModeKey(key, copyMode, mouseStateBeforeCopyModeRef)) {
         return;
       }
 

@@ -89,7 +89,6 @@ export interface AppLayoutParams {
 function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
   const {
     config,
-    settings,
     clearItems,
     clearConsoleMessagesState,
     constrainHeight,
@@ -149,7 +148,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
     copyMode: {
       copyModeEnabled,
       setCopyModeEnabled,
-      useAlternateBuffer: settings.merged.ui?.useAlternateBuffer === true,
+      useAlternateBuffer,
     },
     ideContext: { getIdeMode: () => config.getIdeMode(), ideContextState },
     mcp: {
@@ -201,25 +200,15 @@ function useLayoutMeasure(p: AppLayoutParams) {
     [terminalHeight, footerHeight],
   );
   useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
-  const {
-    todoContinuationRef: todoContinuationRefFromHook,
-    hadToolCallsRef: hadToolCallsRefFromHook,
-  } = useTodoContinuationFlow({
+  useTodoContinuationFlow({
     config,
     streamingState,
     history,
     pendingHistoryItems,
     setDebugMessage,
-  });
-  useEffect(() => {
-    todoContinuationRef.current = todoContinuationRefFromHook.current;
-    hadToolCallsRef.current = hadToolCallsRefFromHook.current;
-  }, [
-    todoContinuationRefFromHook,
-    hadToolCallsRefFromHook,
-    hadToolCallsRef,
     todoContinuationRef,
-  ]);
+    hadToolCallsRef,
+  });
   return {
     mainControlsRef,
     pendingHistoryItemRef,

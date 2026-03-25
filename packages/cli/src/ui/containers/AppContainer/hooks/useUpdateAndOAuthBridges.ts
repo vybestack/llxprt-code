@@ -48,14 +48,21 @@ export function useUpdateAndOAuthBridges({
 
     const oauthManager = getCliOAuthManager() as CliOAuthManagerWithProviders;
     const providersMap = oauthManager.providers;
+    const providers: OAuthProviderWithAddItem[] = [];
     if (providersMap instanceof Map) {
       for (const provider of providersMap.values()) {
         const candidate = provider as OAuthProviderWithAddItem;
         candidate.setAddItem?.(addItem);
+        providers.push(candidate);
       }
     }
 
-    return cleanup;
+    return () => {
+      // Replace stale addItem references in providers with a safe no-op
+      // so callbacks that fire after unmount don't interact with stale closures.
+      providers.forEach((p) => p.setAddItem?.(() => -1));
+      cleanup();
+    };
   }, [addItem, getCliOAuthManager, setUpdateInfo]);
 
   useEffect(() => {

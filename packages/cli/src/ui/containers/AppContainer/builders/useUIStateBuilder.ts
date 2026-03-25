@@ -17,5 +17,6 @@ import type { UIState } from '../../../contexts/UIStateContext.js';
  * @strictMode Safe - useMemo deps are primitives
  */
 export function useUIStateBuilder(params: UIStateParams): UIState {
-  return useMemo(() => buildUIState(params), [params]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => buildUIState(params), Object.values(params));
 }

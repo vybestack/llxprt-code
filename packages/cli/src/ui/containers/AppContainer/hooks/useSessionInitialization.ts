@@ -97,28 +97,21 @@ export function useSessionInitialization({
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
 
-  // Guard refs for idempotency in StrictMode
-  const hasSeededResumedHistory = useRef(false);
+  // Guard ref for idempotency in StrictMode
   const hasTriggeredSessionStart = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Effect: Seed resumed history into history manager
+  // Effect: Seed resumed history into history manager.
+  // This effect is idempotent: resumedHistory is a static prop from mount,
+  // loadHistory replaces (not appends), and StrictMode double-mount is harmless.
   useEffect(() => {
-    if (hasSeededResumedHistory.current) {
-      return;
-    }
-
     if (!resumedHistory || resumedHistory.length === 0) {
-      hasSeededResumedHistory.current = true;
       return;
     }
-
     const uiItems = iContentToHistoryItems(resumedHistory);
     if (uiItems.length > 0) {
       loadHistory(uiItems);
     }
-
-    hasSeededResumedHistory.current = true;
   }, [loadHistory, resumedHistory]);
 
   // Effect: Trigger SessionStart hook on initialization

@@ -75,5 +75,8 @@ export function useCoreEventHandlers({
     });
     consolePatcher.patch();
     registerCleanup(consolePatcher.cleanup);
+    return () => {
+      consolePatcher.cleanup();
+    };
   }, [handleNewMessage, config]);
 }

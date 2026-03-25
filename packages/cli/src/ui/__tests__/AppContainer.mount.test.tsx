@@ -494,7 +494,7 @@ describe('AppContainer.mount', () => {
       }).not.toThrow();
     });
 
-    it('should render UIStateProvider context', () => {
+    it('should render with provider contexts active', () => {
       // Arrange
       const props = {
         config: mockConfig as unknown as Config,
@@ -505,27 +505,14 @@ describe('AppContainer.mount', () => {
       };
 
       // Act
-      const { lastFrame } = renderWithProviders(<AppContainer {...props} />);
+      const { lastFrame, unmount } = renderWithProviders(
+        <AppContainer {...props} />,
+      );
 
-      // Assert: Component renders output (indicating providers are active)
+      // Assert: Component renders output (indicating UIStateProvider and UIActionsProvider are active)
       expect(lastFrame()).toBeDefined();
-    });
-
-    it('should render UIActionsProvider context', () => {
-      // Arrange
-      const props = {
-        config: mockConfig as unknown as Config,
-        settings: mockSettings,
-        version: '1.0.0-test',
-        appState: initialAppState,
-        appDispatch: vi.fn(),
-      };
-
-      // Act
-      const { lastFrame } = renderWithProviders(<AppContainer {...props} />);
-
-      // Assert: Component renders without errors indicating actions provider is active
-      expect(lastFrame()).toBeDefined();
+      expect(unmount).toBeTypeOf('function');
+      unmount();
     });
 
     it('should render DefaultAppLayout', () => {

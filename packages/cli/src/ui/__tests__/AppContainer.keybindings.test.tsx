@@ -479,7 +479,7 @@ describe('AppContainer.keybindings', () => {
       expect(hasCtrlD).toBe(true);
     });
 
-    it('should have Alt+M (command+M) bound to TOGGLE_MARKDOWN command', () => {
+    it('should have Cmd+M (macOS) / Alt+M bound to TOGGLE_MARKDOWN command', () => {
       const markdownBindings = defaultKeyBindings[Command.TOGGLE_MARKDOWN];
       const hasAltM = markdownBindings.some(
         (b) => b.key === 'm' && b.command === true,
@@ -518,7 +518,7 @@ describe('AppContainer.keybindings', () => {
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
       // Component mounts without errors, meaning keybinding handlers are registered
-      expect(true).toBe(true);
+      expect(unmount).toBeTypeOf('function');
 
       unmount();
     });

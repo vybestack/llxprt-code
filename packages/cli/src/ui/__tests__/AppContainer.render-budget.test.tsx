@@ -523,9 +523,10 @@ describe('AppContainer.render-budget', () => {
 
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
-      // Component mounts successfully with memoized values
-      // The useMemo hooks for historyLimits, viewport, etc. are called
-      expect(true).toBe(true);
+      // Component mounts successfully with memoized values.
+      // Note: reference-stability testing requires re-render capability not available
+      // in the current ink test mocking setup, so we verify mount/unmount succeeds.
+      expect(unmount).toBeTypeOf('function');
 
       unmount();
     });
@@ -541,9 +542,10 @@ describe('AppContainer.render-budget', () => {
 
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
-      // Component mounts successfully with memoized callbacks
-      // The useCallback hooks for handlers are called
-      expect(true).toBe(true);
+      // Component mounts successfully with memoized callbacks.
+      // Note: reference-stability testing requires re-render capability not available
+      // in the current ink test mocking setup, so we verify mount/unmount succeeds.
+      expect(unmount).toBeTypeOf('function');
 
       unmount();
     });
@@ -598,8 +600,8 @@ describe('AppContainer.render-budget', () => {
     });
   });
 
-  describe('no memory leaks', () => {
-    it('should clean up properly on unmount', () => {
+  describe('cleanup smoke test', () => {
+    it('should complete mount/unmount cycles without errors', () => {
       const props = {
         config: mockConfig as unknown as Config,
         settings: mockSettings,
@@ -608,14 +610,12 @@ describe('AppContainer.render-budget', () => {
         appDispatch: vi.fn(),
       };
 
-      // Multiple mount/unmount cycles
+      // Multiple mount/unmount cycles — no errors indicates proper cleanup
       for (let i = 0; i < 3; i++) {
         const { unmount } = renderWithProviders(<AppContainer {...props} />);
+        expect(unmount).toBeTypeOf('function');
         unmount();
       }
-
-      // No errors indicates proper cleanup
-      expect(true).toBe(true);
     });
   });
 });

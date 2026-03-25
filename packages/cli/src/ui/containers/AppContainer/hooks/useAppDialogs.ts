@@ -66,7 +66,6 @@ function useDialogsState() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [editorError] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState<number>(0);
-  const [_corgiMode, setCorgiMode] = useState(false);
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
   const [ideContextState, setIdeContextState] = useState<
@@ -79,9 +78,9 @@ function useDialogsState() {
   const [queueErrorMessage, setQueueErrorMessage] = useState<string | null>(
     null,
   );
-  const toggleCorgiMode = useCallback(() => {
-    setCorgiMode((prev) => !prev);
-  }, []);
+  // toggleCorgiMode is retained as a no-op interface required by slash commands;
+  // the _corgiMode state it previously toggled was never read or rendered.
+  const toggleCorgiMode = useCallback(() => {}, []);
   const handleExternalEditorOpen = useCallback(() => {}, []);
   const refreshStatic = useCallback(() => {
     setStaticKey((prev) => prev + 1);
