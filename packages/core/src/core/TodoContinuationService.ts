@@ -20,13 +20,13 @@ const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
 
 function toPartArray(request: PartListUnion): Part[] {
   if (Array.isArray(request)) {
-    return [...(request as Part[])];
+    return [...request] as Part[];
   }
   if (typeof request === 'string') {
-    return [{ text: request } as Part];
+    return [{ text: request }];
   }
-  if (typeof request === 'object' && request !== null && 'text' in request) {
-    return [request as Part];
+  if ('text' in request) {
+    return [request];
   }
   return [];
 }
