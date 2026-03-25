@@ -31,7 +31,6 @@ import {
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
 import type { ScheduledToolCall } from './types.js';
-import type { Part } from '@google/genai';
 
 const logger = new DebugLogger('llxprt:scheduler:result-aggregator');
 
@@ -333,7 +332,7 @@ export class ResultAggregator {
         callId,
         result.llmContent,
         outputConfig,
-      ) as Part[];
+      );
 
       const metadataAgentId = extractAgentIdFromMetadata(result.metadata);
 

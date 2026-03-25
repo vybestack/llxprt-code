@@ -57,7 +57,7 @@ function makeSuccessResult(output = 'hello'): ToolResult {
   };
 }
 
-function makeErrorResult(message = 'boom'): ToolResult {
+function _makeErrorResult(message = 'boom'): ToolResult {
   return {
     error: { message, type: ToolErrorType.UNHANDLED_EXCEPTION },
     llmContent: message,

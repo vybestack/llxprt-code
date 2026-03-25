@@ -356,6 +356,7 @@ describe('ToolDispatcher', () => {
       const tool = new MockTool('string_throw_tool');
       // Override build to throw a string
       vi.spyOn(tool, 'build').mockImplementation(() => {
+        // eslint-disable-next-line no-restricted-syntax
         throw 'just a string';
       });
       const registry = makeMockRegistry(tool);

@@ -482,7 +482,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('duplicate callId is skipped (processedConfirmations gate)', async () => {
       const waitingCall = makeWaitingToolCall();
-      const { coordinator, statusMutator } = createCoordinator({
+      const { coordinator } = createCoordinator({
         toolCalls: [waitingCall],
       });
       const signal = makeAbortSignal();
@@ -849,7 +849,6 @@ describe('ConfirmationCoordinator', () => {
         .mockResolvedValue(confirmDetails);
 
       const statusMutator = makeStatusMutator();
-      const onToolNotification = vi.fn().mockResolvedValue(undefined);
       const { coordinator, messageBus } = createCoordinator({
         config,
         statusMutator,
