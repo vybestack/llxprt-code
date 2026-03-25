@@ -7,10 +7,8 @@
 import {
   type GenerateContentConfig,
   type PartListUnion,
-  type Part,
   type Content,
   type Tool,
-  type FunctionDeclaration,
   GenerateContentResponse,
   type SendMessageParameters,
 } from '@google/genai';
@@ -18,192 +16,57 @@ import {
   getDirectoryContextString,
   getEnvironmentContext,
 } from '../utils/environmentContext.js';
-import {
-  Turn,
-  type ServerGeminiStreamEvent,
-  GeminiEventType,
-  DEFAULT_AGENT_ID,
-} from './turn.js';
-import type { ToolCallResponseInfo } from './turn.js';
+import { Turn, type ServerGeminiStreamEvent } from './turn.js';
+
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPromptAsync } from './prompts.js';
-import { shouldIncludeSubagentDelegation } from '../prompt-config/subagent-delegation.js';
-import { reportError } from '../utils/errorReporting.js';
+import {
+  buildToolDeclarationsFromView,
+  getEnabledToolNamesForPrompt,
+} from './clientToolGovernance.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { ContentConverters } from '../services/history/ContentConverters.js';
-import type {
-  ReadonlySettingsSnapshot,
-  ToolRegistryView,
-} from '../runtime/AgentRuntimeContext.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
-import { retryWithBackoff } from '../utils/retry.js';
-import { getErrorMessage } from '../utils/errors.js';
+
 import {
   type ContentGenerator,
   type ContentGeneratorConfig,
   createContentGenerator,
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import { tokenLimit } from './tokenLimits.js';
-
 import { LoopDetectionService } from '../services/loopDetectionService.js';
-import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
-import {
-  ComplexityAnalyzer,
-  type ComplexityAnalysisResult,
-} from '../services/complexity-analyzer.js';
+
+import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
-import { TodoStore } from '../tools/todo-store.js';
-import type { Todo } from '../tools/todo-schemas.js';
-import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '../services/history/IContent.js';
-import {
-  triggerBeforeAgentHook,
-  triggerAfterAgentHook,
-} from './lifecycleHookTriggers.js';
-import type {
-  BeforeAgentHookOutput,
-  AfterAgentHookOutput,
-} from '../hooks/types.js';
+
 import { coreEvents, CoreEvent } from '../utils/events.js';
-
-const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
-const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
-
-/**
- * Hook state for tracking BeforeAgent/AfterAgent deduplication
- */
-interface HookState {
-  hasFiredBeforeAgent: boolean;
-  cumulativeResponse: string;
-  activeCalls: number;
-}
-
-export function isThinkingSupported(model: string) {
-  return !model.startsWith('gemini-2.0');
-}
-
-/**
- * Returns the index of the content after the fraction of the total characters in the history.
- *
- * Exported for testing purposes.
- */
-export function findCompressSplitPoint(
-  contents: Content[],
-  fraction: number,
-): number {
-  if (fraction <= 0 || fraction >= 1) {
-    throw new Error('Fraction must be between 0 and 1');
-  }
-
-  const charCounts = contents.map((content) => JSON.stringify(content).length);
-  const totalCharCount = charCounts.reduce((sum, length) => sum + length, 0);
-  const targetCharCount = totalCharCount * fraction;
-
-  let lastSplitPoint = 0;
-  let lastToolCallSplitPoint = 0;
-  let toolCallSplitPointAfterTarget: number | null = null;
-  let cumulativeCharCount = 0;
-  for (let i = 0; i < contents.length; i++) {
-    const content = contents[i];
-    const hasFunctionResponse = content.parts?.some(
-      (part) => !!part.functionResponse,
-    );
-    const hasFunctionCall = content.parts?.some((part) => !!part.functionCall);
-    if (content.role === 'user' && !hasFunctionResponse) {
-      if (cumulativeCharCount >= targetCharCount) {
-        return i;
-      }
-      lastSplitPoint = i;
-    }
-    if (content.role === 'model' && hasFunctionCall) {
-      if (
-        cumulativeCharCount >= targetCharCount &&
-        toolCallSplitPointAfterTarget === null
-      ) {
-        toolCallSplitPointAfterTarget = i;
-      }
-      lastToolCallSplitPoint = i;
-    }
-    cumulativeCharCount += charCounts[i];
-  }
-
-  const lastContent = contents[contents.length - 1];
-  if (lastSplitPoint > 0) {
-    if (
-      lastContent?.role === 'model' &&
-      !lastContent?.parts?.some((part) => part.functionCall)
-    ) {
-      return contents.length;
-    }
-
-    return lastSplitPoint;
-  }
-
-  if (toolCallSplitPointAfterTarget !== null) {
-    return toolCallSplitPointAfterTarget;
-  }
-
-  if (lastToolCallSplitPoint > 0) {
-    return lastToolCallSplitPoint;
-  }
-
-  if (
-    lastContent?.role === 'model' &&
-    !lastContent?.parts?.some((part) => part.functionCall)
-  ) {
-    return contents.length;
-  }
-
-  return lastSplitPoint;
-}
-
-/**
- * Estimates the character length of text-only parts in a request.
- * Binary data (inline_data, fileData) is excluded from the estimation
- * because Gemini counts these as fixed token values, not based on their size.
- * @param request The request to estimate tokens for
- * @returns Estimated character length of text content
- */
-function estimateTextOnlyLength(request: PartListUnion): number {
-  if (typeof request === 'string') {
-    return request.length;
-  }
-
-  // Ensure request is an array before iterating
-  if (!Array.isArray(request)) {
-    return 0;
-  }
-
-  let textLength = 0;
-  for (const part of request) {
-    // Handle string elements in the array
-    if (typeof part === 'string') {
-      textLength += part.length;
-    }
-    // Handle object elements with text property
-    else if (
-      typeof part === 'object' &&
-      part !== null &&
-      'text' in part &&
-      part.text
-    ) {
-      textLength += part.text.length;
-    }
-    // inlineData, fileData, and other binary parts are ignored
-    // as they are counted as fixed tokens by Gemini
-  }
-  return textLength;
-}
+import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+export {
+  isThinkingSupported,
+  findCompressSplitPoint,
+} from './clientHelpers.js';
+import {
+  generateJson as clientLlmGenerateJson,
+  generateContent as clientLlmGenerateContent,
+  generateEmbedding as clientLlmGenerateEmbedding,
+} from './clientLlmUtilities.js';
+import { TodoContinuationService } from './TodoContinuationService.js';
+export { PostTurnAction } from './TodoContinuationService.js';
+import { IdeContextTracker } from './IdeContextTracker.js';
+import { AgentHookManager } from './AgentHookManager.js';
+import {
+  buildSystemInstruction as factoryBuildSystemInstruction,
+  createChatSessionSafe,
+} from './ChatSessionFactory.js';
+import {
+  MessageStreamOrchestrator,
+  type MessageStreamDeps,
+} from './MessageStreamOrchestrator.js';
 
 export class GeminiClient {
   private chat?: GeminiChat;
@@ -225,23 +88,10 @@ export class GeminiClient {
   private lastPromptId?: string;
   private readonly complexityAnalyzer: ComplexityAnalyzer;
   private readonly todoReminderService: TodoReminderService;
+  private readonly todoContinuationService: TodoContinuationService;
 
-  /**
-   * Hook state tracking for agent hook deduplication
-   * Prevents BeforeAgent/AfterAgent from firing multiple times during recursive calls
-   */
-  private hookStateMap: Map<string, HookState> = new Map();
-  private todoToolsAvailable = false;
-  private lastComplexitySuggestionTime: number = 0;
-  private readonly complexitySuggestionCooldown: number;
-  private lastSentIdeContext: IdeContext | undefined;
-  private forceFullIdeContext = true;
-  private lastTodoToolTurn?: number;
-  private consecutiveComplexTurns = 0;
-  private lastComplexitySuggestionTurn?: number;
-  private toolActivityCount = 0;
-  private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
-  private lastTodoSnapshot?: Todo[];
+  private readonly ideContextTracker: IdeContextTracker;
+  private readonly agentHookManager: AgentHookManager;
 
   /**
    * Runtime state for stateless operation (Phase 5)
@@ -258,6 +108,8 @@ export class GeminiClient {
    * Lazily initialized when needed
    */
   private _baseLlmClient?: BaseLLMClient;
+
+  private readonly messageStreamOrchestrator: MessageStreamOrchestrator;
 
   /**
    * @plan PLAN-20251027-STATELESS5.P10
@@ -310,12 +162,61 @@ export class GeminiClient {
       complexityThreshold: complexitySettings.complexityThreshold,
       minTasksForSuggestion: complexitySettings.minTasksForSuggestion,
     });
-    this.complexitySuggestionCooldown =
+    const complexitySuggestionCooldown =
       complexitySettings.suggestionCooldownMs ?? 300000;
 
     this.todoReminderService = new TodoReminderService();
 
+    this.todoContinuationService = new TodoContinuationService({
+      config,
+      todoReminderService: this.todoReminderService,
+      complexitySuggestionCooldown,
+    });
+
+    this.ideContextTracker = new IdeContextTracker(config);
+    this.agentHookManager = new AgentHookManager(config);
+
+    this.messageStreamOrchestrator = new MessageStreamOrchestrator(
+      this._buildOrchestratorDeps(),
+    );
+
     coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
+  }
+
+  private _buildOrchestratorDeps(): MessageStreamDeps {
+    return {
+      config: this.config,
+      getChat: () => this.getChat(),
+      logger: this.logger,
+      loopDetector: this.loopDetector,
+      todoContinuationService: this.todoContinuationService,
+      ideContextTracker: this.ideContextTracker,
+      agentHookManager: this.agentHookManager,
+      getEffectiveModel: () => this._getEffectiveModelForCurrentTurn(),
+      getHistory: () => this.getHistory(),
+      getSessionTurnCount: () => this.sessionTurnCount,
+      incrementSessionTurnCount: () => {
+        this.sessionTurnCount++;
+      },
+      lazyInitialize: () => this.lazyInitialize(),
+      startChat: (extraHistory?) => this.startChat(extraHistory),
+      getPreviousHistory: () => this._previousHistory,
+      setChat: (chat) => {
+        this.chat = chat;
+      },
+      hasChat: () => this.chat !== undefined,
+      complexityAnalyzer: this.complexityAnalyzer,
+      getLastPromptId: () => this.lastPromptId,
+      setLastPromptId: (id) => {
+        this.lastPromptId = id;
+      },
+      resetCurrentSequenceModel: () => {
+        this.currentSequenceModel = null;
+      },
+      updateTelemetryTokenCount: () => this.updateTelemetryTokenCount(),
+      sendMessageStream: (req, sig, pid, trns, isRetry) =>
+        this.sendMessageStream(req, sig, pid, trns, isRetry),
+    };
   }
 
   private handleModelChanged = () => {
@@ -394,226 +295,6 @@ export class GeminiClient {
     return this._baseLlmClient;
   }
 
-  private processComplexityAnalysis(
-    analysis: ComplexityAnalysisResult,
-  ): string | undefined {
-    if (!this.todoToolsAvailable) {
-      this.consecutiveComplexTurns = 0;
-      return undefined;
-    }
-
-    if (!analysis.isComplex || !analysis.shouldSuggestTodos) {
-      this.consecutiveComplexTurns = 0;
-      return undefined;
-    }
-
-    this.consecutiveComplexTurns += 1;
-
-    const alreadySuggestedThisTurn =
-      this.lastComplexitySuggestionTurn === this.sessionTurnCount;
-    const currentTime = Date.now();
-    const withinCooldown =
-      currentTime - this.lastComplexitySuggestionTime <
-      this.complexitySuggestionCooldown;
-
-    if (alreadySuggestedThisTurn || withinCooldown) {
-      return undefined;
-    }
-
-    const reminder = this.shouldEscalateReminder()
-      ? this.todoReminderService.getEscalatedComplexTaskSuggestion(
-          analysis.detectedTasks,
-        )
-      : this.todoReminderService.getComplexTaskSuggestion(
-          analysis.detectedTasks,
-        );
-
-    this.lastComplexitySuggestionTime = currentTime;
-    this.lastComplexitySuggestionTurn = this.sessionTurnCount;
-
-    return reminder;
-  }
-
-  private shouldEscalateReminder(): boolean {
-    if (this.consecutiveComplexTurns < COMPLEXITY_ESCALATION_TURN_THRESHOLD) {
-      return false;
-    }
-
-    const turnsSinceTodo =
-      this.lastTodoToolTurn === undefined
-        ? Number.POSITIVE_INFINITY
-        : this.sessionTurnCount - this.lastTodoToolTurn;
-
-    return turnsSinceTodo >= COMPLEXITY_ESCALATION_TURN_THRESHOLD;
-  }
-
-  private isTodoToolCall(name: unknown): boolean {
-    if (typeof name !== 'string') {
-      return false;
-    }
-    const normalized = name.toLowerCase();
-    return normalized === 'todo_write' || normalized === 'todo_read';
-  }
-
-  private appendTodoSuffixToRequest(request: PartListUnion): PartListUnion {
-    if (!Array.isArray(request)) {
-      return request;
-    }
-
-    const suffixAlreadyPresent = request.some(
-      (part) =>
-        typeof part === 'object' &&
-        part !== null &&
-        'text' in part &&
-        typeof part.text === 'string' &&
-        part.text.includes(TODO_PROMPT_SUFFIX),
-    );
-
-    if (suffixAlreadyPresent) {
-      return request;
-    }
-
-    (request as Part[]).push({ text: TODO_PROMPT_SUFFIX } as Part);
-    return request;
-  }
-
-  private recordModelActivity(event: ServerGeminiStreamEvent): void {
-    if (!this.todoToolsAvailable) {
-      return;
-    }
-    if (event.type !== GeminiEventType.ToolCallResponse) {
-      return;
-    }
-
-    this.toolActivityCount += 1;
-
-    if (this.toolActivityCount > 4) {
-      this.toolCallReminderLevel = 'escalated';
-    } else if (
-      this.toolActivityCount === 4 &&
-      this.toolCallReminderLevel === 'none'
-    ) {
-      this.toolCallReminderLevel = 'base';
-    }
-  }
-
-  private async readTodoSnapshot(): Promise<Todo[]> {
-    try {
-      const sessionId = this.config.getSessionId();
-      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
-      return await store.readTodos();
-    } catch (_error) {
-      return [];
-    }
-  }
-
-  private getActiveTodos(todos: Todo[]): Todo[] {
-    const inProgress = todos.filter((todo) => todo.status === 'in_progress');
-    const pending = todos.filter((todo) => todo.status === 'pending');
-    return [...inProgress, ...pending];
-  }
-
-  private areTodoSnapshotsEqual(
-    a: readonly Todo[],
-    b: readonly Todo[],
-  ): boolean {
-    if (a.length !== b.length) {
-      return false;
-    }
-    const normalize = (todos: readonly Todo[]) =>
-      todos
-        .map((todo) => ({
-          id: `${todo.id ?? ''}`,
-          status: (todo.status ?? 'pending').toLowerCase(),
-          content: todo.content ?? '',
-        }))
-        .sort((left, right) => left.id.localeCompare(right.id));
-    const normalizedA = normalize(a);
-    const normalizedB = normalize(b);
-    return normalizedA.every(
-      (todo, index) =>
-        JSON.stringify(todo) === JSON.stringify(normalizedB[index]),
-    );
-  }
-
-  private async getTodoReminderForCurrentState(options?: {
-    todoSnapshot?: Todo[];
-    activeTodos?: Todo[];
-    escalate?: boolean;
-  }): Promise<{
-    reminder: string | null;
-    todos: Todo[];
-    activeTodos: Todo[];
-  }> {
-    const todos = options?.todoSnapshot ?? (await this.readTodoSnapshot());
-    const activeTodos = options?.activeTodos ?? this.getActiveTodos(todos);
-
-    let reminder: string | null = null;
-    if (todos.length === 0) {
-      reminder = this.todoReminderService.getCreateListReminder([]);
-    } else if (activeTodos.length > 0) {
-      reminder = options?.escalate
-        ? this.todoReminderService.getEscalatedActiveTodoReminder(
-            activeTodos[0],
-          )
-        : this.todoReminderService.getUpdateActiveTodoReminder(activeTodos[0]);
-    }
-
-    return { reminder, todos, activeTodos };
-  }
-
-  private appendSystemReminderToRequest(
-    request: PartListUnion,
-    reminderText: string,
-  ): PartListUnion {
-    if (Array.isArray(request)) {
-      const cloned = [...request];
-      const alreadyPresent = cloned.some(
-        (part) =>
-          typeof part === 'object' &&
-          part !== null &&
-          'text' in part &&
-          typeof part.text === 'string' &&
-          part.text === reminderText,
-      );
-      if (!alreadyPresent) {
-        cloned.push({ text: reminderText } as Part);
-      }
-      return cloned;
-    }
-
-    return [{ text: reminderText } as Part];
-  }
-
-  private shouldDeferStreamEvent(event: ServerGeminiStreamEvent): boolean {
-    return (
-      event.type === GeminiEventType.Content ||
-      event.type === GeminiEventType.Finished ||
-      event.type === GeminiEventType.Citation
-    );
-  }
-
-  private isTodoPauseResponse(
-    response: ToolCallResponseInfo | undefined,
-  ): boolean {
-    if (!response?.responseParts) {
-      return false;
-    }
-    return response.responseParts.some((part) => {
-      if (
-        part &&
-        typeof part === 'object' &&
-        'functionResponse' in part &&
-        part.functionResponse &&
-        typeof part.functionResponse === 'object'
-      ) {
-        const name = (part.functionResponse as { name?: unknown }).name;
-        return typeof name === 'string' && name.toLowerCase() === 'todo_pause';
-      }
-      return false;
-    });
-  }
-
   async addHistory(content: Content) {
     // Ensure chat is initialized before adding history
     if (!this.hasChatInitialized()) {
@@ -627,16 +308,18 @@ export class GeminiClient {
       return;
     }
 
-    const enabledToolNames = this.getEnabledToolNamesForPrompt();
+    const enabledToolNames = getEnabledToolNamesForPrompt(this.config);
     const envParts = await getEnvironmentContext(this.config);
-    const systemInstruction = await this.buildSystemInstruction(
+    const model = this.runtimeState.model;
+    const systemInstruction = await factoryBuildSystemInstruction(
+      this.config,
       enabledToolNames,
       envParts,
+      model,
     );
 
     this.getChat().setSystemInstruction(systemInstruction);
 
-    const model = this.runtimeState.model;
     const historyService = this.getHistoryService();
     if (historyService) {
       try {
@@ -651,62 +334,6 @@ export class GeminiClient {
         );
       }
     }
-  }
-
-  /**
-   * Builds the full system instruction by combining environment context with
-   * the core system prompt.  Shared by both startChat and
-   * updateSystemInstruction so the prompt is assembled consistently.
-   */
-  private async buildSystemInstruction(
-    enabledToolNames: string[],
-    envParts?: Array<{ text?: string }>,
-  ): Promise<string> {
-    let userMemory = this.config.isJitContextEnabled()
-      ? this.config.getGlobalMemory()
-      : this.config.getUserMemory();
-    const coreMemory = this.config.getCoreMemory();
-
-    // Load JIT subdirectory context for the current working directory
-    const jitMemory = await this.config.getJitMemoryForPath(
-      this.config.getWorkingDir(),
-    );
-    if (jitMemory) {
-      userMemory = userMemory
-        ? `${userMemory}
-
-${jitMemory}`
-        : jitMemory;
-    }
-
-    const mcpInstructions = this.config
-      .getMcpClientManager()
-      ?.getMcpInstructions();
-    const model = this.runtimeState.model;
-    const includeSubagentDelegation =
-      await this.shouldIncludeSubagentDelegation(enabledToolNames);
-
-    const interactionMode = this.config.isInteractive()
-      ? 'interactive'
-      : 'non-interactive';
-
-    let systemInstruction = await getCoreSystemPromptAsync({
-      userMemory,
-      coreMemory,
-      mcpInstructions,
-      model,
-      tools: enabledToolNames,
-      includeSubagentDelegation,
-      interactionMode,
-    });
-
-    const envContextText = (envParts ?? [])
-      .map((part) => ('text' in part && part.text ? part.text : ''))
-      .join('\n');
-    if (envContextText) {
-      systemInstruction = envContextText + '\n\n' + systemInstruction;
-    }
-    return systemInstruction;
   }
 
   getChat(): GeminiChat {
@@ -738,31 +365,6 @@ ${jitMemory}`
 
   isInitialized(): boolean {
     return this.chat !== undefined && this.contentGenerator !== undefined;
-  }
-
-  /**
-   * Extract text from a PartListUnion for hook consumption
-   */
-  private extractPromptText(request: PartListUnion): string {
-    if (typeof request === 'string') {
-      return request;
-    }
-    if (Array.isArray(request)) {
-      return request
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (part && typeof part === 'object' && 'text' in part) {
-            return (part as { text: string }).text;
-          }
-          return '';
-        })
-        .filter(Boolean)
-        .join(' ');
-    }
-    if (request && typeof request === 'object' && 'text' in request) {
-      return (request as { text: string }).text;
-    }
-    return '';
   }
 
   async getHistory(): Promise<Content[]> {
@@ -823,7 +425,7 @@ ${jitMemory}`
     // Otherwise, the history will be used when the chat is initialized
 
     // Reset IDE context tracking when history changes
-    this.forceFullIdeContext = true;
+    this.ideContextTracker.resetContext();
   }
 
   /**
@@ -860,9 +462,11 @@ ${jitMemory}`
         ? this.chat.getToolsView()
         : undefined;
     const toolDeclarations = toolsView
-      ? this.buildToolDeclarationsFromView(toolRegistry, toolsView)
+      ? buildToolDeclarationsFromView(toolRegistry, toolsView)
       : toolRegistry.getFunctionDeclarations();
-    this.updateTodoToolAvailabilityFromDeclarations(toolDeclarations);
+    this.todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
+      toolDeclarations,
+    );
 
     // Debug log for intermittent tool issues
     const logger = new DebugLogger('llxprt:client:setTools');
@@ -918,7 +522,7 @@ ${jitMemory}`
         this.chat.clearHistory();
       }
       // Reset the chat's internal state
-      this.forceFullIdeContext = true;
+      this.ideContextTracker.resetContext();
     } else {
       // No chat exists yet, create one with empty history
       this.chat = await this.startChat([]);
@@ -1033,382 +637,22 @@ ${jitMemory}`
   }
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
-    this.forceFullIdeContext = true;
-
-    // Ensure content generator is initialized before creating chat
+    this.ideContextTracker.resetContext();
     await this.lazyInitialize();
-    const envParts = await getEnvironmentContext(this.config);
-    const toolRegistry = this.config.getToolRegistry();
-    const enabledToolNames = this.getEnabledToolNamesForPrompt();
 
-    // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
-    // This is essential for maintaining conversation history across provider switches
-    let historyService: HistoryService;
-    const reusedHistoryService = Boolean(this._storedHistoryService);
-    if (this._storedHistoryService) {
-      this.logger.debug(
-        'Reusing stored HistoryService to preserve UI conversation',
-      );
-      historyService = this._storedHistoryService;
-      // Clear the stored reference after using it
-      this._storedHistoryService = undefined;
-    } else {
-      // Create new HistoryService only if we don't have a stored one
-      historyService = new HistoryService();
-    }
-
-    // Add extraHistory if provided
-    if (!reusedHistoryService && extraHistory && extraHistory.length > 0) {
-      // @plan PLAN-20251027-STATELESS5.P10
-      // @requirement REQ-STAT5-003.1
-      const currentModel = this.runtimeState.model;
-      for (const content of extraHistory) {
-        const turnKey = historyService.generateTurnKey();
-        historyService.add(
-          ContentConverters.toIContent(content, undefined, undefined, turnKey),
-          currentModel,
-        );
-      }
-    }
-
-    try {
-      // @plan PLAN-20251027-STATELESS5.P10
-      // @requirement REQ-STAT5-003.1
-      const model = this.runtimeState.model;
-      const logger = new DebugLogger('llxprt:client:start');
-      logger.debug(
-        () => `DEBUG [client.startChat]: Model from config: ${model}`,
-      );
-      const systemInstruction = await this.buildSystemInstruction(
-        enabledToolNames,
-        envParts,
-      );
-
-      let systemPromptTokens = 0;
-      try {
-        systemPromptTokens = await historyService.estimateTokensForText(
-          systemInstruction,
-          model,
-        );
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `Failed to count system instruction tokens for model ${model}, using fallback`,
-          { error },
-        );
-        systemPromptTokens = estimateTextTokens(systemInstruction);
-      }
-      historyService.setBaseTokenOffset(systemPromptTokens);
-
-      logger.debug(
-        () =>
-          `DEBUG [client.startChat]: System instruction includes Flash instructions: ${systemInstruction.includes(
-            'IMPORTANT: You MUST use the provided tools',
-          )}`,
-      );
-
-      // @plan PLAN-20251027-STATELESS5.P10
-      // @requirement REQ-STAT5-003.1
-      const generateContentConfigWithThinking = isThinkingSupported(
-        this.runtimeState.model,
-      )
-        ? {
-            ...this.generateContentConfig,
-            thinkingConfig: {
-              thinkingBudget: -1,
-              includeThoughts: true,
-            },
-          }
-        : this.generateContentConfig;
-      // @plan PLAN-20251028-STATELESS6.P10
-      // @requirement REQ-STAT6-001.2
-      // Create runtime context from config (foreground agent)
-      const rawCompressionThreshold = this.config.getEphemeralSetting(
-        'compression-threshold',
-      );
-      const compressionThreshold =
-        typeof rawCompressionThreshold === 'number'
-          ? rawCompressionThreshold
-          : undefined;
-
-      const rawContextLimit = this.config.getEphemeralSetting('context-limit');
-      const contextLimit =
-        typeof rawContextLimit === 'number' &&
-        Number.isFinite(rawContextLimit) &&
-        rawContextLimit > 0
-          ? rawContextLimit
-          : undefined;
-
-      const rawPreserveThreshold = this.config.getEphemeralSetting(
-        'compression-preserve-threshold',
-      );
-      const preserveThreshold =
-        typeof rawPreserveThreshold === 'number'
-          ? rawPreserveThreshold
-          : undefined;
-
-      const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold: compressionThreshold ?? 0.85,
-        contextLimit,
-        preserveThreshold: preserveThreshold ?? 0.2,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-        tools: this.getToolGovernanceEphemerals(),
-        'reasoning.enabled': this.config.getEphemeralSetting(
-          'reasoning.enabled',
-        ) as boolean | undefined,
-        'reasoning.includeInContext': this.config.getEphemeralSetting(
-          'reasoning.includeInContext',
-        ) as boolean | undefined,
-        'reasoning.includeInResponse': this.config.getEphemeralSetting(
-          'reasoning.includeInResponse',
-        ) as boolean | undefined,
-        'reasoning.format': this.config.getEphemeralSetting(
-          'reasoning.format',
-        ) as 'native' | 'field' | undefined,
-        'reasoning.stripFromContext': this.config.getEphemeralSetting(
-          'reasoning.stripFromContext',
-        ) as 'all' | 'allButLast' | 'none' | undefined,
-        'reasoning.effort': this.config.getEphemeralSetting(
-          'reasoning.effort',
-        ) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined,
-        'reasoning.maxTokens': this.config.getEphemeralSetting(
-          'reasoning.maxTokens',
-        ) as number | undefined,
-      };
-
-      const providerRuntime = createProviderRuntimeContext({
-        settingsService: this.config.getSettingsService(),
-        config: this.config,
-        runtimeId: this.runtimeState.runtimeId,
-        metadata: { source: 'GeminiClient.startChat' },
-      });
-
-      const runtimeBundle = await loadAgentRuntime({
-        profile: {
-          config: this.config,
-          state: this.runtimeState,
-          settings,
-          providerRuntime,
-          contentGeneratorConfig: this.config.getContentGeneratorConfig(),
-          toolRegistry,
-          providerManager: this.config.getProviderManager?.(),
-        },
-        overrides: {
-          historyService,
-          contentGenerator: this.getContentGenerator(),
-        },
-      });
-
-      const filteredDeclarations = this.buildToolDeclarationsFromView(
-        toolRegistry,
-        runtimeBundle.toolsView,
-      );
-      this.updateTodoToolAvailabilityFromDeclarations(filteredDeclarations);
-      const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
-
-      const chat = new GeminiChat(
-        runtimeBundle.runtimeContext,
-        runtimeBundle.contentGenerator,
-        {
-          systemInstruction,
-          ...generateContentConfigWithThinking,
-          tools,
-        },
-        [], // Empty initial history since we're using HistoryService
-      );
-
-      chat.setActiveTodosProvider(async () => {
-        const todos = await this.readTodoSnapshot();
-        const active = this.getActiveTodos(todos);
-        if (active.length === 0) return undefined;
-        return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
-      });
-
-      return chat;
-    } catch (error) {
-      await reportError(
-        error,
-        'Error initializing chat session.',
-        extraHistory ?? [],
-        'startChat',
-      );
-      throw new Error(`Failed to initialize chat: ${getErrorMessage(error)}`);
-    }
-  }
-
-  private getIdeContextParts(forceFullContext: boolean): {
-    contextParts: string[];
-    newIdeContext: IdeContext | undefined;
-  } {
-    const currentIdeContext = ideContext.getIdeContext();
-    if (!currentIdeContext) {
-      return { contextParts: [], newIdeContext: undefined };
-    }
-
-    if (forceFullContext || !this.lastSentIdeContext) {
-      // Send full context as JSON
-      const openFiles = currentIdeContext.workspaceState?.openFiles || [];
-      const activeFile = openFiles.find((f) => f.isActive);
-      const otherOpenFiles = openFiles
-        .filter((f) => !f.isActive)
-        .map((f) => f.path);
-
-      const contextData: Record<string, unknown> = {};
-
-      if (activeFile) {
-        contextData.activeFile = {
-          path: activeFile.path,
-          cursor: activeFile.cursor
-            ? {
-                line: activeFile.cursor.line,
-                character: activeFile.cursor.character,
-              }
-            : undefined,
-          selectedText: activeFile.selectedText || undefined,
-        };
-      }
-
-      if (otherOpenFiles.length > 0) {
-        contextData.otherOpenFiles = otherOpenFiles;
-      }
-
-      if (Object.keys(contextData).length === 0) {
-        return { contextParts: [], newIdeContext: currentIdeContext };
-      }
-
-      const jsonString = JSON.stringify(contextData, null, 2);
-      const contextParts = [
-        "Here is the user's editor context as a JSON object. This is for your information only.",
-        '```json',
-        jsonString,
-        '```',
-      ];
-
-      if (this.config.getDebugMode()) {
-        this.logger.debug(() => 'IDE Context:', {
-          context: contextParts.join('\n'),
-        });
-      }
-      return {
-        contextParts,
-        newIdeContext: currentIdeContext,
-      };
-    } else {
-      // Calculate and send delta as JSON
-      const delta: Record<string, unknown> = {};
-      const changes: Record<string, unknown> = {};
-
-      const lastFiles = new Map(
-        (this.lastSentIdeContext.workspaceState?.openFiles || []).map(
-          (f: File) => [f.path, f],
-        ),
-      );
-      const currentFiles = new Map(
-        (currentIdeContext.workspaceState?.openFiles || []).map((f: File) => [
-          f.path,
-          f,
-        ]),
-      );
-
-      const openedFiles: string[] = [];
-      for (const [path] of currentFiles.entries()) {
-        if (!lastFiles.has(path)) {
-          openedFiles.push(path);
-        }
-      }
-      if (openedFiles.length > 0) {
-        changes.filesOpened = openedFiles;
-      }
-
-      const closedFiles: string[] = [];
-      for (const [path] of lastFiles.entries()) {
-        if (!currentFiles.has(path)) {
-          closedFiles.push(path);
-        }
-      }
-      if (closedFiles.length > 0) {
-        changes.filesClosed = closedFiles;
-      }
-
-      const lastActiveFile = (
-        this.lastSentIdeContext.workspaceState?.openFiles || []
-      ).find((f: File) => f.isActive);
-      const currentActiveFile = (
-        currentIdeContext.workspaceState?.openFiles || []
-      ).find((f: File) => f.isActive);
-
-      if (currentActiveFile) {
-        if (!lastActiveFile || lastActiveFile.path !== currentActiveFile.path) {
-          changes.activeFileChanged = {
-            path: currentActiveFile.path,
-            cursor: currentActiveFile.cursor
-              ? {
-                  line: currentActiveFile.cursor.line,
-                  character: currentActiveFile.cursor.character,
-                }
-              : undefined,
-            selectedText: currentActiveFile.selectedText || undefined,
-          };
-        } else {
-          const lastCursor = lastActiveFile.cursor;
-          const currentCursor = currentActiveFile.cursor;
-          if (
-            currentCursor &&
-            (!lastCursor ||
-              lastCursor.line !== currentCursor.line ||
-              lastCursor.character !== currentCursor.character)
-          ) {
-            changes.cursorMoved = {
-              path: currentActiveFile.path,
-              cursor: {
-                line: currentCursor.line,
-                character: currentCursor.character,
-              },
-            };
-          }
-
-          const lastSelectedText = lastActiveFile.selectedText || '';
-          const currentSelectedText = currentActiveFile.selectedText || '';
-          if (lastSelectedText !== currentSelectedText) {
-            changes.selectionChanged = {
-              path: currentActiveFile.path,
-              selectedText: currentSelectedText,
-            };
-          }
-        }
-      } else if (lastActiveFile) {
-        changes.activeFileChanged = {
-          path: null,
-          previousPath: lastActiveFile.path,
-        };
-      }
-
-      if (Object.keys(changes).length === 0) {
-        return { contextParts: [], newIdeContext: currentIdeContext };
-      }
-
-      delta.changes = changes;
-      const jsonString = JSON.stringify(delta, null, 2);
-      const contextParts = [
-        "Here is a summary of changes in the user's editor context, in JSON format. This is for your information only.",
-        '```json',
-        jsonString,
-        '```',
-      ];
-
-      if (this.config.getDebugMode()) {
-        this.logger.debug(() => 'IDE Context:', {
-          context: contextParts.join('\n'),
-        });
-      }
-      return {
-        contextParts,
-        newIdeContext: currentIdeContext,
-      };
-    }
+    return createChatSessionSafe({
+      config: this.config,
+      runtimeState: this.runtimeState,
+      contentGenerator: this.getContentGenerator(),
+      storedHistoryService: this._storedHistoryService,
+      clearStoredHistoryService: () => {
+        this._storedHistoryService = undefined;
+      },
+      extraHistory,
+      generateContentConfig: this.generateContentConfig,
+      todoContinuationService: this.todoContinuationService,
+      toolRegistry: this.config.getToolRegistry(),
+    });
   }
 
   private _getEffectiveModelForCurrentTurn(): string {
@@ -1421,68 +665,6 @@ ${jitMemory}`
     return this.config.getModel();
   }
 
-  /**
-   * Safely fire BeforeAgent hook with deduplication
-   * Only fires once per prompt_id regardless of recursive calls
-   */
-  private async fireBeforeAgentHookSafe(
-    prompt_id: string,
-    prompt: string,
-  ): Promise<BeforeAgentHookOutput | undefined> {
-    // Initialize hook state if needed
-    if (!this.hookStateMap.has(prompt_id)) {
-      this.hookStateMap.set(prompt_id, {
-        hasFiredBeforeAgent: false,
-        cumulativeResponse: '',
-        activeCalls: 0,
-      });
-    }
-
-    const hookState = this.hookStateMap.get(prompt_id)!;
-    hookState.activeCalls++;
-
-    // Only fire on first call for this prompt_id
-    if (!hookState.hasFiredBeforeAgent) {
-      const result = await triggerBeforeAgentHook(this.config, prompt);
-      hookState.hasFiredBeforeAgent = true;
-      return result;
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Safely fire AfterAgent hook with deduplication
-   * Only fires on outermost call (activeCalls === 1) with cumulative response
-   */
-  private async fireAfterAgentHookSafe(
-    prompt_id: string,
-    prompt: string,
-    responseChunk: string,
-    hasPendingToolCalls: boolean,
-  ): Promise<AfterAgentHookOutput | undefined> {
-    const hookState = this.hookStateMap.get(prompt_id);
-    if (!hookState) {
-      return undefined;
-    }
-
-    // Accumulate response text
-    hookState.cumulativeResponse += responseChunk;
-    hookState.activeCalls--;
-
-    // Only fire on outermost call and when no tool calls pending
-    if (hookState.activeCalls === 0 && !hasPendingToolCalls) {
-      return triggerAfterAgentHook(
-        this.config,
-        prompt,
-        hookState.cumulativeResponse,
-        false, // stop_hook_active
-      );
-    }
-
-    return undefined;
-  }
-
   async *sendMessageStream(
     initialRequest: PartListUnion,
     signal: AbortSignal,
@@ -1490,585 +672,13 @@ ${jitMemory}`
     turns: number = this.MAX_TURNS,
     isInvalidStreamRetry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
-    const logger = new DebugLogger('llxprt:client:stream');
-    logger.debug(() => 'DEBUG: GeminiClient.sendMessageStream called');
-    logger.debug(
-      () =>
-        `DEBUG: GeminiClient.sendMessageStream request: ${JSON.stringify(initialRequest, null, 2)}`,
+    return yield* this.messageStreamOrchestrator.execute(
+      initialRequest,
+      signal,
+      prompt_id,
+      turns,
+      isInvalidStreamRetry,
     );
-    logger.debug(
-      () =>
-        `DEBUG: GeminiClient.sendMessageStream typeof request: ${typeof initialRequest}`,
-    );
-    logger.debug(
-      () =>
-        `DEBUG: GeminiClient.sendMessageStream Array.isArray(request): ${Array.isArray(initialRequest)}`,
-    );
-
-    // Clean up old hook state when prompt_id changes
-    if (this.lastPromptId && this.lastPromptId !== prompt_id) {
-      this.hookStateMap.delete(this.lastPromptId);
-    }
-
-    await this.lazyInitialize();
-
-    if (!this.chat) {
-      if (this._previousHistory && this._previousHistory.length > 0) {
-        this.logger.debug(
-          'Restoring previous history during prompt generation',
-          {
-            historyLength: this._previousHistory.length,
-          },
-        );
-        const conversationHistory = this._previousHistory.slice(2);
-        this.chat = await this.startChat(conversationHistory);
-        this.logger.debug('Chat started with restored history', {
-          conversationHistoryLength: conversationHistory.length,
-        });
-      } else {
-        this.chat = await this.startChat();
-      }
-    }
-
-    // Track if this is a new user prompt (vs a continuation/retry)
-    const isNewPrompt = this.lastPromptId !== prompt_id;
-    const promptText = this.extractPromptText(initialRequest);
-    const responseChunks: string[] = [];
-
-    // Helper to fire AfterAgent hook when returning
-    // Returns the hook output for caller to check for continuation
-    // Uses safe method to deduplicate hooks across recursive calls
-    const fireAfterAgentHook = async (hasPendingToolCalls: boolean = false) => {
-      const responseText = responseChunks.join('');
-      return this.fireAfterAgentHookSafe(
-        prompt_id,
-        promptText,
-        responseText,
-        hasPendingToolCalls,
-      );
-    };
-
-    // getBoundedTurns returns the bounded turn count for continuation
-    const getBoundedTurns = () => Math.min(turns, this.MAX_TURNS);
-
-    // Mutable request that may be modified by hooks
-    let request: PartListUnion = initialRequest;
-
-    if (isNewPrompt) {
-      this.loopDetector.reset(prompt_id);
-      this.lastPromptId = prompt_id;
-      this.currentSequenceModel = null;
-
-      // Fire BeforeAgent hook for new user prompts and handle result
-      // Uses safe method to prevent duplicate firing in recursive calls
-      const hookOutput = await this.fireBeforeAgentHookSafe(
-        prompt_id,
-        promptText,
-      );
-
-      // Check for blocking decision or stop execution
-      if (
-        hookOutput?.isBlockingDecision() ||
-        hookOutput?.shouldStopExecution()
-      ) {
-        yield {
-          type: GeminiEventType.Error,
-          value: {
-            error: new Error(
-              `BeforeAgent hook blocked processing: ${hookOutput.getEffectiveReason()}`,
-            ),
-          },
-        };
-        const contentGenConfig = this.config.getContentGeneratorConfig();
-        const providerManager = contentGenConfig?.providerManager;
-        const providerName =
-          providerManager?.getActiveProviderName() || 'backend';
-        return new Turn(
-          this.getChat(),
-          prompt_id,
-          DEFAULT_AGENT_ID,
-          providerName,
-        );
-      }
-
-      // Add additional context from hooks to the request
-      const additionalContext = hookOutput?.getAdditionalContext();
-      if (additionalContext) {
-        const requestArray = Array.isArray(request) ? request : [request];
-        request = [...requestArray, { text: additionalContext }];
-      }
-    }
-
-    this.sessionTurnCount++;
-    this.toolActivityCount = 0;
-    this.toolCallReminderLevel = 'none';
-
-    if (
-      this.config.getMaxSessionTurns() > 0 &&
-      this.sessionTurnCount > this.config.getMaxSessionTurns()
-    ) {
-      yield { type: GeminiEventType.MaxSessionTurns };
-      const contentGenConfig = this.config.getContentGeneratorConfig();
-      const providerManager = contentGenConfig?.providerManager;
-      const providerName =
-        providerManager?.getActiveProviderName() || 'backend';
-      await fireAfterAgentHook();
-      return new Turn(
-        this.getChat(),
-        prompt_id,
-        DEFAULT_AGENT_ID,
-        providerName,
-      );
-    }
-
-    const boundedTurns = Math.min(turns, this.MAX_TURNS);
-    if (!boundedTurns) {
-      const contentGenConfig = this.config.getContentGeneratorConfig();
-      const providerManager = contentGenConfig?.providerManager;
-      const providerName =
-        providerManager?.getActiveProviderName() || 'backend';
-      await fireAfterAgentHook();
-      return new Turn(
-        this.getChat(),
-        prompt_id,
-        DEFAULT_AGENT_ID,
-        providerName,
-      );
-    }
-
-    // Check for context window overflow
-    const modelForLimitCheck = this._getEffectiveModelForCurrentTurn();
-
-    // Estimate tokens based on text content only.
-    // Binary data (PDFs, images) are counted as fixed tokens by Gemini,
-    // not based on their base64-encoded size.
-    const estimatedRequestTokenCount = Math.floor(
-      estimateTextOnlyLength(initialRequest) / 4,
-    );
-
-    const remainingTokenCount =
-      tokenLimit(modelForLimitCheck) - this.getChat().getLastPromptTokenCount();
-
-    if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
-      const contentGenConfig = this.config.getContentGeneratorConfig();
-      const providerManager = contentGenConfig?.providerManager;
-      const providerName =
-        providerManager?.getActiveProviderName() || 'backend';
-      yield {
-        type: GeminiEventType.ContextWindowWillOverflow,
-        value: { estimatedRequestTokenCount, remainingTokenCount },
-      };
-      await fireAfterAgentHook();
-      return new Turn(
-        this.getChat(),
-        prompt_id,
-        DEFAULT_AGENT_ID,
-        providerName,
-      );
-    }
-
-    const history = await this.getHistory();
-    const lastMessage =
-      history.length > 0 ? history[history.length - 1] : undefined;
-    const hasPendingToolCall =
-      !!lastMessage &&
-      lastMessage.role === 'model' &&
-      (lastMessage.parts?.some((p) => 'functionCall' in p) || false);
-
-    if (this.config.getIdeMode() && !hasPendingToolCall) {
-      const { contextParts, newIdeContext } = this.getIdeContextParts(
-        this.forceFullIdeContext || history.length === 0,
-      );
-      if (contextParts.length > 0) {
-        this.getChat().addHistory({
-          role: 'user',
-          parts: [{ text: contextParts.join('\n') }],
-        });
-      }
-      this.lastSentIdeContext = newIdeContext;
-      this.forceFullIdeContext = false;
-    }
-
-    let baseRequest: PartListUnion = Array.isArray(request)
-      ? [...(request as Part[])]
-      : request;
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
-    let lastTurn: Turn | undefined;
-    let hadToolCallsThisTurn = false; // Track if model executed tools - preserve across retries
-
-    while (retryCount < MAX_RETRIES) {
-      let request: PartListUnion = Array.isArray(baseRequest)
-        ? [...(baseRequest as Part[])]
-        : baseRequest;
-
-      // Complexity analysis only on first iteration
-      if (retryCount === 0) {
-        let shouldAppendTodoSuffix = false;
-
-        if (Array.isArray(request) && request.length > 0) {
-          const userMessage = request
-            .filter((part) => typeof part === 'object' && 'text' in part)
-            .map((part) => (part as { text: string }).text)
-            .join(' ')
-            .trim();
-
-          if (userMessage.length > 0) {
-            const analysis =
-              this.complexityAnalyzer.analyzeComplexity(userMessage);
-            const complexityReminder = this.processComplexityAnalysis(analysis);
-            if (complexityReminder) {
-              shouldAppendTodoSuffix = true;
-            }
-          } else {
-            this.consecutiveComplexTurns = 0;
-          }
-        } else {
-          this.consecutiveComplexTurns = 0;
-        }
-
-        if (shouldAppendTodoSuffix) {
-          request = this.appendTodoSuffixToRequest(request);
-        }
-        baseRequest = Array.isArray(request)
-          ? [...(request as Part[])]
-          : request;
-      } else {
-        this.consecutiveComplexTurns = 0;
-      }
-
-      // Apply todo reminder if one is pending from previous iteration
-      if (this.todoToolsAvailable && this.toolCallReminderLevel !== 'none') {
-        const reminderResult = await this.getTodoReminderForCurrentState({
-          todoSnapshot: this.lastTodoSnapshot,
-          escalate: this.toolCallReminderLevel === 'escalated',
-        });
-        if (reminderResult.reminder) {
-          // Filter out functionCall/functionResponse before appending reminder.
-          // These tool-related parts were already recorded in history.
-          // Including them again would create duplicate tool_call blocks (Issue #1135).
-          const textOnlyRequest = Array.isArray(request)
-            ? (request as Part[]).filter(
-                (part) =>
-                  typeof part === 'object' &&
-                  !('functionCall' in part) &&
-                  !('functionResponse' in part),
-              )
-            : [];
-          request = this.appendSystemReminderToRequest(
-            textOnlyRequest,
-            reminderResult.reminder,
-          );
-          this.lastTodoSnapshot = reminderResult.todos;
-        }
-        this.toolCallReminderLevel = 'none';
-        this.toolActivityCount = 0;
-      }
-
-      const contentGenConfig = this.config.getContentGeneratorConfig();
-      const providerManager = contentGenConfig?.providerManager;
-      const providerName =
-        providerManager?.getActiveProviderName() || 'backend';
-
-      const turn = new Turn(
-        this.getChat(),
-        prompt_id,
-        DEFAULT_AGENT_ID,
-        providerName,
-      );
-      lastTurn = turn;
-
-      const loopDetected = await this.loopDetector.turnStarted(signal);
-      if (loopDetected) {
-        yield { type: GeminiEventType.LoopDetected };
-        await fireAfterAgentHook();
-        return turn;
-      }
-
-      // Reset flags for this iteration (hadToolCallsThisTurn persists across duplicate todo retries)
-      let todoPauseSeen = false;
-      let hadThinkingThisIteration = false;
-      let hadContentThisIteration = false;
-      const deferredEvents: ServerGeminiStreamEvent[] = [];
-      const resultStream = turn.run(request, signal);
-
-      // Stream events, deferring Content/Finished/Citation until we decide on a retry
-      for await (const event of resultStream) {
-        if (this.loopDetector.addAndCheck(event)) {
-          yield { type: GeminiEventType.LoopDetected };
-          await fireAfterAgentHook();
-          return turn;
-        }
-
-        this.recordModelActivity(event);
-
-        // Track tool execution during this turn
-        if (event.type === GeminiEventType.ToolCallRequest) {
-          hadToolCallsThisTurn = true;
-        }
-
-        if (event.type === GeminiEventType.ToolCallResponse) {
-          if (this.isTodoPauseResponse(event.value)) {
-            todoPauseSeen = true;
-          }
-        }
-
-        if (event.type === GeminiEventType.Thought) {
-          hadThinkingThisIteration = true;
-        }
-        if (event.type === GeminiEventType.Content) {
-          hadContentThisIteration = true;
-        }
-
-        // Handle duplicate todo writes
-        if (
-          event.type === GeminiEventType.ToolCallRequest &&
-          this.isTodoToolCall(event.value?.name)
-        ) {
-          this.lastTodoToolTurn = this.sessionTurnCount;
-          this.consecutiveComplexTurns = 0;
-
-          const requestedTodos = Array.isArray(event.value?.args?.todos)
-            ? (event.value.args.todos as Todo[])
-            : [];
-          if (requestedTodos.length > 0) {
-            this.lastTodoSnapshot = requestedTodos.map((todo) => ({
-              id: `${todo.id ?? ''}`,
-              content: todo.content ?? '',
-              status: todo.status ?? 'pending',
-            }));
-          }
-        }
-
-        // Capture content events for AfterAgent hook
-        if (event.type === GeminiEventType.Content && event.value) {
-          responseChunks.push(event.value);
-        }
-
-        if (this.shouldDeferStreamEvent(event)) {
-          deferredEvents.push(event);
-        } else {
-          yield event;
-        }
-
-        // Update telemetry token count after yielding stream events
-        // This keeps UI in sync with actual token usage
-        this.updateTelemetryTokenCount();
-
-        if (event.type === GeminiEventType.Error) {
-          for (const deferred of deferredEvents) {
-            yield deferred;
-          }
-          await fireAfterAgentHook();
-          return turn;
-        }
-
-        // Handle InvalidStream with retry via "Please continue" prompt
-        if (event.type === GeminiEventType.InvalidStream) {
-          if (this.config.getContinueOnFailedApiCall()) {
-            if (isInvalidStreamRetry) {
-              // We already retried once, so stop here.
-              await fireAfterAgentHook();
-              return turn;
-            }
-            const nextRequest = [{ text: 'System: Please continue.' }];
-            yield* this.sendMessageStream(
-              nextRequest,
-              signal,
-              prompt_id,
-              boundedTurns - 1,
-              true, // Set isInvalidStreamRetry to true
-            );
-            await fireAfterAgentHook();
-            return turn;
-          }
-        }
-      }
-
-      // Turn stream is now complete. Decide if we should retry.
-
-      // Check if model made progress by executing tools FIRST
-      if (hadToolCallsThisTurn) {
-        // Model executed tools - that's progress, flush deferred events and exit
-        const reminderState = await this.getTodoReminderForCurrentState();
-        for (const deferred of deferredEvents) {
-          yield deferred;
-        }
-        this.lastTodoSnapshot = reminderState.todos;
-        this.toolCallReminderLevel = 'none';
-        this.toolActivityCount = 0;
-        const afterHookOutput = await fireAfterAgentHook();
-        // For AfterAgent hooks, blocking/stop execution should force continuation
-        if (
-          afterHookOutput?.isBlockingDecision() ||
-          afterHookOutput?.shouldStopExecution()
-        ) {
-          const continueReason = afterHookOutput.getEffectiveReason();
-          const continueRequest: PartListUnion = [{ text: continueReason }];
-          yield* this.sendMessageStream(
-            continueRequest,
-            signal,
-            prompt_id,
-            getBoundedTurns() - 1,
-          );
-        }
-        return turn;
-      }
-
-      // Issue #1400/#1729: If model generated thinking but no content or tool calls,
-      // auto-continue so the model proceeds with its planned actions.
-      if (
-        hadThinkingThisIteration &&
-        !hadContentThisIteration &&
-        !hadToolCallsThisTurn
-      ) {
-        retryCount++;
-        if (retryCount >= MAX_RETRIES) {
-          for (const deferred of deferredEvents) {
-            yield deferred;
-          }
-          return turn;
-        }
-        // Flush Content/Citation events so they reach the UI before retry.
-        // Drop Finished events from the superseded iteration.
-        for (const deferred of deferredEvents) {
-          if (
-            deferred.type === GeminiEventType.Content ||
-            deferred.type === GeminiEventType.Citation
-          ) {
-            yield deferred;
-          }
-        }
-        baseRequest = [
-          {
-            text: 'System: Continue and take the next concrete action now. Use tools if needed.',
-          } as Part,
-        ];
-        continue;
-      }
-
-      // No tool work detected - check todo/pause state
-      const reminderState = await this.getTodoReminderForCurrentState();
-      const latestSnapshot = reminderState.todos;
-      const activeTodos = reminderState.activeTodos;
-
-      if (todoPauseSeen) {
-        // Model explicitly paused - respect that
-        for (const deferred of deferredEvents) {
-          yield deferred;
-        }
-        this.lastTodoSnapshot = latestSnapshot;
-        this.toolCallReminderLevel = 'none';
-        this.toolActivityCount = 0;
-        await fireAfterAgentHook();
-        return turn;
-      }
-
-      // Check if todos are still pending
-      const todosStillPending = activeTodos.length > 0;
-      const hasPendingReminder =
-        this.todoToolsAvailable && this.toolCallReminderLevel !== 'none';
-
-      if (!todosStillPending && !hasPendingReminder) {
-        // All todos complete or list is empty, and no reminder pending - return normally
-        for (const deferred of deferredEvents) {
-          yield deferred;
-        }
-        this.lastTodoSnapshot = latestSnapshot;
-        this.toolCallReminderLevel = 'none';
-        this.toolActivityCount = 0;
-        const afterHookOutput2 = await fireAfterAgentHook();
-        // For AfterAgent hooks, blocking/stop execution should force continuation
-        if (
-          afterHookOutput2?.isBlockingDecision() ||
-          afterHookOutput2?.shouldStopExecution()
-        ) {
-          const continueReason = afterHookOutput2.getEffectiveReason();
-          const continueRequest: PartListUnion = [{ text: continueReason }];
-          yield* this.sendMessageStream(
-            continueRequest,
-            signal,
-            prompt_id,
-            getBoundedTurns() - 1,
-          );
-        }
-        return turn;
-      }
-
-      // Model tried to return with incomplete todos or has pending reminder - check if we should retry
-      retryCount++;
-
-      if (retryCount >= MAX_RETRIES) {
-        // Hit retry limit - return anyway, let continuation service handle it
-        for (const deferred of deferredEvents) {
-          yield deferred;
-        }
-        this.lastTodoSnapshot = latestSnapshot;
-        this.toolCallReminderLevel = 'none';
-        this.toolActivityCount = 0;
-        await fireAfterAgentHook();
-        return turn;
-      }
-
-      // If we have a pending reminder (from toolActivityCount), it will be injected
-      // at the start of the next iteration. Otherwise, prepare a followUp reminder.
-      if (!hasPendingReminder) {
-        // Prepare retry with escalated reminder
-        const previousSnapshot = this.lastTodoSnapshot ?? [];
-        const snapshotUnchanged = this.areTodoSnapshotsEqual(
-          previousSnapshot,
-          latestSnapshot,
-        );
-
-        const followUpReminder = (
-          await this.getTodoReminderForCurrentState({
-            todoSnapshot: latestSnapshot,
-            activeTodos,
-            escalate: snapshotUnchanged,
-          })
-        ).reminder;
-
-        this.lastTodoSnapshot = latestSnapshot;
-
-        if (!followUpReminder) {
-          // No reminder to add - flush and return
-          for (const deferred of deferredEvents) {
-            yield deferred;
-          }
-          this.toolCallReminderLevel = 'none';
-          this.toolActivityCount = 0;
-          await fireAfterAgentHook();
-          return turn;
-        }
-
-        // Set up retry request with reminder
-        // IMPORTANT: Filter out functionCall/functionResponse from baseRequest before retry.
-        // These tool-related parts were already recorded in history after the first request.
-        // Including them again would create duplicate tool_call blocks, causing Anthropic
-        // to reject with "tool_use ids were found without tool_result blocks" (Issue #1135).
-        const textOnlyBase = Array.isArray(baseRequest)
-          ? (baseRequest as Part[]).filter(
-              (part) =>
-                typeof part === 'object' &&
-                !('functionCall' in part) &&
-                !('functionResponse' in part),
-            )
-          : [];
-        baseRequest = this.appendSystemReminderToRequest(
-          textOnlyBase,
-          followUpReminder,
-        );
-      } else {
-        // hasPendingReminder is true - reminder will be injected at loop start
-        this.lastTodoSnapshot = latestSnapshot;
-      }
-
-      // Loop back for one more try
-    }
-
-    // Shouldn't reach here, but return last turn if we do
-    await fireAfterAgentHook();
-    return lastTurn!;
   }
 
   async generateJson(
@@ -2079,98 +689,17 @@ ${jitMemory}`
     config: GenerateContentConfig = {},
   ): Promise<Record<string, unknown>> {
     await this.lazyInitialize();
-    const modelToUse = model;
-
-    try {
-      const userMemory = this.config.getUserMemory();
-      const mcpInstructions = this.config
-        .getMcpClientManager()
-        ?.getMcpInstructions();
-      const enabledToolNames = this.getEnabledToolNamesForPrompt();
-      const includeSubagentDelegation =
-        await this.shouldIncludeSubagentDelegation(enabledToolNames);
-      const systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        mcpInstructions,
-        model: modelToUse,
-        tools: enabledToolNames,
-        includeSubagentDelegation,
-        interactionMode: this.config.isInteractive()
-          ? 'interactive'
-          : 'non-interactive',
-      });
-
-      // Convert Content[] to a single prompt for BaseLLMClient
-      // This preserves the conversation context in the prompt
-      const prompt = contents
-        .map((c) =>
-          c.parts
-            ?.map((p) => ('text' in p ? p.text : ''))
-            .filter(Boolean)
-            .join('\n'),
-        )
-        .filter(Boolean)
-        .join('\n\n');
-
-      // Use BaseLLMClient for the core JSON generation
-      // This delegates to the stateless utility layer
-      const baseLlmClient = this.getBaseLlmClient();
-
-      const apiCall = async () => {
-        try {
-          return await baseLlmClient.generateJson({
-            prompt,
-            schema,
-            model: modelToUse,
-            temperature:
-              config.temperature ?? this.generateContentConfig.temperature,
-            systemInstruction,
-            promptId: this.lastPromptId || this.config.getSessionId(),
-          });
-        } catch (error) {
-          // Preserve abort signal behavior
-          if (abortSignal.aborted) {
-            throw error;
-          }
-          throw error;
-        }
-      };
-
-      const result = await retryWithBackoff(apiCall);
-
-      // Special case: Gemini sometimes returns just "user" or "model" for next speaker checks
-      // This happens particularly with non-ASCII content in the conversation
-      if (
-        typeof result === 'string' &&
-        (result === 'user' || result === 'model') &&
-        contents.some((c) =>
-          c.parts?.some((p) => 'text' in p && p.text?.includes('next_speaker')),
-        )
-      ) {
-        this.logger.warn(
-          () =>
-            `[generateJson] Gemini returned plain text "${result}" instead of JSON for next speaker check. Converting to valid response.`,
-        );
-        return {
-          reasoning: 'Gemini returned plain text response',
-          next_speaker: result,
-        };
-      }
-
-      return result as Record<string, unknown>;
-    } catch (error) {
-      if (abortSignal.aborted) {
-        throw error;
-      }
-
-      await reportError(
-        error,
-        'Error generating JSON content via API.',
-        contents,
-        'generateJson-api',
-      );
-      throw error;
-    }
+    return clientLlmGenerateJson(
+      this.config,
+      this.getContentGenerator(),
+      this.getBaseLlmClient(),
+      contents,
+      schema,
+      abortSignal,
+      model,
+      { ...this.generateContentConfig, ...config },
+      this.lastPromptId || this.config.getSessionId(),
+    );
   }
 
   async generateContent(
@@ -2180,210 +709,24 @@ ${jitMemory}`
     model: string,
   ): Promise<GenerateContentResponse> {
     await this.lazyInitialize();
-    const modelToUse = model;
-    const configToUse: GenerateContentConfig = {
-      ...this.generateContentConfig,
-      ...generationConfig,
-    };
-
-    try {
-      const userMemory = this.config.getUserMemory();
-      const mcpInstructions = this.config
-        .getMcpClientManager()
-        ?.getMcpInstructions();
-      const enabledToolNames = this.getEnabledToolNamesForPrompt();
-      const includeSubagentDelegation =
-        await this.shouldIncludeSubagentDelegation(enabledToolNames);
-      // Provider name removed from prompt call signature
-      const systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        mcpInstructions,
-        model: modelToUse,
-        tools: enabledToolNames,
-        includeSubagentDelegation,
-        interactionMode: this.config.isInteractive()
-          ? 'interactive'
-          : 'non-interactive',
-      });
-
-      const requestConfig = {
-        abortSignal,
-        ...configToUse,
-        systemInstruction,
-      };
-
-      const apiCall = () =>
-        this.getContentGenerator().generateContent(
-          {
-            model,
-            config: requestConfig,
-            contents,
-          },
-          this.lastPromptId || this.config.getSessionId(),
-        );
-
-      const result = await retryWithBackoff(apiCall);
-      return result;
-    } catch (error: unknown) {
-      if (abortSignal.aborted) {
-        throw error;
-      }
-
-      await reportError(
-        error,
-        `Error generating content via API with model ${model}.`,
-        {
-          requestContents: contents,
-          requestConfig: configToUse,
-        },
-        'generateContent-api',
-      );
-      throw new Error(
-        `Failed to generate content with model ${model}: ${getErrorMessage(error)}`,
-      );
-    }
+    return clientLlmGenerateContent(
+      this.config,
+      this.getContentGenerator(),
+      contents,
+      generationConfig,
+      abortSignal,
+      model,
+      this.lastPromptId || this.config.getSessionId(),
+      this.generateContentConfig,
+    );
   }
 
   async generateEmbedding(texts: string[]): Promise<number[][]> {
     await this.lazyInitialize();
-    if (!texts || texts.length === 0) {
-      return [];
-    }
-
-    // Delegate to BaseLLMClient for stateless embedding generation
-    const baseLlmClient = this.getBaseLlmClient();
-    const result = await baseLlmClient.generateEmbedding({
-      text: texts,
-      model: this.embeddingModel,
-    });
-
-    // Result is already validated by BaseLLMClient
-    return result as number[][];
-  }
-
-  private getToolGovernanceEphemerals():
-    | {
-        allowed?: string[];
-        disabled?: string[];
-      }
-    | undefined {
-    const allowedList = this.readToolList(
-      this.config.getEphemeralSetting('tools.allowed'),
+    return clientLlmGenerateEmbedding(
+      this.getBaseLlmClient(),
+      texts,
+      this.embeddingModel,
     );
-    const disabledList = this.readToolList(
-      this.config.getEphemeralSetting('tools.disabled') ??
-        this.config.getEphemeralSetting('disabled-tools'),
-    );
-
-    const hasAllowed = allowedList.length > 0;
-    const hasDisabled = disabledList.length > 0;
-
-    if (!hasAllowed && !hasDisabled) {
-      return undefined;
-    }
-
-    return {
-      allowed: hasAllowed ? allowedList : undefined,
-      disabled: hasDisabled ? disabledList : undefined,
-    };
-  }
-
-  private readToolList(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const filtered = value.filter(
-      (entry): entry is string =>
-        typeof entry === 'string' && entry.trim().length > 0,
-    );
-    return filtered.length > 0 ? [...filtered] : [];
-  }
-
-  private buildToolDeclarationsFromView(
-    toolRegistry: ToolRegistry | undefined,
-    view: ToolRegistryView,
-  ): FunctionDeclaration[] {
-    if (!toolRegistry) {
-      return [];
-    }
-
-    const allowedNames = view.listToolNames();
-    if (allowedNames.length === 0) {
-      return [];
-    }
-
-    const declarations: FunctionDeclaration[] = [];
-    if (typeof toolRegistry.getAllTools === 'function') {
-      const toolsByName = new Map(
-        toolRegistry.getAllTools().map((tool) => [tool.name, tool]),
-      );
-      for (const name of allowedNames) {
-        const tool = toolsByName.get(name);
-        if (!tool) {
-          continue;
-        }
-        const schema = (tool as { schema?: FunctionDeclaration }).schema;
-        if (schema) {
-          declarations.push(schema);
-        }
-      }
-      return declarations;
-    }
-
-    if (typeof toolRegistry.getFunctionDeclarations === 'function') {
-      const declarationsByName = new Map(
-        toolRegistry
-          .getFunctionDeclarations()
-          .map((decl) => [decl.name, decl] as const),
-      );
-      for (const name of allowedNames) {
-        const declaration = declarationsByName.get(name);
-        if (declaration) {
-          declarations.push(declaration);
-        }
-      }
-    }
-    return declarations;
-  }
-
-  private getEnabledToolNamesForPrompt(): string[] {
-    const toolRegistry = this.config.getToolRegistry();
-    if (
-      !toolRegistry ||
-      typeof (toolRegistry as { getEnabledTools?: unknown }).getEnabledTools !==
-        'function'
-    ) {
-      return [];
-    }
-    return Array.from(
-      new Set(
-        toolRegistry
-          .getEnabledTools()
-          .map((tool) => tool.name)
-          .filter(Boolean),
-      ),
-    );
-  }
-
-  private async shouldIncludeSubagentDelegation(
-    enabledToolNames: string[],
-  ): Promise<boolean> {
-    return shouldIncludeSubagentDelegation(enabledToolNames, () =>
-      this.config.getSubagentManager?.(),
-    );
-  }
-
-  private updateTodoToolAvailabilityFromDeclarations(
-    declarations: Array<{ name?: string }>,
-  ): void {
-    const normalizedNames = new Set(
-      declarations
-        .map((decl) => decl?.name)
-        .filter((name): name is string => typeof name === 'string')
-        .map((name) => name.toLowerCase()),
-    );
-
-    this.todoToolsAvailable =
-      normalizedNames.has('todo_write') && normalizedNames.has('todo_read');
   }
 }
