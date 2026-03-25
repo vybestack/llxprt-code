@@ -202,18 +202,10 @@ export interface ConfigConstructorTarget {
   getProxy(): string | undefined;
 }
 
-/**
- * Applies ConfigParameters to a Config instance's fields and
- * initializes dependent subsystems (telemetry, proxy, policy engine).
- *
- * This function is the extracted body of Config.constructor().
- * It mutates the config instance directly via field assignment.
- */
-export function applyConfigParams(
+function applySettingsService(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
-  // Settings service resolution
   const providedSettingsService = params.settingsService;
   if (providedSettingsService) {
     registerSettingsService(providedSettingsService);
@@ -227,8 +219,12 @@ export function applyConfigParams(
   } else {
     config.settingsService = new SettingsService();
   }
+}
 
-  // Core identity and workspace
+function applyCoreIdentity(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.sessionId = params.sessionId;
   config.embeddingModel = params.embeddingModel;
   config.fileSystemService = new StandardFileSystemService();
@@ -241,8 +237,12 @@ export function applyConfigParams(
   config.debugMode = params.debugMode;
   config.outputFormat = params.outputFormat ?? OutputFormat.TEXT;
   config.question = params.question;
+}
 
-  // Tool governance
+function applyToolGovernance(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.coreTools = params.coreTools;
   config.allowedTools = params.allowedTools;
   config.excludeTools = params.excludeTools;
@@ -252,11 +252,13 @@ export function applyConfigParams(
   config.mcpServers = params.mcpServers;
   config.allowedMcpServers = params.allowedMcpServers ?? [];
   config.blockedMcpServers = params.blockedMcpServers ?? [];
-
-  // LSP
   config._lspState.lspConfig = parseLspConfig(params.lsp);
+}
 
-  // Memory and context
+function applyTelemetryAndMemory(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.userMemory = params.userMemory ?? '';
   config.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
   config.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
@@ -264,9 +266,9 @@ export function applyConfigParams(
   config.showMemoryUsage = params.showMemoryUsage ?? false;
   config.accessibility = params.accessibility ?? {};
 
-  // Telemetry configuration — spread first to preserve all fields (e.g.
-  // conversationLogPath, customRedactionPatterns, retention settings), then
-  // override core fields with explicit defaults.
+  // Spread first to preserve all fields (e.g. conversationLogPath,
+  // customRedactionPatterns, retention settings), then override core fields
+  // with explicit defaults.
   config.telemetrySettings = {
     ...(params.telemetry ?? {}),
     enabled: params.telemetry?.enabled ?? false,
@@ -284,7 +286,6 @@ export function applyConfigParams(
   };
   config.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
 
-  // File filtering
   config.fileFiltering = {
     respectGitIgnore:
       params.fileFiltering?.respectGitIgnore ??
@@ -296,8 +297,12 @@ export function applyConfigParams(
       params.fileFiltering?.enableRecursiveFileSearch ?? true,
     disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
   };
+}
 
-  // Feature flags and runtime settings
+function applyRuntimeFlags(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.checkpointing = params.checkpointing ?? false;
   config.dumpOnError = params.dumpOnError ?? false;
   config.proxy = params.proxy;
@@ -355,8 +360,12 @@ export function applyConfigParams(
   config.fileExclusions = new FileExclusions(config as unknown as Config);
   config.enablePromptCompletion = params.enablePromptCompletion ?? false;
   config.eventEmitter = params.eventEmitter;
+}
 
-  // Policy engine and runtime state
+function applyPolicyAndLifecycle(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
   config.policyEngine = new PolicyEngine(params.policyEngineConfig);
   config.runtimeState = createAgentRuntimeStateFromConfig(
     config as unknown as Config,
@@ -390,7 +399,7 @@ export function applyConfigParams(
     setLlxprtMdFilename(params.contextFileName);
   }
 
-  // Telemetry initialization
+  // Telemetry initialization (intentional cast — avoids circular dep with Config)
   const isTestEnvironment =
     process.env.NODE_ENV === 'test' || process.env.VITEST;
   if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
@@ -408,7 +417,6 @@ export function applyConfigParams(
     debugLogger.log(`[CONFIG] Telemetry disabled`);
   }
 
-  // Proxy setup
   const proxy = config.getProxy();
   if (proxy) {
     try {
@@ -426,4 +434,23 @@ export function applyConfigParams(
     config as unknown as Config,
     new StartSessionEvent(config as unknown as Config),
   );
+}
+
+/**
+ * Applies ConfigParameters to a Config instance's fields and
+ * initializes dependent subsystems (telemetry, proxy, policy engine).
+ *
+ * This function is the extracted body of Config.constructor().
+ * It mutates the config instance directly via field assignment.
+ */
+export function applyConfigParams(
+  config: ConfigConstructorTarget,
+  params: ConfigParameters,
+): void {
+  applySettingsService(config, params);
+  applyCoreIdentity(config, params);
+  applyToolGovernance(config, params);
+  applyTelemetryAndMemory(config, params);
+  applyRuntimeFlags(config, params);
+  applyPolicyAndLifecycle(config, params);
 }
