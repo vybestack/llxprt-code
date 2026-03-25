@@ -181,4 +181,16 @@ describe('estimateTextOnlyLength', () => {
       ]),
     ).toBe(0);
   });
+
+  it('handles singular {text} object (non-array)', () => {
+    expect(estimateTextOnlyLength({ text: 'hello world' })).toBe(11);
+  });
+
+  it('returns 0 for singular non-text object', () => {
+    expect(
+      estimateTextOnlyLength({
+        inlineData: { mimeType: 'image/png', data: 'binary' },
+      }),
+    ).toBe(0);
+  });
 });

@@ -111,6 +111,14 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
   }
 
   if (!Array.isArray(request)) {
+    if (
+      typeof request === 'object' &&
+      request !== null &&
+      'text' in request &&
+      request.text
+    ) {
+      return (request as { text: string }).text.length;
+    }
     return 0;
   }
 

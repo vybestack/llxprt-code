@@ -58,7 +58,7 @@ describe('IdeContextTracker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tracker = new IdeContextTracker(
-      makeConfig() as Parameters<typeof IdeContextTracker>[0],
+      makeConfig() as ConstructorParameters<typeof IdeContextTracker>[0],
     );
   });
 
@@ -220,6 +220,20 @@ describe('IdeContextTracker', () => {
       const { contextParts } = tracker.buildIncrementalDelta();
       expect(contextParts.join('\n')).toContain('cursorMoved');
       expect(contextParts.join('\n')).toContain('"line": 10');
+    });
+
+    it('emits cursor disappearance when cursor is removed', () => {
+      const last = makeIdeContext({
+        activeFilePath: 'a.ts',
+        cursorLine: 5,
+        cursorCharacter: 3,
+      });
+      const current = makeIdeContext({ activeFilePath: 'a.ts' });
+      mockGetIdeContext.mockReturnValue(current);
+      tracker.recordSentContext(last);
+      const { contextParts } = tracker.buildIncrementalDelta();
+      expect(contextParts.join('\n')).toContain('cursorMoved');
+      expect(contextParts.join('\n')).toContain('null');
     });
 
     it('detects selection change', () => {

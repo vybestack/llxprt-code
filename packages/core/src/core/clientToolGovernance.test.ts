@@ -143,7 +143,18 @@ describe('buildToolDeclarationsFromView', () => {
     expect(buildToolDeclarationsFromView(registry, view)).toEqual([]);
   });
 
-  it('builds declarations from getAllTools', () => {
+  it('prefers getFunctionDeclarations for transformed schemas', () => {
+    const decl1 = { name: 'bash', description: 'Run bash' };
+    const decl2 = { name: 'read_file', description: 'Read a file' };
+    const registry = {
+      getFunctionDeclarations: vi.fn().mockReturnValue([decl1, decl2]),
+    } as unknown as ToolRegistry;
+    const view = makeView(['bash']);
+    const result = buildToolDeclarationsFromView(registry, view);
+    expect(result).toEqual([decl1]);
+  });
+
+  it('falls back to getAllTools when getFunctionDeclarations not available', () => {
     const schema1 = { name: 'bash', description: 'Run bash' };
     const schema2 = { name: 'read_file', description: 'Read a file' };
     const registry = {
@@ -156,17 +167,6 @@ describe('buildToolDeclarationsFromView', () => {
     const view = makeView(['bash', 'read_file']);
     const result = buildToolDeclarationsFromView(registry, view);
     expect(result).toEqual([schema1, schema2]);
-  });
-
-  it('falls back to getFunctionDeclarations when getAllTools not available', () => {
-    const decl1 = { name: 'bash', description: 'Run bash' };
-    const decl2 = { name: 'read_file', description: 'Read a file' };
-    const registry = {
-      getFunctionDeclarations: vi.fn().mockReturnValue([decl1, decl2]),
-    } as unknown as ToolRegistry;
-    const view = makeView(['bash']);
-    const result = buildToolDeclarationsFromView(registry, view);
-    expect(result).toEqual([decl1]);
   });
 
   it('skips tools without schema in getAllTools', () => {

@@ -15,29 +15,27 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock prompts module before imports
 vi.mock('./prompts.js', () => ({
-  getCoreSystemPromptAsync: vi
-    .fn()
-    .mockResolvedValue('Test system instruction'),
-  getCoreSystemPrompt: vi.fn().mockReturnValue('Test system instruction'),
-  getCompressionPrompt: vi.fn().mockReturnValue('Test compression prompt'),
-  initializePromptSystem: vi.fn().mockResolvedValue(undefined),
+  getCoreSystemPromptAsync: vi.fn(() =>
+    Promise.resolve('Test system instruction'),
+  ),
+  getCoreSystemPrompt: vi.fn(() => 'Test system instruction'),
+  getCompressionPrompt: vi.fn(() => 'Test compression prompt'),
+  initializePromptSystem: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
 vi.mock('./clientToolGovernance.js', () => ({
-  getToolGovernanceEphemerals: vi.fn().mockReturnValue(undefined),
-  readToolList: vi
-    .fn()
-    .mockImplementation((v: unknown) =>
-      Array.isArray(v)
-        ? (v as unknown[]).filter(
-            (e): e is string => typeof e === 'string' && e.trim().length > 0,
-          )
-        : [],
-    ),
-  buildToolDeclarationsFromView: vi.fn().mockReturnValue([]),
-  getEnabledToolNamesForPrompt: vi.fn().mockReturnValue([]),
-  shouldIncludeSubagentDelegationForConfig: vi.fn().mockResolvedValue(false),
+  getToolGovernanceEphemerals: vi.fn(() => undefined),
+  readToolList: vi.fn((v: unknown) =>
+    Array.isArray(v)
+      ? (v as unknown[]).filter(
+          (e): e is string => typeof e === 'string' && e.trim().length > 0,
+        )
+      : [],
+  ),
+  buildToolDeclarationsFromView: vi.fn(() => []),
+  getEnabledToolNamesForPrompt: vi.fn(() => []),
+  shouldIncludeSubagentDelegationForConfig: vi.fn(() => Promise.resolve(false)),
 }));
 
 import {

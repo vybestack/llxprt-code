@@ -640,7 +640,7 @@ export class GeminiClient {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
 
-    return createChatSessionSafe({
+    const chat = await createChatSessionSafe({
       config: this.config,
       runtimeState: this.runtimeState,
       contentGenerator: this.getContentGenerator(),
@@ -653,6 +653,8 @@ export class GeminiClient {
       todoContinuationService: this.todoContinuationService,
       toolRegistry: this.config.getToolRegistry(),
     });
+    this.chat = chat;
+    return chat;
   }
 
   private _getEffectiveModelForCurrentTurn(): string {

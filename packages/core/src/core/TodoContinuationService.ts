@@ -18,6 +18,19 @@ import type { Todo } from '../tools/todo-schemas.js';
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
 
+function toPartArray(request: PartListUnion): Part[] {
+  if (Array.isArray(request)) {
+    return [...(request as Part[])];
+  }
+  if (typeof request === 'string') {
+    return [{ text: request } as Part];
+  }
+  if (typeof request === 'object' && request !== null && 'text' in request) {
+    return [request as Part];
+  }
+  return [];
+}
+
 export enum PostTurnAction {
   Finish = 'finish',
   ThinkingOnlyRetry = 'thinking-only-retry',
@@ -140,11 +153,9 @@ export class TodoContinuationService {
   }
 
   appendTodoSuffixToRequest(request: PartListUnion): PartListUnion {
-    if (!Array.isArray(request)) {
-      return request;
-    }
+    const parts = toPartArray(request);
 
-    const suffixAlreadyPresent = request.some(
+    const suffixAlreadyPresent = parts.some(
       (part) =>
         typeof part === 'object' &&
         part !== null &&
@@ -154,11 +165,11 @@ export class TodoContinuationService {
     );
 
     if (suffixAlreadyPresent) {
-      return request;
+      return parts;
     }
 
-    (request as Part[]).push({ text: TODO_PROMPT_SUFFIX } as Part);
-    return request;
+    parts.push({ text: TODO_PROMPT_SUFFIX } as Part);
+    return parts;
   }
 
   recordModelActivity(event: ServerGeminiStreamEvent): void {
@@ -247,23 +258,19 @@ export class TodoContinuationService {
     request: PartListUnion,
     reminderText: string,
   ): PartListUnion {
-    if (Array.isArray(request)) {
-      const cloned = [...request];
-      const alreadyPresent = cloned.some(
-        (part) =>
-          typeof part === 'object' &&
-          part !== null &&
-          'text' in part &&
-          typeof part.text === 'string' &&
-          part.text === reminderText,
-      );
-      if (!alreadyPresent) {
-        cloned.push({ text: reminderText } as Part);
-      }
-      return cloned;
+    const parts = toPartArray(request);
+    const alreadyPresent = parts.some(
+      (part) =>
+        typeof part === 'object' &&
+        part !== null &&
+        'text' in part &&
+        typeof part.text === 'string' &&
+        part.text === reminderText,
+    );
+    if (!alreadyPresent) {
+      parts.push({ text: reminderText } as Part);
     }
-
-    return [{ text: reminderText } as Part];
+    return parts;
   }
 
   shouldDeferStreamEvent(event: ServerGeminiStreamEvent): boolean {
@@ -360,6 +367,11 @@ export class TodoContinuationService {
   resetActivityCounters(): void {
     this.toolCallReminderLevel = 'none';
     this.toolActivityCount = 0;
+    this.consecutiveComplexTurns = 0;
+    this.lastComplexitySuggestionTime = 0;
+    this.lastComplexitySuggestionTurn = undefined;
+    this.lastTodoToolTurn = undefined;
+    this.lastTodoSnapshot = undefined;
   }
 
   setLastTodoToolTurn(turn: number): void {
@@ -375,16 +387,15 @@ export class TodoContinuationService {
     });
 
     if (reminderResult.reminder) {
-      const textOnlyRequest = Array.isArray(request)
-        ? (request as Part[]).filter(
-            (part) =>
-              typeof part === 'object' &&
-              !('functionCall' in part) &&
-              !('functionResponse' in part),
-          )
-        : [];
+      const parts = toPartArray(request);
+      const textOnlyParts = parts.filter(
+        (part) =>
+          typeof part === 'object' &&
+          !('functionCall' in part) &&
+          !('functionResponse' in part),
+      );
       request = this.appendSystemReminderToRequest(
-        textOnlyRequest,
+        textOnlyParts,
         reminderResult.reminder,
       );
       this.lastTodoSnapshot = reminderResult.todos;

@@ -85,8 +85,10 @@ export async function generateJson(
         promptId: lastPromptId,
       });
 
-    const result = await retryWithBackoff(apiCall);
+    const result = await retryWithBackoff(apiCall, { signal: abortSignal });
 
+    // Gemini sometimes returns a bare "user"/"model" string instead of JSON
+    // when asked for `next_speaker`. Wrap it so callers always get an object.
     if (
       typeof result === 'string' &&
       (result === 'user' || result === 'model') &&
@@ -164,7 +166,7 @@ export async function generateContent(
         lastPromptId,
       );
 
-    return await retryWithBackoff(apiCall);
+    return await retryWithBackoff(apiCall, { signal: abortSignal });
   } catch (error: unknown) {
     if (abortSignal.aborted) {
       throw error;

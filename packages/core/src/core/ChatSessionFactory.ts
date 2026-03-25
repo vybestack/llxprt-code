@@ -41,7 +41,8 @@ export function buildSettingsSnapshot(
     'compression-threshold',
   );
   const compressionThreshold =
-    typeof rawCompressionThreshold === 'number'
+    typeof rawCompressionThreshold === 'number' &&
+    Number.isFinite(rawCompressionThreshold)
       ? rawCompressionThreshold
       : undefined;
 
@@ -57,7 +58,10 @@ export function buildSettingsSnapshot(
     'compression-preserve-threshold',
   );
   const preserveThreshold =
-    typeof rawPreserveThreshold === 'number' ? rawPreserveThreshold : undefined;
+    typeof rawPreserveThreshold === 'number' &&
+    Number.isFinite(rawPreserveThreshold)
+      ? rawPreserveThreshold
+      : undefined;
 
   return {
     compressionThreshold: compressionThreshold ?? 0.85,
@@ -161,14 +165,12 @@ export interface CreateChatSessionDeps {
  */
 function setupHistoryService(
   storedHistoryService: HistoryService | undefined,
-  clearStoredHistoryService: () => void,
   extraHistory: Content[] | undefined,
   runtimeState: AgentRuntimeState,
 ): { historyService: HistoryService; reused: boolean } {
   const logger = new DebugLogger('llxprt:client:start');
   if (storedHistoryService) {
     logger.debug('Reusing stored HistoryService to preserve UI conversation');
-    clearStoredHistoryService();
     return { historyService: storedHistoryService, reused: true };
   }
 
@@ -247,9 +249,8 @@ export async function createChatSession(
 
   const logger = new DebugLogger('llxprt:client:start');
 
-  const { historyService } = setupHistoryService(
+  const { historyService, reused } = setupHistoryService(
     storedHistoryService,
-    clearStoredHistoryService,
     extraHistory,
     runtimeState,
   );
@@ -329,6 +330,10 @@ export async function createChatSession(
     if (active.length === 0) return undefined;
     return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
   });
+
+  if (reused) {
+    clearStoredHistoryService();
+  }
 
   return chat;
 }

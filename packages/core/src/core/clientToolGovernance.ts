@@ -74,6 +74,21 @@ export function buildToolDeclarationsFromView(
   }
 
   const declarations: FunctionDeclaration[] = [];
+  if (typeof toolRegistry.getFunctionDeclarations === 'function') {
+    const declarationsByName = new Map(
+      toolRegistry
+        .getFunctionDeclarations()
+        .map((decl) => [decl.name, decl] as const),
+    );
+    for (const name of allowedNames) {
+      const declaration = declarationsByName.get(name);
+      if (declaration) {
+        declarations.push(declaration);
+      }
+    }
+    return declarations;
+  }
+
   if (typeof toolRegistry.getAllTools === 'function') {
     const toolsByName = new Map(
       toolRegistry.getAllTools().map((tool) => [tool.name, tool]),
@@ -86,21 +101,6 @@ export function buildToolDeclarationsFromView(
       const schema = (tool as { schema?: FunctionDeclaration }).schema;
       if (schema) {
         declarations.push(schema);
-      }
-    }
-    return declarations;
-  }
-
-  if (typeof toolRegistry.getFunctionDeclarations === 'function') {
-    const declarationsByName = new Map(
-      toolRegistry
-        .getFunctionDeclarations()
-        .map((decl) => [decl.name, decl] as const),
-    );
-    for (const name of allowedNames) {
-      const declaration = declarationsByName.get(name);
-      if (declaration) {
-        declarations.push(declaration);
       }
     }
   }

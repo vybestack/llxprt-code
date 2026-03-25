@@ -154,6 +154,23 @@ describe('buildSettingsSnapshot', () => {
     expect(snapshot.contextLimit).toBeUndefined();
   });
 
+  it('falls back to defaults when thresholds are NaN or Infinity', () => {
+    const config = makeConfig({
+      getEphemeralSetting: vi.fn().mockImplementation((key: string) => {
+        if (key === 'compression-threshold') return NaN;
+        if (key === 'compression-preserve-threshold') return Infinity;
+        if (key === 'context-limit') return -Infinity;
+        return undefined;
+      }),
+    });
+
+    const snapshot = buildSettingsSnapshot(config);
+
+    expect(snapshot.compressionThreshold).toBe(0.85);
+    expect(snapshot.preserveThreshold).toBe(0.2);
+    expect(snapshot.contextLimit).toBeUndefined();
+  });
+
   it('includes reasoning settings from ephemerals', () => {
     const config = makeConfig({
       getEphemeralSetting: vi.fn().mockImplementation((key: string) => {

@@ -18,7 +18,7 @@ import {
 } from './lifecycleHookTriggers.js';
 
 function makeConfig() {
-  return {} as Parameters<typeof AgentHookManager>[0];
+  return {} as ConstructorParameters<typeof AgentHookManager>[0];
 }
 
 describe('AgentHookManager', () => {

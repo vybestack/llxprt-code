@@ -358,10 +358,29 @@ describe('TodoContinuationService', () => {
       expect(suffixCount).toBe(1);
     });
 
-    it('returns non-array requests unchanged', () => {
+    it('normalizes string request to Part array and appends suffix', () => {
       const req = 'plain string request';
       const result = service.appendTodoSuffixToRequest(req);
-      expect(result).toBe(req);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr[0]).toEqual({ text: 'plain string request' });
+      expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
+    });
+
+    it('normalizes singular {text} object and appends suffix', () => {
+      const req = { text: 'do this task' };
+      const result = service.appendTodoSuffixToRequest(req);
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr[0]).toEqual({ text: 'do this task' });
+      expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
+    });
+
+    it('does not mutate the original array', () => {
+      const req = [{ text: 'Do something' }];
+      const original = [...req];
+      service.appendTodoSuffixToRequest(req);
+      expect(req).toEqual(original);
     });
   });
 
@@ -500,15 +519,28 @@ describe('TodoContinuationService', () => {
       expect(count).toBe(1);
     });
 
-    it('wraps non-array input in array with only reminder text', () => {
+    it('normalizes string input and appends reminder', () => {
       const result = service.appendSystemReminderToRequest(
         'plain string',
         'System reminder text',
       );
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
-      expect(arr).toHaveLength(1);
-      expect(arr[0].text).toBe('System reminder text');
+      expect(arr).toHaveLength(2);
+      expect(arr[0]).toEqual({ text: 'plain string' });
+      expect(arr[1].text).toBe('System reminder text');
+    });
+
+    it('normalizes singular {text} object and appends reminder', () => {
+      const result = service.appendSystemReminderToRequest(
+        { text: 'single part' },
+        'Reminder',
+      );
+      expect(Array.isArray(result)).toBe(true);
+      const arr = result as Array<{ text?: string }>;
+      expect(arr).toHaveLength(2);
+      expect(arr[0]).toEqual({ text: 'single part' });
+      expect(arr[1].text).toBe('Reminder');
     });
   });
 
@@ -775,6 +807,17 @@ describe('TodoContinuationService', () => {
       service.resetActivityCounters();
       expect(service.toolCallReminderLevel).toBe('none');
       expect(service.toolActivityCount).toBe(0);
+    });
+
+    it('resets all per-chat state including complexity and snapshot tracking', () => {
+      service.consecutiveComplexTurns = 5;
+      service.lastTodoSnapshot = [pendingTodo];
+      service.setLastTodoToolTurn(10);
+
+      service.resetActivityCounters();
+
+      expect(service.consecutiveComplexTurns).toBe(0);
+      expect(service.lastTodoSnapshot).toBeUndefined();
     });
   });
 

@@ -244,6 +244,11 @@ export class IdeContextTracker {
           character: currentCursor.character,
         },
       };
+    } else if (!currentCursor && lastCursor) {
+      changes.cursorMoved = {
+        path: currentActiveFile.path,
+        cursor: null,
+      };
     }
 
     const lastSelectedText = lastActiveFile.selectedText || '';
