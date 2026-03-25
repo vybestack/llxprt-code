@@ -45,7 +45,9 @@ describe('transformations', () => {
     it('should truncate long base names', () => {
       const longName = 'a'.repeat(50);
       const result = getTransformedImagePath(`@${longName}.png`);
-      expect(result.length).toBeLessThan(longName.length + 20);
+      expect(result).not.toBe(`[Image ${longName}.png]`);
+      expect(result).toContain('.png');
+      expect(result.length).toBeLessThan(`[Image ${longName}.png]`.length);
     });
 
     it('should preserve extension in output', () => {
@@ -117,7 +119,7 @@ describe('transformations', () => {
         [
           {
             logStart: 6,
-            logEnd: 16,
+            logEnd: 14,
             logicalText: '@img.png',
             collapsedText: '[Image img.png]',
           },
@@ -133,7 +135,7 @@ describe('transformations', () => {
         [
           {
             logStart: 6,
-            logEnd: 16,
+            logEnd: 14,
             logicalText: '@img.png',
             collapsedText: '[Image img.png]',
           },
@@ -154,14 +156,15 @@ describe('transformations', () => {
         [
           {
             logStart: 6,
-            logEnd: 16,
+            logEnd: 14,
             logicalText: '@img.png',
             collapsedText: '[Image img.png]',
           },
         ],
       ];
       expect(getTransformUnderCursor(0, 6, spansByLine)).not.toBeNull();
-      expect(getTransformUnderCursor(0, 16, spansByLine)).not.toBeNull();
+      expect(getTransformUnderCursor(0, 14, spansByLine)).not.toBeNull();
+      expect(getTransformUnderCursor(0, 15, spansByLine)).toBeNull();
     });
   });
 });
