@@ -956,8 +956,6 @@ describe('ConfirmationCoordinator', () => {
 
       // modifyWithEditor is mocked at module scope
 
-
-
       await coordinator.handleConfirmationResponse(
         'call-1',
         vi.fn().mockResolvedValue(undefined),
