@@ -456,6 +456,28 @@ export default tseslint.config(
       'max-lines-per-function': 'off',
     },
   },
+  // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
+  // These files are being decomposed; error-level rules catch regressions during
+  // and after the decomposition. Test files are excluded (they already have
+  // max-lines-per-function: 'off' via the vitest block above).
+  {
+    files: [
+      'packages/cli/src/ui/AppContainerRuntime.tsx',
+      'packages/cli/src/ui/containers/AppContainer/**/*.ts',
+      'packages/cli/src/ui/containers/AppContainer/**/*.tsx',
+    ],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
   // Settings for eslint-rules directory
   {
     files: ['./eslint-rules/**/*.js'],
