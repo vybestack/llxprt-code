@@ -63,9 +63,9 @@ function useHistoryTokenListener(
       const geminiClient = config.getGeminiClient();
 
       if (geminiClient?.hasChatInitialized?.()) {
-        const historyService = geminiClient.getHistoryService?.();
+        const historyService = geminiClient.getHistoryService?.() ?? null;
 
-        // Handle service identity change (including transition to undefined).
+        // Handle service identity change (including transition to null).
         if (historyService !== lastHistoryServiceRef.current) {
           // Clean up listener from the old service regardless of whether the
           // new service is truthy — a reset may have cleared the service.

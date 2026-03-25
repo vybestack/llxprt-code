@@ -76,7 +76,7 @@ async function runSessionStartHook(
     }
 
     const additionalContext = sessionStartOutput.getAdditionalContext();
-    if (additionalContext) {
+    if (additionalContext && !signal.aborted) {
       const geminiClient = config.getGeminiClient();
       if (geminiClient) {
         await geminiClient.addHistory({
@@ -121,9 +121,6 @@ export function useSessionInitialization({
     }
     hasTriggeredSessionStart.current = true;
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 

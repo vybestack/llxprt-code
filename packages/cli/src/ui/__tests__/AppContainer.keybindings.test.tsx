@@ -8,7 +8,7 @@
  * @plan project-plans/issue1576/TEST_PLAN.md - Test 4
  *
  * Verifies AppContainer keyboard shortcuts.
- * Behavior: Ctrl+C double-press, Ctrl+B copy mode, Alt+M markdown, Ctrl+F shell focus.
+ * Behavior: Ctrl+C double-press, Ctrl+S copy mode, Cmd+M/Alt+M markdown, Ctrl+F shell focus.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -534,7 +534,7 @@ describe('AppContainer.keybindings', () => {
 
       const { unmount } = renderWithProviders(<AppContainer {...props} />);
 
-      // When useAlternateBuffer is true, copy mode keybinding (Ctrl+Y) should be available
+      // When useAlternateBuffer is true, copy mode keybinding (Ctrl+S) should be available
       // The keybinding is defined and the settings enable alternate buffer
       expect(mockSettings.merged.ui?.useAlternateBuffer).toBe(true);
 

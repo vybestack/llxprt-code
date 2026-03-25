@@ -46,8 +46,13 @@ export function useUpdateAndOAuthBridges({
   useEffect(() => {
     const cleanup = setUpdateHandler(addItem, setUpdateInfo);
 
-    const oauthManager = getCliOAuthManager() as CliOAuthManagerWithProviders;
-    const providersMap = oauthManager.providers;
+    const oauthManager = getCliOAuthManager();
+    const providersMap =
+      oauthManager &&
+      typeof oauthManager === 'object' &&
+      'providers' in oauthManager
+        ? (oauthManager as CliOAuthManagerWithProviders).providers
+        : undefined;
     const providers: OAuthProviderWithAddItem[] = [];
     if (providersMap instanceof Map) {
       for (const provider of providersMap.values()) {

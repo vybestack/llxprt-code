@@ -74,9 +74,9 @@ export function useCoreEventHandlers({
       debugMode: config.getDebugMode(),
     });
     consolePatcher.patch();
+    // registerCleanup handles process.exit; React return handles unmount.
+    // cleanup() is idempotent, so double invocation is safe.
     registerCleanup(consolePatcher.cleanup);
-    return () => {
-      consolePatcher.cleanup();
-    };
+    return () => consolePatcher.cleanup();
   }, [handleNewMessage, config]);
 }

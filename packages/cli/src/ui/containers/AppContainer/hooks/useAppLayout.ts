@@ -237,10 +237,11 @@ function useLayoutContext(p: AppLayoutParams) {
     submitQuery,
     vimModeEnabled,
   } = p;
+  const debugMode = config.getDebugMode();
   const filteredConsoleMessages = useMemo(() => {
-    if (config.getDebugMode()) return consoleMessages;
+    if (debugMode) return consoleMessages;
     return consoleMessages.filter((msg) => msg.type !== 'debug');
-  }, [consoleMessages, config]);
+  }, [consoleMessages, debugMode]);
   const branchName = useGitBranchName(config.getTargetDir());
   const contextFileNames = useMemo(() => {
     const fromSettings = settings.merged.ui?.contextFileName;

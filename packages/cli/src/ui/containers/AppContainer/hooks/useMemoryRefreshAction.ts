@@ -65,7 +65,7 @@ export function useMemoryRefreshAction({
 
       if (config.getDebugMode()) {
         debugLogger.log(
-          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
+          `[DEBUG] Refreshed memory content in config (${memoryContent.length} chars from ${fileCount} file(s))`,
         );
       }
     } catch (error) {

@@ -65,14 +65,15 @@ export function useLayoutMeasurement({
       }),
   });
 
-  // Fix for issue #1284: Add keyboard shortcut for Cmd+C/Ctrl+C to copy selection
+  // Fix for issue #1284: Add keyboard shortcut for Cmd+C/Ctrl+C to copy selection.
+  // Only active when copy mode is enabled to avoid conflicting with Ctrl+C quit.
   useKeypress(
     (key: Key) => {
       if (key.name === 'c' && (key.ctrl || key.meta)) {
         void copySelectionToClipboard();
       }
     },
-    { isActive: true },
+    { isActive: enabled },
   );
 
   useLayoutEffect(() => {
