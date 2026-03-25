@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import '../../../test-utils/customMatchers.js';
 import stripAnsi from 'strip-ansi';
 import { act } from 'react';
 import { renderHook } from '../../../test-utils/render.js';
@@ -15,16 +16,15 @@ import type {
   TextBufferAction,
   VisualLayout,
   TextBufferOptions,
-} from './text-buffer.js';
+} from './buffer-types.js';
+import { useTextBuffer } from './text-buffer.js';
+import { offsetToLogicalPos, logicalPosToOffset } from './buffer-operations.js';
+import { textBufferReducer } from './buffer-reducer.js';
 import {
-  useTextBuffer,
-  offsetToLogicalPos,
-  logicalPosToOffset,
-  textBufferReducer,
   findWordEndInLine,
   findNextWordStartInLine,
   isWordCharStrict,
-} from './text-buffer.js';
+} from './word-navigation.js';
 import { cpLen } from '../../utils/textUtils.js';
 
 const defaultVisualLayout: VisualLayout = {

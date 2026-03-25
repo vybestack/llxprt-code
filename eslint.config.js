@@ -524,6 +524,165 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // ============================================================================
+  // Issue #1577: text-buffer.ts decomposition - Architecture Enforcement
+  // ============================================================================
+
+  // Domain modules must be pure (no React, no side effects)
+  {
+    files: [
+      'packages/cli/src/ui/components/shared/buffer-types.ts',
+      'packages/cli/src/ui/components/shared/word-navigation.ts',
+      'packages/cli/src/ui/components/shared/buffer-operations.ts',
+      'packages/cli/src/ui/components/shared/transformations.ts',
+      'packages/cli/src/ui/components/shared/visual-layout.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react',
+              message:
+                'Domain modules must be pure. React only allowed in text-buffer.ts',
+            },
+            {
+              name: '@vybestack/llxprt-code-core',
+              importNames: ['debugLogger'],
+              message:
+                'Domain modules must be side-effect free. No logging.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['node:fs', 'node:child_process', 'node:os'],
+              message:
+                'Domain modules must be pure. No Node.js I/O modules.',
+            },
+          ],
+        },
+      ],
+      complexity: ['error', 15],
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+
+  // vim-buffer-actions.ts specific restrictions
+  {
+    files: ['packages/cli/src/ui/components/shared/vim-buffer-actions.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: './text-buffer.js',
+              message:
+                'Import from buffer-types, buffer-operations, or word-navigation directly',
+            },
+            {
+              name: './buffer-reducer.js',
+              message:
+                'vim-buffer-actions must not import buffer-reducer (creates cycle)',
+            },
+            {
+              name: 'react',
+              message: 'vim-buffer-actions must be pure logic. No React.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['**/shared/text-buffer.js'],
+              message: 'Import from specific module, not text-buffer.js',
+            },
+          ],
+        },
+      ],
+      complexity: ['error', 15],
+      'max-lines-per-function': ['error', 80],
+    },
+  },
+
+  // buffer-reducer.ts specific restrictions
+  {
+    files: ['packages/cli/src/ui/components/shared/buffer-reducer.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react',
+              message: 'buffer-reducer must be pure logic. No React.',
+            },
+          ],
+        },
+      ],
+      complexity: ['error', 15],
+      'max-lines-per-function': ['error', 80],
+    },
+  },
+
+  // text-buffer.ts size limits (React allowed here only)
+  // useTextBuffer is a React hook composition root; its size comes from
+  // useCallback/useMemo declarations, not from logic complexity.
+  {
+    files: ['packages/cli/src/ui/components/shared/text-buffer.ts'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+
+  // Migration: Warn on utility imports from text-buffer.js in CLI src
+  {
+    files: ['packages/cli/src/**/*.ts', 'packages/cli/src/**/*.tsx'],
+    ignores: [
+      'packages/cli/src/ui/components/shared/text-buffer.ts',
+      'packages/cli/src/ui/components/shared/text-buffer.test.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          paths: [],
+          patterns: [
+            {
+              group: ['**/shared/text-buffer.js'],
+              importNames: [
+                'offsetToLogicalPos',
+                'logicalPosToOffset',
+                'textBufferReducer',
+                'pushUndo',
+                'replaceRangeInternal',
+                'findNextWordStartInLine',
+                'findPrevWordStartInLine',
+                'findWordEndInLine',
+                'getPositionFromOffsets',
+                'getLineRangeOffsets',
+              ],
+              message:
+                'Import from buffer-operations.js, word-navigation.js, or buffer-types.js directly. See Issue #1577.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1577
+  // ============================================================================
+
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node

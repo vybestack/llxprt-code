@@ -8,11 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useVim } from './vim.js';
-import type { TextBuffer } from '../components/shared/text-buffer.js';
-import {
-  textBufferReducer,
-  calculateTransformations,
-} from '../components/shared/text-buffer.js';
+import type { TextBuffer } from '../components/shared/buffer-types.js';
+import { textBufferReducer } from '../components/shared/buffer-reducer.js';
+import { calculateTransformations } from '../components/shared/transformations.js';
 
 // Mock the VimModeContext
 const mockVimContext = {
