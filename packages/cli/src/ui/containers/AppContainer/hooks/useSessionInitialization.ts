@@ -79,10 +79,14 @@ async function runSessionStartHook(
     if (additionalContext && !signal.aborted) {
       const geminiClient = config.getGeminiClient();
       if (geminiClient) {
-        await geminiClient.addHistory({
-          role: 'user',
-          parts: [{ text: additionalContext }],
-        });
+        try {
+          await geminiClient.addHistory({
+            role: 'user',
+            parts: [{ text: additionalContext }],
+          });
+        } catch {
+          // Hook failures should not block session start.
+        }
       }
     }
   }
@@ -124,7 +128,9 @@ export function useSessionInitialization({
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
-    void runSessionStartHook(config, addItem, signal);
+    void runSessionStartHook(config, addItem, signal).catch(() => {
+      // Hook failures should not block session start.
+    });
 
     return () => {
       if (abortControllerRef.current) {

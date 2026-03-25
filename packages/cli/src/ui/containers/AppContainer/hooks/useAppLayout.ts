@@ -137,7 +137,7 @@ function useLayoutKeybindingsAndHistory(p: AppLayoutParams) {
       constrainHeight,
       setConstrainHeight,
       refreshStatic,
-      addItem: (item, ts) => addItem(item, ts),
+      addItem,
       handleSlashCommand,
     },
     shell: {
@@ -188,7 +188,7 @@ function useLayoutMeasure(p: AppLayoutParams) {
   });
   const { mainControlsRef, pendingHistoryItemRef, rootUiRef } =
     useLayoutMeasurement({
-      enabled: true,
+      enabled: p.copyModeEnabled,
       setFooterHeight,
       terminalHeight,
       consoleMessages,

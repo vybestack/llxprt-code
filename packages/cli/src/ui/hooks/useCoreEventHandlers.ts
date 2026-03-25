@@ -15,7 +15,7 @@
  * @subscriptionStrategy Stable (refs for handler freshness)
  */
 
-import { useEffect } from 'react';
+import { useEffect, type MutableRefObject } from 'react';
 import {
   coreEvents,
   CoreEvent,
@@ -30,7 +30,7 @@ import type { ConsoleMessageItem } from '../types.js';
 interface UseCoreEventHandlersOptions {
   handleNewMessage: (message: ConsoleMessageItem) => void;
   config: Config;
-  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
+  recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>;
 }
 
 export function useCoreEventHandlers({
