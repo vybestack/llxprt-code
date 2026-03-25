@@ -53,22 +53,56 @@ export interface ToolExecutionResult {
  * This class encapsulates the single-tool execution logic that was previously
  * embedded in CoreToolScheduler. The code is MOVED, not rewritten.
  */
+/**
+ * Check a hook result for stop/block decisions and throw if needed.
+ */
+function checkHookDecision(
+  hookResult: { shouldStopExecution(): boolean; isBlockingDecision(): boolean; getEffectiveReason(): string | undefined } | undefined,
+  hookPhase: string,
+): void {
+  if (hookResult?.shouldStopExecution()) {
+    const stopError = new Error(hookResult.getEffectiveReason() || `Stopped by ${hookPhase} hook`);
+    (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
+    throw stopError;
+  }
+  if (hookResult?.isBlockingDecision()) {
+    throw new Error(hookResult.getEffectiveReason() || `Blocked by ${hookPhase} hook`);
+  }
+}
+
+/**
+ * Apply after-hook modifications (systemMessage, suppressOutput) to a tool result.
+ */
+function applyAfterHookModifications(
+  afterResult: { systemMessage?: string; getAdditionalContext(): string | undefined; suppressOutput?: boolean } | undefined,
+  toolResult: ToolResult,
+): ToolResult {
+  if (!afterResult) return toolResult;
+
+  let finalResult = toolResult;
+  const systemMessage = afterResult.systemMessage;
+  const additionalContext = afterResult.getAdditionalContext();
+  if (systemMessage || additionalContext) {
+    const appendText = systemMessage || additionalContext || '';
+    const existingContent =
+      typeof finalResult.llmContent === 'string'
+        ? finalResult.llmContent
+        : JSON.stringify(finalResult.llmContent);
+    finalResult = { ...finalResult, llmContent: `${existingContent}
+
+${appendText}` };
+  }
+  if (afterResult.suppressOutput) {
+    finalResult = { ...finalResult, suppressDisplay: true };
+  }
+  return finalResult;
+}
+
 export class ToolExecutor {
   constructor(private readonly config: Config) {}
 
   /**
    * Execute a single tool call from scheduled to completed state.
-   *
-   * EXTRACTED CODE from coreToolScheduler.ts lines 1691-1858.
-   *
-   * Handles:
-   * - Before/after hook invocation
-   * - PID tracking for shell tools
-   * - Live output streaming
-   * - Error handling and cancellation
-   * - Result transformation
-   *
-   * @throws Never throws - all errors are captured in the result
    */
   async execute(context: ToolExecutionContext): Promise<ToolExecutionResult> {
     const { call: scheduledCall, signal, onLiveOutput, onPid } = context;
@@ -76,148 +110,45 @@ export class ToolExecutor {
     let invocation = scheduledCall.invocation;
     let effectiveArgs = args;
 
-    // Extract MCP context if tool originates from an MCP server
     const serverName = (invocation as { _serverName?: string })._serverName;
     const mcpContext = serverName ? { server_name: serverName } : undefined;
 
-    // ============================================================
-    // EXTRACTED CODE STARTS HERE (from launchToolExecution lines 1691-1858)
-    // ============================================================
+    const beforeResult = await triggerBeforeToolHook(this.config, toolName, args, mcpContext);
+    checkHookDecision(beforeResult, 'BeforeTool');
 
-    // Trigger BeforeTool hook and await result
-    // @requirement:HOOK-017,HOOK-019 - Block execution or modify args based on hook result
-    const beforeResult = await triggerBeforeToolHook(
-      this.config,
-      toolName,
-      args,
-      mcpContext,
-    );
-
-    // Check if hook wants to stop execution (higher priority per upstream 05049b5a)
-    if (beforeResult?.shouldStopExecution()) {
-      const stopReason =
-        beforeResult.getEffectiveReason() || 'Stopped by BeforeTool hook';
-      // Throw with special error that caller can recognize as STOP_EXECUTION
-      const stopError = new Error(stopReason);
-      (stopError as Error & { isStopExecution?: boolean }).isStopExecution =
-        true;
-      throw stopError;
-    }
-
-    // Check if hook wants to block execution
-    if (beforeResult?.isBlockingDecision()) {
-      const blockReason =
-        beforeResult.getEffectiveReason() || 'Blocked by BeforeTool hook';
-      // Throw to signal blocking — caller converts to bufferError
-      throw new Error(blockReason);
-    }
-
-    // Check if hook wants to modify tool input (per upstream 90eb1e02)
     const modifiedInput = beforeResult?.getModifiedToolInput();
     if (modifiedInput) {
       effectiveArgs = modifiedInput;
-      // Re-create invocation with modified args to ensure validation
       try {
         invocation = scheduledCall.tool.build(modifiedInput);
       } catch (error) {
-        // If rebuild fails, log and continue with original invocation
-        // This matches upstream behavior of graceful degradation
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        debugLogger.warn(
-          `Failed to rebuild tool invocation after input modification: ${errorMessage}`,
-        );
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        debugLogger.warn(`Failed to rebuild tool invocation after input modification: ${errorMessage}`);
       }
     }
 
     const liveOutputCallback = scheduledCall.tool.canUpdateOutput
-      ? (outputChunk: string | AnsiOutput) => {
-          onLiveOutput?.(callId, outputChunk);
-        }
+      ? (outputChunk: string | AnsiOutput) => { onLiveOutput?.(callId, outputChunk); }
       : undefined;
-
-    const setPidCallback = (pid: number) => {
-      onPid?.(callId, pid);
-    };
+    const setPidCallback = (pid: number) => { onPid?.(callId, pid); };
 
     return invocation
       .execute(signal, liveOutputCallback, undefined, undefined, setPidCallback)
       .then(async (toolResult: ToolResult) => {
-        if (signal.aborted) {
-          throw new Error('User cancelled tool execution.');
-        }
+        if (signal.aborted) throw new Error('User cancelled tool execution.');
 
-        // Trigger AfterTool hook and await result
-        // @requirement:HOOK-131,HOOK-132 - Apply systemMessage and suppressOutput
-        const afterResult = await triggerAfterToolHook(
-          this.config,
-          toolName,
-          effectiveArgs,
-          toolResult,
-          mcpContext,
-        );
-
-        // Check if AfterTool hook wants to stop execution (per upstream 05049b5a)
-        if (afterResult?.shouldStopExecution()) {
-          const stopReason =
-            afterResult.getEffectiveReason() || 'Stopped by AfterTool hook';
-          const stopError = new Error(stopReason);
-          (stopError as Error & { isStopExecution?: boolean }).isStopExecution =
-            true;
-          throw stopError;
-        }
-
-        // Check if AfterTool hook wants to block/deny (per upstream 05049b5a)
-        if (afterResult?.isBlockingDecision()) {
-          const blockReason =
-            afterResult.getEffectiveReason() || 'Blocked by AfterTool hook';
-          throw new Error(blockReason);
-        }
-
-        // Apply hook modifications to tool result
-        let finalResult = toolResult;
-        if (afterResult) {
-          // Append systemMessage to llmContent
-          const systemMessage = afterResult.systemMessage;
-          const additionalContext = afterResult.getAdditionalContext();
-          if (systemMessage || additionalContext) {
-            const appendText = systemMessage || additionalContext || '';
-            const existingContent =
-              typeof finalResult.llmContent === 'string'
-                ? finalResult.llmContent
-                : JSON.stringify(finalResult.llmContent);
-            finalResult = {
-              ...finalResult,
-              llmContent: `${existingContent}
-
-${appendText}`,
-            };
-          }
-
-          // Set suppressDisplay if requested
-          if (afterResult.suppressOutput) {
-            finalResult = {
-              ...finalResult,
-              suppressDisplay: true,
-            };
-          }
-        }
+        const afterResult = await triggerAfterToolHook(this.config, toolName, effectiveArgs, toolResult, mcpContext);
+        checkHookDecision(afterResult, 'AfterTool');
 
         return {
-          result: finalResult,
+          result: applyAfterHookModifications(afterResult, toolResult),
           invocation,
           effectiveArgs,
         };
       })
       .catch(async (executionError: Error) => {
-        if (signal.aborted) {
-          throw new Error('User cancelled tool execution.');
-        }
+        if (signal.aborted) throw new Error('User cancelled tool execution.');
         throw executionError;
       });
-
-    // ============================================================
-    // EXTRACTED CODE ENDS HERE
-    // ============================================================
   }
 }

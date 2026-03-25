@@ -18,7 +18,7 @@ import type { PolicyEngine } from './policy-engine.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import { ToolErrorType } from '../index.js';
-import { DEFAULT_AGENT_ID } from '../core/turn.js';
+import { createErrorResponse } from '../utils/generateContentResponseUtilities.js';
 
 /**
  * Extract policy context from a tool invocation.
@@ -75,24 +75,7 @@ export function handlePolicyDenial(
 ): void {
   const message = `Policy denied execution of tool "${context.toolName}".`;
   const error = new Error(message);
-
-  // Construct error response inline (createErrorResponse is file-scoped in coreToolScheduler)
-  const response: ToolCallResponseInfo = {
-    callId: request.callId,
-    error,
-    responseParts: [
-      {
-        functionResponse: {
-          id: request.callId,
-          name: request.name,
-          response: { error: error.message },
-        },
-      },
-    ],
-    resultDisplay: error.message,
-    errorType: ToolErrorType.POLICY_VIOLATION,
-    agentId: request.agentId ?? DEFAULT_AGENT_ID,
-  };
+  const response = createErrorResponse(request, error, ToolErrorType.POLICY_VIOLATION);
 
   setStatusFn(request.callId, 'error', response);
 
