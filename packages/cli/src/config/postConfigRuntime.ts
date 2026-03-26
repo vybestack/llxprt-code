@@ -1,0 +1,439 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  ApprovalMode,
+  DebugLogger,
+  ProfileManager,
+  type Config,
+} from '@vybestack/llxprt-code-core';
+import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
+import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
+import { switchActiveProvider } from '../runtime/providerSwitch.js';
+import { applyCliSetArguments } from './cliEphemeralSettings.js';
+import {
+  READ_ONLY_TOOL_NAMES,
+  EDIT_TOOL_NAME,
+  normalizeToolNameForPolicy,
+  buildNormalizedToolSet,
+} from './toolGovernance.js';
+import { applyProfileToRuntime } from './profileRuntimeApplication.js';
+import {
+  createBootstrapResult,
+  type BootstrapRuntimeState,
+  type BootstrapProfileArgs,
+} from './profileBootstrap.js';
+import type { CliArgs } from './cliArgParser.js';
+import type { Settings } from './settings.js';
+import type { ProfileLoadResult } from './profileResolution.js';
+import type { ProviderModelResult } from './providerModelResolver.js';
+import type { SettingsService } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:config:postConfigRuntime');
+
+// ─── DTOs ───────────────────────────────────────────────────────────────────
+
+export interface PostConfigInput {
+  readonly config: Config;
+  readonly runtimeState: BootstrapRuntimeState;
+  readonly bootstrapArgs: BootstrapProfileArgs;
+  readonly argv: CliArgs;
+  readonly effectiveSettings: Settings;
+  readonly profileLoadResult: ProfileLoadResult;
+  readonly providerModelResult: ProviderModelResult;
+  readonly defaultDisabledTools: readonly string[];
+  readonly runtimeOverrides: { settingsService?: SettingsService };
+  readonly approvalMode: ApprovalMode;
+  readonly interactive: boolean;
+}
+
+// ─── Sub-functions ────────────────────────────────────────────────────────────
+
+/**
+ * Step 10: Set CLI runtime context.
+ * Step 11: Re-register provider infrastructure (conditional, dynamic import).
+ * This is the SECOND call to registerCliProviderInfrastructure — the first
+ * happened inside prepareRuntimeForProfile() (step 2).
+ */
+async function setupRuntimeContext(input: PostConfigInput): Promise<void> {
+  const { config, runtimeState, bootstrapArgs } = input;
+
+  const bootstrapRuntimeId =
+    runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
+  const baseBootstrapMetadata = {
+    ...(runtimeState.runtime.metadata ?? {}),
+    stage: 'post-config',
+  };
+
+  // Set disabled hooks from settings if present
+  const hooks = input.effectiveSettings.hooks as
+    | { disabled?: unknown }
+    | undefined;
+  if (hooks && 'disabled' in hooks) {
+    const disabledHooks = hooks.disabled;
+    if (Array.isArray(disabledHooks)) {
+      config.setDisabledHooks(disabledHooks as string[]);
+    }
+  }
+
+  const profileManager = new ProfileManager();
+  setCliRuntimeContext(runtimeState.runtime.settingsService, config, {
+    runtimeId: bootstrapRuntimeId,
+    metadata: baseBootstrapMetadata,
+    profileManager,
+  });
+
+  // Re-register provider infrastructure AFTER runtime context (step 11)
+  const { registerCliProviderInfrastructure } = await import(
+    '../runtime/runtimeSettings.js'
+  );
+  if (runtimeState.oauthManager) {
+    registerCliProviderInfrastructure(
+      runtimeState.providerManager,
+      runtimeState.oauthManager,
+      { messageBus: runtimeState.runtimeMessageBus },
+    );
+  }
+
+  logger.debug(
+    () => `[bootstrap] Runtime context set, runtimeId=${bootstrapRuntimeId}`,
+  );
+  void bootstrapArgs; // used above indirectly
+}
+
+/**
+ * Steps 12-13: Apply profile snapshot to runtime, then switch active provider.
+ */
+async function activateProviderAndProfile(
+  input: PostConfigInput,
+): Promise<string> {
+  const { bootstrapArgs, argv, profileLoadResult, providerModelResult } = input;
+
+  const profileApplicationResult = await applyProfileToRuntime({
+    loadedProfile: profileLoadResult.loadedProfile,
+    profileToLoad: profileLoadResult.profileToLoad ?? undefined,
+    bootstrapArgs,
+    argv,
+    finalModel: providerModelResult.model,
+    finalProvider: providerModelResult.provider,
+    profileWarnings: [...profileLoadResult.profileWarnings],
+  });
+
+  const finalProvider = profileApplicationResult.resolvedFinalProvider;
+
+  const runtimeContext = getCliRuntimeContext();
+  const bootstrapResult = createBootstrapResult({
+    runtime: runtimeContext,
+    providerManager: input.runtimeState.providerManager,
+    oauthManager: input.runtimeState.oauthManager,
+    bootstrapArgs,
+    profileApplication: {
+      providerName:
+        profileApplicationResult.resolvedProviderAfterProfile ?? finalProvider,
+      modelName:
+        profileApplicationResult.resolvedModelAfterProfile ??
+        providerModelResult.model,
+      ...(profileApplicationResult.resolvedBaseUrlAfterProfile
+        ? { baseUrl: profileApplicationResult.resolvedBaseUrlAfterProfile }
+        : {}),
+      warnings: [...profileApplicationResult.profileWarnings],
+    },
+  });
+
+  // Store bootstrap args on config
+  (
+    input.config as Config & { _bootstrapArgs?: BootstrapProfileArgs }
+  )._bootstrapArgs = bootstrapArgs;
+
+  if (bootstrapResult.profile.warnings.length > 0) {
+    for (const warning of bootstrapResult.profile.warnings) {
+      logger.warn(() => `[bootstrap] ${warning}`);
+    }
+  }
+
+  try {
+    await switchActiveProvider(finalProvider);
+  } catch (error) {
+    logger.warn(
+      () =>
+        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+  }
+
+  return finalProvider;
+}
+
+/**
+ * Step 14: Reapply CLI model override + CLI arg overrides after provider switch.
+ * switchActiveProvider clears ephemerals, so we reapply CLI args here.
+ */
+async function reapplyCliOverrides(
+  input: PostConfigInput,
+  finalProvider: string,
+): Promise<void> {
+  const { config, runtimeState, bootstrapArgs, argv, providerModelResult } =
+    input;
+
+  const cliModelOverride = (() => {
+    if (typeof argv.model === 'string') {
+      const trimmed = argv.model.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+    if (typeof bootstrapArgs.modelOverride === 'string') {
+      const trimmed = bootstrapArgs.modelOverride.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+    return undefined;
+  })();
+
+  if (cliModelOverride) {
+    runtimeState.runtime.settingsService.setProviderSetting(
+      finalProvider,
+      'model',
+      cliModelOverride,
+    );
+    config.setModel(cliModelOverride);
+    (config as Config & { _cliModelOverride?: string })._cliModelOverride =
+      cliModelOverride;
+    logger.debug(
+      () =>
+        `[bootstrap] Re-applied CLI model override '${cliModelOverride}' after provider activation`,
+    );
+  }
+
+  if (
+    bootstrapArgs &&
+    (bootstrapArgs.keyOverride ||
+      bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.baseurlOverride ||
+      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
+  ) {
+    const { applyCliArgumentOverrides } = await import(
+      '../runtime/runtimeSettings.js'
+    );
+    await applyCliArgumentOverrides(
+      {
+        key: argv.key,
+        keyfile: argv.keyfile,
+        baseurl: argv.baseurl,
+        set: argv.set,
+      },
+      bootstrapArgs,
+    );
+  }
+
+  void providerModelResult;
+}
+
+/**
+ * Step 15: Apply tool governance policy (ephemeral settings for allowed/excluded tools).
+ */
+function applyToolPolicies(input: PostConfigInput): void {
+  const {
+    config,
+    argv,
+    effectiveSettings,
+    profileLoadResult,
+    approvalMode,
+    interactive,
+  } = input;
+
+  // Note: effectiveSettings here may have allowedTools merged in from CLI
+  const allowedTools =
+    argv.allowedTools || effectiveSettings.allowedTools || [];
+
+  const explicitAllowedTools = buildNormalizedToolSet(
+    argv.allowedTools && argv.allowedTools.length > 0
+      ? argv.allowedTools
+      : (effectiveSettings.allowedTools ?? []),
+  );
+
+  const profileAllowedTools = buildNormalizedToolSet(
+    config.getEphemeralSetting('tools.allowed'),
+  );
+
+  const applyPolicy = (allowedSet: Set<string> | undefined): void => {
+    if (allowedSet === undefined) {
+      config.setEphemeralSetting('tools.allowed', undefined);
+    } else {
+      config.setEphemeralSetting(
+        'tools.allowed',
+        Array.from(allowedSet).sort(),
+      );
+    }
+  };
+
+  const experimentalAcp = argv.experimentalAcp;
+
+  if (!interactive && !experimentalAcp) {
+    if (approvalMode === ApprovalMode.YOLO) {
+      if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+        const finalAllowed = new Set(profileAllowedTools);
+        explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
+        applyPolicy(finalAllowed);
+      } else {
+        applyPolicy(undefined);
+      }
+    } else {
+      const baseAllowed = new Set<string>(
+        READ_ONLY_TOOL_NAMES.map(normalizeToolNameForPolicy),
+      );
+      explicitAllowedTools.forEach((tool) => baseAllowed.add(tool));
+      if (approvalMode === ApprovalMode.AUTO_EDIT) {
+        baseAllowed.add(EDIT_TOOL_NAME);
+      }
+
+      const finalAllowed =
+        profileAllowedTools.size > 0
+          ? new Set(
+              [...baseAllowed].filter((tool) => profileAllowedTools.has(tool)),
+            )
+          : baseAllowed;
+
+      applyPolicy(finalAllowed);
+    }
+  } else if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+    const finalAllowed = new Set(profileAllowedTools);
+    explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
+    applyPolicy(finalAllowed);
+  }
+
+  void allowedTools;
+  void profileLoadResult;
+}
+
+/**
+ * Step 16: Apply emojifilter, profile ephemeral settings, CLI /set args, disabled hooks.
+ */
+function applyEphemeralSettings(input: PostConfigInput): void {
+  const {
+    config,
+    runtimeState,
+    bootstrapArgs,
+    argv,
+    effectiveSettings,
+    profileLoadResult,
+    runtimeOverrides,
+  } = input;
+
+  const settingsService = runtimeState.runtime.settingsService;
+  if (!runtimeOverrides.settingsService) {
+    logger.warn(
+      '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
+    );
+  }
+  if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {
+    settingsService.set('emojifilter', effectiveSettings.emojifilter);
+  }
+
+  // Apply ephemeral settings from profile (--profile-load or --profile)
+  // Skip ALL profile ephemeral settings if --provider was explicitly specified
+  const profileToLoad = profileLoadResult.profileToLoad;
+  if (
+    (profileToLoad || bootstrapArgs.profileJson !== null) &&
+    effectiveSettings &&
+    argv.provider === undefined
+  ) {
+    const ephemeralKeys = [
+      'auth-key',
+      'auth-keyfile',
+      'context-limit',
+      'compression-threshold',
+      'base-url',
+      'tool-format',
+      'api-version',
+      'custom-headers',
+      'shell-replacement',
+      'authOnly',
+    ];
+
+    for (const key of ephemeralKeys) {
+      const value = (effectiveSettings as Record<string, unknown>)[key];
+      if (value !== undefined) {
+        config.setEphemeralSetting(key, value);
+      }
+    }
+  }
+
+  const cliSetResult = applyCliSetArguments(config, argv.set);
+
+  if (Object.keys(cliSetResult.modelParams).length > 0) {
+    (
+      config as Config & { _cliModelParams?: Record<string, unknown> }
+    )._cliModelParams = cliSetResult.modelParams;
+  }
+}
+
+/**
+ * Step 17: Seed default disabled tools, store profile model params, store bootstrap args, log warnings.
+ */
+function finalizeMetadata(input: PostConfigInput): void {
+  const { config, profileLoadResult, defaultDisabledTools } = input;
+
+  // Store profile model params on config
+  if (profileLoadResult.profileModelParams) {
+    (
+      config as Config & { _profileModelParams?: Record<string, unknown> }
+    )._profileModelParams = profileLoadResult.profileModelParams;
+  }
+
+  // Seed tools.disabled with defaultDisabledTools from settings
+  if (Array.isArray(defaultDisabledTools) && defaultDisabledTools.length > 0) {
+    const currentDisabled = Array.isArray(
+      config.getEphemeralSetting('tools.disabled'),
+    )
+      ? (config.getEphemeralSetting('tools.disabled') as string[])
+      : [];
+    const currentAllowed = buildNormalizedToolSet(
+      config.getEphemeralSetting('tools.allowed'),
+    );
+    const disabledSet = new Set(currentDisabled);
+    for (const toolName of defaultDisabledTools) {
+      if (!currentAllowed.has(normalizeToolNameForPolicy(toolName))) {
+        disabledSet.add(toolName);
+      }
+    }
+    config.setEphemeralSetting('tools.disabled', Array.from(disabledSet));
+  }
+}
+
+// ─── Main orchestrator ────────────────────────────────────────────────────────
+
+/**
+ * Orchestrates all post-Config side effects in the correct order.
+ *
+ * Step 10: setCliRuntimeContext()
+ * Step 11: registerCliProviderInfrastructure() — re-registration, conditional, dynamic import
+ * Step 12: applyProfileToRuntime() — snapshot application
+ * Step 13: switchActiveProvider()
+ * Step 14: reapplyCliOverrides() — CLI args win after provider switch clears ephemerals
+ * Step 15: applyToolGovernance() — tool policy (ephemeral settings for allowed/excluded tools)
+ * Step 16: applyEphemeralSettings() — emojifilter, profile ephemerals, CLI /set args, disabled hooks
+ * Step 17: finalizeMetadata() — seed default disabled tools, store model params, store bootstrap args, log warnings
+ */
+export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
+  // Step 10-11: Set runtime context + re-register provider infra
+  await setupRuntimeContext(input);
+
+  // Steps 12-13: Apply profile + switch provider
+  const finalProvider = await activateProviderAndProfile(input);
+
+  // Step 14: Reapply CLI overrides after provider switch
+  await reapplyCliOverrides(input, finalProvider);
+
+  // Step 15: Apply tool governance policy
+  applyToolPolicies(input);
+
+  // Step 16: Apply ephemeral settings
+  applyEphemeralSettings(input);
+
+  // Step 17: Finalize metadata
+  finalizeMetadata(input);
+
+  return input.config;
+}

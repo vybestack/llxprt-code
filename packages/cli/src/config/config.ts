@@ -9,65 +9,47 @@
 import process from 'node:process';
 import {
   Config,
-  setLlxprtMdFilename as setServerGeminiMdFilename,
-  getCurrentLlxprtMdFilename,
-  ApprovalMode,
-  DEFAULT_GEMINI_MODEL,
-  DEFAULT_FILE_FILTERING_OPTIONS,
-  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-  FileDiscoveryService,
-  TelemetryTarget,
   OutputFormat,
-  ProfileManager,
-  ShellTool,
-  EditTool,
-  WriteFileTool,
+  isRipgrepAvailable,
+  type GeminiCLIExtension,
   SettingsService,
   DebugLogger,
-  isRipgrepAvailable,
-  normalizeShellReplacement,
-  type GeminiCLIExtension,
-  type Profile,
-  debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { Settings, loadSettings } from './settings.js';
-import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
+
+import { Settings } from './settings.js';
 import { createPolicyEngineConfig } from './policy.js';
-
-import { annotateActiveExtensions } from './extension.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
-import { resolvePath } from '../utils/resolvePath.js';
-import { appEvents } from '../utils/events.js';
+import { allowedMcpServers, mergeMcpServers } from './mcpServerConfig.js';
+import { type CliArgs } from './cliArgParser.js';
+import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-import { isWorkspaceTrusted } from './trustedFolders.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
-  createBootstrapResult,
-  type BootstrapProfileArgs,
 } from './profileBootstrap.js';
-import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
-import { applyProfileSnapshot } from '../runtime/profileSnapshot.js';
-import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
-import { switchActiveProvider } from '../runtime/providerSwitch.js';
-import { applyCliSetArguments } from './cliEphemeralSettings.js';
-
-import { loadProviderAliasEntries } from '../providers/providerAliases.js';
-
-import { loadHierarchicalLlxprtMemory } from './environmentLoader.js';
 import {
-  READ_ONLY_TOOL_NAMES,
-  EDIT_TOOL_NAME,
-  normalizeToolNameForPolicy,
-  buildNormalizedToolSet,
-  createToolExclusionFilter,
+  resolveProfileToLoad,
+  loadAndPrepareProfile,
+} from './profileResolution.js';
+import { resolveContextAndEnvironment } from './interactiveContext.js';
+import { loadHierarchicalLlxprtMemory } from './environmentLoader.js';
+import { resolveApprovalMode } from './approvalModeResolver.js';
+import { resolveProviderAndModel } from './providerModelResolver.js';
+import { buildConfig } from './configBuilder.js';
+import { finalizeConfig } from './postConfigRuntime.js';
+import {
   mergeExcludeTools,
+  createToolExclusionFilter,
 } from './toolGovernance.js';
-import { allowedMcpServers, mergeMcpServers } from './mcpServerConfig.js';
-import { type CliArgs } from './cliArgParser.js';
+
+import {
+  ShellTool,
+  EditTool,
+  WriteFileTool,
+  ApprovalMode,
+} from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:config');
 
@@ -83,10 +65,10 @@ export async function loadCliConfig(
   /**
    * @plan PLAN-20251020-STATELESSPROVIDER3.P06
    * @requirement REQ-SP3-001
-   * @pseudocode bootstrap-order.md lines 1-9
    */
-  const bootstrapParsed = parseBootstrapArgs();
 
+  // Step 1: Parse bootstrap args
+  const bootstrapParsed = parseBootstrapArgs();
   const parsedWithOverrides = {
     bootstrapArgs: bootstrapParsed.bootstrapArgs,
     runtimeMetadata: {
@@ -96,419 +78,63 @@ export async function loadCliConfig(
         bootstrapParsed.runtimeMetadata.settingsService,
     },
   };
-
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
 
+  // Step 2: Prepare runtime (also calls registerCliProviderInfrastructure internally)
   const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
 
-  /**
-   * Helper function to prepare profile data for application
-   * Extracts common logic used by both --profile and --profile-load
-   * @plan:PLAN-20251118-ISSUE533.P13
-   */
-  function prepareProfileForApplication(
-    profile: Profile,
-    profileSource: string, // 'inline' or profile name
-    argv: CliArgs,
-    baseSettings: Settings,
-  ): {
-    profileProvider: string | undefined;
-    profileModel: string | undefined;
-    profileModelParams: Record<string, unknown> | undefined;
-    profileBaseUrl: string | undefined;
-    effectiveSettings: Settings;
-  } {
-    // Extract profile values, respecting --provider override
-    const profileProvider =
-      argv.provider !== undefined ? undefined : profile.provider;
-    const profileModel =
-      argv.provider !== undefined ? undefined : profile.model;
-    const profileModelParams = profile.modelParams;
-    const profileBaseUrl =
-      typeof profile.ephemeralSettings?.['base-url'] === 'string'
-        ? profile.ephemeralSettings['base-url']
-        : undefined;
+  // Step 3: Profile resolution and loading
+  const { profileToLoad, profileExplicitlySpecified } = resolveProfileToLoad({
+    bootstrapArgs,
+    settings,
+    cliProvider: argv.provider,
+  });
 
-    // Log profile loading
-    const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
-    logger.debug(() => loadSummary);
+  const profileResult = await loadAndPrepareProfile({
+    bootstrapArgs,
+    settings,
+    argv,
+    profileToLoad,
+    profileExplicitlySpecified,
+  });
+  const effectiveSettings = profileResult.effectiveSettings;
 
-    // Merge ephemeral settings into settings object
-    let effectiveSettings = baseSettings;
-    if (argv.provider === undefined && profile.ephemeralSettings) {
-      effectiveSettings = {
-        ...baseSettings,
-        ...profile.ephemeralSettings,
-      } as Settings;
-      logger.debug(
-        () =>
-          `Merged ephemeral settings from ${profileSource === 'inline' ? 'inline profile' : `profile '${profileSource}'`}`,
-      );
-    } else if (argv.provider !== undefined) {
-      logger.debug(
-        () =>
-          `Skipping profile ephemeral settings because --provider was explicitly specified`,
-      );
-    }
-
-    return {
-      profileProvider,
-      profileModel,
-      profileModelParams,
-      profileBaseUrl,
-      effectiveSettings,
-    };
-  }
-
-  // Handle --profile (inline JSON) or --profile-load (file-based) early to apply profile settings
-  let effectiveSettings = settings;
-  let profileModel: string | undefined;
-  let profileProvider: string | undefined;
-  let profileModelParams: Record<string, unknown> | undefined;
-  let profileBaseUrl: string | undefined;
-  let loadedProfile: Profile | null = null;
-  const profileWarnings: string[] = [];
-
-  // @plan:PLAN-20251118-ISSUE533.P13 - Handle inline profile from --profile flag
-  // Check for both null and undefined since tests may not set this field
-  if (bootstrapArgs.profileJson != null) {
-    try {
-      const profile = JSON.parse(bootstrapArgs.profileJson) as Profile;
-      loadedProfile = profile;
-
-      const prepared = prepareProfileForApplication(
-        profile,
-        'inline',
-        argv,
-        settings,
-      );
-      profileProvider = prepared.profileProvider;
-      profileModel = prepared.profileModel;
-      profileModelParams = prepared.profileModelParams;
-      profileBaseUrl = prepared.profileBaseUrl;
-      effectiveSettings = prepared.effectiveSettings;
-    } catch (err) {
-      // Profile parsing/validation errors are thrown during parseBootstrapArgs
-      // If we get here, JSON.parse failed which shouldn't happen since it was already validated
-      throw new Error(
-        `Failed to parse inline profile: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-
-  const normaliseProfileName = (
-    value: string | null | undefined,
-  ): string | undefined => {
-    if (value === null || value === undefined) {
-      return undefined;
-    }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  };
-
-  // Check for profile to load - either from CLI arg, env var, or default profile setting
-  // BUT skip default profile if --provider is explicitly specified
-  // AND skip all file-based profiles entirely when an inline profile (--profile) is provided.
-  const profileToLoad =
-    bootstrapArgs.profileJson != null
-      ? undefined
-      : (normaliseProfileName(bootstrapArgs.profileName) ??
-        normaliseProfileName(process.env.LLXPRT_PROFILE) ??
-        (argv.provider === undefined
-          ? normaliseProfileName(
-              typeof settings.defaultProfile === 'string'
-                ? settings.defaultProfile
-                : undefined,
-            )
-          : undefined));
-
-  // Track whether profile was explicitly specified via --profile-load
-  const profileExplicitlySpecified =
-    bootstrapArgs.profileName != null &&
-    normaliseProfileName(bootstrapArgs.profileName) != null;
-
-  if (profileToLoad) {
-    try {
-      const profileManager = new ProfileManager();
-      const profile = await profileManager.loadProfile(profileToLoad);
-      loadedProfile = profile;
-
-      const prepared = prepareProfileForApplication(
-        profile,
-        profileToLoad,
-        argv,
-        settings,
-      );
-      profileProvider = prepared.profileProvider;
-      profileModel = prepared.profileModel;
-      profileModelParams = prepared.profileModelParams;
-      profileBaseUrl = prepared.profileBaseUrl;
-      effectiveSettings = prepared.effectiveSettings;
-
-      // Additional debugLogger.debug logging for file-based profiles (for backward compatibility)
-      const tempDebugMode =
-        argv.debug ||
-        [process.env.DEBUG, process.env.DEBUG_MODE].some(
-          (v) => v === 'true' || v === '1',
-        ) ||
-        false;
-
-      if (tempDebugMode) {
-        debugLogger.debug(
-          `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
-        );
-        if (profileProvider && profileModel) {
-          debugLogger.debug(
-            `Applied profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
-          );
-        }
-      }
-    } catch (error) {
-      const failureSummary = `Failed to load profile '${profileToLoad}': ${error instanceof Error ? error.message : String(error)}`;
-      logger.error(() => {
-        if (error instanceof Error && error.stack) {
-          return `${failureSummary}\n${error.stack}`;
-        }
-        return failureSummary;
-      });
-      debugLogger.error(failureSummary);
-
-      // If profile was explicitly specified via --profile-load, error out
-      if (profileExplicitlySpecified) {
-        throw error;
-      }
-
-      // Otherwise, warn and continue (profile from env var or default setting)
-      profileWarnings.push(failureSummary);
-      // Continue without the profile settings
-    }
-  }
-
-  // Calculate debugMode after profile settings have been applied
-  const debugMode =
-    argv.debug ||
-    [process.env.DEBUG, process.env.DEBUG_MODE].some(
-      (v) => v === 'true' || v === '1',
-    ) ||
-    false;
-
-  const memoryImportFormat = effectiveSettings.ui?.memoryImportFormat || 'tree';
-
-  // Handle IDE mode: CLI flag overrides settings
-  let ideMode: boolean;
-  if (argv.ideMode === 'enable') {
-    ideMode = true;
-  } else if (argv.ideMode === 'disable') {
-    ideMode = false;
-  } else {
-    // No CLI flag, use settings
-    ideMode = effectiveSettings.ui?.ideMode ?? false;
-  }
-
-  if (debugMode) {
-    debugLogger.debug('[DEBUG] IDE mode configuration:', {
-      'argv.ideMode': argv.ideMode,
-      'effectiveSettings.ui.ideMode': effectiveSettings.ui?.ideMode,
-      'final ideMode': ideMode,
-    });
-  }
-
-  // ideModeFeature flag removed - now using ideMode directly
-
-  // Folder trust feature flag removed - now using settings directly
-  const folderTrust = settings.folderTrust ?? false;
-  const trustedFolder = isWorkspaceTrusted(settings) ?? false;
-
-  const allExtensions = annotateActiveExtensions(
-    extensions,
+  // Step 4: Context and environment resolution (uses originalSettings for trust — security critical)
+  const context = resolveContextAndEnvironment({
+    argv,
+    effectiveSettings,
+    originalSettings: settings,
     cwd,
+    extensions,
     extensionEnablementManager,
-  );
+  });
 
-  const activeExtensions = extensions.filter(
-    (_, i) => allExtensions[i].isActive,
-  );
-
-  // Set the context filename in the server's memoryTool module BEFORE loading memory
-  // TODO(b/343434939): This is a bit of a hack. The contextFileName should ideally be passed
-  // directly to the Config constructor in core, and have core handle setLlxprtMdFilename.
-  // However, loadHierarchicalLlxprtMemory is called *before* createServerConfig.
-  if (effectiveSettings.ui?.contextFileName) {
-    setServerGeminiMdFilename(effectiveSettings.ui.contextFileName);
-  } else {
-    // Reset to default if not provided in settings.
-    setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
-  }
-
-  const fileService = new FileDiscoveryService(cwd);
-
-  const memoryFileFiltering = {
-    ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-    ...effectiveSettings.fileFiltering,
-  };
-
-  const fileFiltering = {
-    ...DEFAULT_FILE_FILTERING_OPTIONS,
-    ...effectiveSettings.fileFiltering,
-  };
-
-  const includeDirectoriesFromSettings =
-    effectiveSettings.includeDirectories || [];
-  const includeDirectoriesFromCli = argv.includeDirectories || [];
-  const includeDirectories = includeDirectoriesFromSettings
-    .map(resolvePath)
-    .concat(includeDirectoriesFromCli.map(resolvePath));
-
-  const includeDirectoriesProvided = includeDirectories.length > 0;
-  const cliLoadMemoryPreference = argv.loadMemoryFromIncludeDirectories;
-  const settingsLoadMemoryPreference =
-    effectiveSettings.loadMemoryFromIncludeDirectories;
-
-  let resolvedLoadMemoryFromIncludeDirectories =
-    cliLoadMemoryPreference ?? settingsLoadMemoryPreference ?? false;
-
-  if (
-    !resolvedLoadMemoryFromIncludeDirectories &&
-    includeDirectoriesProvided &&
-    cliLoadMemoryPreference === undefined &&
-    settingsLoadMemoryPreference !== true
-  ) {
-    resolvedLoadMemoryFromIncludeDirectories = true;
-  }
-
-  const jitContextEnabled = effectiveSettings.experimental?.jitContext ?? true;
-
+  // Step 5: Memory loading
   let memoryContent = '';
   let fileCount = 0;
   let filePaths: string[] = [];
 
-  if (!jitContextEnabled) {
-    // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
-    const result = await loadHierarchicalLlxprtMemory(
+  if (!context.jitContextEnabled) {
+    const memoryResult = await loadHierarchicalLlxprtMemory(
       cwd,
-      resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
-      debugMode,
-      fileService,
+      context.resolvedLoadMemoryFromIncludeDirectories
+        ? (context.includeDirectories as string[])
+        : [],
+      context.debugMode,
+      context.fileService,
       effectiveSettings,
-      allExtensions,
-      trustedFolder,
-      memoryImportFormat,
-      memoryFileFiltering,
+      context.allExtensions,
+      context.trustedFolder,
+      context.memoryImportFormat,
+      context.memoryFileFiltering,
     );
-    memoryContent = result.memoryContent;
-    fileCount = result.fileCount;
-    filePaths = result.filePaths;
+    memoryContent = memoryResult.memoryContent;
+    fileCount = memoryResult.fileCount;
+    filePaths = memoryResult.filePaths;
   }
 
-  let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
-  const question =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
-
-  const extensionContextFilePaths = allExtensions
-    .filter((ext) => ext.isActive)
-    .flatMap((ext) => ext.contextFiles);
-
-  // Determine approval mode with backward compatibility
-  let approvalMode: ApprovalMode;
-  if (argv.approvalMode) {
-    // New --approval-mode flag takes precedence
-    switch (argv.approvalMode) {
-      case 'yolo':
-        approvalMode = ApprovalMode.YOLO;
-        break;
-      case 'auto_edit':
-        approvalMode = ApprovalMode.AUTO_EDIT;
-        break;
-      case 'default':
-        approvalMode = ApprovalMode.DEFAULT;
-        break;
-      default:
-        throw new Error(
-          `Invalid approval mode: ${argv.approvalMode}. Valid values are: yolo, auto_edit, default`,
-        );
-    }
-  } else {
-    // Fallback to legacy --yolo flag behavior
-    approvalMode =
-      argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
-  }
-
-  // Override approval mode if disableYoloMode or secureModeEnabled is set.
-  if (
-    effectiveSettings.security?.disableYoloMode ||
-    effectiveSettings.admin?.secureModeEnabled
-  ) {
-    if (approvalMode === ApprovalMode.YOLO) {
-      if (effectiveSettings.admin?.secureModeEnabled) {
-        logger.error('YOLO mode is disabled by "secureModeEnabled" setting.');
-      } else {
-        logger.error('YOLO mode is disabled by the "disableYoloMode" setting.');
-      }
-      throw new Error(
-        'Cannot start in YOLO mode since it is disabled by your admin',
-      );
-    }
-    // Note: We only block YOLO mode here. AUTO_EDIT and other modes are still
-    // allowed since disableYoloMode specifically targets YOLO mode only.
-  } else if (approvalMode === ApprovalMode.YOLO) {
-    debugLogger.warn(
-      'YOLO mode is enabled. All tool calls will be automatically approved.',
-    );
-  }
-
-  // Force approval mode to default if the folder is not trusted.
-  if (!trustedFolder && approvalMode !== ApprovalMode.DEFAULT) {
-    logger.log(
-      `Approval mode overridden to "default" because the current folder is not trusted.`,
-    );
-    approvalMode = ApprovalMode.DEFAULT;
-  }
-
-  // Fix: If promptWords are provided (and non-empty), always use non-interactive mode
-  const hasPromptWords =
-    argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
-  const interactive =
-    !!argv.promptInteractive ||
-    !!argv.experimentalAcp ||
-    (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
-
-  const allowedTools = argv.allowedTools || settings.allowedTools || [];
-  const allowedToolsSet = new Set(allowedTools);
-
-  // In non-interactive mode, exclude tools that require a prompt.
-  const extraExcludes: string[] = [];
-  if (!interactive && !argv.experimentalAcp) {
-    const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
-    const autoEditExcludes = [ShellTool.Name];
-
-    const toolExclusionFilter = createToolExclusionFilter(
-      allowedTools,
-      allowedToolsSet,
-    );
-
-    switch (approvalMode) {
-      case ApprovalMode.DEFAULT:
-        // In default non-interactive mode, all tools that require approval are excluded.
-        extraExcludes.push(...defaultExcludes.filter(toolExclusionFilter));
-        break;
-      case ApprovalMode.AUTO_EDIT:
-        // In auto-edit non-interactive mode, only tools that still require a prompt are excluded.
-        extraExcludes.push(...autoEditExcludes.filter(toolExclusionFilter));
-        break;
-      case ApprovalMode.YOLO:
-        // No extra excludes for YOLO mode.
-        break;
-      default:
-        // This should never happen due to validation earlier, but satisfies the linter
-        break;
-    }
-  }
-
-  const excludeTools = mergeExcludeTools(
-    effectiveSettings,
-    activeExtensions,
-    extraExcludes.length > 0 ? extraExcludes : undefined,
-  );
+  // Step 6: MCP server resolution
+  let mcpServers = mergeMcpServers(effectiveSettings, context.activeExtensions);
   const blockedMcpServers: Array<{ name: string; extensionName: string }> = [];
 
   if (!argv.allowedMcpServerNames) {
@@ -519,7 +145,6 @@ export async function loadCliConfig(
         blockedMcpServers,
       );
     }
-
     if (effectiveSettings.excludeMCPServers) {
       const excludedNames = new Set(
         effectiveSettings.excludeMCPServers.filter(Boolean),
@@ -531,7 +156,6 @@ export async function loadCliConfig(
       }
     }
   }
-
   if (argv.allowedMcpServerNames) {
     mcpServers = allowedMcpServers(
       mcpServers,
@@ -540,75 +164,50 @@ export async function loadCliConfig(
     );
   }
 
-  const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
+  // Step 7: Approval mode resolution
+  const approvalMode = resolveApprovalMode({
+    cliApprovalMode: argv.approvalMode,
+    cliYolo: argv.yolo,
+    disableYoloMode: effectiveSettings.security?.disableYoloMode,
+    secureModeEnabled: effectiveSettings.admin?.secureModeEnabled,
+    trustedFolder: context.trustedFolder,
+  });
 
-  // Handle provider selection FIRST with proper precedence
-  // Priority: CLI arg > Profile > Environment > Default
-  let finalProvider: string;
-  if (argv.provider) {
-    finalProvider = argv.provider;
-  } else if (profileProvider && profileProvider.trim() !== '') {
-    // Use profile provider only if it's not empty/whitespace
-    finalProvider = profileProvider;
-  } else if (process.env.LLXPRT_DEFAULT_PROVIDER) {
-    finalProvider = process.env.LLXPRT_DEFAULT_PROVIDER;
-  } else {
-    finalProvider = 'gemini';
-  }
-
-  logger.debug(
-    () =>
-      `Provider selection: argv=${argv.provider}, profile=${profileProvider}, env=${process.env.LLXPRT_DEFAULT_PROVIDER}, final=${finalProvider}`,
-  );
-
-  // If provider is a known alias with defaultModel, use it as a fallback when no model is otherwise specified.
-  // This prevents `model.missing` during Config construction for non-gemini providers.
-  const aliasDefaultModel = (() => {
-    try {
-      const entry = loadProviderAliasEntries().find(
-        (candidate: { alias: string }) => candidate.alias === finalProvider,
-      );
-      const candidate = entry?.config?.defaultModel;
-      return typeof candidate === 'string' && candidate.trim()
-        ? candidate.trim()
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  })();
-
-  const finalModel: string =
-    argv.model ||
-    profileModel ||
-    effectiveSettings.model ||
-    process.env.LLXPRT_DEFAULT_MODEL ||
-    process.env.GEMINI_MODEL ||
-    // If no model specified and provider is gemini, use the Gemini default
-    (finalProvider === 'gemini'
-      ? DEFAULT_GEMINI_MODEL
-      : aliasDefaultModel || '');
+  // Step 8: Provider and model resolution
+  const providerModel = resolveProviderAndModel({
+    cliProvider: argv.provider,
+    profileProvider: profileResult.profileProvider,
+    envDefaultProvider: process.env.LLXPRT_DEFAULT_PROVIDER,
+    cliModel: argv.model,
+    profileModel: profileResult.profileModel,
+    settingsModel: effectiveSettings.model,
+    envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
+    envGeminiModel: process.env.GEMINI_MODEL,
+  });
 
   // Ensure SettingsService reflects the selected model so Config#getModel picks it up
-  if (finalModel && finalModel.trim() !== '') {
-    const targetProviderForModel = finalProvider;
-    const settingsServiceForModel = runtimeState.runtime.settingsService;
-    settingsServiceForModel.setProviderSetting(
-      targetProviderForModel,
+  if (providerModel.model && providerModel.model.trim() !== '') {
+    runtimeState.runtime.settingsService.setProviderSetting(
+      providerModel.provider,
       'model',
-      finalModel,
+      providerModel.model,
     );
   }
 
-  // The screen reader argument takes precedence over the accessibility setting.
+  // Intermediate: compute screen reader, allowed tools, effectiveSettings with tools,
+  // policy engine, output format, ripgrep, admin flags, exclude tools, sandbox, question
   const screenReader =
     argv.screenReader !== undefined
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
+  const allowedTools = argv.allowedTools || settings.allowedTools || [];
+  const allowedToolsSet = new Set(allowedTools);
+
   // Merge CLI allowed tools into effectiveSettings for policy engine
-  // The allowedTools computed from CLI args needs to be available to the policy engine
+  let effectiveSettingsWithTools = effectiveSettings;
   if (allowedTools.length > 0) {
-    effectiveSettings = {
+    effectiveSettingsWithTools = {
       ...effectiveSettings,
       tools: {
         ...effectiveSettings.tools,
@@ -617,9 +216,8 @@ export async function loadCliConfig(
     };
   }
 
-  // Create policy engine config from settings and approval mode
   const policyEngineConfig = await createPolicyEngineConfig(
-    effectiveSettings,
+    effectiveSettingsWithTools,
     approvalMode,
   );
 
@@ -628,8 +226,6 @@ export async function loadCliConfig(
       ? OutputFormat.JSON
       : OutputFormat.TEXT;
 
-  // Auto-detect ripgrep when useRipgrep is not explicitly set in settings
-  // Precedence: CLI arg (if available) > explicit setting in files > auto-detection
   let useRipgrepSetting = effectiveSettings.useRipgrep;
   if (useRipgrepSetting === undefined) {
     const ripgrepAvailable = await isRipgrepAvailable();
@@ -641,541 +237,82 @@ export async function loadCliConfig(
     );
   }
 
-  // Calculate mcpEnabled based on admin settings
   const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
   const extensionsEnabled =
     effectiveSettings.admin?.extensions?.enabled ?? true;
   const adminSkillsEnabled = effectiveSettings.admin?.skills?.enabled ?? true;
 
-  const config = new Config({
-    sessionId,
-    embeddingModel: undefined, // No embedding model configured for llxprt-code
-    sandbox: sandboxConfig,
-    targetDir: cwd,
-    includeDirectories,
-    loadMemoryFromIncludeDirectories: resolvedLoadMemoryFromIncludeDirectories,
-    debugMode,
-    outputFormat,
-    question,
+  // Non-interactive extra excludes
+  const extraExcludes: string[] = [];
+  if (!context.interactive && !argv.experimentalAcp) {
+    const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
+    const autoEditExcludes = [ShellTool.Name];
+    const toolExclusionFilter = createToolExclusionFilter(
+      allowedTools,
+      allowedToolsSet,
+    );
 
-    coreTools: effectiveSettings.coreTools || undefined,
-    allowedTools: allowedTools.length > 0 ? allowedTools : undefined,
-    policyEngineConfig,
+    switch (approvalMode) {
+      case ApprovalMode.DEFAULT:
+        extraExcludes.push(...defaultExcludes.filter(toolExclusionFilter));
+        break;
+      case ApprovalMode.AUTO_EDIT:
+        extraExcludes.push(...autoEditExcludes.filter(toolExclusionFilter));
+        break;
+      default:
+        break;
+    }
+  }
+
+  const excludeTools = mergeExcludeTools(
+    effectiveSettings,
+    context.activeExtensions,
+    extraExcludes.length > 0 ? extraExcludes : undefined,
+  );
+
+  const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
+
+  const question =
+    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+
+  // Step 9: Build Config object
+  const config = buildConfig({
+    sessionId,
+    cwd,
+    argv,
+    effectiveSettings: effectiveSettingsWithTools,
+    context,
+    approvalMode,
+    providerModel,
+    sandboxConfig,
+    mcpServers,
     excludeTools,
-    toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
-    toolCallCommand: effectiveSettings.toolCallCommand,
-    mcpServerCommand: mcpEnabled
-      ? effectiveSettings.mcpServerCommand
-      : undefined,
-    mcpServers: mcpEnabled ? mcpServers : {},
+    memoryContent,
+    fileCount,
+    filePaths,
+    policyEngineConfig,
+    question,
+    screenReader,
+    useRipgrepSetting,
     mcpEnabled,
     extensionsEnabled,
     adminSkillsEnabled,
-    allowedMcpServers: mcpEnabled
-      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
-      : undefined,
-
-    userMemory: memoryContent,
-    llxprtMdFileCount: fileCount,
-    llxprtMdFilePaths: filePaths,
-    approvalMode,
-    showMemoryUsage:
-      argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
-    disableYoloMode:
-      effectiveSettings.security?.disableYoloMode ||
-      effectiveSettings.admin?.secureModeEnabled,
-    accessibility: {
-      ...effectiveSettings.accessibility,
-      screenReader,
-    },
-    telemetry: {
-      enabled: argv.telemetry ?? effectiveSettings.telemetry?.enabled,
-      target: (argv.telemetryTarget ??
-        effectiveSettings.telemetry?.target) as TelemetryTarget,
-      otlpEndpoint:
-        argv.telemetryOtlpEndpoint ??
-        process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-        effectiveSettings.telemetry?.otlpEndpoint,
-      logPrompts:
-        argv.telemetryLogPrompts ?? effectiveSettings.telemetry?.logPrompts,
-      outfile: argv.telemetryOutfile ?? effectiveSettings.telemetry?.outfile,
-      logConversations: effectiveSettings.telemetry?.logConversations,
-      logResponses: effectiveSettings.telemetry?.logResponses,
-      redactSensitiveData: effectiveSettings.telemetry?.redactSensitiveData,
-      redactFilePaths: effectiveSettings.telemetry?.redactFilePaths,
-      redactUrls: effectiveSettings.telemetry?.redactUrls,
-      redactEmails: effectiveSettings.telemetry?.redactEmails,
-      redactPersonalInfo: effectiveSettings.telemetry?.redactPersonalInfo,
-    },
-    usageStatisticsEnabled:
-      effectiveSettings.ui?.usageStatisticsEnabled ?? true,
-    // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
-    fileFiltering,
-    checkpointing:
-      argv.checkpointing || effectiveSettings.checkpointing?.enabled,
-    dumpOnError: argv.dumponerror || false,
-    proxy:
-      argv.proxy ||
-      process.env.HTTPS_PROXY ||
-      process.env.https_proxy ||
-      process.env.HTTP_PROXY ||
-      process.env.http_proxy,
-    cwd,
-    fileDiscoveryService: fileService,
-    bugCommand: effectiveSettings.bugCommand,
-    model: finalModel,
-    extensionContextFilePaths,
-    maxSessionTurns: effectiveSettings.ui?.maxSessionTurns ?? -1,
-    experimentalZedIntegration: argv.experimentalAcp || false,
-    listExtensions: argv.listExtensions || false,
-    activeExtensions: activeExtensions.map((e) => ({
-      name: e.name,
-      version: e.version,
-    })),
-    provider: finalProvider,
-    extensions: allExtensions,
-    enableExtensionReloading:
-      effectiveSettings.experimental?.extensionReloading,
-    blockedMcpServers: undefined, // Extension-based blocking handled elsewhere
-
-    sanitizationConfig: {
-      allowedEnvironmentVariables: [
-        ...(effectiveSettings.security?.environmentVariableRedaction?.allowed ??
-          []),
-      ],
-      blockedEnvironmentVariables: [
-        ...(effectiveSettings.security?.environmentVariableRedaction?.blocked ??
-          []),
-      ],
-      enableEnvironmentVariableRedaction:
-        effectiveSettings.security?.environmentVariableRedaction?.enabled ??
-        false,
-    },
-
-    skillsSupport: effectiveSettings.experimental?.skills,
-    disabledSkills: effectiveSettings.skills?.disabled,
-    noBrowser: !!process.env.NO_BROWSER,
-    summarizeToolOutput: effectiveSettings.summarizeToolOutput,
-    ideMode,
-    chatCompression: effectiveSettings.chatCompression,
-    interactive,
-    folderTrust,
-    trustedFolder,
-    shellReplacement: normalizeShellReplacement(
-      effectiveSettings.shellReplacement as
-        | 'allowlist'
-        | 'all'
-        | 'none'
-        | boolean
-        | undefined,
-    ),
-    useRipgrep: useRipgrepSetting,
-    shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
-    allowPtyThemeOverride: effectiveSettings.allowPtyThemeOverride,
-    ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
-    enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
-    eventEmitter: appEvents,
-    // @plan PLAN-20260211-SESSIONRECORDING.P24 — normalize --continue flag:
-    // bare --continue (yargs gives "") → true, --continue <id> → id string, absent → false
-    continueSession:
-      argv.continue === '' || argv.continue === true
-        ? true
-        : argv.continue || false,
-    // TODO: loading of hooks based on workspace trust
-    jitContextEnabled,
-    enableHooks: getEnableHooks(effectiveSettings),
-    enableHooksUI: getEnableHooksUI(effectiveSettings),
-    hooks: (() => {
-      const hooksConfig = effectiveSettings.hooks || {};
-      // Filter out the 'disabled' property from hooks config as it's handled separately
-      const { disabled: _disabled, ...eventHooks } = hooksConfig as {
-        disabled?: string[];
-        [key: string]: unknown;
-      };
-      return eventHooks;
-    })(),
-    onReload: async () => {
-      const refreshedSettings = loadSettings(cwd);
-      return {
-        disabledSkills: refreshedSettings.merged.skills?.disabled,
-        adminSkillsEnabled:
-          refreshedSettings.merged.admin?.skills?.enabled ?? adminSkillsEnabled,
-      };
-    },
+    outputFormat,
+    allowedTools,
   });
 
-  const enhancedConfig = config;
-
-  // Set disabled hooks from settings if present
-  if (effectiveSettings.hooks && 'disabled' in effectiveSettings.hooks) {
-    const disabledHooks = (effectiveSettings.hooks as { disabled?: unknown })
-      .disabled;
-    if (Array.isArray(disabledHooks)) {
-      enhancedConfig.setDisabledHooks(disabledHooks as string[]);
-    }
-  }
-
-  const bootstrapRuntimeId =
-    runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
-  const baseBootstrapMetadata = {
-    ...(runtimeState.runtime.metadata ?? {}),
-    stage: 'post-config',
-  };
-
-  const profileManager = new ProfileManager();
-  setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
-    runtimeId: bootstrapRuntimeId,
-    metadata: baseBootstrapMetadata,
-    profileManager,
-  });
-
-  // Register provider infrastructure AFTER runtime context but BEFORE any profile application
-  // This is critical for applyProfileSnapshot to access the provider manager
-  const { registerCliProviderInfrastructure } = await import(
-    '../runtime/runtimeSettings.js'
-  );
-  if (runtimeState.oauthManager) {
-    registerCliProviderInfrastructure(
-      runtimeState.providerManager,
-      runtimeState.oauthManager,
-      {
-        messageBus: runtimeState.runtimeMessageBus,
-      },
-    );
-  }
-
-  let appliedProfileResult: Awaited<
-    ReturnType<typeof applyProfileSnapshot>
-  > | null = null;
-
-  logger.debug(
-    () =>
-      `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
-  );
-
-  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--baseurl),
-  // create a synthetic profile to apply the auth credentials using the same flow as profile loading.
-  // This ensures auth is applied BEFORE provider switch, just like profile loading does.
-  if (
-    argv.provider &&
-    (bootstrapArgs.keyOverride ||
-      bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.baseurlOverride)
-  ) {
-    logger.debug(
-      () => '[bootstrap] Creating synthetic profile for CLI auth args',
-    );
-    const syntheticProfile: Profile = {
-      version: 1,
-      provider: argv.provider,
-      model: argv.model ?? finalModel,
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    if (bootstrapArgs.keyOverride) {
-      syntheticProfile.ephemeralSettings['auth-key'] =
-        bootstrapArgs.keyOverride;
-    }
-    if (bootstrapArgs.keyfileOverride) {
-      syntheticProfile.ephemeralSettings['auth-keyfile'] =
-        bootstrapArgs.keyfileOverride;
-    }
-    if (bootstrapArgs.baseurlOverride) {
-      syntheticProfile.ephemeralSettings['base-url'] =
-        bootstrapArgs.baseurlOverride;
-    }
-
-    appliedProfileResult = await applyProfileSnapshot(syntheticProfile, {
-      profileName: 'cli-args',
-    });
-
-    profileProvider = appliedProfileResult.providerName;
-    profileModel = appliedProfileResult.modelName;
-    if (appliedProfileResult.baseUrl) {
-      profileBaseUrl = appliedProfileResult.baseUrl;
-    }
-    if (appliedProfileResult.warnings.length > 0) {
-      profileWarnings.push(...appliedProfileResult.warnings);
-    }
-    logger.debug(
-      () =>
-        `[bootstrap] Applied CLI auth -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
-    );
-  } else if (
-    loadedProfile &&
-    (profileToLoad || bootstrapArgs.profileJson !== null) &&
-    argv.provider === undefined
-  ) {
-    // @plan:PLAN-20251118-ISSUE533.P13 - Apply inline or file-based profile through runtime
-    appliedProfileResult = await applyProfileSnapshot(loadedProfile, {
-      profileName: profileToLoad || 'inline-profile',
-    });
-
-    profileProvider = appliedProfileResult.providerName;
-    profileModel = appliedProfileResult.modelName;
-    if (appliedProfileResult.baseUrl) {
-      profileBaseUrl = appliedProfileResult.baseUrl;
-    }
-    if (appliedProfileResult.warnings.length > 0) {
-      profileWarnings.push(...appliedProfileResult.warnings);
-    }
-    // @plan:PLAN-20251211issue486b - Update finalProvider after applyProfile
-    // applyProfile may change the provider (e.g., to "load-balancer" for LB profiles)
-    // so we need to update finalProvider to match
-    if (profileProvider && profileProvider.trim() !== '') {
-      finalProvider = profileProvider;
-    }
-    logger.debug(
-      () =>
-        `[bootstrap] Applied profile '${profileToLoad || 'inline'}' -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
-    );
-  } else if (profileToLoad && argv.provider !== undefined) {
-    logger.debug(
-      () =>
-        `[bootstrap] Skipping profile application for '${profileToLoad}' because --provider was specified.`,
-    );
-  }
-
-  const cliModelOverride = (() => {
-    if (typeof argv.model === 'string') {
-      const trimmed = argv.model.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-    if (typeof bootstrapArgs.modelOverride === 'string') {
-      const trimmed = bootstrapArgs.modelOverride.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-    return undefined;
-  })();
-
-  const bootstrapRuntimeContext = getCliRuntimeContext();
-  const bootstrapResult = createBootstrapResult({
-    runtime: bootstrapRuntimeContext,
-    providerManager: runtimeState.providerManager,
-    oauthManager: runtimeState.oauthManager,
+  // Steps 10-17: Post-config runtime finalization
+  return finalizeConfig({
+    config,
+    runtimeState,
     bootstrapArgs,
-    profileApplication: {
-      providerName: profileProvider ?? finalProvider,
-      modelName: profileModel ?? finalModel,
-      ...(profileBaseUrl ? { baseUrl: profileBaseUrl } : {}),
-      warnings: profileWarnings.slice(),
-    },
+    argv,
+    effectiveSettings: effectiveSettingsWithTools,
+    profileLoadResult: profileResult,
+    providerModelResult: providerModel,
+    defaultDisabledTools: effectiveSettings.defaultDisabledTools ?? [],
+    runtimeOverrides,
+    approvalMode,
+    interactive: context.interactive,
   });
-
-  // Store bootstrap args in runtime context for later use
-  const configWithBootstrapArgs = enhancedConfig as Config & {
-    _bootstrapArgs?: BootstrapProfileArgs;
-  };
-  configWithBootstrapArgs._bootstrapArgs = bootstrapArgs;
-
-  if (bootstrapResult.profile.warnings.length > 0) {
-    for (const warning of bootstrapResult.profile.warnings) {
-      logger.warn(() => `[bootstrap] ${warning}`);
-    }
-  }
-
-  try {
-    await switchActiveProvider(finalProvider);
-  } catch (error) {
-    logger.warn(
-      () =>
-        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
-  }
-
-  if (cliModelOverride) {
-    runtimeState.runtime.settingsService.setProviderSetting(
-      finalProvider,
-      'model',
-      cliModelOverride,
-    );
-    enhancedConfig.setModel(cliModelOverride);
-    const configWithCliOverride = enhancedConfig as Config & {
-      _cliModelOverride?: string;
-    };
-    configWithCliOverride._cliModelOverride = cliModelOverride;
-    logger.debug(
-      () =>
-        `[bootstrap] Re-applied CLI model override '${cliModelOverride}' after provider activation`,
-    );
-  }
-
-  // Apply CLI argument overrides AFTER provider switch (switchActiveProvider clears ephemerals)
-  // Note: We already applied key/keyfile/baseurl earlier, but we need to reapply after provider switch
-  // Also apply --set arguments which weren't handled earlier
-  if (
-    bootstrapArgs &&
-    (bootstrapArgs.keyOverride ||
-      bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.baseurlOverride ||
-      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
-  ) {
-    const { applyCliArgumentOverrides } = await import(
-      '../runtime/runtimeSettings.js'
-    );
-    await applyCliArgumentOverrides(
-      {
-        key: argv.key,
-        keyfile: argv.keyfile,
-        baseurl: argv.baseurl,
-        set: argv.set,
-      },
-      bootstrapArgs,
-    );
-  }
-
-  const explicitAllowedTools = buildNormalizedToolSet(
-    argv.allowedTools && argv.allowedTools.length > 0
-      ? argv.allowedTools
-      : (settings.allowedTools ?? []),
-  );
-
-  const profileAllowedTools = buildNormalizedToolSet(
-    enhancedConfig.getEphemeralSetting('tools.allowed'),
-  );
-
-  const applyToolGovernancePolicy = (
-    allowedSet: Set<string> | undefined,
-  ): void => {
-    if (allowedSet === undefined) {
-      enhancedConfig.setEphemeralSetting('tools.allowed', undefined);
-    } else {
-      enhancedConfig.setEphemeralSetting(
-        'tools.allowed',
-        Array.from(allowedSet).sort(),
-      );
-    }
-  };
-
-  if (!interactive && !argv.experimentalAcp) {
-    if (approvalMode === ApprovalMode.YOLO) {
-      if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
-        const finalAllowed = new Set(profileAllowedTools);
-        explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
-        applyToolGovernancePolicy(finalAllowed);
-      } else {
-        applyToolGovernancePolicy(undefined);
-      }
-    } else {
-      const baseAllowed = new Set<string>(
-        READ_ONLY_TOOL_NAMES.map(normalizeToolNameForPolicy),
-      );
-      explicitAllowedTools.forEach((tool) => baseAllowed.add(tool));
-      if (approvalMode === ApprovalMode.AUTO_EDIT) {
-        baseAllowed.add(EDIT_TOOL_NAME);
-      }
-
-      const finalAllowed =
-        profileAllowedTools.size > 0
-          ? new Set(
-              [...baseAllowed].filter((tool) => profileAllowedTools.has(tool)),
-            )
-          : baseAllowed;
-
-      applyToolGovernancePolicy(finalAllowed);
-    }
-  } else if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
-    const finalAllowed = new Set(profileAllowedTools);
-    explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
-    applyToolGovernancePolicy(finalAllowed);
-  }
-
-  // Apply emojifilter setting from settings.json to SettingsService
-  // Only set if there isn't already an ephemeral setting (from /set command)
-  const settingsService = runtimeState.runtime.settingsService;
-  if (!runtimeOverrides.settingsService) {
-    /**
-     * @plan:PLAN-20250218-STATELESSPROVIDER.P06
-     * @requirement:REQ-SP-005
-     * Fallback path maintained temporarily until remaining entrypoints adopt
-     * runtime helpers. Remove once all callers supply a scoped SettingsService.
-     */
-    logger.warn(
-      '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
-    );
-  }
-  if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {
-    settingsService.set('emojifilter', effectiveSettings.emojifilter);
-  }
-
-  // Apply ephemeral settings from profile if loaded (either --profile-load or --profile)
-  // BUT skip ALL profile ephemeral settings if --provider was explicitly specified
-  // @plan:PLAN-20251118-ISSUE533.P13 - Also apply for inline profiles
-  if (
-    (profileToLoad || bootstrapArgs.profileJson !== null) &&
-    effectiveSettings &&
-    argv.provider === undefined
-  ) {
-    // Extract ephemeral settings that were merged from the profile
-    const ephemeralKeys = [
-      'auth-key',
-      'auth-keyfile',
-      'context-limit',
-      'compression-threshold',
-      'base-url',
-      'tool-format',
-      'api-version',
-      'custom-headers',
-      'shell-replacement',
-      'authOnly',
-    ];
-
-    for (const key of ephemeralKeys) {
-      const value = (effectiveSettings as Record<string, unknown>)[key];
-      if (value !== undefined) {
-        enhancedConfig.setEphemeralSetting(key, value);
-      }
-    }
-  }
-
-  const cliSetResult = applyCliSetArguments(enhancedConfig, argv.set);
-
-  if (Object.keys(cliSetResult.modelParams).length > 0) {
-    const configWithCliParams = enhancedConfig as Config & {
-      _cliModelParams?: Record<string, unknown>;
-    };
-    configWithCliParams._cliModelParams = cliSetResult.modelParams;
-  }
-
-  // Store profile model params on the config for later application
-  if (profileModelParams) {
-    // Attach profile params to config object with proper typing
-    const configWithProfile = enhancedConfig as Config & {
-      _profileModelParams?: Record<string, unknown>;
-    };
-    configWithProfile._profileModelParams = profileModelParams;
-  }
-
-  // Seed tools.disabled with defaultDisabledTools from settings.
-  // These tools are registered (discoverable) but soft-blocked by default.
-  // Users can override via /tools enable, which persists to their profile.
-  // Tools explicitly in tools.allowed (e.g. from a saved profile) are not re-disabled.
-  const defaultDisabled = effectiveSettings.defaultDisabledTools;
-  if (Array.isArray(defaultDisabled) && defaultDisabled.length > 0) {
-    const currentDisabled = Array.isArray(
-      enhancedConfig.getEphemeralSetting('tools.disabled'),
-    )
-      ? (enhancedConfig.getEphemeralSetting('tools.disabled') as string[])
-      : [];
-    const currentAllowed = buildNormalizedToolSet(
-      enhancedConfig.getEphemeralSetting('tools.allowed'),
-    );
-    const disabledSet = new Set(currentDisabled);
-    for (const toolName of defaultDisabled) {
-      if (!currentAllowed.has(normalizeToolNameForPolicy(toolName))) {
-        disabledSet.add(toolName);
-      }
-    }
-    const mergedDisabled = Array.from(disabledSet);
-    enhancedConfig.setEphemeralSetting('tools.disabled', mergedDisabled);
-  }
-
-  return enhancedConfig;
 }
