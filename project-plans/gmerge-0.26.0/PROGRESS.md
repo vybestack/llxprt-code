@@ -52,7 +52,7 @@
 | R36 | REIMPLEMENT | 93ae777 | DONE | 1d60766c2 | System scopes migration |
 | R37 | REIMPLEMENT | 0fa9a54 | DONE | 3ae52cbd1 | auth failure |
 | R38 | REIMPLEMENT | ee87c98 | DONE | cd3a71bf4 | fast return buffer |
-| R39 | REIMPLEMENT | cebe386 | TODO | | **HIGH RISK** MCP status hook |
+| R39 | REIMPLEMENT | cebe386 | DONE | 54ea7b615 | **HIGH RISK** MCP status hook |
 | R40 | REIMPLEMENT | 2a3c879 | TODO | | clearContext hooks |
 | R41 | REIMPLEMENT | 43846f4 | TODO | | package.ts error |
 | R42 | REIMPLEMENT | d8e9db3 | TODO | | package.ts follow-up |
