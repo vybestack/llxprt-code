@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import {
   initializeParser,
   isParserAvailable,
   parseShellCommand,
+  parseCommandDetails,
   extractCommandNames,
   hasCommandSubstitution,
   splitCommandsWithTree,
@@ -16,6 +17,7 @@ import {
   getInitializationError,
   collectCommandDetails,
 } from './shell-parser.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 /**
  * Tree-sitter parser tests.
@@ -86,6 +88,50 @@ describe('shell-parser', () => {
       expect(tree).toBeNull();
       // Re-initialize for remaining tests
       return initializeParser();
+    });
+  });
+
+  describe('timeout handling', () => {
+    it('should handle bash parser timeouts in parseShellCommand', async () => {
+      await initializeParser();
+      if (!isParserAvailable()) return;
+
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
+      const nowSpy = vi.spyOn(performance, 'now');
+      // First call sets the deadline, subsequent calls simulate time passing past it
+      nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
+
+      const command = 'ls -la';
+      const result = parseShellCommand(command);
+      expect(result).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Bash command parsing timed out for command:',
+        command,
+      );
+
+      nowSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('should handle bash parser timeouts in parseCommandDetails', async () => {
+      await initializeParser();
+      if (!isParserAvailable()) return;
+
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
+      const nowSpy = vi.spyOn(performance, 'now');
+      nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);
+
+      const command = 'ls -la';
+      const result = parseCommandDetails(command);
+      // When parseShellCommand times out, parseCommandDetails returns hasError: true
+      expect(result).toEqual({ details: [], hasError: true });
+
+      nowSpy.mockRestore();
+      errorSpy.mockRestore();
     });
   });
 
