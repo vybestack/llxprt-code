@@ -552,7 +552,7 @@ function instantiateChat(
   startHistory: Content[],
   runtimeContext: AgentRuntimeContext,
   contentGenerator: ContentGenerator,
-  logger: { debug: (fn: () => string) => void },
+  _logger: { debug: (fn: () => string) => void },
 ): GeminiChat | null {
   try {
     const generationConfig: GenerateContentConfig & {
@@ -574,7 +574,7 @@ function instantiateChat(
       startHistory,
     );
   } catch (error) {
-    reportError(
+    void reportError(
       error,
       'Error initializing Gemini chat session.',
       startHistory,
