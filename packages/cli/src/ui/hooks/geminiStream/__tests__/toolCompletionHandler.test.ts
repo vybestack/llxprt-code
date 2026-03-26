@@ -196,7 +196,9 @@ describe('classifyCompletedTools', () => {
   });
 
   it('uses DEFAULT_AGENT_ID when agentId is undefined', () => {
-    const tool = makeCompletedTool({ callId: 'call-1', agentId: undefined });
+    const tool = makeCompletedTool({ callId: 'call-1' });
+    // Force agentId to undefined to exercise the fallback in classifyCompletedTools
+    (tool.request as any).agentId = undefined;
     const result = classifyCompletedTools([tool]);
     expect(result.primaryTools).toHaveLength(1);
     expect(result.externalTools).toHaveLength(0);

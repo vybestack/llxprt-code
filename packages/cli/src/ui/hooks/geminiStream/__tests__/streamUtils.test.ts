@@ -571,9 +571,9 @@ describe('showCitations', () => {
     expect(showCitations(makeSettings(undefined), config)).toBe(false);
   });
 
-  it('returns false when getCodeAssistServer returns null', () => {
+  it('returns false when getCodeAssistServer returns undefined', () => {
     const config = makeConfig({ getSettingsService: vi.fn(() => null) });
-    mockGetCodeAssistServer.mockReturnValue(null);
+    mockGetCodeAssistServer.mockReturnValue(undefined);
     expect(showCitations(makeSettings(undefined), config)).toBe(false);
   });
 });
