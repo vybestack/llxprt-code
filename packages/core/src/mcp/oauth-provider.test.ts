@@ -773,8 +773,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const authProvider = new MCPOAuthProvider();
-      await authProvider.authenticate('test-server', configWithPort);
+      await MCPOAuthProvider.authenticate('test-server', configWithPort);
 
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
         12345,
@@ -820,8 +819,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const authProvider = new MCPOAuthProvider();
-      await authProvider.authenticate('test-server', configWithInvalidPort);
+      await MCPOAuthProvider.authenticate('test-server', configWithInvalidPort);
 
       // Should be called with 0 (OS assigned) because the port was invalid
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
@@ -868,8 +866,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const authProvider = new MCPOAuthProvider();
-      await authProvider.authenticate('test-server', configNoPort);
+      await MCPOAuthProvider.authenticate('test-server', configNoPort);
 
       // Should be called with 0 (OS assigned), not 80
       expect(mockHttpServer.listen).toHaveBeenCalledWith(

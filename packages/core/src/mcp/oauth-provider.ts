@@ -264,7 +264,7 @@ export class MCPOAuthProvider {
    * @param expectedState The state parameter to validate
    * @returns Object containing the port (available immediately) and a promise for the auth response
    */
-  private startCallbackServer(
+  private static startCallbackServer(
     expectedState: string,
     port?: number,
   ): {
@@ -402,7 +402,7 @@ export class MCPOAuthProvider {
    * @param urlString The URL string to parse
    * @returns The port number or undefined if not found or invalid
    */
-  private getPortFromUrl(urlString?: string): number | undefined {
+  private static getPortFromUrl(urlString?: string): number | undefined {
     if (!urlString) {
       return undefined;
     }

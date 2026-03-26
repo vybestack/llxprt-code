@@ -930,13 +930,15 @@ function calculateLayout(
     if (cached) {
       const visualLineOffset = visualLines.length;
       visualLines.push(...cached.visualLines);
-      cached.logicalToVisualMap.forEach(([relVisualIdx, logCol]) => {
-        logicalToVisualMap[logIndex].push([
-          visualLineOffset + relVisualIdx,
-          logCol,
-        ]);
-      });
-      cached.visualToLogicalMap.forEach(([, logCol]) => {
+      cached.logicalToVisualMap.forEach(
+        ([relVisualIdx, logCol]: [number, number]) => {
+          logicalToVisualMap[logIndex].push([
+            visualLineOffset + relVisualIdx,
+            logCol,
+          ]);
+        },
+      );
+      cached.visualToLogicalMap.forEach(([, logCol]: [number, number]) => {
         visualToLogicalMap.push([logIndex, logCol]);
       });
       transformedToLogicalMaps[logIndex] = cached.transformedToLogMap;

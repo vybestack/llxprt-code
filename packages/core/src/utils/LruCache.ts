@@ -28,4 +28,8 @@ export class LruCache<K, V> {
   clear(): void {
     this.cache.clear();
   }
+
+  get size(): number {
+    return this.cache.size;
+  }
 }
