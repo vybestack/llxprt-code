@@ -735,20 +735,12 @@ export class TokenAccessCoordinator {
   // Profile resolution helpers
   // --------------------------------------------------------------------------
 
-  /**
-   * Resolve current profile session metadata for a provider.
-   * Returns undefined if no current profile is active.
-   */
   async getCurrentProfileSessionMetadata(
     providerName: string,
   ): Promise<OAuthTokenRequestMetadata | undefined> {
     return resolveCurrentProfileSessionMetadata(providerName);
   }
 
-  /**
-   * Get the bucket for the current profile session.
-   * Resolution chain: scoped session → profile first bucket → unscoped session.
-   */
   async getCurrentProfileSessionBucket(
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
@@ -778,14 +770,6 @@ export class TokenAccessCoordinator {
     return undefined;
   }
 
-  /**
-   * Get the list of buckets for the current profile for a given provider.
-   * Returns empty array for single-bucket or non-OAuth profiles.
-   *
-   * Routes through _getProfileBucketsDelegate if set (used by OAuthManager
-   * to allow test spies on the facade's getProfileBuckets method to intercept
-   * internal calls made by this coordinator).
-   */
   async getProfileBuckets(
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
@@ -796,11 +780,6 @@ export class TokenAccessCoordinator {
     return this.doGetProfileBuckets(providerName, metadata);
   }
 
-  /**
-   * The real profile bucket resolution implementation.
-   * Called directly from OAuthManager.getProfileBuckets (the spy-able delegate),
-   * and also as the default when no delegate is registered.
-   */
   async doGetProfileBuckets(
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
