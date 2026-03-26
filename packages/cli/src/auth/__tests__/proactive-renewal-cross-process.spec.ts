@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
 import { executeTokenRefresh } from '../token-refresh-helper.js';
 import type { OAuthToken, OAuthProvider, TokenStore } from '../types.js';
+import type { ProviderRegistry } from '../provider-registry.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -146,18 +147,29 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
 });
 
 describe('executeTokenRefresh – refresh_token guard', () => {
-  it('skips refresh when disk refresh_token differs from original token', async () => {
-    const tokenStore = createMockTokenStore();
-    const provider = createMockProvider();
-    const providerRegistry = {
+  let tokenStore: TokenStore;
+  let provider: OAuthProvider;
+  let providerRegistry: Pick<ProviderRegistry, 'getProvider'>;
+  let renewalManager: ProactiveRenewalManager;
+
+  beforeEach(() => {
+    tokenStore = createMockTokenStore();
+    provider = createMockProvider();
+    providerRegistry = {
       getProvider: (_name: string) => provider,
     };
-    const renewalManager = new ProactiveRenewalManager(
+    renewalManager = new ProactiveRenewalManager(
       tokenStore,
       (_name: string) => provider,
       (_name: string) => true,
     );
+  });
 
+  afterEach(() => {
+    renewalManager.clearAllTimers();
+  });
+
+  it('skips refresh when disk refresh_token differs from original token', async () => {
     const originalToken = makeExpiredToken('access-A', 'refresh-R1');
     const diskToken = makeExpiredToken('access-A', 'refresh-R2');
 
@@ -169,7 +181,7 @@ describe('executeTokenRefresh – refresh_token guard', () => {
       originalToken,
       Math.floor(Date.now() / 1000) + 30,
       tokenStore,
-      providerRegistry as never,
+      providerRegistry as ProviderRegistry,
       renewalManager,
     );
 
@@ -180,17 +192,6 @@ describe('executeTokenRefresh – refresh_token guard', () => {
   });
 
   it('proceeds with refresh when disk refresh_token matches original', async () => {
-    const tokenStore = createMockTokenStore();
-    const provider = createMockProvider();
-    const providerRegistry = {
-      getProvider: (_name: string) => provider,
-    };
-    const renewalManager = new ProactiveRenewalManager(
-      tokenStore,
-      (_name: string) => provider,
-      (_name: string) => true,
-    );
-
     const originalToken = makeExpiredToken('access-A', 'refresh-R1');
     const diskToken = makeExpiredToken('access-A', 'refresh-R1');
     const refreshedToken = makeToken('access-B', 'refresh-R2', 3600);
@@ -204,7 +205,7 @@ describe('executeTokenRefresh – refresh_token guard', () => {
       originalToken,
       Math.floor(Date.now() / 1000) + 30,
       tokenStore,
-      providerRegistry as never,
+      providerRegistry as ProviderRegistry,
       renewalManager,
     );
 
