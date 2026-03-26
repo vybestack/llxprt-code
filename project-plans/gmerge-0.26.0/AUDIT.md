@@ -65,7 +65,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 272570c | REIMPLEMENTED | de72ae2b4 | skills default enabled — PASS |
 | 6900253 | REIMPLEMENTED | 234a2255f | keyboard shortcuts URL — PASS |
 | 4cfbe4c | REIMPLEMENTED | 76bc50193 | Homebrew detection — PASS |
-| 1b6b6d4 | REIMPLEMENTED | | centralize tool mapping |
+| 1b6b6d4 | REIMPLEMENTED | 895be1e83 | centralize tool mapping — PASS |
 | 0bebc66 | REIMPLEMENTED | | rationale before tool calls (was PICK) |
 | ec74134 | REIMPLEMENTED | | shell redirection security |
 | 1182168 | REIMPLEMENTED | | enhanced compression |

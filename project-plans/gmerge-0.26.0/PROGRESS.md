@@ -39,7 +39,7 @@
 | R23 | REIMPLEMENT | 272570c | DONE | de72ae2b4 | skills default enabled |
 | R24 | REIMPLEMENT | 6900253 | DONE | 234a2255f | keyboard shortcuts URL |
 | R25 | REIMPLEMENT | 4cfbe4c | DONE | 76bc50193 | Homebrew detection |
-| R26 | REIMPLEMENT | 1b6b6d4 | TODO | | centralize tool mapping |
+| R26 | REIMPLEMENT | 1b6b6d4 | DONE | 895be1e83 | centralize tool mapping |
 | R27 | REIMPLEMENT | 0bebc66 | TODO | | rationale before tool calls |
 | R28 | REIMPLEMENT | ec74134 | TODO | | shell redirection security |
 | R29 | REIMPLEMENT | 1182168 | TODO | | enhanced compression |
