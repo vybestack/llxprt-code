@@ -58,27 +58,6 @@ import {
   type ExecutionLoopContext,
 } from './subagentExecution.js';
 
-// --- Re-exports from subagentTypes.ts for backward compatibility (Issue #1581) ---
-// Value re-exports (backward-compatible — existed before decomposition)
-export {
-  SubagentTerminateMode,
-  ContextState,
-  templateString,
-} from './subagentTypes.js';
-// Type-only re-exports (backward-compatible)
-export type {
-  OutputObject,
-  PromptConfig,
-  ToolConfig,
-  OutputConfig,
-  SubAgentRuntimeOverrides,
-  ModelConfig,
-  RunConfig,
-} from './subagentTypes.js';
-// Additive exports (not previously public — no existing consumers)
-export { defaultEnvironmentContextLoader } from './subagentTypes.js';
-export type { EnvironmentContextLoader } from './subagentTypes.js';
-
 // --- Internal imports from subagentTypes.ts (used within this file) ---
 import {
   SubagentTerminateMode,
@@ -268,7 +247,17 @@ export class SubAgentScope {
   }
 
   private async prepareRun(context: ContextState) {
-    const chat = await this.createChatObject(context);
+    const chat = await createChatObject({
+      promptConfig: this.promptConfig,
+      modelConfig: this.modelConfig,
+      outputConfig: this.outputConfig,
+      toolConfig: this.toolConfig,
+      runtimeContext: this.runtimeContext,
+      contentGenerator: this.contentGenerator,
+      environmentContextLoader: this.environmentContextLoader,
+      foregroundConfig: this.config,
+      context,
+    });
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return null;
@@ -276,9 +265,12 @@ export class SubAgentScope {
     const abortController = new AbortController();
     this.activeAbortController = abortController;
     this.bindParentSignal(abortController);
-    const functionDeclarations = this.buildRuntimeFunctionDeclarations();
+    const functionDeclarations = buildRuntimeFunctionDeclarations(
+      this.runtimeContext.tools,
+      this.toolConfig,
+    );
     if (this.outputConfig?.outputs) {
-      functionDeclarations.push(...this.getScopeLocalFuncDefs());
+      functionDeclarations.push(...getScopeLocalFuncDefs(this.outputConfig));
     }
     return { chat, abortController, functionDeclarations };
   }
@@ -360,7 +352,11 @@ export class SubAgentScope {
         );
         if (recheck.shouldStop) break;
 
-        const todoReminder = await this.buildTodoCompletionPrompt();
+        const todoReminder = await buildTodoCompletionPrompt(
+          this.runtimeContext,
+          this.subagentId,
+          this.logger,
+        );
         const nextMessages = await checkGoalCompletion(
           execCtx,
           todoReminder,
@@ -369,10 +365,10 @@ export class SubAgentScope {
         if (!nextMessages) break;
         currentMessages = nextMessages;
       }
-      this.finalizeOutput();
+      finalizeOutput(this.output);
     } catch (error) {
       handleExecutionError(error, execCtx);
-      this.finalizeOutput();
+      finalizeOutput(this.output);
       throw error;
     } finally {
       await this.cleanupInteractive(schedulerDispose, abortController);
@@ -383,7 +379,11 @@ export class SubAgentScope {
     options: { schedulerFactory?: SubagentSchedulerFactory } | undefined,
   ) {
     return initInteractiveScheduler(options, {
-      schedulerConfig: this.createSchedulerConfig({ interactive: true }),
+      schedulerConfig: createSchedulerConfig(
+        this.toolExecutorContext,
+        this.config,
+        { interactive: true },
+      ),
       onMessage: this.onMessage,
       messageBus: this.messageBus,
       subagentId: this.subagentId,
@@ -450,7 +450,14 @@ export class SubAgentScope {
 
     for (const request of toolRequests) {
       if (request.name === 'self_emitvalue') {
-        manualParts.push(...this.handleEmitValueCall(request));
+        manualParts.push(
+          ...handleEmitValueCall(request, {
+            output: this.output,
+            onMessage: this.onMessage,
+            subagentId: this.subagentId,
+            logger: this.logger,
+          }),
+        );
       } else {
         schedulerRequests.push(request);
       }
@@ -463,7 +470,11 @@ export class SubAgentScope {
       await scheduler.schedule(schedulerRequests, abortController.signal);
       const completedCalls = await completionPromise;
       responseParts = responseParts.concat(
-        this.buildPartsFromCompletedCalls(completedCalls),
+        buildPartsFromCompletedCalls(completedCalls, {
+          onMessage: this.onMessage,
+          subagentId: this.subagentId,
+          logger: this.logger,
+        }),
       );
       const fatalCall = completedCalls.find(
         (call) =>
@@ -569,13 +580,25 @@ export class SubAgentScope {
         if (recheck.shouldStop) break;
 
         if (functionCalls.length > 0) {
-          currentMessages = await this.processFunctionCalls(
+          currentMessages = await processFunctionCalls(
             functionCalls,
             abortController,
             promptId,
+            {
+              output: this.output,
+              subagentId: this.subagentId,
+              logger: this.logger,
+              toolExecutorContext: this.toolExecutorContext,
+              config: this.config,
+              messageBus: this.messageBus,
+            },
           );
         } else {
-          const todoReminder = await this.buildTodoCompletionPrompt();
+          const todoReminder = await buildTodoCompletionPrompt(
+            this.runtimeContext,
+            this.subagentId,
+            this.logger,
+          );
           const nextMessages = await checkGoalCompletion(
             execCtx,
             todoReminder,
@@ -585,10 +608,10 @@ export class SubAgentScope {
           currentMessages = nextMessages;
         }
       }
-      this.finalizeOutput();
+      finalizeOutput(this.output);
     } catch (error) {
       handleExecutionError(error, execCtx);
-      this.finalizeOutput();
+      finalizeOutput(this.output);
       throw error;
     } finally {
       this.parentAbortCleanup?.();
@@ -711,84 +734,5 @@ export class SubAgentScope {
     }
 
     this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
-  }
-
-  private async processFunctionCalls(
-    functionCalls: FunctionCall[],
-    abortController: AbortController,
-    promptId: string,
-  ): Promise<Content[]> {
-    return processFunctionCalls(functionCalls, abortController, promptId, {
-      output: this.output,
-      subagentId: this.subagentId,
-      logger: this.logger,
-      toolExecutorContext: this.toolExecutorContext,
-      config: this.config,
-      messageBus: this.messageBus,
-    });
-  }
-
-  private createSchedulerConfig(options?: { interactive?: boolean }): Config {
-    return createSchedulerConfig(
-      this.toolExecutorContext,
-      this.config,
-      options,
-    );
-  }
-
-  private finalizeOutput(): void {
-    finalizeOutput(this.output);
-  }
-
-  private handleEmitValueCall(request: ToolCallRequestInfo): Part[] {
-    return handleEmitValueCall(request, {
-      output: this.output,
-      onMessage: this.onMessage,
-      subagentId: this.subagentId,
-      logger: this.logger,
-    });
-  }
-
-  private buildPartsFromCompletedCalls(
-    completedCalls: CompletedToolCall[],
-  ): Part[] {
-    return buildPartsFromCompletedCalls(completedCalls, {
-      onMessage: this.onMessage,
-      subagentId: this.subagentId,
-      logger: this.logger,
-    });
-  }
-
-  private async buildTodoCompletionPrompt(): Promise<string | null> {
-    return buildTodoCompletionPrompt(
-      this.runtimeContext,
-      this.subagentId,
-      this.logger,
-    );
-  }
-
-  private async createChatObject(context: ContextState) {
-    return createChatObject({
-      promptConfig: this.promptConfig,
-      modelConfig: this.modelConfig,
-      outputConfig: this.outputConfig,
-      toolConfig: this.toolConfig,
-      runtimeContext: this.runtimeContext,
-      contentGenerator: this.contentGenerator,
-      environmentContextLoader: this.environmentContextLoader,
-      foregroundConfig: this.config,
-      context,
-    });
-  }
-
-  private buildRuntimeFunctionDeclarations(): FunctionDeclaration[] {
-    return buildRuntimeFunctionDeclarations(
-      this.runtimeContext.tools,
-      this.toolConfig,
-    );
-  }
-
-  private getScopeLocalFuncDefs() {
-    return getScopeLocalFuncDefs(this.outputConfig);
   }
 }

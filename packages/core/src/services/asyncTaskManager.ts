@@ -11,7 +11,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { OutputObject } from '../core/subagent.js';
+import type { OutputObject } from '../core/subagentTypes.js';
 
 export type AsyncTaskStatus = 'running' | 'completed' | 'failed' | 'cancelled';
 

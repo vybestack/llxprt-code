@@ -10,14 +10,14 @@ import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '../config/profileManager.js';
 import type { SubagentConfig } from '../config/types.js';
 import type { Profile } from '../types/modelParams.js';
-import {
-  SubAgentScope,
-  type ModelConfig,
-  type PromptConfig,
-  type RunConfig,
-  type ToolConfig,
-  type OutputConfig,
-} from './subagent.js';
+import { SubAgentScope } from './subagent.js';
+import type {
+  ModelConfig,
+  PromptConfig,
+  RunConfig,
+  ToolConfig,
+  OutputConfig,
+} from './subagentTypes.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { homedir } from 'node:os';
