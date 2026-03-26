@@ -5,33 +5,32 @@
  */
 
 import {
-  Config,
-  ToolCallRequestInfo,
-  ExecutingToolCall,
-  ScheduledToolCall,
-  ValidatingToolCall,
-  WaitingToolCall,
-  CompletedToolCall,
-  CancelledToolCall,
-  CoreToolScheduler,
-  OutputUpdateHandler,
-  ToolCallsUpdateHandler,
-  ToolCall,
-  ToolCallConfirmationDetails,
-  Status as CoreStatus,
-  EditorType,
+  type Config,
+  type ToolCallRequestInfo,
+  type ExecutingToolCall,
+  type ScheduledToolCall,
+  type ValidatingToolCall,
+  type WaitingToolCall,
+  type CompletedToolCall,
+  type CancelledToolCall,
+  type CoreToolScheduler,
+  type OutputUpdateHandler,
+  type ToolCallsUpdateHandler,
+  type ToolCall,
+  type Status as CoreStatus,
+  type EditorType,
   DEFAULT_AGENT_ID,
   DebugLogger,
   type AnsiOutput,
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import {
+import type {
   HistoryItemToolGroup,
   IndividualToolCallDisplay,
-  ToolCallStatus,
   HistoryItemWithoutId,
 } from '../types.js';
+import { ToolCallStatus } from '../types.js';
 
 type ExternalSchedulerFactory = (args: {
   schedulerConfig: Config;
@@ -612,8 +611,7 @@ export function mapToDisplay(
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
             resultDisplay: undefined,
-            confirmationDetails:
-              trackedCall.confirmationDetails as ToolCallConfirmationDetails,
+            confirmationDetails: trackedCall.confirmationDetails,
           };
         case 'executing': {
           const executingCall = trackedCall;

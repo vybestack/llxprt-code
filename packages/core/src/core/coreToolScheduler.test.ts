@@ -10,30 +10,31 @@ import type {
   WaitingToolCall,
   CompletedToolCall,
   ErroredToolCall,
-} from './coreToolScheduler.js';
-import {
-  CoreToolScheduler,
   ToolCall,
   WaitingToolCall,
 } from './coreToolScheduler.js';
+import { CoreToolScheduler } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '../utils/generateContentResponseUtilities.js';
-import {
-  BaseDeclarativeTool,
-  BaseToolInvocation,
+import type {
   ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
   ToolConfirmationPayload,
   ToolInvocation,
   ToolResult,
   Config,
+  ToolRegistry,
+} from '../index.js';
+import {
+  BaseDeclarativeTool,
+  BaseToolInvocation,
+  ToolConfirmationOutcome,
   Kind,
   ApprovalMode,
-  ToolRegistry,
 } from '../index.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
-import { Part, PartListUnion, type Content } from '@google/genai';
+import type { Part, PartListUnion } from '@google/genai';
+import { type Content } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import {
@@ -1426,8 +1427,7 @@ describe('CoreToolScheduler with payload', () => {
       onToolCallsUpdate,
       'awaiting_approval',
     )) as WaitingToolCall;
-    const confirmationDetails =
-      awaitingCall.confirmationDetails as ToolCallConfirmationDetails;
+    const confirmationDetails = awaitingCall.confirmationDetails;
 
     expect(confirmationDetails).toBeDefined();
     const payload: ToolConfirmationPayload = { newContent: 'final version' };
@@ -1561,11 +1561,10 @@ describe('CoreToolScheduler with payload', () => {
       editedCommand: 'npm install',
     };
 
-    await (awaitingCall.confirmationDetails as ToolCallConfirmationDetails).onConfirm(
+    await awaitingCall.confirmationDetails.onConfirm(
       ToolConfirmationOutcome.SuggestEdit,
       payload,
     );
-
 
     await vi.waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
@@ -1961,12 +1960,10 @@ describe('CoreToolScheduler edit cancellation', () => {
     )) as WaitingToolCall;
 
     // Cancel the edit
-    const confirmationDetails =
-      awaitingCall.confirmationDetails as ToolCallConfirmationDetails;
+    const confirmationDetails = awaitingCall.confirmationDetails;
     if (confirmationDetails) {
       await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
     }
-
 
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCalls = onAllToolCallsComplete.mock
@@ -2779,8 +2776,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
         toolCalls.forEach((call) => {
           if (call.status === 'awaiting_approval') {
             const waitingCall = call;
-            const details =
-              waitingCall.confirmationDetails as ToolCallConfirmationDetails;
+            const details = waitingCall.confirmationDetails;
             if (details?.onConfirm) {
               const originalHandler = pendingConfirmations.find(
                 (h) => h === details.onConfirm,
@@ -2789,7 +2785,6 @@ describe.skip('CoreToolScheduler request queueing', () => {
                 pendingConfirmations.push(details.onConfirm);
               }
             }
-
           }
         });
       },
@@ -3726,11 +3721,9 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
     expect(waitingCall).toBeDefined();
     expect(waitingCall?.status).toBe('awaiting_approval');
 
-    const confirmationDetails = (
-      waitingCall as WaitingToolCall
-    ).confirmationDetails as ToolCallConfirmationDetails;
+    const confirmationDetails = (waitingCall as WaitingToolCall)
+      .confirmationDetails;
     expect(confirmationDetails).toBeDefined();
-
 
     // Simulate calling handleConfirmationResponse twice with the same call ID
     // The first call should proceed with execution
