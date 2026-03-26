@@ -437,6 +437,7 @@ export interface BucketFailoverHandler {
 
 export interface ConfigParameters {
   sessionId: string;
+  clientVersion?: string;
   embeddingModel?: string;
   sandbox?: SandboxConfig;
   targetDir: string;
@@ -562,6 +563,7 @@ export class Config {
   private promptRegistry!: PromptRegistry;
   private resourceRegistry!: ResourceRegistry;
   private readonly sessionId: string;
+  private readonly clientVersion: string;
   private adoptedSessionId: string | undefined;
   private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
@@ -810,6 +812,7 @@ export class Config {
     }
 
     this.sessionId = params.sessionId;
+    this.clientVersion = params.clientVersion ?? 'unknown';
     // Embedding models not currently configured for llxprt-code
     this.embeddingModel = params.embeddingModel;
     this.fileSystemService = new StandardFileSystemService();
@@ -1047,6 +1050,7 @@ export class Config {
     this.resourceRegistry = new ResourceRegistry();
     this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
+      this.clientVersion,
       this.toolRegistry,
       this,
       this.eventEmitter,

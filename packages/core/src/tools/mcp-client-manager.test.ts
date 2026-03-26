@@ -54,7 +54,11 @@ describe('McpClientManager', () => {
       }),
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    const manager = new McpClientManager(
+      '0.0.1',
+      {} as ToolRegistry,
+      mockConfig,
+    );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
@@ -94,7 +98,11 @@ describe('McpClientManager', () => {
       }),
       refreshMcpContext,
     } as unknown as Config;
-    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    const manager = new McpClientManager(
+      '0.0.1',
+      {} as ToolRegistry,
+      mockConfig,
+    );
     await manager.startConfiguredMcpServers();
 
     // Each client should be connected/discovered
@@ -134,7 +142,11 @@ describe('McpClientManager', () => {
         isInitialized: () => false,
       }),
     } as unknown as Config;
-    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    const manager = new McpClientManager(
+      '0.0.1',
+      {} as ToolRegistry,
+      mockConfig,
+    );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
     expect(mockedMcpClient.discover).not.toHaveBeenCalled();
@@ -171,7 +183,11 @@ describe('McpClientManager', () => {
       getGeminiClient: () => undefined,
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+    const manager = new McpClientManager(
+      '0.0.1',
+      {} as ToolRegistry,
+      mockConfig,
+    );
 
     // This must resolve, not hang forever
     await manager.startConfiguredMcpServers();
@@ -227,7 +243,11 @@ describe('McpClientManager', () => {
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
-      const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+      const manager = new McpClientManager(
+        '0.0.1',
+        {} as ToolRegistry,
+        mockConfig,
+      );
       await manager.startConfiguredMcpServers();
 
       const instructions = manager.getMcpInstructions();
@@ -277,7 +297,11 @@ describe('McpClientManager', () => {
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
-      const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+      const manager = new McpClientManager(
+        '0.0.1',
+        {} as ToolRegistry,
+        mockConfig,
+      );
       await manager.startConfiguredMcpServers();
 
       const instructions = manager.getMcpInstructions();
@@ -332,7 +356,11 @@ describe('McpClientManager', () => {
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
-      const manager = new McpClientManager({} as ToolRegistry, mockConfig);
+      const manager = new McpClientManager(
+        '0.0.1',
+        {} as ToolRegistry,
+        mockConfig,
+      );
       await manager.startConfiguredMcpServers();
 
       const instructions = manager.getMcpInstructions();

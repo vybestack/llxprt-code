@@ -1376,6 +1376,7 @@ export async function loadCliConfig(
 
   const config = new Config({
     sessionId,
+    clientVersion: await getCliVersion(),
     embeddingModel: undefined, // No embedding model configured for llxprt-code
     sandbox: sandboxConfig,
     targetDir: cwd,
