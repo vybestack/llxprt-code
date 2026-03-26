@@ -167,13 +167,13 @@ export const SETTINGS_SCHEMA = {
     description: 'Accessibility settings.',
     showInDialog: false,
     properties: {
-      disableLoadingPhrases: {
+      enableLoadingPhrases: {
         type: 'boolean',
-        label: 'Disable Loading Phrases',
+        label: 'Enable Loading Phrases',
         category: 'Accessibility',
         requiresRestart: true,
-        default: false,
-        description: 'Disable loading phrases for accessibility',
+        default: true,
+        description: 'Enable loading phrases during operations.',
         showInDialog: true,
       },
       screenReader: {
@@ -265,13 +265,13 @@ export const SETTINGS_SCHEMA = {
         description: 'Enable recursive file search functionality',
         showInDialog: true,
       },
-      disableFuzzySearch: {
+      enableFuzzySearch: {
         type: 'boolean',
-        label: 'Disable Fuzzy Search',
+        label: 'Enable Fuzzy Search',
         category: 'File Filtering',
         requiresRestart: true,
-        default: false,
-        description: 'Disable fuzzy search when searching for files.',
+        default: true,
+        description: 'Enable fuzzy search when searching for files.',
         showInDialog: true,
       },
       maxFileCount: {
@@ -296,13 +296,13 @@ export const SETTINGS_SCHEMA = {
     },
   },
 
-  disableAutoUpdate: {
+  enableAutoUpdate: {
     type: 'boolean',
-    label: 'Disable Auto Update',
+    label: 'Enable Auto Update',
     category: 'Updates',
     requiresRestart: false,
-    default: false,
-    description: 'Disable automatic updates',
+    default: true,
+    description: 'Enable automatic updates.',
     showInDialog: true,
   },
 
@@ -840,13 +840,13 @@ export const SETTINGS_SCHEMA = {
         description: 'Use the entire width of the terminal for output.',
         showInDialog: true,
       },
-      disableLoadingPhrases: {
+      enableLoadingPhrases: {
         type: 'boolean',
-        label: 'Disable Loading Phrases',
+        label: 'Enable Loading Phrases',
         category: 'UI',
         requiresRestart: true,
-        default: false,
-        description: 'Disable loading phrases for accessibility.',
+        default: true,
+        description: 'Enable loading phrases during operations.',
         showInDialog: true,
       },
       screenReader: {
@@ -1364,13 +1364,13 @@ export const SETTINGS_SCHEMA = {
     description: 'Environment variables to exclude from project context.',
     showInDialog: false,
   },
-  disableUpdateNag: {
+  enableAutoUpdateNotification: {
     type: 'boolean',
-    label: 'Disable Update Nag',
+    label: 'Enable Auto Update Notification',
     category: 'Updates',
     requiresRestart: false,
-    default: false,
-    description: 'Disable update notification prompts.',
+    default: true,
+    description: 'Enable update notification prompts.',
     showInDialog: false,
   },
   includeDirectories: {

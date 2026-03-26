@@ -68,7 +68,7 @@ describe('getInstallationInfo', () => {
 
   it('should return UNKNOWN when cliPath is not available', () => {
     process.argv[1] = '';
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
   });
 
@@ -79,7 +79,7 @@ describe('getInstallationInfo', () => {
       throw error;
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
     expect(mockDebugLogger.log).toHaveBeenCalledWith(String(error));
@@ -92,7 +92,7 @@ describe('getInstallationInfo', () => {
     );
     mockedIsGitRepository.mockReturnValue(true);
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
     expect(info.isGlobal).toBe(false);
@@ -106,7 +106,7 @@ describe('getInstallationInfo', () => {
     process.argv[1] = npxPath;
     mockedRealPathSync.mockReturnValue(npxPath);
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.NPX);
     expect(info.isGlobal).toBe(false);
@@ -118,7 +118,7 @@ describe('getInstallationInfo', () => {
     process.argv[1] = pnpxPath;
     mockedRealPathSync.mockReturnValue(pnpxPath);
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.PNPX);
     expect(info.isGlobal).toBe(false);
@@ -133,7 +133,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.BUNX);
     expect(info.isGlobal).toBe(false);
@@ -149,7 +149,7 @@ describe('getInstallationInfo', () => {
     mockedRealPathSync.mockReturnValue(cliPath);
     mockedExecSync.mockReturnValue(Buffer.from('gemini-cli')); // Simulate successful command
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
       'brew list -1 | grep -q "^llxprt-code$"',
@@ -171,7 +171,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
       'brew list -1 | grep -q "^llxprt-code$"',
@@ -190,7 +190,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.PNPM);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
@@ -198,7 +198,7 @@ describe('getInstallationInfo', () => {
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run pnpm add');
   });
 
@@ -210,7 +210,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.YARN);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
@@ -218,7 +218,7 @@ describe('getInstallationInfo', () => {
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run yarn global add');
   });
 
@@ -230,13 +230,13 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.BUN);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe('bun add -g @vybestack/llxprt-code@latest');
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run bun add');
   });
 
@@ -251,7 +251,7 @@ describe('getInstallationInfo', () => {
       (p) => p === path.join(projectRoot, 'yarn.lock'),
     );
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.YARN);
     expect(info.isGlobal).toBe(false);
@@ -269,7 +269,7 @@ describe('getInstallationInfo', () => {
       (p) => p === path.join(projectRoot, 'pnpm-lock.yaml'),
     );
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.PNPM);
     expect(info.isGlobal).toBe(false);
@@ -286,7 +286,7 @@ describe('getInstallationInfo', () => {
       (p) => p === path.join(projectRoot, 'bun.lockb'),
     );
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.BUN);
     expect(info.isGlobal).toBe(false);
@@ -301,7 +301,7 @@ describe('getInstallationInfo', () => {
     });
     mockedExistsSync.mockReturnValue(false); // No lockfiles
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.NPM);
     expect(info.isGlobal).toBe(false);
@@ -315,7 +315,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.NPM);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
@@ -323,7 +323,7 @@ describe('getInstallationInfo', () => {
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run npm install');
   });
 
@@ -339,7 +339,7 @@ describe('getInstallationInfo', () => {
         throw new Error('brew not found');
       });
 
-      const info = getInstallationInfo(projectRoot, false);
+      const info = getInstallationInfo(projectRoot, true);
 
       expect(info.packageManager).toBe(PackageManager.NPM);
       expect(info.isGlobal).toBe(true);
@@ -359,7 +359,7 @@ describe('getInstallationInfo', () => {
         throw new Error('Command failed');
       });
 
-      const info = getInstallationInfo(projectRoot, false);
+      const info = getInstallationInfo(projectRoot, true);
 
       // Should still detect Homebrew npm even if brew command fails
       expect(info.packageManager).toBe(PackageManager.NPM);

@@ -141,7 +141,7 @@ export interface SummarizeToolOutputSettings {
 }
 
 export interface AccessibilitySettings {
-  disableLoadingPhrases?: boolean;
+  enableLoadingPhrases?: boolean;
   screenReader?: boolean;
 }
 
@@ -843,7 +843,7 @@ export function loadSettings(
     migrateLegacyInteractiveShellSetting(scopeSettings);
   }
 
-  return new LoadedSettings(
+  const loadedSettings = new LoadedSettings(
     {
       path: systemSettingsPath,
       settings: systemSettings,
@@ -862,6 +862,11 @@ export function loadSettings(
     },
     isTrusted,
   );
+
+  // Automatically migrate deprecated settings when loading.
+  migrateDeprecatedSettings(loadedSettings);
+
+  return loadedSettings;
 }
 
 function deepMergeWithComments(target: unknown, source: unknown): unknown {
@@ -905,6 +910,193 @@ function deepMergeWithComments(target: unknown, source: unknown): unknown {
   });
 
   return result;
+}
+
+/**
+ * Migrates deprecated settings to their new counterparts.
+ *
+ * TODO: After a couple of weeks (around early Feb 2026), we should start removing
+ * the deprecated settings from the settings files by default.
+ *
+ * @returns true if any changes were made and need to be saved.
+ */
+export function migrateDeprecatedSettings(
+  loadedSettings: LoadedSettings,
+  removeDeprecated = false,
+): boolean {
+  let anyModified = false;
+  const processScope = (scope: LoadableSettingScope) => {
+    const rawSettings = loadedSettings.forScope(scope).settings as Record<
+      string,
+      unknown
+    >;
+
+    // Migrate inverted boolean settings (disableX -> enableX)
+    // These settings were renamed and their boolean logic inverted.
+    // In LLxprt's flat schema, disableAutoUpdate and disableUpdateNag are
+    // top-level keys (not nested under 'general').
+    let rootModified = false;
+    const newRoot: Record<string, unknown> = { ...rawSettings };
+
+    if (typeof newRoot['disableAutoUpdate'] === 'boolean') {
+      if (typeof newRoot['enableAutoUpdate'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newRoot['disableAutoUpdate'];
+          rootModified = true;
+        }
+      } else {
+        newRoot['enableAutoUpdate'] = !newRoot['disableAutoUpdate'];
+        if (removeDeprecated) {
+          delete newRoot['disableAutoUpdate'];
+        }
+        rootModified = true;
+      }
+    }
+
+    if (typeof newRoot['disableUpdateNag'] === 'boolean') {
+      if (typeof newRoot['enableAutoUpdateNotification'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newRoot['disableUpdateNag'];
+          rootModified = true;
+        }
+      } else {
+        newRoot['enableAutoUpdateNotification'] = !newRoot['disableUpdateNag'];
+        if (removeDeprecated) {
+          delete newRoot['disableUpdateNag'];
+        }
+        rootModified = true;
+      }
+    }
+
+    if (rootModified) {
+      // Apply new top-level keys
+      if (
+        typeof newRoot['enableAutoUpdate'] === 'boolean' &&
+        newRoot['enableAutoUpdate'] !== rawSettings['enableAutoUpdate']
+      ) {
+        loadedSettings.setValue(
+          scope,
+          'enableAutoUpdate' as keyof Settings,
+          newRoot['enableAutoUpdate'],
+        );
+      }
+      if (
+        typeof newRoot['enableAutoUpdateNotification'] === 'boolean' &&
+        newRoot['enableAutoUpdateNotification'] !==
+          rawSettings['enableAutoUpdateNotification']
+      ) {
+        loadedSettings.setValue(
+          scope,
+          'enableAutoUpdateNotification' as keyof Settings,
+          newRoot['enableAutoUpdateNotification'],
+        );
+      }
+      anyModified = true;
+    }
+
+    // Migrate accessibility.disableLoadingPhrases -> accessibility.enableLoadingPhrases
+    const accessibilitySettings = rawSettings['accessibility'] as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      accessibilitySettings &&
+      typeof accessibilitySettings['disableLoadingPhrases'] === 'boolean'
+    ) {
+      const newAccessibility: Record<string, unknown> = {
+        ...accessibilitySettings,
+      };
+      if (typeof accessibilitySettings['enableLoadingPhrases'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newAccessibility['disableLoadingPhrases'];
+          loadedSettings.setValue(scope, 'accessibility', newAccessibility);
+          anyModified = true;
+        }
+      } else {
+        newAccessibility['enableLoadingPhrases'] =
+          !accessibilitySettings['disableLoadingPhrases'];
+        if (removeDeprecated) {
+          delete newAccessibility['disableLoadingPhrases'];
+        }
+        loadedSettings.setValue(scope, 'accessibility', newAccessibility);
+        anyModified = true;
+      }
+    }
+
+    // Migrate fileFiltering.disableFuzzySearch -> fileFiltering.enableFuzzySearch
+    const fileFilteringSettings = rawSettings['fileFiltering'] as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      fileFilteringSettings &&
+      typeof fileFilteringSettings['disableFuzzySearch'] === 'boolean'
+    ) {
+      const newFileFiltering: Record<string, unknown> = {
+        ...fileFilteringSettings,
+      };
+      if (typeof fileFilteringSettings['enableFuzzySearch'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newFileFiltering['disableFuzzySearch'];
+          loadedSettings.setValue(scope, 'fileFiltering', newFileFiltering);
+          anyModified = true;
+        }
+      } else {
+        newFileFiltering['enableFuzzySearch'] =
+          !fileFilteringSettings['disableFuzzySearch'];
+        if (removeDeprecated) {
+          delete newFileFiltering['disableFuzzySearch'];
+        }
+        loadedSettings.setValue(scope, 'fileFiltering', newFileFiltering);
+        anyModified = true;
+      }
+    }
+
+    // Migrate ui.accessibility.disableLoadingPhrases -> ui.accessibility.enableLoadingPhrases
+    const uiSettings = rawSettings['ui'] as Record<string, unknown> | undefined;
+    if (uiSettings) {
+      const uiAccessibility = uiSettings['accessibility'] as
+        | Record<string, unknown>
+        | undefined;
+      if (
+        uiAccessibility &&
+        typeof uiAccessibility['disableLoadingPhrases'] === 'boolean'
+      ) {
+        const newUiAccessibility: Record<string, unknown> = {
+          ...uiAccessibility,
+        };
+        if (typeof uiAccessibility['enableLoadingPhrases'] === 'boolean') {
+          // Both exist, trust the new one
+          if (removeDeprecated) {
+            delete newUiAccessibility['disableLoadingPhrases'];
+            loadedSettings.setValue(scope, 'ui', {
+              ...uiSettings,
+              accessibility: newUiAccessibility,
+            });
+            anyModified = true;
+          }
+        } else {
+          newUiAccessibility['enableLoadingPhrases'] =
+            !uiAccessibility['disableLoadingPhrases'];
+          if (removeDeprecated) {
+            delete newUiAccessibility['disableLoadingPhrases'];
+          }
+          loadedSettings.setValue(scope, 'ui', {
+            ...uiSettings,
+            accessibility: newUiAccessibility,
+          });
+          anyModified = true;
+        }
+      }
+    }
+  };
+
+  processScope(SettingScope.User);
+  processScope(SettingScope.Workspace);
+
+  return anyModified;
 }
 
 export function saveSettings(settingsFile: SettingsFile): void {

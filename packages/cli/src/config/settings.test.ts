@@ -170,7 +170,7 @@ describe('Settings Loading and Merging', () => {
       // Schema defaults are now recursively extracted for nested objects
       // Test key nested defaults that demonstrate the fix is working
       expect(settings.merged.accessibility).toEqual({
-        disableLoadingPhrases: false,
+        enableLoadingPhrases: true,
         screenReader: false,
       });
       expect(settings.merged.checkpointing).toEqual({ enabled: false });
@@ -178,7 +178,9 @@ describe('Settings Loading and Merging', () => {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
         enableRecursiveFileSearch: true,
-        disableFuzzySearch: false,
+        enableFuzzySearch: true,
+        maxFileCount: 20000,
+        searchTimeout: 5000,
       });
       expect(settings.merged.security).toEqual({
         disableYoloMode: false,

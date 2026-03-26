@@ -143,13 +143,13 @@ export function handleAutoUpdate(
     return;
   }
 
-  if (settings.merged.disableUpdateNag) {
+  if (!settings.merged.enableAutoUpdateNotification) {
     return;
   }
 
   const installationInfo = getInstallationInfo(
     projectRoot,
-    settings.merged.disableAutoUpdate ?? false,
+    !settings.merged.enableAutoUpdate,
   );
 
   if (
@@ -169,7 +169,7 @@ export function handleAutoUpdate(
     message: combinedMessage,
   });
 
-  if (!installationInfo.updateCommand || settings.merged.disableAutoUpdate) {
+  if (!installationInfo.updateCommand || !settings.merged.enableAutoUpdate) {
     return;
   }
 

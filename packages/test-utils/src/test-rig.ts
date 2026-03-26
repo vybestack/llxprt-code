@@ -626,7 +626,7 @@ export class TestRig {
       general: {
         // Nightly releases sometimes becomes out of sync with local code and
         // triggers auto-update, which causes tests to fail.
-        disableAutoUpdate: true,
+        enableAutoUpdate: false,
       },
       ui: {
         theme: 'Green Screen',

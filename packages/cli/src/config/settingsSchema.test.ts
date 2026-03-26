@@ -24,7 +24,7 @@ describe('SettingsSchema', () => {
         'accessibility',
         'checkpointing',
         'fileFiltering',
-        'disableAutoUpdate',
+        'enableAutoUpdate',
         'useExternalAuth',
         'sandbox',
         'coreTools',
@@ -41,7 +41,7 @@ describe('SettingsSchema', () => {
         'summarizeToolOutput',
         'dnsResolutionOrder',
         'excludedProjectEnvVars',
-        'disableUpdateNag',
+        'enableAutoUpdateNotification',
         'includeDirectories',
         'loadMemoryFromIncludeDirectories',
         'model',
@@ -97,10 +97,10 @@ describe('SettingsSchema', () => {
 
     it('should have accessibility nested properties', () => {
       expect(
-        SETTINGS_SCHEMA.accessibility.properties?.disableLoadingPhrases,
+        SETTINGS_SCHEMA.accessibility.properties?.enableLoadingPhrases,
       ).toBeDefined();
       expect(
-        SETTINGS_SCHEMA.accessibility.properties?.disableLoadingPhrases.type,
+        SETTINGS_SCHEMA.accessibility.properties?.enableLoadingPhrases.type,
       ).toBe('boolean');
     });
 
@@ -186,7 +186,7 @@ describe('SettingsSchema', () => {
       );
       expect(SETTINGS_SCHEMA.ui.properties?.vimMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ui.properties?.ideMode.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.disableAutoUpdate.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.enableAutoUpdate.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ui.properties?.hideWindowTitle.showInDialog).toBe(
         true,
       );

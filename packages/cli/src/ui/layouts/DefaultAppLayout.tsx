@@ -435,13 +435,13 @@ export const DefaultAppLayout = ({
                 <LoadingIndicator
                   thought={
                     streamingState === StreamingState.WaitingForConfirmation ||
-                    config.getAccessibility()?.disableLoadingPhrases ||
+                    !config.getAccessibility()?.enableLoadingPhrases ||
                     config.getScreenReader()
                       ? undefined
                       : thought
                   }
                   currentLoadingPhrase={
-                    config.getAccessibility()?.disableLoadingPhrases ||
+                    !config.getAccessibility()?.enableLoadingPhrases ||
                     config.getScreenReader()
                       ? undefined
                       : currentLoadingPhrase
@@ -607,13 +607,13 @@ export const DefaultAppLayout = ({
               <LoadingIndicator
                 thought={
                   streamingState === StreamingState.WaitingForConfirmation ||
-                  config.getAccessibility()?.disableLoadingPhrases ||
+                  !config.getAccessibility()?.enableLoadingPhrases ||
                   config.getScreenReader()
                     ? undefined
                     : thought
                 }
                 currentLoadingPhrase={
-                  config.getAccessibility()?.disableLoadingPhrases ||
+                  !config.getAccessibility()?.enableLoadingPhrases ||
                   config.getScreenReader()
                     ? undefined
                     : currentLoadingPhrase

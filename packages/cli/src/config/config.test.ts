@@ -1632,13 +1632,13 @@ describe('loadCliConfig fileFiltering', () => {
     value: boolean;
   }> = [
     {
-      property: 'disableFuzzySearch',
-      getter: (c) => c.getFileFilteringDisableFuzzySearch(),
+      property: 'enableFuzzySearch',
+      getter: (c) => c.getFileFilteringEnableFuzzySearch(),
       value: true,
     },
     {
-      property: 'disableFuzzySearch',
-      getter: (c) => c.getFileFilteringDisableFuzzySearch(),
+      property: 'enableFuzzySearch',
+      getter: (c) => c.getFileFilteringEnableFuzzySearch(),
       value: false,
     },
     {

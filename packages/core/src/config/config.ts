@@ -160,7 +160,7 @@ export enum ApprovalMode {
 }
 
 export interface AccessibilitySettings {
-  disableLoadingPhrases?: boolean;
+  enableLoadingPhrases?: boolean;
   screenReader?: boolean;
 }
 
@@ -467,7 +467,7 @@ export interface ConfigParameters {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
-    disableFuzzySearch?: boolean;
+    enableFuzzySearch?: boolean;
     maxFileCount?: number;
     searchTimeout?: number;
   };
@@ -607,7 +607,7 @@ export class Config {
     respectGitIgnore: boolean;
     respectLlxprtIgnore: boolean;
     enableRecursiveFileSearch: boolean;
-    disableFuzzySearch: boolean;
+    enableFuzzySearch: boolean;
     maxFileCount: number;
     searchTimeout: number;
   };
@@ -883,7 +883,7 @@ export class Config {
         DEFAULT_FILE_FILTERING_OPTIONS.respectLlxprtIgnore,
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
-      disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
+      enableFuzzySearch: params.fileFiltering?.enableFuzzySearch ?? true,
       maxFileCount:
         params.fileFiltering?.maxFileCount ??
         DEFAULT_FILE_FILTERING_OPTIONS.maxFileCount ??
@@ -1824,8 +1824,8 @@ export class Config {
     return this.fileFiltering.enableRecursiveFileSearch;
   }
 
-  getFileFilteringDisableFuzzySearch(): boolean {
-    return this.fileFiltering.disableFuzzySearch;
+  getFileFilteringEnableFuzzySearch(): boolean {
+    return this.fileFiltering.enableFuzzySearch;
   }
 
   getFileFilteringRespectGitIgnore(): boolean {
