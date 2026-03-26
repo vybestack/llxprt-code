@@ -488,6 +488,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
+      let processingResult = StreamProcessingStatus.Completed;
       for await (const event of stream) {
         if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT)
           continue;
@@ -520,9 +521,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           case ServerGeminiEventType.UserCancelled:
             toolCallRequests.length = 0;
             handleUserCancelledEvent(userMessageTimestamp);
+            processingResult = StreamProcessingStatus.UserCancelled;
             break;
           case ServerGeminiEventType.Error:
             handleErrorEvent(event.value, userMessageTimestamp);
+            processingResult = StreamProcessingStatus.Error;
             break;
           case ServerGeminiEventType.ChatCompressed:
             handleChatCompressionEvent(event.value, userMessageTimestamp);
@@ -596,7 +599,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           await scheduleToolCalls(deduped, signal);
         }
       }
-      return StreamProcessingStatus.Completed;
+      return processingResult;
     },
     [
       config,
