@@ -102,7 +102,17 @@ export async function executeTokenRefresh(
         () =>
           `[FLOW] Refresh token changed for ${providerName} — another process refreshed, skipping`,
       );
-      return recheckToken;
+      // Only return the disk token if it's still valid; otherwise return null
+      // so the caller can fall through to re-auth/failover.
+      if (recheckToken.expiry > thirtySecondsFromNow) {
+        proactiveRenewalManager.scheduleProactiveRenewal(
+          providerName,
+          bucketToUse,
+          recheckToken,
+        );
+        return recheckToken;
+      }
+      return null;
     }
 
     const provider = providerRegistry.getProvider(providerName);

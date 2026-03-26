@@ -299,6 +299,10 @@ export class ProactiveRenewalManager {
     // @requirement REQ-1598-PR02
     // Check if another process already refreshed the token
     if (this.hasTokenBeenRefreshedExternally(key, currentToken)) {
+      // The current timer callback already fired; delete the stale entry
+      // so scheduleProactiveRenewal's same-expiry short-circuit doesn't
+      // prevent installing a new timer for the externally-refreshed token.
+      this.proactiveRenewals.delete(key);
       this.scheduleProactiveRenewal(
         providerName,
         normalizedBucket,

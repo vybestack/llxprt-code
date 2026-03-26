@@ -177,9 +177,10 @@ describe('executeTokenRefresh – refresh_token guard', () => {
       renewalManager,
     );
 
-    // Should return the disk token without calling refreshToken
+    // Should NOT call refreshToken (refresh_token was consumed by another process)
     expect(provider.refreshToken).not.toHaveBeenCalled();
-    expect(result).toBe(diskToken);
+    // Disk token is expired, so returns null instead of propagating a stale token
+    expect(result).toBeNull();
   });
 
   it('proceeds with refresh when disk refresh_token matches original', async () => {
