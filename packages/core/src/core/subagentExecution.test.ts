@@ -113,13 +113,11 @@ describe('subagentExecution', () => {
     it('should call onMessage with system feedback', () => {
       const onMessage = vi.fn();
       const mockFilter = {
-        filterText: vi
-          .fn()
-          .mockReturnValue({
-            filtered: 'ok',
-            blocked: false,
-            systemFeedback: 'warning!',
-          }),
+        filterText: vi.fn().mockReturnValue({
+          filtered: 'ok',
+          blocked: false,
+          systemFeedback: 'warning!',
+        }),
       };
       filterTextWithEmoji('test', {
         emojiFilter: mockFilter as never,
