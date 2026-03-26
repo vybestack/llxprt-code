@@ -45,4 +45,14 @@ Running notes during batch execution. Append after each batch.
 - 88df621: Applied with modify/delete conflict resolved. Hook exit code test coverage using TestRig, provider-agnostic.
 - Quick verify: lint 0 errors, typecheck clean.
 
+## Batch P4 (2026-03-25)
+
+- 85b1716: Applied with conflicts. Extension examples branding fixed (Gemini CLI→LLxprt Code). eslint.config.js merged.
+- b99e841: Applied with conflicts. Windows PTY crash fix merged with LLxprt's existing uncaughtException handling.
+- 995ae42: Applied with conflicts. DebugProfiler coreEvents/AppEvent registration. Cast to base EventEmitter for type compat.
+- 2455f93: Applied with conflicts. home/end keybinding ctrl:false/shift:false. Preserved LLxprt-specific bindings (TOGGLE_TODO_DIALOG, etc.).
+- 55c2783: Applied with conflicts. MCP list 'http' type display.
+- Fixed: disable.test.ts message updated ("Restart required to take effect."), DebugProfiler test uses AppEvent.OpenDebugConsole, MCP list test mocks.
+- Full verify: typecheck clean, core 514 tests pass, CLI specific areas pass (auth 45 pass, commands 28 pass), format clean, build clean, smoke test passes.
+
 ---

@@ -28,11 +28,11 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 4920ad2 | PICKED | a8a282fd0 | docs themes — PASS |
 | 166e04a | PICKED | cc6b6be76 | mcp instructions — PASS (+ refreshMcpContext fixup) |
 | 88df621 | PICKED | aa87fd250 | hook exit code tests — PASS |
-| 85b1716 | PICKED | | extension examples |
-| b99e841 | PICKED | | Windows pty crash |
-| 995ae42 | PICKED | | DebugProfiler warnings |
-| 2455f93 | PICKED | | home/end keybinding |
-| 55c2783 | PICKED | | mcp http display |
+| 85b1716 | PICKED | 0f05bcaf4 | extension examples — PASS |
+| b99e841 | PICKED | 98e0ca414 | Windows pty crash — PASS |
+| 995ae42 | PICKED | d1998fe0e | DebugProfiler warnings — PASS |
+| 2455f93 | PICKED | 37b4c79d2 | home/end keybinding — PASS |
+| 55c2783 | PICKED | a522dcf83 | mcp http display — PASS |
 | 9866eb0 | PICKED | | external editor fallback |
 | 97aac69 | PICKED | | mcp tool lookup |
 
