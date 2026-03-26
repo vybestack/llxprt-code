@@ -58,7 +58,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 8a627d6 | REIMPLEMENTED | 62f3ce394 | /dev/tty safety — PASS, FULL VERIFY |
 | 1e8f87f | REIMPLEMENTED | 8f68d3b78 | MCPDiscoveryState — PASS |
 | cfdc4cf | NO_OP | — | scheduleToolCalls race — already present in LLxprt |
-| ce35d84 | REIMPLEMENTED | | organize keybindings |
+| ce35d84 | REIMPLEMENTED | 7f5c40438 | organize keybindings — PASS |
 | 9722ec9 | REIMPLEMENTED | | hook event names (was PICK) |
 | 608da23 | REIMPLEMENTED | | **HIGH** disable→enable settings |
 | 1681ae1 | REIMPLEMENTED | | unify shell confirmation |
