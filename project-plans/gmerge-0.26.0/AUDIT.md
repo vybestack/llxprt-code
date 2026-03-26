@@ -72,7 +72,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | e92f60b | REIMPLEMENTED | 44c3d484e | migrate hooks — PASS |
 | 645e2ec | REIMPLEMENTED | e62e45099 | Ctrl+Enter/Ctrl+J — PASS (code already present, tests added) |
 | b288f12 | REIMPLEMENTED | bc456e0e2 | MCP client version — PASS |
-| 211d2c5 | REIMPLEMENTED | | **HIGH** hooks event names split |
+| 211d2c5 | REIMPLEMENTED | d160f64ef | **HIGH** hooks event names split — PASS |
 | aceb06a | REIMPLEMENTED | | newline fix |
 | e1fd5be | REIMPLEMENTED | | Esc-Esc clear |
 | 93ae777 | REIMPLEMENTED | | System scopes migration |

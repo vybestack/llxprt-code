@@ -46,7 +46,7 @@
 | R30 | REIMPLEMENT | e92f60b | DONE | 44c3d484e | migrate hooks |
 | R31 | REIMPLEMENT | 645e2ec | DONE | e62e45099 | Ctrl+Enter/Ctrl+J |
 | R32 | REIMPLEMENT | b288f12 | DONE | bc456e0e2 | MCP client version |
-| R33 | REIMPLEMENT | 211d2c5 | TODO | | **HIGH RISK** hooks event names split |
+| R33 | REIMPLEMENT | 211d2c5 | DONE | d160f64ef | **HIGH RISK** hooks event names split |
 | R34 | REIMPLEMENT | aceb06a | TODO | | newline fix |
 | R35 | REIMPLEMENT | e1fd5be | TODO | | Esc-Esc clear |
 | R36 | REIMPLEMENT | 93ae777 | TODO | | System scopes migration |
