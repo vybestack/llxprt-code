@@ -650,11 +650,17 @@ export class TokenAccessCoordinator {
       }
     }
 
-    // Couldn't acquire lock — check disk anyway
-    const diskToken = await this.tokenStore.getToken(
-      providerName,
-      bucketToCheck,
-    );
+    // Couldn't acquire lock — check disk anyway (best-effort, treat failures as cache miss)
+    let diskToken: OAuthToken | null = null;
+    try {
+      diskToken = await this.tokenStore.getToken(providerName, bucketToCheck);
+    } catch (error) {
+      logger.debug(
+        `[issue1262/1195] Disk fallback read failed for ${providerName}:`,
+        error,
+      );
+      return undefined;
+    }
     const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
     if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
       logger.debug(
@@ -672,9 +678,6 @@ export class TokenAccessCoordinator {
     return undefined; // continue to auth
   }
 
-  /**
-   * Trigger OAuth authentication flow for a single-bucket provider.
-   */
   private async triggerAuthFlow(
     providerName: string,
     bucketToCheck: string | undefined,
