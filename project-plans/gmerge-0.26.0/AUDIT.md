@@ -77,7 +77,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | e1fd5be | REIMPLEMENTED | ca2b2eaa3 | Esc-Esc clear — PASS (behavior already present, test added) |
 | 93ae777 | REIMPLEMENTED | 1d60766c2 | System scopes migration — PASS |
 | 0fa9a54 | REIMPLEMENTED | 3ae52cbd1 | auth failure — PASS |
-| ee87c98 | REIMPLEMENTED | | fast return buffer |
+| ee87c98 | REIMPLEMENTED | cd3a71bf4 | fast return buffer — PASS |
 | cebe386 | REIMPLEMENTED | | **HIGH** MCP status hook |
 | 2a3c879 | REIMPLEMENTED | | clearContext hooks |
 | 43846f4 | REIMPLEMENTED | | package.ts error |
