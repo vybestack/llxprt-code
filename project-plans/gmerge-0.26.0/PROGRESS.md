@@ -36,7 +36,7 @@
 | R20 | REIMPLEMENT | 9722ec9 | DONE | 4180f7ba2 | hook event name validation (chain 1/4) |
 | R21 | REIMPLEMENT | 608da23 | DONE | 5bf2581c4 | **HIGH RISK** disable→enable settings (21 files) |
 | R22 | REIMPLEMENT | 1681ae1 | DONE | 2dd155b87 | unify shell confirmation |
-| R23 | REIMPLEMENT | 272570c | TODO | | skills default enabled |
+| R23 | REIMPLEMENT | 272570c | DONE | de72ae2b4 | skills default enabled |
 | R24 | REIMPLEMENT | 6900253 | TODO | | keyboard shortcuts URL |
 | R25 | REIMPLEMENT | 4cfbe4c | TODO | | Homebrew detection |
 | R26 | REIMPLEMENT | 1b6b6d4 | TODO | | centralize tool mapping |
