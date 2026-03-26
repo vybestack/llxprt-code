@@ -45,7 +45,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 09a7301 | REIMPLEMENTED | 756587f69 | remove \\x7f bindings — PASS |
 | 94d5ae5 | REIMPLEMENTED | 893307fe9 | paste handling — PASS |
 | 7e6817d | REIMPLEMENTED | (no-op) | stdin close cleanup — already present |
-| 6021e4c | REIMPLEMENTED | | scheduler event types |
+| 6021e4c | REIMPLEMENTED | fd040a143 | scheduler event types — PASS |
 | fb76408 | REIMPLEMENTED | | sequence binding |
 | a2dab14 | REIMPLEMENTED | | undeprecate --prompt |
 | 42c26d1 | REIMPLEMENTED | | improve keybindings |

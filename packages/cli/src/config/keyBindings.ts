@@ -100,9 +100,7 @@ export enum Command {
  */
 export interface KeyBinding {
   /** The key name (e.g., 'a', 'return', 'tab', 'escape') */
-  key?: string;
-  /** The key sequence (e.g., '\x18' for Ctrl+X) - alternative to key name */
-  sequence?: string;
+  key: string;
   /** Control key requirement: true=must be pressed, false=must not be pressed, undefined=ignore */
   ctrl?: boolean;
   /** Shift key requirement: true=must be pressed, false=must not be pressed, undefined=ignore */
@@ -239,10 +237,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   ],
 
   // External tools
-  [Command.OPEN_EXTERNAL_EDITOR]: [
-    { key: 'x', ctrl: true },
-    { sequence: '\x18', ctrl: true },
-  ],
+  [Command.OPEN_EXTERNAL_EDITOR]: [{ key: 'x', ctrl: true }],
   [Command.PASTE_CLIPBOARD]: [
     { key: 'v', ctrl: true },
     { key: 'v', command: true },
@@ -274,7 +269,6 @@ export const defaultKeyBindings: KeyBindingConfig = {
   [Command.TOGGLE_MOUSE_EVENTS]: [
     // Ctrl+\ (typically FS / \x1c)
     { key: '\\', ctrl: true },
-    { sequence: '\x1c' },
   ],
 
   // Additional commands from keyboard shortcuts autogen

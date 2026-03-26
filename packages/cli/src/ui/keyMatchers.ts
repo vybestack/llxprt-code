@@ -17,19 +17,7 @@ import {
  * Pure data-driven matching logic
  */
 function matchKeyBinding(keyBinding: KeyBinding, key: Key): boolean {
-  // Either key name or sequence must match (but not both should be defined)
-  let keyMatches = false;
-
-  if (keyBinding.key !== undefined) {
-    keyMatches = keyBinding.key === key.name;
-  } else if (keyBinding.sequence !== undefined) {
-    keyMatches = keyBinding.sequence === key.sequence;
-  } else {
-    // Neither key nor sequence defined - invalid binding
-    return false;
-  }
-
-  if (!keyMatches) {
+  if (keyBinding.key !== key.name) {
     return false;
   }
 

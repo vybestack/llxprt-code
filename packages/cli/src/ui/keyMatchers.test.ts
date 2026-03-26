@@ -328,10 +328,7 @@ describe('keyMatchers', () => {
     // External tools
     {
       command: Command.OPEN_EXTERNAL_EDITOR,
-      positive: [
-        createKey('x', { ctrl: true }),
-        { ...createKey('\x18'), sequence: '\x18', ctrl: true },
-      ],
+      positive: [createKey('x', { ctrl: true })],
       negative: [createKey('x'), createKey('c', { ctrl: true })],
     },
     {
@@ -407,11 +404,7 @@ describe('keyMatchers', () => {
     // Debugging/Terminal fixes
     {
       command: Command.TOGGLE_MOUSE_EVENTS,
-      positive: [
-        createKey('\\', { ctrl: true }),
-        createKey('', { sequence: '\x1c', ctrl: true }),
-        createKey('', { sequence: '\x1c' }),
-      ],
+      positive: [createKey('\\', { ctrl: true })],
       negative: [createKey('\\'), createKey('r', { ctrl: true })],
     },
     {

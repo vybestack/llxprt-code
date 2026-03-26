@@ -19,7 +19,7 @@
 | R3 | REIMPLEMENT | 09a7301 | DONE | 756587f69 | remove \\x7f bindings |
 | R4 | REIMPLEMENT | 94d5ae5 | DONE | 893307fe9 | paste handling |
 | R5 | REIMPLEMENT | 7e6817d | DONE | (no-op) | stdin close cleanup — already present in LLxprt |
-| R6 | REIMPLEMENT | 6021e4c | TODO | | scheduler event types |
+| R6 | REIMPLEMENT | 6021e4c | DONE | fd040a143 | scheduler event types |
 | R7 | REIMPLEMENT | fb76408 | TODO | | sequence binding |
 | R8 | REIMPLEMENT | a2dab14 | TODO | | undeprecate --prompt |
 | R9 | REIMPLEMENT | 42c26d1 | TODO | | improve keybindings |
