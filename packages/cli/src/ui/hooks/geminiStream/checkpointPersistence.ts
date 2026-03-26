@@ -103,7 +103,7 @@ export async function createToolCheckpoint(
   const checkpointFileName = `${timestamp}-${fileName}-${toolName}.json`;
   const checkpointFilePath = path.join(checkpointDir, checkpointFileName);
 
-  const clientHistory = await geminiClient?.getHistory();
+  const clientHistory = await geminiClient.getHistory();
 
   await fsOps.writeFile(
     checkpointFilePath,

@@ -237,9 +237,16 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         pendingHistoryItemRef.current?.type === 'gemini_content'
           ? 'gemini_content'
           : 'gemini';
+      const existingProfileName = (
+        pendingHistoryItemRef.current as
+          | HistoryItemGemini
+          | HistoryItemGeminiContent
+          | undefined
+      )?.profileName;
       const { splitPoint, beforeText, afterItem } = buildSplitContent(
         sanitizedCombined,
         liveProfileName,
+        existingProfileName ?? null,
         thinkingBlocksRef.current,
         pendingType,
       );

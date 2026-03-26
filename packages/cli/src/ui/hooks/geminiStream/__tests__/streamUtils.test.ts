@@ -371,7 +371,13 @@ describe('buildSplitContent', () => {
   });
 
   it('returns fullTextItem when no split needed (splitPoint equals length)', () => {
-    const result = buildSplitContent('hello world', 'myProfile', [], 'gemini');
+    const result = buildSplitContent(
+      'hello world',
+      'myProfile',
+      null,
+      [],
+      'gemini',
+    );
     expect(result.splitPoint).toBe('hello world'.length);
     expect(result.beforeText).toBe('hello world');
     expect(result.afterText).toBe('');
@@ -380,9 +386,33 @@ describe('buildSplitContent', () => {
   });
 
   it('includes profileName when provided', () => {
-    const result = buildSplitContent('text', 'myProfile', [], 'gemini');
+    const result = buildSplitContent('text', 'myProfile', null, [], 'gemini');
     expect(result.fullTextItem.profileName).toBe('myProfile');
     expect(result.afterItem.profileName).toBe('myProfile');
+  });
+
+  it('falls back to existingProfileName when liveProfileName is null', () => {
+    const result = buildSplitContent(
+      'text',
+      null,
+      'existingProfile',
+      [],
+      'gemini',
+    );
+    expect(result.fullTextItem.profileName).toBe('existingProfile');
+    expect(result.afterItem.profileName).toBe('existingProfile');
+  });
+
+  it('prefers liveProfileName over existingProfileName', () => {
+    const result = buildSplitContent(
+      'text',
+      'liveProfile',
+      'existingProfile',
+      [],
+      'gemini',
+    );
+    expect(result.fullTextItem.profileName).toBe('liveProfile');
+    expect(result.afterItem.profileName).toBe('liveProfile');
   });
 
   it('includes thinkingBlocks when provided', () => {
@@ -393,17 +423,17 @@ describe('buildSplitContent', () => {
         sourceField: 'thought' as const,
       },
     ];
-    const result = buildSplitContent('text', null, blocks, 'gemini');
+    const result = buildSplitContent('text', null, null, blocks, 'gemini');
     expect(result.fullTextItem.thinkingBlocks).toHaveLength(1);
   });
 
   it('produces afterItem as gemini_content type', () => {
-    const result = buildSplitContent('hello', null, [], 'gemini');
+    const result = buildSplitContent('hello', null, null, [], 'gemini');
     expect(result.afterItem.type).toBe('gemini_content');
   });
 
   it('handles null profileName (no profileName property)', () => {
-    const result = buildSplitContent('text', null, [], 'gemini');
+    const result = buildSplitContent('text', null, null, [], 'gemini');
     expect(result.fullTextItem.profileName).toBeUndefined();
   });
 });

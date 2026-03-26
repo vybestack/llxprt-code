@@ -286,6 +286,7 @@ export function buildFullSplitItem(
 export function buildSplitContent(
   sanitizedCombined: string,
   liveProfileName: string | null,
+  existingProfileName: string | null | undefined,
   thinkingBlocks: ThinkingBlock[],
   pendingType: 'gemini' | 'gemini_content',
 ): {
@@ -299,8 +300,8 @@ export function buildSplitContent(
   const beforeText = sanitizedCombined.substring(0, splitPoint);
   const afterText = sanitizedCombined.substring(splitPoint);
 
-  const profileNameProp =
-    liveProfileName != null ? { profileName: liveProfileName } : {};
+  const profileName = liveProfileName ?? existingProfileName ?? null;
+  const profileNameProp = profileName != null ? { profileName } : {};
   const thinkingProp =
     thinkingBlocks.length > 0 ? { thinkingBlocks: [...thinkingBlocks] } : {};
 
