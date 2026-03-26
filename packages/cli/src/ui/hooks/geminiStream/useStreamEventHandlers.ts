@@ -518,6 +518,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
             });
             break;
           case ServerGeminiEventType.UserCancelled:
+            toolCallRequests.length = 0;
             handleUserCancelledEvent(userMessageTimestamp);
             break;
           case ServerGeminiEventType.Error:
@@ -543,6 +544,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
             break;
           case ServerGeminiEventType.LoopDetected:
             loopDetectedRef.current = true;
+            toolCallRequests.length = 0;
             break;
           case ServerGeminiEventType.UsageMetadata:
             if (event.value.promptTokenCount !== undefined)
@@ -579,7 +581,12 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         }
       }
 
-      if (toolCallRequests.length > 0) {
+      if (
+        !signal.aborted &&
+        !turnCancelledRef.current &&
+        !loopDetectedRef.current &&
+        toolCallRequests.length > 0
+      ) {
         const deduped = deduplicateToolCallRequests(toolCallRequests);
         if (deduped.length > 0) {
           if (pendingHistoryItemRef.current) {
