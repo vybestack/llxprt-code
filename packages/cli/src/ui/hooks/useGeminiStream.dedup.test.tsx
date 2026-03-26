@@ -404,5 +404,12 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     expect(shellInstances).toHaveLength(1);
     expect(nonShellInstances).toHaveLength(1);
     expect(schedulerOnlyInstances).toHaveLength(1);
+
+    // Shell tools: pending-history copy wins (scheduler copy is removed).
+    // Non-shell tools: scheduler copy wins (pending copy is removed).
+    expect(shellInstances[0].resultDisplay).toBe('pending shell output');
+    expect(nonShellInstances[0].resultDisplay).toBe(
+      'scheduler read_file output',
+    );
   });
 });

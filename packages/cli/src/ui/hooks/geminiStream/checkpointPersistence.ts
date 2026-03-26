@@ -178,6 +178,9 @@ async function saveRestorableToolCalls(
       );
       continue;
     }
+    // Reserve the callId before attempting the write to prevent
+    // concurrent duplicate checkpoint attempts from a re-render.
+    checkpointedCallIds?.add(toolCall.request.callId);
     try {
       await createToolCheckpoint(
         toolCall,
@@ -188,8 +191,9 @@ async function saveRestorableToolCalls(
         onDebugMessage,
         effectiveFsOps,
       );
-      checkpointedCallIds?.add(toolCall.request.callId);
     } catch (error) {
+      // Remove reservation so the next effect run can retry.
+      checkpointedCallIds?.delete(toolCall.request.callId);
       const filePath = toolCall.request.args['file_path'] as string;
       onDebugMessage(
         `Failed to create checkpoint for ${filePath}: ${getErrorMessage(error)}. This may indicate a problem with Git or file system permissions.`,

@@ -250,8 +250,11 @@ export function buildThinkingBlock(
 
 /**
  * Builds the full-split pending history item for the no-split case in
- * handleContentEvent. Preserves the existing item's type and profileName
- * (falls back to liveProfileName when the item has none).
+ * handleContentEvent. Preserves the existing item's type and profileName.
+ *
+ * Profile name precedence: liveProfileName takes priority when present;
+ * existingProfileName (from the current pending item) is used as a fallback
+ * when liveProfileName is null/undefined.
  */
 export function buildFullSplitItem(
   currentItem: HistoryItemWithoutId | null,
