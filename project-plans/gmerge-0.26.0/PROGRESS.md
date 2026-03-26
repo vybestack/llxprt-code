@@ -40,7 +40,7 @@
 | R24 | REIMPLEMENT | 6900253 | DONE | 234a2255f | keyboard shortcuts URL |
 | R25 | REIMPLEMENT | 4cfbe4c | DONE | 76bc50193 | Homebrew detection |
 | R26 | REIMPLEMENT | 1b6b6d4 | DONE | 895be1e83 | centralize tool mapping |
-| R27 | REIMPLEMENT | 0bebc66 | TODO | | rationale before tool calls |
+| R27 | REIMPLEMENT | 0bebc66 | NO_OP | — | rationale flush already present in LLxprt |
 | R28 | REIMPLEMENT | ec74134 | TODO | | shell redirection security |
 | R29 | REIMPLEMENT | 1182168 | TODO | | enhanced compression |
 | R30 | REIMPLEMENT | e92f60b | TODO | | migrate hooks |
