@@ -2274,6 +2274,7 @@ export function useTextBuffer({
 
       if (key.name === 'paste') insert(input, { paste: true });
       else if (keyMatchers[Command.RETURN](key)) newline();
+      else if (keyMatchers[Command.NEWLINE](key)) newline();
       else if (keyMatchers[Command.MOVE_LEFT](key)) move('left');
       else if (keyMatchers[Command.MOVE_RIGHT](key)) move('right');
       else if (keyMatchers[Command.MOVE_UP](key)) move('up');
