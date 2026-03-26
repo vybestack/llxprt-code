@@ -166,7 +166,7 @@ function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
     if (key.name === 'return' && now - lastKeyTime <= FAST_RETURN_TIMEOUT) {
       keypressHandler({
         ...key,
-        name: '',
+        name: 'return',
         sequence: '\r',
         insertable: true,
       });

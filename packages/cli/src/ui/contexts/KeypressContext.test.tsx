@@ -191,7 +191,7 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       expect(keyHandler).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          name: '',
+          name: 'return',
           sequence: '\r',
           insertable: true,
         }),
@@ -214,7 +214,7 @@ describe('KeypressContext - Kitty Protocol', () => {
       // Now bufferFastReturn is always applied, so return should be buffered
       expect(keyHandler).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          name: '',
+          name: 'return',
           sequence: '\r',
           insertable: true,
         }),
