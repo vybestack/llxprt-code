@@ -6,7 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { unwrapLoggingProvider, type OAuthProvider } from '../oauth-manager.js';
+import { unwrapLoggingProvider } from '../auth-utils.js';
+import type { OAuthProvider } from '../types.js';
 
 // Cast the current stub to the future-friendly signature so the tests compile
 const unwrap = unwrapLoggingProvider as unknown as (

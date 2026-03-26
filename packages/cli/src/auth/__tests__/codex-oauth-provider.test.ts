@@ -144,48 +144,6 @@ describe('CodexOAuthProvider', () => {
     });
   });
 
-  describe('refreshIfNeeded', () => {
-    it('should return null when no token exists', async () => {
-      const result = await provider.refreshIfNeeded();
-      expect(result).toBeNull();
-    });
-
-    it('should return null (deprecated no-op, issue #1652)', async () => {
-      // refreshIfNeeded is now a no-op deprecation shell — refresh is handled
-      // by OAuthManager. It always returns null regardless of token state.
-      const validToken = {
-        access_token: 'test-access-token',
-        token_type: 'Bearer' as const,
-        expiry: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-        account_id: 'test-account-id',
-        refresh_token: 'test-refresh-token',
-      };
-
-      await tokenStore.saveToken('codex', validToken);
-
-      const result = await provider.refreshIfNeeded();
-      expect(result).toBeNull();
-    });
-
-    it('should refresh expired token automatically', async () => {
-      const expiredToken = {
-        access_token: 'old-access-token',
-        token_type: 'Bearer' as const,
-        expiry: Math.floor(Date.now() / 1000) - 100, // Already expired
-        account_id: 'test-account-id',
-        refresh_token: 'test-refresh-token',
-        id_token: 'test-id-token',
-      };
-
-      await tokenStore.saveToken('codex', expiredToken);
-
-      // Mock the deviceFlow.refreshToken to avoid actual network calls
-      // In a real test, we'd mock the fetch call or the CodexDeviceFlow
-      // For now, we just verify the method exists
-      expect(provider.refreshIfNeeded).toBeDefined();
-    });
-  });
-
   describe('logout', () => {
     it('should remove stored tokens from ~/.llxprt/oauth/codex.json', async () => {
       const validToken = {
@@ -232,7 +190,7 @@ describe('CodexOAuthProvider', () => {
 
       // getToken should still return the token (validation doesn't check expiry)
       const token = await provider.getToken();
-      expect(token).not.toBeNull(); // Will still return it, but refreshIfNeeded will handle it
+      expect(token).not.toBeNull(); // Will still return it; OAuthManager handles refresh
     });
 
     it('should use 30-second buffer for expiry detection', async () => {
@@ -246,9 +204,8 @@ describe('CodexOAuthProvider', () => {
 
       await tokenStore.saveToken('codex', soonToExpireToken);
 
-      // refreshIfNeeded should try to refresh
-      // (actual refresh would require mocking network calls)
-      expect(provider.refreshIfNeeded).toBeDefined();
+      // refreshToken is handled by OAuthManager; provider.getToken returns as-is
+      expect(provider.refreshToken).toBeDefined();
     });
   });
 

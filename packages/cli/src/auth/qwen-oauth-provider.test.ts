@@ -199,13 +199,4 @@ describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
       expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
     });
   });
-
-  describe('Test 3.11: refreshIfNeeded does not write', () => {
-    it('GIVEN refreshIfNeeded() called, THEN saveToken and removeToken NOT called', async () => {
-      await provider.refreshIfNeeded();
-
-      expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
-      expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
-    });
-  });
 });

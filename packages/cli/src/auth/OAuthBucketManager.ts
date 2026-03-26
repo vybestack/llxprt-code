@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { TokenStore } from './types.js';
+import type { TokenStore, OAuthTokenRequestMetadata } from './types.js';
 
 /**
  * Bucket status information
@@ -33,40 +33,68 @@ export class OAuthBucketManager {
    * Set session bucket override for a provider
    * Session state is in-memory only and not persisted
    */
-  setSessionBucket(provider: string, bucket: string): void {
-    this.sessionBuckets.set(provider, bucket);
+  getSessionBucketScopeKey(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): string {
+    const profileId =
+      typeof metadata?.profileId === 'string' &&
+      metadata.profileId.trim() !== ''
+        ? metadata.profileId.trim()
+        : undefined;
+
+    return profileId ? `${provider}::${profileId}` : provider;
+  }
+
+  /**
+   * Set session bucket override for a provider
+   * Session state is in-memory only and not persisted
+   */
+  setSessionBucket(
+    provider: string,
+    bucket: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): void {
+    this.sessionBuckets.set(
+      this.getSessionBucketScopeKey(provider, metadata),
+      bucket,
+    );
   }
 
   /**
    * Get session bucket override for a provider
    * Returns undefined if no session override set
    */
-  getSessionBucket(provider: string): string | undefined {
-    return this.sessionBuckets.get(provider);
+  getSessionBucket(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): string | undefined {
+    return this.sessionBuckets.get(
+      this.getSessionBucketScopeKey(provider, metadata),
+    );
   }
 
   /**
    * Clear session bucket override for a provider
    */
-  clearSessionBucket(provider: string): void {
-    this.sessionBuckets.delete(provider);
+  clearSessionBucket(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): void {
+    this.sessionBuckets.delete(
+      this.getSessionBucketScopeKey(provider, metadata),
+    );
   }
 
   /**
-   * Resolve bucket for a provider
-   * Priority: session override > first profile bucket > 'default'
+   * Clear all session bucket overrides for a provider
    */
-  resolveBucket(provider: string, profileBuckets?: string[]): string {
-    const sessionBucket = this.sessionBuckets.get(provider);
-    if (sessionBucket) {
-      return sessionBucket;
+  clearAllSessionBuckets(provider: string): void {
+    for (const key of Array.from(this.sessionBuckets.keys())) {
+      if (key === provider || key.startsWith(`${provider}::`)) {
+        this.sessionBuckets.delete(key);
+      }
     }
-
-    if (profileBuckets && profileBuckets.length > 0) {
-      return profileBuckets[0];
-    }
-
-    return 'default';
   }
 
   /**

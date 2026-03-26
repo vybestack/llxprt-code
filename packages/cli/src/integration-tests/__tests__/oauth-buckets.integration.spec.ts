@@ -23,7 +23,8 @@ import {
   type OAuthToken,
   type StandardProfile,
 } from '@vybestack/llxprt-code-core';
-import { OAuthManager, OAuthProvider } from '../../auth/oauth-manager.js';
+import { OAuthManager } from '../../auth/oauth-manager.js';
+import type { OAuthProvider } from '../../auth/types.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,

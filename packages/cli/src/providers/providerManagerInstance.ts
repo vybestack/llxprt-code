@@ -30,10 +30,8 @@ import {
   USER_SETTINGS_PATH,
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
-import {
-  OAuthManager,
-  type OAuthManagerRuntimeMessageBusDeps,
-} from '../auth/oauth-manager.js';
+import { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
 import { HistoryItemWithoutId } from '../ui/types.js';

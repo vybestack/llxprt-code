@@ -18,7 +18,7 @@ import {
   type OAuthToken,
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from './oauth-manager.js';
+import type { BucketFailoverOAuthManagerLike } from './types.js';
 
 const logger = new DebugLogger('llxprt:bucket:failover:handler');
 
@@ -34,7 +34,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   private buckets: string[];
   private currentBucketIndex: number;
   private readonly provider: string;
-  private readonly oauthManager: OAuthManager;
+  private readonly oauthManager: BucketFailoverOAuthManagerLike;
   private readonly metadata?: OAuthTokenRequestMetadata;
   private triedBucketsThisSession: Set<string>;
   private ensureBucketsAuthInFlight: Promise<void> | null = null;
@@ -53,7 +53,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
   constructor(
     buckets: string[],
     provider: string,
-    oauthManager: OAuthManager,
+    oauthManager: BucketFailoverOAuthManagerLike,
     metadata?: OAuthTokenRequestMetadata,
   ) {
     this.buckets = buckets;
