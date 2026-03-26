@@ -30,6 +30,9 @@ vi.mock('./config/settings.js', async (importOriginal) => {
 
 vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn(),
+}));
+
+vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
 }));
 
@@ -215,9 +218,8 @@ describe('gemini main provider initialization', () => {
       getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
 
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
+    const { loadCliConfig } = await import('./config/config.js');
+    const { parseArguments } = await import('./config/cliArgParser.js');
     vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
     vi.mocked(parseArguments).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -230,7 +232,7 @@ describe('gemini main provider initialization', () => {
       outputFormat: OutputFormat.TEXT,
       extensions: [],
       sessionSummary: undefined,
-    } as unknown as import('./config/config.js').CliArgs);
+    } as unknown as import('./config/cliArgParser.js').CliArgs);
 
     const startInteractiveSpy = vi
       .spyOn(gemini, 'startInteractiveUI')
@@ -312,9 +314,8 @@ describe('gemini main provider initialization', () => {
       makeResumeResult('restored user content'),
     );
 
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
+    const { loadCliConfig } = await import('./config/config.js');
+    const { parseArguments } = await import('./config/cliArgParser.js');
     vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
     vi.mocked(parseArguments).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -327,7 +328,7 @@ describe('gemini main provider initialization', () => {
       outputFormat: OutputFormat.TEXT,
       extensions: [],
       sessionSummary: undefined,
-    } as unknown as import('./config/config.js').CliArgs);
+    } as unknown as import('./config/cliArgParser.js').CliArgs);
 
     const exitSpy = vi
       .spyOn(process, 'exit')

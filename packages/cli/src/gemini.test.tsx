@@ -17,7 +17,8 @@ import {
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
-import { loadCliConfig, parseArguments } from './config/config.js';
+import { loadCliConfig } from './config/config.js';
+import { parseArguments } from './config/cliArgParser.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
@@ -71,6 +72,9 @@ vi.mock('./config/config.js', () => ({
     getQuestion: vi.fn(() => ''),
     getProvider: vi.fn(() => undefined),
   } as unknown as Config),
+}));
+
+vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn().mockResolvedValue({
     model: undefined,
     sandbox: undefined,

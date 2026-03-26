@@ -41,7 +41,8 @@ import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
-import { loadCliConfig, parseArguments } from './config/config.js';
+import { loadCliConfig } from './config/config.js';
+import { parseArguments } from './config/cliArgParser.js';
 import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,

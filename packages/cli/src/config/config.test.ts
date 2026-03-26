@@ -15,7 +15,8 @@ import {
   isRipgrepAvailable,
   ApprovalMode,
 } from '@vybestack/llxprt-code-core';
-import { loadCliConfig, parseArguments } from './config.js';
+import { loadCliConfig } from './config.js';
+import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';

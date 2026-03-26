@@ -26,7 +26,8 @@ import {
   clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
-import { loadCliConfig, parseArguments } from '../config.js';
+import { loadCliConfig } from '../config.js';
+import { parseArguments } from '../cliArgParser.js';
 import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';

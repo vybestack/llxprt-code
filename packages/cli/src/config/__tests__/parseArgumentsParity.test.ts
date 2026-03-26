@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { parseArguments } from '../config.js';
+import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 
 // Minimal mocks so parseArguments doesn't need a full environment

@@ -18,7 +18,7 @@ import {
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
-import type { CliArgs } from './config.js';
+import type { CliArgs } from './cliArgParser.js';
 
 const logger = new DebugLogger('llxprt:config:environmentLoader');
 
