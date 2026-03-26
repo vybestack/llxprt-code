@@ -571,6 +571,53 @@ describe('HookRegistry', () => {
         expect.objectContaining({ type: 'invalid-type' }),
       );
     });
+
+    it('should skip known config fields and warn on invalid event names', async () => {
+      const emitSpy = vi.spyOn(coreEvents, 'emit');
+
+      const configWithExtras = {
+        disabled: [], // known config field — must be skipped silently
+        InvalidEvent: [], // unknown event name — must trigger warning
+        BeforeTool: [
+          {
+            hooks: [{ type: 'command', command: './test.sh' }],
+          },
+        ],
+      };
+
+      vi.mocked(mockConfig.getHooks).mockReturnValue(
+        configWithExtras as unknown as {
+          [K in HookEventName]?: HookDefinition[];
+        },
+      );
+
+      await hookRegistry.initialize();
+
+      // Should only load the valid hook (BeforeTool), not InvalidEvent
+      expect(hookRegistry.getAllHooks()).toHaveLength(1);
+
+      // Should have emitted exactly one Output warning for InvalidEvent
+      expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {
+        chunk: expect.stringContaining(
+          'Invalid hook event name: "InvalidEvent"',
+        ),
+        isStderr: true,
+      });
+
+      // Should NOT have emitted a warning for 'disabled' (known config field)
+      const allCalls = emitSpy.mock.calls;
+      const warningCallsForDisabled = allCalls.filter(
+        ([, payload]) =>
+          typeof payload === 'object' &&
+          payload !== null &&
+          'chunk' in payload &&
+          typeof (payload as { chunk: string }).chunk === 'string' &&
+          (payload as { chunk: string }).chunk.includes('"disabled"'),
+      );
+      expect(warningCallsForDisabled).toHaveLength(0);
+
+      emitSpy.mockRestore();
+    });
   });
 
   describe('hook name identification', () => {

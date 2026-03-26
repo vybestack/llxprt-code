@@ -93,32 +93,32 @@ available combinations.
 
 #### App Controls
 
-| Action                                                                                           | Keys             |
-| ------------------------------------------------------------------------------------------------ | ---------------- |
-| Toggle detailed error information.                                                               | `Ctrl + O`       |
-| Show IDE context details.                                                                        | `Ctrl + G`       |
-| Toggle Markdown rendering.                                                                       | `Cmd + M`        |
-| Toggle copy mode when in alternate buffer mode.                                                  | `Ctrl + S`       |
-| Toggle YOLO (auto-approval) mode for tool calls.                                                 | `Ctrl + Y`       |
-| Toggle Auto Edit (auto-accept edits) mode.                                                       | `Shift + Tab`    |
-| Expand a height-constrained response to show additional lines when not in alternate buffer mode. | `Ctrl + S`       |
-| Focus the shell input from the LLxprt input.                                                     | `Tab (no Shift)` |
-| Focus the LLxprt input from the shell input.                                                     | `Tab`            |
-| Clear the terminal screen and redraw the UI.                                                     | `Ctrl + L`       |
+| Action                                                                                           | Keys               |
+| ------------------------------------------------------------------------------------------------ | ------------------ |
+| Toggle detailed error information.                                                               | `Ctrl + O`         |
+| Show IDE context details.                                                                        | `Ctrl + G`         |
+| Toggle Markdown rendering.                                                                       | `Cmd + M`          |
+| Toggle copy mode when in alternate buffer mode.                                                  | `Ctrl + S`         |
+| Toggle YOLO (auto-approval) mode for tool calls.                                                 | `Ctrl + Y`         |
+| Toggle Auto Edit (auto-accept edits) mode.                                                       | `Shift + Tab`      |
+| Expand a height-constrained response to show additional lines when not in alternate buffer mode. | `Ctrl + S`         |
+| Focus the shell input from the LLxprt input.                                                     | `Tab (no Shift)`   |
+| Focus the LLxprt input from the shell input.                                                     | `Tab`              |
+| Clear the terminal screen and redraw the UI.                                                     | `Ctrl + L`         |
 | Refresh keypress handling.                                                                       | `Ctrl + Shift + R` |
 
 #### Todo Dialog
 
-| Action                           | Keys       |
-| -------------------------------- | ---------- |
-| Toggle the TODO dialog.          | `Ctrl + Q` |
+| Action                            | Keys       |
+| --------------------------------- | ---------- |
+| Toggle the TODO dialog.           | `Ctrl + Q` |
 | Toggle tool descriptions display. | `Ctrl + T` |
 
 #### Mouse
 
-| Action                      | Keys         |
-| --------------------------- | ------------ |
-| Toggle mouse event tracking. | `Ctrl + \`  |
+| Action                       | Keys       |
+| ---------------------------- | ---------- |
+| Toggle mouse event tracking. | `Ctrl + \` |
 
 <!-- KEYBINDINGS-AUTOGEN:END -->
 
