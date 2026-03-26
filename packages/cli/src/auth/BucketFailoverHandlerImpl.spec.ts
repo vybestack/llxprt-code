@@ -6,7 +6,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
-import { OAuthManager, type OAuthProvider } from './oauth-manager.js';
+import { OAuthManager } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import type {
   OAuthToken,
   TokenStore,
@@ -496,7 +497,8 @@ describe('BucketFailoverHandlerImpl', () => {
       oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
       // Mock refresh to fail (token was revoked server-side)
-      const provider = oauthManager['providers'].get('anthropic');
+      const provider = oauthManager.getProvider('anthropic');
+      expect(provider).toBeDefined();
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }
@@ -539,7 +541,8 @@ describe('BucketFailoverHandlerImpl', () => {
       oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
       // Mock refresh to fail
-      const provider = oauthManager['providers'].get('anthropic');
+      const provider = oauthManager.getProvider('anthropic');
+      expect(provider).toBeDefined();
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }
@@ -583,7 +586,8 @@ describe('BucketFailoverHandlerImpl', () => {
 
       // Mock refresh to succeed
       const refreshedToken = makeToken('refreshed-token');
-      const provider = oauthManager['providers'].get('anthropic');
+      const provider = oauthManager.getProvider('anthropic');
+      expect(provider).toBeDefined();
       if (provider) {
         provider.refreshToken = vi.fn(async () => refreshedToken);
       }
@@ -800,7 +804,8 @@ describe('BucketFailoverHandlerImpl', () => {
 
       // Mock refresh to succeed for bucket-b
       const refreshedToken = makeToken('refreshed-b');
-      const provider = oauthManager['providers'].get('anthropic');
+      const provider = oauthManager.getProvider('anthropic');
+      expect(provider).toBeDefined();
       if (provider) {
         provider.refreshToken = vi.fn(async () => refreshedToken);
       }
@@ -842,7 +847,8 @@ describe('BucketFailoverHandlerImpl', () => {
       oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
       // Mock refresh to fail
-      const provider = oauthManager['providers'].get('anthropic');
+      const provider = oauthManager.getProvider('anthropic');
+      expect(provider).toBeDefined();
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }
@@ -1066,7 +1072,8 @@ describe('BucketFailoverHandlerImpl', () => {
       oauthManager.setSessionBucket('anthropic', 'bucket-a');
 
       // Mock refresh to fail for all
-      const provider = oauthManager['providers'].get('anthropic');
+      const provider = oauthManager.getProvider('anthropic');
+      expect(provider).toBeDefined();
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }

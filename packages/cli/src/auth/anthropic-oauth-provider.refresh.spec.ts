@@ -18,7 +18,17 @@ function expiredToken(): OAuthToken {
   };
 }
 
-describe('AnthropicOAuthProvider refreshIfNeeded', () => {
+function validToken(): OAuthToken {
+  return {
+    access_token: 'refreshed-access-token',
+    refresh_token: 'refresh-token',
+    expiry: Math.floor(Date.now() / 1000) + 3600,
+    token_type: 'Bearer',
+    scope: null,
+  };
+}
+
+describe('AnthropicOAuthProvider refreshToken', () => {
   let tokenStore: TokenStore;
 
   beforeEach(() => {
@@ -29,36 +39,48 @@ describe('AnthropicOAuthProvider refreshIfNeeded', () => {
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['default']),
       getBucketStats: vi.fn(async () => null),
-      acquireRefreshLock: vi.fn(async () => true), // Issue #1159: Mock lock acquisition
-      releaseRefreshLock: vi.fn(async () => undefined), // Issue #1159: Mock lock release
+      acquireRefreshLock: vi.fn(async () => true),
+      releaseRefreshLock: vi.fn(async () => undefined),
       acquireAuthLock: vi.fn(async () => true),
       releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
   });
 
-  // Phase 4: refreshIfNeeded() is now a no-op deprecation shell
-  // Token refresh is handled by OAuthManager.authenticate()
-  it('returns null without persistence when refreshIfNeeded is deprecated no-op', async () => {
+  it('returns refreshed token without writing to tokenStore directly', async () => {
     const provider = new AnthropicOAuthProvider(tokenStore);
 
-    // refreshIfNeeded is now a no-op that returns null
-    const result = await provider.refreshIfNeeded();
+    const deviceFlow = (
+      provider as unknown as {
+        deviceFlow: { refreshToken: (rt: string) => Promise<OAuthToken> };
+      }
+    ).deviceFlow;
+    deviceFlow.refreshToken = vi.fn(async () => validToken());
 
-    expect(result).toBeNull();
-    // Provider no longer calls saveToken - OAuthManager handles persistence
+    const expired = expiredToken();
+    const result = await provider.refreshToken(expired);
+
+    expect(result).not.toBeNull();
+    expect(result?.access_token).toBe('refreshed-access-token');
+    // Provider does not call saveToken — OAuthManager handles persistence
     expect(tokenStore.saveToken).not.toHaveBeenCalled();
     expect(tokenStore.removeToken).not.toHaveBeenCalled();
   });
 
-  // Phase 4: refreshIfNeeded() is now a no-op deprecation shell
-  it('returns null without token removal when refreshIfNeeded is deprecated no-op', async () => {
+  it('returns null when token has no valid refresh_token', async () => {
     const provider = new AnthropicOAuthProvider(tokenStore);
 
-    // refreshIfNeeded is now a no-op that returns null
-    const result = await provider.refreshIfNeeded();
+    const noRefreshToken: OAuthToken = {
+      access_token: 'access',
+      refresh_token: undefined,
+      expiry: Math.floor(Date.now() / 1000) - 60,
+      token_type: 'Bearer',
+      scope: null,
+    };
+
+    const result = await provider.refreshToken(noRefreshToken);
 
     expect(result).toBeNull();
-    // Provider no longer calls removeToken - OAuthManager handles auth failures
+    expect(tokenStore.saveToken).not.toHaveBeenCalled();
     expect(tokenStore.removeToken).not.toHaveBeenCalled();
   });
 });

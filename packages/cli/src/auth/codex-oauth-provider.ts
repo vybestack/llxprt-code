@@ -17,18 +17,12 @@ import type {
   OAuthToken,
   TokenStore,
 } from '@vybestack/llxprt-code-core';
-import { OAuthProvider } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
 import { ClipboardService } from '../services/ClipboardService.js';
-
-enum InitializationState {
-  NotStarted = 'not-started',
-  InProgress = 'in-progress',
-  Completed = 'completed',
-  Failed = 'failed',
-}
+import { InitializationGuard } from './oauth-provider-base.js';
 
 /**
  * Port configuration for Codex OAuth callback
@@ -51,8 +45,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp?: number,
   ) => number;
-  private initializationState = InitializationState.NotStarted;
-  private initializationPromise?: Promise<void>;
+  private initGuard: InitializationGuard;
   private authInProgress: Promise<CodexOAuthToken> | null = null;
 
   constructor(
@@ -66,6 +59,8 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.logger = new DebugLogger('llxprt:auth:codex');
     this.tokenStore = tokenStore;
     this.addItem = addItem;
+    // Codex uses rethrow mode — no OAuthError wrapping, simpler semantics
+    this.initGuard = new InitializationGuard('rethrow');
   }
 
   /**
@@ -80,34 +75,8 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.addItem = addItem;
   }
 
-  /**
-   * Lazy initialization pattern
-   * Ensures initialization only happens once and handles concurrent calls
-   */
   private async ensureInitialized(): Promise<void> {
-    if (this.initializationState === InitializationState.Completed) {
-      return;
-    }
-
-    if (this.initializationState === InitializationState.Failed) {
-      this.initializationState = InitializationState.NotStarted;
-      this.initializationPromise = undefined;
-    }
-
-    if (this.initializationState === InitializationState.NotStarted) {
-      this.initializationState = InitializationState.InProgress;
-      this.initializationPromise = this.initializeToken();
-    }
-
-    if (this.initializationPromise) {
-      try {
-        await this.initializationPromise;
-        this.initializationState = InitializationState.Completed;
-      } catch (error) {
-        this.initializationState = InitializationState.Failed;
-        throw error;
-      }
-    }
+    return this.initGuard.ensureInitialized(() => this.initializeToken());
   }
 
   /**
@@ -178,7 +147,6 @@ export class CodexOAuthProvider implements OAuthProvider {
     const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
     this.logger.debug(() => `[FLOW] Interactive mode: ${interactive}`);
 
-    // Check if we should use device flow (browserless mode)
     if (!interactive) {
       this.logger.debug(
         () => '[FLOW] Using device flow for browserless authentication',
@@ -191,7 +159,6 @@ export class CodexOAuthProvider implements OAuthProvider {
       () => `[FLOW] Generated state: ${state.substring(0, 8)}...`,
     );
 
-    // Try primary port first (Codex CLI compatible), fallback to range
     this.logger.debug(() => '[FLOW] Starting local callback server...');
     const localCallback = await startLocalOAuthCallback({
       state,
@@ -204,21 +171,25 @@ export class CodexOAuthProvider implements OAuthProvider {
       localCallback.redirectUri.match(/:(\d+)\//)?.[1] || '0',
       10,
     );
-    const waitForCallback = localCallback.waitForCallback;
-
     this.logger.debug(
       () =>
         `[FLOW] Callback server started on port ${port}, redirectUri: ${localCallback.redirectUri}`,
     );
 
-    // Use the server's redirectUri - it already includes the correct path
     const redirectUri = localCallback.redirectUri;
     const authUrl = this.deviceFlow.buildAuthorizationUrl(redirectUri, state);
     this.logger.debug(
       () => `[FLOW] Built auth URL: ${authUrl.substring(0, 80)}...`,
     );
 
-    // Display URL in TUI (clickable) if available
+    await this.displayAuthUrlAndOpenBrowser(authUrl);
+    return this.waitForCallbackAndComplete(localCallback, redirectUri);
+  }
+
+  /**
+   * Display the auth URL to the user (TUI + clipboard + browser).
+   */
+  private async displayAuthUrlAndOpenBrowser(authUrl: string): Promise<void> {
     debugLogger.log('\nCodex OAuth Authentication');
     debugLogger.log('─'.repeat(40));
 
@@ -232,27 +203,32 @@ export class CodexOAuthProvider implements OAuthProvider {
       addItem(historyItem);
     }
 
-    // Also show plain URL for copying (pastable)
     debugLogger.log('Please visit the following URL to authenticate:');
     debugLogger.log(authUrl);
 
-    // Copy URL to clipboard with error handling
     try {
       await ClipboardService.copyToClipboard(authUrl);
     } catch (error) {
-      // Clipboard copy is non-critical, continue without it
       this.logger.debug(() => `Failed to copy URL to clipboard: ${error}`);
     }
 
-    // Open browser (we already know we're in interactive mode from the check at the start)
     this.logger.debug(() => '[FLOW] Opening browser for authentication');
     await openBrowserSecurely(authUrl);
     this.logger.debug(() => '[FLOW] Browser opened');
+  }
 
-    // Wait for callback — fall back to device auth if it fails
+  /**
+   * Wait for the OAuth callback and exchange the code for a token.
+   * Falls back to device auth if the callback fails.
+   */
+  private async waitForCallbackAndComplete(
+    localCallback: Awaited<ReturnType<typeof startLocalOAuthCallback>>,
+    redirectUri: string,
+  ): Promise<CodexOAuthToken> {
     this.logger.debug(() => '[FLOW] Waiting for OAuth callback...');
     try {
-      const { code, state: callbackState } = await waitForCallback();
+      const { code, state: callbackState } =
+        await localCallback.waitForCallback();
       this.logger.debug(
         () =>
           `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
@@ -260,7 +236,6 @@ export class CodexOAuthProvider implements OAuthProvider {
 
       await localCallback.shutdown().catch(() => undefined);
 
-      // Exchange code for tokens with state
       this.logger.debug(() => '[FLOW] Calling completeAuth()...');
       const token = await this.completeAuth(code, redirectUri, callbackState);
       this.logger.debug(() => '[FLOW] completeAuth() finished');
@@ -321,7 +296,6 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.logger.debug(() => '[DEVICE-FLOW] Starting device authorization flow');
 
     try {
-      // Request device code from OpenAI
       this.logger.debug(
         () => '[DEVICE-FLOW] Requesting device code from OpenAI...',
       );
@@ -329,59 +303,20 @@ export class CodexOAuthProvider implements OAuthProvider {
       this.logger.debug(
         () => `[DEVICE-FLOW] requestDeviceCode() returned successfully`,
       );
-
       this.logger.debug(
         () =>
           `[DEVICE-FLOW] Received user code: ${deviceCodeResponse.user_code}`,
       );
 
-      // Display the auth URL and user code in TUI history
-      const authUrl = 'https://auth.openai.com/codex/device';
-      const userCode = deviceCodeResponse.user_code;
+      const addItem = this.displayDeviceCodeToUser(
+        deviceCodeResponse.user_code,
+      );
 
-      // First show the clickable URL
-      const urlHistoryItem: HistoryItemOAuthURL = {
-        type: 'oauth_url',
-        text: `Please visit the following URL to authorize with Codex:\n${authUrl}`,
-        url: authUrl,
-      };
+      await this.copyDeviceCodeToClipboard(
+        deviceCodeResponse.user_code,
+        addItem,
+      );
 
-      // Try instance addItem first, fallback to global
-      const addItem = this.addItem || globalOAuthUI.getAddItem();
-      if (addItem) {
-        addItem(urlHistoryItem);
-
-        // Show the user code prominently - this is what the user needs to copy!
-        const codeMessage: HistoryItemWithoutId = {
-          type: 'info',
-          text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
-        };
-        addItem(codeMessage);
-      } else {
-        // Fallback for non-interactive mode - write to stdout
-        process.stdout.write('\nCodex Device Authorization\n');
-        process.stdout.write('─'.repeat(40) + '\n');
-        process.stdout.write(`Visit: ${authUrl}\n`);
-        process.stdout.write(`Code:  ${userCode}\n`);
-        process.stdout.write('(Code expires in 15 minutes)\n\n');
-      }
-
-      // Copy the user code to clipboard (this is what users need to paste in browser)
-      try {
-        await ClipboardService.copyToClipboard(userCode);
-        if (addItem) {
-          addItem(
-            { type: 'info', text: 'Code copied to clipboard!' },
-            Date.now(),
-          );
-        } else {
-          process.stdout.write('Code copied to clipboard!\n');
-        }
-      } catch (error) {
-        this.logger.debug(() => `Failed to copy code to clipboard: ${error}`);
-      }
-
-      // Start polling for device token - waits for user to complete auth in browser
       const pollResult = await this.deviceFlow.pollForDeviceToken(
         deviceCodeResponse.device_auth_id,
         deviceCodeResponse.user_code,
@@ -396,8 +331,6 @@ export class CodexOAuthProvider implements OAuthProvider {
           `[DEVICE-FLOW] Got authorization_code: ${pollResult.authorization_code.substring(0, 10)}...`,
       );
 
-      // Complete the device auth flow by exchanging authorization code for tokens
-      // This redirect_uri matches what OpenAI expects for device flow token exchange
       const redirectUri =
         'https://auth.openai.com/api/accounts/deviceauth/callback';
       const token = await this.deviceFlow.completeDeviceAuth(
@@ -410,7 +343,6 @@ export class CodexOAuthProvider implements OAuthProvider {
         () => '[DEVICE-FLOW] Device flow completed successfully',
       );
 
-      // Show success message
       const successMessage: HistoryItemWithoutId = {
         type: 'info',
         text: 'Successfully authenticated with Codex!',
@@ -428,6 +360,64 @@ export class CodexOAuthProvider implements OAuthProvider {
           `[DEVICE-FLOW] Device auth failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Display the device code and auth URL to the user.
+   * Returns the addItem callback for subsequent messages.
+   */
+  private displayDeviceCodeToUser(
+    userCode: string,
+  ):
+    | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
+    | undefined {
+    const authUrl = 'https://auth.openai.com/codex/device';
+    const urlHistoryItem: HistoryItemOAuthURL = {
+      type: 'oauth_url',
+      text: `Please visit the following URL to authorize with Codex:\n${authUrl}`,
+      url: authUrl,
+    };
+
+    const addItem = this.addItem || globalOAuthUI.getAddItem();
+    if (addItem) {
+      addItem(urlHistoryItem);
+      addItem({
+        type: 'info',
+        text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
+      });
+    } else {
+      process.stdout.write('\nCodex Device Authorization\n');
+      process.stdout.write('─'.repeat(40) + '\n');
+      process.stdout.write(`Visit: ${authUrl}\n`);
+      process.stdout.write(`Code:  ${userCode}\n`);
+      process.stdout.write('(Code expires in 15 minutes)\n\n');
+    }
+
+    return addItem ?? undefined;
+  }
+
+  /**
+   * Copy device code to clipboard and notify the user.
+   */
+  private async copyDeviceCodeToClipboard(
+    userCode: string,
+    addItem:
+      | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
+      | undefined,
+  ): Promise<void> {
+    try {
+      await ClipboardService.copyToClipboard(userCode);
+      if (addItem) {
+        addItem(
+          { type: 'info', text: 'Code copied to clipboard!' },
+          Date.now(),
+        );
+      } else {
+        process.stdout.write('Code copied to clipboard!\n');
+      }
+    } catch (error) {
+      this.logger.debug(() => `Failed to copy code to clipboard: ${error}`);
     }
   }
 
@@ -475,18 +465,6 @@ export class CodexOAuthProvider implements OAuthProvider {
       );
       return null;
     }
-  }
-
-  /**
-   * Refresh token if expired or about to expire
-   * @returns Refreshed token or null if refresh failed
-   */
-  async refreshIfNeeded(): Promise<CodexOAuthToken | null> {
-    this.logger.debug(
-      () =>
-        'refreshIfNeeded() is deprecated — refresh is handled by OAuthManager',
-    );
-    return null;
   }
 
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
