@@ -394,6 +394,10 @@ describe('processSlashCommandResult', () => {
   const mockScheduleToolCalls = vi.fn().mockResolvedValue(undefined);
   const mockSignal = new AbortController().signal;
 
+  beforeEach(() => {
+    mockScheduleToolCalls.mockClear();
+  });
+
   it('handles schedule_tool: calls scheduleToolCalls and returns no further proceed', async () => {
     const result = await processSlashCommandResult(
       {

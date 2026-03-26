@@ -19,6 +19,7 @@
  * - External tools marked even when primaryTools is empty
  */
 
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';
@@ -583,6 +584,3 @@ describe('call-order invariants', () => {
     expect(callOrder).toContain('mark');
   });
 });
-
-// ─── React import for type ────────────────────────────────────────────────────
-import React from 'react';
