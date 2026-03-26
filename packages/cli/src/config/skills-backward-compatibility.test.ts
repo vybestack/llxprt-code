@@ -13,8 +13,7 @@ import { ExtensionStorage } from './extension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 vi.mock('./trustedFolders.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./trustedFolders.js')>();
+  const actual = await importOriginal<typeof import('./trustedFolders.js')>();
   return {
     ...actual,
     isWorkspaceTrusted: vi.fn().mockReturnValue(true),
@@ -31,7 +30,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-async function buildConfig(settings: ReturnType<typeof createTestMergedSettings>) {
+async function buildConfig(
+  settings: ReturnType<typeof createTestMergedSettings>,
+) {
   process.argv = ['node', 'llxprt'];
   const argv = await parseArguments(settings);
   return loadCliConfig(
@@ -66,7 +67,9 @@ describe('Agent Skills Backward Compatibility', () => {
     const settings = createTestMergedSettings({});
     const config = await buildConfig(settings);
     expect(
-      (config as unknown as { isSkillsSupportEnabled: () => boolean }).isSkillsSupportEnabled(),
+      (
+        config as unknown as { isSkillsSupportEnabled: () => boolean }
+      ).isSkillsSupportEnabled(),
     ).toBe(true);
   });
 
@@ -76,7 +79,9 @@ describe('Agent Skills Backward Compatibility', () => {
     } as unknown as Settings);
     const config = await buildConfig(settings);
     expect(
-      (config as unknown as { isSkillsSupportEnabled: () => boolean }).isSkillsSupportEnabled(),
+      (
+        config as unknown as { isSkillsSupportEnabled: () => boolean }
+      ).isSkillsSupportEnabled(),
     ).toBe(false);
   });
 
@@ -86,7 +91,9 @@ describe('Agent Skills Backward Compatibility', () => {
     } as unknown as Settings);
     const config = await buildConfig(settings);
     expect(
-      (config as unknown as { isSkillsSupportEnabled: () => boolean }).isSkillsSupportEnabled(),
+      (
+        config as unknown as { isSkillsSupportEnabled: () => boolean }
+      ).isSkillsSupportEnabled(),
     ).toBe(true);
   });
 
@@ -97,7 +104,9 @@ describe('Agent Skills Backward Compatibility', () => {
     } as unknown as Settings);
     const config = await buildConfig(settings);
     expect(
-      (config as unknown as { isSkillsSupportEnabled: () => boolean }).isSkillsSupportEnabled(),
+      (
+        config as unknown as { isSkillsSupportEnabled: () => boolean }
+      ).isSkillsSupportEnabled(),
     ).toBe(true);
   });
 
@@ -107,7 +116,9 @@ describe('Agent Skills Backward Compatibility', () => {
     } as unknown as Settings);
     const config = await buildConfig(settings);
     expect(
-      (config as unknown as { isSkillsSupportEnabled: () => boolean }).isSkillsSupportEnabled(),
+      (
+        config as unknown as { isSkillsSupportEnabled: () => boolean }
+      ).isSkillsSupportEnabled(),
     ).toBe(true);
   });
 });
