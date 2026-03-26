@@ -49,7 +49,7 @@
 | R33 | REIMPLEMENT | 211d2c5 | DONE | d160f64ef | **HIGH RISK** hooks event names split |
 | R34 | REIMPLEMENT | aceb06a | DONE | 0ab20d705 | newline fix |
 | R35 | REIMPLEMENT | e1fd5be | DONE | ca2b2eaa3 | Esc-Esc clear |
-| R36 | REIMPLEMENT | 93ae777 | TODO | | System scopes migration |
+| R36 | REIMPLEMENT | 93ae777 | DONE | 1d60766c2 | System scopes migration |
 | R37 | REIMPLEMENT | 0fa9a54 | TODO | | auth failure |
 | R38 | REIMPLEMENT | ee87c98 | TODO | | fast return buffer |
 | R39 | REIMPLEMENT | cebe386 | TODO | | **HIGH RISK** MCP status hook |
