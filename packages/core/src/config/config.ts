@@ -1051,10 +1051,15 @@ export class Config {
       this,
       this.eventEmitter,
     );
-    await Promise.all([
+    // We do not await this promise so that the CLI can start up even if
+    // MCP servers are slow to connect. Discovery state is tracked via
+    // MCPDiscoveryState; useGeminiStream blocks non-slash queries until COMPLETED.
+    Promise.all([
       this.mcpClientManager.startConfiguredMcpServers(),
       this.getExtensionLoader().start(this),
-    ]);
+    ]).catch((error) => {
+      debugLogger.error('Error initializing MCP clients:', error);
+    });
 
     /**
      * @plan PLAN-20250212-LSP.P33

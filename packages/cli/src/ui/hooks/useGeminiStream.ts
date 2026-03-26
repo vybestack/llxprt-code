@@ -38,6 +38,8 @@ import {
   type RecordingIntegration,
   type MessageBus,
   debugLogger,
+  MCPDiscoveryState,
+  coreEvents,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -1271,6 +1273,23 @@ export const useGeminiStream = (
 
       if (!prompt_id) {
         prompt_id = config.getSessionId() + '########' + getPromptCount();
+      }
+
+      const discoveryState = config.getMcpClientManager()?.getDiscoveryState();
+      const mcpServerCount =
+        config.getMcpClientManager()?.getMcpServerCount() ?? 0;
+      if (
+        !options?.isContinuation &&
+        typeof query === 'string' &&
+        !isSlashCommand(query.trim()) &&
+        mcpServerCount > 0 &&
+        discoveryState !== MCPDiscoveryState.COMPLETED
+      ) {
+        coreEvents.emitFeedback(
+          'info',
+          'Waiting for MCP servers to initialize... Slash commands are still available.',
+        );
+        return;
       }
 
       // Display user message IMMEDIATELY for string queries (not continuations)

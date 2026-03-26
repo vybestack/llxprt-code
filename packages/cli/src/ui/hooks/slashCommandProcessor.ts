@@ -28,6 +28,9 @@ import {
   ProfileManager,
   SubagentManager,
   getProjectHash,
+  addMCPStatusChangeListener,
+  removeMCPStatusChangeListener,
+  MCPDiscoveryState,
 } from '@vybestack/llxprt-code-core';
 import {
   performResume,
@@ -382,12 +385,17 @@ export const useSlashCommandProcessor = (
       ideClient.addStatusChangeListener(listener);
     })();
 
+    // Listen for MCP server status changes (e.g. connection, discovery completion)
+    // to reload slash commands (since they may include MCP prompts).
+    addMCPStatusChangeListener(listener);
+
     return () => {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       (async () => {
         const ideClient = await IdeClient.getInstance();
         ideClient.removeStatusChangeListener(listener);
       })();
+      removeMCPStatusChangeListener(listener);
     };
   }, [config, reloadCommands]);
 
@@ -893,9 +901,16 @@ export const useSlashCommandProcessor = (
           }
         }
 
+        const isMcpLoading =
+          config?.getMcpClientManager()?.getDiscoveryState() ===
+          MCPDiscoveryState.IN_PROGRESS;
+        const errorMessage = isMcpLoading
+          ? `Unknown command: ${trimmed}. Command might have been from an MCP server but MCP servers are not done loading.`
+          : `Unknown command: ${trimmed}`;
+
         addMessage({
           type: MessageType.ERROR,
-          content: `Unknown command: ${trimmed}`,
+          content: errorMessage,
           timestamp: new Date(),
         });
 
