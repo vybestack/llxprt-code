@@ -11,10 +11,10 @@ TOLERANCE=1  # percentage points
 
 extract() {
   local file="$1" metric="$2"
-  if [ ! -f "$file" ]; then echo "ERROR: Coverage file not found: $file" >&2; exit 1; fi
+  if [[ ! -f "${file}" ]]; then echo "ERROR: Coverage file not found: ${file}" >&2; exit 1; fi
   node --input-type=module -e "
     import { readFileSync } from 'node:fs';
-    const data = JSON.parse(readFileSync('$file', 'utf-8'));
+    const data = JSON.parse(readFileSync('${file}', 'utf-8'));
     const TARGET_BASENAMES = ['subagent.ts','subagentTypes.ts','subagentRuntimeSetup.ts','subagentToolProcessing.ts','subagentExecution.ts'];
     const files = Object.keys(data).filter(f => TARGET_BASENAMES.some(t => f.endsWith('/core/' + t)));
     let covered = 0, total = 0;
@@ -29,17 +29,17 @@ extract() {
 overall_pass=true
 
 for metric in lines branches; do
-  baseline_val=$(extract "$BASELINE" "$metric")
-  current_val=$(extract "$CURRENT" "$metric")
-  diff=$(node -e "console.log(($baseline_val - $current_val).toFixed(2))")
-  if (( $(echo "$diff > $TOLERANCE" | bc -l) )); then
-    echo "FAIL: $metric coverage dropped by ${diff}pp (${baseline_val}% -> ${current_val}%)"
+  baseline_val=$(extract "${BASELINE}" "${metric}")
+  current_val=$(extract "${CURRENT}" "${metric}")
+  diff=$(node -e "console.log((${baseline_val} - ${current_val}).toFixed(2))")
+  if (( $(echo "${diff} > ${TOLERANCE}" | bc -l) )); then
+    echo "FAIL: ${metric} coverage dropped by ${diff}pp (${baseline_val}% -> ${current_val}%)"
     overall_pass=false
   else
-    echo "OK: $metric coverage ${current_val}% (baseline: ${baseline_val}%, delta: -${diff}pp)"
+    echo "OK: ${metric} coverage ${current_val}% (baseline: ${baseline_val}%, delta: -${diff}pp)"
   fi
 done
 
-if [ "$overall_pass" = "false" ]; then
+if [[ "${overall_pass}" = "false" ]]; then
   exit 1
 fi
