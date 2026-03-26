@@ -32,6 +32,7 @@ import type {
 } from './types.js';
 import {
   CompressionExecutionError,
+  EmptySummaryError,
   PromptResolutionError,
   isTransientCompressionError,
 } from './types.js';
@@ -39,14 +40,14 @@ import {
   adjustForToolCallBoundary,
   aggregateTextFromBlocks,
   buildContinuationDirective,
+  buildTriggerInstruction,
+  COMPRESSION_SECURITY_PREAMBLE,
+  runVerificationPass,
   sanitizeHistoryForCompression,
 } from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
-
-const TRIGGER_INSTRUCTION =
-  'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
 
 // ---------------------------------------------------------------------------
 // MiddleOutStrategy
@@ -88,7 +89,9 @@ export class MiddleOutStrategy implements CompressionStrategy {
     // validation (orphaned blocks from interrupted loops would cause 400s).
     // @plan PLAN-20260211-HIGHDENSITY.P23
     // @requirement REQ-HD-011.3, REQ-HD-012.2
+    const triggerInstruction = buildTriggerInstruction(toCompress);
     const compressionRequest: IContent[] = [
+      COMPRESSION_SECURITY_PREAMBLE,
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: prompt }],
@@ -97,7 +100,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       ...this.buildContextInjections(context),
       {
         speaker: 'human',
-        blocks: [{ type: 'text', text: TRIGGER_INSTRUCTION }],
+        blocks: [{ type: 'text', text: triggerInstruction }],
       },
     ];
 
@@ -108,17 +111,19 @@ export class MiddleOutStrategy implements CompressionStrategy {
     );
 
     if (!summary.trim()) {
-      throw new CompressionExecutionError(
-        'middle-out',
-        'LLM returned empty summary during compression; this may be caused by rate limiting or a transient provider issue',
-        { isTransient: true },
-      );
+      throw new EmptySummaryError('middle-out');
+    }
+
+    // Optional verification pass — gated by compressionVerification flag (default off)
+    let finalSummary = summary;
+    if (context.compressionVerification) {
+      finalSummary = await runVerificationPass(provider, summary);
     }
 
     // Assemble result
     const newHistory = this.assembleHistory(
       toKeepTop,
-      summary,
+      finalSummary,
       toKeepBottom,
       context.activeTodos,
       capturedUsage,

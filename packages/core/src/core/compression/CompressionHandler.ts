@@ -610,6 +610,8 @@ export class CompressionHandler {
       },
       promptId,
       ...(activeTodos ? { activeTodos } : {}),
+      compressionVerification:
+        this.runtimeContext.ephemerals.compressionVerification?.() ?? false,
     };
   }
 
