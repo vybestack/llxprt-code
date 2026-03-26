@@ -705,6 +705,77 @@ export default tseslint.config(
   // End Issue #1577
   // ============================================================================
 
+  // ============================================================================
+  // Issue #1581: subagent.ts decomposition - Size enforcement
+  // ============================================================================
+  //
+  // Error-level max-lines and max-lines-per-function rules on the four new
+  // modules ensure they never grow past their design targets. The coordinator
+  // file (subagent.ts) uses 'warn' during the decomposition (Phases 1-4) and
+  // will be promoted to 'error' in Phase 5 once the file is thin enough.
+  // These rules target files that don't exist yet — ESLint silently ignores
+  // unmatched globs, so CI stays green during Phase 0.
+  {
+    files: [
+      'packages/core/src/core/subagentTypes.ts',
+      'packages/core/src/core/subagentRuntimeSetup.ts',
+      'packages/core/src/core/subagentToolProcessing.ts',
+      'packages/core/src/core/subagentExecution.ts',
+    ],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // subagent.ts coordinator: warn during decomposition, promoted to error in Phase 5
+  {
+    files: ['packages/core/src/core/subagent.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'max-lines': [
+        'warn',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'warn',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // Enforce execution -> runtimeSetup dependency boundary.
+  // subagentExecution.ts must not import from subagentRuntimeSetup.js.
+  // All runtime artifacts must be passed as parameters by the coordinator.
+  // See project-plans/issue1581/README.md §Dependency Graph.
+  {
+    files: ['packages/core/src/core/subagentExecution.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: './subagentRuntimeSetup.js',
+              message:
+                'subagentExecution must not import from subagentRuntimeSetup. ' +
+                'All runtime artifacts must be passed as parameters by the coordinator (subagent.ts). ' +
+                'See project-plans/issue1581/README.md §Dependency Graph.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1581
+  // ============================================================================
+
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node
