@@ -33,7 +33,7 @@
 | R17 | REIMPLEMENT | 1e8f87f | DONE | 8f68d3b78 | MCPDiscoveryState tracking |
 | R18 | REIMPLEMENT | cfdc4cf | DONE (NO_OP) | — | scheduleToolCalls race — already present in LLxprt |
 | R19 | REIMPLEMENT | ce35d84 | DONE | 7f5c40438 | organize keybindings (chain 4/4) |
-| R20 | REIMPLEMENT | 9722ec9 | TODO | | hook event names |
+| R20 | REIMPLEMENT | 9722ec9 | DONE | 4180f7ba2 | hook event name validation (chain 1/4) |
 | R21 | REIMPLEMENT | 608da23 | TODO | | **HIGH RISK** disable→enable settings (22+ files) |
 | R22 | REIMPLEMENT | 1681ae1 | TODO | | unify shell confirmation |
 | R23 | REIMPLEMENT | 272570c | TODO | | skills default enabled |
