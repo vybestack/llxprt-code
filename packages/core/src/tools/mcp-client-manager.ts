@@ -17,7 +17,7 @@ import {
 } from './mcp-client.js';
 import { getErrorMessage, isAuthenticationError } from '../utils/errors.js';
 import type { EventEmitter } from 'node:events';
-import { coreEvents } from '../utils/events.js';
+import { coreEvents, CoreEvent } from '../utils/events.js';
 import { DebugLogger } from '../debug/index.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
@@ -119,7 +119,9 @@ export class McpClientManager {
     if (existing) {
       try {
         this.clients.delete(name);
-        this.eventEmitter?.emit('mcp-client-update', this.clients);
+        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+          clients: this.clients,
+        });
         await existing.disconnect();
       } catch (error) {
         logger.warn(
@@ -191,14 +193,20 @@ export class McpClientManager {
             );
           if (!existing) {
             this.clients.set(name, client);
-            this.eventEmitter?.emit('mcp-client-update', this.clients);
+            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+              clients: this.clients,
+            });
           }
           try {
             await client.connect();
             await client.discover(this.cliConfig);
-            this.eventEmitter?.emit('mcp-client-update', this.clients);
+            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+              clients: this.clients,
+            });
           } catch (error) {
-            this.eventEmitter?.emit('mcp-client-update', this.clients);
+            this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+              clients: this.clients,
+            });
             // Log the error but don't let a single failed server stop the others
             // Skip emitting feedback for authentication errors (they're handled by connectToMcpServer)
             if (!isAuthenticationError(error)) {
@@ -225,7 +233,9 @@ export class McpClientManager {
       this.discoveryState = MCPDiscoveryState.IN_PROGRESS;
       this.discoveryPromise = currentDiscoveryPromise;
     }
-    this.eventEmitter?.emit('mcp-client-update', this.clients);
+    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+      clients: this.clients,
+    });
     const currentPromise = this.discoveryPromise;
     void currentPromise.then((_) => {
       // If we are the last recorded discoveryPromise, then we are done, reset
@@ -233,6 +243,9 @@ export class McpClientManager {
       if (currentPromise === this.discoveryPromise) {
         this.discoveryPromise = undefined;
         this.discoveryState = MCPDiscoveryState.COMPLETED;
+        this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+          clients: this.clients,
+        });
       }
     });
     return currentPromise;
@@ -260,7 +273,17 @@ export class McpClientManager {
       this.cliConfig.getMcpServerCommand(),
     );
 
-    this.eventEmitter?.emit('mcp-client-update', this.clients);
+    if (Object.keys(servers).length === 0) {
+      this.discoveryState = MCPDiscoveryState.COMPLETED;
+      this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+        clients: this.clients,
+      });
+      return;
+    }
+
+    this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
+      clients: this.clients,
+    });
     await Promise.all(
       Object.entries(servers).map(([name, config]) =>
         this.maybeDiscoverMcpServer(name, config),

@@ -34,6 +34,8 @@ import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
+import { useMcpStatus } from './hooks/useMcpStatus.js';
+import { useMessageQueue } from './hooks/useMessageQueue.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
@@ -112,6 +114,7 @@ import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { basename } from 'node:path';
 import { computeTerminalTitle } from '../utils/windowTitle.js';
+import { isSlashCommand } from './utils/commandUtils.js';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
@@ -1553,6 +1556,15 @@ export const AppContainer = (props: AppContainerProps) => {
     [buffer, pendingHistoryItems],
   );
 
+  const { isMcpReady } = useMcpStatus(config);
+
+  const { messageQueue, addMessage } = useMessageQueue({
+    isConfigInitialized: true,
+    streamingState,
+    submitQuery,
+    isMcpReady,
+  });
+
   // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {
@@ -1571,11 +1583,32 @@ export const AppContainer = (props: AppContainerProps) => {
         lastSubmittedPromptRef.current = trimmedValue;
         // Add to independent input history
         inputHistoryStore.addInput(trimmedValue);
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        submitQuery(trimmedValue);
+
+        const isSlash = isSlashCommand(trimmedValue);
+        const isIdle = streamingState === StreamingState.Idle;
+
+        if (isSlash || (isIdle && isMcpReady)) {
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          submitQuery(trimmedValue);
+        } else {
+          if (isIdle && !isMcpReady && messageQueue.length === 0) {
+            coreEvents.emitFeedback(
+              'info',
+              'Waiting for MCP servers to initialize... Slash commands are still available and prompts will be queued.',
+            );
+          }
+          addMessage(trimmedValue);
+        }
       }
     },
-    [submitQuery, inputHistoryStore],
+    [
+      addMessage,
+      inputHistoryStore,
+      submitQuery,
+      isMcpReady,
+      streamingState,
+      messageQueue.length,
+    ],
   );
 
   const { handleUserInputSubmit } = useTodoPausePreserver({

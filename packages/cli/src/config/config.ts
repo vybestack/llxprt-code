@@ -41,6 +41,7 @@ import {
   type GeminiCLIExtension,
   type Profile,
   debugLogger,
+  coreEvents,
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings, loadSettings } from './settings.js';
@@ -53,7 +54,6 @@ import { loadSandboxConfig } from './sandboxConfig.js';
 import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
-import { appEvents } from '../utils/events.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
@@ -1504,7 +1504,7 @@ export async function loadCliConfig(
     allowPtyThemeOverride: effectiveSettings.allowPtyThemeOverride,
     ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
-    eventEmitter: appEvents,
+    eventEmitter: coreEvents,
     // @plan PLAN-20260211-SESSIONRECORDING.P24 — normalize --continue flag:
     // bare --continue (yargs gives "") → true, --continue <id> → id string, absent → false
     continueSession:
