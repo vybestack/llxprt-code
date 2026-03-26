@@ -17,6 +17,7 @@ import {
   OutputUpdateHandler,
   ToolCallsUpdateHandler,
   ToolCall,
+  ToolCallConfirmationDetails,
   Status as CoreStatus,
   EditorType,
   DEFAULT_AGENT_ID,
@@ -611,7 +612,8 @@ export function mapToDisplay(
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
             resultDisplay: undefined,
-            confirmationDetails: trackedCall.confirmationDetails,
+            confirmationDetails:
+              trackedCall.confirmationDetails as ToolCallConfirmationDetails,
           };
         case 'executing': {
           const executingCall = trackedCall;

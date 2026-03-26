@@ -1426,7 +1426,8 @@ describe('CoreToolScheduler with payload', () => {
       onToolCallsUpdate,
       'awaiting_approval',
     )) as WaitingToolCall;
-    const confirmationDetails = awaitingCall.confirmationDetails;
+    const confirmationDetails =
+      awaitingCall.confirmationDetails as ToolCallConfirmationDetails;
 
     expect(confirmationDetails).toBeDefined();
     const payload: ToolConfirmationPayload = { newContent: 'final version' };
@@ -1560,10 +1561,11 @@ describe('CoreToolScheduler with payload', () => {
       editedCommand: 'npm install',
     };
 
-    await awaitingCall.confirmationDetails.onConfirm(
+    await (awaitingCall.confirmationDetails as ToolCallConfirmationDetails).onConfirm(
       ToolConfirmationOutcome.SuggestEdit,
       payload,
     );
+
 
     await vi.waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
@@ -1959,10 +1961,12 @@ describe('CoreToolScheduler edit cancellation', () => {
     )) as WaitingToolCall;
 
     // Cancel the edit
-    const confirmationDetails = awaitingCall.confirmationDetails;
+    const confirmationDetails =
+      awaitingCall.confirmationDetails as ToolCallConfirmationDetails;
     if (confirmationDetails) {
       await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
     }
+
 
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCalls = onAllToolCallsComplete.mock
@@ -2775,16 +2779,17 @@ describe.skip('CoreToolScheduler request queueing', () => {
         toolCalls.forEach((call) => {
           if (call.status === 'awaiting_approval') {
             const waitingCall = call;
-            if (waitingCall.confirmationDetails?.onConfirm) {
+            const details =
+              waitingCall.confirmationDetails as ToolCallConfirmationDetails;
+            if (details?.onConfirm) {
               const originalHandler = pendingConfirmations.find(
-                (h) => h === waitingCall.confirmationDetails.onConfirm,
+                (h) => h === details.onConfirm,
               );
               if (!originalHandler) {
-                pendingConfirmations.push(
-                  waitingCall.confirmationDetails.onConfirm,
-                );
+                pendingConfirmations.push(details.onConfirm);
               }
             }
+
           }
         });
       },
@@ -3721,10 +3726,11 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
     expect(waitingCall).toBeDefined();
     expect(waitingCall?.status).toBe('awaiting_approval');
 
-    // Get the confirmation details
-    const confirmationDetails = (waitingCall as WaitingToolCall)
-      .confirmationDetails;
+    const confirmationDetails = (
+      waitingCall as WaitingToolCall
+    ).confirmationDetails as ToolCallConfirmationDetails;
     expect(confirmationDetails).toBeDefined();
+
 
     // Simulate calling handleConfirmationResponse twice with the same call ID
     // The first call should proceed with execution

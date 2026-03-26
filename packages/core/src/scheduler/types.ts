@@ -23,6 +23,7 @@ import type {
 } from '../core/turn.js';
 import type { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
+import type { SerializableConfirmationDetails } from '../confirmation-bus/types.js';
 
 /**
  * @requirement TS-TYPE-001
@@ -92,7 +93,18 @@ export type WaitingToolCall = {
   request: ToolCallRequestInfo;
   tool: AnyDeclarativeTool;
   invocation: AnyToolInvocation;
-  confirmationDetails: ToolCallConfirmationDetails;
+  /**
+   * Supports both legacy (with callbacks) and new (serializable) details.
+   * New code should treat this as SerializableConfirmationDetails.
+   *
+   * TODO: Remove ToolCallConfirmationDetails and collapse to just
+   * SerializableConfirmationDetails after migration.
+   */
+  confirmationDetails:
+    | ToolCallConfirmationDetails
+    | SerializableConfirmationDetails;
+  // TODO: Make required after migration.
+  correlationId?: string;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
 };

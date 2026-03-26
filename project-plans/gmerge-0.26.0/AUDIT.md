@@ -42,9 +42,9 @@ Post-implementation reconciliation. Updated continuously during execution.
 |:------------:|----------|---------------|-------|
 | 3b55581 | REIMPLEMENTED | b56a039ef | extension config — PASS |
 | a3234fb | REIMPLEMENTED | 038ec6682 | rootCommands — PASS |
-| 09a7301 | REIMPLEMENTED | | remove \x7f bindings |
-| 94d5ae5 | REIMPLEMENTED | | paste handling |
-| 7e6817d | REIMPLEMENTED | | stdin close cleanup |
+| 09a7301 | REIMPLEMENTED | 756587f69 | remove \\x7f bindings — PASS |
+| 94d5ae5 | REIMPLEMENTED | 893307fe9 | paste handling — PASS |
+| 7e6817d | REIMPLEMENTED | (no-op) | stdin close cleanup — already present |
 | 6021e4c | REIMPLEMENTED | | scheduler event types |
 | fb76408 | REIMPLEMENTED | | sequence binding |
 | a2dab14 | REIMPLEMENTED | | undeprecate --prompt |

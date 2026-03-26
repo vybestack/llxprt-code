@@ -16,9 +16,9 @@
 |------:|------|-------------|--------|---------------|-------|
 | R1 | REIMPLEMENT | 3b55581 | DONE | b56a039ef | extension config |
 | R2 | REIMPLEMENT | a3234fb | DONE | 038ec6682 | rootCommands |
-| R3 | REIMPLEMENT | 09a7301 | TODO | | remove \x7f bindings |
-| R4 | REIMPLEMENT | 94d5ae5 | TODO | | paste handling |
-| R5 | REIMPLEMENT | 7e6817d | TODO | | stdin close cleanup |
+| R3 | REIMPLEMENT | 09a7301 | DONE | 756587f69 | remove \\x7f bindings |
+| R4 | REIMPLEMENT | 94d5ae5 | DONE | 893307fe9 | paste handling |
+| R5 | REIMPLEMENT | 7e6817d | DONE | (no-op) | stdin close cleanup — already present in LLxprt |
 | R6 | REIMPLEMENT | 6021e4c | TODO | | scheduler event types |
 | R7 | REIMPLEMENT | fb76408 | TODO | | sequence binding |
 | R8 | REIMPLEMENT | a2dab14 | TODO | | undeprecate --prompt |
