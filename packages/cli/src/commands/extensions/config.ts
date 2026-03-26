@@ -17,6 +17,7 @@ import {
   loadUserExtensions,
   loadExtensionConfig,
 } from '../../config/extension.js';
+import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
 import { promptForSetting } from './settings.js';
 
@@ -263,6 +264,15 @@ export const configCommand: CommandModule = {
         default: 'user',
       }),
   handler: async (argv) => {
+    const settings = loadSettings(process.cwd()).merged;
+    if (!(settings.experimental?.extensionConfig ?? false)) {
+      console.error(
+        'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
+      );
+      await exitCli();
+      return;
+    }
+
     await handleConfig({
       name: argv['name'] as string | undefined,
       setting: argv['setting'] as string | undefined,

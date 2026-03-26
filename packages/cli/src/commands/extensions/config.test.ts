@@ -34,6 +34,7 @@ const mockLoadExtensionConfig: Mock<
 const mockPromptForSetting: Mock<typeof settingsModule.promptForSetting> =
   vi.hoisted(() => vi.fn());
 const mockConfirmOverwrite: Mock = vi.hoisted(() => vi.fn());
+const mockLoadSettings: Mock = vi.hoisted(() => vi.fn());
 
 // Mock readline module to control confirmOverwrite
 vi.mock('node:readline', () => ({
@@ -111,6 +112,10 @@ vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
+vi.mock('../../config/settings.js', () => ({
+  loadSettings: mockLoadSettings,
+}));
+
 // Mock confirmOverwrite in the config module
 vi.mock('./config.js', async () => {
   const actual = await vi.importActual('./config.js');
@@ -145,6 +150,14 @@ describe('extensions config command', () => {
     mockLoadExtensionConfig.mockResolvedValue({
       name: 'test-ext',
       version: '1.0.0',
+    });
+    // Default: extensionConfig enabled so existing tests pass
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: true,
+        },
+      },
     });
   });
 
@@ -438,6 +451,69 @@ describe('extensions config command', () => {
       // Cleanup
       process.exitCode = originalExitCode;
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('extensionConfig gate', () => {
+    it('should show error and exit when experimental.extensionConfig is false', async () => {
+      mockLoadSettings.mockReturnValue({
+        merged: {
+          experimental: {
+            extensionConfig: false,
+          },
+        },
+      });
+
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const parser = yargs([]).command(configCommand).fail(false);
+      await parser.parseAsync('config test-ext TEST_VAR');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Extension configuration is currently disabled'),
+      );
+      expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+      expect(mockUpdateSetting).not.toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should show error and exit when experimental.extensionConfig is not set', async () => {
+      mockLoadSettings.mockReturnValue({
+        merged: {},
+      });
+
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      const parser = yargs([]).command(configCommand).fail(false);
+      await parser.parseAsync('config test-ext');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Extension configuration is currently disabled'),
+      );
+      expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should proceed when experimental.extensionConfig is true', async () => {
+      mockLoadSettings.mockReturnValue({
+        merged: {
+          experimental: {
+            extensionConfig: true,
+          },
+        },
+      });
+
+      const parser = yargs([]).command(configCommand).fail(false);
+      await parser.parseAsync('config test-ext TEST_VAR');
+
+      expect(mockGetExtensionAndConfig).toHaveBeenCalledWith('test-ext');
+      expect(mockUpdateSetting).toHaveBeenCalled();
     });
   });
 });

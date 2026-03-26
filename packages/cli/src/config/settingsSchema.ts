@@ -1428,6 +1428,15 @@ export const SETTINGS_SCHEMA = {
     description: 'Experimental features.',
     showInDialog: false,
     properties: {
+      extensionConfig: {
+        type: 'boolean',
+        label: 'Extension Configuration',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: false,
+        description: 'Enable requesting and fetching of extension settings.',
+        showInDialog: false,
+      },
       extensionReloading: {
         type: 'boolean',
         label: 'Extension Reloading',
