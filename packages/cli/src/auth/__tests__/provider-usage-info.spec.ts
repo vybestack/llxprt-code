@@ -807,4 +807,11 @@ describe('isQwenCompatibleUrl', () => {
       false,
     );
   });
+
+  it('rejects hostile hostname that contains a Qwen domain as substring', () => {
+    expect(isQwenCompatibleUrl('https://api.qwen.com.evil.test/v1')).toBe(
+      false,
+    );
+    expect(isQwenCompatibleUrl('https://notqwen.com/v1')).toBe(false);
+  });
 });

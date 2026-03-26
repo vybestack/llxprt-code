@@ -434,7 +434,7 @@ export class TokenAccessCoordinator {
     if (token) {
       logger.debug(
         () =>
-          `[FLOW] Returning existing token for ${providerName}: ${token.access_token.substring(0, 10)}...`,
+          `[FLOW] Returning existing token for ${providerName} (expiry=${token.expiry})`,
       );
       return token.access_token;
     }

@@ -270,7 +270,10 @@ export function isQwenCompatibleUrl(url: string): boolean {
 
   try {
     const urlObj = new URL(url);
-    return qwenDomains.some((domain) => urlObj.hostname.includes(domain));
+    return qwenDomains.some(
+      (domain) =>
+        urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`),
+    );
   } catch {
     return false;
   }

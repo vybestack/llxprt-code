@@ -136,29 +136,17 @@ export async function resolveProfileBuckets(
 export async function resolveCurrentProfileSessionMetadata(
   providerName: string,
 ): Promise<OAuthTokenRequestMetadata | undefined> {
-  try {
-    const { getCliRuntimeServices } = await import(
-      '../runtime/runtimeSettings.js'
-    );
-    const { settingsService } = getCliRuntimeServices();
-    const currentProfileName =
-      typeof settingsService.getCurrentProfileName === 'function'
-        ? settingsService.getCurrentProfileName()
-        : ((settingsService.get('currentProfile') as string | null) ?? null);
+  const currentProfileName = await resolveCurrentProfileName(
+    providerName,
+    null,
+  );
 
-    if (!currentProfileName || currentProfileName.trim() === '') {
-      return undefined;
-    }
-
-    return {
-      providerId: providerName,
-      profileId: currentProfileName.trim(),
-    };
-  } catch (error) {
-    logger.debug(
-      `Could not resolve current profile session metadata for ${providerName}:`,
-      error,
-    );
+  if (!currentProfileName || currentProfileName.trim() === '') {
     return undefined;
   }
+
+  return {
+    providerId: providerName,
+    profileId: currentProfileName.trim(),
+  };
 }
