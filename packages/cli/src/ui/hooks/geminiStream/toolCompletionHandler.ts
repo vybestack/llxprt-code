@@ -85,11 +85,10 @@ export function buildToolResponses(
 }
 
 /**
- * Handles the turn-cancelled branch: adds function calls and responses to
- * history with correct roles, then marks tool calls as submitted.
- * No continuation query is sent.
+ * Records cancelled tool history and marks as submitted.
+ * Used for both turn-cancelled and all-tools-cancelled branches.
  */
-export function processCancelledTurnTools(
+export function recordCancelledToolHistory(
   tools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
   geminiClient: GeminiClient,
   markToolsAsSubmitted: (callIds: string[]) => void,
@@ -108,34 +107,7 @@ export function processCancelledTurnTools(
     });
   }
 
-  const callIds = tools.map((tc) => tc.request.callId);
-  markToolsAsSubmitted(callIds);
-}
-
-/**
- * Handles the all-tools-cancelled branch: adds cancelled tool responses to
- * history with correct roles, marks as submitted. No continuation query sent.
- */
-export function processAllCancelledTools(
-  geminiTools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
-  geminiClient: GeminiClient,
-  markToolsAsSubmitted: (callIds: string[]) => void,
-): void {
-  const combinedParts = geminiTools.flatMap((tc) => tc.response.responseParts);
-  const { functionCalls, functionResponses, otherParts } =
-    splitPartsByRole(combinedParts);
-
-  if (functionCalls.length > 0) {
-    void geminiClient.addHistory({ role: 'model', parts: functionCalls });
-  }
-  if (functionResponses.length > 0 || otherParts.length > 0) {
-    void geminiClient.addHistory({
-      role: 'user',
-      parts: [...functionResponses, ...otherParts],
-    });
-  }
-
-  markToolsAsSubmitted(geminiTools.map((tc) => tc.request.callId));
+  markToolsAsSubmitted(tools.map((tc) => tc.request.callId));
 }
 
 /**
@@ -204,8 +176,8 @@ async function _executeCompletedTools(
         (tc as TrackedCompletedToolCall | TrackedCancelledToolCall).response
           ?.responseParts !== undefined,
     );
-    if (completedWithResponses.length > 0 && geminiClient) {
-      processCancelledTurnTools(
+    if (completedWithResponses.length > 0) {
+      recordCancelledToolHistory(
         completedWithResponses,
         geminiClient,
         markToolsAsSubmitted,
@@ -245,8 +217,7 @@ async function _executeCompletedTools(
   if (geminiTools.length === 0) return;
 
   if (geminiTools.every((tc) => tc.status === 'cancelled')) {
-    if (geminiClient)
-      processAllCancelledTools(geminiTools, geminiClient, markToolsAsSubmitted);
+    recordCancelledToolHistory(geminiTools, geminiClient, markToolsAsSubmitted);
     return;
   }
 

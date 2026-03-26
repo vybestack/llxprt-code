@@ -46,7 +46,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('../../../../utils/markdownUtilities.js', async () => ({
+vi.mock('../../../utils/markdownUtilities.js', async () => ({
   findLastSafeSplitPoint: vi.fn((text: string) => text.length),
 }));
 

@@ -11,7 +11,7 @@
  * and the useToolCompletionHandler hook's branch matrix.
  *
  * Tests pure functions: classifyCompletedTools, buildToolResponses,
- * processCancelledTurnTools, processAllCancelledTools, processMemoryToolResults
+ * recordCancelledToolHistory, processMemoryToolResults
  *
  * Tests call-order invariants:
  * - addHistory role ordering (model before user)
@@ -31,8 +31,7 @@ import type {
 import {
   classifyCompletedTools,
   buildToolResponses,
-  processCancelledTurnTools,
-  processAllCancelledTools,
+  recordCancelledToolHistory,
   processMemoryToolResults,
 } from '../toolCompletionHandler.js';
 
@@ -255,9 +254,9 @@ describe('buildToolResponses', () => {
   });
 });
 
-// ─── processCancelledTurnTools ────────────────────────────────────────────────
+// ─── recordCancelledToolHistory ────────────────────────────────────────────────
 
-describe('processCancelledTurnTools', () => {
+describe('recordCancelledToolHistory', () => {
   let mockAddHistory: ReturnType<typeof vi.fn>;
   let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
   let mockGeminiClient: GeminiClient;
@@ -275,7 +274,7 @@ describe('processCancelledTurnTools', () => {
       callId: 'call-1',
       responseParts: [functionCallPart, functionResponsePart],
     });
-    processCancelledTurnTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -296,7 +295,7 @@ describe('processCancelledTurnTools', () => {
       callId: 'call-1',
       responseParts: [functionCallPart, functionResponsePart],
     });
-    processCancelledTurnTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -311,7 +310,7 @@ describe('processCancelledTurnTools', () => {
       callId: 'call-1',
       responseParts: [functionResponsePart],
     });
-    processCancelledTurnTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -330,7 +329,7 @@ describe('processCancelledTurnTools', () => {
       callId: 'call-b',
       responseParts: [functionResponsePart],
     });
-    processCancelledTurnTools(
+    recordCancelledToolHistory(
       [tool1, tool2],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -344,7 +343,7 @@ describe('processCancelledTurnTools', () => {
 
   it('handles empty responseParts gracefully', () => {
     const tool = makeCompletedTool({ callId: 'call-1', responseParts: [] });
-    processCancelledTurnTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -356,9 +355,9 @@ describe('processCancelledTurnTools', () => {
   });
 });
 
-// ─── processAllCancelledTools ─────────────────────────────────────────────────
+// ─── recordCancelledToolHistory (all-cancelled branch) ──────────────────────────
 
-describe('processAllCancelledTools', () => {
+describe('recordCancelledToolHistory (all-cancelled branch)', () => {
   let mockAddHistory: ReturnType<typeof vi.fn>;
   let mockMarkToolsAsSubmitted: ReturnType<typeof vi.fn>;
   let mockGeminiClient: GeminiClient;
@@ -376,7 +375,7 @@ describe('processAllCancelledTools', () => {
       callId: 'call-1',
       responseParts: [functionCallPart, functionResponsePart],
     });
-    processAllCancelledTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -397,7 +396,7 @@ describe('processAllCancelledTools', () => {
       callId: 'call-1',
       responseParts: [functionCallPart, functionResponsePart],
     });
-    processAllCancelledTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -412,7 +411,7 @@ describe('processAllCancelledTools', () => {
       callId: 'cancelled-call',
       responseParts: [functionResponsePart],
     });
-    processAllCancelledTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -425,13 +424,13 @@ describe('processAllCancelledTools', () => {
   });
 
   it('does NOT call submitQuery (no continuation)', () => {
-    // processAllCancelledTools should only update history and mark submitted
+    // recordCancelledToolHistory should only update history and mark submitted
     // It takes no submitQuery param — this is verified structurally
     const tool = makeCancelledTool({
       callId: 'c1',
       responseParts: [functionResponsePart],
     });
-    processAllCancelledTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,
@@ -570,13 +569,13 @@ describe('call-order invariants', () => {
     mockMarkToolsAsSubmitted.mockImplementation(() => {
       callOrder.push('mark');
     });
-    // There is no submitQuery in processAllCancelledTools — it handles marking
+    // There is no submitQuery in recordCancelledToolHistory — it handles marking
     // and returns without continuation.
     const tool = makeCancelledTool({
       callId: 'c1',
       responseParts: [functionResponsePart],
     });
-    processAllCancelledTools(
+    recordCancelledToolHistory(
       [tool],
       mockGeminiClient,
       mockMarkToolsAsSubmitted,

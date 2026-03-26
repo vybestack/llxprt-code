@@ -15,7 +15,7 @@
  * checkpointing, missing file_path arg, and multiple tools.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../../../test-utils/render.js';
 import { act } from 'react';
 import type {
@@ -241,6 +241,10 @@ describe('createToolCheckpoint', () => {
 describe('useCheckpointPersistence', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('writes checkpoint file for each restorable tool on happy path', async () => {
