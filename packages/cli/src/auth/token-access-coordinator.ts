@@ -146,7 +146,8 @@ export class TokenAccessCoordinator {
 
   /**
    * Retrieve the stored OAuth token without refreshing it.
-   * Returns null if the provider is unknown or no token exists.
+   * Throws if the provider name is invalid or unknown.
+   * Returns null if no token exists or the token store read fails.
    */
   async peekStoredToken(providerName: string): Promise<OAuthToken | null> {
     if (!providerName || typeof providerName !== 'string') {
@@ -659,6 +660,11 @@ export class TokenAccessCoordinator {
       logger.debug(
         () =>
           `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
+      );
+      this.proactiveRenewalManager.scheduleProactiveRenewal(
+        providerName,
+        bucketToCheck,
+        diskToken,
       );
       return diskToken.access_token;
     }
