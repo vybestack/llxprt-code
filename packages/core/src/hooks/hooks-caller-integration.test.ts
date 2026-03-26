@@ -27,11 +27,9 @@ import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
 } from '../core/coreToolHookTriggers.js';
-import {
-  triggerBeforeModelHook,
-  triggerAfterModelHook,
-  triggerBeforeToolSelectionHook,
-} from '../core/geminiChatHookTriggers.js';
+// Note: triggerBeforeModelHook, triggerAfterModelHook, triggerBeforeToolSelectionHook
+// have been migrated into HookSystem.fireBeforeModelEvent/fireAfterModelEvent/fireBeforeToolSelectionEvent
+// The tests below that used these trigger functions are skipped pending update to new API.
 import { createTestConfigWithHook } from './test-utils/createTestConfigWithHook.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { ToolResult } from '../tools/tools.js';

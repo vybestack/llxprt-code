@@ -34,11 +34,6 @@ type ToolGroupArray = Array<{
   }>;
 }>;
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
-import {
-  triggerBeforeToolSelectionHook,
-  triggerBeforeModelHook,
-  triggerAfterModelHook,
-} from './geminiChatHookTriggers.js';
 import { DebugLogger } from '../debug/index.js';
 import type { Config } from '../config/config.js';
 
@@ -311,10 +306,12 @@ export class DirectMessageProcessor {
     configForHooks: Config,
     toolsFromConfig: ToolGroupArray,
   ): Promise<ToolGroupArray> {
-    const toolSelectionResult = await triggerBeforeToolSelectionHook(
-      configForHooks,
-      toolsFromConfig,
-    );
+    if (!configForHooks.getEnableHooks?.()) return toolsFromConfig;
+    const hookSystem = configForHooks.getHookSystem?.();
+    if (!hookSystem) return toolsFromConfig;
+    await hookSystem.initialize();
+    const toolSelectionResult =
+      await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
     const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
       tools: toolsFromConfig,
     });
@@ -364,10 +361,15 @@ export class DirectMessageProcessor {
           : undefined,
     };
 
-    const beforeModelResult = await triggerBeforeModelHook(
-      configForHooks,
-      requestForHook,
-    );
+    let beforeModelResult = undefined;
+    if (configForHooks.getEnableHooks?.()) {
+      const hookSystem = configForHooks.getHookSystem?.();
+      if (hookSystem) {
+        await hookSystem.initialize();
+        beforeModelResult =
+          await hookSystem.fireBeforeModelEvent(requestForHook);
+      }
+    }
 
     if (beforeModelResult?.isBlockingDecision()) {
       const syntheticResponse = beforeModelResult.getSyntheticResponse();
@@ -427,16 +429,19 @@ export class DirectMessageProcessor {
     let directResponse = convertIContentToResponse(lastResponse);
 
     // Trigger AfterModel hook
-    if (config) {
-      const afterModelResult = await triggerAfterModelHook(
-        config,
-        lastResponse,
-      );
-
-      if (afterModelResult) {
-        const modifiedResponse = afterModelResult.getModifiedResponse();
-        if (modifiedResponse) {
-          directResponse = modifiedResponse;
+    if (config && config.getEnableHooks?.()) {
+      const hookSystem = config.getHookSystem?.();
+      if (hookSystem) {
+        await hookSystem.initialize();
+        const afterModelResult = await hookSystem.fireAfterModelEvent(
+          {},
+          lastResponse,
+        );
+        if (afterModelResult) {
+          const modifiedResponse = afterModelResult.getModifiedResponse();
+          if (modifiedResponse) {
+            directResponse = modifiedResponse;
+          }
         }
       }
     }

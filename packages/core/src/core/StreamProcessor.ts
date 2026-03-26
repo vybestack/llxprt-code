@@ -48,10 +48,6 @@ import {
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import {
-  triggerBeforeModelHook,
-  triggerAfterModelHook,
-} from './geminiChatHookTriggers.js';
-import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './geminiChat.js';
@@ -174,59 +170,55 @@ export class StreamProcessor {
 
     // Trigger BeforeModel hook for streaming path
     const configForHooks = this.runtimeContext.providerRuntime.config;
-    if (configForHooks) {
-      const requestForHook = {
-        contents: requestContents,
-        tools: tools as ProviderToolset | undefined,
-      };
-      const beforeModelResult = await triggerBeforeModelHook(
-        configForHooks,
-        requestForHook,
-      );
-
-      // Check for stop first
-      if (beforeModelResult?.shouldStopExecution()) {
-        throw new AgentExecutionStoppedError(
-          beforeModelResult.getEffectiveReason() ||
-            'Execution stopped by BeforeModel hook',
-          beforeModelResult.systemMessage,
-        );
-      }
-
-      // Check for blocking decision with synthetic response
-      if (beforeModelResult?.isBlockingDecision()) {
-        let syntheticResponse = beforeModelResult.getSyntheticResponse();
-        // Ensure synthetic response has finishReason to avoid invalid-stream handling
-        if (syntheticResponse) {
-          const candidate = syntheticResponse.candidates?.[0];
-          if (candidate && !candidate.finishReason) {
-            syntheticResponse = {
-              ...syntheticResponse,
-              candidates: [
-                {
-                  ...candidate,
-                  finishReason: FinishReason.STOP,
-                },
-              ],
-            } as GenerateContentResponse;
-          }
-        }
-        throw new AgentExecutionBlockedError(
-          beforeModelResult.getEffectiveReason() ||
-            'Request blocked by BeforeModel hook',
-          syntheticResponse,
-        );
-      }
-
-      // Apply request modifications from BeforeModel hook
-      if (beforeModelResult) {
-        const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
-          model: this.runtimeContext.state.model || '',
-          contents: requestContents as unknown as Content[],
+    if (configForHooks && configForHooks.getEnableHooks?.()) {
+      const hookSystem = configForHooks.getHookSystem?.();
+      if (hookSystem) {
+        await hookSystem.initialize();
+        const beforeModelResult = await hookSystem.fireBeforeModelEvent({
+          contents: requestContents,
+          tools: tools as ProviderToolset | undefined,
         });
-        // If hook modified contents, update requestContents
-        if (modifiedRequest && modifiedRequest.contents) {
-          requestContents = modifiedRequest.contents as unknown as IContent[];
+
+        if (beforeModelResult?.shouldStopExecution()) {
+          throw new AgentExecutionStoppedError(
+            beforeModelResult.getEffectiveReason() ||
+              'Execution stopped by BeforeModel hook',
+            beforeModelResult.systemMessage,
+          );
+        }
+
+        if (beforeModelResult?.isBlockingDecision()) {
+          let syntheticResponse = beforeModelResult.getSyntheticResponse();
+          if (syntheticResponse) {
+            const candidate = syntheticResponse.candidates?.[0];
+            if (candidate && !candidate.finishReason) {
+              syntheticResponse = {
+                ...syntheticResponse,
+                candidates: [
+                  {
+                    ...candidate,
+                    finishReason: FinishReason.STOP,
+                  },
+                ],
+              } as GenerateContentResponse;
+            }
+          }
+          throw new AgentExecutionBlockedError(
+            beforeModelResult.getEffectiveReason() ||
+              'Request blocked by BeforeModel hook',
+            syntheticResponse,
+          );
+        }
+
+        if (beforeModelResult) {
+          const modifiedRequest =
+            beforeModelResult.applyLLMRequestModifications({
+              model: this.runtimeContext.state.model || '',
+              contents: requestContents as unknown as Content[],
+            });
+          if (modifiedRequest && modifiedRequest.contents) {
+            requestContents = modifiedRequest.contents as unknown as IContent[];
+          }
         }
       }
     }
@@ -322,38 +314,39 @@ export class StreamProcessor {
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
-      if (hookConfig) {
-        const afterModelResult = await triggerAfterModelHook(
-          hookConfig,
-          iContent,
-        );
-
-        // Check for stop
-        if (afterModelResult?.shouldStopExecution()) {
-          throw new AgentExecutionStoppedError(
-            afterModelResult.getEffectiveReason() ||
-              'Execution stopped by AfterModel hook',
-            afterModelResult.systemMessage,
+      if (hookConfig && hookConfig.getEnableHooks?.()) {
+        const hookSystem = hookConfig.getHookSystem?.();
+        if (hookSystem) {
+          await hookSystem.initialize();
+          const afterModelResult = await hookSystem.fireAfterModelEvent(
+            {},
+            iContent,
           );
-        }
 
-        // Check for blocking decision
-        if (afterModelResult?.isBlockingDecision()) {
-          const modifiedResponse = afterModelResult.getModifiedResponse();
-          const syntheticResponse = modifiedResponse || convertedChunk;
-          throw new AgentExecutionBlockedError(
-            afterModelResult.getEffectiveReason() ||
-              'Execution blocked by AfterModel hook',
-            syntheticResponse,
-            afterModelResult.systemMessage,
-          );
-        }
+          if (afterModelResult?.shouldStopExecution()) {
+            throw new AgentExecutionStoppedError(
+              afterModelResult.getEffectiveReason() ||
+                'Execution stopped by AfterModel hook',
+              afterModelResult.systemMessage,
+            );
+          }
 
-        // Apply modified response if available
-        const modifiedResponse = afterModelResult?.getModifiedResponse();
-        if (modifiedResponse) {
-          yield modifiedResponse;
-          continue;
+          if (afterModelResult?.isBlockingDecision()) {
+            const modifiedResponse = afterModelResult.getModifiedResponse();
+            const syntheticResponse = modifiedResponse || convertedChunk;
+            throw new AgentExecutionBlockedError(
+              afterModelResult.getEffectiveReason() ||
+                'Execution blocked by AfterModel hook',
+              syntheticResponse,
+              afterModelResult.systemMessage,
+            );
+          }
+
+          const modifiedResponse = afterModelResult?.getModifiedResponse();
+          if (modifiedResponse) {
+            yield modifiedResponse;
+            continue;
+          }
         }
       }
 

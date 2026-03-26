@@ -26,6 +26,9 @@ import {
   type PreCompressTrigger,
   type McpContext,
   NotificationType,
+  BeforeModelHookOutput,
+  AfterModelHookOutput,
+  BeforeToolSelectionHookOutput,
 } from './types.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
@@ -222,42 +225,77 @@ export class HookSystem {
 
   /**
    * Fire BeforeModel event.
-   * Wrapper for getEventHandler().fireBeforeModelEvent().
+   * Returns a typed BeforeModelHookOutput, or undefined if no hook output.
+   * Errors are caught and logged; hooks are fail-open.
    *
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
-   * @throws {HookSystemNotInitializedError} if called before initialize()
    */
   async fireBeforeModelEvent(
     llmRequest: unknown,
-  ): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireBeforeModelEvent(llmRequest);
+  ): Promise<BeforeModelHookOutput | undefined> {
+    try {
+      const result =
+        await this.getEventHandler().fireBeforeModelEvent(llmRequest);
+      if (result.finalOutput) {
+        return new BeforeModelHookOutput(result.finalOutput);
+      }
+      return undefined;
+    } catch (error) {
+      debugLogger.debug('BeforeModel hook failed (non-blocking):', error);
+      return undefined;
+    }
   }
 
   /**
    * Fire AfterModel event.
-   * Wrapper for getEventHandler().fireAfterModelEvent().
+   * Returns a typed AfterModelHookOutput, or undefined if no hook output.
+   * Errors are caught and logged; hooks are fail-open.
    *
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
-   * @throws {HookSystemNotInitializedError} if called before initialize()
    */
   async fireAfterModelEvent(
     llmRequest: unknown,
     llmResponse: unknown,
-  ): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireAfterModelEvent(llmRequest, llmResponse);
+  ): Promise<AfterModelHookOutput | undefined> {
+    try {
+      const result = await this.getEventHandler().fireAfterModelEvent(
+        llmRequest,
+        llmResponse,
+      );
+      if (result.finalOutput) {
+        return new AfterModelHookOutput(result.finalOutput);
+      }
+      return undefined;
+    } catch (error) {
+      debugLogger.debug('AfterModel hook failed (non-blocking):', error);
+      return undefined;
+    }
   }
 
   /**
    * Fire BeforeToolSelection event.
-   * Wrapper for getEventHandler().fireBeforeToolSelectionEvent().
+   * Returns a typed BeforeToolSelectionHookOutput, or undefined if no hook output.
+   * Errors are caught and logged; hooks are fail-open.
    *
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
-   * @throws {HookSystemNotInitializedError} if called before initialize()
    */
   async fireBeforeToolSelectionEvent(
     llmRequest: unknown,
-  ): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireBeforeToolSelectionEvent(llmRequest);
+  ): Promise<BeforeToolSelectionHookOutput | undefined> {
+    try {
+      const result =
+        await this.getEventHandler().fireBeforeToolSelectionEvent(llmRequest);
+      if (result.finalOutput) {
+        return new BeforeToolSelectionHookOutput(result.finalOutput);
+      }
+      return undefined;
+    } catch (error) {
+      debugLogger.debug(
+        'BeforeToolSelection hook failed (non-blocking):',
+        error,
+      );
+      return undefined;
+    }
   }
 
   /**

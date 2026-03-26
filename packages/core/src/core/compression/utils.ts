@@ -303,7 +303,11 @@ export async function runVerificationPass(
 
     const trimmed = verifiedText.trim();
     // Use verified output only if non-empty and model produced an improved snapshot
-    if (trimmed && trimmed !== 'VERIFIED' && trimmed.includes('<state_snapshot>')) {
+    if (
+      trimmed &&
+      trimmed !== 'VERIFIED' &&
+      trimmed.includes('<state_snapshot>')
+    ) {
       return trimmed;
     }
   } catch {

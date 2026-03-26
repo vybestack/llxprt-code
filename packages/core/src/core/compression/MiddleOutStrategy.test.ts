@@ -20,7 +20,11 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
-import { CompressionExecutionError } from './types.js';
+import {
+  CompressionExecutionError,
+  EmptySummaryError,
+  isTransientCompressionError,
+} from './types.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -719,7 +723,7 @@ describe('MiddleOutStrategy', () => {
   // -----------------------------------------------------------------------
 
   describe('empty summary handling', () => {
-    it('throws a transient CompressionExecutionError when LLM returns empty summary', async () => {
+    it('throws EmptySummaryError when LLM returns empty summary', async () => {
       const emptyProvider = createFakeProvider('empty-provider', '');
       const history = generateHistory(20);
       const ctx = buildContext({
@@ -728,18 +732,16 @@ describe('MiddleOutStrategy', () => {
       });
       const strategy = new MiddleOutStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
       try {
         await strategy.compress(ctx);
       } catch (error) {
-        expect(error).toBeInstanceOf(CompressionExecutionError);
-        expect((error as CompressionExecutionError).isTransient).toBe(true);
+        expect(error).toBeInstanceOf(EmptySummaryError);
+        expect(isTransientCompressionError(error)).toBe(false);
       }
     });
 
-    it('throws a transient CompressionExecutionError when LLM returns whitespace-only summary', async () => {
+    it('throws EmptySummaryError when LLM returns whitespace-only summary', async () => {
       const whitespaceProvider = createFakeProvider(
         'whitespace-provider',
         '   \n  \t  ',
@@ -751,14 +753,12 @@ describe('MiddleOutStrategy', () => {
       });
       const strategy = new MiddleOutStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
       try {
         await strategy.compress(ctx);
       } catch (error) {
-        expect(error).toBeInstanceOf(CompressionExecutionError);
-        expect((error as CompressionExecutionError).isTransient).toBe(true);
+        expect(error).toBeInstanceOf(EmptySummaryError);
+        expect(isTransientCompressionError(error)).toBe(false);
       }
     });
   });
