@@ -266,7 +266,7 @@ export async function getHigherPriorityAuth(
 export function isQwenCompatibleUrl(url: string): boolean {
   if (!url) return true;
 
-  const qwenDomains = ['dashscope.aliyuncs.com', 'qwen.com', 'api.qwen.com'];
+  const qwenDomains = ['dashscope.aliyuncs.com', 'qwen.com'];
 
   try {
     const urlObj = new URL(url);
