@@ -36,4 +36,13 @@ Running notes during batch execution. Append after each batch.
 - d8a8b43: Applied cleanly.
 - Full verify: lint clean, typecheck clean, 514 test files pass, build clean, smoke test passes.
 
+## Batch P3 (2026-03-25)
+
+- a90bcf7: Applied. /introspect command TOML at .gemini/commands/introspect.toml. Branding fix: GEMINI.md→LLXPRT.md.
+- 155d9aa: Empty NO_OP — LLxprt already handles fireSessionStartEvent return type via triggerSessionStartHook in lifecycleHookTriggers.ts.
+- 4920ad2: Applied cleanly. DiffModified removed from theme docs.
+- 166e04a: Applied with conflicts. Added refreshMcpContext() using LLxprt's refreshMemory(). scheduleMcpContextRefresh() debounce added. Updated instruction format.
+- 88df621: Applied with modify/delete conflict resolved. Hook exit code test coverage using TestRig, provider-agnostic.
+- Quick verify: lint 0 errors, typecheck clean.
+
 ---

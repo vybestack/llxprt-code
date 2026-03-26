@@ -23,11 +23,11 @@ Post-implementation reconciliation. Updated continuously during execution.
 | be37c26 | PICKED | 99836347f | text buffer perf — PASS (+ LruCache.size, type annotations) |
 | 41e01c2 | PICKED | d1ff2eb9f | PKCE/OAuth — PASS (+ static method fixes) |
 | d8a8b43 | PICKED | 4478accbc | OSC-52 clipboard — PASS |
-| a90bcf7 | PICKED | | /introspect command |
-| 155d9aa | PICKED | | fireSessionStartEvent return type |
-| 4920ad2 | PICKED | | docs themes |
-| 166e04a | PICKED | | mcp instructions |
-| 88df621 | PICKED | | hook exit code tests |
+| a90bcf7 | PICKED | e45cfdb3c | /introspect command — PASS |
+| 155d9aa | PICKED | (NO_OP) | fireSessionStartEvent — LLxprt handles via triggerSessionStartHook |
+| 4920ad2 | PICKED | a8a282fd0 | docs themes — PASS |
+| 166e04a | PICKED | cc6b6be76 | mcp instructions — PASS (+ refreshMcpContext fixup) |
+| 88df621 | PICKED | aa87fd250 | hook exit code tests — PASS |
 | 85b1716 | PICKED | | extension examples |
 | b99e841 | PICKED | | Windows pty crash |
 | 995ae42 | PICKED | | DebugProfiler warnings |

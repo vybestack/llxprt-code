@@ -6,7 +6,7 @@
 |------:|------|-----------------|--------|---------------|-------|
 | P1 | PICK x5 | c04af6c f6c2d61 c8c7b57 4848f42 d0bbc7f | DONE | 8ef4487f0, 93697af0e, 68384cf6e, 89a27bb44 | docs + skills (f6c2d61 empty-skipped: docs/architecture.md not in LLxprt) |
 | P2 | PICK x5 | 448fd3c 6740886 be37c26 41e01c2 d8a8b43 | DONE | 99836347f, d1ff2eb9f, 4478accbc, b72c08dc3 | core fixes + UI perf (448fd3c+6740886 NO_OP; LruCache.size added; OAuth static fix) |
-| P3 | PICK x5 | a90bcf7 155d9aa 4920ad2 166e04a 88df621 | TODO | | commands + hooks + mcp |
+| P3 | PICK x5 | a90bcf7 155d9aa 4920ad2 166e04a 88df621 | DONE | e45cfdb3c, a8a282fd0, cc6b6be76, aa87fd250, 2b524443e | commands + hooks + mcp (155d9aa NO_OP: LLxprt handles differently) |
 | P4 | PICK x5 | 85b1716 b99e841 995ae42 2455f93 55c2783 | TODO | | extensions + pty + UI + mcp |
 | P5 | PICK x2 | 9866eb0 97aac69 | TODO | | editor fallback + mcp lookup |
 
