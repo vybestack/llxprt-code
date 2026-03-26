@@ -46,10 +46,10 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 94d5ae5 | REIMPLEMENTED | 893307fe9 | paste handling — PASS |
 | 7e6817d | REIMPLEMENTED | (no-op) | stdin close cleanup — already present |
 | 6021e4c | REIMPLEMENTED | fd040a143 | scheduler event types — PASS |
-| fb76408 | REIMPLEMENTED | | sequence binding |
-| a2dab14 | REIMPLEMENTED | | undeprecate --prompt |
-| 42c26d1 | REIMPLEMENTED | | improve keybindings |
-| ae19802 | REIMPLEMENTED | | shell parsing timeout (was PICK) |
+| fb76408 | REIMPLEMENTED | 9a5ce9e78 | sequence binding — PASS |
+| a2dab14 | REIMPLEMENTED | 55feec847 | undeprecate --prompt — PASS |
+| 42c26d1 | REIMPLEMENTED | 320696790 | improve keybindings — PASS |
+| ae19802 | REIMPLEMENTED | a009d8b1f | shell parsing timeout — PASS |
 | a81500a | REIMPLEMENTED | | skill install consent |
 | 222b739 | REIMPLEMENTED | | skill conflict detection |
 | f909c9e | REIMPLEMENTED | | policy source tracking |

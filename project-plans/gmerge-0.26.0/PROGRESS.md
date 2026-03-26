@@ -20,10 +20,10 @@
 | R4 | REIMPLEMENT | 94d5ae5 | DONE | 893307fe9 | paste handling |
 | R5 | REIMPLEMENT | 7e6817d | DONE | (no-op) | stdin close cleanup — already present in LLxprt |
 | R6 | REIMPLEMENT | 6021e4c | DONE | fd040a143 | scheduler event types |
-| R7 | REIMPLEMENT | fb76408 | TODO | | sequence binding |
-| R8 | REIMPLEMENT | a2dab14 | TODO | | undeprecate --prompt |
-| R9 | REIMPLEMENT | 42c26d1 | TODO | | improve keybindings |
-| R10 | REIMPLEMENT | ae19802 | TODO | | shell parsing timeout |
+| R7 | REIMPLEMENT | fb76408 | DONE | 9a5ce9e78 | sequence binding |
+| R8 | REIMPLEMENT | a2dab14 | DONE | 55feec847 | undeprecate --prompt |
+| R9 | REIMPLEMENT | 42c26d1 | DONE | 320696790 | improve keybindings |
+| R10 | REIMPLEMENT | ae19802 | DONE | a009d8b1f | shell parsing timeout |
 | R11 | REIMPLEMENT | a81500a | TODO | | skill install consent |
 | R12 | REIMPLEMENT | 222b739 | TODO | | skill conflict detection |
 | R13 | REIMPLEMENT | f909c9e | TODO | | policy source tracking |
