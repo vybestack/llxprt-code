@@ -15,7 +15,7 @@
  * The hook accepts an injectable `fsOps` parameter so tests can avoid real I/O.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import path from 'path';
 import { promises as nodeFs } from 'fs';
 import {
@@ -139,13 +139,15 @@ async function saveRestorableToolCalls(
   storage: Config['storage'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
+  checkpointedCallIds?: Set<string>,
 ): Promise<void> {
   if (!config.getCheckpointingEnabled()) return;
 
   const restorableToolCalls = toolCalls.filter(
     (tc) =>
       (tc.request.name === 'replace' || tc.request.name === 'write_file') &&
-      tc.status === 'awaiting_approval',
+      tc.status === 'awaiting_approval' &&
+      !checkpointedCallIds?.has(tc.request.callId),
   );
   if (restorableToolCalls.length === 0) return;
 
@@ -186,6 +188,7 @@ async function saveRestorableToolCalls(
         onDebugMessage,
         effectiveFsOps,
       );
+      checkpointedCallIds?.add(toolCall.request.callId);
     } catch (error) {
       const filePath = toolCall.request.args['file_path'] as string;
       onDebugMessage(
@@ -217,7 +220,18 @@ export function useCheckpointPersistence(
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
 ): void {
+  const checkpointedCallIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
+    // Clear checkpointed tracking for callIds no longer in the tool list,
+    // so that if a tool is re-scheduled it can be checkpointed again.
+    const activeCallIds = new Set(toolCalls.map((tc) => tc.request.callId));
+    for (const id of checkpointedCallIdsRef.current) {
+      if (!activeCallIds.has(id)) {
+        checkpointedCallIdsRef.current.delete(id);
+      }
+    }
+
     void saveRestorableToolCalls(
       toolCalls,
       config,
@@ -227,6 +241,7 @@ export function useCheckpointPersistence(
       storage,
       onDebugMessage,
       fsOps,
+      checkpointedCallIdsRef.current,
     );
   }, [
     toolCalls,

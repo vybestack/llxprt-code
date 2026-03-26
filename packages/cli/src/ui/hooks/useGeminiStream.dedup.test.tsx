@@ -315,7 +315,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     expect(scheduledToolCalls[0][1].callId).toBe('call-2');
   });
 
-  it('should keep overlapping non-shell scheduler tools while deduplicating overlapping shell tools in pending display merge', async () => {
+  it('should deduplicate all overlapping tools (shell and non-shell) from pending group', async () => {
     const { mergePendingToolGroupsForDisplay } = await import(
       './geminiStream/index.js'
     );
@@ -387,36 +387,22 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
     const pendingToolGroups = mergedItems.filter(
       (item) => item.type === 'tool_group',
     );
-    expect(pendingToolGroups).toHaveLength(2);
 
-    const pendingGroup = pendingToolGroups.find((group) =>
-      group.tools.some((tool) => tool.callId === sharedShellCallId),
+    // All overlapping tools are removed from pending group; scheduler
+    // version is authoritative for both shell and non-shell tools.
+    const allTools = pendingToolGroups.flatMap((g) => g.tools);
+    const shellInstances = allTools.filter(
+      (t) => t.callId === sharedShellCallId,
     );
-    const schedulerGroup = pendingToolGroups.find((group) =>
-      group.tools.some((tool) => tool.callId === schedulerOnlyCallId),
+    const nonShellInstances = allTools.filter(
+      (t) => t.callId === sharedNonShellCallId,
+    );
+    const schedulerOnlyInstances = allTools.filter(
+      (t) => t.callId === schedulerOnlyCallId,
     );
 
-    expect(pendingGroup).toBeDefined();
-    expect(schedulerGroup).toBeDefined();
-
-    const pendingTools = pendingGroup?.tools ?? [];
-    const schedulerTools = schedulerGroup?.tools ?? [];
-
-    expect(
-      pendingTools.filter((tool) => tool.callId === sharedShellCallId),
-    ).toHaveLength(1);
-    expect(
-      pendingTools.filter((tool) => tool.callId === sharedNonShellCallId),
-    ).toHaveLength(1);
-
-    expect(
-      schedulerTools.filter((tool) => tool.callId === sharedShellCallId),
-    ).toHaveLength(0);
-    expect(
-      schedulerTools.filter((tool) => tool.callId === sharedNonShellCallId),
-    ).toHaveLength(1);
-    expect(
-      schedulerTools.filter((tool) => tool.callId === schedulerOnlyCallId),
-    ).toHaveLength(1);
+    expect(shellInstances).toHaveLength(1);
+    expect(nonShellInstances).toHaveLength(1);
+    expect(schedulerOnlyInstances).toHaveLength(1);
   });
 });

@@ -143,6 +143,26 @@ describe('mergePendingToolGroupsForDisplay', () => {
     const shellToolInstances = allTools.filter((t) => t.callId === shellCallId);
     expect(shellToolInstances).toHaveLength(1);
   });
+
+  it('deduplicates non-shell overlapping tools between pending and scheduler groups', () => {
+    const overlappingCallId = 'call-overlap';
+    const a: HistoryItemWithoutId = {
+      type: 'tool_group',
+      agentId: 'primary',
+      tools: [makeTool(overlappingCallId, 'read_file')],
+    };
+    const b: HistoryItemWithoutId = {
+      type: 'tool_group',
+      agentId: 'primary',
+      tools: [makeTool(overlappingCallId, 'read_file')],
+    };
+    const result = mergePendingToolGroupsForDisplay(a, b);
+    const allTools = result.flatMap(
+      (r) => (r as { tools?: Array<{ callId: string }> }).tools ?? [],
+    );
+    const instances = allTools.filter((t) => t.callId === overlappingCallId);
+    expect(instances).toHaveLength(1);
+  });
 });
 
 // ─── splitPartsByRole ─────────────────────────────────────────────────────────

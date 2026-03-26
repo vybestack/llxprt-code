@@ -98,9 +98,7 @@ export function mergePendingToolGroupsForDisplay(
     }
 
     const filteredPendingTools = pendingHistoryItem.tools.filter(
-      (tool) =>
-        !overlappingCallIds.has(tool.callId) ||
-        tool.name !== SHELL_COMMAND_NAME,
+      (tool) => !overlappingCallIds.has(tool.callId),
     );
 
     const overlappingShellTools = pendingHistoryItem.tools.filter(

@@ -484,4 +484,86 @@ describe('useCheckpointPersistence', () => {
     expect(fsOps.mkdir).not.toHaveBeenCalled();
     expect(fsOps.writeFile).not.toHaveBeenCalled();
   });
+
+  it('does not re-checkpoint the same tool on subsequent effect runs', async () => {
+    const config = makeConfig(true);
+    const gitService = makeGitService();
+    const geminiClient = makeGeminiClient();
+    const fsOps = makeFsOps();
+    const onDebugMessage = vi.fn();
+    const tools = [makeRestorableTool('r1', 'replace', '/project/a.ts')];
+
+    let currentTools = tools;
+    const { rerender } = renderHook(() =>
+      useCheckpointPersistence(
+        currentTools,
+        config,
+        gitService as unknown as GitService,
+        mockHistory,
+        geminiClient as unknown as GeminiClient,
+        (config as any).storage,
+        onDebugMessage,
+        fsOps,
+      ),
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(fsOps.writeFile).toHaveBeenCalledTimes(1);
+
+    // Re-render with the same tools — should NOT checkpoint again
+    currentTools = [...tools];
+    rerender();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(fsOps.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-checkpoints a tool if it leaves and re-enters the tool list', async () => {
+    const config = makeConfig(true);
+    const gitService = makeGitService();
+    const geminiClient = makeGeminiClient();
+    const fsOps = makeFsOps();
+    const onDebugMessage = vi.fn();
+    const tool = makeRestorableTool('r1', 'replace', '/project/a.ts');
+
+    let currentTools: TrackedToolCall[] = [tool];
+    const { rerender } = renderHook(() =>
+      useCheckpointPersistence(
+        currentTools,
+        config,
+        gitService as unknown as GitService,
+        mockHistory,
+        geminiClient as unknown as GeminiClient,
+        (config as any).storage,
+        onDebugMessage,
+        fsOps,
+      ),
+    );
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(fsOps.writeFile).toHaveBeenCalledTimes(1);
+
+    // Tool leaves the list
+    currentTools = [];
+    rerender();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    // Tool re-enters — should checkpoint again
+    currentTools = [tool];
+    rerender();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(fsOps.writeFile).toHaveBeenCalledTimes(2);
+  });
 });
