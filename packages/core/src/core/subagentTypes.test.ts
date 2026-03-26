@@ -6,9 +6,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 
-// These module references will be populated at runtime inside the skipped block.
-// The imports target subagentTypes.js which does not exist yet — it will be created
-// in Phase 1. The describe.skip wrapper keeps CI green in the meantime.
+// Module references populated at runtime via dynamic import in beforeAll.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ContextState: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,7 +14,7 @@ let SubagentTerminateMode: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let templateString: any;
 
-describe('subagentTypes (enable in Phase 1)', () => {
+describe('subagentTypes', () => {
   beforeAll(async () => {
     const mod = await import('./subagentTypes.js');
     ContextState = mod.ContextState;

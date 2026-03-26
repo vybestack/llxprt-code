@@ -7,12 +7,12 @@
 /**
  * API surface compatibility canary for subagent.ts.
  *
- * Backward-compatible surface tests are BLOCKING — they must pass at all
- * times during refactoring. Failure here means a regression in public API.
+ * Backward-compatible surface tests verify that the original public API
+ * from subagent.ts still works after decomposition. Failure here means
+ * a regression in the re-export facade.
  *
- * Additive surface tests are NON-BLOCKING — they verify new exports introduced
- * by the decomposition (expected in Phase 1+). They are skipped until the
- * relevant phase lands, then unskipped to become blocking.
+ * Additive surface tests verify new exports introduced by the decomposition
+ * (e.g. templateString, defaultEnvironmentContextLoader).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -45,11 +45,10 @@ describe('subagent.ts backward-compatible API surface', () => {
 
 /**
  * Additive API surface — new exports introduced by the decomposition.
- * These are expected to land in Phase 1. The tests are skipped here in Phase 0
- * and will be unskipped in Phase 1 once the symbols are available.
- * Move the passing tests into the backward-compat block above after Phase 5.
+ * These verify symbols that were previously internal but are now publicly
+ * re-exported through subagent.ts.
  */
-describe('subagent.ts additive API surface (unskip in Phase 1)', () => {
+describe('subagent.ts additive API surface', () => {
   it('should export templateString as a function', async () => {
     const mod = await import('./subagent.js');
     expect(typeof mod.templateString).toBe('function');

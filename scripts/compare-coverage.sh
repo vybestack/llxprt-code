@@ -22,7 +22,8 @@ extract() {
       covered += data[f]['${metric}'].covered;
       total += data[f]['${metric}'].total;
     }
-    console.log(total === 0 ? 100 : ((covered / total) * 100).toFixed(2));
+    if (total === 0) { console.error('No matching coverage entries found for ' + '${metric}'); process.exit(1); }
+    console.log(((covered / total) * 100).toFixed(2));
   "
 }
 
@@ -31,12 +32,15 @@ overall_pass=true
 for metric in lines branches; do
   baseline_val=$(extract "${BASELINE}" "${metric}")
   current_val=$(extract "${CURRENT}" "${metric}")
-  diff=$(node -e "console.log((${baseline_val} - ${current_val}).toFixed(2))")
-  if (( $(echo "${diff} > ${TOLERANCE}" | bc -l) )); then
-    echo "FAIL: ${metric} coverage dropped by ${diff}pp (${baseline_val}% -> ${current_val}%)"
+  drop=$(node -e "console.log((${baseline_val} - ${current_val}).toFixed(2))")
+  if (( $(echo "${drop} > ${TOLERANCE}" | bc -l) )); then
+    echo "FAIL: ${metric} coverage dropped by ${drop}pp (${baseline_val}% -> ${current_val}%)"
     overall_pass=false
   else
-    echo "OK: ${metric} coverage ${current_val}% (baseline: ${baseline_val}%, delta: -${diff}pp)"
+    delta=$(node -e "console.log((${current_val} - ${baseline_val}).toFixed(2))")
+    sign=""
+    if (( $(echo "${delta} > 0" | bc -l) )); then sign="+"; fi
+    echo "OK: ${metric} coverage ${current_val}% (baseline: ${baseline_val}%, delta: ${sign}${delta}pp)"
   fi
 done
 
