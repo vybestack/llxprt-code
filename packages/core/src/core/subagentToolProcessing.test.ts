@@ -4,361 +4,120 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { ToolErrorType } from '../tools/tool-error.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+import {
+  toSnakeCase,
+  isFatalToolError,
+  extractToolDetail,
+  buildToolUnavailableMessage,
+  resolveToolName,
+  finalizeOutput,
+  handleEmitValueCall,
+  buildPartsFromCompletedCalls,
+  type EmitValueContext,
+  type BuildPartsContext,
+} from './subagentToolProcessing.js';
+import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
 
-// These module references will be populated at runtime inside the skipped block.
-// The imports target subagentToolProcessing.js which does not exist yet — it will be created
-// in Phase 3. The describe.skip wrapper keeps CI green in the meantime.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let processFunctionCalls: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let handleEmitValueCall: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildPartsFromCompletedCalls: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let resolveToolName: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildToolUnavailableMessage: any;
+describe('subagentToolProcessing', () => {
+  // --- Pure helpers ---
 
-describe.skip('subagentToolProcessing (enable in Phase 3)', () => {
-  beforeAll(async () => {
-    const mod = await import('./subagentToolProcessing.js');
-    processFunctionCalls = mod.processFunctionCalls;
-    handleEmitValueCall = mod.handleEmitValueCall;
-    buildPartsFromCompletedCalls = mod.buildPartsFromCompletedCalls;
-    resolveToolName = mod.resolveToolName;
-    buildToolUnavailableMessage = mod.buildToolUnavailableMessage;
-  });
-
-  // --- Behavioral tests (blocking — test public API) ---
-
-  describe('processFunctionCalls', () => {
-    it('should route self_emitvalue calls to emit handling', async () => {
-      const outputObject = { emitted_vars: {}, terminate_reason: 'ERROR' };
-      const outputConfig = { outputs: { my_var: 'My variable description' } };
-      const functionCalls = [
-        { name: 'self_emitvalue', args: { key: 'my_var', value: 'hello' } },
-      ];
-      const params = {
-        functionCalls,
-        outputObject,
-        outputConfig,
-        toolsView: {
-          listToolNames: () => [],
-          getToolMetadata: () => undefined,
-        },
-        toolExecutorContext: {},
-        schedulerConfigFactory: () => ({}),
-        subagentId: 'test-agent',
-        logger: { log: () => {} },
-      };
-      const result = await processFunctionCalls(params);
-      expect(result).toBeDefined();
-      // The emit call should have stored the variable
-      expect(outputObject.emitted_vars.my_var).toBe('hello');
+  describe('toSnakeCase', () => {
+    it('should convert camelCase to snake_case', () => {
+      expect(toSnakeCase('camelCaseString')).toBe('camel_case_string');
     });
 
-    it('should route external tool calls to execution', async () => {
-      const outputObject = { emitted_vars: {}, terminate_reason: 'ERROR' };
-      const mockToolExecutorContext = {
-        getToolRegistry: () => ({
-          getTool: () => undefined,
-        }),
-        getEphemeralSettings: () => ({}),
-        getEphemeralSetting: () => undefined,
-        getExcludeTools: () => [],
-        getSessionId: () => 'test-session',
-        getTelemetryLogPromptsEnabled: () => false,
-        getOrCreateScheduler: () => {},
-        disposeScheduler: () => {},
-      };
-      const functionCalls = [{ name: 'external_tool', args: {} }];
-      const toolsView = {
-        listToolNames: () => ['external_tool'],
-        getToolMetadata: (name: string) => ({
-          name,
-          description: 'An external tool',
-          parameterSchema: { type: 'OBJECT', properties: {} },
-        }),
-      };
-      const params = {
-        functionCalls,
-        outputObject,
-        outputConfig: undefined,
-        toolsView,
-        toolExecutorContext: mockToolExecutorContext,
-        schedulerConfigFactory: () => ({}),
-        subagentId: 'test-agent',
-        logger: { log: () => {} },
-      };
-      const result = await processFunctionCalls(params);
-      expect(result).toBeDefined();
-      expect(Array.isArray(result)).toBe(true);
+    it('should convert PascalCase to snake_case', () => {
+      expect(toSnakeCase('PascalCaseString')).toBe('pascal_case_string');
     });
 
-    it('should produce fallback message when all calls fail', async () => {
-      const outputObject = { emitted_vars: {}, terminate_reason: 'ERROR' };
-      const functionCalls = [{ name: 'failing_tool', args: {} }];
-      const toolsView = {
-        listToolNames: () => [],
-        getToolMetadata: () => undefined,
-      };
-      const params = {
-        functionCalls,
-        outputObject,
-        outputConfig: undefined,
-        toolsView,
-        toolExecutorContext: {
-          getToolRegistry: () => ({ getTool: () => undefined }),
-          getEphemeralSettings: () => ({}),
-          getEphemeralSetting: () => undefined,
-          getExcludeTools: () => [],
-          getSessionId: () => 'test',
-          getTelemetryLogPromptsEnabled: () => false,
-          getOrCreateScheduler: () => {},
-          disposeScheduler: () => {},
-        },
-        schedulerConfigFactory: () => ({}),
-        subagentId: 'test-agent',
-        logger: { log: () => {} },
-      };
-      const result = await processFunctionCalls(params);
-      expect(result).toBeDefined();
+    it('should handle already snake_case', () => {
+      expect(toSnakeCase('snake_case')).toBe('snake_case');
+    });
+
+    it('should handle spaces and hyphens', () => {
+      expect(toSnakeCase('some-value here')).toBe('some_value_here');
     });
   });
 
-  describe('handleEmitValueCall', () => {
-    it('should store emitted variable in output object', () => {
-      const outputObject = {
-        emitted_vars: {},
-        terminate_reason: 'ERROR' as const,
-      };
-      const outputConfig = { outputs: { result: 'The result' } };
-      const result = handleEmitValueCall({
-        callId: 'call-1',
-        args: { key: 'result', value: 'my value' },
-        outputObject,
-        outputConfig,
-      });
-      expect(outputObject.emitted_vars.result).toBe('my value');
-      expect(result).toBeDefined();
+  describe('isFatalToolError', () => {
+    it('should return true for TOOL_DISABLED', () => {
+      expect(isFatalToolError(ToolErrorType.TOOL_DISABLED)).toBe(true);
     });
 
-    it('should return functionResponse confirming storage', () => {
-      const outputObject = { emitted_vars: {}, terminate_reason: 'ERROR' };
-      const outputConfig = { outputs: { x: 'Some var' } };
-      const parts = handleEmitValueCall({
-        callId: 'call-2',
-        args: { key: 'x', value: '42' },
-        outputObject,
-        outputConfig,
-      });
-      expect(parts.length).toBeGreaterThan(0);
-      expect(parts[0]).toHaveProperty('functionResponse');
+    it('should return true for TOOL_NOT_REGISTERED', () => {
+      expect(isFatalToolError(ToolErrorType.TOOL_NOT_REGISTERED)).toBe(true);
     });
 
-    it('should handle multiple emissions', () => {
-      const outputObject = { emitted_vars: {}, terminate_reason: 'ERROR' };
-      const outputConfig = { outputs: { a: 'Var a', b: 'Var b' } };
-      handleEmitValueCall({
-        callId: 'call-3',
-        args: { key: 'a', value: 'valueA' },
-        outputObject,
-        outputConfig,
-      });
-      handleEmitValueCall({
-        callId: 'call-4',
-        args: { key: 'b', value: 'valueB' },
-        outputObject,
-        outputConfig,
-      });
-      expect(outputObject.emitted_vars.a).toBe('valueA');
-      expect(outputObject.emitted_vars.b).toBe('valueB');
+    it('should return false for other error types', () => {
+      expect(isFatalToolError(ToolErrorType.EXECUTION_ERROR)).toBe(false);
     });
 
-    it('should reject emission for undefined output keys', () => {
-      const outputObject = { emitted_vars: {}, terminate_reason: 'ERROR' };
-      const outputConfig = { outputs: { known: 'Known var' } };
-      // Emitting an unknown key — the function should handle this gracefully
-      const parts = handleEmitValueCall({
-        callId: 'call-5',
-        args: { key: 'unknown_key', value: 'value' },
-        outputObject,
-        outputConfig,
-      });
-      // Should still return parts (with error or warning), not throw
-      expect(parts).toBeDefined();
+    it('should return false for undefined', () => {
+      expect(isFatalToolError(undefined)).toBe(false);
     });
   });
 
-  describe('buildPartsFromCompletedCalls', () => {
-    it('should produce functionResponse parts for each completed call', () => {
-      const completedCalls = [
-        {
-          status: 'success',
-          request: {
-            callId: 'c1',
-            name: 'tool_a',
-            args: {},
-            isClientInitiated: true,
-            prompt_id: 'p1',
-            agentId: 'agent1',
-          },
-          response: {
-            callId: 'c1',
-            responseParts: [{ text: 'Result A' }],
-            resultDisplay: { type: 'text', value: 'Result A' },
-            agentId: 'agent1',
-          },
-        },
-      ];
-      const parts = buildPartsFromCompletedCalls({
-        completedCalls,
-        canUpdateOutput: false,
-        onMessage: undefined,
-      });
-      expect(parts.length).toBeGreaterThan(0);
+  describe('extractToolDetail', () => {
+    it('should return error message when available', () => {
+      expect(extractToolDetail(undefined, new Error('Permission denied'))).toBe(
+        'Permission denied',
+      );
     });
 
-    it('should not call onMessage for tools with canUpdateOutput=true', () => {
-      const onMessage = { fn: (_msg: string) => {} };
-      const spy = vi.spyOn(onMessage, 'fn');
-      const completedCalls = [
-        {
-          status: 'success',
-          request: {
-            callId: 'c2',
-            name: 'tool_b',
-            args: {},
-            isClientInitiated: true,
-            prompt_id: 'p2',
-            agentId: 'agent1',
-          },
-          response: {
-            callId: 'c2',
-            responseParts: [{ text: 'Result B' }],
-            resultDisplay: { type: 'text', value: 'Result B' },
-            agentId: 'agent1',
-          },
-        },
-      ];
-      buildPartsFromCompletedCalls({
-        completedCalls,
-        canUpdateOutput: true,
-        onMessage: onMessage.fn,
-      });
-      expect(spy).not.toHaveBeenCalled();
+    it('should return string resultDisplay', () => {
+      expect(extractToolDetail('Tool not found', undefined)).toBe(
+        'Tool not found',
+      );
     });
 
-    it('should call onMessage for tools with canUpdateOutput=false', () => {
-      const messages: string[] = [];
-      const onMessage = (msg: string) => messages.push(msg);
-      const completedCalls = [
-        {
-          status: 'success',
-          request: {
-            callId: 'c3',
-            name: 'tool_c',
-            args: {},
-            isClientInitiated: true,
-            prompt_id: 'p3',
-            agentId: 'agent1',
-          },
-          response: {
-            callId: 'c3',
-            responseParts: [{ text: 'Result C' }],
-            resultDisplay: { type: 'text', value: 'Result C' },
-            agentId: 'agent1',
-          },
-        },
-      ];
-      buildPartsFromCompletedCalls({
-        completedCalls,
-        canUpdateOutput: false,
-        onMessage,
-      });
-      expect(messages.length).toBeGreaterThan(0);
+    it('should return message from object resultDisplay', () => {
+      const display = { message: 'Some detail' } as unknown as import('../tools/tools.js').ToolResultDisplay;
+      expect(extractToolDetail(display, undefined)).toBe('Some detail');
     });
 
-    it('should call onMessage for error calls even with canUpdateOutput=true', () => {
-      const messages: string[] = [];
-      const onMessage = (msg: string) => messages.push(msg);
-      const completedCalls = [
-        {
-          status: 'error',
-          request: {
-            callId: 'c4',
-            name: 'failing_tool',
-            args: {},
-            isClientInitiated: true,
-            prompt_id: 'p4',
-            agentId: 'agent1',
-          },
-          response: {
-            callId: 'c4',
-            responseParts: [],
-            error: new Error('Tool failed'),
-            agentId: 'agent1',
-          },
-        },
-      ];
-      buildPartsFromCompletedCalls({
-        completedCalls,
-        canUpdateOutput: true,
-        onMessage,
-      });
-      expect(messages.length).toBeGreaterThan(0);
-    });
-
-    it('should produce functionResponse-only parts for error calls', () => {
-      const completedCalls = [
-        {
-          status: 'error',
-          request: {
-            callId: 'c5',
-            name: 'error_tool',
-            args: {},
-            isClientInitiated: true,
-            prompt_id: 'p5',
-            agentId: 'agent1',
-          },
-          response: {
-            callId: 'c5',
-            responseParts: [],
-            error: new Error('Something went wrong'),
-            agentId: 'agent1',
-          },
-        },
-      ];
-      const parts = buildPartsFromCompletedCalls({
-        completedCalls,
-        canUpdateOutput: false,
-        onMessage: undefined,
-      });
-      expect(
-        parts.every(
-          (p: Record<string, unknown>) => p.functionResponse !== undefined,
-        ),
-      ).toBe(true);
+    it('should return undefined when neither available', () => {
+      expect(extractToolDetail(undefined, undefined)).toBeUndefined();
     });
   });
+
+  describe('buildToolUnavailableMessage', () => {
+    it('should include tool name', () => {
+      const msg = buildToolUnavailableMessage('my_tool');
+      expect(msg).toContain('my_tool');
+      expect(msg).toContain('not available');
+    });
+
+    it('should include error detail when provided', () => {
+      const msg = buildToolUnavailableMessage(
+        'my_tool',
+        undefined,
+        new Error('Permission denied'),
+      );
+      expect(msg).toContain('Permission denied');
+    });
+
+    it('should include fallback when no detail', () => {
+      const msg = buildToolUnavailableMessage('my_tool');
+      expect(msg).toContain('Please continue without using it');
+    });
+  });
+
+  // --- resolveToolName ---
 
   describe('resolveToolName', () => {
+    const registeredTools = ['read_file', 'write_file', 'run_shell_command'];
     const toolsView = {
-      listToolNames: () => [
-        'read_file',
-        'write_file',
-        'run_shell_command',
-        'mySpecialTool',
-      ],
-      getToolMetadata: (name: string) => ({
-        name,
-        description: '',
-        parameterSchema: { type: 'OBJECT', properties: {} },
-      }),
+      listToolNames: () => registeredTools,
+      getToolMetadata: (name: string) =>
+        registeredTools.includes(name)
+          ? { name, description: '', parameterSchema: { type: 'OBJECT', properties: {} } }
+          : undefined,
     };
 
-    it('should match exact tool name from registry', () => {
+    it('should match exact tool name', () => {
       expect(resolveToolName('read_file', toolsView)).toBe('read_file');
     });
 
@@ -366,19 +125,20 @@ describe.skip('subagentToolProcessing (enable in Phase 3)', () => {
       expect(resolveToolName('READ_FILE', toolsView)).toBe('read_file');
     });
 
+    it('should convert camelCase to snake_case and match', () => {
+      expect(resolveToolName('runShellCommand', toolsView)).toBe(
+        'run_shell_command',
+      );
+    });
+
     it('should strip Tool suffix and match', () => {
-      // e.g. "runShellCommandTool" -> strips "Tool" -> "runShellCommand" -> snake "run_shell_command"
       expect(resolveToolName('run_shell_commandTool', toolsView)).toBe(
         'run_shell_command',
       );
     });
 
-    it('should convert camelCase to snake_case and match', () => {
-      expect(resolveToolName('mySpecialTool', toolsView)).toBe('mySpecialTool');
-    });
-
-    it('should return null when no candidate matches registry', () => {
-      expect(resolveToolName('completely_unknown_tool', toolsView)).toBeNull();
+    it('should return null for unknown tool', () => {
+      expect(resolveToolName('unknown_tool', toolsView)).toBeNull();
     });
 
     it('should return null for undefined input', () => {
@@ -386,112 +146,232 @@ describe.skip('subagentToolProcessing (enable in Phase 3)', () => {
     });
   });
 
-  describe('buildToolUnavailableMessage', () => {
-    it('should produce descriptive error message with tool name', () => {
-      const msg = buildToolUnavailableMessage('my_tool');
-      expect(msg).toContain('my_tool');
-    });
+  // --- finalizeOutput ---
 
-    it('should include resultDisplay detail when available', () => {
-      const resultDisplay = {
-        type: 'text',
-        value: 'Tool not found in registry',
+  describe('finalizeOutput', () => {
+    it('should not overwrite existing final_message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+        final_message: 'Already set',
       };
-      const msg = buildToolUnavailableMessage('my_tool', resultDisplay);
-      expect(msg).toBeDefined();
-      expect(typeof msg).toBe('string');
+      finalizeOutput(output);
+      expect(output.final_message).toBe('Already set');
     });
 
-    it('should include error message when available', () => {
-      const error = new Error('Permission denied');
-      const msg = buildToolUnavailableMessage('my_tool', undefined, error);
-      expect(msg).toContain('Permission denied');
+    it('should set GOAL message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('Completed');
+    });
+
+    it('should set TIMEOUT message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.TIMEOUT,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('time limit');
+    });
+
+    it('should set MAX_TURNS message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.MAX_TURNS,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('maximum number of turns');
+    });
+
+    it('should set ERROR message', () => {
+      const output: OutputObject = {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.ERROR,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('unrecoverable error');
+    });
+
+    it('should include emitted vars in message', () => {
+      const output: OutputObject = {
+        emitted_vars: { result: 'hello' },
+        terminate_reason: SubagentTerminateMode.GOAL,
+      };
+      finalizeOutput(output);
+      expect(output.final_message).toContain('result=hello');
     });
   });
 
-  // --- Helper unit tests (add only if exported; skip until API settled) ---
-  // These target small functions (<10 lines) that may be inlined during Phase 3.
-  // If inlined, verify behavior through the public functions above instead.
-  describe.skip('helper unit tests (enable if exported)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let categorizeToolCall: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let isFatalToolError: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let toSnakeCase: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let extractToolDetail: any;
+  // --- handleEmitValueCall ---
 
-    beforeAll(async () => {
-      const mod = await import('./subagentToolProcessing.js');
-      categorizeToolCall = mod.categorizeToolCall;
-      isFatalToolError = mod.isFatalToolError;
-      toSnakeCase = mod.toSnakeCase;
-      extractToolDetail = mod.extractToolDetail;
+  describe('handleEmitValueCall', () => {
+    function makeCtx(
+      overrides?: Partial<EmitValueContext>,
+    ): EmitValueContext {
+      return {
+        output: { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR },
+        subagentId: 'test-agent',
+        logger: new DebugLogger('test'),
+        ...overrides,
+      };
+    }
+
+    it('should store emitted variable and return functionResponse', () => {
+      const ctx = makeCtx();
+      const parts = handleEmitValueCall(
+        {
+          callId: 'c1',
+          name: 'self_emitvalue',
+          args: { emit_variable_name: 'result', emit_variable_value: 'hello' },
+          isClientInitiated: true,
+          prompt_id: 'p1',
+          agentId: 'test-agent',
+        },
+        ctx,
+      );
+      expect(ctx.output.emitted_vars['result']).toBe('hello');
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).toHaveProperty('functionResponse');
     });
 
-    describe('categorizeToolCall', () => {
-      it('should return emit for self_emitvalue calls', () => {
-        const call = { name: 'self_emitvalue', args: {} };
-        const outputConfig = { outputs: { x: 'var x' } };
-        expect(categorizeToolCall(call, outputConfig)).toBe('emit');
-      });
-
-      it('should return external for any other tool name', () => {
-        const call = { name: 'read_file', args: {} };
-        const outputConfig = { outputs: {} };
-        expect(categorizeToolCall(call, outputConfig)).toBe('external');
-      });
+    it('should call onMessage when provided', () => {
+      const messages: string[] = [];
+      const ctx = makeCtx({ onMessage: (m) => messages.push(m) });
+      handleEmitValueCall(
+        {
+          callId: 'c2',
+          name: 'self_emitvalue',
+          args: { emit_variable_name: 'x', emit_variable_value: 'val' },
+          isClientInitiated: true,
+          prompt_id: 'p2',
+          agentId: 'test-agent',
+        },
+        ctx,
+      );
+      expect(messages.length).toBe(1);
+      expect(messages[0]).toContain('Emitted');
     });
 
-    describe('isFatalToolError', () => {
-      it('should return true for TOOL_DISABLED error type', () => {
-        expect(isFatalToolError('TOOL_DISABLED')).toBe(true);
-      });
+    it('should return error when missing args', () => {
+      const ctx = makeCtx();
+      const parts = handleEmitValueCall(
+        {
+          callId: 'c3',
+          name: 'self_emitvalue',
+          args: {},
+          isClientInitiated: true,
+          prompt_id: 'p3',
+          agentId: 'test-agent',
+        },
+        ctx,
+      );
+      expect(parts).toHaveLength(1);
+      const resp = (parts[0] as { functionResponse: { response: { error: string } } })
+        .functionResponse.response;
+      expect(resp.error).toContain('requires');
+    });
+  });
 
-      it('should return true for TOOL_NOT_REGISTERED error type', () => {
-        expect(isFatalToolError('TOOL_NOT_REGISTERED')).toBe(true);
-      });
+  // --- buildPartsFromCompletedCalls ---
 
-      it('should return false for other error types', () => {
-        expect(isFatalToolError('EXECUTION_ERROR')).toBe(false);
-      });
+  describe('buildPartsFromCompletedCalls', () => {
+    function makeCtx(overrides?: Partial<BuildPartsContext>): BuildPartsContext {
+      return {
+        subagentId: 'test-agent',
+        logger: new DebugLogger('test'),
+        ...overrides,
+      };
+    }
 
-      it('should return false for undefined', () => {
-        expect(isFatalToolError(undefined)).toBe(false);
-      });
+    it('should extract functionResponse parts from completed calls', () => {
+      const parts = buildPartsFromCompletedCalls(
+        [
+          {
+            status: 'success' as const,
+            request: { callId: 'c1', name: 'tool_a', args: {}, isClientInitiated: true, prompt_id: 'p1', agentId: 'a1' },
+            response: {
+              callId: 'c1',
+              responseParts: [{ functionResponse: { id: 'c1', name: 'tool_a', response: { output: 'ok' } } }],
+              agentId: 'a1',
+            },
+          },
+        ],
+        makeCtx(),
+      );
+      expect(parts.length).toBe(1);
+      expect(parts[0]).toHaveProperty('functionResponse');
     });
 
-    describe('toSnakeCase', () => {
-      it('should convert camelCase to snake_case', () => {
-        expect(toSnakeCase('camelCaseString')).toBe('camel_case_string');
-      });
-
-      it('should convert PascalCase to snake_case', () => {
-        expect(toSnakeCase('PascalCaseString')).toBe('pascal_case_string');
-      });
-
-      it('should handle already snake_case', () => {
-        expect(toSnakeCase('snake_case')).toBe('snake_case');
-      });
+    it('should create fallback functionResponse when no responseParts', () => {
+      const parts = buildPartsFromCompletedCalls(
+        [
+          {
+            status: 'success' as const,
+            request: { callId: 'c2', name: 'tool_b', args: {}, isClientInitiated: true, prompt_id: 'p2', agentId: 'a1' },
+            response: { callId: 'c2', responseParts: [], agentId: 'a1' },
+          },
+        ],
+        makeCtx(),
+      );
+      expect(parts.length).toBe(1);
+      expect(parts[0]).toHaveProperty('functionResponse');
     });
 
-    describe('extractToolDetail', () => {
-      it('should extract detail string from resultDisplay', () => {
-        const resultDisplay = { type: 'text', value: 'Some detail' };
-        expect(extractToolDetail(resultDisplay, undefined)).toBeDefined();
-      });
+    it('should not call onMessage for tools with canUpdateOutput=true', () => {
+      const onMessage = vi.fn();
+      buildPartsFromCompletedCalls(
+        [
+          {
+            status: 'success' as const,
+            request: { callId: 'c3', name: 'tool_c', args: {}, isClientInitiated: true, prompt_id: 'p3', agentId: 'a1' },
+            response: { callId: 'c3', responseParts: [{ text: 'data' }], resultDisplay: 'output', agentId: 'a1' },
+            tool: { canUpdateOutput: true },
+          },
+        ],
+        makeCtx({ onMessage }),
+      );
+      expect(onMessage).not.toHaveBeenCalled();
+    });
 
-      it('should extract detail from error when no resultDisplay', () => {
-        const error = new Error('Error message here');
-        expect(extractToolDetail(undefined, error)).toContain(
-          'Error message here',
-        );
-      });
+    it('should call onMessage for tools without canUpdateOutput', () => {
+      const onMessage = vi.fn();
+      buildPartsFromCompletedCalls(
+        [
+          {
+            status: 'success' as const,
+            request: { callId: 'c4', name: 'tool_d', args: {}, isClientInitiated: true, prompt_id: 'p4', agentId: 'a1' },
+            response: { callId: 'c4', responseParts: [{ text: 'data' }], resultDisplay: 'output text', agentId: 'a1' },
+          },
+        ],
+        makeCtx({ onMessage }),
+      );
+      expect(onMessage).toHaveBeenCalledWith('output text');
+    });
 
-      it('should return undefined when neither available', () => {
-        expect(extractToolDetail(undefined, undefined)).toBeUndefined();
-      });
+    it('should filter out functionCall parts (Anthropic boundary)', () => {
+      const parts = buildPartsFromCompletedCalls(
+        [
+          {
+            status: 'success' as const,
+            request: { callId: 'c5', name: 'tool_e', args: {}, isClientInitiated: true, prompt_id: 'p5', agentId: 'a1' },
+            response: {
+              callId: 'c5',
+              responseParts: [
+                { functionCall: { name: 'tool_e', args: {} } },
+                { functionResponse: { id: 'c5', name: 'tool_e', response: { ok: true } } },
+              ],
+              agentId: 'a1',
+            },
+          },
+        ],
+        makeCtx(),
+      );
+      expect(parts.length).toBe(1);
+      expect(parts[0]).toHaveProperty('functionResponse');
+      expect(parts[0]).not.toHaveProperty('functionCall');
     });
   });
 });

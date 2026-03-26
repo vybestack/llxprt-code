@@ -17,12 +17,10 @@ import {
 } from '../config/config.js';
 import {
   type ToolCallRequestInfo,
-  type ToolCallResponseInfo,
   GeminiEventType,
   Turn,
 } from './turn.js';
 import {
-  executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
 import {
@@ -37,16 +35,12 @@ import type {
   ReadonlySettingsSnapshot,
 } from '../runtime/AgentRuntimeContext.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
-import { TodoStore } from '../tools/todo-store.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
-import { ToolErrorType } from '../tools/tool-error.js';
-import { type ToolResultDisplay } from '../tools/tools.js';
 import {
   type CompletedToolCall,
   type OutputUpdateHandler,
 } from './coreToolScheduler.js';
 import { type EmojiFilter } from '../filters/EmojiFilter.js';
-import { debugLogger } from '../utils/debugLogger.js';
 import {
   validateToolsAgainstRuntime,
   createToolExecutionConfig,
@@ -56,6 +50,16 @@ import {
   createSchedulerConfig,
   createChatObject,
 } from './subagentRuntimeSetup.js';
+import {
+  isFatalToolError,
+  buildToolUnavailableMessage,
+  resolveToolName,
+  finalizeOutput,
+  handleEmitValueCall,
+  buildPartsFromCompletedCalls,
+  processFunctionCalls,
+  buildTodoCompletionPrompt,
+} from './subagentToolProcessing.js';
 
 // --- Re-exports from subagentTypes.ts for backward compatibility (Issue #1581) ---
 // Value re-exports (backward-compatible — existed before decomposition)
@@ -562,10 +566,10 @@ export class SubAgentScope {
             const fatalCall = completedCalls.find(
               (call) =>
                 call.status === 'error' &&
-                this.isFatalToolError(call.response.errorType),
+                isFatalToolError(call.response.errorType),
             );
             if (fatalCall) {
-              const fatalMessage = this.buildToolUnavailableMessage(
+              const fatalMessage = buildToolUnavailableMessage(
                 fatalCall.request.name,
                 fatalCall.response.resultDisplay,
                 fatalCall.response.error,
@@ -1033,135 +1037,19 @@ export class SubAgentScope {
     this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
   }
 
-  /**
-   * Processes a list of function calls, executing each one and collecting their responses.
-   * This method iterates through the provided function calls, executes them using the
-   * `executeToolCall` function (or handles `self_emitvalue` internally), and aggregates
-   * their results. It also manages error reporting for failed tool executions.
-   * @param {FunctionCall[]} functionCalls - An array of `FunctionCall` objects to process.
-   * @param {ToolRegistry} toolRegistry - The tool registry to look up and execute tools.
-   * @param {AbortController} abortController - An `AbortController` to signal cancellation of tool executions.
-   * @returns {Promise<Content[]>} A promise that resolves to an array of `Content` parts representing the tool responses,
-   *          which are then used to update the chat history.
-   */
   private async processFunctionCalls(
     functionCalls: FunctionCall[],
     abortController: AbortController,
     promptId: string,
   ): Promise<Content[]> {
-    const toolResponseParts: Part[] = [];
-
-    for (const functionCall of functionCalls) {
-      const callId = functionCall.id ?? `${functionCall.name}-${Date.now()}`;
-      const requestInfo: ToolCallRequestInfo = {
-        callId,
-        name: functionCall.name as string,
-        args: functionCall.args ?? {},
-        isClientInitiated: true,
-        prompt_id: promptId,
-        agentId: this.subagentId,
-      };
-
-      this.logger.debug(
-        () =>
-          `Subagent ${this.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
-      );
-
-      let toolResponse: ToolCallResponseInfo;
-
-      // Handle scope-local tools first.
-      if (functionCall.name === 'self_emitvalue') {
-        const valName = String(requestInfo.args['emit_variable_name']);
-        const valVal = String(requestInfo.args['emit_variable_value']);
-        this.output.emitted_vars[valName] = valVal;
-
-        const successMessage = `Emitted variable ${valName} successfully`;
-        toolResponse = {
-          callId,
-          // Only include functionResponse - history already has functionCall from model response
-          responseParts: [
-            {
-              functionResponse: {
-                id: callId,
-                name: requestInfo.name,
-                response: {
-                  emit_variable_name: valName,
-                  emit_variable_value: valVal,
-                  message: successMessage,
-                },
-              },
-            },
-          ],
-          resultDisplay: successMessage,
-          error: undefined,
-          errorType: undefined,
-          agentId: requestInfo.agentId,
-        };
-      } else {
-        // @plan PLAN-20251028-STATELESS6.P08
-        // @requirement REQ-STAT6-001.1
-        const completed = await executeToolCall(
-          this.createSchedulerConfig({ interactive: false }),
-          requestInfo,
-          abortController.signal,
-          {
-            messageBus: this.messageBus,
-          },
-        );
-        toolResponse = completed.response;
-      }
-
-      if (toolResponse.error) {
-        debugLogger.error(
-          `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
-        );
-      }
-      if (toolResponse.error) {
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} tool '${functionCall.name}' failed: ${toolResponse.error?.message}`,
-        );
-      } else {
-        this.logger.debug(
-          () =>
-            `Subagent ${this.subagentId} tool '${functionCall.name}' completed successfully`,
-        );
-      }
-
-      if (this.isFatalToolError(toolResponse.errorType)) {
-        const fatalMessage = this.buildToolUnavailableMessage(
-          functionCall.name as string,
-          toolResponse.resultDisplay,
-          toolResponse.error,
-        );
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
-        );
-        toolResponseParts.push({ text: fatalMessage });
-        this.output.final_message = fatalMessage;
-        continue;
-      }
-
-      if (toolResponse.responseParts) {
-        // Only include functionResponse parts — the functionCall is already in
-        // history from the model's assistant message (Issue #244).
-        for (const part of toolResponse.responseParts) {
-          if ('functionCall' in part) {
-            continue;
-          }
-          toolResponseParts.push(part);
-        }
-      }
-    }
-    // If all tool calls failed, inform the model so it can re-evaluate.
-    if (functionCalls.length > 0 && toolResponseParts.length === 0) {
-      toolResponseParts.push({
-        text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
-      });
-    }
-
-    return [{ role: 'user', parts: toolResponseParts }];
+    return processFunctionCalls(functionCalls, abortController, promptId, {
+      output: this.output,
+      subagentId: this.subagentId,
+      logger: this.logger,
+      toolExecutorContext: this.toolExecutorContext,
+      config: this.config,
+      messageBus: this.messageBus,
+    });
   }
 
   private createSchedulerConfig(options?: { interactive?: boolean }): Config {
@@ -1173,256 +1061,36 @@ export class SubAgentScope {
   }
 
   private finalizeOutput(): void {
-    const message = this.output.final_message;
-    if (typeof message === 'string' && message.trim().length > 0) {
-      return;
-    }
-
-    const emittedVars = this.output.emitted_vars ?? {};
-    const emittedEntries = Object.entries(emittedVars)
-      .filter(
-        ([, value]) =>
-          value !== undefined &&
-          value !== null &&
-          String(value).trim().length > 0,
-      )
-      .map(([key, value]) => `${key}=${String(value)}`);
-
-    let baseMessage: string;
-    switch (this.output.terminate_reason) {
-      case SubagentTerminateMode.GOAL:
-        baseMessage = 'Completed the requested task.';
-        break;
-      case SubagentTerminateMode.TIMEOUT:
-        baseMessage = 'Stopped because the time limit was reached.';
-        break;
-      case SubagentTerminateMode.MAX_TURNS:
-        baseMessage =
-          'Stopped because the maximum number of turns was reached.';
-        break;
-      case SubagentTerminateMode.ERROR:
-      default:
-        baseMessage = 'Stopped due to an unrecoverable error.';
-        break;
-    }
-
-    const varsSuffix =
-      emittedEntries.length > 0
-        ? ` Emitted variables: ${emittedEntries.join(', ')}.`
-        : '';
-
-    this.output.final_message = `${baseMessage}${varsSuffix}`.trim();
+    finalizeOutput(this.output);
   }
 
-  private isFatalToolError(errorType: ToolErrorType | undefined): boolean {
-    return (
-      errorType === ToolErrorType.TOOL_DISABLED ||
-      errorType === ToolErrorType.TOOL_NOT_REGISTERED
-    );
-  }
 
-  private buildToolUnavailableMessage(
-    toolName: string,
-    resultDisplay?: ToolResultDisplay,
-    error?: Error,
-  ): string {
-    const detail = this.extractToolDetail(resultDisplay, error);
-    const baseMessage = `Tool "${toolName}" is not available in this environment.`;
-    return detail
-      ? `${baseMessage} ${detail}`
-      : `${baseMessage} Please continue without using it.`;
-  }
-
-  private extractToolDetail(
-    resultDisplay?: ToolResultDisplay,
-    error?: Error,
-  ): string | undefined {
-    if (error?.message) {
-      return error.message;
-    }
-    if (typeof resultDisplay === 'string') {
-      return resultDisplay;
-    }
-    if (
-      resultDisplay &&
-      typeof resultDisplay === 'object' &&
-      'message' in resultDisplay &&
-      typeof (resultDisplay as { message?: unknown }).message === 'string'
-    ) {
-      return (resultDisplay as { message: string }).message;
-    }
-    const missingResultDisplay: string | undefined = void 0;
-    return missingResultDisplay;
-  }
 
   private handleEmitValueCall(request: ToolCallRequestInfo): Part[] {
-    const args = request.args ?? {};
-    const variableName =
-      typeof args.emit_variable_name === 'string'
-        ? args.emit_variable_name
-        : typeof args.emitVariableName === 'string'
-          ? args.emitVariableName
-          : '';
-    const variableValue =
-      typeof args.emit_variable_value === 'string'
-        ? args.emit_variable_value
-        : typeof args.emitVariableValue === 'string'
-          ? args.emitVariableValue
-          : '';
-
-    if (variableName && variableValue) {
-      this.output.emitted_vars[variableName] = variableValue;
-      const message = `Emitted variable ${variableName} successfully`;
-      if (this.onMessage) {
-        this.onMessage(`[${this.subagentId}] ${message}`);
-      }
-      // Only return functionResponse - history already has functionCall from Turn
-      return [
-        {
-          functionResponse: {
-            id: request.callId,
-            name: request.name,
-            response: {
-              emit_variable_name: variableName,
-              emit_variable_value: variableValue,
-              message,
-            },
-          },
-        },
-      ];
-    }
-
-    const errorMessage =
-      'self_emitvalue requires emit_variable_name and emit_variable_value arguments.';
-    this.logger.warn(
-      () => `Subagent ${this.subagentId} failed to emit value: ${errorMessage}`,
-    );
-    // Only return functionResponse - history already has functionCall from Turn
-    return [
-      {
-        functionResponse: {
-          id: request.callId,
-          name: request.name,
-          response: { error: errorMessage },
-        },
-      },
-    ];
+    return handleEmitValueCall(request, {
+      output: this.output,
+      onMessage: this.onMessage,
+      subagentId: this.subagentId,
+      logger: this.logger,
+    });
   }
 
   private buildPartsFromCompletedCalls(
     completedCalls: CompletedToolCall[],
   ): Part[] {
-    const aggregate: Part[] = [];
-    for (const call of completedCalls) {
-      // History already has functionCall from model response recorded via Turn.
-      // Only include functionResponse parts here — including functionCall would
-      // create orphan tool_use blocks for Anthropic (Issue #244).
-      if (call.response?.responseParts?.length) {
-        for (const part of call.response.responseParts) {
-          if ('functionCall' in part) {
-            continue;
-          }
-          aggregate.push(part);
-        }
-      } else {
-        // Fallback: create a proper functionResponse instead of plain text
-        aggregate.push({
-          functionResponse: {
-            id: call.request.callId,
-            name: call.request.name,
-            response: {
-              output: `Tool ${call.request.name} completed without response.`,
-            },
-          },
-        });
-      }
-
-      if (call.status === 'error') {
-        const errorMessage =
-          call.response?.error?.message ??
-          call.response?.resultDisplay ??
-          'Tool execution failed.';
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} tool '${call.request.name}' failed: ${errorMessage}`,
-        );
-      } else if (call.status === 'cancelled') {
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} tool '${call.request.name}' was cancelled.`,
-        );
-      }
-
-      // Only display resultDisplay for tools that don't stream live output.
-      // Tools with canUpdateOutput=true already streamed their output via outputUpdateHandler,
-      // so displaying resultDisplay here would cause duplicate output (fixes #898).
-      const toolCanUpdateOutput =
-        call.status === 'success' && call.tool?.canUpdateOutput === true;
-
-      const display = call.response?.resultDisplay;
-      if (
-        typeof display === 'string' &&
-        this.onMessage &&
-        display.trim() &&
-        !toolCanUpdateOutput
-      ) {
-        this.onMessage(display);
-      }
-    }
-    return aggregate;
+    return buildPartsFromCompletedCalls(completedCalls, {
+      onMessage: this.onMessage,
+      subagentId: this.subagentId,
+      logger: this.logger,
+    });
   }
 
   private async buildTodoCompletionPrompt(): Promise<string | null> {
-    const sessionId = this.runtimeContext.state.sessionId;
-    if (!sessionId) {
-      const missingSessionPrompt: string | null = null;
-      return missingSessionPrompt;
-    }
-
-    try {
-      let todos = await new TodoStore(sessionId, this.subagentId).readTodos();
-      if (todos.length === 0) {
-        todos = await new TodoStore(sessionId).readTodos();
-      }
-
-      if (todos.length === 0) {
-        const noTodosPrompt: string | null = null;
-        return noTodosPrompt;
-      }
-
-      const outstanding = todos.filter((todo) => todo.status !== 'completed');
-
-      if (outstanding.length === 0) {
-        const noOutstandingPrompt: string | null = null;
-        return noOutstandingPrompt;
-      }
-
-      const previewCount = Math.min(3, outstanding.length);
-      const previewLines = outstanding
-        .slice(0, previewCount)
-        .map((todo) => `- ${todo.content}`);
-      if (outstanding.length > previewCount) {
-        previewLines.push(
-          `- ... and ${outstanding.length - previewCount} more`,
-        );
-      }
-
-      return [
-        'You still have todos in your todo list. Complete them before finishing.',
-        previewLines.length > 0
-          ? `Outstanding items:\n${previewLines.join('\n')}`
-          : undefined,
-      ]
-        .filter(Boolean)
-        .join('\n\n');
-    } catch (error) {
-      this.logger.warn(
-        () =>
-          `Subagent ${this.subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      const todoInspectionUnavailable: string | null = null;
-      return todoInspectionUnavailable;
-    }
+    return buildTodoCompletionPrompt(
+      this.runtimeContext,
+      this.subagentId,
+      this.logger,
+    );
   }
 
   /**
@@ -1463,47 +1131,7 @@ export class SubAgentScope {
   }
 
   private normalizeToolName(rawName: string | undefined): string | null {
-    if (!rawName) {
-      const missingToolName: string | null = null;
-      return missingToolName;
-    }
-
-    const candidates = new Set<string>();
-    const trimmed = rawName.trim();
-    if (trimmed) {
-      candidates.add(trimmed);
-      candidates.add(trimmed.toLowerCase());
-    }
-
-    if (trimmed.endsWith('Tool')) {
-      const withoutSuffix = trimmed.slice(0, -4);
-      if (withoutSuffix) {
-        candidates.add(withoutSuffix);
-        candidates.add(withoutSuffix.toLowerCase());
-        candidates.add(this.toSnakeCase(withoutSuffix));
-      }
-    }
-
-    candidates.add(this.toSnakeCase(trimmed));
-
-    for (const candidate of candidates) {
-      if (!candidate) {
-        continue;
-      }
-      if (this.runtimeContext.tools.getToolMetadata(candidate)) {
-        return candidate;
-      }
-    }
-
-    const unresolvedToolName: string | null = null;
-    return unresolvedToolName;
-  }
-
-  private toSnakeCase(value: string): string {
-    return value
-      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-      .replace(/[\s-]+/g, '_')
-      .toLowerCase();
+    return resolveToolName(rawName, this.runtimeContext.tools);
   }
 
 }
