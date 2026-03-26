@@ -76,3 +76,17 @@ Running notes during batch execution. Append after each batch.
 - FULL VERIFY: lint 0 errors, typecheck clean, core 514 pass, CLI 336 pass, format/build/smoke clean
 
 ---
+
+## Final Execution Summary (2026-03-25)
+
+All 47 executable batches (5 PICK + 42 REIMPLEMENT) completed:
+
+- **22 PICK commits**: 4 applied via cherry-pick, 1 empty-skipped (f6c2d61), several were effectively NO_OP (upstream files absent in LLxprt)
+- **42 REIMPLEMENT commits**: All completed; 2 were NO_OP (R18 scheduleToolCalls race already present, R27 rationale flush already present)
+- **4 HIGH RISK batches** (R14, R21, R33, R39): All completed successfully
+- **Dependency chains honored**: keybinding chain (R3→R7→R9→R19), hooks chain (R20→R30→R33→R39→R40), newline chain (R31→R34), package.ts chain (R41→R42), settings chain (R14→R21→R36)
+- **Core test baseline**: started at 8786, ended at 8790 passed | 114 skipped
+- **Pre-existing test failures**: useGeminiStream.dedup.test.tsx and useGeminiStream.thinking.test.tsx (getMcpClientManager mock missing) — not introduced by this merge
+- **Final full verify**: typecheck clean, core 8790 passed, format clean, build clean, smoke test passes
+
+---

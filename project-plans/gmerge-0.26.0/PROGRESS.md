@@ -55,4 +55,4 @@
 | R39 | REIMPLEMENT | cebe386 | DONE | 54ea7b615 | **HIGH RISK** MCP status hook |
 | R40 | REIMPLEMENT | 2a3c879 | DONE | 2b98926f5 | clearContext hooks |
 | R41 | REIMPLEMENT | 43846f4 | DONE | 777226143 | package.ts error |
-| R42 | REIMPLEMENT | d8e9db3 | TODO | | package.ts follow-up |
+| R42 | REIMPLEMENT | d8e9db3 | DONE | 829ff6adf | package.ts follow-up |
