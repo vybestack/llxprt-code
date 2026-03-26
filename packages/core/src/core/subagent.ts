@@ -10,11 +10,7 @@
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
-import {
-  Config,
-  type SchedulerCallbacks,
-  type SchedulerOptions,
-} from '../config/config.js';
+import { Config } from '../config/config.js';
 import {
   type ToolCallRequestInfo,
   GeminiEventType,
@@ -38,7 +34,6 @@ import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 import {
   type CompletedToolCall,
-  type OutputUpdateHandler,
 } from './coreToolScheduler.js';
 import { type EmojiFilter } from '../filters/EmojiFilter.js';
 import {
@@ -60,6 +55,16 @@ import {
   processFunctionCalls,
   buildTodoCompletionPrompt,
 } from './subagentToolProcessing.js';
+import {
+  checkTerminationConditions,
+  filterTextWithEmoji,
+  checkGoalCompletion,
+  processNonInteractiveTextResponse,
+  processInteractiveTextResponse,
+  handleExecutionError,
+  initInteractiveScheduler,
+  type ExecutionLoopContext,
+} from './subagentExecution.js';
 
 // --- Re-exports from subagentTypes.ts for backward compatibility (Issue #1581) ---
 // Value re-exports (backward-compatible — existed before decomposition)
@@ -336,7 +341,6 @@ export class SubAgentScope {
     },
   ): Promise<void> {
     const chat = await this.createChatObject(context);
-
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return;
@@ -347,358 +351,182 @@ export class SubAgentScope {
     this.bindParentSignal(abortController);
 
     const functionDeclarations = this.buildRuntimeFunctionDeclarations();
-    if (this.outputConfig && this.outputConfig.outputs) {
+    if (this.outputConfig?.outputs) {
       functionDeclarations.push(...this.getScopeLocalFuncDefs());
     }
 
-    const schedulerConfig = this.createSchedulerConfig({ interactive: true });
-    let pendingCompletedCalls: CompletedToolCall[] | null = null;
-    let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
-      null;
+    const { scheduler, schedulerDispose } =
+      await this.initScheduler(options);
 
-    const awaitCompletedCalls = () => {
-      if (pendingCompletedCalls) {
-        const calls = pendingCompletedCalls;
-        pendingCompletedCalls = null;
-        return Promise.resolve(calls);
-      }
-      return new Promise<CompletedToolCall[]>((resolve) => {
-        completionResolver = resolve;
-      });
-    };
-
-    const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
-      if (output && this.onMessage) {
-        // For subagents, we convert AnsiOutput to string for simple text display
-        const textOutput =
-          typeof output === 'string'
-            ? output
-            : output
-                .map((line) => line.map((token) => token.text).join(''))
-                .join('\n');
-        this.onMessage(textOutput);
-      }
-    };
-
-    const handleCompletion = async (calls: CompletedToolCall[]) => {
-      if (completionResolver) {
-        completionResolver(calls);
-        completionResolver = null;
-      } else {
-        pendingCompletedCalls = calls;
-      }
-    };
-
-    const schedulerPromise = options?.schedulerFactory
-      ? Promise.resolve(
-          options.schedulerFactory({
-            schedulerConfig,
-            onAllToolCallsComplete: handleCompletion,
-            outputUpdateHandler,
-            onToolCallsUpdate: undefined,
-          }),
-        )
-      : (async () => {
-          const sessionId = schedulerConfig.getSessionId();
-          return (
-            schedulerConfig as Config & {
-              getOrCreateScheduler(
-                sessionId: string,
-                callbacks: SchedulerCallbacks,
-                options?: SchedulerOptions,
-                dependencies?: {
-                  messageBus?: import('../index.js').MessageBus;
-                },
-              ): ReturnType<Config['getOrCreateScheduler']>;
-            }
-          ).getOrCreateScheduler(
-            sessionId,
-            {
-              outputUpdateHandler,
-              onAllToolCallsComplete: handleCompletion,
-              onToolCallsUpdate: undefined,
-              getPreferredEditor: () => undefined,
-              onEditorClose: () => {},
-            },
-            undefined,
-            {
-              messageBus: this.messageBus,
-            },
-          );
-        })();
-
-    let scheduler: Awaited<typeof schedulerPromise>;
-    try {
-      scheduler = await schedulerPromise;
-    } catch (error) {
-      this.logger.error(
-        () =>
-          `Subagent ${this.subagentId} failed to create scheduler: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-      throw error;
-    }
-
-    const schedulerDispose = options?.schedulerFactory
-      ? typeof scheduler.dispose === 'function'
-        ? async () => scheduler.dispose?.()
-        : async () => {}
-      : async () =>
-          schedulerConfig.disposeScheduler(schedulerConfig.getSessionId());
-
+    const execCtx = this.buildExecCtx();
     const startTime = Date.now();
     let turnCounter = 0;
     let currentMessages = this.buildInitialMessages(context);
 
     try {
       while (true) {
-        if (
-          this.runConfig.max_turns &&
-          turnCounter >= this.runConfig.max_turns
-        ) {
-          this.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached max turns (${this.runConfig.max_turns})`,
+        const check = checkTerminationConditions(turnCounter, startTime, execCtx);
+        if (check.shouldStop) break;
+
+        const { responseParts, textResponse, currentTurn } =
+          await this.runInteractiveTurn(
+            chat, currentMessages, abortController, turnCounter++, execCtx,
           );
-          break;
-        }
+        if (abortController.signal.aborted) return;
 
-        let durationMin = (Date.now() - startTime) / (1000 * 60);
-        if (durationMin >= this.runConfig.max_time_minutes) {
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes)`,
-          );
-          break;
-        }
+        processInteractiveTextResponse(textResponse, execCtx);
 
-        const currentTurn = turnCounter++;
-        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
-        const providerName = this.runtimeContext.state.provider ?? 'backend';
-        const turn = new Turn(chat, promptId, this.subagentId, providerName);
+        const toolMessages = await this.handleInteractiveToolCalls(
+          responseParts, scheduler, abortController, execCtx,
+        );
+        if (toolMessages) { currentMessages = toolMessages; continue; }
 
-        let textResponse = '';
-        const parts = currentMessages[0]?.parts ?? [];
-
-        const stream = turn.run(parts, abortController.signal);
-        for await (const event of stream) {
-          if (abortController.signal.aborted) {
-            return;
-          }
-          if (event.type === GeminiEventType.Content && event.value) {
-            textResponse += event.value;
-
-            let messageToSend = event.value;
-            if (this.emojiFilter) {
-              const filterResult = this.emojiFilter.filterText(messageToSend);
-              if (filterResult.blocked) {
-                this.output.terminate_reason = SubagentTerminateMode.ERROR;
-                throw new Error(
-                  filterResult.error ?? 'Content blocked by emoji filter',
-                );
-              }
-              messageToSend =
-                typeof filterResult.filtered === 'string'
-                  ? filterResult.filtered
-                  : '';
-
-              // In warn mode, include system feedback
-              if (filterResult.systemFeedback && this.onMessage) {
-                this.onMessage(filterResult.systemFeedback);
-              }
-            }
-
-            if (this.onMessage && messageToSend) {
-              this.onMessage(messageToSend);
-            }
-          } else if (
-            event.type === GeminiEventType.Error &&
-            event.value?.error
-          ) {
-            this.output.terminate_reason = SubagentTerminateMode.ERROR;
-            throw new Error(event.value.error.message);
-          }
-        }
-
-        if (textResponse.trim()) {
-          let finalMessage = textResponse.trim();
-          if (this.emojiFilter) {
-            const filterResult = this.emojiFilter.filterText(finalMessage);
-            if (filterResult.blocked) {
-              this.output.terminate_reason = SubagentTerminateMode.ERROR;
-              throw new Error(
-                filterResult.error ?? 'Content blocked by emoji filter',
-              );
-            }
-            finalMessage =
-              typeof filterResult.filtered === 'string'
-                ? filterResult.filtered
-                : '';
-          }
-          this.output.final_message = finalMessage;
-        }
-
-        const toolRequests = [...turn.pendingToolCalls];
-        if (toolRequests.length > 0) {
-          const manualParts: Part[] = [];
-          const schedulerRequests: ToolCallRequestInfo[] = [];
-
-          for (const request of toolRequests) {
-            if (request.name === 'self_emitvalue') {
-              manualParts.push(...this.handleEmitValueCall(request));
-            } else {
-              schedulerRequests.push(request);
-            }
-          }
-
-          let responseParts: Part[] = [...manualParts];
-
-          if (schedulerRequests.length > 0) {
-            const completionPromise = awaitCompletedCalls();
-            await scheduler.schedule(schedulerRequests, abortController.signal);
-            const completedCalls = await completionPromise;
-            responseParts = responseParts.concat(
-              this.buildPartsFromCompletedCalls(completedCalls),
-            );
-            const fatalCall = completedCalls.find(
-              (call) =>
-                call.status === 'error' &&
-                isFatalToolError(call.response.errorType),
-            );
-            if (fatalCall) {
-              const fatalMessage = buildToolUnavailableMessage(
-                fatalCall.request.name,
-                fatalCall.response.resultDisplay,
-                fatalCall.response.error,
-              );
-              this.logger.warn(
-                () =>
-                  `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
-              );
-              responseParts.push({ text: fatalMessage });
-              this.output.final_message = fatalMessage;
-            }
-          }
-
-          if (responseParts.length === 0) {
-            responseParts.push({
-              text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
-            });
-          }
-
-          currentMessages = [{ role: 'user', parts: responseParts }];
-          continue;
-        }
-
-        durationMin = (Date.now() - startTime) / (1000 * 60);
-        if (durationMin >= this.runConfig.max_time_minutes) {
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached time limit after turn ${currentTurn}`,
-          );
-          break;
-        }
+        // Post-turn timeout recheck
+        const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
+        if (recheck.shouldStop) break;
 
         const todoReminder = await this.buildTodoCompletionPrompt();
-        if (todoReminder) {
-          this.logger.debug(
-            () =>
-              `Subagent ${this.subagentId} postponing completion until outstanding todos are addressed`,
-          );
-          currentMessages = [
-            {
-              role: 'user',
-              parts: [{ text: todoReminder }],
-            },
-          ];
-          continue;
-        }
-
-        if (
-          !this.outputConfig ||
-          Object.keys(this.outputConfig.outputs).length === 0
-        ) {
-          this.output.terminate_reason = SubagentTerminateMode.GOAL;
-          break;
-        }
-
-        const remainingVars = Object.keys(this.outputConfig.outputs).filter(
-          (key) => !(key in this.output.emitted_vars),
-        );
-
-        if (remainingVars.length === 0) {
-          this.output.terminate_reason = SubagentTerminateMode.GOAL;
-          this.logger.debug(
-            () =>
-              `Subagent ${this.subagentId} satisfied output requirements on turn ${currentTurn}`,
-          );
-          break;
-        }
-
-        const nudgeMessage = `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
-          ', ',
-        )}. Please use the 'self_emitvalue' tool to emit them now, or continue working if necessary.`;
-
-        this.logger.debug(
-          () =>
-            `Subagent ${this.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
-        );
-
-        currentMessages = [
-          {
-            role: 'user',
-            parts: [{ text: nudgeMessage }],
-          },
-        ];
+        const nextMessages = await checkGoalCompletion(execCtx, todoReminder, currentTurn);
+        if (!nextMessages) break;
+        currentMessages = nextMessages;
       }
       this.finalizeOutput();
     } catch (error) {
-      this.logger.warn(
-        () =>
-          `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      this.output.terminate_reason = SubagentTerminateMode.ERROR;
-      if (!this.output.final_message) {
-        this.output.final_message =
-          error instanceof Error ? error.message : String(error);
-      }
+      handleExecutionError(error, execCtx);
       this.finalizeOutput();
       throw error;
     } finally {
-      try {
-        await schedulerDispose();
-      } catch (error) {
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} failed to dispose scheduler: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-        );
-      }
-      this.parentAbortCleanup?.();
-      this.parentAbortCleanup = undefined;
-      this.activeAbortController = null;
+      await this.cleanupInteractive(schedulerDispose, abortController);
     }
+  }
+
+  private async initScheduler(
+    options: { schedulerFactory?: SubagentSchedulerFactory } | undefined,
+  ) {
+    return initInteractiveScheduler(options, {
+      schedulerConfig: this.createSchedulerConfig({ interactive: true }),
+      onMessage: this.onMessage,
+      messageBus: this.messageBus,
+      subagentId: this.subagentId,
+      logger: this.logger,
+    });
+  }
+
+  private async runInteractiveTurn(
+    chat: import('./geminiChat.js').GeminiChat,
+    currentMessages: Content[],
+    abortController: AbortController,
+    turnIndex: number,
+    execCtx: ExecutionLoopContext,
+  ) {
+    const currentTurn = turnIndex;
+    const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
+    const providerName = this.runtimeContext.state.provider ?? 'backend';
+    const turn = new Turn(chat, promptId, this.subagentId, providerName);
+    const parts = currentMessages[0]?.parts ?? [];
+
+    let textResponse = '';
+    const stream = turn.run(parts, abortController.signal);
+    for await (const event of stream) {
+      if (abortController.signal.aborted) break;
+      if (event.type === GeminiEventType.Content && event.value) {
+        textResponse += event.value;
+        const filtered = filterTextWithEmoji(event.value, execCtx);
+        if (filtered.blocked) {
+          execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
+          throw new Error(filtered.error ?? 'Content blocked by emoji filter');
+        }
+        if (execCtx.onMessage && filtered.text) {
+          execCtx.onMessage(filtered.text);
+        }
+      } else if (event.type === GeminiEventType.Error && event.value?.error) {
+        execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
+        throw new Error(event.value.error.message);
+      }
+    }
+
+    return { responseParts: [...turn.pendingToolCalls], textResponse, currentTurn };
+  }
+
+  private async handleInteractiveToolCalls(
+    toolRequests: ToolCallRequestInfo[],
+    scheduler: { schedule: (req: ToolCallRequestInfo | ToolCallRequestInfo[], signal: AbortSignal) => Promise<void> | void; awaitCompletedCalls: () => Promise<CompletedToolCall[]> },
+    abortController: AbortController,
+    execCtx: ExecutionLoopContext,
+  ): Promise<Content[] | null> {
+    if (toolRequests.length === 0) return null;
+
+    const manualParts: Part[] = [];
+    const schedulerRequests: ToolCallRequestInfo[] = [];
+
+    for (const request of toolRequests) {
+      if (request.name === 'self_emitvalue') {
+        manualParts.push(...this.handleEmitValueCall(request));
+      } else {
+        schedulerRequests.push(request);
+      }
+    }
+
+    let responseParts: Part[] = [...manualParts];
+
+    if (schedulerRequests.length > 0) {
+      const completionPromise = scheduler.awaitCompletedCalls();
+      await scheduler.schedule(schedulerRequests, abortController.signal);
+      const completedCalls = await completionPromise;
+      responseParts = responseParts.concat(
+        this.buildPartsFromCompletedCalls(completedCalls),
+      );
+      const fatalCall = completedCalls.find(
+        (call) => call.status === 'error' && isFatalToolError(call.response.errorType),
+      );
+      if (fatalCall) {
+        const fatalMessage = buildToolUnavailableMessage(
+          fatalCall.request.name, fatalCall.response.resultDisplay, fatalCall.response.error,
+        );
+        this.logger.warn(
+          () => `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
+        );
+        responseParts.push({ text: fatalMessage });
+        execCtx.output.final_message = fatalMessage;
+      }
+    }
+
+    if (responseParts.length === 0) {
+      responseParts.push({
+        text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
+      });
+    }
+
+    return [{ role: 'user', parts: responseParts }];
+  }
+
+  private async cleanupInteractive(
+    schedulerDispose: () => Promise<void>,
+    _abortController: AbortController,
+  ): Promise<void> {
+    try {
+      await schedulerDispose();
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Subagent ${this.subagentId} failed to dispose scheduler: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+    this.parentAbortCleanup?.();
+    this.parentAbortCleanup = undefined;
+    this.activeAbortController = null;
   }
 
   /**
    * Runs the subagent in a non-interactive mode.
-   * This method orchestrates the subagent's execution loop, including prompt templating,
-   * tool execution, and termination conditions.
    *
    * @plan PLAN-20251028-STATELESS6.P08
    * @requirement REQ-STAT6-001.1
-   *
-   * @param {ContextState} context - The current context state containing variables for prompt templating.
-   * @returns {Promise<void>} A promise that resolves when the subagent has completed its execution.
    */
   async runNonInteractive(context: ContextState): Promise<void> {
     const chat = await this.createChatObject(context);
-
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return;
@@ -708,278 +536,57 @@ export class SubAgentScope {
     this.activeAbortController = abortController;
     this.bindParentSignal(abortController);
 
-    const toolsList: FunctionDeclaration[] =
-      this.buildRuntimeFunctionDeclarations();
-    if (this.outputConfig && this.outputConfig.outputs) {
+    const toolsList: FunctionDeclaration[] = this.buildRuntimeFunctionDeclarations();
+    if (this.outputConfig?.outputs) {
       toolsList.push(...this.getScopeLocalFuncDefs());
     }
 
     this.logger.debug(
       () =>
         `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${
-          this.outputConfig
-            ? Object.keys(this.outputConfig.outputs).join(', ')
-            : 'none'
+          this.outputConfig ? Object.keys(this.outputConfig.outputs).join(', ') : 'none'
         } runConfig=${JSON.stringify(this.runConfig)}`,
     );
 
+    const execCtx = this.buildExecCtx();
     let currentMessages: Content[] = this.buildInitialMessages(context);
-
     const startTime = Date.now();
     let turnCounter = 0;
+
     try {
       while (true) {
-        // Check termination conditions.
-        if (
-          this.runConfig.max_turns &&
-          turnCounter >= this.runConfig.max_turns
-        ) {
-          this.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached max turns (${this.runConfig.max_turns})`,
-          );
-          break;
-        }
-        let durationMin = (Date.now() - startTime) / (1000 * 60);
-        if (durationMin >= this.runConfig.max_time_minutes) {
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes)`,
-          );
-          break;
-        }
+        const check = checkTerminationConditions(turnCounter, startTime, execCtx);
+        if (check.shouldStop) break;
 
-        // @plan PLAN-20251028-STATELESS6.P08
-        // @requirement REQ-STAT6-001.1
         const currentTurn = turnCounter++;
         const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
         this.logger.debug(
-          () =>
-            `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
-        );
-        const messageParams = {
-          message: currentMessages[0]?.parts || [],
-          config: {
-            abortSignal: abortController.signal,
-            tools: [{ functionDeclarations: toolsList }],
-          },
-        };
-
-        const responseStream = await chat.sendMessageStream(
-          messageParams,
-          promptId,
+          () => `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
         );
 
-        durationMin = (Date.now() - startTime) / (1000 * 60);
-        if (durationMin >= this.runConfig.max_time_minutes) {
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes) while waiting for model response`,
-          );
-          break;
-        }
+        const { functionCalls } = await this.runNonInteractiveTurn(
+          chat, currentMessages, toolsList, abortController, currentTurn, execCtx,
+        );
+        if (abortController.signal.aborted) return;
 
-        let functionCalls: FunctionCall[] = [];
-        let textResponse = '';
-        for await (const resp of responseStream) {
-          if (abortController.signal.aborted) return;
-          if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
-            const chunkCalls = resp.value.functionCalls ?? [];
-            if (chunkCalls.length > 0) {
-              functionCalls.push(...chunkCalls);
-              this.logger.debug(
-                () =>
-                  `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
-              );
-            }
-          }
-          if (resp.type === StreamEventType.CHUNK && resp.value.text) {
-            textResponse += resp.value.text;
-          }
-        }
-
-        if (textResponse) {
-          const messageToSend = textResponse;
-          let messageToCallback = textResponse;
-
-          if (this.emojiFilter) {
-            const filterResult = this.emojiFilter.filterText(messageToSend);
-            if (filterResult.blocked) {
-              this.output.terminate_reason = SubagentTerminateMode.ERROR;
-              throw new Error(
-                filterResult.error ?? 'Content blocked by emoji filter',
-              );
-            }
-            messageToCallback =
-              typeof filterResult.filtered === 'string'
-                ? filterResult.filtered
-                : '';
-
-            // Include system feedback in warn mode
-            if (filterResult.systemFeedback && this.onMessage) {
-              this.onMessage(filterResult.systemFeedback);
-            }
-          }
-
-          if (this.onMessage && messageToCallback) {
-            this.onMessage(messageToCallback);
-          }
-
-          let cleanedText = messageToSend;
-          try {
-            const parsedResult = this.textToolParser.parse(messageToSend);
-            cleanedText = parsedResult.cleanedContent;
-            if (parsedResult.toolCalls.length > 0) {
-              const synthesizedCalls: FunctionCall[] = [];
-              parsedResult.toolCalls.forEach((call, index) => {
-                const normalizedName = this.normalizeToolName(call.name);
-                if (!normalizedName) {
-                  this.logger.debug(
-                    () =>
-                      `Subagent ${this.subagentId} could not map textual tool name '${call.name}' to a registered tool`,
-                  );
-                  return;
-                }
-                synthesizedCalls.push({
-                  id: `parsed_${this.subagentId}_${Date.now()}_${index}`,
-                  name: normalizedName,
-                  args: call.arguments ?? {},
-                });
-              });
-
-              if (synthesizedCalls.length > 0) {
-                functionCalls = [...functionCalls, ...synthesizedCalls];
-                this.logger.debug(
-                  () =>
-                    `Subagent ${this.subagentId} extracted ${synthesizedCalls.length} tool call(s) from text: ${synthesizedCalls
-                      .map((call) => call.name)
-                      .join(', ')}`,
-                );
-              }
-            }
-          } catch (error) {
-            this.logger.warn(
-              () =>
-                `Subagent ${this.subagentId} failed to parse textual tool calls: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-
-          textResponse = cleanedText;
-          const trimmedText = textResponse.trim();
-
-          if (trimmedText.length > 0) {
-            let finalMessage = trimmedText;
-            if (this.emojiFilter) {
-              const filterResult = this.emojiFilter.filterText(finalMessage);
-              if (filterResult.blocked) {
-                this.output.terminate_reason = SubagentTerminateMode.ERROR;
-                throw new Error(
-                  filterResult.error ?? 'Content blocked by emoji filter',
-                );
-              }
-              finalMessage =
-                typeof filterResult.filtered === 'string'
-                  ? filterResult.filtered
-                  : '';
-            }
-            this.output.final_message = finalMessage;
-          }
-
-          const preview =
-            textResponse.length > 200
-              ? `${textResponse.slice(0, 200)}…`
-              : textResponse;
-          this.logger.debug(
-            () =>
-              `Subagent ${this.subagentId} model response (truncated): ${preview}`,
-          );
-        }
-
-        durationMin = (Date.now() - startTime) / (1000 * 60);
-        if (durationMin >= this.runConfig.max_time_minutes) {
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-          this.logger.warn(
-            () =>
-              `Subagent ${this.subagentId} reached time limit after turn ${currentTurn}`,
-          );
-          break;
-        }
+        // Post-send timeout recheck
+        const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
+        if (recheck.shouldStop) break;
 
         if (functionCalls.length > 0) {
           currentMessages = await this.processFunctionCalls(
-            functionCalls,
-            abortController,
-            promptId,
+            functionCalls, abortController, promptId,
           );
         } else {
-          // Model stopped calling tools. Check if goal is met.
           const todoReminder = await this.buildTodoCompletionPrompt();
-          if (todoReminder) {
-            this.logger.debug(
-              () =>
-                `Subagent ${this.subagentId} postponing completion until outstanding todos are addressed`,
-            );
-            currentMessages = [
-              {
-                role: 'user',
-                parts: [{ text: todoReminder }],
-              },
-            ];
-            continue;
-          }
-
-          if (
-            !this.outputConfig ||
-            Object.keys(this.outputConfig.outputs).length === 0
-          ) {
-            this.output.terminate_reason = SubagentTerminateMode.GOAL;
-            break;
-          }
-
-          const remainingVars = Object.keys(this.outputConfig.outputs).filter(
-            (key) => !(key in this.output.emitted_vars),
-          );
-
-          if (remainingVars.length === 0) {
-            this.output.terminate_reason = SubagentTerminateMode.GOAL;
-            this.logger.debug(
-              () =>
-                `Subagent ${this.subagentId} satisfied output requirements on turn ${currentTurn}`,
-            );
-            break;
-          }
-
-          const nudgeMessage = `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
-            ', ',
-          )}. Please use the 'self_emitvalue' tool to emit them now, or continue working if necessary.`;
-
-          this.logger.debug(
-            () =>
-              `Subagent ${this.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
-          );
-
-          currentMessages = [
-            {
-              role: 'user',
-              parts: [{ text: nudgeMessage }],
-            },
-          ];
+          const nextMessages = await checkGoalCompletion(execCtx, todoReminder, currentTurn);
+          if (!nextMessages) break;
+          currentMessages = nextMessages;
         }
       }
       this.finalizeOutput();
     } catch (error) {
-      this.logger.warn(
-        () =>
-          `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      this.output.terminate_reason = SubagentTerminateMode.ERROR;
-      if (!this.output.final_message) {
-        this.output.final_message =
-          error instanceof Error ? error.message : String(error);
-      }
+      handleExecutionError(error, execCtx);
       this.finalizeOutput();
       throw error;
     } finally {
@@ -987,6 +594,70 @@ export class SubAgentScope {
       this.parentAbortCleanup = undefined;
       this.activeAbortController = null;
     }
+  }
+
+  private async runNonInteractiveTurn(
+    chat: import('./geminiChat.js').GeminiChat,
+    currentMessages: Content[],
+    toolsList: FunctionDeclaration[],
+    abortController: AbortController,
+    currentTurn: number,
+    execCtx: ExecutionLoopContext,
+  ) {
+    const messageParams = {
+      message: currentMessages[0]?.parts || [],
+      config: {
+        abortSignal: abortController.signal,
+        tools: [{ functionDeclarations: toolsList }],
+      },
+    };
+
+    const responseStream = await chat.sendMessageStream(
+      messageParams,
+      `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`,
+    );
+
+    let functionCalls: FunctionCall[] = [];
+    let textResponse = '';
+    for await (const resp of responseStream) {
+      if (abortController.signal.aborted) return { functionCalls: [], textResponse: '' };
+      if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
+        const chunkCalls = resp.value.functionCalls ?? [];
+        if (chunkCalls.length > 0) {
+          functionCalls.push(...chunkCalls);
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
+          );
+        }
+      }
+      if (resp.type === StreamEventType.CHUNK && resp.value.text) {
+        textResponse += resp.value.text;
+      }
+    }
+
+    if (textResponse) {
+      const result = processNonInteractiveTextResponse(
+        textResponse, functionCalls, execCtx, resolveToolName,
+      );
+      functionCalls = result.functionCalls;
+    }
+
+    return { functionCalls, textResponse };
+  }
+
+  private buildExecCtx(): ExecutionLoopContext {
+    return {
+      output: this.output,
+      subagentId: this.subagentId,
+      runConfig: this.runConfig,
+      outputConfig: this.outputConfig,
+      emojiFilter: this.emojiFilter,
+      textToolParser: this.textToolParser,
+      toolsView: this.runtimeContext.tools,
+      logger: this.logger,
+      onMessage: this.onMessage,
+    };
   }
 
   cancel(reason?: string): void {
@@ -1064,8 +735,6 @@ export class SubAgentScope {
     finalizeOutput(this.output);
   }
 
-
-
   private handleEmitValueCall(request: ToolCallRequestInfo): Part[] {
     return handleEmitValueCall(request, {
       output: this.output,
@@ -1093,13 +762,6 @@ export class SubAgentScope {
     );
   }
 
-  /**
-   * Creates a GeminiChat instance for this subagent.
-   *
-   * @plan PLAN-20251028-STATELESS6.P08
-   * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
-   * @pseudocode agent-runtime-context.md line 99 (step 007.7)
-   */
   private async createChatObject(context: ContextState) {
     return createChatObject({
       promptConfig: this.promptConfig,
@@ -1121,17 +783,8 @@ export class SubAgentScope {
     );
   }
 
-  /**
-   * Returns an array of FunctionDeclaration objects for tools that are local to the subagent's scope.
-   * Currently, this includes the `self_emitvalue` tool for emitting variables.
-   * @returns An array of `FunctionDeclaration` objects.
-   */
   private getScopeLocalFuncDefs() {
     return getScopeLocalFuncDefs(this.outputConfig);
-  }
-
-  private normalizeToolName(rawName: string | undefined): string | null {
-    return resolveToolName(rawName, this.runtimeContext.tools);
   }
 
 }

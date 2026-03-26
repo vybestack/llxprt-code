@@ -4,293 +4,228 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  checkTerminationConditions,
+  filterTextWithEmoji,
+  checkGoalCompletion,
+  processInteractiveTextResponse,
+  handleExecutionError,
+  type ExecutionLoopContext,
+} from './subagentExecution.js';
+import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
-// These module references will be populated at runtime inside the skipped block.
-// The imports target subagentExecution.js which does not exist yet — it will be created
-// in Phase 4. The describe.skip wrapper keeps CI green in the meantime.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let filterTextResponse: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let checkGoalCompletion: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let checkTerminationConditions: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildMissingOutputsNudge: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildTodoCompletionPrompt: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let finalizeOutput: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildInitialMessages: any;
+function makeOutput(): OutputObject {
+  return { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR };
+}
 
-describe.skip('subagentExecution (enable in Phase 4)', () => {
-  beforeAll(async () => {
-    const mod = await import('./subagentExecution.js');
-    filterTextResponse = mod.filterTextResponse;
-    checkGoalCompletion = mod.checkGoalCompletion;
-    checkTerminationConditions = mod.checkTerminationConditions;
-    buildMissingOutputsNudge = mod.buildMissingOutputsNudge;
-    buildTodoCompletionPrompt = mod.buildTodoCompletionPrompt;
-    finalizeOutput = mod.finalizeOutput;
-    buildInitialMessages = mod.buildInitialMessages;
+describe('subagentExecution', () => {
+  // --- checkTerminationConditions ---
+
+  describe('checkTerminationConditions', () => {
+    it('should return shouldStop=false when within limits', () => {
+      const ctx = {
+        runConfig: { max_turns: 10, max_time_minutes: 30 },
+        subagentId: 'test',
+        output: makeOutput(),
+        logger: new DebugLogger('test'),
+      };
+      const result = checkTerminationConditions(0, Date.now(), ctx);
+      expect(result.shouldStop).toBe(false);
+    });
+
+    it('should stop at max_turns', () => {
+      const ctx = {
+        runConfig: { max_turns: 5, max_time_minutes: 30 },
+        subagentId: 'test',
+        output: makeOutput(),
+        logger: new DebugLogger('test'),
+      };
+      const result = checkTerminationConditions(5, Date.now(), ctx);
+      expect(result.shouldStop).toBe(true);
+      expect(result.reason).toBe(SubagentTerminateMode.MAX_TURNS);
+      expect(ctx.output.terminate_reason).toBe(SubagentTerminateMode.MAX_TURNS);
+    });
+
+    it('should stop at timeout', () => {
+      const ctx = {
+        runConfig: { max_turns: 100, max_time_minutes: 0 },
+        subagentId: 'test',
+        output: makeOutput(),
+        logger: new DebugLogger('test'),
+      };
+      // Start time in the past
+      const result = checkTerminationConditions(0, Date.now() - 60000, ctx);
+      expect(result.shouldStop).toBe(true);
+      expect(result.reason).toBe(SubagentTerminateMode.TIMEOUT);
+    });
+
+    it('should handle undefined max_turns (no turn limit)', () => {
+      const ctx = {
+        runConfig: { max_turns: undefined as unknown as number, max_time_minutes: 30 },
+        subagentId: 'test',
+        output: makeOutput(),
+        logger: new DebugLogger('test'),
+      };
+      const result = checkTerminationConditions(999, Date.now(), ctx);
+      expect(result.shouldStop).toBe(false);
+    });
   });
 
-  describe('filterTextResponse', () => {
-    it('should pass through text when no emoji filter', () => {
-      const result = filterTextResponse('Hello world!', undefined);
-      expect(result.filtered).toBe('Hello world!');
+  // --- filterTextWithEmoji ---
+
+  describe('filterTextWithEmoji', () => {
+    it('should pass through when no emojiFilter', () => {
+      const result = filterTextWithEmoji('hello world', {});
+      expect(result.text).toBe('hello world');
       expect(result.blocked).toBe(false);
     });
 
-    it('should filter emojis when emoji filter is active', () => {
-      // Create a mock emoji filter
-      const mockEmojiFilter = {
-        filter: (text: string) => ({
-          filtered: text.replace(/[\u{1F600}-\u{1F64F}]/gu, ''),
-          systemFeedback: 'Emojis removed',
-          blocked: false,
-        }),
-      };
-      const result = filterTextResponse('Hello  world!', mockEmojiFilter);
-      expect(result.filtered).not.toContain('');
-    });
-
-    it('should return blocked=true for fully blocked content', () => {
-      const mockBlockingFilter = {
-        filter: (_text: string) => ({
-          filtered: '',
-          systemFeedback: 'Content blocked',
-          blocked: true,
-        }),
-      };
-      const result = filterTextResponse('blocked content', mockBlockingFilter);
-      expect(result.blocked).toBe(true);
-    });
-
-    it('should include system feedback when content modified', () => {
+    it('should apply emoji filter and return filtered text', () => {
       const mockFilter = {
-        filter: (text: string) => ({
-          filtered: text + ' (modified)',
-          systemFeedback: 'Content was modified',
-          blocked: false,
-        }),
+        filterText: vi.fn().mockReturnValue({ filtered: 'cleaned', blocked: false }),
       };
-      const result = filterTextResponse('original text', mockFilter);
-      expect(result.systemFeedback).toBeDefined();
+      const result = filterTextWithEmoji('hello ', { emojiFilter: mockFilter as never });
+      expect(result.text).toBe('cleaned');
+      expect(result.blocked).toBe(false);
+    });
+
+    it('should return blocked=true when filter blocks', () => {
+      const mockFilter = {
+        filterText: vi.fn().mockReturnValue({ blocked: true, error: 'Content blocked' }),
+      };
+      const result = filterTextWithEmoji('bad content', { emojiFilter: mockFilter as never });
+      expect(result.blocked).toBe(true);
+      expect(result.error).toBe('Content blocked');
+    });
+
+    it('should call onMessage with system feedback', () => {
+      const onMessage = vi.fn();
+      const mockFilter = {
+        filterText: vi.fn().mockReturnValue({ filtered: 'ok', blocked: false, systemFeedback: 'warning!' }),
+      };
+      filterTextWithEmoji('test', { emojiFilter: mockFilter as never, onMessage });
+      expect(onMessage).toHaveBeenCalledWith('warning!');
     });
   });
+
+  // --- checkGoalCompletion ---
 
   describe('checkGoalCompletion', () => {
-    it('should return complete=true when all outputs emitted', () => {
-      const outputConfig = { outputs: { a: 'Var a', b: 'Var b' } };
-      const emittedVars = { a: 'value_a', b: 'value_b' };
-      const result = checkGoalCompletion(outputConfig, emittedVars);
-      expect(result.complete).toBe(true);
-      expect(result.remainingVars).toEqual([]);
-    });
-
-    it('should return remaining vars when not all emitted', () => {
-      const outputConfig = { outputs: { a: 'Var a', b: 'Var b', c: 'Var c' } };
-      const emittedVars = { a: 'value_a' };
-      const result = checkGoalCompletion(outputConfig, emittedVars);
-      expect(result.complete).toBe(false);
-      expect(result.remainingVars).toContain('b');
-      expect(result.remainingVars).toContain('c');
-    });
-
-    it('should return complete=true when no outputs configured', () => {
-      const result = checkGoalCompletion(undefined, {});
-      expect(result.complete).toBe(true);
-    });
-  });
-
-  describe('checkTerminationConditions', () => {
-    it('should return MAX_TURNS when turn counter exceeds max_turns', () => {
-      const params = {
-        turnCount: 11,
-        startTime: Date.now() - 1000,
-        runConfig: { max_turns: 10, max_time_minutes: 60 },
-        abortSignal: null,
+    it('should return todo reminder messages', async () => {
+      const ctx = {
+        output: makeOutput(),
+        outputConfig: { outputs: { x: 'var x' } },
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
       };
-      const result = checkTerminationConditions(params);
+      const result = await checkGoalCompletion(ctx, 'Please finish todos', 0);
       expect(result).not.toBeNull();
-      expect(result?.reason).toBe('MAX_TURNS');
+      expect(result![0].parts[0]).toHaveProperty('text', 'Please finish todos');
     });
 
-    it('should return TIMEOUT when elapsed time exceeds max_time_minutes', () => {
-      const params = {
-        turnCount: 1,
-        startTime: Date.now() - 61 * 60 * 1000, // 61 minutes ago
-        runConfig: { max_time_minutes: 1, max_turns: 100 },
-        abortSignal: null,
+    it('should return null when no outputs expected (GOAL)', async () => {
+      const ctx = {
+        output: makeOutput(),
+        outputConfig: undefined,
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
       };
-      const result = checkTerminationConditions(params);
+      const result = await checkGoalCompletion(ctx, null, 0);
+      expect(result).toBeNull();
+      expect(ctx.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+    });
+
+    it('should return null when all outputs emitted (GOAL)', async () => {
+      const output = makeOutput();
+      output.emitted_vars = { x: 'val' };
+      const ctx = {
+        output,
+        outputConfig: { outputs: { x: 'var x' } },
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
+      };
+      const result = await checkGoalCompletion(ctx, null, 1);
+      expect(result).toBeNull();
+      expect(ctx.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+    });
+
+    it('should return nudge messages for missing outputs', async () => {
+      const ctx = {
+        output: makeOutput(),
+        outputConfig: { outputs: { x: 'var x', y: 'var y' } },
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
+      };
+      const result = await checkGoalCompletion(ctx, null, 0);
       expect(result).not.toBeNull();
-      expect(result?.reason).toBe('TIMEOUT');
-    });
-
-    it('should return null when neither limit exceeded', () => {
-      const params = {
-        turnCount: 5,
-        startTime: Date.now() - 1000,
-        runConfig: { max_turns: 20, max_time_minutes: 60 },
-        abortSignal: null,
-      };
-      const result = checkTerminationConditions(params);
-      expect(result).toBeNull();
-    });
-
-    it('should check turns before timeout', () => {
-      // Both exceeded: turns takes priority
-      const params = {
-        turnCount: 25,
-        startTime: Date.now() - 61 * 60 * 1000, // also timed out
-        runConfig: { max_turns: 20, max_time_minutes: 1 },
-        abortSignal: null,
-      };
-      const result = checkTerminationConditions(params);
-      expect(result?.reason).toBe('MAX_TURNS');
-    });
-
-    it('should handle undefined max_turns (no limit)', () => {
-      const params = {
-        turnCount: 1000,
-        startTime: Date.now() - 1000,
-        runConfig: { max_time_minutes: 60 }, // no max_turns
-        abortSignal: null,
-      };
-      const result = checkTerminationConditions(params);
-      expect(result).toBeNull();
+      const text = (result![0].parts[0] as { text: string }).text;
+      expect(text).toContain('x');
+      expect(text).toContain('y');
+      expect(text).toContain('self_emitvalue');
     });
   });
 
-  describe('buildMissingOutputsNudge', () => {
-    it('should produce nudge listing missing variables', () => {
-      const outputConfig = { outputs: { a: 'Var a', b: 'Var b' } };
-      const emittedVars = {};
-      const nudge = buildMissingOutputsNudge(outputConfig, emittedVars);
-      expect(nudge).not.toBeNull();
-      expect(nudge).toBeDefined();
-      // The nudge content should mention missing variables
-      const nudgeText = JSON.stringify(nudge);
-      expect(nudgeText).toMatch(/a|b/);
+  // --- processInteractiveTextResponse ---
+
+  describe('processInteractiveTextResponse', () => {
+    it('should set final_message from text', () => {
+      const output = makeOutput();
+      processInteractiveTextResponse('Hello world', { output });
+      expect(output.final_message).toBe('Hello world');
     });
 
-    it('should return null when all outputs emitted', () => {
-      const outputConfig = { outputs: { a: 'Var a' } };
-      const emittedVars = { a: 'value' };
-      const nudge = buildMissingOutputsNudge(outputConfig, emittedVars);
-      expect(nudge).toBeNull();
+    it('should not set final_message for empty text', () => {
+      const output = makeOutput();
+      processInteractiveTextResponse('   ', { output });
+      expect(output.final_message).toBeUndefined();
     });
 
-    it('should return null when no outputs configured', () => {
-      const nudge = buildMissingOutputsNudge(undefined, {});
-      expect(nudge).toBeNull();
-    });
-
-    it('should list only missing variables, not already-emitted ones', () => {
-      const outputConfig = { outputs: { a: 'Var a', b: 'Var b', c: 'Var c' } };
-      const emittedVars = { a: 'emitted' };
-      const nudge = buildMissingOutputsNudge(outputConfig, emittedVars);
-      expect(nudge).not.toBeNull();
-      const nudgeText = JSON.stringify(nudge);
-      // 'a' is emitted, so should NOT appear in nudge (or should not be flagged as missing)
-      expect(nudgeText).toMatch(/b|c/);
+    it('should throw when emoji filter blocks', () => {
+      const output = makeOutput();
+      const mockFilter = {
+        filterText: vi.fn().mockReturnValue({ blocked: true, error: 'Blocked!' }),
+      };
+      expect(() =>
+        processInteractiveTextResponse('bad', { output, emojiFilter: mockFilter as never }),
+      ).toThrow('Blocked!');
+      expect(output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
     });
   });
 
-  describe('buildTodoCompletionPrompt', () => {
-    it('should produce prompt when todos are incomplete', async () => {
-      const mockTodoStore = {
-        readTodos: async () => [
-          { id: '1', text: 'Task 1', status: 'pending' },
-          { id: '2', text: 'Task 2', status: 'complete' },
-        ],
+  // --- handleExecutionError ---
+
+  describe('handleExecutionError', () => {
+    it('should set ERROR terminate reason and final message', () => {
+      const ctx = {
+        output: makeOutput(),
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
       };
-      const prompt = await buildTodoCompletionPrompt(mockTodoStore);
-      expect(prompt).not.toBeNull();
+      handleExecutionError(new Error('Something broke'), ctx);
+      expect(ctx.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+      expect(ctx.output.final_message).toBe('Something broke');
     });
 
-    it('should return null when all todos complete', async () => {
-      const mockTodoStore = {
-        readTodos: async () => [
-          { id: '1', text: 'Task 1', status: 'complete' },
-          { id: '2', text: 'Task 2', status: 'complete' },
-        ],
+    it('should not overwrite existing final_message', () => {
+      const ctx = {
+        output: { ...makeOutput(), final_message: 'Already set' },
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
       };
-      const prompt = await buildTodoCompletionPrompt(mockTodoStore);
-      expect(prompt).toBeNull();
+      handleExecutionError(new Error('New error'), ctx);
+      expect(ctx.output.final_message).toBe('Already set');
     });
 
-    it('should return null when no todos exist', async () => {
-      const mockTodoStore = {
-        readTodos: async () => [],
+    it('should handle non-Error values', () => {
+      const ctx = {
+        output: makeOutput(),
+        subagentId: 'test',
+        logger: new DebugLogger('test'),
       };
-      const prompt = await buildTodoCompletionPrompt(mockTodoStore);
-      expect(prompt).toBeNull();
-    });
-  });
-
-  describe('finalizeOutput', () => {
-    it('should set terminate_reason to GOAL when all required outputs emitted', () => {
-      const outputConfig = { outputs: { a: 'Var a' } };
-      const output = {
-        emitted_vars: { a: 'value' },
-        terminate_reason: 'ERROR' as const,
-      };
-      finalizeOutput(outputConfig, output);
-      expect(output.terminate_reason).toBe('GOAL');
-    });
-
-    it('should not change terminate_reason when outputs are missing', () => {
-      const outputConfig = { outputs: { a: 'Var a', b: 'Var b' } };
-      const output = {
-        emitted_vars: { a: 'value' },
-        terminate_reason: 'MAX_TURNS' as const,
-      };
-      finalizeOutput(outputConfig, output);
-      expect(output.terminate_reason).toBe('MAX_TURNS');
-    });
-
-    it('should set GOAL when no outputs are configured', () => {
-      const output = {
-        emitted_vars: {},
-        terminate_reason: 'ERROR' as const,
-      };
-      finalizeOutput(undefined, output);
-      expect(output.terminate_reason).toBe('GOAL');
-    });
-  });
-
-  describe('buildInitialMessages', () => {
-    it('should produce user message from promptConfig.initialMessages', () => {
-      const promptConfig = {
-        initialMessages: [
-          { role: 'user', parts: [{ text: 'Hello' }] },
-          { role: 'model', parts: [{ text: 'Hi' }] },
-        ],
-      };
-      const context = { state: {} };
-      const messages = buildInitialMessages(promptConfig, context);
-      expect(messages).toBeDefined();
-      expect(messages.length).toBeGreaterThan(0);
-    });
-
-    it('should produce message from goal_prompt', () => {
-      const promptConfig = { systemPrompt: 'You are a test agent.' };
-      const context = { state: {} };
-      const messages = buildInitialMessages(promptConfig, context);
-      expect(messages).toBeDefined();
-    });
-
-    it('should handle behaviour_prompts concatenation', () => {
-      const promptConfig = {
-        systemPrompt: 'Base prompt.',
-      };
-      const context = { state: {} };
-      const messages = buildInitialMessages(promptConfig, context);
-      expect(messages).toBeDefined();
+      handleExecutionError('string error', ctx);
+      expect(ctx.output.final_message).toBe('string error');
     });
   });
 });
