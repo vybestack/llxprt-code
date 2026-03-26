@@ -34,7 +34,7 @@
 | R18 | REIMPLEMENT | cfdc4cf | DONE (NO_OP) | — | scheduleToolCalls race — already present in LLxprt |
 | R19 | REIMPLEMENT | ce35d84 | DONE | 7f5c40438 | organize keybindings (chain 4/4) |
 | R20 | REIMPLEMENT | 9722ec9 | DONE | 4180f7ba2 | hook event name validation (chain 1/4) |
-| R21 | REIMPLEMENT | 608da23 | TODO | | **HIGH RISK** disable→enable settings (22+ files) |
+| R21 | REIMPLEMENT | 608da23 | DONE | 5bf2581c4 | **HIGH RISK** disable→enable settings (21 files) |
 | R22 | REIMPLEMENT | 1681ae1 | TODO | | unify shell confirmation |
 | R23 | REIMPLEMENT | 272570c | TODO | | skills default enabled |
 | R24 | REIMPLEMENT | 6900253 | TODO | | keyboard shortcuts URL |

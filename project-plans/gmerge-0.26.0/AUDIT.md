@@ -60,7 +60,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | cfdc4cf | NO_OP | — | scheduleToolCalls race — already present in LLxprt |
 | ce35d84 | REIMPLEMENTED | 7f5c40438 | organize keybindings — PASS |
 | 9722ec9 | REIMPLEMENTED | 4180f7ba2 | hook event names — PASS, FULL VERIFY |
-| 608da23 | REIMPLEMENTED | | **HIGH** disable→enable settings |
+| 608da23 | REIMPLEMENTED | 5bf2581c4 | **HIGH** disable→enable settings — PASS |
 | 1681ae1 | REIMPLEMENTED | | unify shell confirmation |
 | 272570c | REIMPLEMENTED | | skills default enabled |
 | 6900253 | REIMPLEMENTED | | keyboard shortcuts URL (was PICK) |
