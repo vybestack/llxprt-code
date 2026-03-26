@@ -93,7 +93,7 @@ export async function validateToolsAgainstRuntime(params: {
   toolRegistry: ToolRegistry;
   toolsView: ToolRegistryView;
 }): Promise<void> {
-  const { toolConfig, toolRegistry, toolsView } = params;
+  const { toolConfig, toolsView } = params;
   const allowedNames = new Set(
     (typeof toolsView.listToolNames === 'function'
       ? toolsView.listToolNames()
@@ -113,11 +113,6 @@ export async function validateToolsAgainstRuntime(params: {
       throw new Error(
         `Tool "${toolEntry}" is not permitted for this runtime bundle.`,
       );
-    }
-
-    const tool = toolRegistry.getTool(toolEntry);
-    if (!tool) {
-      continue;
     }
   }
 }
@@ -387,6 +382,9 @@ export function createSchedulerConfig(
       ? foregroundConfig.getAllowedTools()
       : undefined;
   };
+
+  // Partial Config adapter for CoreToolScheduler — only the methods the
+  // scheduler and tool-execution paths actually call are implemented.
 
   return {
     getToolRegistry: () => toolExecutorContext.getToolRegistry(),
