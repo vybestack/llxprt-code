@@ -69,7 +69,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 0bebc66 | NO_OP | — | rationale flush already present in LLxprt |
 | ec74134 | REIMPLEMENTED | c1d5aec22 | shell redirection security — PASS |
 | 1182168 | REIMPLEMENTED | 5393ce6d0 | enhanced compression — PASS |
-| e92f60b | REIMPLEMENTED | | migrate hooks |
+| e92f60b | REIMPLEMENTED | 44c3d484e | migrate hooks — PASS |
 | 645e2ec | REIMPLEMENTED | | Ctrl+Enter/Ctrl+J |
 | b288f12 | REIMPLEMENTED | | MCP client version |
 | 211d2c5 | REIMPLEMENTED | | **HIGH** hooks event names split |
