@@ -29,6 +29,7 @@ import { type CompletedToolCall } from './coreToolScheduler.js';
 import { TodoStore } from '../tools/todo-store.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { createSchedulerConfig } from './subagentRuntimeSetup.js';
 
 // ---------------------------------------------------------------------------
@@ -317,7 +318,7 @@ export interface ProcessFunctionCallsContext {
   logger: DebugLogger;
   toolExecutorContext: ToolExecutionConfig;
   config: Config;
-  messageBus?: import('../index.js').MessageBus;
+  messageBus?: MessageBus;
 }
 
 export async function processFunctionCalls(

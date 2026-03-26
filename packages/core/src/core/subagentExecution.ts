@@ -36,6 +36,7 @@ import {
   type OutputConfig,
   type RunConfig,
 } from './subagentTypes.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 // ---------------------------------------------------------------------------
 // Shared execution context — all loop helpers receive this instead of `this`
@@ -363,7 +364,7 @@ function synthesizeToolCalls(
 export interface InitSchedulerContext {
   schedulerConfig: Config;
   onMessage?: (message: string) => void;
-  messageBus?: import('../index.js').MessageBus;
+  messageBus?: MessageBus;
   subagentId: string;
   logger: DebugLogger;
 }
@@ -441,7 +442,7 @@ export async function initInteractiveScheduler(
               sessionId: string,
               callbacks: SchedulerCallbacks,
               options?: SchedulerOptions,
-              dependencies?: { messageBus?: import('../index.js').MessageBus },
+              dependencies?: { messageBus?: MessageBus },
             ): ReturnType<Config['getOrCreateScheduler']>;
           }
         ).getOrCreateScheduler(

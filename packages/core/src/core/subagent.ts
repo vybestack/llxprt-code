@@ -28,6 +28,7 @@ import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { type EmojiFilter } from '../filters/EmojiFilter.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   validateToolsAgainstRuntime,
   createToolExecutionConfig,
@@ -114,7 +115,7 @@ export class SubAgentScope {
     private readonly toolExecutorContext: ToolExecutionConfig,
     private readonly environmentContextLoader: EnvironmentContextLoader,
     private readonly config: Config,
-    private readonly messageBus?: import('../index.js').MessageBus,
+    private readonly messageBus?: MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
     settingsSnapshot?: ReadonlySettingsSnapshot,
@@ -125,16 +126,7 @@ export class SubAgentScope {
     this.parentAbortSignal = parentAbortSignal;
 
     // Initialize emoji filter based on subagent and foreground settings
-    this.emojiFilter = this.createEmojiFilter(settingsSnapshot);
-  }
-
-  /**
-   * Creates an emoji filter based on the provided settings snapshot
-   */
-  private createEmojiFilter(
-    settingsSnapshot?: ReadonlySettingsSnapshot,
-  ): EmojiFilter | undefined {
-    return createEmojiFilter(settingsSnapshot);
+    this.emojiFilter = createEmojiFilter(settingsSnapshot);
   }
 
   /**
@@ -579,34 +571,15 @@ export class SubAgentScope {
         );
         if (recheck.shouldStop) break;
 
-        if (functionCalls.length > 0) {
-          currentMessages = await processFunctionCalls(
-            functionCalls,
-            abortController,
-            promptId,
-            {
-              output: this.output,
-              subagentId: this.subagentId,
-              logger: this.logger,
-              toolExecutorContext: this.toolExecutorContext,
-              config: this.config,
-              messageBus: this.messageBus,
-            },
-          );
-        } else {
-          const todoReminder = await buildTodoCompletionPrompt(
-            this.runtimeContext,
-            this.subagentId,
-            this.logger,
-          );
-          const nextMessages = await checkGoalCompletion(
-            execCtx,
-            todoReminder,
-            currentTurn,
-          );
-          if (!nextMessages) break;
-          currentMessages = nextMessages;
-        }
+        const nextMessages = await this.dispatchNonInteractiveTurnResult(
+          functionCalls,
+          abortController,
+          promptId,
+          currentTurn,
+          execCtx,
+        );
+        if (!nextMessages) break;
+        currentMessages = nextMessages;
       }
       finalizeOutput(this.output);
     } catch (error) {
@@ -672,6 +645,31 @@ export class SubAgentScope {
     }
 
     return { functionCalls, textResponse };
+  }
+
+  private async dispatchNonInteractiveTurnResult(
+    functionCalls: FunctionCall[],
+    abortController: AbortController,
+    promptId: string,
+    currentTurn: number,
+    execCtx: ExecutionLoopContext,
+  ): Promise<Content[] | null> {
+    if (functionCalls.length > 0) {
+      return processFunctionCalls(functionCalls, abortController, promptId, {
+        output: this.output,
+        subagentId: this.subagentId,
+        logger: this.logger,
+        toolExecutorContext: this.toolExecutorContext,
+        config: this.config,
+        messageBus: this.messageBus,
+      });
+    }
+    const todoReminder = await buildTodoCompletionPrompt(
+      this.runtimeContext,
+      this.subagentId,
+      this.logger,
+    );
+    return checkGoalCompletion(execCtx, todoReminder, currentTurn);
   }
 
   private buildExecCtx(): ExecutionLoopContext {

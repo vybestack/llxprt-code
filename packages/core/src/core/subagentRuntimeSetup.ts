@@ -37,6 +37,7 @@ import type {
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { ContentGenerator } from './contentGenerator.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -155,7 +156,7 @@ export function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
   toolRegistry: ToolRegistry,
   foregroundConfig: Config,
-  messageBus?: import('../index.js').MessageBus,
+  messageBus?: MessageBus,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
 ): ToolExecutionConfig {
@@ -405,7 +406,7 @@ export function createSchedulerConfig(
       callbacks: SchedulerCallbacks,
       schedulerOptions?: SchedulerOptions,
       dependencies?: {
-        messageBus?: import('../index.js').MessageBus;
+        messageBus?: MessageBus;
       },
     ) =>
       foregroundConfig.getOrCreateScheduler(

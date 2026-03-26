@@ -19,6 +19,7 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 /**
  * Describes the possible termination modes for a subagent.
@@ -109,7 +110,7 @@ export interface SubAgentRuntimeOverrides {
   toolRegistry?: ToolRegistry;
   environmentContextLoader?: (runtime: AgentRuntimeContext) => Promise<Part[]>;
   runtimeBundle?: AgentRuntimeLoaderResult;
-  messageBus?: import('../index.js').MessageBus;
+  messageBus?: MessageBus;
 }
 
 export type EnvironmentContextLoader = (
