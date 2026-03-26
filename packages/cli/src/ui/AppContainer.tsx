@@ -1373,7 +1373,6 @@ export const AppContainer = (props: AppContainerProps) => {
     slashCommands,
     pendingHistoryItems: pendingSlashCommandHistoryItems,
     commandContext,
-    shellConfirmationRequest,
     confirmationRequest,
   } = useSlashCommandProcessor(
     config,
@@ -1876,10 +1875,7 @@ export const AppContainer = (props: AppContainerProps) => {
     const paddedTitle = computeTerminalTitle({
       streamingState,
       thoughtSubject: thought?.subject,
-      isConfirming:
-        !!shellConfirmationRequest ||
-        !!confirmationRequest ||
-        showShellActionRequired,
+      isConfirming: !!confirmationRequest || showShellActionRequired,
       folderName: basename(config.getTargetDir()),
       showThoughts: !!settings.merged.ui.showStatusInTitle,
       useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
@@ -1892,7 +1888,6 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [
     streamingState,
     thought,
-    shellConfirmationRequest,
     confirmationRequest,
     showShellActionRequired,
     config,
@@ -2300,7 +2295,6 @@ export const AppContainer = (props: AppContainerProps) => {
     profileDialogLoading,
 
     // Confirmation requests
-    shellConfirmationRequest,
     confirmationRequest,
     confirmUpdateGeminiCLIExtensionRequests: confirmUpdateExtensionRequests,
 

@@ -126,6 +126,8 @@ const coreMocks = vi.hoisted(() => {
         removeStatusChangeListener: vi.fn(),
       }),
     },
+    addMCPStatusChangeListener: vi.fn(),
+    removeMCPStatusChangeListener: vi.fn(),
   };
 });
 

@@ -15,6 +15,7 @@ import type {
   Config,
   RecordingIntegration,
   Todo,
+  ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-core';
 import {
   GitService,
@@ -45,8 +46,9 @@ import type {
   SlashCommandProcessorResult,
   HistoryItem,
   ConfirmationRequest,
+  IndividualToolCallDisplay,
 } from '../types.js';
-import { MessageType } from '../types.js';
+import { MessageType, ToolCallStatus } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import {
   type CommandContext,
@@ -140,14 +142,6 @@ export const useSlashCommandProcessor = (
   const reloadCommands = useCallback(() => {
     setReloadTrigger((v) => v + 1);
   }, []);
-  const [shellConfirmationRequest, setShellConfirmationRequest] =
-    useState<null | {
-      commands: string[];
-      onConfirm: (
-        outcome: ToolConfirmationOutcome,
-        approvedCommands?: string[],
-      ) => void;
-    }>(null);
   const [confirmationRequest, setConfirmationRequest] = useState<null | {
     prompt: React.ReactNode;
     onConfirm: (confirmed: boolean) => void;
@@ -440,6 +434,7 @@ export const useSlashCommandProcessor = (
       rawQuery: PartListUnion,
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed?: boolean,
+      addToHistory: boolean = true,
     ): Promise<SlashCommandProcessorResult | false> => {
       if (!commands) {
         return false;
@@ -457,14 +452,16 @@ export const useSlashCommandProcessor = (
       setLocalIsProcessing(true); // @plan PLAN-20260214-SESSIONBROWSER.P23
 
       const userMessageTimestamp = Date.now();
-      const sanitizedCommand =
-        trimmed.startsWith('/key ') || trimmed.startsWith('/toolkey ')
-          ? secureInputHandler.sanitizeForHistory(trimmed)
-          : trimmed;
-      addItem(
-        { type: MessageType.USER, text: sanitizedCommand },
-        userMessageTimestamp,
-      );
+      if (addToHistory) {
+        const sanitizedCommand =
+          trimmed.startsWith('/key ') || trimmed.startsWith('/toolkey ')
+            ? secureInputHandler.sanitizeForHistory(trimmed)
+            : trimmed;
+        addItem(
+          { type: MessageType.USER, text: sanitizedCommand },
+          userMessageTimestamp,
+        );
+      }
 
       let hasError = false;
       const { commandToExecute, args, canonicalPath } = parseSlashCommand(
@@ -697,6 +694,7 @@ export const useSlashCommandProcessor = (
                   };
                 }
                 case 'confirm_shell_commands': {
+                  const callId = `expansion-${Date.now()}`;
                   const { outcome, approvedCommands } = await new Promise<{
                     outcome: ToolConfirmationOutcome;
                     approvedCommands?: string[];
@@ -707,32 +705,59 @@ export const useSlashCommandProcessor = (
                           `Shell confirmation dialog opened for ${result.commandsToConfirm.length} command(s)`,
                       );
                     }
-                    setShellConfirmationRequest({
+                    const confirmationDetails: ToolCallConfirmationDetails = {
+                      type: 'exec',
+                      title: `Confirm Shell Expansion`,
+                      command: result.commandsToConfirm[0] || '',
+                      rootCommand: result.commandsToConfirm[0] || '',
+                      rootCommands: result.commandsToConfirm,
                       commands: result.commandsToConfirm,
-                      onConfirm: (
-                        resolvedOutcome,
-                        resolvedApprovedCommands,
-                      ) => {
+                      onConfirm: async (resolvedOutcome) => {
                         if (confirmationLogger.enabled) {
                           confirmationLogger.debug(
                             () =>
-                              `Shell confirmation resolved outcome=${resolvedOutcome} approved=${resolvedApprovedCommands?.length}`,
+                              `Shell confirmation resolved outcome=${resolvedOutcome}`,
                           );
                         }
-                        setShellConfirmationRequest(null); // Close the dialog
                         resolve({
                           outcome: resolvedOutcome,
-                          approvedCommands: resolvedApprovedCommands,
+                          approvedCommands:
+                            resolvedOutcome === ToolConfirmationOutcome.Cancel
+                              ? []
+                              : result.commandsToConfirm,
                         });
                       },
+                    };
+
+                    const toolDisplay: IndividualToolCallDisplay = {
+                      callId,
+                      name: 'Expansion',
+                      description: 'Command expansion needs shell access',
+                      status: ToolCallStatus.Confirming,
+                      resultDisplay: undefined,
+                      confirmationDetails,
+                    };
+
+                    setPendingItem({
+                      type: 'tool_group',
+                      tools: [toolDisplay],
                     });
                   });
+
+                  setPendingItem(null);
 
                   if (
                     outcome === ToolConfirmationOutcome.Cancel ||
                     !approvedCommands ||
                     approvedCommands.length === 0
                   ) {
+                    addItem(
+                      {
+                        type: MessageType.INFO,
+                        text: 'Slash command shell execution declined.',
+                      },
+                      Date.now(),
+                    );
                     return { type: 'handled' };
                   }
 
@@ -746,6 +771,8 @@ export const useSlashCommandProcessor = (
                     result.originalInvocation.raw,
                     // Pass the approved commands as a one-time grant for this execution.
                     new Set(approvedCommands),
+                    undefined,
+                    false, // Do not add to history again
                   );
                 }
                 case 'confirm_action': {
@@ -953,7 +980,6 @@ export const useSlashCommandProcessor = (
       commands,
       commandContext,
       addMessage,
-      setShellConfirmationRequest,
       setSessionShellAllowlist,
       setIsProcessing,
       setConfirmationRequest,
@@ -967,7 +993,6 @@ export const useSlashCommandProcessor = (
     slashCommands: commands,
     pendingHistoryItems,
     commandContext,
-    shellConfirmationRequest,
     confirmationRequest,
   };
 };

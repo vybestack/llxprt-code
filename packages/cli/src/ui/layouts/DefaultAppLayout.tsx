@@ -83,7 +83,6 @@ function hasActiveDialog(uiState: UIState): boolean {
     uiState.isFolderTrustDialogOpen ||
     uiState.isWelcomeDialogOpen ||
     uiState.isPermissionsDialogOpen ||
-    Boolean(uiState.shellConfirmationRequest) ||
     Boolean(uiState.confirmationRequest) ||
     uiState.isThemeDialogOpen ||
     uiState.isSettingsDialogOpen ||
