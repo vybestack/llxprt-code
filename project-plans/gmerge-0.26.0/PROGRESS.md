@@ -50,7 +50,7 @@
 | R34 | REIMPLEMENT | aceb06a | DONE | 0ab20d705 | newline fix |
 | R35 | REIMPLEMENT | e1fd5be | DONE | ca2b2eaa3 | Esc-Esc clear |
 | R36 | REIMPLEMENT | 93ae777 | DONE | 1d60766c2 | System scopes migration |
-| R37 | REIMPLEMENT | 0fa9a54 | TODO | | auth failure |
+| R37 | REIMPLEMENT | 0fa9a54 | DONE | 3ae52cbd1 | auth failure |
 | R38 | REIMPLEMENT | ee87c98 | TODO | | fast return buffer |
 | R39 | REIMPLEMENT | cebe386 | TODO | | **HIGH RISK** MCP status hook |
 | R40 | REIMPLEMENT | 2a3c879 | TODO | | clearContext hooks |

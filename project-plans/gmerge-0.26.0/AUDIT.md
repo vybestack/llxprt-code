@@ -76,7 +76,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | aceb06a | REIMPLEMENTED | 0ab20d705 | newline fix — PASS |
 | e1fd5be | REIMPLEMENTED | ca2b2eaa3 | Esc-Esc clear — PASS (behavior already present, test added) |
 | 93ae777 | REIMPLEMENTED | 1d60766c2 | System scopes migration — PASS |
-| 0fa9a54 | REIMPLEMENTED | | auth failure |
+| 0fa9a54 | REIMPLEMENTED | 3ae52cbd1 | auth failure — PASS |
 | ee87c98 | REIMPLEMENTED | | fast return buffer |
 | cebe386 | REIMPLEMENTED | | **HIGH** MCP status hook |
 | 2a3c879 | REIMPLEMENTED | | clearContext hooks |
