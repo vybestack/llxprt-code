@@ -40,7 +40,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 
 | Upstream SHA | Decision | LLxprt Commit | Notes |
 |:------------:|----------|---------------|-------|
-| 3b55581 | REIMPLEMENTED | | extension config |
+| 3b55581 | REIMPLEMENTED | b56a039ef | extension config — PASS |
 | a3234fb | REIMPLEMENTED | | rootCommands |
 | 09a7301 | REIMPLEMENTED | | remove \x7f bindings |
 | 94d5ae5 | REIMPLEMENTED | | paste handling |

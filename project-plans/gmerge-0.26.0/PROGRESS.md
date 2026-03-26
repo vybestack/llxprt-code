@@ -14,7 +14,7 @@
 
 | Batch | Type | Upstream SHA | Status | LLxprt Commit | Notes |
 |------:|------|-------------|--------|---------------|-------|
-| R1 | REIMPLEMENT | 3b55581 | TODO | | extension config |
+| R1 | REIMPLEMENT | 3b55581 | DONE | b56a039ef | extension config |
 | R2 | REIMPLEMENT | a3234fb | TODO | | rootCommands |
 | R3 | REIMPLEMENT | 09a7301 | TODO | | remove \x7f bindings |
 | R4 | REIMPLEMENT | 94d5ae5 | TODO | | paste handling |

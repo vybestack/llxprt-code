@@ -749,6 +749,7 @@ export interface ToolExecuteConfirmationDetails {
   ) => Promise<void>;
   command: string;
   rootCommand: string;
+  rootCommands: string[];
   correlationId?: string;
 }
 
