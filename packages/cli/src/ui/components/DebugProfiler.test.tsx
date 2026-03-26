@@ -242,7 +242,7 @@ describe('DebugProfiler Component', () => {
     const { unmount } = render(<DebugProfiler />);
 
     act(() => {
-      appEvents.emit(AppEvent.SelectionWarning);
+      appEvents.emit(AppEvent.OpenDebugConsole);
     });
 
     expect(reportActionSpy).toHaveBeenCalled();

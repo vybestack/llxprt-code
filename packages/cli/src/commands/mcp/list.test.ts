@@ -143,12 +143,12 @@ describe('mcp list command', () => {
         'http-server: https://example.com/http (http) - Connected',
       ),
     );
-    expect(debugLogger.log).toHaveBeenCalledWith(
+    expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining(
         'http-server-by-default: https://example.com/http (http) - Connected',
       ),
     );
-    expect(debugLogger.log).toHaveBeenCalledWith(
+    expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining(
         'http-server-with-type: https://example.com/http (http) - Connected',
       ),

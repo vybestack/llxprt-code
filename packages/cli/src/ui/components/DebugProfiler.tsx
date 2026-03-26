@@ -12,6 +12,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { debugState } from '../debug.js';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
+import { EventEmitter } from 'node:events';
 
 // Frames that render at least this far before or after an action are considered
 // idle frames.
@@ -136,12 +137,16 @@ export const DebugProfiler = () => {
     // Register handlers for all core and app events to ensure they are
     // considered "actions" and don't trigger spurious idle frame warnings.
     // These events are expected to trigger UI renders.
+    // Cast to base EventEmitter to allow generic event name iteration.
+    const coreEventsBase = coreEvents as unknown as EventEmitter;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const appEventsBase = appEvents as unknown as EventEmitter;
     for (const eventName of Object.values(CoreEvent)) {
-      coreEvents.on(eventName, handler);
+      coreEventsBase.on(eventName, handler);
     }
 
     for (const eventName of Object.values(AppEvent)) {
-      appEvents.on(eventName, handler);
+      appEventsBase.on(eventName, handler);
     }
 
     return () => {
@@ -149,11 +154,11 @@ export const DebugProfiler = () => {
       stdout.off('resize', handler);
 
       for (const eventName of Object.values(CoreEvent)) {
-        coreEvents.off(eventName, handler);
+        coreEventsBase.off(eventName, handler);
       }
 
       for (const eventName of Object.values(AppEvent)) {
-        appEvents.off(eventName, handler);
+        appEventsBase.off(eventName, handler);
       }
     };
   }, []);

@@ -215,7 +215,6 @@ describe('keyMatchers', () => {
       negative: [createKey('pageup'), createKey('down')],
     },
 
-
     // History navigation
     {
       command: Command.HISTORY_UP,
