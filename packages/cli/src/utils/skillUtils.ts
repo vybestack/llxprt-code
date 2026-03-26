@@ -6,7 +6,11 @@
 
 import { SettingScope } from '../config/settings.js';
 import type { SkillActionResult } from './skillSettings.js';
-import { Storage, loadSkillsFromDir } from '@vybestack/llxprt-code-core';
+import {
+  Storage,
+  loadSkillsFromDir,
+  type SkillDefinition,
+} from '@vybestack/llxprt-code-core';
 import { cloneFromGit } from '../config/extensions/github.js';
 import extract from 'extract-zip';
 import * as fs from 'node:fs/promises';
@@ -79,6 +83,10 @@ export async function installSkill(
   scope: 'user' | 'workspace',
   subpath: string | undefined,
   onLog: (msg: string) => void,
+  requestConsent: (
+    skills: SkillDefinition[],
+    targetDir: string,
+  ) => Promise<boolean> = () => Promise.resolve(true),
 ): Promise<Array<{ name: string; location: string }>> {
   let sourcePath = source;
   let tempDirToClean: string | undefined = undefined;
@@ -144,6 +152,13 @@ export async function installSkill(
     scope === 'workspace'
       ? storage.getProjectSkillsDir()
       : Storage.getUserSkillsDir();
+
+  if (!(await requestConsent(skills, targetDir))) {
+    if (tempDirToClean) {
+      await fs.rm(tempDirToClean, { recursive: true, force: true });
+    }
+    throw new Error('Skill installation cancelled by user.');
+  }
 
   await fs.mkdir(targetDir, { recursive: true });
 

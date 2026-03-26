@@ -249,6 +249,50 @@ async function promptForConsentInteractive(
 }
 
 /**
+ * Renders a list of skills for a consent prompt.
+ */
+async function renderSkillsList(skills: SkillDefinition[]): Promise<string[]> {
+  const output: string[] = [];
+  for (const skill of skills) {
+    output.push(`  * ${chalk.bold(skill.name)}: ${skill.description}`);
+    const skillDir = path.dirname(skill.location);
+    let fileCountStr = '';
+    try {
+      const skillDirItems = await fs.readdir(skillDir);
+      fileCountStr = ` (${skillDirItems.length} items in directory)`;
+    } catch {
+      fileCountStr = ` ${chalk.red('(Could not count items in directory)')}`;
+    }
+    output.push(`    (Location: ${skill.location})${fileCountStr}`);
+    output.push('');
+  }
+  return output;
+}
+
+/**
+ * Builds a consent string for installing standalone skills (not via extension).
+ */
+export async function skillsConsentString(
+  skills: SkillDefinition[],
+  source: string,
+  targetDir?: string,
+): Promise<string> {
+  const output: string[] = [];
+  output.push(`Installing agent skill(s) from "${source}".`);
+  output.push('
+The following agent skill(s) will be installed:
+');
+  output.push(...(await renderSkillsList(skills)));
+  if (targetDir) {
+    output.push(`Install Destination: ${targetDir}`);
+  }
+  output.push('
+' + SKILLS_WARNING_MESSAGE);
+  return output.join('
+');
+}
+
+/**
  * Builds a consent string for installing an extension based on its
  * extensionConfig.
  */
@@ -292,19 +336,7 @@ async function extensionConsentString(
     output.push(`\n${chalk.bold('Skills:')}`);
     output.push(SKILLS_WARNING_MESSAGE);
     output.push('This extension will install the following skills:');
-    for (const skill of skills) {
-      output.push(`  * ${chalk.bold(skill.name)}: ${skill.description}`);
-      const skillDir = path.dirname(skill.location);
-      let fileCountStr = '';
-      try {
-        const skillDirItems = await fs.readdir(skillDir);
-        fileCountStr = ` (${skillDirItems.length} items in directory)`;
-      } catch {
-        fileCountStr = ` ${chalk.red('(Could not count items in directory)')}`;
-      }
-      output.push(`    (Location: ${skill.location})${fileCountStr}`);
-    }
-    output.push('');
+    output.push(...(await renderSkillsList(skills)));
   }
   return output.join('\n');
 }
