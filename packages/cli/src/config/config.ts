@@ -602,7 +602,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     yargsInstance.command(extensionsCommand);
   }
 
-  if (settings?.experimental?.skills ?? false) {
+  if (settings?.experimental?.skills || (settings?.skills?.enabled ?? true)) {
     yargsInstance.command(skillsCommand);
   }
 
@@ -1479,7 +1479,9 @@ export async function loadCliConfig(
         false,
     },
 
-    skillsSupport: effectiveSettings.experimental?.skills,
+    skillsSupport:
+      effectiveSettings.experimental?.skills ||
+      (effectiveSettings.skills?.enabled ?? true),
     disabledSkills: effectiveSettings.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,

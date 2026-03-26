@@ -19,11 +19,11 @@
       "default": {},
       "type": "object",
       "properties": {
-        "disableLoadingPhrases": {
-          "title": "Disable Loading Phrases",
-          "description": "Disable loading phrases for accessibility",
-          "markdownDescription": "Disable loading phrases for accessibility\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+        "enableLoadingPhrases": {
+          "title": "Enable Loading Phrases",
+          "description": "Enable loading phrases during operations.",
+          "markdownDescription": "Enable loading phrases during operations.\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "screenReader": {
@@ -95,21 +95,35 @@
           "default": true,
           "type": "boolean"
         },
-        "disableFuzzySearch": {
-          "title": "Disable Fuzzy Search",
-          "description": "Disable fuzzy search when searching for files.",
-          "markdownDescription": "Disable fuzzy search when searching for files.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+        "enableFuzzySearch": {
+          "title": "Enable Fuzzy Search",
+          "description": "Enable fuzzy search when searching for files.",
+          "markdownDescription": "Enable fuzzy search when searching for files.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
+        },
+        "maxFileCount": {
+          "title": "Max File Count",
+          "description": "Maximum number of files to index during file search. Prevents OOM on large projects.",
+          "markdownDescription": "Maximum number of files to index during file search. Prevents OOM on large projects.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `20000`",
+          "default": 20000,
+          "type": "number"
+        },
+        "searchTimeout": {
+          "title": "Search Timeout (ms)",
+          "description": "Timeout in milliseconds for file search operations.",
+          "markdownDescription": "Timeout in milliseconds for file search operations.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `5000`",
+          "default": 5000,
+          "type": "number"
         }
       },
       "additionalProperties": false
     },
-    "disableAutoUpdate": {
-      "title": "Disable Auto Update",
-      "description": "Disable automatic updates",
-      "markdownDescription": "Disable automatic updates\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `false`",
-      "default": false,
+    "enableAutoUpdate": {
+      "title": "Enable Auto Update",
+      "description": "Enable automatic updates.",
+      "markdownDescription": "Enable automatic updates.\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `true`",
+      "default": true,
       "type": "boolean"
     },
     "shouldUseNodePtyShell": {
@@ -497,11 +511,11 @@
           "default": true,
           "type": "boolean"
         },
-        "disableLoadingPhrases": {
-          "title": "Disable Loading Phrases",
-          "description": "Disable loading phrases for accessibility.",
-          "markdownDescription": "Disable loading phrases for accessibility.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+        "enableLoadingPhrases": {
+          "title": "Enable Loading Phrases",
+          "description": "Enable loading phrases during operations.",
+          "markdownDescription": "Enable loading phrases during operations.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "screenReader": {
@@ -883,11 +897,11 @@
       "type": "array",
       "items": {}
     },
-    "disableUpdateNag": {
-      "title": "Disable Update Nag",
-      "description": "Disable update notification prompts.",
-      "markdownDescription": "Disable update notification prompts.\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `false`",
-      "default": false,
+    "enableAutoUpdateNotification": {
+      "title": "Enable Auto Update Notification",
+      "description": "Enable update notification prompts.",
+      "markdownDescription": "Enable update notification prompts.\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `true`",
+      "default": true,
       "type": "boolean"
     },
     "includeDirectories": {
@@ -946,6 +960,13 @@
       "default": {},
       "type": "object",
       "properties": {
+        "extensionConfig": {
+          "title": "Extension Configuration",
+          "description": "Enable requesting and fetching of extension settings.",
+          "markdownDescription": "Enable requesting and fetching of extension settings.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        },
         "extensionReloading": {
           "title": "Extension Reloading",
           "description": "Enables extension loading/unloading within the CLI session.",
@@ -1257,6 +1278,13 @@
       "default": {},
       "type": "object",
       "properties": {
+        "enabled": {
+          "title": "Enable Agent Skills",
+          "description": "Enable Agent Skills.",
+          "markdownDescription": "Enable Agent Skills.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
         "disabled": {
           "title": "Disabled Skills",
           "description": "List of disabled skills.",

@@ -10,7 +10,12 @@ import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { Config, SkillDefinition } from '@vybestack/llxprt-code-core';
-import { SettingScope, type LoadedSettings } from '../../config/settings.js';
+import {
+  SettingScope,
+  type LoadedSettings,
+  createTestMergedSettings,
+  type MergedSettings,
+} from '../../config/settings.js';
 
 vi.mock('../../config/settings.js', async (importOriginal) => {
   const actual =
@@ -55,7 +60,7 @@ describe('skillsCommand', () => {
           }),
         } as unknown as Config,
         settings: {
-          merged: { skills: { disabled: [] } },
+          merged: createTestMergedSettings({ skills: { disabled: [] } }),
           workspace: { path: '/workspace' },
           setValue: vi.fn(),
         } as unknown as LoadedSettings,
@@ -136,7 +141,11 @@ describe('skillsCommand', () => {
 
   describe('disable/enable', () => {
     beforeEach(() => {
-      context.services.settings.merged.skills = { disabled: [] };
+      (
+        context.services.settings as unknown as { merged: MergedSettings }
+      ).merged = createTestMergedSettings({
+        skills: { enabled: true, disabled: [] },
+      });
       (
         context.services.settings as unknown as { workspace: { path: string } }
       ).workspace = {
@@ -190,7 +199,14 @@ describe('skillsCommand', () => {
       const enableCmd = skillsCommand.subCommands!.find(
         (s) => s.name === 'enable',
       )!;
-      context.services.settings.merged.skills = { disabled: ['skill1'] };
+      (
+        context.services.settings as unknown as { merged: MergedSettings }
+      ).merged = createTestMergedSettings({
+        skills: {
+          enabled: true,
+          disabled: ['skill1'],
+        },
+      });
       (
         context.services.settings as unknown as {
           workspace: { settings: { skills: { disabled: string[] } } };
