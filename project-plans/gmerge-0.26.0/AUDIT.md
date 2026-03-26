@@ -61,7 +61,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | ce35d84 | REIMPLEMENTED | 7f5c40438 | organize keybindings — PASS |
 | 9722ec9 | REIMPLEMENTED | 4180f7ba2 | hook event names — PASS, FULL VERIFY |
 | 608da23 | REIMPLEMENTED | 5bf2581c4 | **HIGH** disable→enable settings — PASS |
-| 1681ae1 | REIMPLEMENTED | | unify shell confirmation |
+| 1681ae1 | REIMPLEMENTED | 2dd155b87 | unify shell confirmation — PASS |
 | 272570c | REIMPLEMENTED | | skills default enabled |
 | 6900253 | REIMPLEMENTED | | keyboard shortcuts URL (was PICK) |
 | 4cfbe4c | REIMPLEMENTED | | Homebrew detection (was PICK) |
