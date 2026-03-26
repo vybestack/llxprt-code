@@ -226,7 +226,8 @@ describe('Settings Loading and Merging', () => {
         getSystemSettingsPath(),
         'utf-8',
       );
-      expect(settings.system.settings).toEqual(systemSettingsContent);
+      // Migration adds enableAutoUpdate/enableAutoUpdateNotification — use toMatchObject
+      expect(settings.system.settings).toMatchObject(systemSettingsContent);
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toMatchObject({
@@ -1222,7 +1223,8 @@ describe('Settings Loading and Merging', () => {
           'utf-8',
         );
         expect(settings.system.path).toBe(MOCK_ENV_SYSTEM_SETTINGS_PATH);
-        expect(settings.system.settings).toEqual(systemSettingsContent);
+        // Migration adds enableAutoUpdate/enableAutoUpdateNotification — use toMatchObject
+        expect(settings.system.settings).toMatchObject(systemSettingsContent);
         expect(settings.merged).toMatchObject({
           accessibility: {},
           chatCompression: {},
@@ -1355,6 +1357,53 @@ describe('Settings Loading and Merging', () => {
 
       expect(settings.user.settings.shouldUseNodePtyShell).toBe(false);
       expect(settings.merged.shouldUseNodePtyShell).toBe(false);
+    });
+
+    it('should migrate disableUpdateNag to enableAutoUpdateNotification in system and systemDefaults settings', () => {
+      const systemSettingsContent = {
+        disableUpdateNag: true,
+      };
+      const systemDefaultsContent = {
+        disableUpdateNag: false,
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === getSystemSettingsPath()) {
+            return JSON.stringify(systemSettingsContent);
+          }
+          if (p === getSystemDefaultsPath()) {
+            return JSON.stringify(systemDefaultsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify system settings were migrated
+      expect(settings.system.settings).toHaveProperty(
+        'enableAutoUpdateNotification',
+      );
+      expect(
+        (settings.system.settings as Record<string, unknown>)[
+          'enableAutoUpdateNotification'
+        ],
+      ).toBe(false);
+
+      // Verify systemDefaults settings were migrated
+      expect(settings.systemDefaults.settings).toHaveProperty(
+        'enableAutoUpdateNotification',
+      );
+      expect(
+        (settings.systemDefaults.settings as Record<string, unknown>)[
+          'enableAutoUpdateNotification'
+        ],
+      ).toBe(true);
+
+      // Merged reflects system scope (system overrides defaults)
+      expect(settings.merged.enableAutoUpdateNotification).toBe(false);
     });
   });
 

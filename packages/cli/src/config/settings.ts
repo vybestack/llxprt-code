@@ -962,7 +962,7 @@ export function migrateDeprecatedSettings(
   removeDeprecated = false,
 ): boolean {
   let anyModified = false;
-  const processScope = (scope: LoadableSettingScope) => {
+  const processScope = (scope: SettingScope) => {
     const rawSettings = loadedSettings.forScope(scope).settings as Record<
       string,
       unknown
@@ -1132,6 +1132,8 @@ export function migrateDeprecatedSettings(
 
   processScope(SettingScope.User);
   processScope(SettingScope.Workspace);
+  processScope(SettingScope.System);
+  processScope(SettingScope.SystemDefaults);
 
   return anyModified;
 }
