@@ -290,8 +290,7 @@ export const SETTINGS_SCHEMA = {
         category: 'File Filtering',
         requiresRestart: true,
         default: 5000,
-        description:
-          'Timeout in milliseconds for file search operations.',
+        description: 'Timeout in milliseconds for file search operations.',
         showInDialog: true,
       },
     },
