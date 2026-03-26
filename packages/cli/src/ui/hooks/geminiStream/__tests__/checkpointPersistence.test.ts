@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Unit tests for checkpointPersistence.ts using injected fs/git mocks.
  * No real filesystem or git operations are performed.
@@ -210,6 +212,7 @@ describe('createToolCheckpoint', () => {
 
   it('returns early when file_path is missing', async () => {
     const toolWithNoPath = makeRestorableTool('c1', 'replace', '');
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     (toolWithNoPath.request.args as Record<string, unknown>)['file_path'] =
       undefined;
     const gitService = makeGitService();

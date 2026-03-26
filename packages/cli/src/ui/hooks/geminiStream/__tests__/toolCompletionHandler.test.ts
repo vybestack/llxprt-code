@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Unit tests for toolCompletionHandler.ts pure transform helpers
  * and the useToolCompletionHandler hook's branch matrix.

@@ -46,11 +46,9 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-vi.mock('../../../../utils/markdownUtilities.js', async () => {
-  return {
-    findLastSafeSplitPoint: vi.fn((text: string) => text.length),
-  };
-});
+vi.mock('../../../../utils/markdownUtilities.js', async () => ({
+  findLastSafeSplitPoint: vi.fn((text: string) => text.length),
+}));
 
 // ─── mergePartListUnions ──────────────────────────────────────────────────────
 
@@ -140,7 +138,7 @@ describe('mergePendingToolGroupsForDisplay', () => {
     const result = mergePendingToolGroupsForDisplay(a, b);
     // Shell command from pendingHistoryItem takes precedence
     const allTools = result.flatMap(
-      (r) => (r as { tools?: { callId: string }[] }).tools ?? [],
+      (r) => (r as { tools?: Array<{ callId: string }> }).tools ?? [],
     );
     const shellToolInstances = allTools.filter((t) => t.callId === shellCallId);
     expect(shellToolInstances).toHaveLength(1);
@@ -565,10 +563,7 @@ describe('showCitations', () => {
 
   it('returns false when userTier is FREE', () => {
     const config = makeConfig({ getSettingsService: vi.fn(() => null) });
-    mockGetCodeAssistServer.mockReturnValue({ userTier: 'FREE' });
-    // UserTierId.FREE === 'FREE'
-    const { UserTierId } = require('@vybestack/llxprt-code-core');
-    mockGetCodeAssistServer.mockReturnValue({ userTier: UserTierId.FREE });
+    mockGetCodeAssistServer.mockReturnValue({ userTier: 'free-tier' });
     expect(showCitations(makeSettings(undefined), config)).toBe(false);
   });
 
