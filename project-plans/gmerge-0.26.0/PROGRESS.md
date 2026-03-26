@@ -54,5 +54,5 @@
 | R38 | REIMPLEMENT | ee87c98 | DONE | cd3a71bf4 | fast return buffer |
 | R39 | REIMPLEMENT | cebe386 | DONE | 54ea7b615 | **HIGH RISK** MCP status hook |
 | R40 | REIMPLEMENT | 2a3c879 | DONE | 2b98926f5 | clearContext hooks |
-| R41 | REIMPLEMENT | 43846f4 | TODO | | package.ts error |
+| R41 | REIMPLEMENT | 43846f4 | DONE | 777226143 | package.ts error |
 | R42 | REIMPLEMENT | d8e9db3 | TODO | | package.ts follow-up |
