@@ -239,7 +239,7 @@ export const memoryCommand: SlashCommand = {
                 settings.merged,
                 config.getExtensions(),
                 config.isTrustedFolder(),
-                context.services.settings.merged.ui?.memoryImportFormat ||
+                context.services.settings.merged.ui.memoryImportFormat ||
                   'tree', // Use setting or default to 'tree'
                 config.getFileFilteringOptions(),
               );

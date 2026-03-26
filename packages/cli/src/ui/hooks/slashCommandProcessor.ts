@@ -131,7 +131,7 @@ export const useSlashCommandProcessor = (
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const alternateBuffer =
-    settings.merged.ui?.useAlternateBuffer === true &&
+    settings.merged.ui.useAlternateBuffer === true &&
     !config?.getScreenReader();
 
   const reloadCommands = useCallback(() => {

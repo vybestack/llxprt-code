@@ -57,7 +57,7 @@ export function ThemeDialog({
   const [highlightedThemeName, setHighlightedThemeName] = useState<string>(
     () => {
       // If a theme is already set, use it.
-      if (settings.merged.ui?.theme) {
+      if (settings.merged.ui.theme) {
         return settings.merged.ui.theme;
       }
 
@@ -75,7 +75,7 @@ export function ThemeDialog({
   const customThemes =
     selectedScope === SettingScope.User
       ? settings.user.settings.ui?.customThemes || {}
-      : settings.merged.ui?.customThemes || {};
+      : settings.merged.ui.customThemes || {};
   const builtInThemes = themeManager
     .getAvailableThemes()
     .filter((theme) => theme.type !== 'custom');

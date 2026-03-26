@@ -23,6 +23,7 @@ import { DefaultDark } from '../ui/themes/default.js';
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import {
   Settings,
+  type MergedSettings,
   MemoryImportFormat,
   SETTINGS_SCHEMA,
   SettingDefinition,
@@ -40,7 +41,23 @@ import {
 
 export { USER_SETTINGS_PATH, USER_SETTINGS_DIR, SETTINGS_DIRECTORY_NAME };
 
-export type { Settings, MemoryImportFormat };
+export type { Settings, MergedSettings, MemoryImportFormat };
+
+/**
+ * Creates a fully-initialized MergedSettings object for tests.
+ * All sub-objects are guaranteed to be non-nullable.
+ */
+export function createTestMergedSettings(
+  overrides: Partial<Settings> = {},
+): MergedSettings {
+  return mergeSettings(
+    {} as Settings,
+    {} as Settings,
+    overrides as Settings,
+    {} as Settings,
+    true,
+  );
+}
 
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
@@ -200,7 +217,7 @@ function mergeSettings(
   user: Settings,
   workspace: Settings,
   isTrusted: boolean,
-): Settings {
+): MergedSettings {
   const safeWorkspace = isTrusted ? workspace : ({} as Settings);
 
   // Get defaults from schema
@@ -275,6 +292,34 @@ function mergeSettings(
       ...(safeWorkspace.chatCompression || {}),
       ...(system.chatCompression || {}),
     },
+    security: {
+      ...(schemaDefaults.security || {}),
+      ...(systemDefaults.security || {}),
+      ...(user.security || {}),
+      ...(safeWorkspace.security || {}),
+      ...(system.security || {}),
+    },
+    telemetry: {
+      ...(schemaDefaults.telemetry || {}),
+      ...(systemDefaults.telemetry || {}),
+      ...(user.telemetry || {}),
+      ...(safeWorkspace.telemetry || {}),
+      ...(system.telemetry || {}),
+    },
+    mcp: {
+      ...(schemaDefaults.mcp || {}),
+      ...(systemDefaults.mcp || {}),
+      ...(user.mcp || {}),
+      ...(safeWorkspace.mcp || {}),
+      ...(system.mcp || {}),
+    },
+    tools: {
+      ...(schemaDefaults.tools || {}),
+      ...(systemDefaults.tools || {}),
+      ...(user.tools || {}),
+      ...(safeWorkspace.tools || {}),
+      ...(system.tools || {}),
+    },
     extensions: {
       ...(systemDefaults.extensions || {}),
       ...(user.extensions || {}),
@@ -313,7 +358,7 @@ function mergeSettings(
     merged.ui.theme = prioritizedTheme;
   }
 
-  return merged;
+  return merged as MergedSettings;
 }
 
 function migrateLegacyInteractiveShellSetting(settings: Settings): void {
@@ -380,13 +425,13 @@ export class LoadedSettings {
   readonly isTrusted: boolean;
   readonly errors: SettingsError[] = [];
 
-  private _merged: Settings;
+  private _merged: MergedSettings;
 
-  get merged(): Settings {
+  get merged(): MergedSettings {
     return this._merged;
   }
 
-  private computeMergedSettings(): Settings {
+  private computeMergedSettings(): MergedSettings {
     return mergeSettings(
       this.system.settings,
       this.systemDefaults.settings,

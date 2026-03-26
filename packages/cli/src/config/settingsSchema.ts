@@ -2383,6 +2383,20 @@ type InferSettings<T extends SettingsSchema> = {
 
 export type Settings = InferSettings<SettingsSchemaType>;
 
+/**
+ * Settings type for the merged settings object. Sub-objects that are
+ * always populated by mergeSettings() are marked as required.
+ */
+export type MergedSettings = Settings & {
+  ui: NonNullable<Settings['ui']>;
+  security: NonNullable<Settings['security']>;
+  telemetry: NonNullable<Settings['telemetry']>;
+  extensions: NonNullable<Settings['extensions']>;
+  mcp: NonNullable<Settings['mcp']>;
+  tools: NonNullable<Settings['tools']>;
+  chatCompression: NonNullable<Settings['chatCompression']>;
+};
+
 export interface FooterSettings {
   hideCWD?: boolean;
   hideSandboxStatus?: boolean;

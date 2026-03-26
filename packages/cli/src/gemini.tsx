@@ -378,10 +378,7 @@ export async function main() {
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
 
-  if (
-    settings.merged.ui?.autoConfigureMaxOldSpaceSize &&
-    !process.env.SANDBOX
-  ) {
+  if (settings.merged.ui.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
     // Only relaunch with a larger heap when the autosizing setting is enabled.
     const debugMode = isDebugMode();
     const memoryArgs = shouldRelaunchForMemory(debugMode);
@@ -780,7 +777,7 @@ export async function main() {
     // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
     // with Node.js default ~950MB heap.
     let sandboxMemoryArgs: string[] = [];
-    if (settings.merged.ui?.autoConfigureMaxOldSpaceSize) {
+    if (settings.merged.ui.autoConfigureMaxOldSpaceSize) {
       const containerMemoryStr =
         process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
       let containerMemoryMB: number | undefined;
@@ -1314,14 +1311,14 @@ export async function main() {
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
-  if (!settings.merged.ui?.hideWindowTitle) {
+  if (!settings.merged.ui.hideWindowTitle) {
     // Initial state before React loop starts
     const windowTitle = computeTerminalTitle({
       streamingState: StreamingState.Idle,
       isConfirming: false,
       folderName: title,
-      showThoughts: !!settings.merged.ui?.showStatusInTitle,
-      useDynamicTitle: settings.merged.ui?.dynamicWindowTitle ?? true,
+      showThoughts: !!settings.merged.ui.showStatusInTitle,
+      useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
     });
     writeToStdout(`\x1b]0;${windowTitle}\x07`);
 

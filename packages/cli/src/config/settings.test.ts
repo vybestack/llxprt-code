@@ -366,7 +366,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.security?.disableYoloMode).toBe(true); // System setting should be used
+      expect(settings.merged.security.disableYoloMode).toBe(true); // System setting should be used
     });
 
     it('should handle contextFileName correctly when only in user settings', () => {
@@ -553,12 +553,12 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.disableAutoUpdate).toBe(false);
     });
 
-    it('should have telemetry as undefined if not in any settings file', () => {
+    it('should have telemetry as empty object if not in any settings file', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false); // No settings files exist
       (fs.readFileSync as Mock).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.telemetry).toBeUndefined();
-      expect(settings.merged.ui?.customThemes).toEqual({});
+      expect(settings.merged.telemetry).toEqual({});
+      expect(settings.merged.ui.customThemes).toEqual({});
       expect(settings.merged.mcpServers).toEqual({});
     });
 

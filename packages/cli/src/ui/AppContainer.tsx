@@ -217,15 +217,15 @@ export const AppContainer = (props: AppContainerProps) => {
   const historyLimits = useMemo(
     () => ({
       maxItems:
-        typeof settings.merged.ui?.historyMaxItems === 'number'
+        typeof settings.merged.ui.historyMaxItems === 'number'
           ? settings.merged.ui.historyMaxItems
           : DEFAULT_HISTORY_MAX_ITEMS,
       maxBytes:
-        typeof settings.merged.ui?.historyMaxBytes === 'number'
+        typeof settings.merged.ui.historyMaxBytes === 'number'
           ? settings.merged.ui.historyMaxBytes
           : DEFAULT_HISTORY_MAX_BYTES,
     }),
-    [settings.merged.ui?.historyMaxItems, settings.merged.ui?.historyMaxBytes],
+    [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
@@ -590,8 +590,7 @@ export const AppContainer = (props: AppContainerProps) => {
   } | null>(null);
 
   const useAlternateBuffer =
-    settings.merged.ui?.useAlternateBuffer === true &&
-    !config.getScreenReader();
+    settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
 
   const restoreTerminalStateAfterEditor = useCallback(() => {
     const editorState = externalEditorStateRef.current;
@@ -627,7 +626,7 @@ export const AppContainer = (props: AppContainerProps) => {
       return;
     }
 
-    if (settings.merged.ui?.useAlternateBuffer === false) {
+    if (settings.merged.ui.useAlternateBuffer === false) {
       stdout.write(ansiEscapes.clearTerminal);
     }
     setStaticKey((prev) => prev + 1);
@@ -1168,7 +1167,7 @@ export const AppContainer = (props: AppContainerProps) => {
         settings.merged,
         config.getExtensions(),
         config.getFolderTrust(),
-        settings.merged.ui?.memoryImportFormat || 'tree',
+        settings.merged.ui.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),
       );
 
@@ -1267,7 +1266,7 @@ export const AppContainer = (props: AppContainerProps) => {
   }, []);
 
   const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.ui?.preferredEditor;
+    const editorType = settings.merged.ui.preferredEditor;
     const isValidEditor = isEditorAvailable(editorType);
     if (!isValidEditor) {
       openEditorDialog();
@@ -1401,8 +1400,8 @@ export const AppContainer = (props: AppContainerProps) => {
   );
 
   const getPreferredEditorType = useCallback(
-    () => settings.merged.ui?.preferredEditor as EditorType,
-    [settings.merged.ui?.preferredEditor],
+    () => settings.merged.ui.preferredEditor as EditorType,
+    [settings.merged.ui.preferredEditor],
   );
 
   const buffer = useTextBuffer({
@@ -1621,11 +1620,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.ui?.wittyPhraseStyle ??
+    settings.merged.ui.wittyPhraseStyle ??
       settings.merged.wittyPhraseStyle ??
       'default',
-    settings.merged.ui?.customWittyPhrases ??
-      settings.merged.customWittyPhrases,
+    settings.merged.ui.customWittyPhrases ?? settings.merged.customWittyPhrases,
     !!activeShellPtyId && !embeddedShellFocused,
     lastOutputTime,
   );
@@ -1670,7 +1668,7 @@ export const AppContainer = (props: AppContainerProps) => {
       }
 
       if (
-        settings.merged.ui?.useAlternateBuffer === true &&
+        settings.merged.ui.useAlternateBuffer === true &&
         keyMatchers[Command.TOGGLE_COPY_MODE](key)
       ) {
         setCopyModeEnabled(true);
@@ -1851,7 +1849,7 @@ export const AppContainer = (props: AppContainerProps) => {
       refreshStatic,
       setCopyModeEnabled,
       copyModeEnabled,
-      settings.merged.ui?.useAlternateBuffer,
+      settings.merged.ui.useAlternateBuffer,
       activeShellPtyId,
       embeddedShellFocused,
     ],
@@ -1873,7 +1871,7 @@ export const AppContainer = (props: AppContainerProps) => {
   // Update terminal window title based on streaming state
   useEffect(() => {
     // Respect hideWindowTitle settings
-    if (settings.merged.ui?.hideWindowTitle) return;
+    if (settings.merged.ui.hideWindowTitle) return;
 
     const paddedTitle = computeTerminalTitle({
       streamingState,
@@ -1883,8 +1881,8 @@ export const AppContainer = (props: AppContainerProps) => {
         !!confirmationRequest ||
         showShellActionRequired,
       folderName: basename(config.getTargetDir()),
-      showThoughts: !!settings.merged.ui?.showStatusInTitle,
-      useDynamicTitle: settings.merged.ui?.dynamicWindowTitle ?? true,
+      showThoughts: !!settings.merged.ui.showStatusInTitle,
+      useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
     });
 
     if (paddedTitle !== lastTitleRef.current) {
@@ -1898,9 +1896,9 @@ export const AppContainer = (props: AppContainerProps) => {
     confirmationRequest,
     showShellActionRequired,
     config,
-    settings.merged.ui?.showStatusInTitle,
-    settings.merged.ui?.dynamicWindowTitle,
-    settings.merged.ui?.hideWindowTitle,
+    settings.merged.ui.showStatusInTitle,
+    settings.merged.ui.dynamicWindowTitle,
+    settings.merged.ui.hideWindowTitle,
     stdout,
   ]);
 
@@ -2157,12 +2155,12 @@ export const AppContainer = (props: AppContainerProps) => {
   const branchName = useGitBranchName(config.getTargetDir());
 
   const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.ui?.contextFileName;
+    const fromSettings = settings.merged.ui.contextFileName;
     if (fromSettings) {
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     }
     return getAllLlxprtMdFilenames();
-  }, [settings.merged.ui?.contextFileName]);
+  }, [settings.merged.ui.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   const geminiClient = config.getGeminiClient();

@@ -406,6 +406,7 @@ describe('memoryCommand', () => {
           config: mockConfig,
           settings: {
             merged: {
+              ui: {},
               memoryDiscoveryMaxDirs: 1000,
               context: {
                 importFormat: 'tree',
@@ -551,7 +552,7 @@ describe('memoryCommand', () => {
         services: {
           config: jitConfig,
           settings: {
-            merged: {},
+            merged: { ui: {} },
           } as LoadedSettings,
         },
         ui: {

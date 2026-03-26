@@ -279,17 +279,13 @@ export async function skillsConsentString(
 ): Promise<string> {
   const output: string[] = [];
   output.push(`Installing agent skill(s) from "${source}".`);
-  output.push('
-The following agent skill(s) will be installed:
-');
+  output.push('\nThe following agent skill(s) will be installed:\n');
   output.push(...(await renderSkillsList(skills)));
   if (targetDir) {
     output.push(`Install Destination: ${targetDir}`);
   }
-  output.push('
-' + SKILLS_WARNING_MESSAGE);
-  return output.join('
-');
+  output.push('\n' + SKILLS_WARNING_MESSAGE);
+  return output.join('\n');
 }
 
 /**

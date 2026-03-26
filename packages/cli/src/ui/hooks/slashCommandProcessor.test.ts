@@ -186,7 +186,7 @@ function createTestCommand(overrides: Partial<SlashCommand>): SlashCommand {
 describe('useSlashCommandProcessor', () => {
   let mockConfig: Config;
   const mockSettings = {
-    merged: {},
+    merged: { ui: {} },
   } as LoadedSettings;
   let addItem: ReturnType<typeof vi.fn>;
   let clearItems: ReturnType<typeof vi.fn>;
