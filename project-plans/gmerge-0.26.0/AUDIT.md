@@ -18,11 +18,11 @@ Post-implementation reconciliation. Updated continuously during execution.
 | c8c7b57 | PICKED | 93697af0e | skills project→workspace — PASS |
 | 4848f42 | PICKED | 68384cf6e | skill colons — PASS |
 | d0bbc7f | PICKED | 89a27bb44 | skill parsing hardening — PASS |
-| 448fd3c | PICKED | | circular dep tsconfig |
-| 6740886 | PICKED | | prevent ModelInfo on aborted |
-| be37c26 | PICKED | | text buffer perf |
-| 41e01c2 | PICKED | | PKCE/OAuth |
-| d8a8b43 | PICKED | | OSC-52 clipboard |
+| 448fd3c | PICKED | (NO_OP) | circular dep tsconfig — LLxprt already had correct path |
+| 6740886 | PICKED | (NO_OP) | prevent ModelInfo on aborted — LLxprt doesn't emit ModelInfo |
+| be37c26 | PICKED | 99836347f | text buffer perf — PASS (+ LruCache.size, type annotations) |
+| 41e01c2 | PICKED | d1ff2eb9f | PKCE/OAuth — PASS (+ static method fixes) |
+| d8a8b43 | PICKED | 4478accbc | OSC-52 clipboard — PASS |
 | a90bcf7 | PICKED | | /introspect command |
 | 155d9aa | PICKED | | fireSessionStartEvent return type |
 | 4920ad2 | PICKED | | docs themes |

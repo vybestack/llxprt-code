@@ -27,4 +27,13 @@ Running notes during batch execution. Append after each batch.
 - d0bbc7f: Conflict resolved — preserved LLxprt's `source` property while taking upstream's `match[2]?.trim() ?? ''` safety.
 - Lint: 0 errors (warnings only), typecheck: clean.
 
+## Batch P2 (2026-03-25)
+
+- 448fd3c: Empty NO_OP — LLxprt already had correct @vybestack/llxprt-code-core tsconfig path.
+- 6740886: Empty NO_OP — LLxprt doesn't emit ModelInfo events.
+- be37c26: Applied. Needed LruCache.size property added to core (upstream's mnemoist exposes it, LLxprt's wrapper didn't). Also added type annotations for destructured forEach callbacks to fix implicit any errors. Required core tsc --build before CLI typecheck succeeds.
+- 41e01c2: Applied. getPortFromUrl and startCallbackServer needed to be made static (LLxprt's authenticate is static, upstream's is instance). Test calls updated from instance to static.
+- d8a8b43: Applied cleanly.
+- Full verify: lint clean, typecheck clean, 514 test files pass, build clean, smoke test passes.
+
 ---
