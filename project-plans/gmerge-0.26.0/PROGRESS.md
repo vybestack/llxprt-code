@@ -31,7 +31,7 @@
 | R15 | REIMPLEMENT | e77d7b2 | DONE | 9b29e539a | OOM prevention — maxFiles/timeout in crawler |
 | R16 | REIMPLEMENT | 8a627d6 | DONE | 62f3ce394 | /dev/tty safety — async pickTty with timeout |
 | R17 | REIMPLEMENT | 1e8f87f | DONE | 8f68d3b78 | MCPDiscoveryState tracking |
-| R18 | REIMPLEMENT | cfdc4cf | TODO | | scheduleToolCalls race |
+| R18 | REIMPLEMENT | cfdc4cf | DONE (NO_OP) | — | scheduleToolCalls race — already present in LLxprt |
 | R19 | REIMPLEMENT | ce35d84 | TODO | | organize keybindings |
 | R20 | REIMPLEMENT | 9722ec9 | TODO | | hook event names |
 | R21 | REIMPLEMENT | 608da23 | TODO | | **HIGH RISK** disable→enable settings (22+ files) |
