@@ -63,7 +63,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 608da23 | REIMPLEMENTED | 5bf2581c4 | **HIGH** disable→enable settings — PASS |
 | 1681ae1 | REIMPLEMENTED | 2dd155b87 | unify shell confirmation — PASS |
 | 272570c | REIMPLEMENTED | de72ae2b4 | skills default enabled — PASS |
-| 6900253 | REIMPLEMENTED | | keyboard shortcuts URL (was PICK) |
+| 6900253 | REIMPLEMENTED | 234a2255f | keyboard shortcuts URL — PASS |
 | 4cfbe4c | REIMPLEMENTED | | Homebrew detection (was PICK) |
 | 1b6b6d4 | REIMPLEMENTED | | centralize tool mapping |
 | 0bebc66 | REIMPLEMENTED | | rationale before tool calls (was PICK) |
