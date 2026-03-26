@@ -30,7 +30,7 @@
 | R14 | REIMPLEMENT | f7f38e2 | DONE | 5e0fe9278 | **HIGH RISK** non-nullable settings — 33 files changed, MergedSettings type, 63 ?. removals |
 | R15 | REIMPLEMENT | e77d7b2 | DONE | 9b29e539a | OOM prevention — maxFiles/timeout in crawler |
 | R16 | REIMPLEMENT | 8a627d6 | DONE | 62f3ce394 | /dev/tty safety — async pickTty with timeout |
-| R17 | REIMPLEMENT | 1e8f87f | TODO | | MCPDiscoveryState |
+| R17 | REIMPLEMENT | 1e8f87f | DONE | 8f68d3b78 | MCPDiscoveryState tracking |
 | R18 | REIMPLEMENT | cfdc4cf | TODO | | scheduleToolCalls race |
 | R19 | REIMPLEMENT | ce35d84 | TODO | | organize keybindings |
 | R20 | REIMPLEMENT | 9722ec9 | TODO | | hook event names |
