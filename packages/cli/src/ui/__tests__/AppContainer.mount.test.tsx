@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock heavy dependencies first before importing component
-vi.mock('../../hooks/useGeminiStream.js', () => ({
+vi.mock('../../hooks/geminiStream/index.js', () => ({
   useGeminiStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),

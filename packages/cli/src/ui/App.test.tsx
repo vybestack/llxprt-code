@@ -22,7 +22,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
-import { useGeminiStream } from './hooks/useGeminiStream.js';
+import { useGeminiStream } from './hooks/geminiStream/index.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import {
   StreamingState,
@@ -203,7 +203,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 });
 
 // Mock heavy dependencies or those with side effects
-vi.mock('./hooks/useGeminiStream', () => ({
+vi.mock('./hooks/geminiStream/index', () => ({
   useGeminiStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),

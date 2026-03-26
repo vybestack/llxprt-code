@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
-import { useGeminiStream } from './useGeminiStream.js';
+import { useGeminiStream } from './geminiStream/index.js';
 import {
   Config,
   GeminiClient,
@@ -317,7 +317,7 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
 
   it('should keep overlapping non-shell scheduler tools while deduplicating overlapping shell tools in pending display merge', async () => {
     const { mergePendingToolGroupsForDisplay } = await import(
-      './useGeminiStream.js'
+      './geminiStream/index.js'
     );
 
     const sharedShellCallId = 'shared-shell-call';

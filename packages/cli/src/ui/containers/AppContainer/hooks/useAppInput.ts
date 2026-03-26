@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
-import { useGeminiStream } from '../../../hooks/useGeminiStream.js';
+import { useGeminiStream } from '../../../hooks/geminiStream/index.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
 import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
