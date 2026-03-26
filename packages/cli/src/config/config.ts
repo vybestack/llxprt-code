@@ -440,10 +440,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           'Use settings.json instead. This flag will be removed in a future version.',
         )
 
-        .deprecateOption(
-          'prompt',
-          'Use the positional prompt instead. This flag will be removed in a future version.',
-        )
         .positional('promptWords', {
           describe: 'Prompt to run non-interactively',
           type: 'string',
