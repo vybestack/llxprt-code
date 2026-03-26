@@ -524,6 +524,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
             processingResult = StreamProcessingStatus.UserCancelled;
             break;
           case ServerGeminiEventType.Error:
+            toolCallRequests.length = 0;
             handleErrorEvent(event.value, userMessageTimestamp);
             processingResult = StreamProcessingStatus.Error;
             break;
@@ -585,6 +586,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       }
 
       if (
+        processingResult === StreamProcessingStatus.Completed &&
         !signal.aborted &&
         !turnCancelledRef.current &&
         !loopDetectedRef.current &&
