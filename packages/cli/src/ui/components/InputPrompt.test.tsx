@@ -1693,6 +1693,28 @@ describe('InputPrompt', () => {
   });
 
   describe('enhanced input UX - double ESC clear functionality', () => {
+    it('should do nothing on ESC when buffer is empty', async () => {
+      const onEscapePromptChange = vi.fn();
+      props.onEscapePromptChange = onEscapePromptChange;
+      props.buffer.setText('');
+      vi.mocked(props.buffer.setText).mockClear();
+
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+        { kittyProtocolEnabled: false },
+      );
+
+      await act(async () => {
+        stdin.write('\x1B');
+      });
+
+      await waitFor(() => {
+        expect(props.buffer.setText).not.toHaveBeenCalled();
+        expect(onEscapePromptChange).not.toHaveBeenCalledWith(true);
+      });
+      unmount();
+    });
+
     it('should clear buffer on second ESC press', async () => {
       const onEscapePromptChange = vi.fn();
       props.onEscapePromptChange = onEscapePromptChange;
