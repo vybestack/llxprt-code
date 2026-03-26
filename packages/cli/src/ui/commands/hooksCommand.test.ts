@@ -145,7 +145,7 @@ describe('hooksCommand', () => {
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Hooks system is not enabled. Enable it in settings with hooks.enabled.',
+          text: 'Hooks system is not enabled. Enable it in settings with hooksConfig.enabled.',
         }),
         expect.any(Number),
       );

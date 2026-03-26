@@ -769,7 +769,7 @@ export class Config {
     | undefined;
   private disabledHooks: string[] = [];
   private readonly projectHooks:
-    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
+    | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
   private skillManager!: SkillManager;
   private readonly skillsSupport: boolean;
@@ -968,6 +968,7 @@ export class Config {
     this.jitContextEnabled = params.jitContextEnabled ?? true;
     this.hooks = params.hooks;
     this.projectHooks = params.projectHooks;
+    this.disabledHooks = params.disabledHooks ?? [];
     this.skillManager = new SkillManager();
     this.skillsSupport = params.skillsSupport ?? false;
     this.disabledSkills = params.disabledSkills ?? [];
@@ -2770,7 +2771,7 @@ ${trimmed}
    */
   getDisabledHooks(): string[] {
     if (this.disabledHooks.length === 0) {
-      const persisted = this.settingsService.get('hooks.disabled') as
+      const persisted = this.settingsService.get('hooksConfig.disabled') as
         | string[]
         | undefined;
       if (persisted && persisted.length > 0) {
@@ -2787,7 +2788,7 @@ ${trimmed}
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;
     // Persist to settings service
-    this.settingsService.set('hooks.disabled', hooks);
+    this.settingsService.set('hooksConfig.disabled', hooks);
   }
 
   /**
@@ -2825,9 +2826,7 @@ ${trimmed}
   /**
    * Get project hooks configuration
    */
-  getProjectHooks():
-    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
-    | undefined {
+  getProjectHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.projectHooks;
   }
 

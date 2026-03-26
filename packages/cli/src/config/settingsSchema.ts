@@ -1894,20 +1894,14 @@ export const SETTINGS_SCHEMA = {
     },
   },
 
-  hooks: {
+  hooksConfig: {
     type: 'object',
-    label: 'Hooks',
+    label: 'HooksConfig',
     category: 'Advanced',
     requiresRestart: false,
-    default: {} as { [K in HookEventName]?: HookDefinition[] } & {
-      enabled?: boolean;
-      disabled?: string[];
-      notifications?: boolean;
-    },
-    description:
-      'Hook configurations for intercepting and customizing agent behavior.',
+    default: {},
+    description: 'Configuration settings for the hooks system.',
     showInDialog: false,
-    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
     properties: {
       enabled: {
         type: 'boolean',
@@ -1925,7 +1919,7 @@ export const SETTINGS_SCHEMA = {
         default: true,
         category: 'Advanced',
         description: 'Show visual indicators when hooks are executing.',
-        showInDialog: false,
+        showInDialog: true,
         requiresRestart: false,
       },
       disabled: {
@@ -1934,10 +1928,22 @@ export const SETTINGS_SCHEMA = {
         category: 'Advanced',
         requiresRestart: false,
         default: [] as string[],
-        description: 'List of hook names to disable',
+        description:
+          'List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.',
         showInDialog: false,
       },
     },
+  },
+
+  hooks: {
+    type: 'object',
+    label: 'Hook Events',
+    category: 'Advanced',
+    requiresRestart: false,
+    default: {} as { [K in HookEventName]?: HookDefinition[] },
+    description: 'Event-specific hook configurations.',
+    showInDialog: false,
+    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
   },
   admin: {
     type: 'object',
@@ -2393,10 +2399,10 @@ export function getEnableHooksUI(settings: Settings): boolean {
 
 /**
  * Determines if hooks should be enabled based on both experimental flag and user setting.
- * Both tools.enableHooks (experimental gate) and hooks.enabled (user toggle) must be true.
+ * Both tools.enableHooks (experimental gate) and hooksConfig.enabled (user toggle) must be true.
  */
 export function getEnableHooks(settings: Settings): boolean {
-  return getEnableHooksUI(settings) && (settings.hooks?.enabled ?? false);
+  return getEnableHooksUI(settings) && (settings.hooksConfig?.enabled ?? false);
 }
 
 type InferSettings<T extends SettingsSchema> = {

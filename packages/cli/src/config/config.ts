@@ -1515,15 +1515,8 @@ export async function loadCliConfig(
     jitContextEnabled,
     enableHooks: getEnableHooks(effectiveSettings),
     enableHooksUI: getEnableHooksUI(effectiveSettings),
-    hooks: (() => {
-      const hooksConfig = effectiveSettings.hooks || {};
-      // Filter out the 'disabled' property from hooks config as it's handled separately
-      const { disabled: _disabled, ...eventHooks } = hooksConfig as {
-        disabled?: string[];
-        [key: string]: unknown;
-      };
-      return eventHooks;
-    })(),
+    hooks: effectiveSettings.hooks || {},
+    disabledHooks: effectiveSettings.hooksConfig?.disabled || [],
     onReload: async () => {
       const refreshedSettings = loadSettings(cwd);
       return {
@@ -1535,15 +1528,6 @@ export async function loadCliConfig(
   });
 
   const enhancedConfig = config;
-
-  // Set disabled hooks from settings if present
-  if (effectiveSettings.hooks && 'disabled' in effectiveSettings.hooks) {
-    const disabledHooks = (effectiveSettings.hooks as { disabled?: unknown })
-      .disabled;
-    if (Array.isArray(disabledHooks)) {
-      enhancedConfig.setDisabledHooks(disabledHooks as string[]);
-    }
-  }
 
   const bootstrapRuntimeId =
     runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';

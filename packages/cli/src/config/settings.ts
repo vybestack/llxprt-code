@@ -401,6 +401,42 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
   }
 }
 
+/**
+ * Migrates old-style hooks config (hooks.enabled, hooks.disabled, hooks.notifications)
+ * to the new split schema (hooksConfig.enabled, hooksConfig.disabled, hooksConfig.notifications).
+ * Called per-scope before merging, so each scope's settings file is independently migrated.
+ */
+function migrateHooksConfig(settings: Settings): void {
+  if (!settings || typeof settings !== 'object') {
+    return;
+  }
+
+  const hooks = settings.hooks as Record<string, unknown> | undefined;
+  if (!hooks) return;
+
+  const needsMigration =
+    'enabled' in hooks || 'disabled' in hooks || 'notifications' in hooks;
+
+  if (!needsMigration) return;
+
+  const hooksConfig = (settings.hooksConfig as Record<string, unknown>) ?? {};
+  const newHooks: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(hooks)) {
+    if (key === 'enabled' || key === 'disabled' || key === 'notifications') {
+      // Migrate to hooksConfig; do not overwrite if already present
+      if (!(key in hooksConfig)) {
+        hooksConfig[key] = value;
+      }
+    } else {
+      newHooks[key] = value;
+    }
+  }
+
+  (settings as Record<string, unknown>)['hooksConfig'] = hooksConfig;
+  (settings as Record<string, unknown>)['hooks'] = newHooks;
+}
+
 export class LoadedSettings {
   constructor(
     system: SettingsFile,
@@ -841,6 +877,7 @@ export function loadSettings(
     workspaceSettings,
   ]) {
     migrateLegacyInteractiveShellSetting(scopeSettings);
+    migrateHooksConfig(scopeSettings);
   }
 
   const loadedSettings = new LoadedSettings(
