@@ -1188,6 +1188,15 @@ export const useGeminiStream = (
               },
               userMessageTimestamp,
             );
+            if (event.contextCleared) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: 'Conversation context has been cleared.',
+                },
+                userMessageTimestamp,
+              );
+            }
             break;
           case ServerGeminiEventType.AgentExecutionBlocked:
             addItem(
@@ -1197,6 +1206,15 @@ export const useGeminiStream = (
               },
               userMessageTimestamp,
             );
+            if (event.contextCleared) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: 'Conversation context has been cleared.',
+                },
+                userMessageTimestamp,
+              );
+            }
             break;
           default:
             break;

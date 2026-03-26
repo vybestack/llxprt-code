@@ -1904,6 +1904,16 @@ ${jitMemory}`
           afterHookOutput?.shouldStopExecution()
         ) {
           const continueReason = afterHookOutput.getEffectiveReason();
+          const contextCleared = afterHookOutput.shouldClearContext();
+          if (contextCleared) {
+            await this.resetChat();
+          }
+          yield {
+            type: GeminiEventType.AgentExecutionBlocked,
+            reason: continueReason,
+            systemMessage: afterHookOutput.systemMessage,
+            contextCleared,
+          };
           const continueRequest: PartListUnion = [{ text: continueReason }];
           yield* this.sendMessageStream(
             continueRequest,
@@ -1984,6 +1994,16 @@ ${jitMemory}`
           afterHookOutput2?.shouldStopExecution()
         ) {
           const continueReason = afterHookOutput2.getEffectiveReason();
+          const contextCleared = afterHookOutput2.shouldClearContext();
+          if (contextCleared) {
+            await this.resetChat();
+          }
+          yield {
+            type: GeminiEventType.AgentExecutionBlocked,
+            reason: continueReason,
+            systemMessage: afterHookOutput2.systemMessage,
+            contextCleared,
+          };
           const continueRequest: PartListUnion = [{ text: continueReason }];
           yield* this.sendMessageStream(
             continueRequest,

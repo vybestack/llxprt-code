@@ -247,12 +247,14 @@ export type ServerGeminiAgentExecutionStoppedEvent = {
   type: GeminiEventType.AgentExecutionStopped;
   reason: string;
   systemMessage?: string;
+  contextCleared?: boolean;
 };
 
 export type ServerGeminiAgentExecutionBlockedEvent = {
   type: GeminiEventType.AgentExecutionBlocked;
   reason: string;
   systemMessage?: string;
+  contextCleared?: boolean;
 };
 
 // The original union type, now composed of the individual types
