@@ -9,11 +9,9 @@
  * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
  * @pseudocode agent-runtime-context.md lines 92-101
  */
-import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import {
   Config,
-  ApprovalMode,
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '../config/config.js';
@@ -31,19 +29,13 @@ import {
   type Content,
   type Part,
   type FunctionCall,
-  type GenerateContentConfig,
   type FunctionDeclaration,
-  Type,
 } from '@google/genai';
-import { GeminiChat, StreamEventType } from './geminiChat.js';
+import { StreamEventType } from './geminiChat.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
-  ToolRegistryView,
-  ToolMetadata,
 } from '../runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { TodoStore } from '../tools/todo-store.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
@@ -53,9 +45,17 @@ import {
   type CompletedToolCall,
   type OutputUpdateHandler,
 } from './coreToolScheduler.js';
-import { getCoreSystemPromptAsync } from './prompts.js';
-import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
+import { type EmojiFilter } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import {
+  validateToolsAgainstRuntime,
+  createToolExecutionConfig,
+  createEmojiFilter,
+  buildRuntimeFunctionDeclarations,
+  getScopeLocalFuncDefs,
+  createSchedulerConfig,
+  createChatObject,
+} from './subagentRuntimeSetup.js';
 
 // --- Re-exports from subagentTypes.ts for backward compatibility (Issue #1581) ---
 // Value re-exports (backward-compatible — existed before decomposition)
@@ -82,7 +82,6 @@ export type { EnvironmentContextLoader } from './subagentTypes.js';
 import {
   SubagentTerminateMode,
   ContextState,
-  templateString,
   defaultEnvironmentContextLoader,
   type OutputObject,
   type PromptConfig,
@@ -95,158 +94,8 @@ import {
 } from './subagentTypes.js';
 
 // Types, interfaces, enums, and ContextState are now in subagentTypes.ts
-// See re-exports above for backward compatibility.
+// Runtime setup helpers are now in subagentRuntimeSetup.ts
 
-const normalizeToolName = (name: string): string => name.trim().toLowerCase();
-
-function convertMetadataToFunctionDeclaration(
-  fallbackName: string,
-  metadata: ToolMetadata,
-): FunctionDeclaration {
-  const rawSchema =
-    metadata.parameterSchema && typeof metadata.parameterSchema === 'object'
-      ? { ...metadata.parameterSchema }
-      : {};
-  const properties =
-    (rawSchema.properties as Record<string, unknown> | undefined) ?? {};
-
-  return {
-    name: metadata.name ?? fallbackName,
-    description: metadata.description ?? '',
-    parameters: {
-      ...rawSchema,
-      type: (rawSchema.type as Type | undefined) ?? Type.OBJECT,
-      properties,
-    } as FunctionDeclaration['parameters'],
-  };
-}
-
-async function validateToolsAgainstRuntime(params: {
-  toolConfig: ToolConfig;
-  toolRegistry: ToolRegistry;
-  toolsView: ToolRegistryView;
-}): Promise<void> {
-  const { toolConfig, toolRegistry, toolsView } = params;
-  const allowedNames = new Set(
-    (typeof toolsView.listToolNames === 'function'
-      ? toolsView.listToolNames()
-      : []
-    ).map(normalizeToolName),
-  );
-
-  for (const toolEntry of toolConfig.tools) {
-    if (typeof toolEntry !== 'string') {
-      continue;
-    }
-
-    if (
-      allowedNames.size > 0 &&
-      !allowedNames.has(normalizeToolName(toolEntry))
-    ) {
-      throw new Error(
-        `Tool "${toolEntry}" is not permitted for this runtime bundle.`,
-      );
-    }
-
-    const tool = toolRegistry.getTool(toolEntry);
-    if (!tool) {
-      continue;
-    }
-  }
-}
-
-function createToolExecutionConfig(
-  runtimeBundle: AgentRuntimeLoaderResult,
-  toolRegistry: ToolRegistry,
-  foregroundConfig: Config,
-  messageBus?: import('../index.js').MessageBus,
-  settingsSnapshot?: ReadonlySettingsSnapshot,
-  toolConfig?: ToolConfig,
-): ToolExecutionConfig {
-  const ephemerals = buildEphemeralSettings(settingsSnapshot);
-
-  if (toolConfig && Array.isArray(toolConfig.tools)) {
-    const normalizedWhitelist = toolConfig.tools
-      .filter((entry): entry is string => typeof entry === 'string')
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0)
-      .map((entry) => entry.toLowerCase());
-
-    if (normalizedWhitelist.length > 0) {
-      const existingAllowed = Array.isArray(ephemerals['tools.allowed'])
-        ? (ephemerals['tools.allowed'] as string[])
-            .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-            .filter((entry) => entry.length > 0)
-            .map((entry) => entry.toLowerCase())
-        : [];
-
-      const allowedSet =
-        existingAllowed.length > 0
-          ? normalizedWhitelist.filter((entry) =>
-              existingAllowed.includes(entry),
-            )
-          : normalizedWhitelist;
-
-      ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
-    }
-  }
-
-  return {
-    getToolRegistry: () => toolRegistry,
-    getEphemeralSettings: () => ({ ...ephemerals }),
-    getEphemeralSetting: (key: string) => ephemerals[key],
-    getExcludeTools: () => [],
-    getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
-    getTelemetryLogPromptsEnabled: () =>
-      Boolean(settingsSnapshot?.telemetry?.enabled),
-    // Use foreground config's scheduler singleton methods
-    getOrCreateScheduler: (sessionId, callbacks, options, dependencies) =>
-      foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
-        messageBus: dependencies?.messageBus ?? messageBus,
-      }),
-    disposeScheduler: (sessionId) =>
-      foregroundConfig.disposeScheduler(sessionId),
-  };
-}
-
-function buildEphemeralSettings(
-  snapshot?: ReadonlySettingsSnapshot,
-): Record<string, unknown> {
-  const ephemerals: Record<string, unknown> = {};
-
-  if (!snapshot) {
-    ephemerals.emojifilter = 'auto';
-    return ephemerals;
-  }
-
-  // Read emojifilter from settings snapshot if available
-  if (snapshot.emojifilter !== undefined) {
-    ephemerals.emojifilter = snapshot.emojifilter;
-  } else {
-    ephemerals.emojifilter = 'auto';
-  }
-
-  if (snapshot.tools?.allowed) {
-    ephemerals['tools.allowed'] = [...snapshot.tools.allowed];
-  }
-  if (snapshot.tools?.disabled) {
-    ephemerals['tools.disabled'] = [...snapshot.tools.disabled];
-  }
-
-  return ephemerals;
-}
-
-/**
- * Replaces `${...}` tokens in a template string with values from a context.
- *
- * This function identifies all `${key}` tokens, validates that each key exists
- * in the provided `ContextState`, and then performs the substitution.
- *
- * @param template The template string containing `${key}` tokens.
- * @param context The `ContextState` object providing token values.
- * @returns The populated string with all `${key}` tokens replaced.
- * @throws {Error} if any required key is not found in the context.
- */
 /**
  * Represents the scope and execution environment for a subagent.
  * This class orchestrates the subagent's lifecycle, managing its chat interactions,
@@ -328,15 +177,7 @@ export class SubAgentScope {
   private createEmojiFilter(
     settingsSnapshot?: ReadonlySettingsSnapshot,
   ): EmojiFilter | undefined {
-    const filterMode =
-      (settingsSnapshot?.emojifilter as EmojiFilterMode) ?? 'auto';
-
-    if (filterMode === 'allowed') {
-      const noFilter: EmojiFilter | undefined = void 0;
-      return noFilter;
-    }
-
-    return new EmojiFilter({ mode: filterMode });
+    return createEmojiFilter(settingsSnapshot);
   }
 
   /**
@@ -1324,91 +1165,11 @@ export class SubAgentScope {
   }
 
   private createSchedulerConfig(options?: { interactive?: boolean }): Config {
-    const isInteractive = options?.interactive ?? false;
-
-    // Get ephemeral settings from toolExecutorContext, which already has
-    // tools.allowed set correctly by createToolExecutionConfig.
-    // This avoids duplicating whitelist logic here.
-    const getEphemeralSettings =
-      typeof this.toolExecutorContext.getEphemeralSettings === 'function'
-        ? () => ({
-            ...this.toolExecutorContext.getEphemeralSettings(),
-          })
-        : () => this.config.getEphemeralSettings();
-
-    const getEphemeralSetting = (key: string): unknown => {
-      const settings = getEphemeralSettings();
-      return settings[key];
-    };
-
-    const getExcludeTools =
-      typeof this.toolExecutorContext.getExcludeTools === 'function'
-        ? () => this.toolExecutorContext.getExcludeTools()
-        : () => this.config.getExcludeTools?.() ?? [];
-
-    const getTelemetryLogPromptsEnabled =
-      typeof this.toolExecutorContext.getTelemetryLogPromptsEnabled ===
-      'function'
-        ? () => this.toolExecutorContext.getTelemetryLogPromptsEnabled()
-        : () => this.config.getTelemetryLogPromptsEnabled();
-
-    // Read allowed tools from ephemeral settings (tools.allowed) which is the
-    // canonical source set by createToolExecutionConfig. This ensures consistent
-    // behavior with the governance path (buildToolGovernance reads from ephemerals).
-    const getAllowedTools = (): string[] | undefined => {
-      const ephemerals = getEphemeralSettings();
-      const allowed = ephemerals['tools.allowed'];
-      if (Array.isArray(allowed)) {
-        return allowed.filter(
-          (entry): entry is string => typeof entry === 'string',
-        );
-      }
-      // Fall back to parent config's allowed tools
-      return typeof this.config.getAllowedTools === 'function'
-        ? this.config.getAllowedTools()
-        : undefined;
-    };
-
-    return {
-      getToolRegistry: () => this.toolExecutorContext.getToolRegistry(),
-      getSessionId: () => this.toolExecutorContext.getSessionId(),
-      getEphemeralSettings,
-      getEphemeralSetting,
-      getExcludeTools,
-      getTelemetryLogPromptsEnabled,
-      getAllowedTools,
-      getApprovalMode: () =>
-        typeof this.config.getApprovalMode === 'function'
-          ? this.config.getApprovalMode()
-          : ApprovalMode.DEFAULT,
-      getPolicyEngine: () => this.config.getPolicyEngine(),
-      getOrCreateScheduler: (
-        sessionId: string,
-        callbacks: SchedulerCallbacks,
-        schedulerOptions?: SchedulerOptions,
-        dependencies?: {
-          messageBus?: import('../index.js').MessageBus;
-        },
-      ) =>
-        this.config.getOrCreateScheduler(
-          sessionId,
-          callbacks,
-          {
-            ...schedulerOptions,
-            interactiveMode: isInteractive,
-          },
-          dependencies,
-        ),
-      disposeScheduler: (sessionId: string) => {
-        this.config.disposeScheduler(sessionId);
-      },
-      // Hook system delegation - enables BeforeTool/AfterTool hooks for subagents
-      getEnableHooks: () => this.config.getEnableHooks?.() ?? false,
-      getHooks: () => this.config.getHooks?.(),
-      getHookSystem: () => this.config.getHookSystem?.(),
-      getWorkingDir: () => this.config.getWorkingDir?.() ?? process.cwd(),
-      getTargetDir: () => this.config.getTargetDir?.() ?? process.cwd(),
-    } as unknown as Config;
+    return createSchedulerConfig(
+      this.toolExecutorContext,
+      this.config,
+      options,
+    );
   }
 
   private finalizeOutput(): void {
@@ -1670,165 +1431,26 @@ export class SubAgentScope {
    * @plan PLAN-20251028-STATELESS6.P08
    * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
    * @pseudocode agent-runtime-context.md line 99 (step 007.7)
-   *
-   * Step 007.7: Update GeminiChat instantiation to use AgentRuntimeContext
-   * Step 007.8: REMOVE Config mutation (no setModel call)
    */
   private async createChatObject(context: ContextState) {
-    if (!this.promptConfig.systemPrompt && !this.promptConfig.initialMessages) {
-      throw new Error(
-        'PromptConfig must have either `systemPrompt` or `initialMessages` defined.',
-      );
-    }
-    if (this.promptConfig.systemPrompt && this.promptConfig.initialMessages) {
-      throw new Error(
-        'PromptConfig cannot have both `systemPrompt` and `initialMessages` defined.',
-      );
-    }
-
-    const start_history = [...(this.promptConfig.initialMessages ?? [])];
-
-    // Build system instruction with environment context
-    const personaPrompt = this.promptConfig.systemPrompt
-      ? this.buildChatSystemPrompt(context)
-      : '';
-
-    const runtimeFunctionDeclarations = this.buildRuntimeFunctionDeclarations();
-    const scopeLocalDeclarations =
-      this.outputConfig && this.outputConfig.outputs
-        ? this.getScopeLocalFuncDefs()
-        : [];
-    const combinedDeclarations = [
-      ...runtimeFunctionDeclarations,
-      ...scopeLocalDeclarations,
-    ];
-
-    const envParts = await this.environmentContextLoader(this.runtimeContext);
-
-    // Extract environment context text
-    const envContextText = envParts
-      .map((part) => ('text' in part ? part.text : ''))
-      .join('\n')
-      .trim();
-
-    const toolNames = Array.from(
-      new Set(
-        combinedDeclarations
-          .map((declaration) => declaration?.name?.trim())
-          .filter((name): name is string => Boolean(name && name.length > 0)),
-      ),
-    );
-
-    const mcpInstructions = this.config
-      .getMcpClientManager()
-      ?.getMcpInstructions();
-    const coreSystemPrompt = await getCoreSystemPromptAsync({
-      mcpInstructions,
-      model: this.modelConfig.model,
-      tools: toolNames,
-      includeSubagentDelegation: false,
-      interactionMode: 'subagent',
+    return createChatObject({
+      promptConfig: this.promptConfig,
+      modelConfig: this.modelConfig,
+      outputConfig: this.outputConfig,
+      toolConfig: this.toolConfig,
+      runtimeContext: this.runtimeContext,
+      contentGenerator: this.contentGenerator,
+      environmentContextLoader: this.environmentContextLoader,
+      foregroundConfig: this.config,
+      context,
     });
-
-    const instructionSections = [
-      envContextText,
-      coreSystemPrompt?.trim() ?? '',
-      personaPrompt?.trim() ?? '',
-    ].filter((section) => section.length > 0);
-
-    const systemInstruction =
-      instructionSections.length > 0 ? instructionSections.join('\n\n') : '';
-
-    this.logger.debug(() => {
-      const preview =
-        systemInstruction && systemInstruction.length > 0
-          ? systemInstruction.slice(0, 1200)
-          : '<empty>';
-      return `System instruction preview: ${preview}`;
-    });
-
-    try {
-      // Step 007.7: Build generation config from runtime view ephemerals
-      // @plan PLAN-20251028-STATELESS6.P08
-      // @requirement REQ-STAT6-002.2
-      const generationConfig: GenerateContentConfig & {
-        systemInstruction?: string | Content;
-      } = {
-        temperature: this.modelConfig.temp,
-        topP: this.modelConfig.top_p,
-        systemInstruction: systemInstruction || undefined,
-        tools:
-          combinedDeclarations.length > 0
-            ? [{ functionDeclarations: combinedDeclarations }]
-            : undefined,
-      };
-
-      // Step 007.7: Instantiate GeminiChat with runtime view
-      // @plan PLAN-20251028-STATELESS6.P10
-      // @requirement REQ-STAT6-001.2, REQ-STAT6-003.1, REQ-STAT6-003.2
-      // @pseudocode agent-runtime-context.md line 99 (step 007.7)
-      // NOTE: NO Config.setModel() call - REQ-STAT6-003.1 (step 007.8)
-      // NOTE: GeminiChat operates solely on runtime context
-      return new GeminiChat(
-        this.runtimeContext, // AgentRuntimeContext (replaces runtimeState+config+history)
-        this.contentGenerator,
-        generationConfig,
-        start_history,
-      );
-    } catch (error) {
-      await reportError(
-        error,
-        'Error initializing Gemini chat session.',
-        start_history,
-        'startChat',
-      );
-      // The calling function handles the missing chat object result.
-      const missingChatObject: GeminiChat | undefined = void 0;
-      return missingChatObject;
-    }
   }
 
   private buildRuntimeFunctionDeclarations(): FunctionDeclaration[] {
-    if (!this.toolConfig || this.toolConfig.tools.length === 0) {
-      const noFunctionDeclarations: FunctionDeclaration[] = [];
-      return noFunctionDeclarations;
-    }
-
-    const toolsView = this.runtimeContext.tools;
-    const listedNames =
-      typeof toolsView.listToolNames === 'function'
-        ? toolsView.listToolNames()
-        : [];
-    const allowedNames = new Set(listedNames.map(normalizeToolName));
-
-    const declarations: FunctionDeclaration[] = [];
-    for (const entry of this.toolConfig.tools) {
-      if (typeof entry !== 'string') {
-        declarations.push(entry);
-        continue;
-      }
-
-      if (
-        allowedNames.size > 0 &&
-        !allowedNames.has(normalizeToolName(entry))
-      ) {
-        debugLogger.warn(
-          `Tool "${entry}" is not permitted by the runtime view and is skipped.`,
-        );
-        continue;
-      }
-
-      const metadata = toolsView.getToolMetadata(entry);
-      if (!metadata) {
-        debugLogger.warn(
-          `Tool "${entry}" is not available in the runtime view and is skipped.`,
-        );
-        continue;
-      }
-
-      declarations.push(convertMetadataToFunctionDeclaration(entry, metadata));
-    }
-    return declarations;
+    return buildRuntimeFunctionDeclarations(
+      this.runtimeContext.tools,
+      this.toolConfig,
+    );
   }
 
   /**
@@ -1837,28 +1459,7 @@ export class SubAgentScope {
    * @returns An array of `FunctionDeclaration` objects.
    */
   private getScopeLocalFuncDefs() {
-    const emitValueTool: FunctionDeclaration = {
-      name: 'self_emitvalue',
-      description: `* This tool emits A SINGLE return value from this execution, such that it can be collected and presented to the calling function.
-        * You can only emit ONE VALUE each time you call this tool. You are expected to call this tool MULTIPLE TIMES if you have MULTIPLE OUTPUTS.`,
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          emit_variable_name: {
-            description: 'This is the name of the variable to be returned.',
-            type: Type.STRING,
-          },
-          emit_variable_value: {
-            description:
-              'This is the _value_ to be returned for this variable.',
-            type: Type.STRING,
-          },
-        },
-        required: ['emit_variable_name', 'emit_variable_value'],
-      },
-    };
-
-    return [emitValueTool];
+    return getScopeLocalFuncDefs(this.outputConfig);
   }
 
   private normalizeToolName(rawName: string | undefined): string | null {
@@ -1905,39 +1506,4 @@ export class SubAgentScope {
       .toLowerCase();
   }
 
-  /**
-   * Builds the system prompt for the chat based on the provided configurations.
-   * It templates the base system prompt and appends instructions for emitting
-   * variables if an `OutputConfig` is provided.
-   * @param {ContextState} context - The context for templating.
-   * @returns {string} The complete system prompt.
-   */
-  private buildChatSystemPrompt(context: ContextState): string {
-    if (!this.promptConfig.systemPrompt) {
-      // createChatObject normally guards this path; this branch keeps the prompt builder defensive.
-      return '';
-    }
-
-    let finalPrompt = templateString(this.promptConfig.systemPrompt, context);
-
-    // Add instructions for emitting variables if needed.
-    if (this.outputConfig && this.outputConfig.outputs) {
-      let outputInstructions =
-        '\n\nAfter you have achieved all other goals, you MUST emit the required output variables. For each expected output, make one final call to the `self_emitvalue` tool.';
-
-      for (const [key, value] of Object.entries(this.outputConfig.outputs)) {
-        outputInstructions += `\n* Use 'self_emitvalue' to emit the '${key}' key, with a value described as: '${value}'`;
-      }
-      finalPrompt += outputInstructions;
-    }
-
-    // Add general non-interactive instructions.
-    finalPrompt += `
-
-Important Rules:
- * You are running in a non-interactive mode. You CANNOT ask the user for input or clarification. You must proceed with the information you have.
- * Once you believe all goals have been met and all required outputs have been emitted, stop calling tools.`;
-
-    return finalPrompt;
-  }
 }

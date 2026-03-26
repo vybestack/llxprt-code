@@ -6,9 +6,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 
-// These module references will be populated at runtime inside the skipped block.
-// The imports target subagentRuntimeSetup.js which does not exist yet — it will be created
-// in Phase 2. The describe.skip wrapper keeps CI green in the meantime.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let convertMetadataToFunctionDeclaration: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,19 +15,17 @@ let createToolExecutionConfig: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let buildEphemeralSettings: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildChatGenerationConfig: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let buildRuntimeFunctionDeclarations: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let getScopeLocalFuncDefs: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let buildChatSystemPrompt: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let buildSchedulerConfig: any;
+let createSchedulerConfig: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let applySchedulerToolRestrictions: any;
+let createEmojiFilter: any;
 
-describe.skip('subagentRuntimeSetup (enable in Phase 2)', () => {
+describe('subagentRuntimeSetup', () => {
   beforeAll(async () => {
     const mod = await import('./subagentRuntimeSetup.js');
     convertMetadataToFunctionDeclaration =
@@ -38,12 +33,11 @@ describe.skip('subagentRuntimeSetup (enable in Phase 2)', () => {
     validateToolsAgainstRuntime = mod.validateToolsAgainstRuntime;
     createToolExecutionConfig = mod.createToolExecutionConfig;
     buildEphemeralSettings = mod.buildEphemeralSettings;
-    buildChatGenerationConfig = mod.buildChatGenerationConfig;
     buildRuntimeFunctionDeclarations = mod.buildRuntimeFunctionDeclarations;
     getScopeLocalFuncDefs = mod.getScopeLocalFuncDefs;
     buildChatSystemPrompt = mod.buildChatSystemPrompt;
-    buildSchedulerConfig = mod.buildSchedulerConfig;
-    applySchedulerToolRestrictions = mod.applySchedulerToolRestrictions;
+    createSchedulerConfig = mod.createSchedulerConfig;
+    createEmojiFilter = mod.createEmojiFilter;
   });
 
   describe('convertMetadataToFunctionDeclaration', () => {
@@ -223,23 +217,20 @@ describe.skip('subagentRuntimeSetup (enable in Phase 2)', () => {
     });
   });
 
-  describe('buildChatGenerationConfig', () => {
-    it('should set temperature from modelConfig', () => {
-      const modelConfig = { model: 'gemini-1.5-flash', temp: 0.7, top_p: 1 };
-      const genConfig = buildChatGenerationConfig(modelConfig);
-      expect(genConfig.temperature).toBe(0.7);
+  describe('createEmojiFilter', () => {
+    it('should return EmojiFilter for auto mode', () => {
+      const filter = createEmojiFilter({ emojifilter: 'auto' });
+      expect(filter).toBeDefined();
     });
 
-    it('should set topP from modelConfig', () => {
-      const modelConfig = { model: 'gemini-1.5-flash', temp: 0.5, top_p: 0.9 };
-      const genConfig = buildChatGenerationConfig(modelConfig);
-      expect(genConfig.topP).toBe(0.9);
+    it('should return undefined for allowed mode', () => {
+      const filter = createEmojiFilter({ emojifilter: 'allowed' });
+      expect(filter).toBeUndefined();
     });
 
-    it('should handle defaults when optional fields missing', () => {
-      const modelConfig = { model: 'gemini-1.5-flash', temp: 1, top_p: 1 };
-      const genConfig = buildChatGenerationConfig(modelConfig);
-      expect(genConfig).toBeDefined();
+    it('should default to auto when no snapshot', () => {
+      const filter = createEmojiFilter(undefined);
+      expect(filter).toBeDefined();
     });
   });
 
@@ -306,51 +297,72 @@ describe.skip('subagentRuntimeSetup (enable in Phase 2)', () => {
   });
 
   describe('buildChatSystemPrompt', () => {
-    it('should combine core system prompt with behaviour prompts', () => {
-      const params = {
-        corePrompt: 'You are a helpful assistant.',
-        behaviourPrompts: ['Be concise.', 'Be accurate.'],
+    it('should template systemPrompt and add non-interactive rules', () => {
+      const promptConfig = {
+        systemPrompt: 'You are a ${role}.',
+        goal_prompt: 'Do something.',
+        behaviour_prompts: [],
       };
-      const result = buildChatSystemPrompt(params);
-      expect(result).toContain('You are a helpful assistant.');
-      expect(result).toContain('Be concise.');
+      const context = { get: (k: string) => (k === 'role' ? 'tester' : ''), get_keys: () => ['role'], set: () => {} };
+      const result = buildChatSystemPrompt(promptConfig, undefined, context);
+      expect(result).toContain('You are a tester.');
+      expect(result).toContain('non-interactive');
     });
 
-    it('should handle empty behaviour prompts', () => {
-      const params = {
-        corePrompt: 'You are a helpful assistant.',
-        behaviourPrompts: [],
+    it('should add output instructions when outputConfig has outputs', () => {
+      const promptConfig = {
+        systemPrompt: 'Hello',
+        goal_prompt: 'Do something.',
+        behaviour_prompts: [],
       };
-      const result = buildChatSystemPrompt(params);
-      expect(result).toContain('You are a helpful assistant.');
+      const outputConfig = { outputs: { summary: 'A summary' } };
+      const context = { get: () => '', get_keys: () => [], set: () => {} };
+      const result = buildChatSystemPrompt(promptConfig, outputConfig, context);
+      expect(result).toContain('self_emitvalue');
+      expect(result).toContain('summary');
+    });
+
+    it('should return empty string when no systemPrompt', () => {
+      const promptConfig = {
+        goal_prompt: 'Do something.',
+        behaviour_prompts: [],
+      };
+      const context = { get: () => '', get_keys: () => [], set: () => {} };
+      const result = buildChatSystemPrompt(promptConfig, undefined, context);
+      expect(result).toBe('');
     });
   });
 
-  describe('buildSchedulerConfig', () => {
-    it('should create Config with correct model and run settings', () => {
-      const params = {
-        model: 'gemini-1.5-flash',
-        sessionId: 'scheduler-session',
-        approvalMode: 'DEFAULT',
-        toolConfig: { tools: [] },
+  describe('createSchedulerConfig', () => {
+    it('should return a Config-shaped object', () => {
+      const mockToolExecCtx = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'test-session',
+        getEphemeralSettings: () => ({}),
+        getEphemeralSetting: () => undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: () => ({}),
+        disposeScheduler: () => {},
       };
-      const config = buildSchedulerConfig(params);
+      const mockConfig = {
+        getApprovalMode: () => 'DEFAULT',
+        getPolicyEngine: () => undefined,
+        getOrCreateScheduler: () => ({}),
+        disposeScheduler: () => {},
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getAllowedTools: () => undefined,
+        getEnableHooks: () => false,
+        getHooks: () => undefined,
+        getHookSystem: () => undefined,
+        getWorkingDir: () => '/tmp',
+        getTargetDir: () => '/tmp',
+      };
+      const config = createSchedulerConfig(mockToolExecCtx, mockConfig);
       expect(config).toBeDefined();
-    });
-  });
-
-  describe('applySchedulerToolRestrictions', () => {
-    it('should apply whitelist to scheduler config', () => {
-      const baseConfig = {};
-      const toolConfig = { tools: ['allowed_tool'] };
-      const result = applySchedulerToolRestrictions(baseConfig, toolConfig);
-      expect(result).toBeDefined();
-    });
-
-    it('should handle no restrictions', () => {
-      const baseConfig = {};
-      const result = applySchedulerToolRestrictions(baseConfig, undefined);
-      expect(result).toBeDefined();
+      expect(typeof config.getSessionId).toBe('function');
     });
   });
 });
