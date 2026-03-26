@@ -22,6 +22,7 @@ export interface FileSearchOptions {
   enableRecursiveFileSearch: boolean;
   disableFuzzySearch: boolean;
   maxDepth?: number;
+  maxFiles?: number;
 }
 
 export class AbortError extends Error {
@@ -107,7 +108,9 @@ class RecursiveFileSearch implements FileSearch {
       cache: this.options.cache,
       cacheTtl: this.options.cacheTtl,
       maxDepth: this.options.maxDepth,
+      maxFiles: this.options.maxFiles ?? 20000,
     });
+
     this.buildResultCache();
   }
 

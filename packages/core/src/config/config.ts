@@ -468,6 +468,8 @@ export interface ConfigParameters {
     respectLlxprtIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
     disableFuzzySearch?: boolean;
+    maxFileCount?: number;
+    searchTimeout?: number;
   };
   checkpointing?: boolean;
   dumpOnError?: boolean;
@@ -606,6 +608,8 @@ export class Config {
     respectLlxprtIgnore: boolean;
     enableRecursiveFileSearch: boolean;
     disableFuzzySearch: boolean;
+    maxFileCount: number;
+    searchTimeout: number;
   };
   private alwaysAllowedCommands: Set<string> = new Set();
   private fileDiscoveryService: FileDiscoveryService | null = null;
@@ -880,6 +884,14 @@ export class Config {
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
       disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
+      maxFileCount:
+        params.fileFiltering?.maxFileCount ??
+        DEFAULT_FILE_FILTERING_OPTIONS.maxFileCount ??
+        20000,
+      searchTimeout:
+        params.fileFiltering?.searchTimeout ??
+        DEFAULT_FILE_FILTERING_OPTIONS.searchTimeout ??
+        5000,
     };
     this.checkpointing = params.checkpointing ?? false;
     this.dumpOnError = params.dumpOnError ?? false;
@@ -1822,6 +1834,8 @@ export class Config {
     return {
       respectGitIgnore: this.fileFiltering.respectGitIgnore,
       respectLlxprtIgnore: this.fileFiltering.respectLlxprtIgnore,
+      maxFileCount: this.fileFiltering.maxFileCount,
+      searchTimeout: this.fileFiltering.searchTimeout,
     };
   }
 

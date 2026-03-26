@@ -274,6 +274,26 @@ export const SETTINGS_SCHEMA = {
         description: 'Disable fuzzy search when searching for files.',
         showInDialog: true,
       },
+      maxFileCount: {
+        type: 'number',
+        label: 'Max File Count',
+        category: 'File Filtering',
+        requiresRestart: true,
+        default: 20000,
+        description:
+          'Maximum number of files to index during file search. Prevents OOM on large projects.',
+        showInDialog: true,
+      },
+      searchTimeout: {
+        type: 'number',
+        label: 'Search Timeout (ms)',
+        category: 'File Filtering',
+        requiresRestart: true,
+        default: 5000,
+        description:
+          'Timeout in milliseconds for file search operations.',
+        showInDialog: true,
+      },
     },
   },
 
