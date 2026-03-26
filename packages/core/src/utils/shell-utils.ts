@@ -383,6 +383,50 @@ function detectCommandSubstitutionRegex(command: string): boolean {
 }
 
 /**
+ * Detects whether a shell command contains redirection operators (>, >>, <, 2>, &>)
+ * or pipe operators (|), respecting shell quoting rules.
+ * Single-quoted content is treated as fully literal.
+ * @param command The shell command string to check
+ * @returns true if the command contains redirection or pipe operators outside quotes
+ */
+export function hasRedirection(command: string): boolean {
+  let inSingleQuotes = false;
+  let inDoubleQuotes = false;
+  let i = 0;
+
+  while (i < command.length) {
+    const char = command[i];
+
+    // Handle escaping outside single quotes
+    if (char === '\\' && !inSingleQuotes && i < command.length - 1) {
+      i += 2;
+      continue;
+    }
+
+    if (char === "'" && !inDoubleQuotes) {
+      inSingleQuotes = !inSingleQuotes;
+    } else if (char === '"' && !inSingleQuotes) {
+      inDoubleQuotes = !inDoubleQuotes;
+    }
+
+    if (!inSingleQuotes && !inDoubleQuotes) {
+      // Redirection: >, >>, <, 2>, &>, >&
+      if (char === '>' || char === '<') {
+        return true;
+      }
+      // Pipe: single | (not ||, which is a logical operator)
+      if (char === '|' && command[i + 1] !== '|') {
+        return true;
+      }
+    }
+
+    i++;
+  }
+
+  return false;
+}
+
+/**
  * Checks a shell command against security policies and allowlists.
  *
  * This function operates in one of two modes depending on the presence of

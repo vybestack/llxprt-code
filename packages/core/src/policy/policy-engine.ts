@@ -4,7 +4,11 @@ import {
   type PolicyRule,
 } from './types.js';
 import { stableStringify } from './stable-stringify.js';
-import { SHELL_TOOL_NAMES, splitCommands } from '../utils/shell-utils.js';
+import {
+  SHELL_TOOL_NAMES,
+  splitCommands,
+  hasRedirection,
+} from '../utils/shell-utils.js';
 
 /**
  * PolicyEngine evaluates tool execution requests against configured rules.
@@ -102,7 +106,7 @@ export class PolicyEngine {
           }
 
           // Check for redirections in allowed commands
-          if (!matchingRule.allowRedirection && /[>&|]/.test(command)) {
+          if (!matchingRule.allowRedirection && hasRedirection(command)) {
             // Downgrade to ASK_USER unless explicitly allowed
             return this.nonInteractive
               ? PolicyDecision.DENY

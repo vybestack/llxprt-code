@@ -563,4 +563,83 @@ describe('PolicyEngine', () => {
       expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ASK_USER); // write tool
     });
   });
+
+  describe('redirection handling', () => {
+    it('should downgrade ALLOW to ASK_USER for command with redirection when allowRedirection is false', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'echo hello > out.txt',
+      });
+      expect(result).toBe(PolicyDecision.ASK_USER);
+    });
+
+    it('should allow redirection when allowRedirection is true on the rule', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          {
+            toolName: 'run_shell_command',
+            decision: PolicyDecision.ALLOW,
+            allowRedirection: true,
+          },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'echo hello > out.txt',
+      });
+      expect(result).toBe(PolicyDecision.ALLOW);
+    });
+
+    it('should downgrade compound command with redirection to ASK_USER even if base commands are allowed', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'git log && cat file.txt > out.txt',
+      });
+      expect(result).toBe(PolicyDecision.ASK_USER);
+    });
+
+    it('should return DENY for redirection in non-interactive mode', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+        nonInteractive: true,
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'echo hello > out.txt',
+      });
+      expect(result).toBe(PolicyDecision.DENY);
+    });
+
+    it('should allow compound command without redirection if base commands are allowed', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'git status && npm test',
+      });
+      expect(result).toBe(PolicyDecision.ALLOW);
+    });
+
+    it('should not false-positive on redirection characters inside quotes', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'echo "use > to redirect"',
+      });
+      expect(result).toBe(PolicyDecision.ALLOW);
+    });
+  });
 });

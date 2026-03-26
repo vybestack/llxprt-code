@@ -16,14 +16,21 @@ import type {
 import {
   IdeClient,
   ToolConfirmationOutcome,
+  hasRedirection,
 } from '@vybestack/llxprt-code-core';
 import type { RadioSelectItem } from '../shared/RadioButtonSelect.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
-import { MaxSizedBox } from '../shared/MaxSizedBox.js';
+import { MaxSizedBox, MINIMUM_MAX_HEIGHT } from '../shared/MaxSizedBox.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { theme } from '../../semantic-colors.js';
 import { useAlternateBuffer } from '../../hooks/useAlternateBuffer.js';
 import { useSettings } from '../../contexts/SettingsContext.js';
+import {
+  REDIRECTION_WARNING_NOTE_LABEL,
+  REDIRECTION_WARNING_NOTE_TEXT,
+  REDIRECTION_WARNING_TIP_LABEL,
+  REDIRECTION_WARNING_TIP_TEXT,
+} from '../../textConstants.js';
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
@@ -277,37 +284,78 @@ export const ToolConfirmationMessage: React.FC<
       }
     } else if (confirmationDetails.type === 'exec') {
       const executionProps = confirmationDetails;
-      let bodyContentHeight = availableBodyContentHeight();
-      if (bodyContentHeight !== undefined) {
-        // Account for padding, clamped to avoid negative values on very short terminals
-        bodyContentHeight = Math.max(bodyContentHeight - 2, 1);
-      }
 
-      const commandBox = (
-        <Box flexDirection="column">
-          {executionProps.commands && executionProps.commands.length > 1 ? (
-            executionProps.commands.map((cmd, idx) => (
-              <Text key={idx} color={theme.text.link}>
-                {cmd}
-              </Text>
-            ))
-          ) : (
-            <Box>
-              <Text color={theme.text.link}>{executionProps.command}</Text>
-            </Box>
-          )}
-        </Box>
+      const commandsToDisplay =
+        executionProps.commands && executionProps.commands.length > 1
+          ? executionProps.commands
+          : [executionProps.command];
+      const containsRedirection = commandsToDisplay.some((cmd) =>
+        hasRedirection(cmd),
       );
 
-      bodyContent = isAlternateBuffer ? (
-        commandBox
-      ) : (
-        <MaxSizedBox
-          maxHeight={bodyContentHeight}
-          maxWidth={Math.max(terminalWidth, 1)}
-        >
-          {commandBox}
-        </MaxSizedBox>
+      let bodyContentHeight = availableBodyContentHeight();
+      let warnings: React.ReactNode = null;
+
+      if (bodyContentHeight !== undefined) {
+        bodyContentHeight -= 2; // Account for padding
+      }
+
+      if (containsRedirection) {
+        const safeWidth = Math.max(terminalWidth, 1);
+        const noteLength =
+          REDIRECTION_WARNING_NOTE_LABEL.length +
+          REDIRECTION_WARNING_NOTE_TEXT.length;
+        const tipLength =
+          REDIRECTION_WARNING_TIP_LABEL.length +
+          REDIRECTION_WARNING_TIP_TEXT.length;
+
+        const noteLines = Math.ceil(noteLength / safeWidth);
+        const tipLines = Math.ceil(tipLength / safeWidth);
+        const spacerLines = 1;
+        const warningHeight = noteLines + tipLines + spacerLines;
+
+        if (bodyContentHeight !== undefined) {
+          bodyContentHeight = Math.max(
+            bodyContentHeight - warningHeight,
+            MINIMUM_MAX_HEIGHT,
+          );
+        }
+
+        warnings = (
+          <>
+            <Box height={1} />
+            <Box>
+              <Text color={theme.text.primary}>
+                <Text bold>{REDIRECTION_WARNING_NOTE_LABEL}</Text>
+                {REDIRECTION_WARNING_NOTE_TEXT}
+              </Text>
+            </Box>
+            <Box>
+              <Text color={theme.border.default}>
+                <Text bold>{REDIRECTION_WARNING_TIP_LABEL}</Text>
+                {REDIRECTION_WARNING_TIP_TEXT}
+              </Text>
+            </Box>
+          </>
+        );
+      }
+
+      bodyContent = (
+        <Box flexDirection="column">
+          <MaxSizedBox
+            maxHeight={bodyContentHeight}
+            maxWidth={Math.max(terminalWidth, 1)}
+          >
+            <Box flexDirection="column">
+              {commandsToDisplay.map((cmd, idx) => (
+                <Text key={idx} color={theme.text.link}>
+                  {cmd}
+                </Text>
+              ))}
+            </Box>
+          </MaxSizedBox>
+          {warnings}
+        </Box>
       );
     } else if (confirmationDetails.type === 'info') {
       const infoProps = confirmationDetails;
