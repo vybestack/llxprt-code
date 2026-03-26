@@ -439,13 +439,17 @@ export class TokenAccessCoordinator {
       return token.access_token;
     }
 
-    // @fix issue1616: Peek other profile buckets before triggering full re-auth
-    const peekResult = await this.peekOtherProfileBuckets(
-      providerName,
-      requestMetadata,
-    );
-    if (peekResult !== null) {
-      return peekResult;
+    // @fix issue1616: Peek other profile buckets before triggering full re-auth.
+    // Only for implicit (session-resolved) requests — explicit bucket requests
+    // must stay pinned to the requested bucket.
+    if (!explicitBucket) {
+      const peekResult = await this.peekOtherProfileBuckets(
+        providerName,
+        requestMetadata,
+      );
+      if (peekResult !== null) {
+        return peekResult;
+      }
     }
 
     // Check if we should require OAuth to be enabled for new auth
@@ -594,6 +598,11 @@ export class TokenAccessCoordinator {
             providerName,
             peekBucket,
             requestMetadata,
+          );
+          this.proactiveRenewalManager.scheduleProactiveRenewal(
+            providerName,
+            peekBucket,
+            peekToken,
           );
           return peekToken.access_token;
         }

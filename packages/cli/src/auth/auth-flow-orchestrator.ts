@@ -671,10 +671,6 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
       logger.debug('TUI not ready, falling back to delay-based prompt');
 
-      if (showPrompt && process.stdin.isTTY) {
-        return this.waitForStdinKeypress(bucket);
-      }
-
       const delay = getEphemeralSetting<number>('auth-bucket-delay') ?? 5000;
       debugLogger.log(`\nReady to authenticate bucket: ${bucket}`);
       debugLogger.log(
@@ -765,8 +761,12 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         state.restore();
       };
 
-      const onData = (): void => {
+      const onData = (data: Buffer): void => {
         cleanup();
+        if (data.length > 0 && data[0] === 0x03) {
+          reject(new Error('User cancelled with Ctrl+C'));
+          return;
+        }
         resolve();
       };
 

@@ -226,11 +226,14 @@ export async function getHigherPriorityAuth(
   }
 
   const merged = settings.merged;
-  const settingsService = getSettingsService();
-  const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
-
-  if (authOnly) {
-    return null;
+  try {
+    const settingsService = getSettingsService();
+    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
+    if (authOnly) {
+      return null;
+    }
+  } catch {
+    // SettingsService not registered (subagent/test context) — skip authOnly check
   }
 
   if (merged.providerApiKeys && merged.providerApiKeys[providerName]) {

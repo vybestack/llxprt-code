@@ -121,23 +121,25 @@ export class AuthStatusService {
 
     const oauthEnabled = this.providerRegistry.isOAuthEnabled(providerName);
 
+    if (!oauthEnabled) {
+      return false;
+    }
+
     // G1: consult provider override only when OAuth is enabled
-    if (oauthEnabled) {
-      const provider = this.providerRegistry.getProvider(providerName);
-      if (provider?.isAuthenticated) {
-        try {
-          const overrideResult = await provider.isAuthenticated();
-          if (overrideResult) {
-            return true;
-          }
-          // Override returned false → fall through to token-store check
-        } catch (err) {
-          logger.debug(
-            `provider.isAuthenticated() threw for ${providerName}, falling back to token store:`,
-            err,
-          );
-          // Fall through to token-store check
+    const provider = this.providerRegistry.getProvider(providerName);
+    if (provider?.isAuthenticated) {
+      try {
+        const overrideResult = await provider.isAuthenticated();
+        if (overrideResult) {
+          return true;
         }
+        // Override returned false → fall through to token-store check
+      } catch (err) {
+        logger.debug(
+          `provider.isAuthenticated() threw for ${providerName}, falling back to token store:`,
+          err,
+        );
+        // Fall through to token-store check
       }
     }
 

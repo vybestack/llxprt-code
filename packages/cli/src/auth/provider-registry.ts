@@ -128,8 +128,9 @@ export class ProviderRegistry {
     this.inMemoryOAuthState.set(providerName, enabled);
 
     if (this.settings) {
-      const oauthEnabledProviders =
-        this.settings.merged.oauthEnabledProviders || {};
+      const oauthEnabledProviders = {
+        ...(this.settings.merged.oauthEnabledProviders || {}),
+      };
       oauthEnabledProviders[providerName] = enabled;
       this.settings.setValue(
         SettingScope.User,
