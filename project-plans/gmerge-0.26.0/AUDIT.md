@@ -73,7 +73,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 645e2ec | REIMPLEMENTED | e62e45099 | Ctrl+Enter/Ctrl+J — PASS (code already present, tests added) |
 | b288f12 | REIMPLEMENTED | bc456e0e2 | MCP client version — PASS |
 | 211d2c5 | REIMPLEMENTED | d160f64ef | **HIGH** hooks event names split — PASS |
-| aceb06a | REIMPLEMENTED | | newline fix |
+| aceb06a | REIMPLEMENTED | 0ab20d705 | newline fix — PASS |
 | e1fd5be | REIMPLEMENTED | | Esc-Esc clear |
 | 93ae777 | REIMPLEMENTED | | System scopes migration |
 | 0fa9a54 | REIMPLEMENTED | | auth failure |
