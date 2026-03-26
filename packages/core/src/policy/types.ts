@@ -51,6 +51,12 @@ export interface PolicyRule {
    * Default is false.
    */
   allowRedirection?: boolean;
+
+  /**
+   * Origin of the rule, e.g. "Default: defaults.toml", "Settings (MCP Trusted)",
+   * "Dynamic (Confirmed)".
+   */
+  source?: string;
 }
 
 export interface PolicyEngineConfig {
