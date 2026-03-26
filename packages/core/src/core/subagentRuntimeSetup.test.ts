@@ -303,7 +303,11 @@ describe('subagentRuntimeSetup', () => {
         goal_prompt: 'Do something.',
         behaviour_prompts: [],
       };
-      const context = { get: (k: string) => (k === 'role' ? 'tester' : ''), get_keys: () => ['role'], set: () => {} };
+      const context = {
+        get: (k: string) => (k === 'role' ? 'tester' : ''),
+        get_keys: () => ['role'],
+        set: () => {},
+      };
       const result = buildChatSystemPrompt(promptConfig, undefined, context);
       expect(result).toContain('You are a tester.');
       expect(result).toContain('non-interactive');

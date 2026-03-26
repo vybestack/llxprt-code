@@ -13,10 +13,7 @@
 
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config } from '../config/config.js';
-import {
-  type ToolCallRequestInfo,
-  type ToolCallResponseInfo,
-} from './turn.js';
+import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
@@ -31,10 +28,7 @@ import { type ToolResultDisplay } from '../tools/tools.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { TodoStore } from '../tools/todo-store.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import {
-  SubagentTerminateMode,
-  type OutputObject,
-} from './subagentTypes.js';
+import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
 import { createSchedulerConfig } from './subagentRuntimeSetup.js';
 
 // ---------------------------------------------------------------------------
@@ -164,8 +158,7 @@ export function finalizeOutput(output: OutputObject): void {
       baseMessage = 'Stopped because the time limit was reached.';
       break;
     case SubagentTerminateMode.MAX_TURNS:
-      baseMessage =
-        'Stopped because the maximum number of turns was reached.';
+      baseMessage = 'Stopped because the maximum number of turns was reached.';
       break;
     case SubagentTerminateMode.ERROR:
     default:
@@ -234,8 +227,7 @@ export function handleEmitValueCall(
   const errorMessage =
     'self_emitvalue requires emit_variable_name and emit_variable_value arguments.';
   ctx.logger.warn(
-    () =>
-      `Subagent ${ctx.subagentId} failed to emit value: ${errorMessage}`,
+    () => `Subagent ${ctx.subagentId} failed to emit value: ${errorMessage}`,
   );
   return [
     {
@@ -504,9 +496,7 @@ export async function buildTodoCompletionPrompt(
       .slice(0, previewCount)
       .map((todo) => `- ${todo.content}`);
     if (outstanding.length > previewCount) {
-      previewLines.push(
-        `- ... and ${outstanding.length - previewCount} more`,
-      );
+      previewLines.push(`- ... and ${outstanding.length - previewCount} more`);
     }
 
     return [

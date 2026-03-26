@@ -74,7 +74,9 @@ describe('subagentToolProcessing', () => {
     });
 
     it('should return message from object resultDisplay', () => {
-      const display = { message: 'Some detail' } as unknown as import('../tools/tools.js').ToolResultDisplay;
+      const display = {
+        message: 'Some detail',
+      } as unknown as import('../tools/tools.js').ToolResultDisplay;
       expect(extractToolDetail(display, undefined)).toBe('Some detail');
     });
 
@@ -113,7 +115,11 @@ describe('subagentToolProcessing', () => {
       listToolNames: () => registeredTools,
       getToolMetadata: (name: string) =>
         registeredTools.includes(name)
-          ? { name, description: '', parameterSchema: { type: 'OBJECT', properties: {} } }
+          ? {
+              name,
+              description: '',
+              parameterSchema: { type: 'OBJECT', properties: {} },
+            }
           : undefined,
     };
 
@@ -208,11 +214,12 @@ describe('subagentToolProcessing', () => {
   // --- handleEmitValueCall ---
 
   describe('handleEmitValueCall', () => {
-    function makeCtx(
-      overrides?: Partial<EmitValueContext>,
-    ): EmitValueContext {
+    function makeCtx(overrides?: Partial<EmitValueContext>): EmitValueContext {
       return {
-        output: { emitted_vars: {}, terminate_reason: SubagentTerminateMode.ERROR },
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.ERROR,
+        },
         subagentId: 'test-agent',
         logger: new DebugLogger('test'),
         ...overrides,
@@ -269,8 +276,9 @@ describe('subagentToolProcessing', () => {
         ctx,
       );
       expect(parts).toHaveLength(1);
-      const resp = (parts[0] as { functionResponse: { response: { error: string } } })
-        .functionResponse.response;
+      const resp = (
+        parts[0] as { functionResponse: { response: { error: string } } }
+      ).functionResponse.response;
       expect(resp.error).toContain('requires');
     });
   });
@@ -278,7 +286,9 @@ describe('subagentToolProcessing', () => {
   // --- buildPartsFromCompletedCalls ---
 
   describe('buildPartsFromCompletedCalls', () => {
-    function makeCtx(overrides?: Partial<BuildPartsContext>): BuildPartsContext {
+    function makeCtx(
+      overrides?: Partial<BuildPartsContext>,
+    ): BuildPartsContext {
       return {
         subagentId: 'test-agent',
         logger: new DebugLogger('test'),
@@ -291,10 +301,25 @@ describe('subagentToolProcessing', () => {
         [
           {
             status: 'success' as const,
-            request: { callId: 'c1', name: 'tool_a', args: {}, isClientInitiated: true, prompt_id: 'p1', agentId: 'a1' },
+            request: {
+              callId: 'c1',
+              name: 'tool_a',
+              args: {},
+              isClientInitiated: true,
+              prompt_id: 'p1',
+              agentId: 'a1',
+            },
             response: {
               callId: 'c1',
-              responseParts: [{ functionResponse: { id: 'c1', name: 'tool_a', response: { output: 'ok' } } }],
+              responseParts: [
+                {
+                  functionResponse: {
+                    id: 'c1',
+                    name: 'tool_a',
+                    response: { output: 'ok' },
+                  },
+                },
+              ],
               agentId: 'a1',
             },
           },
@@ -310,7 +335,14 @@ describe('subagentToolProcessing', () => {
         [
           {
             status: 'success' as const,
-            request: { callId: 'c2', name: 'tool_b', args: {}, isClientInitiated: true, prompt_id: 'p2', agentId: 'a1' },
+            request: {
+              callId: 'c2',
+              name: 'tool_b',
+              args: {},
+              isClientInitiated: true,
+              prompt_id: 'p2',
+              agentId: 'a1',
+            },
             response: { callId: 'c2', responseParts: [], agentId: 'a1' },
           },
         ],
@@ -326,8 +358,20 @@ describe('subagentToolProcessing', () => {
         [
           {
             status: 'success' as const,
-            request: { callId: 'c3', name: 'tool_c', args: {}, isClientInitiated: true, prompt_id: 'p3', agentId: 'a1' },
-            response: { callId: 'c3', responseParts: [{ text: 'data' }], resultDisplay: 'output', agentId: 'a1' },
+            request: {
+              callId: 'c3',
+              name: 'tool_c',
+              args: {},
+              isClientInitiated: true,
+              prompt_id: 'p3',
+              agentId: 'a1',
+            },
+            response: {
+              callId: 'c3',
+              responseParts: [{ text: 'data' }],
+              resultDisplay: 'output',
+              agentId: 'a1',
+            },
             tool: { canUpdateOutput: true },
           },
         ],
@@ -342,8 +386,20 @@ describe('subagentToolProcessing', () => {
         [
           {
             status: 'success' as const,
-            request: { callId: 'c4', name: 'tool_d', args: {}, isClientInitiated: true, prompt_id: 'p4', agentId: 'a1' },
-            response: { callId: 'c4', responseParts: [{ text: 'data' }], resultDisplay: 'output text', agentId: 'a1' },
+            request: {
+              callId: 'c4',
+              name: 'tool_d',
+              args: {},
+              isClientInitiated: true,
+              prompt_id: 'p4',
+              agentId: 'a1',
+            },
+            response: {
+              callId: 'c4',
+              responseParts: [{ text: 'data' }],
+              resultDisplay: 'output text',
+              agentId: 'a1',
+            },
           },
         ],
         makeCtx({ onMessage }),
@@ -356,12 +412,25 @@ describe('subagentToolProcessing', () => {
         [
           {
             status: 'success' as const,
-            request: { callId: 'c5', name: 'tool_e', args: {}, isClientInitiated: true, prompt_id: 'p5', agentId: 'a1' },
+            request: {
+              callId: 'c5',
+              name: 'tool_e',
+              args: {},
+              isClientInitiated: true,
+              prompt_id: 'p5',
+              agentId: 'a1',
+            },
             response: {
               callId: 'c5',
               responseParts: [
                 { functionCall: { name: 'tool_e', args: {} } },
-                { functionResponse: { id: 'c5', name: 'tool_e', response: { ok: true } } },
+                {
+                  functionResponse: {
+                    id: 'c5',
+                    name: 'tool_e',
+                    response: { ok: true },
+                  },
+                },
               ],
               agentId: 'a1',
             },

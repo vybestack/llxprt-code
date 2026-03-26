@@ -11,14 +11,8 @@
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config } from '../config/config.js';
-import {
-  type ToolCallRequestInfo,
-  GeminiEventType,
-  Turn,
-} from './turn.js';
-import {
-  type ToolExecutionConfig,
-} from './nonInteractiveToolExecutor.js';
+import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
+import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import {
   type Content,
   type Part,
@@ -32,9 +26,7 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
-import {
-  type CompletedToolCall,
-} from './coreToolScheduler.js';
+import { type CompletedToolCall } from './coreToolScheduler.js';
 import { type EmojiFilter } from '../filters/EmojiFilter.js';
 import {
   validateToolsAgainstRuntime,
@@ -132,30 +124,7 @@ export class SubAgentScope {
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
 
-  /**
-   * Constructs a new SubAgentScope instance.
-   *
-   * @plan PLAN-20251028-STATELESS6.P08
-   * @requirement REQ-STAT6-001.1
-   * @pseudocode agent-runtime-context.md line 93 (step 007.1)
-   *
-   * @param name - The name for the subagent, used for logging and identification.
-   * @param runtimeContext - Immutable runtime context (replaces Config parameter).
-   * @param modelConfig - Configuration for the generative model parameters.
-   * @param runConfig - Configuration for the subagent's execution environment.
-   * @param promptConfig - Configuration for the subagent's prompt and behavior.
-   * @param contentGenerator - Pre-initialized content generator for this subagent.
-   * @param toolRegistry - Active tool registry for execution and validation.
-   * @param toolExecutorContext - Stateless execution context used for tool invocations.
-   * @param environmentContextLoader - Function that resolves environment context for prompts.
-   * @param toolConfig - Optional configuration for tools available to the subagent.
-   * @param outputConfig - Optional configuration for the subagent's expected outputs.
-   * @param settingsSnapshot - Runtime settings snapshot containing emojifilter setting.
-   */
-  /**
-   * @plan PLAN-20260303-MESSAGEBUS.P01
-   * MessageBus optional parameter added (Phase 1)
-   */
+  /** @plan PLAN-20251028-STATELESS6.P08, PLAN-20260303-MESSAGEBUS.P01 */
   private constructor(
     readonly name: string,
     readonly runtimeContext: AgentRuntimeContext,
@@ -198,26 +167,11 @@ export class SubAgentScope {
 
   /**
    * Creates and validates a new SubAgentScope instance.
-   * This factory method ensures that all tools provided in the prompt configuration
-   * are valid for non-interactive use before creating the subagent instance.
    *
    * @plan PLAN-20251028-STATELESS6.P08
    * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1, REQ-STAT6-003.2
-   * @pseudocode agent-runtime-context.md lines 94-98 (steps 007.2-007.6)
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
    * @requirement REQ-D01-001.1
-   * @pseudocode lines 56-72
-   *
-   * @param {string} name - The name of the subagent.
-   * @param {Config} foregroundConfig - Foreground configuration used for shared scheduler plumbing.
-   * @param {PromptConfig} promptConfig - Configuration for the subagent's prompt and behavior.
-   * @param {ModelConfig} modelConfig - Configuration for the generative model parameters.
-   * @param {RunConfig} runConfig - Configuration for the subagent's execution environment.
-   * @param {ToolConfig} [toolConfig] - Optional configuration for tools.
-   * @param {OutputConfig} [outputConfig] - Optional configuration for expected outputs.
-   * @param {SubAgentRuntimeOverrides} [overrides] - Optional stateless runtime inputs (provider runtime, adapters, settings) to bypass Config usage.
-   * @returns {Promise<SubAgentScope>} A promise that resolves to a valid SubAgentScope instance.
-   * @throws {Error} If any tool requires user confirmation.
    */
   static async create(
     name: string,
@@ -313,6 +267,22 @@ export class SubAgentScope {
     };
   }
 
+  private async prepareRun(context: ContextState) {
+    const chat = await this.createChatObject(context);
+    if (!chat) {
+      this.output.terminate_reason = SubagentTerminateMode.ERROR;
+      return null;
+    }
+    const abortController = new AbortController();
+    this.activeAbortController = abortController;
+    this.bindParentSignal(abortController);
+    const functionDeclarations = this.buildRuntimeFunctionDeclarations();
+    if (this.outputConfig?.outputs) {
+      functionDeclarations.push(...this.getScopeLocalFuncDefs());
+    }
+    return { chat, abortController, functionDeclarations };
+  }
+
   private buildInitialMessages(context: ContextState): Content[] {
     const behaviourPrompts =
       (context.get('task_behaviour_prompts') as string[] | undefined) ?? [];
@@ -340,23 +310,10 @@ export class SubAgentScope {
       schedulerFactory?: SubagentSchedulerFactory;
     },
   ): Promise<void> {
-    const chat = await this.createChatObject(context);
-    if (!chat) {
-      this.output.terminate_reason = SubagentTerminateMode.ERROR;
-      return;
-    }
-
-    const abortController = new AbortController();
-    this.activeAbortController = abortController;
-    this.bindParentSignal(abortController);
-
-    const functionDeclarations = this.buildRuntimeFunctionDeclarations();
-    if (this.outputConfig?.outputs) {
-      functionDeclarations.push(...this.getScopeLocalFuncDefs());
-    }
-
-    const { scheduler, schedulerDispose } =
-      await this.initScheduler(options);
+    const setup = await this.prepareRun(context);
+    if (!setup) return;
+    const { chat, abortController } = setup;
+    const { scheduler, schedulerDispose } = await this.initScheduler(options);
 
     const execCtx = this.buildExecCtx();
     const startTime = Date.now();
@@ -365,28 +322,50 @@ export class SubAgentScope {
 
     try {
       while (true) {
-        const check = checkTerminationConditions(turnCounter, startTime, execCtx);
+        const check = checkTerminationConditions(
+          turnCounter,
+          startTime,
+          execCtx,
+        );
         if (check.shouldStop) break;
 
         const { responseParts, textResponse, currentTurn } =
           await this.runInteractiveTurn(
-            chat, currentMessages, abortController, turnCounter++, execCtx,
+            chat,
+            currentMessages,
+            abortController,
+            turnCounter++,
+            execCtx,
           );
         if (abortController.signal.aborted) return;
 
         processInteractiveTextResponse(textResponse, execCtx);
 
         const toolMessages = await this.handleInteractiveToolCalls(
-          responseParts, scheduler, abortController, execCtx,
+          responseParts,
+          scheduler,
+          abortController,
+          execCtx,
         );
-        if (toolMessages) { currentMessages = toolMessages; continue; }
+        if (toolMessages) {
+          currentMessages = toolMessages;
+          continue;
+        }
 
         // Post-turn timeout recheck
-        const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
+        const recheck = checkTerminationConditions(
+          turnCounter,
+          startTime,
+          execCtx,
+        );
         if (recheck.shouldStop) break;
 
         const todoReminder = await this.buildTodoCompletionPrompt();
-        const nextMessages = await checkGoalCompletion(execCtx, todoReminder, currentTurn);
+        const nextMessages = await checkGoalCompletion(
+          execCtx,
+          todoReminder,
+          currentTurn,
+        );
         if (!nextMessages) break;
         currentMessages = nextMessages;
       }
@@ -445,12 +424,22 @@ export class SubAgentScope {
       }
     }
 
-    return { responseParts: [...turn.pendingToolCalls], textResponse, currentTurn };
+    return {
+      responseParts: [...turn.pendingToolCalls],
+      textResponse,
+      currentTurn,
+    };
   }
 
   private async handleInteractiveToolCalls(
     toolRequests: ToolCallRequestInfo[],
-    scheduler: { schedule: (req: ToolCallRequestInfo | ToolCallRequestInfo[], signal: AbortSignal) => Promise<void> | void; awaitCompletedCalls: () => Promise<CompletedToolCall[]> },
+    scheduler: {
+      schedule: (
+        req: ToolCallRequestInfo | ToolCallRequestInfo[],
+        signal: AbortSignal,
+      ) => Promise<void> | void;
+      awaitCompletedCalls: () => Promise<CompletedToolCall[]>;
+    },
     abortController: AbortController,
     execCtx: ExecutionLoopContext,
   ): Promise<Content[] | null> {
@@ -477,14 +466,18 @@ export class SubAgentScope {
         this.buildPartsFromCompletedCalls(completedCalls),
       );
       const fatalCall = completedCalls.find(
-        (call) => call.status === 'error' && isFatalToolError(call.response.errorType),
+        (call) =>
+          call.status === 'error' && isFatalToolError(call.response.errorType),
       );
       if (fatalCall) {
         const fatalMessage = buildToolUnavailableMessage(
-          fatalCall.request.name, fatalCall.response.resultDisplay, fatalCall.response.error,
+          fatalCall.request.name,
+          fatalCall.response.resultDisplay,
+          fatalCall.response.error,
         );
         this.logger.warn(
-          () => `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
+          () =>
+            `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
         );
         responseParts.push({ text: fatalMessage });
         execCtx.output.final_message = fatalMessage;
@@ -526,28 +519,16 @@ export class SubAgentScope {
    * @requirement REQ-STAT6-001.1
    */
   async runNonInteractive(context: ContextState): Promise<void> {
-    const chat = await this.createChatObject(context);
-    if (!chat) {
-      this.output.terminate_reason = SubagentTerminateMode.ERROR;
-      return;
-    }
+    const setup = await this.prepareRun(context);
+    if (!setup) return;
+    const { chat, abortController, functionDeclarations: toolsList } = setup;
 
-    const abortController = new AbortController();
-    this.activeAbortController = abortController;
-    this.bindParentSignal(abortController);
-
-    const toolsList: FunctionDeclaration[] = this.buildRuntimeFunctionDeclarations();
-    if (this.outputConfig?.outputs) {
-      toolsList.push(...this.getScopeLocalFuncDefs());
-    }
-
-    this.logger.debug(
-      () =>
-        `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${
-          this.outputConfig ? Object.keys(this.outputConfig.outputs).join(', ') : 'none'
-        } runConfig=${JSON.stringify(this.runConfig)}`,
-    );
-
+    this.logger.debug(() => {
+      const outputs = this.outputConfig
+        ? Object.keys(this.outputConfig.outputs).join(', ')
+        : 'none';
+      return `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${outputs} runConfig=${JSON.stringify(this.runConfig)}`;
+    });
     const execCtx = this.buildExecCtx();
     let currentMessages: Content[] = this.buildInitialMessages(context);
     const startTime = Date.now();
@@ -555,31 +536,51 @@ export class SubAgentScope {
 
     try {
       while (true) {
-        const check = checkTerminationConditions(turnCounter, startTime, execCtx);
+        const check = checkTerminationConditions(
+          turnCounter,
+          startTime,
+          execCtx,
+        );
         if (check.shouldStop) break;
 
         const currentTurn = turnCounter++;
         const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
         this.logger.debug(
-          () => `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
+          () =>
+            `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
         );
 
         const { functionCalls } = await this.runNonInteractiveTurn(
-          chat, currentMessages, toolsList, abortController, currentTurn, execCtx,
+          chat,
+          currentMessages,
+          toolsList,
+          abortController,
+          currentTurn,
+          execCtx,
         );
         if (abortController.signal.aborted) return;
 
         // Post-send timeout recheck
-        const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
+        const recheck = checkTerminationConditions(
+          turnCounter,
+          startTime,
+          execCtx,
+        );
         if (recheck.shouldStop) break;
 
         if (functionCalls.length > 0) {
           currentMessages = await this.processFunctionCalls(
-            functionCalls, abortController, promptId,
+            functionCalls,
+            abortController,
+            promptId,
           );
         } else {
           const todoReminder = await this.buildTodoCompletionPrompt();
-          const nextMessages = await checkGoalCompletion(execCtx, todoReminder, currentTurn);
+          const nextMessages = await checkGoalCompletion(
+            execCtx,
+            todoReminder,
+            currentTurn,
+          );
           if (!nextMessages) break;
           currentMessages = nextMessages;
         }
@@ -620,7 +621,8 @@ export class SubAgentScope {
     let functionCalls: FunctionCall[] = [];
     let textResponse = '';
     for await (const resp of responseStream) {
-      if (abortController.signal.aborted) return { functionCalls: [], textResponse: '' };
+      if (abortController.signal.aborted)
+        return { functionCalls: [], textResponse: '' };
       if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
         const chunkCalls = resp.value.functionCalls ?? [];
         if (chunkCalls.length > 0) {
@@ -638,7 +640,10 @@ export class SubAgentScope {
 
     if (textResponse) {
       const result = processNonInteractiveTextResponse(
-        textResponse, functionCalls, execCtx, resolveToolName,
+        textResponse,
+        functionCalls,
+        execCtx,
+        resolveToolName,
       );
       functionCalls = result.functionCalls;
     }
@@ -786,5 +791,4 @@ export class SubAgentScope {
   private getScopeLocalFuncDefs() {
     return getScopeLocalFuncDefs(this.outputConfig);
   }
-
 }

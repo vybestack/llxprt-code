@@ -11,7 +11,6 @@ import {
   checkGoalCompletion,
   processInteractiveTextResponse,
   handleExecutionError,
-  type ExecutionLoopContext,
 } from './subagentExecution.js';
 import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
@@ -63,7 +62,10 @@ describe('subagentExecution', () => {
 
     it('should handle undefined max_turns (no turn limit)', () => {
       const ctx = {
-        runConfig: { max_turns: undefined as unknown as number, max_time_minutes: 30 },
+        runConfig: {
+          max_turns: undefined as unknown as number,
+          max_time_minutes: 30,
+        },
         subagentId: 'test',
         output: makeOutput(),
         logger: new DebugLogger('test'),
@@ -84,18 +86,26 @@ describe('subagentExecution', () => {
 
     it('should apply emoji filter and return filtered text', () => {
       const mockFilter = {
-        filterText: vi.fn().mockReturnValue({ filtered: 'cleaned', blocked: false }),
+        filterText: vi
+          .fn()
+          .mockReturnValue({ filtered: 'cleaned', blocked: false }),
       };
-      const result = filterTextWithEmoji('hello ', { emojiFilter: mockFilter as never });
+      const result = filterTextWithEmoji('hello ', {
+        emojiFilter: mockFilter as never,
+      });
       expect(result.text).toBe('cleaned');
       expect(result.blocked).toBe(false);
     });
 
     it('should return blocked=true when filter blocks', () => {
       const mockFilter = {
-        filterText: vi.fn().mockReturnValue({ blocked: true, error: 'Content blocked' }),
+        filterText: vi
+          .fn()
+          .mockReturnValue({ blocked: true, error: 'Content blocked' }),
       };
-      const result = filterTextWithEmoji('bad content', { emojiFilter: mockFilter as never });
+      const result = filterTextWithEmoji('bad content', {
+        emojiFilter: mockFilter as never,
+      });
       expect(result.blocked).toBe(true);
       expect(result.error).toBe('Content blocked');
     });
@@ -103,9 +113,18 @@ describe('subagentExecution', () => {
     it('should call onMessage with system feedback', () => {
       const onMessage = vi.fn();
       const mockFilter = {
-        filterText: vi.fn().mockReturnValue({ filtered: 'ok', blocked: false, systemFeedback: 'warning!' }),
+        filterText: vi
+          .fn()
+          .mockReturnValue({
+            filtered: 'ok',
+            blocked: false,
+            systemFeedback: 'warning!',
+          }),
       };
-      filterTextWithEmoji('test', { emojiFilter: mockFilter as never, onMessage });
+      filterTextWithEmoji('test', {
+        emojiFilter: mockFilter as never,
+        onMessage,
+      });
       expect(onMessage).toHaveBeenCalledWith('warning!');
     });
   });
@@ -185,10 +204,15 @@ describe('subagentExecution', () => {
     it('should throw when emoji filter blocks', () => {
       const output = makeOutput();
       const mockFilter = {
-        filterText: vi.fn().mockReturnValue({ blocked: true, error: 'Blocked!' }),
+        filterText: vi
+          .fn()
+          .mockReturnValue({ blocked: true, error: 'Blocked!' }),
       };
       expect(() =>
-        processInteractiveTextResponse('bad', { output, emojiFilter: mockFilter as never }),
+        processInteractiveTextResponse('bad', {
+          output,
+          emojiFilter: mockFilter as never,
+        }),
       ).toThrow('Blocked!');
       expect(output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
     });

@@ -68,12 +68,16 @@ export interface TerminationCheck {
 export function checkTerminationConditions(
   turnCounter: number,
   startTime: number,
-  ctx: Pick<ExecutionLoopContext, 'runConfig' | 'subagentId' | 'output' | 'logger'>,
+  ctx: Pick<
+    ExecutionLoopContext,
+    'runConfig' | 'subagentId' | 'output' | 'logger'
+  >,
 ): TerminationCheck {
   if (ctx.runConfig.max_turns && turnCounter >= ctx.runConfig.max_turns) {
     ctx.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
     ctx.logger.warn(
-      () => `Subagent ${ctx.subagentId} reached max turns (${ctx.runConfig.max_turns})`,
+      () =>
+        `Subagent ${ctx.subagentId} reached max turns (${ctx.runConfig.max_turns})`,
     );
     return { shouldStop: true, reason: SubagentTerminateMode.MAX_TURNS };
   }
@@ -81,7 +85,8 @@ export function checkTerminationConditions(
   if (durationMin >= ctx.runConfig.max_time_minutes) {
     ctx.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
     ctx.logger.warn(
-      () => `Subagent ${ctx.subagentId} reached time limit (${ctx.runConfig.max_time_minutes} minutes)`,
+      () =>
+        `Subagent ${ctx.subagentId} reached time limit (${ctx.runConfig.max_time_minutes} minutes)`,
     );
     return { shouldStop: true, reason: SubagentTerminateMode.TIMEOUT };
   }
@@ -120,8 +125,7 @@ export function filterTextWithEmoji(
   if (result.systemFeedback && ctx.onMessage) {
     ctx.onMessage(result.systemFeedback);
   }
-  const filtered =
-    typeof result.filtered === 'string' ? result.filtered : '';
+  const filtered = typeof result.filtered === 'string' ? result.filtered : '';
   return { text: filtered, blocked: false };
 }
 
@@ -136,13 +140,17 @@ export function filterTextWithEmoji(
  * - null (goal is met — caller should break the loop).
  */
 export async function checkGoalCompletion(
-  ctx: Pick<ExecutionLoopContext, 'output' | 'outputConfig' | 'subagentId' | 'logger'>,
+  ctx: Pick<
+    ExecutionLoopContext,
+    'output' | 'outputConfig' | 'subagentId' | 'logger'
+  >,
   todoReminder: string | null,
   currentTurn: number,
 ): Promise<Content[] | null> {
   if (todoReminder) {
     ctx.logger.debug(
-      () => `Subagent ${ctx.subagentId} postponing completion until outstanding todos are addressed`,
+      () =>
+        `Subagent ${ctx.subagentId} postponing completion until outstanding todos are addressed`,
     );
     return [{ role: 'user', parts: [{ text: todoReminder }] }];
   }
@@ -159,18 +167,19 @@ export async function checkGoalCompletion(
   if (remainingVars.length === 0) {
     ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
     ctx.logger.debug(
-      () => `Subagent ${ctx.subagentId} satisfied output requirements on turn ${currentTurn}`,
+      () =>
+        `Subagent ${ctx.subagentId} satisfied output requirements on turn ${currentTurn}`,
     );
     return null;
   }
 
-  const nudgeMessage =
-    `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
-      ', ',
-    )}. Please use the 'self_emitvalue' tool to emit them now, or continue working if necessary.`;
+  const nudgeMessage = `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
+    ', ',
+  )}. Please use the 'self_emitvalue' tool to emit them now, or continue working if necessary.`;
 
   ctx.logger.debug(
-    () => `Subagent ${ctx.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
+    () =>
+      `Subagent ${ctx.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
   );
 
   return [{ role: 'user', parts: [{ text: nudgeMessage }] }];
@@ -194,9 +203,18 @@ export function processNonInteractiveTextResponse(
   existingFunctionCalls: FunctionCall[],
   ctx: Pick<
     ExecutionLoopContext,
-    'emojiFilter' | 'onMessage' | 'textToolParser' | 'toolsView' | 'output' | 'subagentId' | 'logger'
+    | 'emojiFilter'
+    | 'onMessage'
+    | 'textToolParser'
+    | 'toolsView'
+    | 'output'
+    | 'subagentId'
+    | 'logger'
   >,
-  resolveToolNameFn: (rawName: string | undefined, toolsView: ToolRegistryView) => string | null,
+  resolveToolNameFn: (
+    rawName: string | undefined,
+    toolsView: ToolRegistryView,
+  ) => string | null,
 ): NonInteractiveTextResult {
   const messageToSend = textResponse;
 
@@ -313,7 +331,10 @@ interface ParsedToolCall {
 function synthesizeToolCalls(
   toolCalls: ParsedToolCall[],
   ctx: Pick<ExecutionLoopContext, 'subagentId' | 'logger' | 'toolsView'>,
-  resolveToolNameFn: (rawName: string | undefined, toolsView: ToolRegistryView) => string | null,
+  resolveToolNameFn: (
+    rawName: string | undefined,
+    toolsView: ToolRegistryView,
+  ) => string | null,
 ): FunctionCall[] {
   const synthesized: FunctionCall[] = [];
   toolCalls.forEach((call, index) => {
@@ -377,7 +398,9 @@ export function createCompletionChannel(
       const textOutput =
         typeof output === 'string'
           ? output
-          : output.map((line) => line.map((token) => token.text).join('')).join("\n");
+          : output
+              .map((line) => line.map((token) => token.text).join(''))
+              .join('\n');
       ctx.onMessage(textOutput);
     }
   };
@@ -453,10 +476,15 @@ export async function initInteractiveScheduler(
       ? async () => scheduler.dispose?.()
       : async () => {}
     : async () =>
-        ctx.schedulerConfig.disposeScheduler(ctx.schedulerConfig.getSessionId());
+        ctx.schedulerConfig.disposeScheduler(
+          ctx.schedulerConfig.getSessionId(),
+        );
 
   return {
-    scheduler: { schedule: scheduler.schedule, awaitCompletedCalls: channel.awaitCompletedCalls },
+    scheduler: {
+      schedule: scheduler.schedule,
+      awaitCompletedCalls: channel.awaitCompletedCalls,
+    },
     schedulerDispose,
   };
 }

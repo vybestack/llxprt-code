@@ -204,9 +204,7 @@ function applyToolWhitelistToEphemerals(
 
   const allowedSet =
     existingAllowed.length > 0
-      ? normalizedWhitelist.filter((entry) =>
-          existingAllowed.includes(entry),
-        )
+      ? normalizedWhitelist.filter((entry) => existingAllowed.includes(entry))
       : normalizedWhitelist;
 
   ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
@@ -298,8 +296,7 @@ export function getScopeLocalFuncDefs(
           type: Type.STRING,
         },
         emit_variable_value: {
-          description:
-            'This is the _value_ to be returned for this variable.',
+          description: 'This is the _value_ to be returned for this variable.',
           type: Type.STRING,
         },
       },
