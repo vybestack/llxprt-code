@@ -42,7 +42,7 @@
 | R26 | REIMPLEMENT | 1b6b6d4 | DONE | 895be1e83 | centralize tool mapping |
 | R27 | REIMPLEMENT | 0bebc66 | NO_OP | — | rationale flush already present in LLxprt |
 | R28 | REIMPLEMENT | ec74134 | DONE | c1d5aec22 | shell redirection security |
-| R29 | REIMPLEMENT | 1182168 | TODO | | enhanced compression |
+| R29 | REIMPLEMENT | 1182168 | DONE | 5393ce6d0 | enhanced compression |
 | R30 | REIMPLEMENT | e92f60b | TODO | | migrate hooks |
 | R31 | REIMPLEMENT | 645e2ec | TODO | | Ctrl+Enter/Ctrl+J |
 | R32 | REIMPLEMENT | b288f12 | TODO | | MCP client version |

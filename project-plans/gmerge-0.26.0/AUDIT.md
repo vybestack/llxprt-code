@@ -68,7 +68,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 1b6b6d4 | REIMPLEMENTED | 895be1e83 | centralize tool mapping — PASS |
 | 0bebc66 | NO_OP | — | rationale flush already present in LLxprt |
 | ec74134 | REIMPLEMENTED | c1d5aec22 | shell redirection security — PASS |
-| 1182168 | REIMPLEMENTED | | enhanced compression |
+| 1182168 | REIMPLEMENTED | 5393ce6d0 | enhanced compression — PASS |
 | e92f60b | REIMPLEMENTED | | migrate hooks |
 | 645e2ec | REIMPLEMENTED | | Ctrl+Enter/Ctrl+J |
 | b288f12 | REIMPLEMENTED | | MCP client version |
