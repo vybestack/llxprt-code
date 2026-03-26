@@ -8,7 +8,7 @@
 | P2 | PICK x5 | 448fd3c 6740886 be37c26 41e01c2 d8a8b43 | DONE | 99836347f, d1ff2eb9f, 4478accbc, b72c08dc3 | core fixes + UI perf (448fd3c+6740886 NO_OP; LruCache.size added; OAuth static fix) |
 | P3 | PICK x5 | a90bcf7 155d9aa 4920ad2 166e04a 88df621 | DONE | e45cfdb3c, a8a282fd0, cc6b6be76, aa87fd250, 2b524443e | commands + hooks + mcp (155d9aa NO_OP: LLxprt handles differently) |
 | P4 | PICK x5 | 85b1716 b99e841 995ae42 2455f93 55c2783 | DONE | 0f05bcaf4, 98e0ca414, d1998fe0e, 37b4c79d2, a522dcf83, 4a6e65266 | extensions + pty + UI + mcp |
-| P5 | PICK x2 | 9866eb0 97aac69 | TODO | | editor fallback + mcp lookup |
+| P5 | PICK x2 | 9866eb0 97aac69 | DONE | 5e5308b37, c9f625505 | editor fallback + mcp lookup |
 
 ## REIMPLEMENT Batches
 

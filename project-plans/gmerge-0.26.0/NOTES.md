@@ -55,4 +55,10 @@ Running notes during batch execution. Append after each batch.
 - Fixed: disable.test.ts message updated ("Restart required to take effect."), DebugProfiler test uses AppEvent.OpenDebugConsole, MCP list test mocks.
 - Full verify: typecheck clean, core 514 tests pass, CLI specific areas pass (auth 45 pass, commands 28 pass), format clean, build clean, smoke test passes.
 
+## Batch P5 (2026-03-25)
+
+- 9866eb0: Applied cleanly. Operator precedence fix in text-buffer.ts external editor fallback.
+- 97aac69: Applied with conflicts. getFullyQualifiedName()/getFullyQualifiedPrefix() added to mcp-tool.ts. MCP fallback lookup integrated into LLxprt's getTool() as 3rd lookup path after normalizeToolName.
+- Quick verify: typecheck clean.
+
 ---

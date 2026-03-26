@@ -33,8 +33,8 @@ Post-implementation reconciliation. Updated continuously during execution.
 | 995ae42 | PICKED | d1998fe0e | DebugProfiler warnings — PASS |
 | 2455f93 | PICKED | 37b4c79d2 | home/end keybinding — PASS |
 | 55c2783 | PICKED | a522dcf83 | mcp http display — PASS |
-| 9866eb0 | PICKED | | external editor fallback |
-| 97aac69 | PICKED | | mcp tool lookup |
+| 9866eb0 | PICKED | 5e5308b37 | external editor fallback — PASS |
+| 97aac69 | PICKED | c9f625505 | mcp tool lookup — PASS |
 
 ## REIMPLEMENT Commits (42)
 
