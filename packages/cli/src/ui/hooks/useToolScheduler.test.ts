@@ -7,10 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
-import {
-  useReactToolScheduler,
-  mapToDisplay,
-} from './useReactToolScheduler.js';
+import { useReactToolScheduler } from './useReactToolScheduler.js';
+import { mapToDisplay } from './toolMapping.js';
 import {
   ApprovalMode,
   AnyDeclarativeTool,

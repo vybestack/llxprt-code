@@ -63,9 +63,9 @@ import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { useLogger } from './useLogger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { mapToDisplay as mapTrackedToolCallsToDisplay } from './toolMapping.js';
 import {
   useReactToolScheduler,
-  mapToDisplay as mapTrackedToolCallsToDisplay,
   TrackedToolCall,
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,

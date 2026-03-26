@@ -84,6 +84,9 @@ vi.mock('./useReactToolScheduler.js', () => ({
       vi.fn(), // cancelAllToolCalls
     ];
   }),
+}));
+
+vi.mock('./toolMapping.js', () => ({
   mapToDisplay: vi.fn(() => ({
     type: 'tool_group',
     tools: [],

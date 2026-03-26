@@ -149,7 +149,10 @@ describe('getInstallationInfo', () => {
     process.argv[1] = cliPath;
 
     mockedExecSync.mockImplementation((cmd) => {
-      if (typeof cmd === 'string' && cmd.includes('brew --prefix llxprt-code')) {
+      if (
+        typeof cmd === 'string' &&
+        cmd.includes('brew --prefix llxprt-code')
+      ) {
         return '/opt/homebrew/opt/llxprt-code';
       }
       throw new Error(`Command failed: ${cmd}`);
@@ -394,7 +397,10 @@ describe('getInstallationInfo', () => {
 
     // Brew prefix succeeds but path doesn't match
     mockedExecSync.mockImplementation((cmd) => {
-      if (typeof cmd === 'string' && cmd.includes('brew --prefix llxprt-code')) {
+      if (
+        typeof cmd === 'string' &&
+        cmd.includes('brew --prefix llxprt-code')
+      ) {
         return '/opt/homebrew/opt/llxprt-code';
       }
       throw new Error(`Command failed: ${cmd}`);
