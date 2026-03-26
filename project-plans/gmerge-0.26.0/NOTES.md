@@ -17,3 +17,14 @@ Running notes during batch execution. Append after each batch.
 - Package.ts chain: 43846f4 → d8e9db3 (consecutive REIMPLEMENTs)
 
 ---
+
+## Batch P1 (2026-03-25)
+
+- c04af6c: Applied with conflict resolution in 3 files; docs/get-started/configuration.md excluded (not in LLxprt). F12 info added to troubleshooting.md.
+- f6c2d61: Empty cherry-pick — only touched docs/architecture.md which doesn't exist in LLxprt. Acceptable skip.
+- c8c7b57: "project" → "workspace" terminology applied across skill scope strings in disable.ts, skillUtils.ts, skillManager.ts and tests.
+- 4848f42: Clean apply. YAML colon handling with parseFrontmatter/parseSimpleFrontmatter.
+- d0bbc7f: Conflict resolved — preserved LLxprt's `source` property while taking upstream's `match[2]?.trim() ?? ''` safety.
+- Lint: 0 errors (warnings only), typecheck: clean.
+
+---

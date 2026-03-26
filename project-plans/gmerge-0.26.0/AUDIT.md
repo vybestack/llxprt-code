@@ -13,11 +13,11 @@ Post-implementation reconciliation. Updated continuously during execution.
 
 | Upstream SHA | Decision | LLxprt Commit | Notes |
 |:------------:|----------|---------------|-------|
-| c04af6c | PICKED | | docs: clarify F12 |
-| f6c2d61 | PICKED | | docs: Remove .md extension |
-| c8c7b57 | PICKED | | skills project→workspace (was REIMPLEMENT) |
-| 4848f42 | PICKED | | skill colons |
-| d0bbc7f | PICKED | | skill parsing hardening |
+| c04af6c | PICKED | 8ef4487f0 | docs: clarify F12 — PASS |
+| f6c2d61 | PICKED | (empty skip) | docs: Remove .md extension — target file absent, acceptable |
+| c8c7b57 | PICKED | 93697af0e | skills project→workspace — PASS |
+| 4848f42 | PICKED | 68384cf6e | skill colons — PASS |
+| d0bbc7f | PICKED | 89a27bb44 | skill parsing hardening — PASS |
 | 448fd3c | PICKED | | circular dep tsconfig |
 | 6740886 | PICKED | | prevent ModelInfo on aborted |
 | be37c26 | PICKED | | text buffer perf |
