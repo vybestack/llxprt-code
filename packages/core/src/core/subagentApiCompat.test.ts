@@ -49,7 +49,7 @@ describe('subagent.ts backward-compatible API surface', () => {
  * and will be unskipped in Phase 1 once the symbols are available.
  * Move the passing tests into the backward-compat block above after Phase 5.
  */
-describe.skip('subagent.ts additive API surface (unskip in Phase 1)', () => {
+describe('subagent.ts additive API surface (unskip in Phase 1)', () => {
   it('should export templateString as a function', async () => {
     const mod = await import('./subagent.js');
     expect(typeof mod.templateString).toBe('function');

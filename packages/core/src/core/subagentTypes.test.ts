@@ -16,7 +16,7 @@ let SubagentTerminateMode: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let templateString: any;
 
-describe.skip('subagentTypes (enable in Phase 1)', () => {
+describe('subagentTypes (enable in Phase 1)', () => {
   beforeAll(async () => {
     const mod = await import('./subagentTypes.js');
     ContextState = mod.ContextState;
