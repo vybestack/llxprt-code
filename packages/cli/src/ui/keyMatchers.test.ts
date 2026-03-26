@@ -96,13 +96,27 @@ describe('keyMatchers', () => {
     },
     {
       command: Command.SCROLL_HOME,
-      positive: [createKey('home', { ctrl: true }), createKey('home', { shift: true })],
-      negative: [createKey('end'), createKey('home'), createKey('a', { ctrl: true })],
+      positive: [
+        createKey('home', { ctrl: true }),
+        createKey('home', { shift: true }),
+      ],
+      negative: [
+        createKey('end'),
+        createKey('home'),
+        createKey('a', { ctrl: true }),
+      ],
     },
     {
       command: Command.SCROLL_END,
-      positive: [createKey('end', { ctrl: true }), createKey('end', { shift: true })],
-      negative: [createKey('home'), createKey('end'), createKey('e', { ctrl: true })],
+      positive: [
+        createKey('end', { ctrl: true }),
+        createKey('end', { shift: true }),
+      ],
+      negative: [
+        createKey('home'),
+        createKey('end'),
+        createKey('e', { ctrl: true }),
+      ],
     },
     {
       command: Command.PAGE_UP,

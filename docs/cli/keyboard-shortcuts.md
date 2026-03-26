@@ -38,7 +38,6 @@ available combinations.
 | Undo the most recent text edit.                  | `Ctrl + Z (no Shift)`                                     |
 | Redo the most recent undone text edit.           | `Ctrl + Shift + Z`                                        |
 
-
 #### Screen Control
 
 | Action                                       | Keys       |

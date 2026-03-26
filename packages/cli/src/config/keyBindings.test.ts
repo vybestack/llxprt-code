@@ -46,7 +46,6 @@ describe('keyBindings config', () => {
             binding.command === undefined ||
               typeof binding.command === 'boolean',
           ).toBe(true);
-
         }
       }
     });

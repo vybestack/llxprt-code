@@ -472,7 +472,9 @@ describe('extensions config command', () => {
       await parser.parseAsync('config test-ext TEST_VAR');
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Extension configuration is currently disabled'),
+        expect.stringContaining(
+          'Extension configuration is currently disabled',
+        ),
       );
       expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
       expect(mockUpdateSetting).not.toHaveBeenCalled();
@@ -493,7 +495,9 @@ describe('extensions config command', () => {
       await parser.parseAsync('config test-ext');
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Extension configuration is currently disabled'),
+        expect.stringContaining(
+          'Extension configuration is currently disabled',
+        ),
       );
       expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
 
