@@ -35,7 +35,10 @@ export class ProactiveRenewalManager {
   > = new Map();
   private proactiveRenewalFailures: Map<string, number> = new Map();
   private proactiveRenewalInFlight: Set<string> = new Set();
-  private proactiveRenewalTokens: Map<string, string> = new Map();
+  private proactiveRenewalTokens: Map<
+    string,
+    { accessToken: string; refreshToken: string }
+  > = new Map();
 
   constructor(
     private tokenStore: TokenStore,
@@ -185,7 +188,10 @@ export class ProactiveRenewalManager {
     }
 
     this.proactiveRenewalFailures.delete(key);
-    this.proactiveRenewalTokens.set(key, token.access_token);
+    this.proactiveRenewalTokens.set(key, {
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token ?? '',
+    });
     this.setProactiveTimer(
       providerName,
       normalizedBucket,
@@ -332,9 +338,12 @@ export class ProactiveRenewalManager {
     key: string,
     currentToken: OAuthToken,
   ): boolean {
-    const scheduledAccessToken = this.proactiveRenewalTokens.get(key);
-    if (scheduledAccessToken) {
-      return currentToken.access_token !== scheduledAccessToken;
+    const scheduled = this.proactiveRenewalTokens.get(key);
+    if (scheduled) {
+      return (
+        currentToken.access_token !== scheduled.accessToken ||
+        (currentToken.refresh_token ?? '') !== scheduled.refreshToken
+      );
     }
     // Direct runProactiveRenewal call (no prior schedule) — use expiry-based check
     const nowInSeconds = Math.floor(Date.now() / 1000);

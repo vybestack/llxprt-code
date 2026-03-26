@@ -90,6 +90,21 @@ export async function executeTokenRefresh(
       return recheckToken;
     }
 
+    // Guard: if the refresh_token on disk differs from what we originally read,
+    // another process already consumed the single-use refresh token. Skip refresh
+    // to avoid replaying a consumed token (which can trigger revocation).
+    if (
+      recheckToken &&
+      token.refresh_token &&
+      recheckToken.refresh_token !== token.refresh_token
+    ) {
+      logger.debug(
+        () =>
+          `[FLOW] Refresh token changed for ${providerName} — another process refreshed, skipping`,
+      );
+      return recheckToken;
+    }
+
     const provider = providerRegistry.getProvider(providerName);
     if (!provider) return null;
 

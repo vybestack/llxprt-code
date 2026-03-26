@@ -180,9 +180,16 @@ export class GeminiOAuthProvider implements OAuthProvider {
       return await getOauthClient(config);
     } catch (error) {
       if (error instanceof Error) {
-        const addItem = this.addItem || globalOAuthUI.getAddItem();
-        if (addItem) {
-          addItem(
+        if (this.addItem) {
+          this.addItem(
+            {
+              type: 'error',
+              text: `Browser authentication failed: ${error.message}\nPlease try again or use an API key with /keyfile <path-to-your-gemini-key>`,
+            },
+            Date.now(),
+          );
+        } else {
+          globalOAuthUI.callAddItem(
             {
               type: 'error',
               text: `Browser authentication failed: ${error.message}\nPlease try again or use an API key with /keyfile <path-to-your-gemini-key>`,
@@ -218,17 +225,22 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private showGeminiFallbackInstructions(): void {
     const fallbackMessage = `Browser authentication was cancelled or failed.\nFallback options:\n1. Use API key: /keyfile <path-to-your-gemini-key>\n2. Set environment: export GEMINI_API_KEY=<your-key>\n3. Try OAuth again: /auth gemini enable`;
 
-    const addItem = this.addItem || globalOAuthUI.getAddItem();
-    if (addItem) {
-      addItem({ type: 'info', text: fallbackMessage }, Date.now());
+    if (this.addItem) {
+      this.addItem({ type: 'info', text: fallbackMessage }, Date.now());
     } else {
-      debugLogger.log('\n' + '─'.repeat(60));
-      debugLogger.log('Browser authentication was cancelled or failed.');
-      debugLogger.log('Fallback options:');
-      debugLogger.log('1. Use API key: /keyfile <path-to-your-gemini-key>');
-      debugLogger.log('2. Set environment: export GEMINI_API_KEY=<your-key>');
-      debugLogger.log('3. Try OAuth again: /auth gemini enable');
-      debugLogger.log('─'.repeat(60));
+      const delivered = globalOAuthUI.callAddItem(
+        { type: 'info', text: fallbackMessage },
+        Date.now(),
+      );
+      if (delivered === undefined) {
+        debugLogger.log('\n' + '─'.repeat(60));
+        debugLogger.log('Browser authentication was cancelled or failed.');
+        debugLogger.log('Fallback options:');
+        debugLogger.log('1. Use API key: /keyfile <path-to-your-gemini-key>');
+        debugLogger.log('2. Set environment: export GEMINI_API_KEY=<your-key>');
+        debugLogger.log('3. Try OAuth again: /auth gemini enable');
+        debugLogger.log('─'.repeat(60));
+      }
     }
   }
 
@@ -265,9 +277,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
     this.currentToken = token;
 
-    const addItem = this.addItem || globalOAuthUI.getAddItem();
-    if (addItem) {
-      addItem(
+    if (this.addItem) {
+      this.addItem(
         {
           type: 'info',
           text: 'Successfully authenticated with Google Gemini!',
@@ -275,7 +286,16 @@ export class GeminiOAuthProvider implements OAuthProvider {
         Date.now(),
       );
     } else {
-      debugLogger.log('Successfully authenticated with Google Gemini!');
+      const delivered = globalOAuthUI.callAddItem(
+        {
+          type: 'info',
+          text: 'Successfully authenticated with Google Gemini!',
+        },
+        Date.now(),
+      );
+      if (delivered === undefined) {
+        debugLogger.log('Successfully authenticated with Google Gemini!');
+      }
     }
 
     return token;

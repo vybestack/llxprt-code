@@ -210,9 +210,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       text: `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`,
       url: deviceCodeUrl,
     };
-    const addItem = this.addItem || globalOAuthUI.getAddItem();
-    if (addItem) {
-      addItem(historyItem);
+    if (this.addItem) {
+      this.addItem(historyItem);
+    } else {
+      globalOAuthUI.callAddItem(historyItem);
     }
     debugLogger.log('Visit the following URL to authorize:');
     debugLogger.log(deviceCodeUrl);

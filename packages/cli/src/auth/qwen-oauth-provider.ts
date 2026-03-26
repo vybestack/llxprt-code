@@ -198,14 +198,16 @@ export class QwenOAuthProvider implements OAuthProvider {
       url: authUrl,
     };
 
-    const addItem = this.addItem || globalOAuthUI.getAddItem();
-    if (addItem) {
-      addItem(historyItem);
+    if (this.addItem) {
+      this.addItem(historyItem);
     } else {
-      debugLogger.log('\nQwen OAuth Authentication');
-      debugLogger.log('─'.repeat(40));
-      debugLogger.log('Please visit the following URL to authorize:');
-      debugLogger.log(authUrl);
+      const delivered = globalOAuthUI.callAddItem(historyItem);
+      if (delivered === undefined) {
+        debugLogger.log('\nQwen OAuth Authentication');
+        debugLogger.log('─'.repeat(40));
+        debugLogger.log('Please visit the following URL to authorize:');
+        debugLogger.log(authUrl);
+      }
     }
 
     try {
@@ -219,7 +221,7 @@ export class QwenOAuthProvider implements OAuthProvider {
       );
     }
 
-    return addItem ?? undefined;
+    return this.addItem ?? globalOAuthUI.getAddItem() ?? undefined;
   }
 
   /**
@@ -363,14 +365,19 @@ export class QwenOAuthProvider implements OAuthProvider {
 
         // Line 89: PRINT "Successfully logged out from Qwen"
         if (!token) {
-          const addItem = this.addItem || globalOAuthUI.getAddItem();
-          if (addItem) {
-            addItem(
+          if (this.addItem) {
+            this.addItem(
               { type: 'info', text: 'Successfully logged out from Qwen' },
               Date.now(),
             );
           } else {
-            debugLogger.log('Successfully logged out from Qwen');
+            const delivered = globalOAuthUI.callAddItem(
+              { type: 'info', text: 'Successfully logged out from Qwen' },
+              Date.now(),
+            );
+            if (delivered === undefined) {
+              debugLogger.log('Successfully logged out from Qwen');
+            }
           }
         }
       },
