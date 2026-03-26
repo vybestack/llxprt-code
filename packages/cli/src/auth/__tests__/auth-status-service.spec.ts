@@ -651,9 +651,9 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
       listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),
       getToken: vi
         .fn()
-        .mockImplementation(async (_provider: string, bucket?: string) => {
-          return bucket === 'default' ? validToken : null;
-        }),
+        .mockImplementation(async (_provider: string, bucket?: string) =>
+          bucket === 'default' ? validToken : null,
+        ),
     });
     const service = makeService({ tokenStore });
 
@@ -706,9 +706,9 @@ describe('AuthStatusService.logout session-bucket clear', () => {
     // Both scoped (with metadata) and unscoped (without) return the same bucket
     (
       bucketManager.getSessionBucket as ReturnType<typeof vi.fn>
-    ).mockImplementation((_provider: string, meta?: unknown) => {
-      return meta !== undefined ? 'target-bucket' : 'target-bucket';
-    });
+    ).mockImplementation((_provider: string, meta?: unknown) =>
+      meta !== undefined ? 'target-bucket' : 'target-bucket',
+    );
 
     const tokenAccessCoordinator: TokenAccessCoordinator = {
       getCurrentProfileSessionBucket: vi

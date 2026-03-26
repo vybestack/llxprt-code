@@ -367,9 +367,9 @@ describe('OAuthManager wiring', () => {
       },
     ]);
 
-    providerRegistry.getProvider.mockImplementation((name: string) => {
-      return name === 'anthropic' ? createProvider('anthropic') : undefined;
-    });
+    providerRegistry.getProvider.mockImplementation((name: string) =>
+      name === 'anthropic' ? createProvider('anthropic') : undefined,
+    );
 
     wiring.getHigherPriorityAuth.mockResolvedValue('API Key');
     wiring.getAnthropicUsageInfo.mockResolvedValue({ usage: 1 });

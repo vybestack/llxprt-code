@@ -233,13 +233,13 @@ describe('AuthCodeDialog', () => {
   it('hasPendingPromise returns true while waiting', () => {
     const dialog = new AuthCodeDialog();
     expect(dialog.hasPendingPromise()).toBe(false);
-    dialog.waitForAuthCode();
+    void dialog.waitForAuthCode();
     expect(dialog.hasPendingPromise()).toBe(true);
   });
 
   it('hasPendingPromise returns false after submitAuthCode', () => {
     const dialog = new AuthCodeDialog();
-    dialog.waitForAuthCode();
+    void dialog.waitForAuthCode();
     dialog.submitAuthCode('code');
     expect(dialog.hasPendingPromise()).toBe(false);
   });

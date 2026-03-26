@@ -575,7 +575,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Includes TOCTOU defense-in-depth re-check before auth (issue 1652).
    */
   private buildOnAuthBucketCallback(
-    providerName: string,
+    _providerName: string,
   ): (
     provider: string,
     bucket: string,

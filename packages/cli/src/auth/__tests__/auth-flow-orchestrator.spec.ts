@@ -50,12 +50,12 @@ function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
 }
 
 function createTokenStore(): TokenStore & {
-  acquireAuthLockParams: Array<unknown>;
-  acquireRefreshLockParams: Array<unknown>;
+  acquireAuthLockParams: unknown[];
+  acquireRefreshLockParams: unknown[];
   callOrder: string[];
 } {
-  const acquireAuthLockParams: Array<unknown> = [];
-  const acquireRefreshLockParams: Array<unknown> = [];
+  const acquireAuthLockParams: unknown[] = [];
+  const acquireRefreshLockParams: unknown[] = [];
   const callOrder: string[] = [];
 
   return {

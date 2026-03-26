@@ -196,7 +196,7 @@ export class TokenAccessCoordinator {
         : undefined;
 
     const bucketToUse = explicitBucket
-      ? (bucket as string)
+      ? bucket
       : await this.resolveImplicitBucket(providerName, requestMetadata);
 
     try {
@@ -547,7 +547,7 @@ export class TokenAccessCoordinator {
     }
 
     // Single-bucket or no-bucket: trigger auth
-    return await this.triggerAuthFlow(
+    return this.triggerAuthFlow(
       providerName,
       bucketToCheck,
       requestMetadata,
