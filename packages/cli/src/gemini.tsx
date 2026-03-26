@@ -668,6 +668,7 @@ export async function main() {
   }
 
   // If a provider is specified, activate it after initialization
+  let initialAuthFailed = false;
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
@@ -751,7 +752,7 @@ export async function main() {
       // CLI arguments have already been applied by applyCliArgumentOverrides() above
     } catch (e) {
       debugLogger.error(chalk.red((e as Error).message));
-      process.exit(1);
+      initialAuthFailed = true;
     }
   } else {
     // No explicit provider specified - ensure default provider (gemini) is activated
@@ -796,6 +797,10 @@ export async function main() {
     }
     const sandboxConfig = config.getSandbox();
     if (sandboxConfig) {
+      if (initialAuthFailed) {
+        await runExitCleanup();
+        process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
+      }
       // We intentionally omit the list of extensions here because extensions
       // should not impact auth or setting up the sandbox.
       // TODO(jacobr): refactor loadCliConfig so there is a minimal version
@@ -895,6 +900,11 @@ export async function main() {
       process.exit(exitCode);
     }
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
+  }
+
+  if (initialAuthFailed) {
+    await runExitCleanup();
+    process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
   }
 
   // Cleanup sessions after config initialization

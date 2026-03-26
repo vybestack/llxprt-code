@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as gemini from './gemini.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
-import { OutputFormat } from '@vybestack/llxprt-code-core';
+import { OutputFormat, ExitCodes } from '@vybestack/llxprt-code-core';
 
 vi.mock('./config/settings.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./config/settings.js')>();
@@ -359,6 +359,165 @@ describe('gemini main provider initialization', () => {
     resumeSessionMock.mockReset();
     exitSpy.mockRestore();
     consoleWarnSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('exits with FATAL_AUTHENTICATION_ERROR after sandbox config is determined when auth fails with sandbox', async () => {
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getServerToolsProvider: vi.fn().mockReturnValue(null),
+    };
+
+    const sandboxConfig = { command: 'docker' as const, image: 'llxprt-sandbox:latest' };
+    const mockConfig = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      refreshAuth: vi.fn().mockRejectedValue(new Error('Auth failed')),
+      getProviderManager: vi.fn(() => providerManager),
+      getProvider: vi.fn(() => 'gemini'),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getMcpServers: vi.fn(() => ({})),
+      getDebugMode: vi.fn(() => false),
+      getIdeMode: vi.fn(() => false),
+      getIdeClient: vi.fn(() => null),
+      getListExtensions: vi.fn(() => false),
+      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
+      getToolRegistryInfo: vi.fn(() => ({
+        registered: [],
+        unregistered: [],
+      })),
+      getSandbox: vi.fn(() => sandboxConfig),
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getProjectRoot: vi.fn(() => '/tmp/project'),
+      isInteractive: vi.fn(() => true),
+      getSessionId: vi.fn(() => 'session-1'),
+      adoptSessionId: vi.fn(),
+      getQuestion: vi.fn(() => ''),
+      getExperimentalZedIntegration: vi.fn(() => false),
+      getZedIntegrationEnabled: vi.fn(() => false),
+      getTrustedFolder: vi.fn(() => true),
+      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getContinueSessionRef: vi.fn(() => null),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: () => ['/tmp/project'],
+      })),
+      setTerminalBackground: vi.fn(),
+      getPolicyEngine: vi.fn(() => null),
+    } as unknown as Config;
+
+    const { loadCliConfig, parseArguments } = await import(
+      './config/config.js'
+    );
+    vi.mocked(loadCliConfig).mockResolvedValue(mockConfig);
+    vi.mocked(parseArguments).mockResolvedValueOnce({
+      promptInteractive: undefined,
+      prompt: undefined,
+      promptWords: [],
+      experimentalAcp: false,
+      experimentalUi: false,
+      provider: 'gemini',
+      profileLoad: undefined,
+      outputFormat: OutputFormat.TEXT,
+      extensions: [],
+      sessionSummary: undefined,
+    } as unknown as import('./config/config.js').CliArgs);
+
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null | undefined) => {
+        throw new Error(`EXIT_${code ?? 'unknown'}`);
+      });
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    // Auth fails, sandbox is configured — deferred exit fires with FATAL_AUTHENTICATION_ERROR
+    await expect(gemini.main()).rejects.toThrow(
+      new RegExp(`EXIT_${ExitCodes.FATAL_AUTHENTICATION_ERROR}`),
+    );
+
+    // sandbox should NOT have been started because auth failed before reaching it
+    const { start_sandbox } = await import('./utils/sandbox.js');
+    expect(vi.mocked(start_sandbox)).not.toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('exits with FATAL_AUTHENTICATION_ERROR after sandbox check when auth fails without sandbox', async () => {
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getServerToolsProvider: vi.fn().mockReturnValue(null),
+    };
+
+    const mockConfig = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      refreshAuth: vi.fn().mockRejectedValue(new Error('Auth failed')),
+      getProviderManager: vi.fn(() => providerManager),
+      getProvider: vi.fn(() => 'gemini'),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getMcpServers: vi.fn(() => ({})),
+      getDebugMode: vi.fn(() => false),
+      getIdeMode: vi.fn(() => false),
+      getIdeClient: vi.fn(() => null),
+      getListExtensions: vi.fn(() => false),
+      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
+      getToolRegistryInfo: vi.fn(() => ({
+        registered: [],
+        unregistered: [],
+      })),
+      getSandbox: vi.fn(() => undefined),
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getProjectRoot: vi.fn(() => '/tmp/project'),
+      isInteractive: vi.fn(() => true),
+      getSessionId: vi.fn(() => 'session-1'),
+      adoptSessionId: vi.fn(),
+      getQuestion: vi.fn(() => ''),
+      getExperimentalZedIntegration: vi.fn(() => false),
+      getZedIntegrationEnabled: vi.fn(() => false),
+      getTrustedFolder: vi.fn(() => true),
+      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getContinueSessionRef: vi.fn(() => null),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: () => ['/tmp/project'],
+      })),
+      setTerminalBackground: vi.fn(),
+      getPolicyEngine: vi.fn(() => null),
+    } as unknown as Config;
+
+    const { loadCliConfig, parseArguments } = await import(
+      './config/config.js'
+    );
+    vi.mocked(loadCliConfig).mockResolvedValue(mockConfig);
+    vi.mocked(parseArguments).mockResolvedValueOnce({
+      promptInteractive: undefined,
+      prompt: undefined,
+      promptWords: [],
+      experimentalAcp: false,
+      experimentalUi: false,
+      provider: 'gemini',
+      profileLoad: undefined,
+      outputFormat: OutputFormat.TEXT,
+      extensions: [],
+      sessionSummary: undefined,
+    } as unknown as import('./config/config.js').CliArgs);
+
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null | undefined) => {
+        throw new Error(`EXIT_${code ?? 'unknown'}`);
+      });
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    // Auth fails, no sandbox — deferred exit fires with FATAL_AUTHENTICATION_ERROR
+    await expect(gemini.main()).rejects.toThrow(
+      new RegExp(`EXIT_${ExitCodes.FATAL_AUTHENTICATION_ERROR}`),
+    );
+
+    exitSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
 });
