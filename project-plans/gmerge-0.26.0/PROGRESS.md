@@ -44,7 +44,7 @@
 | R28 | REIMPLEMENT | ec74134 | DONE | c1d5aec22 | shell redirection security |
 | R29 | REIMPLEMENT | 1182168 | DONE | 5393ce6d0 | enhanced compression |
 | R30 | REIMPLEMENT | e92f60b | DONE | 44c3d484e | migrate hooks |
-| R31 | REIMPLEMENT | 645e2ec | TODO | | Ctrl+Enter/Ctrl+J |
+| R31 | REIMPLEMENT | 645e2ec | DONE | e62e45099 | Ctrl+Enter/Ctrl+J |
 | R32 | REIMPLEMENT | b288f12 | TODO | | MCP client version |
 | R33 | REIMPLEMENT | 211d2c5 | TODO | | **HIGH RISK** hooks event names split |
 | R34 | REIMPLEMENT | aceb06a | TODO | | newline fix |

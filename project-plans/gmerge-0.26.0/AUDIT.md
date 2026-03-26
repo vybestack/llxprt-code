@@ -70,7 +70,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | ec74134 | REIMPLEMENTED | c1d5aec22 | shell redirection security — PASS |
 | 1182168 | REIMPLEMENTED | 5393ce6d0 | enhanced compression — PASS |
 | e92f60b | REIMPLEMENTED | 44c3d484e | migrate hooks — PASS |
-| 645e2ec | REIMPLEMENTED | | Ctrl+Enter/Ctrl+J |
+| 645e2ec | REIMPLEMENTED | e62e45099 | Ctrl+Enter/Ctrl+J — PASS (code already present, tests added) |
 | b288f12 | REIMPLEMENTED | | MCP client version |
 | 211d2c5 | REIMPLEMENTED | | **HIGH** hooks event names split |
 | aceb06a | REIMPLEMENTED | | newline fix |
