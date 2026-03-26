@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
+import { executeTokenRefresh } from '../token-refresh-helper.js';
 import type { OAuthToken, OAuthProvider, TokenStore } from '../types.js';
 
 // ---------------------------------------------------------------------------
@@ -146,11 +147,6 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
 
 describe('executeTokenRefresh – refresh_token guard', () => {
   it('skips refresh when disk refresh_token differs from original token', async () => {
-    const { executeTokenRefresh } = await import('../token-refresh-helper.js');
-    const { ProactiveRenewalManager } = await import(
-      '../proactive-renewal-manager.js'
-    );
-
     const tokenStore = createMockTokenStore();
     const provider = createMockProvider();
     const providerRegistry = {
@@ -184,11 +180,6 @@ describe('executeTokenRefresh – refresh_token guard', () => {
   });
 
   it('proceeds with refresh when disk refresh_token matches original', async () => {
-    const { executeTokenRefresh } = await import('../token-refresh-helper.js');
-    const { ProactiveRenewalManager } = await import(
-      '../proactive-renewal-manager.js'
-    );
-
     const tokenStore = createMockTokenStore();
     const provider = createMockProvider();
     const providerRegistry = {
