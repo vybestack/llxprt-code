@@ -6,9 +6,6 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { homedir } from 'node:os';
 import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
@@ -17,7 +14,6 @@ import { skillsCommand } from '../commands/skills.js';
 import { hooksCommand } from '../commands/hooks.js';
 import {
   Config,
-  loadServerHierarchicalMemory,
   setLlxprtMdFilename as setServerGeminiMdFilename,
   getCurrentLlxprtMdFilename,
   ApprovalMode,
@@ -27,15 +23,12 @@ import {
   FileDiscoveryService,
   TelemetryTarget,
   OutputFormat,
-  FileFilteringOptions,
   ProfileManager,
   ShellTool,
   EditTool,
   WriteFileTool,
-  MCPServerConfig,
   SettingsService,
   DebugLogger,
-  SHELL_TOOL_NAMES,
   isRipgrepAvailable,
   normalizeShellReplacement,
   type GeminiCLIExtension,
@@ -50,8 +43,6 @@ import { createPolicyEngineConfig } from './policy.js';
 import { annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
-import * as dotenv from 'dotenv';
-import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
 
@@ -73,67 +64,18 @@ import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 import { loadProviderAliasEntries } from '../providers/providerAliases.js';
 
-const LLXPRT_DIR = '.llxprt';
+import { loadHierarchicalLlxprtMemory } from './environmentLoader.js';
+import {
+  READ_ONLY_TOOL_NAMES,
+  EDIT_TOOL_NAME,
+  normalizeToolNameForPolicy,
+  buildNormalizedToolSet,
+  createToolExclusionFilter,
+  mergeExcludeTools,
+} from './toolGovernance.js';
+import { allowedMcpServers, mergeMcpServers } from './mcpServerConfig.js';
 
 const logger = new DebugLogger('llxprt:config');
-
-export const READ_ONLY_TOOL_NAMES = [
-  'glob',
-  'search_file_content',
-  'read_file',
-  'read_many_files',
-  'list_directory',
-  'ls',
-  'list_subagents',
-  'google_web_search',
-  'web_fetch',
-  'todo_read',
-  'todo_write',
-  'todo_pause',
-  'task',
-  'self_emitvalue',
-] as const;
-
-const EDIT_TOOL_NAME = 'replace';
-
-const normalizeToolNameForPolicy = (name: string): string =>
-  name.trim().toLowerCase();
-
-const buildNormalizedToolSet = (value: unknown): Set<string> => {
-  const normalized = new Set<string>();
-  if (!value) {
-    return normalized;
-  }
-
-  const entries =
-    Array.isArray(value) && value.length > 0
-      ? value
-      : typeof value === 'string' && value.trim().length > 0
-        ? [value]
-        : [];
-
-  for (const entry of entries) {
-    if (typeof entry === 'string' && entry.trim().length > 0) {
-      const trimmedEntry = entry.trim();
-      const openParenIndex = trimmedEntry.indexOf('(');
-      const baseName =
-        openParenIndex === -1
-          ? trimmedEntry
-          : trimmedEntry.substring(0, openParenIndex).trim();
-
-      const canonicalName =
-        normalizeToolNameForPolicy(baseName) === 'shelltool'
-          ? 'run_shell_command'
-          : baseName;
-      const normalizedName = normalizeToolNameForPolicy(canonicalName);
-      if (normalizedName) {
-        normalized.add(normalizedName);
-      }
-    }
-  }
-
-  return normalized;
-};
 
 export interface CliArgs {
   model: string | undefined;
@@ -715,89 +657,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
   };
 
   return cliArgs;
-}
-
-// This function is now a thin wrapper around the server's implementation.
-// It's kept in the CLI for now as App.tsx directly calls it for memory refresh.
-// TODO: Consider if App.tsx should get memory via a server call or if Config should refresh itself.
-export async function loadHierarchicalLlxprtMemory(
-  currentWorkingDirectory: string,
-  includeDirectoriesToReadGemini: readonly string[] = [],
-  debugMode: boolean,
-  fileService: FileDiscoveryService,
-  settings: Settings,
-  extensions: GeminiCLIExtension[],
-  folderTrust: boolean,
-  memoryImportFormat: 'flat' | 'tree' = 'tree',
-  fileFilteringOptions?: FileFilteringOptions,
-): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
-  // FIX: Use real, canonical paths for a reliable comparison to handle symlinks.
-  const realCwd = fs.realpathSync(path.resolve(currentWorkingDirectory));
-  const realHome = fs.realpathSync(path.resolve(homedir()));
-  const isHomeDirectory = realCwd === realHome;
-
-  // If it is the home directory, pass an empty string to the core memory
-  // function to signal that it should skip the workspace search.
-  const effectiveCwd = isHomeDirectory ? '' : currentWorkingDirectory;
-
-  if (debugMode) {
-    logger.debug(
-      `CLI: Delegating hierarchical memory load to server for CWD: ${currentWorkingDirectory} (memoryImportFormat: ${memoryImportFormat})`,
-    );
-  }
-
-  // Directly call the server function with the corrected path.
-  return loadServerHierarchicalMemory(
-    effectiveCwd,
-    includeDirectoriesToReadGemini,
-    debugMode,
-    fileService,
-    extensions,
-    folderTrust,
-    memoryImportFormat,
-    fileFilteringOptions,
-    settings.ui?.memoryDiscoveryMaxDirs,
-    settings.ui?.memoryDiscoveryMaxDepth,
-  );
-}
-
-/**
- * Creates a filter function to determine if a tool should be excluded.
- *
- * In non-interactive mode, we want to disable tools that require user
- * interaction to prevent the CLI from hanging. This function creates a predicate
- * that returns `true` if a tool should be excluded.
- *
- * A tool is excluded if it's not in the `allowedToolsSet`. The shell tool
- * has a special case: it's not excluded if any of its subcommands
- * are in the `allowedTools` list.
- *
- * @param allowedTools A list of explicitly allowed tool names.
- * @param allowedToolsSet A set of explicitly allowed tool names for quick lookups.
- * @returns A function that takes a tool name and returns `true` if it should be excluded.
- */
-function createToolExclusionFilter(
-  allowedTools: string[],
-  allowedToolsSet: Set<string>,
-) {
-  return (tool: string): boolean => {
-    if (tool === ShellTool.Name) {
-      // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
-      return !allowedTools.some((allowed) =>
-        SHELL_TOOL_NAMES.some((shellName) => allowed.startsWith(shellName)),
-      );
-    }
-    return !allowedToolsSet.has(tool);
-  };
-}
-
-export function isDebugMode(argv: CliArgs): boolean {
-  return (
-    argv.debug ||
-    [process.env['DEBUG'], process.env['DEBUG_MODE']].some(
-      (v) => v === 'true' || v === '1',
-    )
-  );
 }
 
 export async function loadCliConfig(
@@ -1908,115 +1767,3 @@ export async function loadCliConfig(
 
   return enhancedConfig;
 }
-
-function allowedMcpServers(
-  mcpServers: { [x: string]: MCPServerConfig },
-  allowMCPServers: string[],
-  blockedMcpServers: Array<{ name: string; extensionName: string }>,
-) {
-  const allowedNames = new Set(allowMCPServers.filter(Boolean));
-  if (allowedNames.size > 0) {
-    mcpServers = Object.fromEntries(
-      Object.entries(mcpServers).filter(([key, server]) => {
-        const isAllowed = allowedNames.has(key);
-        if (!isAllowed) {
-          blockedMcpServers.push({
-            name: key,
-            extensionName: server.extensionName || '',
-          });
-        }
-        return isAllowed;
-      }),
-    );
-  } else {
-    blockedMcpServers.push(
-      ...Object.entries(mcpServers).map(([key, server]) => ({
-        name: key,
-        extensionName: server.extensionName || '',
-      })),
-    );
-    mcpServers = {};
-  }
-  return mcpServers;
-}
-
-function mergeMcpServers(settings: Settings, extensions: GeminiCLIExtension[]) {
-  const mcpServers = { ...(settings.mcpServers || {}) };
-  for (const extension of extensions) {
-    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
-      if (mcpServers[key]) {
-        logger.debug(
-          () =>
-            `WARNING: Skipping extension MCP config for server with key "${key}" as it already exists.`,
-        );
-        return;
-      }
-      mcpServers[key] = {
-        ...server,
-        extensionName: extension.name,
-      };
-    });
-  }
-  return mcpServers;
-}
-
-function mergeExcludeTools(
-  settings: Settings,
-  extensions: GeminiCLIExtension[],
-  extraExcludes?: string[] | undefined,
-): string[] {
-  const allExcludeTools = new Set([
-    ...(settings.excludeTools || []),
-    ...(extraExcludes || []),
-  ]);
-  for (const extension of extensions) {
-    for (const tool of extension.excludeTools || []) {
-      allExcludeTools.add(tool);
-    }
-  }
-  return [...allExcludeTools];
-}
-
-function findEnvFile(startDir: string): string | null {
-  let currentDir = path.resolve(startDir);
-  while (true) {
-    // prefer gemini-specific .env under LLXPRT_DIR
-    const geminiEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
-    if (fs.existsSync(geminiEnvPath)) {
-      return geminiEnvPath;
-    }
-    const envPath = path.join(currentDir, '.env');
-    if (fs.existsSync(envPath)) {
-      return envPath;
-    }
-    const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir || !parentDir) {
-      // check .env under home as fallback, again preferring gemini-specific .env
-      const homeGeminiEnvPath = path.join(os.homedir(), LLXPRT_DIR, '.env');
-      if (fs.existsSync(homeGeminiEnvPath)) {
-        return homeGeminiEnvPath;
-      }
-      const homeEnvPath = path.join(os.homedir(), '.env');
-      if (fs.existsSync(homeEnvPath)) {
-        return homeEnvPath;
-      }
-      return null;
-    }
-    currentDir = parentDir;
-  }
-}
-
-export function loadEnvironment(): void {
-  const envFilePath = findEnvFile(process.cwd());
-  if (envFilePath) {
-    dotenv.config({ path: envFilePath, quiet: true });
-  }
-}
-
-export {
-  getCliRuntimeConfig,
-  getCliRuntimeServices,
-  getCliProviderManager,
-  getActiveProviderStatus,
-  listProviders as listRuntimeProviders,
-} from '../runtime/runtimeAccessors.js';
