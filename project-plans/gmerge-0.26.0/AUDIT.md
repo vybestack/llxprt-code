@@ -55,7 +55,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | f909c9e | REIMPLEMENTED | | policy source tracking |
 | f7f38e2 | REIMPLEMENTED | 5e0fe9278 | **HIGH** non-nullable settings — PASS, FULL VERIFY |
 | e77d7b2 | REIMPLEMENTED | 9b29e539a | OOM prevention — PASS |
-| 8a627d6 | REIMPLEMENTED | | /dev/tty safety |
+| 8a627d6 | REIMPLEMENTED | 62f3ce394 | /dev/tty safety — PASS, FULL VERIFY |
 | 1e8f87f | REIMPLEMENTED | | MCPDiscoveryState |
 | cfdc4cf | REIMPLEMENTED | | scheduleToolCalls race |
 | ce35d84 | REIMPLEMENTED | | organize keybindings |
