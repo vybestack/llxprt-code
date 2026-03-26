@@ -53,7 +53,7 @@ Post-implementation reconciliation. Updated continuously during execution.
 | a81500a | REIMPLEMENTED | | skill install consent |
 | 222b739 | REIMPLEMENTED | | skill conflict detection |
 | f909c9e | REIMPLEMENTED | | policy source tracking |
-| f7f38e2 | REIMPLEMENTED | | **HIGH** non-nullable settings |
+| f7f38e2 | REIMPLEMENTED | 5e0fe9278 | **HIGH** non-nullable settings — PASS, FULL VERIFY |
 | e77d7b2 | REIMPLEMENTED | | OOM prevention |
 | 8a627d6 | REIMPLEMENTED | | /dev/tty safety |
 | 1e8f87f | REIMPLEMENTED | | MCPDiscoveryState |

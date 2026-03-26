@@ -62,3 +62,17 @@ Running notes during batch execution. Append after each batch.
 - Quick verify: typecheck clean.
 
 ---
+
+
+## Batch R14 (2026-03-25) - HIGH RISK
+
+- Created MergedSettings type with NonNullable wrappers for 7 sub-objects
+- mergeSettings() now explicitly constructs security, telemetry, mcp, tools sub-objects
+- Removed 63 optional chaining patterns across 22 source files
+- Fixed broken raw-newline string literals in consent.ts from R11
+- Fixed R13 policy source tracking test expectations
+- Fixed R11 install.test.ts mock (LruCache export, extra consent callback arg)
+- Updated test mocks with required ui sub-object
+- FULL VERIFY: lint 0 errors, typecheck clean, core 514 pass, CLI 336 pass, format/build/smoke clean
+
+---

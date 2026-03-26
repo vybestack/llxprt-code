@@ -27,7 +27,7 @@
 | R11 | REIMPLEMENT | a81500a | TODO | | skill install consent |
 | R12 | REIMPLEMENT | 222b739 | TODO | | skill conflict detection |
 | R13 | REIMPLEMENT | f909c9e | TODO | | policy source tracking |
-| R14 | REIMPLEMENT | f7f38e2 | TODO | | **HIGH RISK** non-nullable settings (59 files) |
+| R14 | REIMPLEMENT | f7f38e2 | DONE | 5e0fe9278 | **HIGH RISK** non-nullable settings — 33 files changed, MergedSettings type, 63 ?. removals |
 | R15 | REIMPLEMENT | e77d7b2 | TODO | | OOM prevention |
 | R16 | REIMPLEMENT | 8a627d6 | TODO | | /dev/tty safety |
 | R17 | REIMPLEMENT | 1e8f87f | TODO | | MCPDiscoveryState |
