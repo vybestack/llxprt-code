@@ -224,6 +224,9 @@ describe('KeypressContext - Kitty Protocol', () => {
           name: 'return',
           sequence: '\r',
           insertable: true,
+          shift: true,
+          ctrl: false,
+          meta: false,
         }),
       );
     });
@@ -247,6 +250,9 @@ describe('KeypressContext - Kitty Protocol', () => {
           name: 'return',
           sequence: '\r',
           insertable: true,
+          shift: true,
+          ctrl: false,
+          meta: false,
         }),
       );
     });

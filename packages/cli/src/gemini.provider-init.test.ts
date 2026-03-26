@@ -369,7 +369,10 @@ describe('gemini main provider initialization', () => {
       getServerToolsProvider: vi.fn().mockReturnValue(null),
     };
 
-    const sandboxConfig = { command: 'docker' as const, image: 'llxprt-sandbox:latest' };
+    const sandboxConfig = {
+      command: 'docker' as const,
+      image: 'llxprt-sandbox:latest',
+    };
     const mockConfig = {
       initialize: vi.fn().mockResolvedValue(undefined),
       refreshAuth: vi.fn().mockRejectedValue(new Error('Auth failed')),
