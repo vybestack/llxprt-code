@@ -614,6 +614,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       pendingHistoryItemRef,
       setPendingHistoryItem,
       loopDetectedRef,
+      turnCancelledRef,
       setLastGeminiActivityTime,
       setThought,
       thinkingBlocksRef,
