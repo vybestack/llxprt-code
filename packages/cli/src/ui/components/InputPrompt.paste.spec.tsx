@@ -251,18 +251,16 @@ describe('InputPrompt paste functionality', () => {
     (mockBuffer.insert as Mock).mockClear();
 
     await sendKey({
-      name: '',
+      name: 'paste',
       ctrl: false,
       meta: false,
       shift: false,
-      paste: true,
       sequence: multiLineContent,
     });
 
     // The buffer should have been updated with the paste content through handleInput
     expect(mockBuffer.handleInput).toHaveBeenCalledWith(
       expect.objectContaining({
-        paste: true,
         sequence: multiLineContent,
       }),
     );
@@ -301,11 +299,10 @@ describe('InputPrompt paste functionality', () => {
 
     // Call the handler directly instead of emitting stdin events
     await sendKey({
-      name: '',
+      name: 'paste',
       ctrl: false,
       meta: false,
       shift: false,
-      paste: true,
       sequence: multiLineContent,
     });
 
@@ -341,11 +338,10 @@ describe('InputPrompt paste functionality', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     await sendKey({
-      name: '',
+      name: 'paste',
       ctrl: false,
       meta: false,
       shift: false,
-      paste: true,
       sequence: multiLineContent,
     });
 
@@ -356,7 +352,6 @@ describe('InputPrompt paste functionality', () => {
       ctrl: false,
       meta: false,
       shift: false,
-      paste: false,
       sequence: '\r',
     });
 
@@ -398,17 +393,15 @@ describe('InputPrompt paste functionality', () => {
     (mockBuffer.handleInput as Mock).mockClear();
 
     await sendKey({
-      name: '',
+      name: 'paste',
       ctrl: false,
       meta: false,
       shift: false,
-      paste: true,
       sequence: singleLineContent,
     });
 
     expect(mockBuffer.handleInput).toHaveBeenCalledWith(
       expect.objectContaining({
-        paste: true,
         sequence: singleLineContent,
       }),
     );
@@ -449,20 +442,18 @@ describe('InputPrompt paste functionality', () => {
     );
 
     await sendKey({
-      name: '',
+      name: 'paste',
       ctrl: false,
       meta: false,
       shift: false,
-      paste: true,
       sequence: firstPaste,
     });
 
     await sendKey({
-      name: '',
+      name: 'paste',
       ctrl: false,
       meta: false,
       shift: false,
-      paste: true,
       sequence: secondPaste,
     });
 
@@ -479,7 +470,6 @@ describe('InputPrompt paste functionality', () => {
       ctrl: false,
       meta: false,
       shift: false,
-      paste: false,
       sequence: '\r',
     });
 

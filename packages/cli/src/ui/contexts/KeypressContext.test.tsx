@@ -385,7 +385,7 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          paste: true,
+          name: 'paste',
           sequence: pastedText,
         }),
       );
@@ -602,8 +602,7 @@ describe('Drag and Drop Handling', () => {
 
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: '',
-          paste: true,
+          name: 'paste',
           sequence: `${SINGLE_QUOTE}${expectedText}`,
         }),
       );
@@ -675,7 +674,6 @@ describe('Kitty Sequence Parsing', () => {
                 ctrl: false,
                 meta: true,
                 shift: false,
-                paste: false,
               },
             };
           } else if (terminal === 'MacTerminal') {
@@ -691,7 +689,6 @@ describe('Kitty Sequence Parsing', () => {
                 ctrl: false,
                 meta: true,
                 shift: false,
-                paste: false,
               },
             };
           } else {
@@ -707,7 +704,6 @@ describe('Kitty Sequence Parsing', () => {
                 ctrl: false,
                 meta: true, // Always expect meta:true after conversion
                 shift: false,
-                paste: false,
                 sequence: accentedChar,
               },
             };
@@ -794,7 +790,6 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         sequence: '\x1b[m',
-        paste: false,
       }),
     );
   });
@@ -1052,7 +1047,7 @@ describe('Kitty Sequence Parsing', () => {
     // The paste event should be broadcast
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
-        paste: true,
+        name: 'paste',
         sequence: pastedText,
       }),
     );

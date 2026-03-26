@@ -260,11 +260,10 @@ function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
 
       if (buffer.length > 0) {
         keypressHandler({
-          name: '',
+          name: 'paste',
           shift: false,
           meta: false,
           ctrl: false,
-          paste: true,
           sequence: buffer,
           insertable: true,
         });
@@ -369,7 +368,6 @@ function* emitKeys(
               shift: false,
               meta: false,
               ctrl: false,
-              paste: true,
               sequence: decoded,
               insertable: false,
             });
@@ -589,7 +587,6 @@ function* emitKeys(
         shift,
         meta,
         ctrl,
-        paste: false,
         sequence: ESC,
         insertable: false,
       });
@@ -611,7 +608,6 @@ function* emitKeys(
         shift,
         meta,
         ctrl,
-        paste: false,
         sequence,
         insertable,
       });
@@ -625,7 +621,6 @@ export interface Key {
   ctrl: boolean;
   meta: boolean;
   shift: boolean;
-  paste: boolean;
   sequence: string;
   insertable?: boolean;
 }
@@ -708,8 +703,7 @@ export function KeypressProvider({
           if (seq) {
             broadcast({
               ...key,
-              name: '',
-              paste: true,
+              name: 'paste',
               sequence: seq,
               insertable: false,
             });
@@ -740,11 +734,10 @@ export function KeypressProvider({
       clearDraggingTimer();
       if (dragBuffer) {
         broadcast({
-          name: '',
+          name: 'paste',
           ctrl: false,
           meta: false,
           shift: false,
-          paste: true,
           sequence: dragBuffer,
           insertable: false,
         });

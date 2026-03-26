@@ -2272,10 +2272,10 @@ export function useTextBuffer({
     (key: Key): void => {
       const { sequence: input } = key;
 
-      if (key.paste) {
+      if (key.name === 'paste') {
         // Do not do any other processing on pastes so ensure we handle them
         // before all other cases.
-        insert(input, { paste: key.paste });
+        insert(input, { paste: true });
         return;
       }
 
@@ -2302,7 +2302,7 @@ export function useTextBuffer({
       else if (keyMatchers[Command.UNDO](key)) undo();
       else if (keyMatchers[Command.REDO](key)) redo();
       else if (key.insertable) {
-        insert(input, { paste: key.paste });
+        insert(input, { paste: false });
       }
     },
     [

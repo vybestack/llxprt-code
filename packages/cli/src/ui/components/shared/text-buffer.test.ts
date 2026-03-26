@@ -1059,7 +1059,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: 'h',
         }),
       );
@@ -1069,7 +1068,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: 'i',
         }),
       );
@@ -1086,7 +1084,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\r',
         }),
       );
@@ -1103,7 +1100,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\t',
         }),
       );
@@ -1120,7 +1116,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: true,
-          paste: false,
           sequence: '\u001b[9;2u',
         }),
       );
@@ -1142,7 +1137,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x7f',
         }),
       );
@@ -1166,7 +1160,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x7f',
         });
         result.current.handleInput({
@@ -1174,7 +1167,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x7f',
         });
         result.current.handleInput({
@@ -1182,7 +1174,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x7f',
         });
       });
@@ -1241,7 +1232,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x1b[D',
         }),
       ); // cursor [0,1]
@@ -1252,7 +1242,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x1b[C',
         }),
       ); // cursor [0,2]
@@ -1271,7 +1260,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: textWithAnsi,
         }),
       );
@@ -1288,7 +1276,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: true,
-          paste: false,
           sequence: '\r',
         }),
       ); // Simulates Shift+Enter in VSCode terminal
@@ -1492,7 +1479,6 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       ctrl: false,
       meta: false,
       shift: false,
-      paste: false,
       sequence,
     });
 
@@ -1550,7 +1536,6 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: largeTextWithUnsafe,
         }),
       );
@@ -1584,7 +1569,6 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: largeTextWithAnsi,
         }),
       );
@@ -1608,7 +1592,6 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: emojis,
         }),
       );
@@ -1799,7 +1782,6 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\r',
         }),
       );
