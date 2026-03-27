@@ -35,6 +35,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
       options.crawlDirectory,
       options.ignore.getFingerprint(),
       options.maxDepth,
+      options.maxFiles,
     );
     const cachedResults = cache.read(cacheKey);
 
@@ -96,6 +97,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
       options.crawlDirectory,
       options.ignore.getFingerprint(),
       options.maxDepth,
+      options.maxFiles,
     );
     cache.write(cacheKey, relativeToCwdResults, options.cacheTtl * 1000);
   }

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${extensionPath}/scripts/on-start.js"
+            "command": "node \"${extensionPath}/scripts/on-start.js\""
           }
         ]
       }

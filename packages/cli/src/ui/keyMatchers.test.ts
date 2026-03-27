@@ -87,12 +87,20 @@ describe('keyMatchers', () => {
     {
       command: Command.SCROLL_UP,
       positive: [createKey('up', { shift: true })],
-      negative: [createKey('up'), createKey('down', { shift: true })],
+      negative: [
+        createKey('up'),
+        createKey('down', { shift: true }),
+        createKey('up', { ctrl: true }),
+      ],
     },
     {
       command: Command.SCROLL_DOWN,
       positive: [createKey('down', { shift: true })],
-      negative: [createKey('down'), createKey('up', { shift: true })],
+      negative: [
+        createKey('down'),
+        createKey('up', { shift: true }),
+        createKey('down', { ctrl: true }),
+      ],
     },
     {
       command: Command.SCROLL_HOME,
@@ -120,12 +128,12 @@ describe('keyMatchers', () => {
     },
     {
       command: Command.PAGE_UP,
-      positive: [createKey('pageup')],
+      positive: [createKey('pageup'), createKey('pageup', { shift: true })],
       negative: [createKey('pagedown'), createKey('up')],
     },
     {
       command: Command.PAGE_DOWN,
-      positive: [createKey('pagedown')],
+      positive: [createKey('pagedown'), createKey('pagedown', { ctrl: true })],
       negative: [createKey('pageup'), createKey('down')],
     },
 
@@ -188,38 +196,6 @@ describe('keyMatchers', () => {
       command: Command.CLEAR_SCREEN,
       positive: [createKey('l', { ctrl: true })],
       negative: [createKey('l'), createKey('k', { ctrl: true })],
-    },
-
-    // Scrolling
-    {
-      command: Command.SCROLL_UP,
-      positive: [createKey('up', { shift: true })],
-      negative: [createKey('up'), createKey('up', { ctrl: true })],
-    },
-    {
-      command: Command.SCROLL_DOWN,
-      positive: [createKey('down', { shift: true })],
-      negative: [createKey('down'), createKey('down', { ctrl: true })],
-    },
-    {
-      command: Command.SCROLL_HOME,
-      positive: [createKey('home', { ctrl: true })],
-      negative: [createKey('end'), createKey('home')],
-    },
-    {
-      command: Command.SCROLL_END,
-      positive: [createKey('end', { ctrl: true })],
-      negative: [createKey('home'), createKey('end')],
-    },
-    {
-      command: Command.PAGE_UP,
-      positive: [createKey('pageup'), createKey('pageup', { shift: true })],
-      negative: [createKey('pagedown'), createKey('up')],
-    },
-    {
-      command: Command.PAGE_DOWN,
-      positive: [createKey('pagedown'), createKey('pagedown', { ctrl: true })],
-      negative: [createKey('pageup'), createKey('down')],
     },
 
     // History navigation

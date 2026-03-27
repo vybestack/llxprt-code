@@ -321,7 +321,9 @@ export class StreamProcessor {
       if (hookConfig && hookConfig.getEnableHooks?.()) {
         const hookSystem = hookConfig.getHookSystem?.();
         if (hookSystem) {
-          await hookSystem.initialize();
+          if (!hookSystem.isInitialized()) {
+            await hookSystem.initialize();
+          }
           const afterModelResult = await hookSystem.fireAfterModelEvent(
             llmRequest ?? {},
             iContent,

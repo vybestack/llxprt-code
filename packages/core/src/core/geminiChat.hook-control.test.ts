@@ -35,6 +35,7 @@ describe('GeminiChat hook execution control', () => {
     mockHookSystem = {
       trigger: vi.fn(),
       initialize: vi.fn().mockResolvedValue(undefined),
+      isInitialized: vi.fn().mockReturnValue(true),
       fireBeforeModelEvent: vi.fn().mockResolvedValue(undefined),
       fireAfterModelEvent: vi.fn().mockResolvedValue(undefined),
       fireBeforeToolSelectionEvent: vi.fn().mockResolvedValue(undefined),

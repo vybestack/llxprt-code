@@ -120,7 +120,7 @@ export class McpClientManager {
       try {
         this.clients.delete(name);
         this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-          clients: this.clients,
+          clients: new Map(this.clients),
         });
         await existing.disconnect();
       } catch (error) {
@@ -194,18 +194,18 @@ export class McpClientManager {
           if (!existing) {
             this.clients.set(name, client);
             this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-              clients: this.clients,
+              clients: new Map(this.clients),
             });
           }
           try {
             await client.connect();
             await client.discover(this.cliConfig);
             this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-              clients: this.clients,
+              clients: new Map(this.clients),
             });
           } catch (error) {
             this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-              clients: this.clients,
+              clients: new Map(this.clients),
             });
             // Log the error but don't let a single failed server stop the others
             // Skip emitting feedback for authentication errors (they're handled by connectToMcpServer)
@@ -234,7 +234,7 @@ export class McpClientManager {
       this.discoveryPromise = currentDiscoveryPromise;
     }
     this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: this.clients,
+      clients: new Map(this.clients),
     });
     const currentPromise = this.discoveryPromise;
     void currentPromise.then((_) => {
@@ -244,7 +244,7 @@ export class McpClientManager {
         this.discoveryPromise = undefined;
         this.discoveryState = MCPDiscoveryState.COMPLETED;
         this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-          clients: this.clients,
+          clients: new Map(this.clients),
         });
       }
     });
@@ -276,13 +276,14 @@ export class McpClientManager {
     if (Object.keys(servers).length === 0) {
       this.discoveryState = MCPDiscoveryState.COMPLETED;
       this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-        clients: this.clients,
+        clients: new Map(this.clients),
       });
+      await this.cliConfig.refreshMcpContext();
       return;
     }
 
     this.eventEmitter?.emit(CoreEvent.McpClientUpdate, {
-      clients: this.clients,
+      clients: new Map(this.clients),
     });
     await Promise.all(
       Object.entries(servers).map(([name, config]) =>

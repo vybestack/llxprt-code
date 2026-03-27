@@ -153,37 +153,36 @@ export async function installSkill(
       ? storage.getProjectSkillsDir()
       : Storage.getUserSkillsDir();
 
-  if (!(await requestConsent(skills, targetDir))) {
+  try {
+    if (!(await requestConsent(skills, targetDir))) {
+      throw new Error('Skill installation cancelled by user.');
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
+
+    const installedSkills: Array<{ name: string; location: string }> = [];
+
+    for (const skill of skills) {
+      const skillName = skill.name;
+      const skillDir = path.dirname(skill.location);
+      const destPath = path.join(targetDir, skillName);
+
+      const exists = await fs.stat(destPath).catch(() => null);
+      if (exists) {
+        onLog(`Skill "${skillName}" already exists. Overwriting...`);
+        await fs.rm(destPath, { recursive: true, force: true });
+      }
+
+      await fs.cp(skillDir, destPath, { recursive: true });
+      installedSkills.push({ name: skillName, location: destPath });
+    }
+
+    return installedSkills;
+  } finally {
     if (tempDirToClean) {
       await fs.rm(tempDirToClean, { recursive: true, force: true });
     }
-    throw new Error('Skill installation cancelled by user.');
   }
-
-  await fs.mkdir(targetDir, { recursive: true });
-
-  const installedSkills: Array<{ name: string; location: string }> = [];
-
-  for (const skill of skills) {
-    const skillName = skill.name;
-    const skillDir = path.dirname(skill.location);
-    const destPath = path.join(targetDir, skillName);
-
-    const exists = await fs.stat(destPath).catch(() => null);
-    if (exists) {
-      onLog(`Skill "${skillName}" already exists. Overwriting...`);
-      await fs.rm(destPath, { recursive: true, force: true });
-    }
-
-    await fs.cp(skillDir, destPath, { recursive: true });
-    installedSkills.push({ name: skillName, location: destPath });
-  }
-
-  if (tempDirToClean) {
-    await fs.rm(tempDirToClean, { recursive: true, force: true });
-  }
-
-  return installedSkills;
 }
 
 /**

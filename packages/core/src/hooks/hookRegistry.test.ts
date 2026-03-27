@@ -599,6 +599,16 @@ describe('HookRegistry', () => {
       expect(hookRegistry.getAllHooks()).toHaveLength(1);
 
       // Should have emitted exactly one Output warning for InvalidEvent
+      const invalidEventWarnings = emitSpy.mock.calls.filter(
+        ([event, payload]) =>
+          event === CoreEvent.Output &&
+          typeof payload === 'object' &&
+          payload !== null &&
+          'chunk' in payload &&
+          typeof (payload as { chunk: string }).chunk === 'string' &&
+          (payload as { chunk: string }).chunk.includes('InvalidEvent'),
+      );
+      expect(invalidEventWarnings).toHaveLength(1);
       expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {
         chunk: expect.stringContaining(
           'Invalid hook event name: "InvalidEvent" from project config',

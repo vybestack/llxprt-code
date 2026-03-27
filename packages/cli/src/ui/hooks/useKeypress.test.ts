@@ -166,19 +166,22 @@ describe('useKeypress', () => {
 
       const keyA = { name: 'a', sequence: 'a' };
       act(() => stdin.write('a'));
-      expect(onKeypress).toHaveBeenCalledWith(
+      expect(onKeypress).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({ ...keyA }),
       );
 
       const pasteText = 'pasted';
       act(() => stdin.write(PASTE_START + pasteText + PASTE_END));
-      expect(onKeypress).toHaveBeenCalledWith(
+      expect(onKeypress).toHaveBeenNthCalledWith(
+        2,
         expect.objectContaining({ name: 'paste', sequence: pasteText }),
       );
 
       const keyB = { name: 'b', sequence: 'b' };
       act(() => stdin.write('b'));
-      expect(onKeypress).toHaveBeenCalledWith(
+      expect(onKeypress).toHaveBeenNthCalledWith(
+        3,
         expect.objectContaining({ ...keyB }),
       );
 

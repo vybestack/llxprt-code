@@ -21,7 +21,7 @@ export enum MessageBusType {
 
 export interface ToolCallsUpdateMessage {
   type: MessageBusType.TOOL_CALLS_UPDATE;
-  toolCalls: ToolCall[];
+  readonly toolCalls: readonly ToolCall[];
 }
 
 /**

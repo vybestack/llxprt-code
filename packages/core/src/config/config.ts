@@ -768,6 +768,7 @@ export class Config {
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
   private disabledHooks: string[] = [];
+  private disabledHooksLoaded = false;
   private readonly projectHooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
@@ -2770,13 +2771,14 @@ ${trimmed}
    * Get disabled hooks list
    */
   getDisabledHooks(): string[] {
-    if (this.disabledHooks.length === 0) {
+    if (!this.disabledHooksLoaded) {
       const persisted = this.settingsService.get('hooksConfig.disabled') as
         | string[]
         | undefined;
       if (persisted && persisted.length > 0) {
         this.disabledHooks = persisted;
       }
+      this.disabledHooksLoaded = true;
     }
     return this.disabledHooks;
   }
@@ -2787,6 +2789,7 @@ ${trimmed}
    */
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;
+    this.disabledHooksLoaded = true;
     // Persist to settings service
     this.settingsService.set('hooksConfig.disabled', hooks);
   }

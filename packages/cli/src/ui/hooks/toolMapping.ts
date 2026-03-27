@@ -99,7 +99,7 @@ export function mapToDisplay(
       switch (trackedCall.status) {
         case 'success': {
           logger.debug(
-            `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${!!trackedCall.response.resultDisplay}, preview: ${typeof trackedCall.response.resultDisplay === 'string' ? trackedCall.response.resultDisplay.slice(0, 100) : 'non-string'}`,
+            `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${!!trackedCall.response.resultDisplay}`,
           );
           const outputFile = (
             trackedCall.response as { outputFile?: string | undefined }

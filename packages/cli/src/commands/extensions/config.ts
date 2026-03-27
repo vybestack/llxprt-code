@@ -269,6 +269,7 @@ export const configCommand: CommandModule = {
       console.error(
         'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
       );
+      process.exitCode = 1;
       await exitCli();
       return;
     }
