@@ -112,57 +112,16 @@ function buildHooksConfig(
   };
 }
 
-// ─── Main builder ─────────────────────────────────────────────────────────────
-
-/**
- * Constructs the Config object from all resolved values.
- */
-export function buildConfig(input: ConfigBuildInput): Config {
-  const {
-    sessionId,
-    cwd,
-    argv,
-    effectiveSettings,
-    context,
-    approvalMode,
-    providerModel,
-    sandboxConfig,
-    mcpServers,
-    excludeTools,
-    memoryContent,
-    fileCount,
-    filePaths,
-    policyEngineConfig,
-    question,
-    screenReader,
-    useRipgrepSetting,
-    mcpEnabled,
-    extensionsEnabled,
-    adminSkillsEnabled,
-    outputFormat,
-    allowedTools,
-  } = input;
-
-  const telemetry = buildTelemetryConfig(argv, effectiveSettings);
-  const sanitizationConfig = buildSanitizationConfig(effectiveSettings);
-  const hooksConfig = buildHooksConfig(
-    effectiveSettings,
-    adminSkillsEnabled,
-    cwd,
-  );
-
-  return new Config({
-    sessionId,
-    embeddingModel: undefined,
-    sandbox: sandboxConfig,
-    targetDir: cwd,
-    includeDirectories: context.includeDirectories as string[],
-    loadMemoryFromIncludeDirectories:
-      context.resolvedLoadMemoryFromIncludeDirectories,
-    debugMode: context.debugMode,
-    outputFormat,
-    question,
-
+function buildToolConfig(
+  argv: CliArgs,
+  effectiveSettings: Settings,
+  mcpEnabled: boolean,
+  mcpServers: Record<string, MCPServerConfig>,
+  excludeTools: readonly string[],
+  allowedTools: readonly string[],
+  policyEngineConfig: PolicyEngineConfig,
+) {
+  return {
     coreTools: effectiveSettings.coreTools || undefined,
     allowedTools: allowedTools.length > 0 ? [...allowedTools] : undefined,
     policyEngineConfig,
@@ -174,12 +133,50 @@ export function buildConfig(input: ConfigBuildInput): Config {
       : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
     mcpEnabled,
-    extensionsEnabled,
-    adminSkillsEnabled,
     allowedMcpServers: mcpEnabled
       ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
       : undefined,
+  };
+}
 
+function buildSessionBaseArgs(
+  input: ConfigBuildInput,
+  toolConfig: ReturnType<typeof buildToolConfig>,
+  telemetry: ReturnType<typeof buildTelemetryConfig>,
+  sanitizationConfig: ReturnType<typeof buildSanitizationConfig>,
+) {
+  const {
+    sessionId,
+    cwd,
+    argv,
+    effectiveSettings,
+    context,
+    approvalMode,
+    providerModel,
+    sandboxConfig,
+    memoryContent,
+    fileCount,
+    filePaths,
+    screenReader,
+    outputFormat,
+    question,
+    extensionsEnabled,
+    adminSkillsEnabled,
+  } = input;
+  return {
+    sessionId,
+    embeddingModel: undefined,
+    sandbox: sandboxConfig,
+    targetDir: cwd,
+    includeDirectories: context.includeDirectories as string[],
+    loadMemoryFromIncludeDirectories:
+      context.resolvedLoadMemoryFromIncludeDirectories,
+    debugMode: context.debugMode,
+    outputFormat,
+    question,
+    ...toolConfig,
+    extensionsEnabled,
+    adminSkillsEnabled,
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: [...filePaths],
@@ -189,10 +186,7 @@ export function buildConfig(input: ConfigBuildInput): Config {
     disableYoloMode:
       effectiveSettings.security?.disableYoloMode ||
       effectiveSettings.admin?.secureModeEnabled,
-    accessibility: {
-      ...effectiveSettings.accessibility,
-      screenReader,
-    },
+    accessibility: { ...effectiveSettings.accessibility, screenReader },
     telemetry,
     usageStatisticsEnabled:
       effectiveSettings.ui?.usageStatisticsEnabled ?? true,
@@ -210,6 +204,17 @@ export function buildConfig(input: ConfigBuildInput): Config {
     fileDiscoveryService: context.fileService,
     bugCommand: effectiveSettings.bugCommand,
     model: providerModel.model,
+    provider: providerModel.provider,
+    sanitizationConfig,
+  };
+}
+
+function buildFeatureArgs(
+  input: ConfigBuildInput,
+  hooksConfig: ReturnType<typeof buildHooksConfig>,
+) {
+  const { argv, effectiveSettings, context, useRipgrepSetting } = input;
+  return {
     extensionContextFilePaths: [...context.extensionContextFilePaths],
     maxSessionTurns: effectiveSettings.ui?.maxSessionTurns ?? -1,
     experimentalZedIntegration: argv.experimentalAcp || false,
@@ -218,14 +223,10 @@ export function buildConfig(input: ConfigBuildInput): Config {
       name: e.name,
       version: e.version,
     })),
-    provider: providerModel.provider,
     extensions: context.allExtensions,
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
     blockedMcpServers: undefined,
-
-    sanitizationConfig,
-
     skillsSupport: effectiveSettings.experimental?.skills,
     disabledSkills: effectiveSettings.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,
@@ -255,5 +256,46 @@ export function buildConfig(input: ConfigBuildInput): Config {
         : argv.continue || false,
     jitContextEnabled: context.jitContextEnabled,
     ...hooksConfig,
+  };
+}
+
+// ─── Main builder ─────────────────────────────────────────────────────────────
+
+/**
+ * Constructs the Config object from all resolved values.
+ */
+export function buildConfig(input: ConfigBuildInput): Config {
+  const {
+    argv,
+    effectiveSettings,
+    mcpEnabled,
+    mcpServers,
+    excludeTools,
+    allowedTools,
+    policyEngineConfig,
+    adminSkillsEnabled,
+    cwd,
+  } = input;
+
+  const telemetry = buildTelemetryConfig(argv, effectiveSettings);
+  const sanitizationConfig = buildSanitizationConfig(effectiveSettings);
+  const hooksConfig = buildHooksConfig(
+    effectiveSettings,
+    adminSkillsEnabled,
+    cwd,
+  );
+  const toolConfig = buildToolConfig(
+    argv,
+    effectiveSettings,
+    mcpEnabled,
+    mcpServers,
+    excludeTools,
+    allowedTools,
+    policyEngineConfig,
+  );
+
+  return new Config({
+    ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
+    ...buildFeatureArgs(input, hooksConfig),
   });
 }

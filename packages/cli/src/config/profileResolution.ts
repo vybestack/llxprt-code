@@ -142,6 +142,95 @@ export function resolveProfileToLoad(
   return { profileToLoad, profileExplicitlySpecified };
 }
 
+// ─── Sub-functions ────────────────────────────────────────────────────────────
+
+function applyInlineProfile(
+  profileJson: string,
+  argv: CliArgs,
+  settings: Settings,
+): Omit<ProfileLoadResult, 'profileToLoad' | 'profileWarnings'> {
+  const profile = JSON.parse(profileJson) as Profile;
+  const prepared = prepareProfileForApplication(
+    profile,
+    'inline',
+    argv,
+    settings,
+  );
+  return {
+    effectiveSettings: prepared.effectiveSettings,
+    profileModel: prepared.profileModel,
+    profileProvider: prepared.profileProvider,
+    profileModelParams: prepared.profileModelParams,
+    profileBaseUrl: prepared.profileBaseUrl,
+    loadedProfile: profile,
+  };
+}
+
+async function applyFileProfile(
+  profileToLoad: string,
+  profileExplicitlySpecified: boolean,
+  argv: CliArgs,
+  settings: Settings,
+  profileWarnings: string[],
+): Promise<Omit<
+  ProfileLoadResult,
+  'profileToLoad' | 'profileWarnings'
+> | null> {
+  try {
+    const profileManager = new ProfileManager();
+    const profile = await profileManager.loadProfile(profileToLoad);
+    const prepared = prepareProfileForApplication(
+      profile,
+      profileToLoad,
+      argv,
+      settings,
+    );
+
+    const tempDebugMode =
+      argv.debug ||
+      [process.env.DEBUG, process.env.DEBUG_MODE].some(
+        (v) => v === 'true' || v === '1',
+      ) ||
+      false;
+
+    if (tempDebugMode) {
+      debugLogger.debug(
+        `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
+      );
+      if (prepared.profileProvider && prepared.profileModel) {
+        debugLogger.debug(
+          `Applied profile '${profileToLoad}' with provider: ${prepared.profileProvider}, model: ${prepared.profileModel}`,
+        );
+      }
+    }
+
+    return {
+      effectiveSettings: prepared.effectiveSettings,
+      profileModel: prepared.profileModel,
+      profileProvider: prepared.profileProvider,
+      profileModelParams: prepared.profileModelParams,
+      profileBaseUrl: prepared.profileBaseUrl,
+      loadedProfile: profile,
+    };
+  } catch (error) {
+    const failureSummary = `Failed to load profile '${profileToLoad}': ${error instanceof Error ? error.message : String(error)}`;
+    logger.error(() => {
+      if (error instanceof Error && error.stack) {
+        return `${failureSummary}\n${error.stack}`;
+      }
+      return failureSummary;
+    });
+    debugLogger.error(failureSummary);
+
+    if (profileExplicitlySpecified) {
+      throw error;
+    }
+
+    profileWarnings.push(failureSummary);
+    return null;
+  }
+}
+
 /**
  * Loads and prepares a profile from the given resolution inputs.
  * Handles both inline (--profile) and file-based (--profile-load) profiles.
@@ -172,20 +261,19 @@ export async function loadAndPrepareProfile(input: {
   // Handle inline profile from --profile flag
   if (bootstrapArgs.profileJson != null) {
     try {
-      const profile = JSON.parse(bootstrapArgs.profileJson) as Profile;
-      loadedProfile = profile;
-
-      const prepared = prepareProfileForApplication(
-        profile,
-        'inline',
+      const result = applyInlineProfile(
+        bootstrapArgs.profileJson,
         argv,
         settings,
       );
-      profileProvider = prepared.profileProvider;
-      profileModel = prepared.profileModel;
-      profileModelParams = prepared.profileModelParams;
-      profileBaseUrl = prepared.profileBaseUrl;
-      effectiveSettings = prepared.effectiveSettings;
+      ({
+        effectiveSettings,
+        profileModel,
+        profileProvider,
+        profileModelParams,
+        profileBaseUrl,
+        loadedProfile,
+      } = result);
     } catch (err) {
       throw new Error(
         `Failed to parse inline profile: ${err instanceof Error ? err.message : String(err)}`,
@@ -195,55 +283,22 @@ export async function loadAndPrepareProfile(input: {
 
   // Handle file-based profile from --profile-load
   if (profileToLoad) {
-    try {
-      const profileManager = new ProfileManager();
-      const profile = await profileManager.loadProfile(profileToLoad);
-      loadedProfile = profile;
-
-      const prepared = prepareProfileForApplication(
-        profile,
-        profileToLoad,
-        argv,
-        settings,
-      );
-      profileProvider = prepared.profileProvider;
-      profileModel = prepared.profileModel;
-      profileModelParams = prepared.profileModelParams;
-      profileBaseUrl = prepared.profileBaseUrl;
-      effectiveSettings = prepared.effectiveSettings;
-
-      const tempDebugMode =
-        argv.debug ||
-        [process.env.DEBUG, process.env.DEBUG_MODE].some(
-          (v) => v === 'true' || v === '1',
-        ) ||
-        false;
-
-      if (tempDebugMode) {
-        debugLogger.debug(
-          `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
-        );
-        if (profileProvider && profileModel) {
-          debugLogger.debug(
-            `Applied profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
-          );
-        }
-      }
-    } catch (error) {
-      const failureSummary = `Failed to load profile '${profileToLoad}': ${error instanceof Error ? error.message : String(error)}`;
-      logger.error(() => {
-        if (error instanceof Error && error.stack) {
-          return `${failureSummary}\n${error.stack}`;
-        }
-        return failureSummary;
-      });
-      debugLogger.error(failureSummary);
-
-      if (profileExplicitlySpecified) {
-        throw error;
-      }
-
-      profileWarnings.push(failureSummary);
+    const result = await applyFileProfile(
+      profileToLoad,
+      profileExplicitlySpecified,
+      argv,
+      settings,
+      profileWarnings,
+    );
+    if (result) {
+      ({
+        effectiveSettings,
+        profileModel,
+        profileProvider,
+        profileModelParams,
+        profileBaseUrl,
+        loadedProfile,
+      } = result);
     }
   }
 
