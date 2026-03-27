@@ -272,12 +272,15 @@ async function getApprovalMode(
 ): Promise<ApprovalMode> {
   const argv = await parseArguments(settings);
   Object.assign(argv, argvOverride ?? {});
+  const runtimeSettingsService = new ServerConfig.SettingsService();
   const config = await loadCliConfig(
     settings,
     [],
     makeExtMgr(argv.extensions),
     'test-session',
     argv,
+    undefined,
+    { settingsService: runtimeSettingsService },
   );
   return config.getApprovalMode();
 }

@@ -318,6 +318,18 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
         shutdown: vi.fn(),
       }),
     },
+    ProfileManager: vi.fn(() => ({
+      loadProfile: vi.fn(async (profileName: string) => {
+        if (profileName === 'env-profile') {
+          return {
+            provider: 'gemini',
+            model: 'gemini-1.5-flash',
+            ephemeralSettings: {},
+          };
+        }
+        throw new Error(`Profile '${profileName}' not found`);
+      }),
+    })),
     loadEnvironment: vi.fn(),
     loadServerHierarchicalMemory: vi.fn().mockResolvedValue({
       memoryContent: '',
@@ -347,7 +359,16 @@ function makeExtMgr() {
 async function runConfig(settings: Settings, argv: string[] = []) {
   process.argv = ['node', 'script.js', ...argv];
   const parsedArgv = await parseArguments(settings);
-  return loadCliConfig(settings, [], makeExtMgr(), 'test-session', parsedArgv);
+  const runtimeSettingsService = new ServerConfig.SettingsService();
+  return loadCliConfig(
+    settings,
+    [],
+    makeExtMgr(),
+    'test-session',
+    parsedArgv,
+    undefined,
+    { settingsService: runtimeSettingsService },
+  );
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
@@ -465,6 +486,20 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
       (c) => c.profileName === 'some-profile',
     );
     expect(fileBasedCall).toBeUndefined();
+  });
+
+  it('without --provider, LLXPRT_PROFILE env is attempted before settings.defaultProfile', async () => {
+    vi.stubEnv('LLXPRT_PROFILE', 'env-profile');
+    const settings: Settings = { defaultProfile: 'default-profile' };
+    await runConfig(settings);
+    const envProfileCall = profileSnapshotCalls.find(
+      (c) => c.profileName === 'env-profile',
+    );
+    const defaultProfileCall = profileSnapshotCalls.find(
+      (c) => c.profileName === 'default-profile',
+    );
+    expect(envProfileCall).toBeDefined();
+    expect(defaultProfileCall).toBeUndefined();
   });
 });
 

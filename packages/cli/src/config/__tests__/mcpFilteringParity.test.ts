@@ -263,12 +263,15 @@ async function getMcpServers(
 ): Promise<string[]> {
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
+  const runtimeSettingsService = new ServerConfig.SettingsService();
   const config = await loadCliConfig(
     settings,
     [],
     makeExtMgr(),
     'test-session',
     argv,
+    undefined,
+    { settingsService: runtimeSettingsService },
   );
   return Object.keys(config.getMcpServers?.() ?? {});
 }
@@ -279,12 +282,15 @@ async function getBlockedMcpServers(
 ): Promise<Array<{ name: string; extensionName: string }>> {
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
+  const runtimeSettingsService = new ServerConfig.SettingsService();
   const config = await loadCliConfig(
     settings,
     [],
     makeExtMgr(),
     'test-session',
     argv,
+    undefined,
+    { settingsService: runtimeSettingsService },
   );
   return config.getBlockedMcpServers() ?? [];
 }
@@ -481,5 +487,19 @@ describe('mcpFilteringParity: MCP server filtering', () => {
     });
     const blocked = await getBlockedMcpServers(settings);
     expect(blocked).toHaveLength(0);
+  });
+
+  it('blockedMcpServers includes servers filtered by settings.excludeMCPServers', async () => {
+    const settings: Settings = {
+      ...settingsWithMcpServers({
+        serverA: { command: 'cmd-a' },
+        serverB: { command: 'cmd-b' },
+      }),
+      excludeMCPServers: ['serverB'],
+    };
+    const blocked = await getBlockedMcpServers(settings);
+    const blockedNames = blocked.map((s) => s.name);
+    expect(blockedNames).toContain('serverB');
+    expect(blockedNames).not.toContain('serverA');
   });
 });

@@ -32,7 +32,7 @@ import {
   type ProfileLoadResult,
 } from './profileResolution.js';
 import { resolveContextAndEnvironment } from './interactiveContext.js';
-import { resolveMemoryContent } from './environmentLoader.js';
+import { loadEnvironment, resolveMemoryContent } from './environmentLoader.js';
 import { resolveApprovalMode } from './approvalModeResolver.js';
 import { resolveProviderAndModel } from './providerModelResolver.js';
 import { buildConfig } from './configBuilder.js';
@@ -128,6 +128,7 @@ export async function loadCliConfig(
   cwd: string = process.cwd(),
   runtimeOverrides: { settingsService?: SettingsService } = {},
 ): Promise<Config> {
+  loadEnvironment();
   const { bootstrapArgs, runtimeState, profileResult } =
     await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
   const profileMergedSettings = profileResult.profileMergedSettings;

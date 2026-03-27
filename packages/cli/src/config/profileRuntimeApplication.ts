@@ -139,6 +139,12 @@ export async function applyProfileToRuntime(
       resolvedModelAfterProfile,
       resolvedBaseUrlAfterProfile,
     } = collectSnapshotResult(snapshotResult, mutableWarnings));
+    if (
+      resolvedProviderAfterProfile &&
+      resolvedProviderAfterProfile.trim() !== ''
+    ) {
+      resolvedFinalProvider = resolvedProviderAfterProfile;
+    }
     logger.debug(
       () =>
         `[bootstrap] Applied CLI auth -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,

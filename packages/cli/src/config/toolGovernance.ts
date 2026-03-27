@@ -94,14 +94,20 @@ export function createToolExclusionFilter(
   allowedTools: string[],
   allowedToolsSet: Set<string>,
 ): (tool: string) => boolean {
+  const normalizedAllowedToolsSet =
+    allowedToolsSet.size > 0
+      ? allowedToolsSet
+      : buildNormalizedToolSet(allowedTools);
+  const normalizedShellNames = buildNormalizedToolSet(SHELL_TOOL_NAMES);
+  const shellAllowed = Array.from(normalizedShellNames).some((shellName) =>
+    normalizedAllowedToolsSet.has(shellName),
+  );
+
   return (tool: string): boolean => {
     if (tool === ShellTool.Name) {
-      // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
-      return !allowedTools.some((allowed) =>
-        SHELL_TOOL_NAMES.some((shellName) => allowed.startsWith(shellName)),
-      );
+      return !shellAllowed;
     }
-    return !allowedToolsSet.has(tool);
+    return !normalizedAllowedToolsSet.has(normalizeToolNameForPolicy(tool));
   };
 }
 

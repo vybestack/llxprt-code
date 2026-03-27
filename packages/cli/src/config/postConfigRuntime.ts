@@ -55,13 +55,13 @@ export interface PostConfigInput {
 /** Fields consumed by setupRuntimeContext (steps 10-11). */
 type SetupRuntimeContextInput = Pick<
   PostConfigInput,
-  'config' | 'runtimeState' | 'profileSettingsWithTools'
+  'config' | 'runtimeState' | 'profileSettingsWithTools' | 'runtimeOverrides'
 >;
 
 /** Fields consumed by reapplyCliOverrides (step 14). */
 type ReapplyCliOverridesInput = Pick<
   PostConfigInput,
-  'config' | 'runtimeState' | 'bootstrapArgs' | 'argv'
+  'config' | 'runtimeState' | 'bootstrapArgs' | 'argv' | 'runtimeOverrides'
 >;
 
 /** Fields consumed by applyToolPolicies (step 15). */
@@ -76,6 +76,15 @@ type ApplyToolPoliciesInput = Pick<
 
 // ─── Sub-functions ────────────────────────────────────────────────────────────
 
+function getSettingsService(
+  input: Pick<PostConfigInput, 'runtimeState' | 'runtimeOverrides'>,
+): SettingsService {
+  return (
+    input.runtimeOverrides.settingsService ??
+    input.runtimeState.runtime.settingsService
+  );
+}
+
 /**
  * Step 10: Set CLI runtime context.
  * Step 11: Re-register provider infrastructure (conditional, dynamic import).
@@ -86,6 +95,7 @@ async function setupRuntimeContext(
   input: SetupRuntimeContextInput,
 ): Promise<void> {
   const { config, runtimeState } = input;
+  const settingsService = getSettingsService(input);
 
   const bootstrapRuntimeId =
     runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
@@ -106,7 +116,7 @@ async function setupRuntimeContext(
   }
 
   const profileManager = new ProfileManager();
-  setCliRuntimeContext(runtimeState.runtime.settingsService, config, {
+  setCliRuntimeContext(settingsService, config, {
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
     profileManager,
@@ -201,7 +211,8 @@ async function reapplyCliOverrides(
   input: ReapplyCliOverridesInput,
   finalProvider: string,
 ): Promise<void> {
-  const { config, runtimeState, bootstrapArgs, argv } = input;
+  const { config, bootstrapArgs, argv } = input;
+  const settingsService = getSettingsService(input);
 
   const cliModelOverride = (() => {
     if (typeof argv.model === 'string') {
@@ -216,7 +227,7 @@ async function reapplyCliOverrides(
   })();
 
   if (cliModelOverride) {
-    runtimeState.runtime.settingsService.setProviderSetting(
+    settingsService.setProviderSetting(
       finalProvider,
       'model',
       cliModelOverride,
@@ -322,7 +333,6 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
 function applyEphemeralSettings(input: PostConfigInput): void {
   const {
     config,
-    runtimeState,
     bootstrapArgs,
     argv,
     profileSettingsWithTools,
@@ -330,7 +340,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     runtimeOverrides,
   } = input;
 
-  const settingsService = runtimeState.runtime.settingsService;
+  const settingsService = getSettingsService(input);
   if (!runtimeOverrides.settingsService) {
     logger.warn(
       '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',

@@ -94,6 +94,14 @@ export function resolveMcpServers(
         profileMergedSettings.excludeMCPServers.filter(Boolean),
       );
       if (excludedNames.size > 0) {
+        blockedMcpServers.push(
+          ...Object.entries(mcpServers)
+            .filter(([key]) => excludedNames.has(key))
+            .map(([key, server]) => ({
+              name: key,
+              extensionName: server.extensionName || '',
+            })),
+        );
         mcpServers = Object.fromEntries(
           Object.entries(mcpServers).filter(([key]) => !excludedNames.has(key)),
         );

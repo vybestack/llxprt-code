@@ -256,6 +256,20 @@ function makeExtMgr() {
   );
 }
 
+async function runConfig(settings: Settings) {
+  const argv = await parseArguments(settings);
+  const runtimeSettingsService = new ServerConfig.SettingsService();
+  return loadCliConfig(
+    settings,
+    [],
+    makeExtMgr(),
+    'test-session',
+    argv,
+    undefined,
+    { settingsService: runtimeSettingsService },
+  );
+}
+
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('folderTrustOriginalSettingsParity: trust uses original settings', () => {
@@ -292,14 +306,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   it('isWorkspaceTrusted is called with the ORIGINAL settings object identity', async () => {
     const originalSettings: Settings = { folderTrust: true };
     process.argv = ['node', 'script.js'];
-    const argv = await parseArguments(originalSettings);
-    await loadCliConfig(
-      originalSettings,
-      [],
-      makeExtMgr(),
-      'test-session',
-      argv,
-    );
+    await runConfig(originalSettings);
 
     expect(isWorkspaceTrusted).toHaveBeenCalled();
     // The settings passed to isWorkspaceTrusted must be the exact original object
@@ -313,14 +320,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     });
 
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      makeExtMgr(),
-      'test-session',
-      argv,
-    );
+    const config = await runConfig({});
 
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
   });
@@ -332,14 +332,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     });
 
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      makeExtMgr(),
-      'test-session',
-      argv,
-    );
+    const config = await runConfig({});
 
     expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
@@ -364,14 +357,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     const originalSettings: Settings = { folderTrust: false };
 
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
-    const argv = await parseArguments(originalSettings);
-    const config = await loadCliConfig(
-      originalSettings,
-      [],
-      makeExtMgr(),
-      'test-session',
-      argv,
-    );
+    const config = await runConfig(originalSettings);
 
     // Trust check must have happened with original settings
     expect(isWorkspaceTrusted).toHaveBeenCalled();
@@ -385,8 +371,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   it('isWorkspaceTrusted is called exactly once for trust determination', async () => {
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
     process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    await loadCliConfig({}, [], makeExtMgr(), 'test-session', argv);
+    await runConfig({});
 
     expect(isWorkspaceTrusted).toHaveBeenCalledTimes(1);
   });

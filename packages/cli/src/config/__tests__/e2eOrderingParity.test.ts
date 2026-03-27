@@ -347,7 +347,16 @@ function makeExtMgr() {
 async function runConfig(settings: Settings, argv: string[] = []) {
   process.argv = ['node', 'script.js', ...argv];
   const parsedArgv = await parseArguments(settings);
-  return loadCliConfig(settings, [], makeExtMgr(), 'test-session', parsedArgv);
+  const runtimeSettingsService = new ServerConfig.SettingsService();
+  return loadCliConfig(
+    settings,
+    [],
+    makeExtMgr(),
+    'test-session',
+    parsedArgv,
+    undefined,
+    { settingsService: runtimeSettingsService },
+  );
 }
 
 // ─── Suite: step ordering ─────────────────────────────────────────────────────

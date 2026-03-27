@@ -12,7 +12,10 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { createPolicyEngineConfig } from './policy.js';
-import { resolveNonInteractiveExcludes } from './toolGovernance.js';
+import {
+  resolveNonInteractiveExcludes,
+  buildNormalizedToolSet,
+} from './toolGovernance.js';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
@@ -46,8 +49,12 @@ export async function resolveIntermediateConfig(
       ? argv.screenReader
       : (profileMergedSettings.accessibility?.screenReader ?? false);
 
-  const allowedTools = argv.allowedTools || settings.allowedTools || [];
-  const allowedToolsSet = new Set(allowedTools);
+  const allowedTools =
+    argv.allowedTools ||
+    profileMergedSettings.allowedTools ||
+    settings.allowedTools ||
+    [];
+  const allowedToolsSet = buildNormalizedToolSet(allowedTools);
 
   let profileSettingsWithTools = profileMergedSettings;
   if (allowedTools.length > 0) {

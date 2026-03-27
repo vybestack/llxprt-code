@@ -262,7 +262,16 @@ function makeExtMgr() {
 async function runConfig(settings: Settings, argv: string[] = []) {
   process.argv = ['node', 'script.js', ...argv];
   const parsedArgv = await parseArguments(settings);
-  return loadCliConfig(settings, [], makeExtMgr(), 'test-session', parsedArgv);
+  const runtimeSettingsService = new ServerConfig.SettingsService();
+  return loadCliConfig(
+    settings,
+    [],
+    makeExtMgr(),
+    'test-session',
+    parsedArgv,
+    undefined,
+    { settingsService: runtimeSettingsService },
+  );
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
@@ -394,6 +403,28 @@ describe('toolGovernanceParity: non-interactive mode', () => {
       'test',
       '--allowed-tools',
       'run_shell_command',
+    ]);
+    expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
+  });
+
+  it('non-interactive with --allowed-tools=run_shell_commander: ShellTool remains excluded', async () => {
+    process.stdin.isTTY = false;
+    const config = await runConfig({}, [
+      '-p',
+      'test',
+      '--allowed-tools',
+      'run_shell_commander',
+    ]);
+    expect(config.getExcludeTools()).toContain(ShellTool.Name);
+  });
+
+  it('non-interactive with --allowed-tools= ShellTool(ls) : ShellTool NOT excluded', async () => {
+    process.stdin.isTTY = false;
+    const config = await runConfig({}, [
+      '-p',
+      'test',
+      '--allowed-tools',
+      ' ShellTool(ls) ',
     ]);
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
