@@ -34,6 +34,7 @@ import {
   ApiErrorEvent,
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
+import { estimateTokens } from '../utils/toolOutputLimiter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
@@ -696,6 +697,7 @@ export class LoggingProviderWrapper implements IProvider {
     const startTime = performance.now();
     let latestTokenUsage: UsageStats | undefined;
     let lastFinishReason: string | undefined;
+    let streamedText = '';
 
     try {
       for await (const chunk of stream) {
@@ -711,6 +713,15 @@ export class LoggingProviderWrapper implements IProvider {
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
+
+          // Accumulate text content for token estimation fallback (only when no real usage yet)
+          if (!latestTokenUsage && content.blocks) {
+            for (const block of content.blocks) {
+              if (block.type === 'text') {
+                streamedText += block.text;
+              }
+            }
+          }
         }
 
         yield chunk;
@@ -722,7 +733,8 @@ export class LoggingProviderWrapper implements IProvider {
         ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
         : {
             input_token_count: 0,
-            output_token_count: 0,
+            output_token_count:
+              streamedText.length > 0 ? estimateTokens(streamedText) : 0,
             cached_content_token_count: 0,
             thoughts_token_count: 0,
             tool_token_count: 0,
@@ -755,18 +767,13 @@ export class LoggingProviderWrapper implements IProvider {
       }
 
       if (latestTokenUsage) {
-        // Accumulate token usage for session tracking
+        // Accumulate token usage for session tracking (requires actual usage data)
         this.accumulateTokenUsage(tokenCounts, config);
-
-        // Record performance metrics (TPM tracks output tokens only)
-        const outputTokens = tokenCounts.output_token_count;
-        this.performanceTracker.recordCompletion(
-          duration,
-          null,
-          outputTokens,
-          0,
-        );
       }
+
+      // Always record completion for performance tracking (TPM, latency, request count)
+      const outputTokens = tokenCounts.output_token_count;
+      this.performanceTracker.recordCompletion(duration, null, outputTokens, 0);
     } catch (error) {
       // Record error in performance tracker
       const duration = performance.now() - startTime;
