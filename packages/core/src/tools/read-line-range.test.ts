@@ -344,7 +344,7 @@ describe('ReadLineRangeTool', () => {
     expect(result.llmContent).toContain('░two');
   });
 
-  it('should report total line count matching wc -l for files with trailing newline', async () => {
+  it('should report total line count for files with trailing newline', async () => {
     const filePath = path.join(tempRootDir, 'trailing-newline.txt');
     await fsp.writeFile(filePath, 'line1\nline2\nline3\n', 'utf-8');
 
@@ -361,7 +361,7 @@ describe('ReadLineRangeTool', () => {
     expect(result.llmContent).toContain('of 3 total lines');
   });
 
-  it('should report total line count matching wc -l for files without trailing newline', async () => {
+  it('should report correct line count for files without trailing newline', async () => {
     const filePath = path.join(tempRootDir, 'no-trailing-newline.txt');
     await fsp.writeFile(filePath, 'line1\nline2\nline3', 'utf-8');
 
