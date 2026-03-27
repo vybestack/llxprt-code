@@ -378,7 +378,7 @@ describe('ReadLineRangeTool', () => {
     expect(result.llmContent).toContain('of 3 total lines');
   });
 
-  it('should report 0 total lines for an empty file', async () => {
+  it('should return empty content for an empty file', async () => {
     const filePath = path.join(tempRootDir, 'empty.txt');
     await fsp.writeFile(filePath, '', 'utf-8');
 
