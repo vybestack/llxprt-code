@@ -425,7 +425,7 @@ export function createSchedulerConfig(
       schedulerOptions?: SchedulerOptions,
       dependencies?: {
         messageBus?: MessageBus;
-        toolRegistry?: import('../tools/tool-registry.js').ToolRegistry;
+        toolRegistry?: ToolRegistry;
       },
     ) =>
       toolExecutorContext.getOrCreateScheduler(
