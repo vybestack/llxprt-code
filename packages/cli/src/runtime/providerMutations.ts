@@ -275,7 +275,7 @@ export async function updateActiveProviderApiKey(
       message:
         `API key removed for provider '${providerName}'` +
         (providerName === 'gemini' && isPaidMode === false
-          ? '\n[OK] You are now using OAuth (no paid usage).'
+          ? '\n✓ You are now using OAuth (no paid usage).'
           : ''),
       isPaidMode,
     };

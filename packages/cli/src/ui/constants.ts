@@ -20,7 +20,7 @@ export const SHELL_NAME = 'Shell';
 
 // Tool status symbols used in ToolMessage component
 export const TOOL_STATUS = {
-  SUCCESS: '[OK]',
+  SUCCESS: '✓',
   PENDING: 'o',
   EXECUTING: '⊷',
   CONFIRMING: '?',
