@@ -50,7 +50,9 @@ export function setupRpcChannel(
   connection.onRequest('lsp/shutdown', async () => {
     try {
       await orchestrator.shutdown();
-    } catch {}
+    } catch {
+      // best-effort shutdown — ignore errors
+    }
     return null;
   });
 }

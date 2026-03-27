@@ -206,6 +206,10 @@ jobs:
         run: |-
           npm run lint:ci
 
+      - name: 'Run LSP package linter'
+        run: |-
+          cd packages/lsp && npx eslint .
+
       - name: 'Run linter on integration tests'
         run: |-
           npx eslint integration-tests
