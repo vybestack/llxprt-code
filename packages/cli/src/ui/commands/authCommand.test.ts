@@ -438,7 +438,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should return formatted status indicators with enablement info
       expect(result).toEqual([
-        '[[OK]] gemini: authenticated (expires in 60m) [OAuth enabled]',
+        '[✓] gemini: authenticated (expires in 60m) [OAuth enabled]',
         '[] qwen: not authenticated [OAuth disabled]',
       ]);
     });

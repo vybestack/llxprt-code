@@ -47,7 +47,7 @@ vi.mock('./ToolMessage.js', () => ({
       resultDisplay,
     });
     const statusSymbol = {
-      [ToolCallStatus.Success]: '[OK]',
+      [ToolCallStatus.Success]: '✓',
       [ToolCallStatus.Pending]: 'o',
       [ToolCallStatus.Executing]: '⊷',
       [ToolCallStatus.Confirming]: '?',

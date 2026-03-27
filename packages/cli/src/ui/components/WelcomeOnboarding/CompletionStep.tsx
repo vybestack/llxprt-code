@@ -97,7 +97,7 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
         </Text>
         <Text color={Colors.Foreground}> </Text>
         <Text bold color={Colors.AccentGreen}>
-          {'[OK] Authentication complete!'}
+          {'✓ Authentication complete!'}
         </Text>
       </Box>
 
