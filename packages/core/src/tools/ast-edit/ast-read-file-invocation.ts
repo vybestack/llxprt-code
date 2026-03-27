@@ -15,6 +15,7 @@ import {
 import { ToolErrorType } from '../tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
 import { isNodeError } from '../../utils/errors.js';
+import { countLines } from '../../utils/fileUtils.js';
 import { Config } from '../../config/config.js';
 import type { AnsiOutput } from '../../utils/terminalSerializer.js';
 
@@ -62,10 +63,7 @@ export class ASTReadFileToolInvocation
 
       // Process line range
       const lines = content.split('\n');
-      const totalLineCount =
-        lines.length > 0 && lines[lines.length - 1] === ''
-          ? lines.length - 1
-          : lines.length;
+      const totalLineCount = countLines(lines);
       const startLine = Math.min(
         this.params.offset ? Math.max(1, this.params.offset) - 1 : 0,
         totalLineCount,

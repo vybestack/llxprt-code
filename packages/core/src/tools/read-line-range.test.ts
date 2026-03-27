@@ -378,25 +378,19 @@ describe('ReadLineRangeTool', () => {
     expect(result.llmContent).toContain('of 3 total lines');
   });
 
-  it('should report 0 total lines for an empty file via originalLineCount', async () => {
+  it('should report 0 total lines for an empty file', async () => {
     const filePath = path.join(tempRootDir, 'empty.txt');
     await fsp.writeFile(filePath, '', 'utf-8');
 
-    await fsp.writeFile(
-      path.join(tempRootDir, 'big-trailing.txt'),
-      'line1\nline2\nline3\n',
-      'utf-8',
-    );
-
-    const bigParams: ReadLineRangeToolParams = {
-      absolute_path: path.join(tempRootDir, 'big-trailing.txt'),
+    const params: ReadLineRangeToolParams = {
+      absolute_path: filePath,
       start_line: 1,
       end_line: 1,
     };
 
-    const invocation = tool.build(bigParams);
-    const bigResult = await invocation.execute(abortSignal);
-    expect(typeof bigResult.llmContent).toBe('string');
-    expect(bigResult.llmContent).toContain('of 3 total lines');
+    const invocation = tool.build(params);
+    const result = await invocation.execute(abortSignal);
+    expect(typeof result.llmContent).toBe('string');
+    expect((result.llmContent as string).trim()).toBe('');
   });
 });
