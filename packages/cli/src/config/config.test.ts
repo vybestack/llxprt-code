@@ -230,6 +230,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
         Promise.resolve({
           memoryContent: extensionPaths?.join(',') || '',
           fileCount: extensionPaths?.length || 0,
+          filePaths: [],
         }),
     ),
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {

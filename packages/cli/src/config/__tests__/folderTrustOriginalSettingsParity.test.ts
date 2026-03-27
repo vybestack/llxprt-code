@@ -388,7 +388,6 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     const argv = await parseArguments({} as Settings);
     await loadCliConfig({}, [], makeExtMgr(), 'test-session', argv);
 
-    // Called at least once for trust determination in loadCliConfig
-    expect(isWorkspaceTrusted).toHaveBeenCalled();
+    expect(isWorkspaceTrusted).toHaveBeenCalledTimes(1);
   });
 });
