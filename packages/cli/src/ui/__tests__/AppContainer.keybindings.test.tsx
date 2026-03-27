@@ -86,7 +86,7 @@ function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
 }
 
 // Mock heavy dependencies
-vi.mock('../hooks/useGeminiStream.js', () => ({
+vi.mock('../hooks/geminiStream/index.js', () => ({
   useGeminiStream: vi.fn(() => ({
     streamingState: 'Idle',
     submitQuery: vi.fn(),

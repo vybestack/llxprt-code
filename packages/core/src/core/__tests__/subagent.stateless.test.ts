@@ -43,7 +43,7 @@ import type {
   ModelConfig,
   RunConfig,
   SubAgentRuntimeOverrides,
-} from '../subagent.js';
+} from '../subagentTypes.js';
 import type { ToolRegistry } from '../../tools/tool-registry.js';
 import type { ContentGenerator } from '../contentGenerator.js';
 import type { Part } from '@google/genai';

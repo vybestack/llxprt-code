@@ -259,14 +259,14 @@ describe('<HistoryItemDisplay />', () => {
       ...baseItem,
       type: 'info',
       text: 'Custom icon message',
-      icon: '[OK]',
+      icon: '✓',
     };
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay {...baseItem} item={item} />,
     );
     const output = lastFrame();
     expect(output).toContain('Custom icon message');
-    expect(output).toContain('[OK]');
+    expect(output).toContain('✓');
   });
 
   it('renders InfoMessage with custom color', () => {

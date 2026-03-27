@@ -167,13 +167,28 @@ export function findBackwardValidSplitPoint(
  * references the first task and points the model at todo_read for
  * full recovery; otherwise it emits a simple "continue" statement.
  */
-export function buildContinuationDirective(activeTodos?: string): string {
+export function buildContinuationDirective(
+  activeTodos?: string,
+  lastUserPromptContext?: string,
+): string {
+  const hasPromptContext =
+    lastUserPromptContext !== undefined &&
+    lastUserPromptContext.trim().length > 0;
+  const promptPart = hasPromptContext
+    ? ` The user's most recent request: "${lastUserPromptContext.trim()}".`
+    : '';
+
   if (activeTodos && activeTodos.trim().length > 0) {
     const firstTask = extractFirstTaskContent(activeTodos);
     if (firstTask) {
-      return `Understood. Continue with current task: "${firstTask}". Use todo_read for full context.`;
+      return `Understood.${promptPart} Continue with current task: "${firstTask}". Use todo_read for full context.`;
     }
   }
+
+  if (hasPromptContext) {
+    return `Understood.${promptPart} Continuing with the current task.`;
+  }
+
   return 'Understood. Continuing with the current task.';
 }
 

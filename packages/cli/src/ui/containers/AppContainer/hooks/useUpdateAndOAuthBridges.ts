@@ -71,11 +71,9 @@ export function useUpdateAndOAuthBridges({
   }, [addItem, getCliOAuthManager, setUpdateInfo]);
 
   useEffect(() => {
-    (global as Record<string, unknown>).__oauth_add_item = addItem;
     globalOAuthUI.setAddItem(addItem);
 
     return () => {
-      delete (global as Record<string, unknown>).__oauth_add_item;
       globalOAuthUI.clearAddItem();
     };
   }, [addItem]);

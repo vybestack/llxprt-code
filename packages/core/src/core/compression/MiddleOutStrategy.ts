@@ -21,7 +21,11 @@
  */
 
 import { readFileSync } from 'node:fs';
-import type { IContent, UsageStats } from '../../services/history/IContent.js';
+import type {
+  IContent,
+  TextBlock,
+  UsageStats,
+} from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type {
   CompressionContext,
@@ -42,8 +46,11 @@ import {
   sanitizeHistoryForCompression,
 } from './utils.js';
 import { getCompressionPrompt } from '../prompts.js';
+import { estimateTokens } from '../../utils/toolOutputLimiter.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
+const LAST_PROMPT_TOKEN_THRESHOLD = 500;
+const LAST_PROMPT_CONTEXT_MAX_LENGTH = 200;
 
 const TRIGGER_INSTRUCTION =
   'First, reason in your scratchpad. Then, generate the <state_snapshot>.';
@@ -69,7 +76,21 @@ export class MiddleOutStrategy implements CompressionStrategy {
     }
 
     // Compute sandwich split
-    const { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
+    let { toKeepTop, toCompress, toKeepBottom } = this.computeSplit(context);
+
+    if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
+      return this.noCompressionResult(history);
+    }
+
+    // Preserve the last user prompt if it ended up in the middle section
+    const {
+      toCompress: adjustedCompress,
+      toKeepBottom: adjustedBottom,
+      lastUserPromptContext,
+      largeLastPromptInjection,
+    } = this.preserveLastUserPrompt(toKeepTop, toCompress, toKeepBottom);
+    toCompress = adjustedCompress;
+    toKeepBottom = adjustedBottom;
 
     if (toCompress.length < MINIMUM_MIDDLE_MESSAGES) {
       return this.noCompressionResult(history);
@@ -95,6 +116,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       },
       ...sanitizeHistoryForCompression(toCompress),
       ...this.buildContextInjections(context),
+      ...largeLastPromptInjection,
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: TRIGGER_INSTRUCTION }],
@@ -122,6 +144,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       toKeepBottom,
       context.activeTodos,
       capturedUsage,
+      lastUserPromptContext,
     );
 
     const metadata: CompressionResultMetadata = {
@@ -239,12 +262,114 @@ export class MiddleOutStrategy implements CompressionStrategy {
     }
   }
 
+  private preserveLastUserPrompt(
+    toKeepTop: readonly IContent[],
+    toCompress: readonly IContent[],
+    toKeepBottom: readonly IContent[],
+  ): {
+    toCompress: IContent[];
+    toKeepBottom: IContent[];
+    lastUserPromptContext: string | undefined;
+    largeLastPromptInjection: IContent[];
+  } {
+    const fullHistory = [...toKeepTop, ...toCompress, ...toKeepBottom];
+    const lastHumanIndex = this.findLastHumanMessageIndex(fullHistory);
+
+    if (lastHumanIndex === -1) {
+      return {
+        toCompress: [...toCompress],
+        toKeepBottom: [...toKeepBottom],
+        lastUserPromptContext: undefined,
+        largeLastPromptInjection: [],
+      };
+    }
+
+    const compressStart = toKeepTop.length;
+    const compressEnd = compressStart + toCompress.length;
+    const isInCompressRange =
+      lastHumanIndex >= compressStart && lastHumanIndex < compressEnd;
+
+    if (!isInCompressRange) {
+      const lastHumanMsg = fullHistory[lastHumanIndex];
+      const text = this.extractTextFromMessage(lastHumanMsg);
+      const context =
+        text.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
+          ? text.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
+          : text;
+      return {
+        toCompress: [...toCompress],
+        toKeepBottom: [...toKeepBottom],
+        lastUserPromptContext: context || undefined,
+        largeLastPromptInjection: [],
+      };
+    }
+
+    const lastHumanMsg = fullHistory[lastHumanIndex];
+    const messageText = this.extractTextFromMessage(lastHumanMsg);
+    const tokenCount = estimateTokens(messageText);
+    const indexInCompress = lastHumanIndex - compressStart;
+
+    if (tokenCount < LAST_PROMPT_TOKEN_THRESHOLD) {
+      const movedMessages = toCompress.slice(indexInCompress);
+      const remainingCompress = toCompress.slice(0, indexInCompress);
+      const context =
+        messageText.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
+          ? messageText.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
+          : messageText;
+      return {
+        toCompress: [...remainingCompress],
+        toKeepBottom: [...movedMessages, ...toKeepBottom],
+        lastUserPromptContext: context || undefined,
+        largeLastPromptInjection: [],
+      };
+    }
+
+    const context =
+      messageText.length > LAST_PROMPT_CONTEXT_MAX_LENGTH
+        ? messageText.slice(0, LAST_PROMPT_CONTEXT_MAX_LENGTH) + '...'
+        : messageText;
+    const injection: IContent = {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'text',
+          text: `IMPORTANT — The user's most recent message (summarized because it was too long to preserve literally). Summarize this user request faithfully and completely, preserving their exact intent, problems described, and any specific instructions:
+
+${messageText}`,
+        },
+      ],
+    };
+    return {
+      toCompress: [...toCompress],
+      toKeepBottom: [...toKeepBottom],
+      lastUserPromptContext: context || undefined,
+      largeLastPromptInjection: [injection],
+    };
+  }
+
+  private findLastHumanMessageIndex(history: readonly IContent[]): number {
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].speaker === 'human') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private extractTextFromMessage(message: IContent): string {
+    return message.blocks
+      .filter((b): b is TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join(' ');
+  }
+
   private assembleHistory(
     toKeepTop: IContent[],
     summary: string,
     toKeepBottom: IContent[],
     activeTodos?: string,
     usage?: UsageStats,
+    lastUserPromptContext?: string,
   ): IContent[] {
     const summaryEntry: IContent = {
       speaker: 'human' as const,
@@ -260,7 +385,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
         blocks: [
           {
             type: 'text' as const,
-            text: buildContinuationDirective(activeTodos),
+            text: buildContinuationDirective(
+              activeTodos,
+              lastUserPromptContext,
+            ),
           },
         ],
       },

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '../config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
-import { ContextState, SubagentTerminateMode } from '../core/subagent.js';
+import { ContextState, SubagentTerminateMode } from '../core/subagentTypes.js';
 import { ToolErrorType } from './tool-error.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
 

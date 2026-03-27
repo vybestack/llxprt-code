@@ -149,7 +149,7 @@ export async function requestHookConsent(
       const consent = answer.trim().toLowerCase() === 'y';
       if (consent) {
         debugLogger.log(
-          `[OK] Hooks enabled for extension "${sanitizedExtensionName}".`,
+          `✓ Hooks enabled for extension "${sanitizedExtensionName}".`,
         );
       } else {
         debugLogger.log(

@@ -221,11 +221,8 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 };
 
 import { existsSync, mkdirSync, promises as fsPromises } from 'fs';
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { homedir } from 'os';
-import { dirname, join } from 'path';
-import commandExists from 'command-exists';
+import { join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
@@ -492,12 +489,7 @@ export async function main() {
   const stdinManager = new StdinRawModeManager({
     debug: config.getDebugMode(),
   });
-  if (
-    config.isInteractive() &&
-    !argv.experimentalUi &&
-    !wasRaw &&
-    process.stdin.isTTY
-  ) {
+  if (config.isInteractive() && !wasRaw && process.stdin.isTTY) {
     // Drain any garbage ANSI sequences that may be in the stdin buffer
     // before we start processing input. This addresses #199 where garbage
     // ANSI on startup can disrupt theme selection on some terminals (e.g., OCI).
@@ -1072,153 +1064,6 @@ export async function main() {
 
   // Check if a provider is already active on startup
   providerManager.getActiveProvider();
-
-  // Check for experimental UI flag
-  if (argv.experimentalUi) {
-    if (!commandExists.sync('bun')) {
-      debugLogger.error('--experimental-ui requires Bun to be installed.');
-      debugLogger.error(
-        'Install bun from https://bun.sh or via your package manager.',
-      );
-      await runExitCleanup();
-      process.exit(ExitCodes.FATAL_INPUT_ERROR);
-    }
-
-    const resolveImportMeta = (
-      import.meta as unknown as {
-        resolve?: (specifier: string, parent?: string) => string;
-      }
-    ).resolve;
-    if (typeof resolveImportMeta !== 'function') {
-      debugLogger.error(
-        '--experimental-ui requires a Node version that supports import.meta.resolve.',
-      );
-      process.exit(1);
-    }
-
-    let uiEntryPath: string;
-    try {
-      const uiEntryUrl = resolveImportMeta('@vybestack/llxprt-ui');
-      uiEntryPath = fileURLToPath(uiEntryUrl);
-    } catch (e: unknown) {
-      const error = e as { code?: string };
-      if (
-        error.code === 'MODULE_NOT_FOUND' ||
-        error.code === 'ERR_MODULE_NOT_FOUND'
-      ) {
-        debugLogger.error(
-          '--experimental-ui requires @vybestack/llxprt-ui to be installed',
-        );
-        debugLogger.error('Run: npm install -g @vybestack/llxprt-ui');
-        process.exit(1);
-      }
-      throw e;
-    }
-
-    // If we enabled raw mode earlier, restore cooked mode before handing
-    // the terminal to bun/OpenTUI.
-    if (process.stdin.isTTY && process.stdin.isRaw && !wasRaw) {
-      try {
-        stdinManager.disable(true); // Restore to wasRaw
-      } catch {
-        // ignore
-      }
-    }
-    // Ensure the parent process isn't consuming stdin while bun runs
-    // (inherited stdio means both processes share the same TTY fd).
-    if (process.stdin.isTTY) {
-      process.stdin.pause();
-    }
-
-    let uiRoot = dirname(uiEntryPath);
-    while (
-      uiRoot !== dirname(uiRoot) &&
-      !existsSync(join(uiRoot, 'package.json'))
-    ) {
-      uiRoot = dirname(uiRoot);
-    }
-    if (!existsSync(join(uiRoot, 'package.json'))) {
-      debugLogger.error(
-        `Unable to locate @vybestack/llxprt-ui package root from: ${uiEntryPath}`,
-      );
-      process.exit(1);
-    }
-
-    const uiEntry = join(uiRoot, 'src', 'main.tsx');
-    const rawArgs = process.argv.slice(2);
-    const filteredArgs: string[] = [];
-    for (let i = 0; i < rawArgs.length; i += 1) {
-      const arg = rawArgs[i];
-      if (arg === '--experimental-ui') {
-        const next = rawArgs[i + 1];
-        if (next === 'true' || next === 'false') {
-          i += 1;
-        }
-        continue;
-      }
-      if (arg.startsWith('--experimental-ui=')) {
-        continue;
-      }
-      filteredArgs.push(arg);
-    }
-
-    const child = spawn('bun', ['run', uiEntry, ...filteredArgs], {
-      stdio: 'inherit',
-      cwd: workspaceRoot,
-      env: { ...process.env },
-    });
-
-    const forwardSignal = (signal: NodeJS.Signals) => {
-      if (!child.killed) {
-        child.kill(signal);
-      }
-      const killTimer = setTimeout(() => {
-        if (!child.killed) {
-          child.kill('SIGKILL');
-        }
-      }, 800);
-      killTimer.unref();
-
-      const exitTimer = setTimeout(async () => {
-        await runExitCleanup();
-        process.exit(signal === 'SIGINT' ? 130 : 143);
-      }, 1200);
-      exitTimer.unref();
-    };
-
-    ['SIGINT', 'SIGTERM'].forEach((signal) => {
-      process.on(signal, () => forwardSignal(signal as NodeJS.Signals));
-    });
-
-    child.on('error', async (err) => {
-      debugLogger.error('Failed to launch experimental UI via bun:', err);
-      await runExitCleanup();
-      process.exit(1);
-    });
-
-    child.on('close', async (code, signal) => {
-      if (process.stdin.isTTY && process.stdin.isRaw !== wasRaw) {
-        try {
-          stdinManager.disable(true); // Restore to wasRaw
-        } catch {
-          // ignore
-        }
-      }
-      await runExitCleanup();
-
-      if (signal === 'SIGINT') {
-        process.exit(130);
-        return;
-      }
-      if (signal === 'SIGTERM') {
-        process.exit(143);
-        return;
-      }
-      process.exit(code ?? 0);
-    });
-
-    return;
-  }
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {

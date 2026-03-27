@@ -24,6 +24,15 @@ else
     FAILED=1
 fi
 
+# LSP package linting (separate config, excluded from root eslint)
+echo -e "\n${YELLOW}Running ESLint on LSP package...${NC}"
+if (cd packages/lsp && npx eslint .); then
+    echo -e "${GREEN}✓ LSP ESLint passed${NC}"
+else
+    echo -e "${RED}✗ LSP ESLint failed${NC}"
+    FAILED=1
+fi
+
 # Format check (doesn't modify, just checks)
 echo -e "\n${YELLOW}Checking Prettier formatting...${NC}"
 if npx prettier --check .; then

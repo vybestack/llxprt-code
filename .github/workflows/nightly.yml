@@ -61,16 +61,6 @@ jobs:
       - name: 'Install dependencies for testing'
         run: |-
           npm ci
-
-      - name: 'Install UI dependencies (bun)'
-        run: |-
-          cd packages/ui
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            bun install --no-save
-          else
-            bun install
-          fi
-
       - name: 'Build project'
         run: |-
           npm run build
@@ -121,12 +111,6 @@ jobs:
         env:
           CI: true
         run: npm run test:scripts
-
-      - name: 'Run UI tests (vitest with happy-dom)'
-        env:
-          CI: true
-        run: |-
-          cd packages/ui && bun run test
 
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'

@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AsyncTaskManager } from './asyncTaskManager.js';
 import { AsyncTaskReminderService } from './asyncTaskReminderService.js';
-import type { OutputObject } from '../core/subagent.js';
+import type { OutputObject } from '../core/subagentTypes.js';
 
 describe('AsyncTaskReminderService', () => {
   let taskManager: AsyncTaskManager;

@@ -5,17 +5,19 @@
  */
 
 import { vi, describe, it, expect, beforeEach, Mock, afterEach } from 'vitest';
+import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
-  SubAgentScope,
   SubagentTerminateMode,
-  PromptConfig,
-  ModelConfig,
-  RunConfig,
-  OutputConfig,
-  ToolConfig,
-  SubAgentRuntimeOverrides,
-} from './subagent.js';
+  type PromptConfig,
+  type ModelConfig,
+  type RunConfig,
+  type OutputConfig,
+  type ToolConfig,
+  type SubAgentRuntimeOverrides,
+} from './subagentTypes.js';
+import { buildPartsFromCompletedCalls } from './subagentToolProcessing.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config, ConfigParameters } from '../config/config.js';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
 import {
@@ -871,6 +873,13 @@ describe('subagent.ts', () => {
           overrides,
         );
 
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [{ id: 'call-1', name: 'externalTool', args: {} }],
+            'stop',
+          ]),
+        );
+
         vi.mocked(executeToolCall).mockResolvedValue({
           ...createCompletedToolCallResponse({
             callId: 'call-1',
@@ -879,30 +888,7 @@ describe('subagent.ts', () => {
           }),
         } as unknown as Awaited<ReturnType<typeof executeToolCall>>);
 
-        const fnCalls: FunctionCall[] = [
-          {
-            id: 'call-1',
-            name: 'externalTool',
-            args: {},
-          } as FunctionCall,
-        ];
-
-        const processFunctionCalls = (
-          scope as unknown as {
-            processFunctionCalls: (
-              calls: FunctionCall[],
-              abortController: AbortController,
-              promptId: string,
-            ) => Promise<Content[]>;
-          }
-        ).processFunctionCalls;
-
-        await processFunctionCalls.call(
-          scope,
-          fnCalls,
-          new AbortController(),
-          'prompt-1',
-        );
+        await scope.runNonInteractive(new ContextState());
 
         for (const call of vi.mocked(executeToolCall).mock.calls) {
           expect(call[0]).not.toBe(config);
@@ -2027,17 +2013,14 @@ describe('subagent.ts', () => {
           },
         ];
 
-        // Call the private method through reflection
-        const buildParts = (
-          scope as unknown as {
-            buildPartsFromCompletedCalls: (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              calls: any[],
-            ) => Part[];
-          }
-        ).buildPartsFromCompletedCalls.bind(scope);
-
-        buildParts(completedCalls);
+        buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
 
         // For tools with canUpdateOutput=true, onMessage should NOT be called
         // because the output was already streamed live
@@ -2097,17 +2080,14 @@ describe('subagent.ts', () => {
           },
         ];
 
-        // Call the private method through reflection
-        const buildParts = (
-          scope as unknown as {
-            buildPartsFromCompletedCalls: (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              calls: any[],
-            ) => Part[];
-          }
-        ).buildPartsFromCompletedCalls.bind(scope);
-
-        buildParts(completedCalls);
+        buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
 
         // For tools with canUpdateOutput=false, onMessage SHOULD be called
         expect(onMessageCalls).toHaveLength(1);
@@ -2166,17 +2146,14 @@ describe('subagent.ts', () => {
           },
         ];
 
-        // Call the private method through reflection
-        const buildParts = (
-          scope as unknown as {
-            buildPartsFromCompletedCalls: (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              calls: any[],
-            ) => Part[];
-          }
-        ).buildPartsFromCompletedCalls.bind(scope);
-
-        buildParts(completedCalls);
+        buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
 
         // For error status, onMessage SHOULD be called to show the error
         expect(onMessageCalls).toHaveLength(1);
@@ -2243,16 +2220,14 @@ describe('subagent.ts', () => {
           },
         ];
 
-        const buildParts = (
-          scope as unknown as {
-            buildPartsFromCompletedCalls: (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              calls: any[],
-            ) => Part[];
-          }
-        ).buildPartsFromCompletedCalls.bind(scope);
-
-        const parts = buildParts(completedCalls);
+        const parts = buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
 
         // CRITICAL: No part should contain functionCall - only functionResponse
         // functionCall in user-role message causes Anthropic invalid_request_error
@@ -2345,16 +2320,14 @@ describe('subagent.ts', () => {
           },
         ];
 
-        const buildParts = (
-          scope as unknown as {
-            buildPartsFromCompletedCalls: (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              calls: any[],
-            ) => Part[];
-          }
-        ).buildPartsFromCompletedCalls.bind(scope);
-
-        const parts = buildParts(completedCalls);
+        const parts = buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
 
         // No part should contain functionCall
         for (const part of parts) {
@@ -2411,18 +2384,15 @@ describe('subagent.ts', () => {
           },
         ];
 
-        // Call the private method through reflection
-        const buildParts = (
-          scope as unknown as {
-            buildPartsFromCompletedCalls: (
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              calls: any[],
-            ) => Part[];
-          }
-        ).buildPartsFromCompletedCalls.bind(scope);
-
         // Should not throw
-        const parts = buildParts(completedCalls);
+        const parts = buildPartsFromCompletedCalls(
+          completedCalls as Parameters<typeof buildPartsFromCompletedCalls>[0],
+          {
+            onMessage: scope.onMessage,
+            subagentId: scope.getAgentId(),
+            logger: new DebugLogger('llxprt:subagent'),
+          },
+        );
 
         // Should have produced parts
         expect(parts.length).toBeGreaterThan(0);

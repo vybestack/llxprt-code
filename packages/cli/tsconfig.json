@@ -11,8 +11,7 @@
       "@vybestack/llxprt-code-core/*": ["../core/src/*"],
       "@vybestack/llxprt-code-core/providers/types/IProviderConfig.js": [
         "../core/src/providers/types/IProviderConfig.ts"
-      ],
-      "@vybestack/llxprt-ui": ["./src/@vybestack-llxprt-ui.d.ts"]
+      ]
     }
   },
   "include": [

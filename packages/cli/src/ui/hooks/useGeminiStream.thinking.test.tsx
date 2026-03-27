@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
-import { useGeminiStream } from './useGeminiStream.js';
+import { useGeminiStream } from './geminiStream/index.js';
 import {
   useReactToolScheduler,
   TrackedToolCall,

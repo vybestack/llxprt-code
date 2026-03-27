@@ -15,12 +15,12 @@ import {
   SubagentOrchestrator,
   type SubagentLaunchRequest,
 } from '../core/subagentOrchestrator.js';
+import type { SubAgentScope } from '../core/subagent.js';
 import {
   ContextState,
   SubagentTerminateMode,
   type OutputObject,
-  type SubAgentScope,
-} from '../core/subagent.js';
+} from '../core/subagentTypes.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '../config/profileManager.js';

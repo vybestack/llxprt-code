@@ -149,31 +149,22 @@ export class QwenOAuthProvider implements OAuthProvider {
           deviceCodeResponse.verification_uri_complete ||
           `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
-        const addItem = await this.displayQwenAuthUrl(authUrl);
-        await this.openQwenBrowserIfInteractive(authUrl, addItem);
+        await this.displayQwenAuthUrl(authUrl);
+        await this.openQwenBrowserIfInteractive(authUrl);
 
-        if (addItem) {
-          addItem(
-            { type: 'info', text: 'Waiting for authorization...' },
-            Date.now(),
-          );
-        } else {
-          debugLogger.log('─'.repeat(40));
-          debugLogger.log('Waiting for authorization...\n');
-        }
+        this.emitUIMessage(
+          { type: 'info', text: 'Waiting for authorization...' },
+          Date.now(),
+        );
 
         const token = await this.deviceFlow.pollForToken(
           deviceCodeResponse.device_code,
         );
 
-        if (addItem) {
-          addItem(
-            { type: 'info', text: 'Authentication successful!' },
-            Date.now(),
-          );
-        } else {
-          debugLogger.log('Authentication successful!');
-        }
+        this.emitUIMessage(
+          { type: 'info', text: 'Authentication successful!' },
+          Date.now(),
+        );
 
         return token;
       },
@@ -198,14 +189,16 @@ export class QwenOAuthProvider implements OAuthProvider {
       url: authUrl,
     };
 
-    const addItem = this.addItem || globalOAuthUI.getAddItem();
-    if (addItem) {
-      addItem(historyItem);
+    if (this.addItem) {
+      this.addItem(historyItem);
     } else {
-      debugLogger.log('\nQwen OAuth Authentication');
-      debugLogger.log('─'.repeat(40));
-      debugLogger.log('Please visit the following URL to authorize:');
-      debugLogger.log(authUrl);
+      const delivered = globalOAuthUI.callAddItem(historyItem);
+      if (delivered === undefined) {
+        debugLogger.log('\nQwen OAuth Authentication');
+        debugLogger.log('─'.repeat(40));
+        debugLogger.log('Please visit the following URL to authorize:');
+        debugLogger.log(authUrl);
+      }
     }
 
     try {
@@ -219,18 +212,32 @@ export class QwenOAuthProvider implements OAuthProvider {
       );
     }
 
-    return addItem ?? undefined;
+    return this.addItem ?? undefined;
+  }
+
+  /**
+   * Emit a UI message via the instance addItem or the global buffer.
+   */
+  private emitUIMessage(
+    itemData: Omit<HistoryItemWithoutId, 'id'>,
+    baseTimestamp?: number,
+  ): void {
+    if (this.addItem) {
+      this.addItem(itemData, baseTimestamp);
+    } else {
+      const delivered = globalOAuthUI.callAddItem(itemData, baseTimestamp);
+      if (delivered === undefined) {
+        debugLogger.log(
+          'text' in itemData ? (itemData.text as string) : 'OAuth event',
+        );
+      }
+    }
   }
 
   /**
    * Optionally open the browser for Qwen auth if interactive mode is enabled.
    */
-  private async openQwenBrowserIfInteractive(
-    authUrl: string,
-    addItem:
-      | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
-      | undefined,
-  ): Promise<void> {
+  private async openQwenBrowserIfInteractive(authUrl: string): Promise<void> {
     let noBrowser = false;
     try {
       const { getEphemeralSetting } = await import(
@@ -245,26 +252,18 @@ export class QwenOAuthProvider implements OAuthProvider {
       return;
     }
 
-    if (addItem) {
-      addItem(
-        { type: 'info', text: 'Opening browser for authentication...' },
-        Date.now(),
-      );
-    } else {
-      debugLogger.log('Opening browser for authentication...');
-    }
+    this.emitUIMessage(
+      { type: 'info', text: 'Opening browser for authentication...' },
+      Date.now(),
+    );
 
     try {
       await openBrowserSecurely(authUrl);
     } catch (error) {
-      if (addItem) {
-        addItem(
-          { type: 'warning', text: 'Failed to open browser automatically.' },
-          Date.now(),
-        );
-      } else {
-        debugLogger.log('Failed to open browser automatically.');
-      }
+      this.emitUIMessage(
+        { type: 'warning', text: 'Failed to open browser automatically.' },
+        Date.now(),
+      );
       this.logger.debug(
         () =>
           `Browser launch error: ${
@@ -363,14 +362,19 @@ export class QwenOAuthProvider implements OAuthProvider {
 
         // Line 89: PRINT "Successfully logged out from Qwen"
         if (!token) {
-          const addItem = this.addItem || globalOAuthUI.getAddItem();
-          if (addItem) {
-            addItem(
+          if (this.addItem) {
+            this.addItem(
               { type: 'info', text: 'Successfully logged out from Qwen' },
               Date.now(),
             );
           } else {
-            debugLogger.log('Successfully logged out from Qwen');
+            const delivered = globalOAuthUI.callAddItem(
+              { type: 'info', text: 'Successfully logged out from Qwen' },
+              Date.now(),
+            );
+            if (delivered === undefined) {
+              debugLogger.log('Successfully logged out from Qwen');
+            }
           }
         }
       },

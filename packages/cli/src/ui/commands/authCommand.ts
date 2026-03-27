@@ -629,7 +629,7 @@ export class AuthCommandExecutor {
     try {
       const statuses = await this.oauthManager.getAuthStatus();
       return statuses.map((status) => {
-        const indicator = status.authenticated ? '[[OK]]' : '[]';
+        const indicator = status.authenticated ? '[✓]' : '[]';
         const authInfo = status.authenticated
           ? `authenticated${status.expiresIn ? ` (expires in ${Math.floor(status.expiresIn / 60)}m)` : ''}`
           : 'not authenticated';
