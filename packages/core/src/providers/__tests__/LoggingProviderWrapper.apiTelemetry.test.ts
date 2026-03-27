@@ -669,5 +669,42 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       // accumulateSessionTokens should have been called since usage metadata was present
       expect(accumulateMock).toHaveBeenCalled();
     });
+
+    it('should NOT accumulate token usage when provider emits no usage metadata', async () => {
+      const provider = new NoUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const accumulateMock = vi.fn();
+      const config = {
+        ...createConfigStub(false),
+        getProviderManager: () => ({
+          accumulateSessionTokens: accumulateMock,
+        }),
+      } as unknown as Config;
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // accumulateSessionTokens must NOT be called when no usage metadata is available
+      expect(accumulateMock).not.toHaveBeenCalled();
+    });
   });
 });
