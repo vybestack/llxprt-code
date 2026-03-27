@@ -529,4 +529,145 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       expect(call[1].finish_reasons).toEqual(['length']);
     });
   });
+
+  describe('TPM tracking (Issue #1764)', () => {
+    // A provider that yields chunks with NO metadata.usage - simulates ollama/zai/anthropic
+    // when they don't surface token usage in stream chunks.
+    class NoUsageProvider implements IProvider {
+      name = 'no-usage-provider';
+
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+
+      getDefaultModel(): string {
+        return 'no-usage-model';
+      }
+
+      getServerTools(): string[] {
+        return [];
+      }
+
+      async invokeServerTool(
+        _toolName: string,
+        _params: unknown,
+        _config?: unknown,
+      ): Promise<unknown> {
+        return {};
+      }
+
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        // Emit a chunk with NO metadata.usage - the common case for many providers
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello from no-usage provider' }],
+          // Deliberately no metadata.usage here
+        } as IContent;
+      }
+    }
+
+    it('should record performance metrics even when provider emits no token usage metadata', async () => {
+      const provider = new NoUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // recordCompletion must have been called even though no usage metadata was emitted
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalRequests).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should record performance metrics when provider emits token usage metadata', async () => {
+      const provider = new StubProvider(); // StubProvider DOES emit metadata.usage
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalRequests).toBeGreaterThanOrEqual(1);
+      expect(metrics.totalTokens).toBeGreaterThan(0);
+    });
+
+    it('should still accumulate token usage when usage metadata is present', async () => {
+      const provider = new StubProvider(); // StubProvider emits metadata.usage
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const accumulateMock = vi.fn();
+      const config = {
+        ...createConfigStub(false),
+        getProviderManager: () => ({
+          accumulateSessionTokens: accumulateMock,
+        }),
+      } as unknown as Config;
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // accumulateSessionTokens should have been called since usage metadata was present
+      expect(accumulateMock).toHaveBeenCalled();
+    });
+  });
 });

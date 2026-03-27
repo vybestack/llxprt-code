@@ -755,18 +755,13 @@ export class LoggingProviderWrapper implements IProvider {
       }
 
       if (latestTokenUsage) {
-        // Accumulate token usage for session tracking
+        // Accumulate token usage for session tracking (requires actual usage data)
         this.accumulateTokenUsage(tokenCounts, config);
-
-        // Record performance metrics (TPM tracks output tokens only)
-        const outputTokens = tokenCounts.output_token_count;
-        this.performanceTracker.recordCompletion(
-          duration,
-          null,
-          outputTokens,
-          0,
-        );
       }
+
+      // Always record completion for performance tracking (TPM, latency, request count)
+      const outputTokens = tokenCounts.output_token_count;
+      this.performanceTracker.recordCompletion(duration, null, outputTokens, 0);
     } catch (error) {
       // Record error in performance tracker
       const duration = performance.now() - startTime;
