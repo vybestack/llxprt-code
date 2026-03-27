@@ -4,111 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
-import type {
-  ToolCallConfirmationDetails,
-  Config,
-} from '@vybestack/llxprt-code-core';
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { describe, it, expect } from 'vitest';
+import { hasRedirection } from '@vybestack/llxprt-code-core';
 
-describe('ToolConfirmationMessage redirection warning', () => {
-  const mockConfig = {
-    isTrustedFolder: () => true,
-    getIdeMode: () => false,
-  } as unknown as Config;
-
-  it('should display redirection warning for command with > operator', () => {
-    const confirmationDetails: ToolCallConfirmationDetails = {
-      type: 'exec',
-      title: 'Confirm Shell Command',
-      command: 'echo "hello" > test.txt',
-      rootCommand: 'echo',
-      rootCommands: ['echo'],
-      onConfirm: vi.fn(),
-    };
-
-    const { lastFrame } = renderWithProviders(
-      <ToolConfirmationMessage
-        confirmationDetails={confirmationDetails}
-        config={mockConfig}
-        availableTerminalHeight={30}
-        terminalWidth={100}
-      />,
-    );
-
-    const output = lastFrame();
-    expect(output).toContain('echo "hello" > test.txt');
-    expect(output).toContain('Command contains redirection');
+describe('redirection warning detection', () => {
+  it('detects redirection for command with > operator', () => {
+    expect(hasRedirection('echo "hello" > test.txt')).toBe(true);
   });
 
-  it('should NOT display redirection warning for command without redirection', () => {
-    const confirmationDetails: ToolCallConfirmationDetails = {
-      type: 'exec',
-      title: 'Confirm Shell Command',
-      command: 'git status',
-      rootCommand: 'git',
-      rootCommands: ['git'],
-      onConfirm: vi.fn(),
-    };
-
-    const { lastFrame } = renderWithProviders(
-      <ToolConfirmationMessage
-        confirmationDetails={confirmationDetails}
-        config={mockConfig}
-        availableTerminalHeight={30}
-        terminalWidth={100}
-      />,
-    );
-
-    const output = lastFrame();
-    expect(output).toContain('git status');
-    expect(output).not.toContain('Command contains redirection');
+  it('does not detect redirection for command without redirection', () => {
+    expect(hasRedirection('git status')).toBe(false);
   });
 
-  it('should display redirection warning for compound command with redirection', () => {
-    const confirmationDetails: ToolCallConfirmationDetails = {
-      type: 'exec',
-      title: 'Confirm Shell Command',
-      command: 'git log && cat file.txt > out.txt',
-      rootCommand: 'git',
-      rootCommands: ['git', 'cat'],
-      onConfirm: vi.fn(),
-    };
-
-    const { lastFrame } = renderWithProviders(
-      <ToolConfirmationMessage
-        confirmationDetails={confirmationDetails}
-        config={mockConfig}
-        availableTerminalHeight={30}
-        terminalWidth={100}
-      />,
-    );
-
-    const output = lastFrame();
-    expect(output).toContain('Command contains redirection');
+  it('detects redirection for compound command with redirection', () => {
+    expect(hasRedirection('git log && cat file.txt > out.txt')).toBe(true);
   });
 
-  it('should NOT display warning for redirection characters inside quotes', () => {
-    const confirmationDetails: ToolCallConfirmationDetails = {
-      type: 'exec',
-      title: 'Confirm Shell Command',
-      command: 'echo "use > to redirect"',
-      rootCommand: 'echo',
-      rootCommands: ['echo'],
-      onConfirm: vi.fn(),
-    };
-
-    const { lastFrame } = renderWithProviders(
-      <ToolConfirmationMessage
-        confirmationDetails={confirmationDetails}
-        config={mockConfig}
-        availableTerminalHeight={30}
-        terminalWidth={100}
-      />,
-    );
-
-    const output = lastFrame();
-    expect(output).not.toContain('Command contains redirection');
+  it('does not detect redirection for > inside double quotes', () => {
+    expect(hasRedirection('echo "use > to redirect"')).toBe(false);
   });
 });

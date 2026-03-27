@@ -383,11 +383,12 @@ function detectCommandSubstitutionRegex(command: string): boolean {
 }
 
 /**
- * Detects whether a shell command contains redirection operators (>, >>, <, 2>, &>)
- * or pipe operators (|), respecting shell quoting rules.
+ * Detects whether a shell command contains shell redirection operators
+ * (>, >>, <, <<, <<<, fd forms such as 2>, &>, >&), respecting shell quoting rules.
+ * Pipe operators (|) are NOT treated as redirection.
  * Single-quoted content is treated as fully literal.
  * @param command The shell command string to check
- * @returns true if the command contains redirection or pipe operators outside quotes
+ * @returns true if the command contains redirection operators outside quotes
  */
 export function hasRedirection(command: string): boolean {
   let inSingleQuotes = false;
@@ -410,12 +411,8 @@ export function hasRedirection(command: string): boolean {
     }
 
     if (!inSingleQuotes && !inDoubleQuotes) {
-      // Redirection: >, >>, <, 2>, &>, >&
+      // Redirection: >, >>, <, <<, <<<, 2>, &>, >&
       if (char === '>' || char === '<') {
-        return true;
-      }
-      // Pipe: single | (not ||, which is a logical operator)
-      if (char === '|' && command[i + 1] !== '|') {
         return true;
       }
     }

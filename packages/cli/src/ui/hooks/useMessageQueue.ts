@@ -31,7 +31,7 @@ export function useMessageQueue({
     setMessageQueue((prev) => [...prev, message]);
   }, []);
 
-  // Flush the queue one message at a time when all gates are open:
+  // Flush the entire queue as a single combined submission when all gates open:
   // config ready, idle, and MCP servers initialized.
   useEffect(() => {
     if (
@@ -40,10 +40,11 @@ export function useMessageQueue({
       isMcpReady &&
       messageQueue.length > 0
     ) {
-      // Submit messages one at a time to preserve individual conversational turns.
-      const [next, ...rest] = messageQueue;
-      setMessageQueue(rest);
-      submitQuery(next);
+      // Combine all queued messages into one submission so they arrive as a
+      // single conversational turn rather than triggering multiple round-trips.
+      const combined = messageQueue.join('\n\n');
+      setMessageQueue([]);
+      submitQuery(combined);
     }
   }, [
     isConfigInitialized,

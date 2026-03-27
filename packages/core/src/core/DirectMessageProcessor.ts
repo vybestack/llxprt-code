@@ -250,6 +250,13 @@ export class DirectMessageProcessor {
       lastResponse,
       aggregatedText,
       runtimeContext.config,
+      {
+        contents: contentsForApi,
+        tools:
+          effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+            ? effectiveToolsFromConfig
+            : undefined,
+      },
     );
   }
 
@@ -425,6 +432,7 @@ export class DirectMessageProcessor {
     lastResponse: IContent,
     aggregatedText: string,
     config: Config | undefined,
+    llmRequest?: Record<string, unknown>,
   ): Promise<GenerateContentResponse> {
     let directResponse = convertIContentToResponse(lastResponse);
 
@@ -434,7 +442,7 @@ export class DirectMessageProcessor {
       if (hookSystem) {
         await hookSystem.initialize();
         const afterModelResult = await hookSystem.fireAfterModelEvent(
-          {},
+          llmRequest ?? {},
           lastResponse,
         );
         if (afterModelResult) {

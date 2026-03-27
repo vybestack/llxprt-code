@@ -97,16 +97,21 @@ export function mapToDisplay(
       };
 
       switch (trackedCall.status) {
-        case 'success':
+        case 'success': {
           logger.debug(
             `mapToDisplay: success call ${trackedCall.request.callId}, toolName=${trackedCall.request.name}, resultDisplay type: ${typeof trackedCall.response.resultDisplay}, hasValue: ${!!trackedCall.response.resultDisplay}, preview: ${typeof trackedCall.response.resultDisplay === 'string' ? trackedCall.response.resultDisplay.slice(0, 100) : 'non-string'}`,
           );
+          const outputFile = (
+            trackedCall.response as { outputFile?: string | undefined }
+          ).outputFile;
           return {
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
             resultDisplay: trackedCall.response.resultDisplay,
             confirmationDetails: undefined,
+            outputFile,
           };
+        }
         case 'error':
           return {
             ...baseDisplayProperties,

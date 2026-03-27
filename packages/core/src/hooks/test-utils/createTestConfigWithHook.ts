@@ -85,6 +85,7 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
   const config = {
     getEnableHooks: () => true,
     getHooks: () => hooks,
+    getProjectHooks: () => hooks,
     getSessionId: () => 'test-session-' + Date.now(),
     getWorkingDir: () => testCwd,
     getTargetDir: () => testCwd,
@@ -92,6 +93,12 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
     getSessionRecordingService: () => undefined,
+    isTrustedFolder: () => true,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
     getHookSystem: () => {
       // Lazy initialization of HookSystem singleton
       if (!hookSystem) {
@@ -113,6 +120,7 @@ export function createTestConfigWithHooksDisabled(): Config {
   return {
     getEnableHooks: () => false,
     getHooks: () => ({}),
+    getProjectHooks: () => ({}),
     getSessionId: () => 'test-session-disabled',
     getWorkingDir: () => testCwd,
     getTargetDir: () => testCwd,
@@ -120,6 +128,12 @@ export function createTestConfigWithHooksDisabled(): Config {
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
     getSessionRecordingService: () => undefined,
+    isTrustedFolder: () => false,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
     getHookSystem: () => undefined,
   } as unknown as Config;
 }

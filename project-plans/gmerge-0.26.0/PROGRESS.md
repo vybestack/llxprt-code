@@ -24,9 +24,9 @@
 | R8 | REIMPLEMENT | a2dab14 | DONE | 55feec847 | undeprecate --prompt |
 | R9 | REIMPLEMENT | 42c26d1 | DONE | 320696790 | improve keybindings |
 | R10 | REIMPLEMENT | ae19802 | DONE | a009d8b1f | shell parsing timeout |
-| R11 | REIMPLEMENT | a81500a | TODO | | skill install consent |
-| R12 | REIMPLEMENT | 222b739 | TODO | | skill conflict detection |
-| R13 | REIMPLEMENT | f909c9e | TODO | | policy source tracking |
+| R11 | REIMPLEMENT | a81500a | DONE | b40cfc34e | skill install consent |
+| R12 | REIMPLEMENT | 222b739 | DONE | fbdad473a | skill conflict detection |
+| R13 | REIMPLEMENT | f909c9e | DONE | ab08dd4fe | policy source tracking |
 | R14 | REIMPLEMENT | f7f38e2 | DONE | 5e0fe9278 | **HIGH RISK** non-nullable settings — 33 files changed, MergedSettings type, 63 ?. removals |
 | R15 | REIMPLEMENT | e77d7b2 | DONE | 9b29e539a | OOM prevention — maxFiles/timeout in crawler |
 | R16 | REIMPLEMENT | 8a627d6 | DONE | 62f3ce394 | /dev/tty safety — async pickTty with timeout |
@@ -56,3 +56,10 @@
 | R40 | REIMPLEMENT | 2a3c879 | DONE | 2b98926f5 | clearContext hooks |
 | R41 | REIMPLEMENT | 43846f4 | DONE | 777226143 | package.ts error |
 | R42 | REIMPLEMENT | d8e9db3 | DONE | 829ff6adf | package.ts follow-up |
+
+
+## Post-Audit Remediation
+
+| Batch | Type | Scope | Status | LLxprt Commit | Notes |
+|------:|------|-------|--------|---------------|-------|
+| R-AUDIT | FIXUP | gmerge/0.26.0 deep review findings | DONE | 201a5303e | Addressed flagged FAIL/CONCERN items and re-ran full verification chain |

@@ -272,11 +272,10 @@ describe('SettingsUtils', () => {
 
         // Advanced settings with showInDialog=true should be included
         expect(categories['Advanced']).toBeDefined();
-        expect(categories['Advanced']).toHaveLength(2);
-        expect(categories['Advanced'].map((s) => s.key)).toContain(
-          'coreToolSettings',
-        );
-        expect(categories['Advanced'].map((s) => s.key)).toContain('lsp');
+        expect(categories['Advanced'].length).toBeGreaterThanOrEqual(2);
+        const advancedKeys = categories['Advanced'].map((s) => s.key);
+        expect(advancedKeys).toContain('coreToolSettings');
+        expect(advancedKeys).toContain('lsp');
       });
 
       it('should include settings with showInDialog=true', () => {

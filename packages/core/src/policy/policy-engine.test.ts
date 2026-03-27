@@ -641,5 +641,29 @@ describe('PolicyEngine', () => {
       });
       expect(result).toBe(PolicyDecision.ALLOW);
     });
+
+    it('pipeline (|) is NOT treated as redirection — ALLOW rule stays ALLOW', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'echo hello | grep h',
+      });
+      expect(result).toBe(PolicyDecision.ALLOW);
+    });
+
+    it('logical OR (||) is not treated as redirection — ALLOW rule stays ALLOW', () => {
+      const engine = new PolicyEngine({
+        rules: [
+          { toolName: 'run_shell_command', decision: PolicyDecision.ALLOW },
+        ],
+      });
+      const result = engine.evaluate('run_shell_command', {
+        command: 'npm test || echo failed',
+      });
+      expect(result).toBe(PolicyDecision.ALLOW);
+    });
   });
 });

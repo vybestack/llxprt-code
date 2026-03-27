@@ -15,7 +15,7 @@ import { coreEvents, CoreEvent } from '../utils/events.js';
  * Fields in the hooks configuration that are not hook event names.
  * Only include keys verified in LLxprt's actual hook config schema.
  */
-const HOOKS_CONFIG_FIELDS = ['disabled'];
+const HOOKS_CONFIG_FIELDS = ['disabled', 'enabled', 'notifications'];
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:registry');
 
@@ -216,7 +216,7 @@ export class HookRegistry {
 
       if (!this.isValidEventName(eventName)) {
         coreEvents.emit(CoreEvent.Output, {
-          chunk: `Warning: Invalid hook event name: "${eventName}". Skipping.
+          chunk: `Warning: Invalid hook event name: "${eventName}" from ${source} config. Skipping.
 `,
           isStderr: true,
         });

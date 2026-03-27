@@ -577,6 +577,8 @@ describe('HookRegistry', () => {
 
       const configWithExtras = {
         disabled: [], // known config field — must be skipped silently
+        enabled: true, // known config field — must be skipped silently
+        notifications: true, // known config field — must be skipped silently
         InvalidEvent: [], // unknown event name — must trigger warning
         BeforeTool: [
           {
@@ -599,22 +601,31 @@ describe('HookRegistry', () => {
       // Should have emitted exactly one Output warning for InvalidEvent
       expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {
         chunk: expect.stringContaining(
-          'Invalid hook event name: "InvalidEvent"',
+          'Invalid hook event name: "InvalidEvent" from project config',
         ),
         isStderr: true,
       });
 
-      // Should NOT have emitted a warning for 'disabled' (known config field)
+      // Should NOT have emitted warnings for known config fields
       const allCalls = emitSpy.mock.calls;
-      const warningCallsForDisabled = allCalls.filter(
-        ([, payload]) =>
-          typeof payload === 'object' &&
-          payload !== null &&
-          'chunk' in payload &&
-          typeof (payload as { chunk: string }).chunk === 'string' &&
-          (payload as { chunk: string }).chunk.includes('"disabled"'),
-      );
-      expect(warningCallsForDisabled).toHaveLength(0);
+      const warningCallsForKnownFields = allCalls.filter(([, payload]) => {
+        if (
+          typeof payload !== 'object' ||
+          payload === null ||
+          !('chunk' in payload) ||
+          typeof (payload as { chunk: string }).chunk !== 'string'
+        ) {
+          return false;
+        }
+
+        const chunk = (payload as { chunk: string }).chunk;
+        return (
+          chunk.includes('"disabled"') ||
+          chunk.includes('"enabled"') ||
+          chunk.includes('"notifications"')
+        );
+      });
+      expect(warningCallsForKnownFields).toHaveLength(0);
 
       emitSpy.mockRestore();
     });

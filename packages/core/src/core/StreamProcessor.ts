@@ -233,7 +233,10 @@ export class StreamProcessor {
       userMemory: baseRuntimeContext.config?.getUserMemory?.(),
     } as GenerateChatOptions);
 
-    return this._convertIContentStream(streamResponse);
+    return this._convertIContentStream(streamResponse, {
+      contents: requestContents,
+      tools,
+    });
   }
 
   private _buildRequestContents(userContent: Content | Content[]): IContent[] {
@@ -290,6 +293,7 @@ export class StreamProcessor {
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
+    llmRequest?: Record<string, unknown>,
   ): AsyncGenerator<GenerateContentResponse> {
     for await (const iContent of streamResponse) {
       // Track token counts from IContent metadata (Anthropic/OpenAI format)
@@ -319,7 +323,7 @@ export class StreamProcessor {
         if (hookSystem) {
           await hookSystem.initialize();
           const afterModelResult = await hookSystem.fireAfterModelEvent(
-            {},
+            llmRequest ?? {},
             iContent,
           );
 

@@ -50,9 +50,9 @@ Post-implementation reconciliation. Updated continuously during execution.
 | a2dab14 | REIMPLEMENTED | 55feec847 | undeprecate --prompt — PASS |
 | 42c26d1 | REIMPLEMENTED | 320696790 | improve keybindings — PASS |
 | ae19802 | REIMPLEMENTED | a009d8b1f | shell parsing timeout — PASS |
-| a81500a | REIMPLEMENTED | | skill install consent |
-| 222b739 | REIMPLEMENTED | | skill conflict detection |
-| f909c9e | REIMPLEMENTED | | policy source tracking |
+| a81500a | REIMPLEMENTED | b40cfc34e | skill install consent — PASS |
+| 222b739 | REIMPLEMENTED | fbdad473a | skill conflict detection — PASS (missing conflict-warning tests) |
+| f909c9e | REIMPLEMENTED | ab08dd4fe | policy source tracking — PASS |
 | f7f38e2 | REIMPLEMENTED | 5e0fe9278 | **HIGH** non-nullable settings — PASS, FULL VERIFY |
 | e77d7b2 | REIMPLEMENTED | 9b29e539a | OOM prevention — PASS |
 | 8a627d6 | REIMPLEMENTED | 62f3ce394 | /dev/tty safety — PASS, FULL VERIFY |
@@ -96,3 +96,10 @@ See CHERRIES.md SKIP table (76 original + 9 added during review).
 | 31c6fef | NO_OP | Skills already at stable in LLxprt |
 | 013a4e0 | NO_OP | LLxprt already has safePtyDestroy() (was PICK) |
 | 52fadba | NO_OP | LLxprt never emits ModelInfo; filed #1770 (was REIMPLEMENT) |
+
+
+## Post-Audit Remediation
+
+| LLxprt Commit | Scope | Verification | Result |
+|:-------------:|-------|--------------|--------|
+| 201a5303e | Remediation for flagged FAIL/CONCERN findings after full-batch audit | npm run test, npm run lint, npm run typecheck, npm run format, npm run build, synthetic smoke command | PASS |

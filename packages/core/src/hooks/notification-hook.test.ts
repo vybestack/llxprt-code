@@ -44,6 +44,7 @@ function createTestConfigWithNotificationHook(command: string): Config {
   const config = {
     getEnableHooks: () => true,
     getHooks: () => hooks,
+    getProjectHooks: () => hooks,
     getSessionId: () => 'test-session-' + Date.now(),
     getWorkingDir: () => '/tmp/test',
     getTargetDir: () => '/tmp/test',
@@ -51,6 +52,12 @@ function createTestConfigWithNotificationHook(command: string): Config {
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
     getSessionRecordingService: () => undefined,
+    isTrustedFolder: () => true,
+    getSanitizationConfig: () => ({
+      enableEnvironmentVariableRedaction: false,
+      allowedEnvironmentVariables: [],
+      blockedEnvironmentVariables: [],
+    }),
     getHookSystem: () => {
       if (!hookSystem) {
         hookSystem = new HookSystem(config);
@@ -64,7 +71,7 @@ function createTestConfigWithNotificationHook(command: string): Config {
 
 describe('Notification Hook (ToolPermission)', () => {
   describe('triggerToolNotificationHook', () => {
-    it.skip('should fire Notification hook with ToolPermission type for edit confirmation', async () => {
+    it('should fire Notification hook with ToolPermission type for edit confirmation', async () => {
       const config = createTestConfigWithNotificationHook(
         'echo \'{"received": true}\'',
       );
@@ -90,7 +97,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result?.notificationType).toBe(NotificationType.ToolPermission);
     });
 
-    it.skip('should fire Notification hook with ToolPermission type for exec confirmation', async () => {
+    it('should fire Notification hook with ToolPermission type for exec confirmation', async () => {
       const config = createTestConfigWithNotificationHook(
         'echo \'{"received": true}\'',
       );
@@ -100,6 +107,7 @@ describe('Notification Hook (ToolPermission)', () => {
         title: 'Run shell command',
         command: 'rm -rf /',
         rootCommand: 'rm',
+        rootCommands: ['rm'],
         onConfirm: async () => {},
       };
 
@@ -112,7 +120,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result?.notificationType).toBe(NotificationType.ToolPermission);
     });
 
-    it.skip('should return undefined when hooks are disabled', async () => {
+    it('should return undefined when hooks are disabled', async () => {
       const config = {
         getEnableHooks: () => false,
         getHooks: () => ({}),
@@ -131,6 +139,7 @@ describe('Notification Hook (ToolPermission)', () => {
         title: 'Run shell command',
         command: 'ls',
         rootCommand: 'ls',
+        rootCommands: ['ls'],
         onConfirm: async () => {},
       };
 
@@ -142,7 +151,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result).toBeUndefined();
     });
 
-    it.skip('should include serialized confirmation details in hook input', async () => {
+    it('should include serialized confirmation details in hook input', async () => {
       let capturedInput: string | undefined;
       const config = createTestConfigWithNotificationHook(
         'cat > /tmp/notification-test-input.json',

@@ -24,7 +24,6 @@ describe('useMessageQueue', () => {
     isMcpReady: boolean;
   }) => {
     let hookResult: ReturnType<typeof useMessageQueue>;
-    let rerenderFn: (props: Partial<typeof initialProps>) => void;
     let currentProps = { ...initialProps };
 
     function TestComponent(props: typeof initialProps) {
@@ -33,7 +32,7 @@ describe('useMessageQueue', () => {
     }
 
     const { rerender } = render(<TestComponent {...initialProps} />);
-    rerenderFn = (newProps) => {
+    const rerenderFn = (newProps: Partial<typeof initialProps>) => {
       currentProps = { ...currentProps, ...newProps };
       rerender(<TestComponent {...currentProps} />);
     };
@@ -117,7 +116,7 @@ describe('useMessageQueue', () => {
     expect(mockSubmitQuery).not.toHaveBeenCalled();
   });
 
-  it('flushes queue one message at a time when conditions are met', () => {
+  it('flushes all queued messages as a single combined submission when conditions are met', () => {
     const { result, rerender } = renderMessageQueueHook({
       isConfigInitialized: true,
       streamingState: StreamingState.Responding,
@@ -135,11 +134,12 @@ describe('useMessageQueue', () => {
       result.current.addMessage('third');
     });
 
-    // Become idle — first message should fire
+    // Become idle — all three messages should be combined into one call
     rerender({ streamingState: StreamingState.Idle });
 
     expect(mockSubmitQuery).toHaveBeenCalledTimes(1);
-    expect(mockSubmitQuery).toHaveBeenCalledWith('first');
+    expect(mockSubmitQuery).toHaveBeenCalledWith('first\n\nsecond\n\nthird');
+    expect(result.current.messageQueue).toEqual([]);
   });
 
   it('no-server startup: isMcpReady=true immediately, no queueing needed', () => {

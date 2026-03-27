@@ -324,37 +324,43 @@ export const ToolConfirmationMessage: React.FC<
         warnings = (
           <>
             <Box height={1} />
-            <Box>
-              <Text color={theme.text.primary}>
-                <Text bold>{REDIRECTION_WARNING_NOTE_LABEL}</Text>
-                {REDIRECTION_WARNING_NOTE_TEXT}
+            <Text color={theme.text.primary}>
+              <Text bold color={theme.text.primary}>
+                {REDIRECTION_WARNING_NOTE_LABEL}
               </Text>
-            </Box>
-            <Box>
-              <Text color={theme.border.default}>
-                <Text bold>{REDIRECTION_WARNING_TIP_LABEL}</Text>
-                {REDIRECTION_WARNING_TIP_TEXT}
+              {REDIRECTION_WARNING_NOTE_TEXT}
+            </Text>
+            <Text color={theme.border.default}>
+              <Text bold color={theme.border.default}>
+                {REDIRECTION_WARNING_TIP_LABEL}
               </Text>
-            </Box>
+              {REDIRECTION_WARNING_TIP_TEXT}
+            </Text>
           </>
         );
       }
 
+      const commandList = commandsToDisplay.join('\n');
+
       bodyContent = (
         <Box flexDirection="column">
-          <MaxSizedBox
-            maxHeight={bodyContentHeight}
-            maxWidth={Math.max(terminalWidth, 1)}
-          >
-            <Box flexDirection="column">
-              {commandsToDisplay.map((cmd, idx) => (
-                <Text key={idx} color={theme.text.link}>
-                  {cmd}
-                </Text>
-              ))}
-            </Box>
-          </MaxSizedBox>
-          {warnings}
+          {isAlternateBuffer ? (
+            <Text color={theme.text.link}>{commandList}</Text>
+          ) : (
+            <MaxSizedBox
+              maxHeight={bodyContentHeight}
+              maxWidth={Math.max(terminalWidth, 1)}
+            >
+              <Box>
+                <Text color={theme.text.link}>{commandList}</Text>
+              </Box>
+            </MaxSizedBox>
+          )}
+          {isAlternateBuffer ? (
+            warnings
+          ) : (
+            <Box flexDirection="column">{warnings}</Box>
+          )}
         </Box>
       );
     } else if (confirmationDetails.type === 'info') {

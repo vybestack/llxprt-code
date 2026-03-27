@@ -156,6 +156,26 @@ describe('toolMapping', () => {
       );
     });
 
+    it('propagates outputFile for successful tool calls when present', () => {
+      const responseWithOutputFile = {
+        ...mockResponse,
+        outputFile: '/tmp/tool-output.txt',
+      } as ToolCallResponseInfo & { outputFile: string };
+
+      const toolCall: SuccessfulToolCall = {
+        status: 'success',
+        request: mockRequest,
+        tool: mockTool,
+        invocation: mockInvocation,
+        response: responseWithOutputFile,
+      };
+
+      const result = mapToDisplay(toolCall);
+      const displayTool = result.tools[0];
+
+      expect(displayTool.outputFile).toBe('/tmp/tool-output.txt');
+    });
+
     it('maps executing tool call properties correctly with live output and ptyId', () => {
       const toolCall: ExecutingToolCall = {
         status: 'executing',

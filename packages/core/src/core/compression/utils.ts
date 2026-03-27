@@ -228,8 +228,7 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
   const hasPriorSnapshot = toCompress.some((content) =>
     content.blocks.some(
       (block) =>
-        block.type === 'text' &&
-        (block as TextBlock).text.includes('<state_snapshot>'),
+        block.type === 'text' && block.text.includes('<state_snapshot>'),
     ),
   );
 

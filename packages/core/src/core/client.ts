@@ -1905,15 +1905,15 @@ ${jitMemory}`
         ) {
           const continueReason = afterHookOutput.getEffectiveReason();
           const contextCleared = afterHookOutput.shouldClearContext();
-          if (contextCleared) {
-            await this.resetChat();
-          }
           yield {
             type: GeminiEventType.AgentExecutionBlocked,
             reason: continueReason,
             systemMessage: afterHookOutput.systemMessage,
             contextCleared,
           };
+          if (contextCleared) {
+            await this.resetChat();
+          }
           const continueRequest: PartListUnion = [{ text: continueReason }];
           yield* this.sendMessageStream(
             continueRequest,
@@ -1995,15 +1995,15 @@ ${jitMemory}`
         ) {
           const continueReason = afterHookOutput2.getEffectiveReason();
           const contextCleared = afterHookOutput2.shouldClearContext();
-          if (contextCleared) {
-            await this.resetChat();
-          }
           yield {
             type: GeminiEventType.AgentExecutionBlocked,
             reason: continueReason,
             systemMessage: afterHookOutput2.systemMessage,
             contextCleared,
           };
+          if (contextCleared) {
+            await this.resetChat();
+          }
           const continueRequest: PartListUnion = [{ text: continueReason }];
           yield* this.sendMessageStream(
             continueRequest,

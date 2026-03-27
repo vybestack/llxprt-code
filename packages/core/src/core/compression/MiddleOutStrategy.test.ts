@@ -20,11 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
-import {
-  CompressionExecutionError,
-  EmptySummaryError,
-  isTransientCompressionError,
-} from './types.js';
+import { EmptySummaryError, isTransientCompressionError } from './types.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';

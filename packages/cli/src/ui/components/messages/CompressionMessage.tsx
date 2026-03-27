@@ -48,7 +48,7 @@ export const CompressionMessage: React.FC<CompressionDisplayProps> = ({
       case CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR:
         return 'Could not compress chat history due to a token counting error.';
       case CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY:
-        return 'Chat history compression failed: the model returned an empty summary. Falling back to truncation.';
+        return 'Chat history compression failed: the model returned an empty summary.';
       case CompressionStatus.NOOP:
         return 'Nothing to compress.';
       default:

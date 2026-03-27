@@ -226,7 +226,7 @@ export class HookEventHandler {
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(HookEventName.BeforeModel, {
-        llmRequest,
+        llm_request: llmRequest,
       });
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeModelEvent', {
@@ -247,8 +247,8 @@ export class HookEventHandler {
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(HookEventName.AfterModel, {
-        llmRequest,
-        llmResponse,
+        llm_request: llmRequest,
+        llm_response: llmResponse,
       });
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireAfterModelEvent', {
@@ -269,7 +269,7 @@ export class HookEventHandler {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.BeforeToolSelection,
-        { llmRequest },
+        { llm_request: llmRequest },
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeToolSelectionEvent', {

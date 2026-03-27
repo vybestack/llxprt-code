@@ -265,7 +265,7 @@ export const configCommand: CommandModule = {
       }),
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
-    if (!(settings.experimental?.extensionConfig ?? false)) {
+    if (!(settings.experimental?.extensionConfig ?? true)) {
       console.error(
         'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
       );

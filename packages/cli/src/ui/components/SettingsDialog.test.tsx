@@ -200,7 +200,7 @@ describe('SettingsDialog', () => {
       const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
       const initialFrame = lastFrame();
-      expect(initialFrame).toContain('Vim Mode');
+      expect(initialFrame).toContain('Enable Loading Phrases');
 
       // Navigate down
       act(() => {
@@ -208,7 +208,7 @@ describe('SettingsDialog', () => {
       });
 
       await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Disable Auto Update');
+        expect(lastFrame()).toContain('Screen Reader Mode');
       });
 
       // Navigate up
@@ -217,7 +217,7 @@ describe('SettingsDialog', () => {
       });
 
       await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Vim Mode');
+        expect(lastFrame()).toContain('Enable Loading Phrases');
       });
 
       unmount();
@@ -236,7 +236,7 @@ describe('SettingsDialog', () => {
 
       await vi.waitFor(() => {
         // Should wrap to last setting (without relying on exact bullet character)
-        expect(lastFrame()).toContain('Codebase Investigator Max Num Turns');
+        expect(lastFrame()).toContain('Hook Notifications');
       });
 
       unmount();
@@ -252,28 +252,19 @@ describe('SettingsDialog', () => {
 
       const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
-      // Wait for initial render and verify we're on Vim Mode (first setting)
+      // Wait for initial render and verify we're on Enable Loading Phrases (first setting)
       await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Vim Mode');
+        expect(lastFrame()).toContain('Enable Loading Phrases');
       });
 
-      // Navigate to Disable Auto Update setting and verify we're there
-      act(() => {
-        stdin.write(TerminalKeys.DOWN_ARROW as string);
-      });
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Disable Auto Update');
-      });
-
-      // Toggle the setting
+      // Toggle the first setting (accessibility.enableLoadingPhrases, restart-required, default true)
       act(() => {
         stdin.write(TerminalKeys.ENTER as string);
       });
-      // Wait for the setting change to be processed
-      await vi.waitFor(() => {
-        expect(
-          vi.mocked(saveModifiedSettings).mock.calls.length,
-        ).toBeGreaterThan(0);
+
+      // Close the dialog via Escape — this triggers saveRestartRequiredSettings → saveModifiedSettings
+      act(() => {
+        stdin.write(TerminalKeys.ESCAPE as string);
       });
 
       // Wait for the mock to be called
@@ -282,10 +273,10 @@ describe('SettingsDialog', () => {
       });
 
       expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalledWith(
-        new Set<string>(['general.disableAutoUpdate']),
+        new Set<string>(['accessibility.enableLoadingPhrases']),
         expect.objectContaining({
-          general: expect.objectContaining({
-            disableAutoUpdate: true,
+          accessibility: expect.objectContaining({
+            enableLoadingPhrases: false,
           }),
         }),
         expect.any(LoadedSettings),
@@ -1066,7 +1057,7 @@ describe('SettingsDialog', () => {
         expect(lastFrame()).toContain('nonexistentsetting');
         expect(lastFrame()).toContain('');
         expect(lastFrame()).not.toContain('Vim Mode'); // Should not contain any settings
-        expect(lastFrame()).not.toContain('Disable Auto Update'); // Should not contain any settings
+        expect(lastFrame()).not.toContain('Enable Auto Update'); // Should not contain any settings
       });
 
       unmount();
@@ -1091,36 +1082,30 @@ describe('SettingsDialog', () => {
       {
         name: 'various boolean settings enabled',
         userSettings: {
-          general: {
-            vimMode: true,
-            disableAutoUpdate: true,
-            enablePromptCompletion: true,
-          },
+          enableAutoUpdate: false,
+          enablePromptCompletion: true,
           ui: {
+            vimMode: true,
             hideWindowTitle: true,
             hideTips: true,
             showMemoryUsage: true,
             showLineNumbers: true,
             showCitations: true,
-            accessibility: {
-              disableLoadingPhrases: true,
-              screenReader: true,
-            },
+          },
+          accessibility: {
+            enableLoadingPhrases: false,
+            screenReader: true,
           },
           ide: {
             enabled: true,
           },
-          context: {
-            loadMemoryFromIncludeDirectories: true,
-            fileFiltering: {
-              respectGitIgnore: true,
-              respectGeminiIgnore: true,
-              enableRecursiveFileSearch: true,
-              disableFuzzySearch: false,
-            },
+          loadMemoryFromIncludeDirectories: true,
+          fileFiltering: {
+            respectGitIgnore: true,
+            enableRecursiveFileSearch: true,
+            enableFuzzySearch: true,
           },
           tools: {
-            enableInteractiveShell: true,
             autoAccept: true,
             useRipgrep: true,
           },
@@ -1137,24 +1122,17 @@ describe('SettingsDialog', () => {
       {
         name: 'mixed boolean and number settings',
         userSettings: {
-          general: {
-            vimMode: false,
-            disableAutoUpdate: true,
-          },
+          enableAutoUpdate: false,
           ui: {
+            vimMode: false,
             showMemoryUsage: true,
             hideWindowTitle: false,
+            memoryDiscoveryMaxDepth: 500,
+            maxSessionTurns: 100,
           },
           tools: {
             truncateToolOutputThreshold: 50000,
             truncateToolOutputLines: 1000,
-          },
-          context: {
-            discoveryMaxDirs: 500,
-          },
-          model: {
-            maxSessionTurns: 100,
-            skipNextSpeakerCheck: false,
           },
         },
         systemSettings: {},
@@ -1174,7 +1152,7 @@ describe('SettingsDialog', () => {
         userSettings: {
           ui: {
             accessibility: {
-              disableLoadingPhrases: true,
+              enableLoadingPhrases: false,
               screenReader: true,
             },
             showMemoryUsage: true,
@@ -1196,7 +1174,7 @@ describe('SettingsDialog', () => {
               respectGitIgnore: false,
               respectGeminiIgnore: true,
               enableRecursiveFileSearch: false,
-              disableFuzzySearch: true,
+              enableFuzzySearch: false,
             },
             loadMemoryFromIncludeDirectories: true,
             discoveryMaxDirs: 100,
@@ -1235,7 +1213,7 @@ describe('SettingsDialog', () => {
         userSettings: {
           general: {
             vimMode: false,
-            disableAutoUpdate: false,
+            enableAutoUpdate: true,
             enablePromptCompletion: false,
           },
           ui: {
@@ -1245,7 +1223,7 @@ describe('SettingsDialog', () => {
             showLineNumbers: false,
             showCitations: false,
             accessibility: {
-              disableLoadingPhrases: false,
+              enableLoadingPhrases: true,
               screenReader: false,
             },
           },
@@ -1258,7 +1236,7 @@ describe('SettingsDialog', () => {
               respectGitIgnore: false,
               respectGeminiIgnore: false,
               enableRecursiveFileSearch: false,
-              disableFuzzySearch: false,
+              enableFuzzySearch: true,
             },
           },
           tools: {
