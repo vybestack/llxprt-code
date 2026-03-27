@@ -346,7 +346,6 @@ describe('loadCliConfig memory discovery', () => {
       telemetryOutfile: undefined,
       allowedMcpServerNames: undefined,
       experimentalAcp: undefined,
-      experimentalUi: undefined,
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
