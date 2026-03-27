@@ -283,9 +283,13 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
-    // Clear provider env vars
+    // Clear all stubs then re-stub only what we need
     vi.unstubAllEnvs();
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    // Remove provider/model env vars that may leak from CI environment
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
   });
@@ -335,6 +339,10 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
     runtimeSettingsState.oauthManager = null;
     vi.unstubAllEnvs();
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    // Remove provider/model env vars that may leak from CI environment
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
   });
 
   afterEach(() => {

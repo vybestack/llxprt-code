@@ -363,6 +363,10 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    // Remove provider/model env vars that may leak from CI environment
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
@@ -421,6 +425,10 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    // Remove provider/model env vars that may leak from CI environment
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
@@ -471,6 +479,10 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    // Remove provider/model env vars that may leak from CI environment
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
