@@ -10,7 +10,7 @@
  * - Session selection and resume works
  * - Delete confirmation works
  *
- * Run with: node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.session-browser.json --assert
+ * Run with: node scripts/tmux-harness.js --script scripts/tmux-script.session-browser.json --assert
  */
 
 import { spawnSync } from 'node:child_process';
@@ -20,12 +20,12 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
 
-const isEnabled = process.env.LLXPRT_E2E_OLDUI_TMUX === '1';
+const isEnabled = process.env.LLXPRT_E2E_TMUX === '1';
 const runTmuxE2E = isEnabled ? it : it.skip;
 
 function runHarness(scriptName, extraArgs = []) {
   const scriptPath = path.join(projectRoot, 'scripts', scriptName);
-  const harnessPath = path.join(projectRoot, 'scripts/oldui-tmux-harness.js');
+  const harnessPath = path.join(projectRoot, 'scripts/tmux-harness.js');
 
   const result = spawnSync(
     'node',
@@ -50,7 +50,7 @@ describe('Session Browser E2E', () => {
   runTmuxE2E(
     'opens session browser with /continue and supports keyboard navigation',
     () => {
-      const result = runHarness('oldui-tmux-script.session-browser.json');
+      const result = runHarness('tmux-script.session-browser.json');
 
       if (result.error) {
         throw result.error;

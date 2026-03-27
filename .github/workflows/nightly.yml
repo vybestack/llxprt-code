@@ -35,11 +35,6 @@ jobs:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
 
-      - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version: 'latest'
-
       - name: 'Configure Windows Defender exclusions'
         run: |
           Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE -Force
@@ -61,16 +56,6 @@ jobs:
       - name: 'Install dependencies for testing'
         run: |-
           npm ci
-
-      - name: 'Install UI dependencies (bun)'
-        run: |-
-          cd packages/ui
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            bun install --no-save
-          else
-            bun install
-          fi
-
       - name: 'Build project'
         run: |-
           npm run build
@@ -121,12 +106,6 @@ jobs:
         env:
           CI: true
         run: npm run test:scripts
-
-      - name: 'Run UI tests (vitest with happy-dom)'
-        env:
-          CI: true
-        run: |-
-          cd packages/ui && bun run test
 
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'

@@ -11,6 +11,12 @@
 - `task-max-async` setting to limit concurrent async tasks (default: 5)
 - Auto-trigger notifications when async tasks complete
 
+### Removed
+
+- Removed `--experimental-ui` flag and `@vybestack/llxprt-ui` (OpenTUI) package. The Ink-based terminal UI is now the sole UI. Development will focus on improving the existing Ink UI.
+- Removed `@vybestack/llxprt-ui` from npm publishing pipeline and CI/CD workflows.
+- Renamed `oldui-*` scripts and documentation to remove legacy naming (the "old UI" distinction is no longer needed).
+
 ## [0.5.3] - 2025-10-28
 
 ### Changed
