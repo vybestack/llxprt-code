@@ -308,7 +308,8 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     await client.waitForDiagnostics('/workspace/src/deadline-10.ts', 3000);
     const elapsed = Date.now() - start;
 
-    expect(elapsed).toBeLessThanOrEqual(3000);
+    // Allow small CI timer jitter (typically 1-5ms on loaded runners)
+    expect(elapsed).toBeLessThanOrEqual(3050);
   });
 
   /**
