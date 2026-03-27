@@ -41,7 +41,7 @@ export interface PostConfigInput {
   readonly runtimeState: BootstrapRuntimeState;
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
-  readonly effectiveSettings: Settings;
+  readonly profileSettingsWithTools: Settings;
   readonly profileLoadResult: ProfileLoadResult;
   readonly providerModelResult: ProviderModelResult;
   readonly defaultDisabledTools: readonly string[];
@@ -49,6 +49,30 @@ export interface PostConfigInput {
   readonly approvalMode: ApprovalMode;
   readonly interactive: boolean;
 }
+
+// ─── Narrowed per-function input types ───────────────────────────────────────
+
+/** Fields consumed by setupRuntimeContext (steps 10-11). */
+type SetupRuntimeContextInput = Pick<
+  PostConfigInput,
+  'config' | 'runtimeState' | 'profileSettingsWithTools'
+>;
+
+/** Fields consumed by reapplyCliOverrides (step 14). */
+type ReapplyCliOverridesInput = Pick<
+  PostConfigInput,
+  'config' | 'runtimeState' | 'bootstrapArgs' | 'argv'
+>;
+
+/** Fields consumed by applyToolPolicies (step 15). */
+type ApplyToolPoliciesInput = Pick<
+  PostConfigInput,
+  | 'config'
+  | 'argv'
+  | 'profileSettingsWithTools'
+  | 'approvalMode'
+  | 'interactive'
+>;
 
 // ─── Sub-functions ────────────────────────────────────────────────────────────
 
@@ -58,8 +82,10 @@ export interface PostConfigInput {
  * This is the SECOND call to registerCliProviderInfrastructure — the first
  * happened inside prepareRuntimeForProfile() (step 2).
  */
-async function setupRuntimeContext(input: PostConfigInput): Promise<void> {
-  const { config, runtimeState, bootstrapArgs } = input;
+async function setupRuntimeContext(
+  input: SetupRuntimeContextInput,
+): Promise<void> {
+  const { config, runtimeState } = input;
 
   const bootstrapRuntimeId =
     runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
@@ -69,7 +95,7 @@ async function setupRuntimeContext(input: PostConfigInput): Promise<void> {
   };
 
   // Set disabled hooks from settings if present
-  const hooks = input.effectiveSettings.hooks as
+  const hooks = input.profileSettingsWithTools.hooks as
     | { disabled?: unknown }
     | undefined;
   if (hooks && 'disabled' in hooks) {
@@ -101,7 +127,6 @@ async function setupRuntimeContext(input: PostConfigInput): Promise<void> {
   logger.debug(
     () => `[bootstrap] Runtime context set, runtimeId=${bootstrapRuntimeId}`,
   );
-  void bootstrapArgs; // used above indirectly
 }
 
 /**
@@ -173,11 +198,10 @@ async function activateProviderAndProfile(
  * switchActiveProvider clears ephemerals, so we reapply CLI args here.
  */
 async function reapplyCliOverrides(
-  input: PostConfigInput,
+  input: ReapplyCliOverridesInput,
   finalProvider: string,
 ): Promise<void> {
-  const { config, runtimeState, bootstrapArgs, argv, providerModelResult } =
-    input;
+  const { config, runtimeState, bootstrapArgs, argv } = input;
 
   const cliModelOverride = (() => {
     if (typeof argv.model === 'string') {
@@ -226,31 +250,19 @@ async function reapplyCliOverrides(
       bootstrapArgs,
     );
   }
-
-  void providerModelResult;
 }
 
 /**
  * Step 15: Apply tool governance policy (ephemeral settings for allowed/excluded tools).
  */
-function applyToolPolicies(input: PostConfigInput): void {
-  const {
-    config,
-    argv,
-    effectiveSettings,
-    profileLoadResult,
-    approvalMode,
-    interactive,
-  } = input;
-
-  // Note: effectiveSettings here may have allowedTools merged in from CLI
-  const allowedTools =
-    argv.allowedTools || effectiveSettings.allowedTools || [];
+function applyToolPolicies(input: ApplyToolPoliciesInput): void {
+  const { config, argv, profileSettingsWithTools, approvalMode, interactive } =
+    input;
 
   const explicitAllowedTools = buildNormalizedToolSet(
     argv.allowedTools && argv.allowedTools.length > 0
       ? argv.allowedTools
-      : (effectiveSettings.allowedTools ?? []),
+      : (profileSettingsWithTools.allowedTools ?? []),
   );
 
   const profileAllowedTools = buildNormalizedToolSet(
@@ -302,9 +314,6 @@ function applyToolPolicies(input: PostConfigInput): void {
     explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
     applyPolicy(finalAllowed);
   }
-
-  void allowedTools;
-  void profileLoadResult;
 }
 
 /**
@@ -316,7 +325,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     runtimeState,
     bootstrapArgs,
     argv,
-    effectiveSettings,
+    profileSettingsWithTools,
     profileLoadResult,
     runtimeOverrides,
   } = input;
@@ -327,8 +336,11 @@ function applyEphemeralSettings(input: PostConfigInput): void {
       '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
     );
   }
-  if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {
-    settingsService.set('emojifilter', effectiveSettings.emojifilter);
+  if (
+    profileSettingsWithTools.emojifilter &&
+    !settingsService.get('emojifilter')
+  ) {
+    settingsService.set('emojifilter', profileSettingsWithTools.emojifilter);
   }
 
   // Apply ephemeral settings from profile (--profile-load or --profile)
@@ -336,7 +348,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   const profileToLoad = profileLoadResult.profileToLoad;
   if (
     (profileToLoad || bootstrapArgs.profileJson !== null) &&
-    effectiveSettings &&
+    profileSettingsWithTools &&
     argv.provider === undefined
   ) {
     const ephemeralKeys = [
@@ -353,7 +365,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     ];
 
     for (const key of ephemeralKeys) {
-      const value = (effectiveSettings as Record<string, unknown>)[key];
+      const value = (profileSettingsWithTools as Record<string, unknown>)[key];
       if (value !== undefined) {
         config.setEphemeralSetting(key, value);
       }

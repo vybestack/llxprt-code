@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import process from 'node:process';
 import {
   ProfileManager,
   DebugLogger,
@@ -23,7 +24,7 @@ export interface ProfilePreparationResult {
   readonly profileModel: string | undefined;
   readonly profileModelParams: Record<string, unknown> | undefined;
   readonly profileBaseUrl: string | undefined;
-  readonly effectiveSettings: Settings;
+  readonly profileMergedSettings: Settings;
 }
 
 export interface ProfileResolutionInput {
@@ -41,7 +42,7 @@ export interface ProfileResolutionResult {
 }
 
 export interface ProfileLoadResult {
-  readonly effectiveSettings: Settings;
+  readonly profileMergedSettings: Settings;
   readonly profileModel: string | undefined;
   readonly profileProvider: string | undefined;
   readonly profileModelParams: Record<string, unknown> | undefined;
@@ -86,9 +87,9 @@ export function prepareProfileForApplication(
   const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
   logger.debug(() => loadSummary);
 
-  let effectiveSettings = baseSettings;
+  let profileMergedSettings = baseSettings;
   if (argv.provider === undefined && profile.ephemeralSettings) {
-    effectiveSettings = {
+    profileMergedSettings = {
       ...baseSettings,
       ...profile.ephemeralSettings,
     } as Settings;
@@ -108,7 +109,7 @@ export function prepareProfileForApplication(
     profileModel,
     profileModelParams,
     profileBaseUrl,
-    effectiveSettings,
+    profileMergedSettings,
   };
 }
 
@@ -159,7 +160,7 @@ function applyInlineProfile(
     settings,
   );
   return {
-    effectiveSettings: prepared.effectiveSettings,
+    profileMergedSettings: prepared.profileMergedSettings,
     profileModel: prepared.profileModel,
     profileProvider: prepared.profileProvider,
     profileModelParams: prepared.profileModelParams,
@@ -207,7 +208,7 @@ async function applyFileProfile(
     }
 
     return {
-      effectiveSettings: prepared.effectiveSettings,
+      profileMergedSettings: prepared.profileMergedSettings,
       profileModel: prepared.profileModel,
       profileProvider: prepared.profileProvider,
       profileModelParams: prepared.profileModelParams,
@@ -252,7 +253,7 @@ export async function loadAndPrepareProfile(input: {
     profileExplicitlySpecified,
   } = input;
 
-  let effectiveSettings = settings;
+  let profileMergedSettings = settings;
   let profileModel: string | undefined;
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
@@ -269,7 +270,7 @@ export async function loadAndPrepareProfile(input: {
         settings,
       );
       ({
-        effectiveSettings,
+        profileMergedSettings,
         profileModel,
         profileProvider,
         profileModelParams,
@@ -294,7 +295,7 @@ export async function loadAndPrepareProfile(input: {
     );
     if (result) {
       ({
-        effectiveSettings,
+        profileMergedSettings,
         profileModel,
         profileProvider,
         profileModelParams,
@@ -305,7 +306,7 @@ export async function loadAndPrepareProfile(input: {
   }
 
   return {
-    effectiveSettings,
+    profileMergedSettings,
     profileModel,
     profileProvider,
     profileModelParams,

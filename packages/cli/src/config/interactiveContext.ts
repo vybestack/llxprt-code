@@ -30,7 +30,7 @@ const logger = new DebugLogger('llxprt:config:interactiveContext');
 
 export interface ContextResolutionInput {
   readonly argv: CliArgs;
-  readonly effectiveSettings: Settings;
+  readonly profileMergedSettings: Settings;
   readonly originalSettings: Settings;
   readonly cwd: string;
   readonly extensions: GeminiCLIExtension[];
@@ -67,11 +67,12 @@ function resolveTrustAndIdeContext(
   | 'folderTrust'
   | 'trustedFolder'
 > {
-  const { argv, effectiveSettings, originalSettings } = input;
+  const { argv, profileMergedSettings, originalSettings } = input;
 
   const debugMode = isDebugMode(argv);
 
-  const memoryImportFormat = effectiveSettings.ui?.memoryImportFormat || 'tree';
+  const memoryImportFormat =
+    profileMergedSettings.ui?.memoryImportFormat || 'tree';
 
   let ideMode: boolean;
   if (argv.ideMode === 'enable') {
@@ -79,13 +80,13 @@ function resolveTrustAndIdeContext(
   } else if (argv.ideMode === 'disable') {
     ideMode = false;
   } else {
-    ideMode = effectiveSettings.ui?.ideMode ?? false;
+    ideMode = profileMergedSettings.ui?.ideMode ?? false;
   }
 
   if (debugMode) {
     debugLogger.debug('[DEBUG] IDE mode configuration:', {
       'argv.ideMode': argv.ideMode,
-      'effectiveSettings.ui.ideMode': effectiveSettings.ui?.ideMode,
+      'profileMergedSettings.ui.ideMode': profileMergedSettings.ui?.ideMode,
       'final ideMode': ideMode,
     });
   }
@@ -98,24 +99,24 @@ function resolveTrustAndIdeContext(
 }
 
 function resolveFiltering(
-  effectiveSettings: Settings,
+  profileMergedSettings: Settings,
   cwd: string,
 ): Pick<ContextResolutionResult, 'fileFiltering' | 'memoryFileFiltering'> & {
   fileService: FileDiscoveryService;
 } {
   const memoryFileFiltering = {
     ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-    ...effectiveSettings.fileFiltering,
+    ...profileMergedSettings.fileFiltering,
   };
 
   const fileFiltering = {
     ...DEFAULT_FILE_FILTERING_OPTIONS,
-    ...effectiveSettings.fileFiltering,
+    ...profileMergedSettings.fileFiltering,
   };
 
   // Set the context filename BEFORE loading memory
-  if (effectiveSettings.ui?.contextFileName) {
-    setServerGeminiMdFilename(effectiveSettings.ui.contextFileName);
+  if (profileMergedSettings.ui?.contextFileName) {
+    setServerGeminiMdFilename(profileMergedSettings.ui.contextFileName);
   } else {
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
   }
@@ -127,13 +128,13 @@ function resolveFiltering(
 
 function resolveIncludeDirectories(
   argv: CliArgs,
-  effectiveSettings: Settings,
+  profileMergedSettings: Settings,
 ): Pick<
   ContextResolutionResult,
   'includeDirectories' | 'resolvedLoadMemoryFromIncludeDirectories'
 > {
   const includeDirectoriesFromSettings =
-    effectiveSettings.includeDirectories || [];
+    profileMergedSettings.includeDirectories || [];
   const includeDirectoriesFromCli = argv.includeDirectories || [];
   const includeDirectories = includeDirectoriesFromSettings
     .map(resolvePath)
@@ -142,7 +143,7 @@ function resolveIncludeDirectories(
   const includeDirectoriesProvided = includeDirectories.length > 0;
   const cliLoadMemoryPreference = argv.loadMemoryFromIncludeDirectories;
   const settingsLoadMemoryPreference =
-    effectiveSettings.loadMemoryFromIncludeDirectories;
+    profileMergedSettings.loadMemoryFromIncludeDirectories;
 
   let resolvedLoadMemoryFromIncludeDirectories =
     cliLoadMemoryPreference ?? settingsLoadMemoryPreference ?? false;
@@ -199,15 +200,15 @@ export function resolveContextAndEnvironment(
 ): ContextResolutionResult {
   const {
     argv,
-    effectiveSettings,
+    profileMergedSettings,
     cwd,
     extensions,
     extensionEnablementManager,
   } = input;
 
   const trustAndIde = resolveTrustAndIdeContext(input);
-  const filtering = resolveFiltering(effectiveSettings, cwd);
-  const includeDirs = resolveIncludeDirectories(argv, effectiveSettings);
+  const filtering = resolveFiltering(profileMergedSettings, cwd);
+  const includeDirs = resolveIncludeDirectories(argv, profileMergedSettings);
   const extensionData = resolveExtensions(
     extensions,
     cwd,
@@ -215,7 +216,8 @@ export function resolveContextAndEnvironment(
   );
   const interactive = resolveInteractiveMode(argv);
 
-  const jitContextEnabled = effectiveSettings.experimental?.jitContext ?? true;
+  const jitContextEnabled =
+    profileMergedSettings.experimental?.jitContext ?? true;
 
   logger.debug(
     () =>

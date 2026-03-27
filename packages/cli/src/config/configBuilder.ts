@@ -29,12 +29,16 @@ export interface ConfigBuildInput {
   readonly sessionId: string;
   readonly cwd: string;
   readonly argv: CliArgs;
-  readonly effectiveSettings: Settings;
+  readonly profileSettingsWithTools: Settings;
   readonly context: ContextResolutionResult;
   readonly approvalMode: ApprovalMode;
   readonly providerModel: ProviderModelResult;
   readonly sandboxConfig: SandboxConfig | undefined;
   readonly mcpServers: Record<string, MCPServerConfig>;
+  readonly blockedMcpServers: ReadonlyArray<{
+    name: string;
+    extensionName: string;
+  }>;
   readonly excludeTools: readonly string[];
   readonly memoryContent: string;
   readonly fileCount: number;
@@ -114,7 +118,7 @@ function buildHooksConfig(
 
 function buildToolConfig(
   argv: CliArgs,
-  effectiveSettings: Settings,
+  profileSettingsWithTools: Settings,
   mcpEnabled: boolean,
   mcpServers: Record<string, MCPServerConfig>,
   excludeTools: readonly string[],
@@ -122,19 +126,19 @@ function buildToolConfig(
   policyEngineConfig: PolicyEngineConfig,
 ) {
   return {
-    coreTools: effectiveSettings.coreTools || undefined,
+    coreTools: profileSettingsWithTools.coreTools || undefined,
     allowedTools: allowedTools.length > 0 ? [...allowedTools] : undefined,
     policyEngineConfig,
     excludeTools: [...excludeTools],
-    toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
-    toolCallCommand: effectiveSettings.toolCallCommand,
+    toolDiscoveryCommand: profileSettingsWithTools.toolDiscoveryCommand,
+    toolCallCommand: profileSettingsWithTools.toolCallCommand,
     mcpServerCommand: mcpEnabled
-      ? effectiveSettings.mcpServerCommand
+      ? profileSettingsWithTools.mcpServerCommand
       : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
     mcpEnabled,
     allowedMcpServers: mcpEnabled
-      ? (argv.allowedMcpServerNames ?? effectiveSettings.mcp?.allowed)
+      ? (argv.allowedMcpServerNames ?? profileSettingsWithTools.mcp?.allowed)
       : undefined,
   };
 }
@@ -149,7 +153,7 @@ function buildSessionBaseArgs(
     sessionId,
     cwd,
     argv,
-    effectiveSettings,
+    profileSettingsWithTools,
     context,
     approvalMode,
     providerModel,
@@ -182,17 +186,19 @@ function buildSessionBaseArgs(
     llxprtMdFilePaths: [...filePaths],
     approvalMode,
     showMemoryUsage:
-      argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
+      argv.showMemoryUsage ||
+      profileSettingsWithTools.ui?.showMemoryUsage ||
+      false,
     disableYoloMode:
-      effectiveSettings.security?.disableYoloMode ||
-      effectiveSettings.admin?.secureModeEnabled,
-    accessibility: { ...effectiveSettings.accessibility, screenReader },
+      profileSettingsWithTools.security?.disableYoloMode ||
+      profileSettingsWithTools.admin?.secureModeEnabled,
+    accessibility: { ...profileSettingsWithTools.accessibility, screenReader },
     telemetry,
     usageStatisticsEnabled:
-      effectiveSettings.ui?.usageStatisticsEnabled ?? true,
+      profileSettingsWithTools.ui?.usageStatisticsEnabled ?? true,
     fileFiltering: context.fileFiltering,
     checkpointing:
-      argv.checkpointing || effectiveSettings.checkpointing?.enabled,
+      argv.checkpointing || profileSettingsWithTools.checkpointing?.enabled,
     dumpOnError: argv.dumponerror || false,
     proxy:
       argv.proxy ||
@@ -202,7 +208,7 @@ function buildSessionBaseArgs(
       process.env.http_proxy,
     cwd,
     fileDiscoveryService: context.fileService,
-    bugCommand: effectiveSettings.bugCommand,
+    bugCommand: profileSettingsWithTools.bugCommand,
     model: providerModel.model,
     provider: providerModel.provider,
     sanitizationConfig,
@@ -213,10 +219,16 @@ function buildFeatureArgs(
   input: ConfigBuildInput,
   hooksConfig: ReturnType<typeof buildHooksConfig>,
 ) {
-  const { argv, effectiveSettings, context, useRipgrepSetting } = input;
+  const {
+    argv,
+    profileSettingsWithTools,
+    context,
+    useRipgrepSetting,
+    blockedMcpServers,
+  } = input;
   return {
     extensionContextFilePaths: [...context.extensionContextFilePaths],
-    maxSessionTurns: effectiveSettings.ui?.maxSessionTurns ?? -1,
+    maxSessionTurns: profileSettingsWithTools.ui?.maxSessionTurns ?? -1,
     experimentalZedIntegration: argv.experimentalAcp || false,
     listExtensions: argv.listExtensions || false,
     activeExtensions: context.activeExtensions.map((e) => ({
@@ -225,19 +237,19 @@ function buildFeatureArgs(
     })),
     extensions: context.allExtensions,
     enableExtensionReloading:
-      effectiveSettings.experimental?.extensionReloading,
-    blockedMcpServers: undefined,
-    skillsSupport: effectiveSettings.experimental?.skills,
-    disabledSkills: effectiveSettings.skills?.disabled,
+      profileSettingsWithTools.experimental?.extensionReloading,
+    blockedMcpServers: [...blockedMcpServers],
+    skillsSupport: profileSettingsWithTools.experimental?.skills,
+    disabledSkills: profileSettingsWithTools.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,
-    summarizeToolOutput: effectiveSettings.summarizeToolOutput,
+    summarizeToolOutput: profileSettingsWithTools.summarizeToolOutput,
     ideMode: context.ideMode,
-    chatCompression: effectiveSettings.chatCompression,
+    chatCompression: profileSettingsWithTools.chatCompression,
     interactive: context.interactive,
     folderTrust: context.folderTrust,
     trustedFolder: context.trustedFolder,
     shellReplacement: normalizeShellReplacement(
-      effectiveSettings.shellReplacement as
+      profileSettingsWithTools.shellReplacement as
         | 'allowlist'
         | 'all'
         | 'none'
@@ -245,10 +257,11 @@ function buildFeatureArgs(
         | undefined,
     ),
     useRipgrep: useRipgrepSetting,
-    shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
-    allowPtyThemeOverride: effectiveSettings.allowPtyThemeOverride,
-    ptyScrollbackLimit: effectiveSettings.ptyScrollbackLimit,
-    enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
+    shouldUseNodePtyShell: profileSettingsWithTools.shouldUseNodePtyShell,
+    allowPtyThemeOverride: profileSettingsWithTools.allowPtyThemeOverride,
+    ptyScrollbackLimit: profileSettingsWithTools.ptyScrollbackLimit,
+    enablePromptCompletion:
+      profileSettingsWithTools.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     continueSession:
       argv.continue === '' || argv.continue === true
@@ -267,7 +280,7 @@ function buildFeatureArgs(
 export function buildConfig(input: ConfigBuildInput): Config {
   const {
     argv,
-    effectiveSettings,
+    profileSettingsWithTools,
     mcpEnabled,
     mcpServers,
     excludeTools,
@@ -277,16 +290,16 @@ export function buildConfig(input: ConfigBuildInput): Config {
     cwd,
   } = input;
 
-  const telemetry = buildTelemetryConfig(argv, effectiveSettings);
-  const sanitizationConfig = buildSanitizationConfig(effectiveSettings);
+  const telemetry = buildTelemetryConfig(argv, profileSettingsWithTools);
+  const sanitizationConfig = buildSanitizationConfig(profileSettingsWithTools);
   const hooksConfig = buildHooksConfig(
-    effectiveSettings,
+    profileSettingsWithTools,
     adminSkillsEnabled,
     cwd,
   );
   const toolConfig = buildToolConfig(
     argv,
-    effectiveSettings,
+    profileSettingsWithTools,
     mcpEnabled,
     mcpServers,
     excludeTools,

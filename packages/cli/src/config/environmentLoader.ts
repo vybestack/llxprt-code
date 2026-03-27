@@ -19,6 +19,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
+import type { ContextResolutionResult } from './interactiveContext.js';
 
 const logger = new DebugLogger('llxprt:config:environmentLoader');
 
@@ -72,6 +73,29 @@ export function isDebugMode(argv: CliArgs): boolean {
     [process.env['DEBUG'], process.env['DEBUG_MODE']].some(
       (v) => v === 'true' || v === '1',
     )
+  );
+}
+
+export async function resolveMemoryContent(
+  cwd: string,
+  context: ContextResolutionResult,
+  profileMergedSettings: Settings,
+): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
+  if (context.jitContextEnabled) {
+    return { memoryContent: '', fileCount: 0, filePaths: [] };
+  }
+  return loadHierarchicalLlxprtMemory(
+    cwd,
+    context.resolvedLoadMemoryFromIncludeDirectories
+      ? (context.includeDirectories as string[])
+      : [],
+    context.debugMode,
+    context.fileService,
+    profileMergedSettings,
+    context.allExtensions,
+    context.trustedFolder,
+    context.memoryImportFormat,
+    context.memoryFileFiltering,
   );
 }
 

@@ -273,6 +273,22 @@ async function getMcpServers(
   return Object.keys(config.getMcpServers?.() ?? {});
 }
 
+async function getBlockedMcpServers(
+  settings: Settings,
+  cliArgs: string[] = [],
+): Promise<Array<{ name: string; extensionName: string }>> {
+  process.argv = ['node', 'script.js', ...cliArgs];
+  const argv = await parseArguments(settings);
+  const config = await loadCliConfig(
+    settings,
+    [],
+    makeExtMgr(),
+    'test-session',
+    argv,
+  );
+  return config.getBlockedMcpServers() ?? [];
+}
+
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('mcpFilteringParity: MCP server filtering', () => {
@@ -424,5 +440,46 @@ describe('mcpFilteringParity: MCP server filtering', () => {
     };
     const servers = await getMcpServers(settings);
     expect(servers).toHaveLength(0);
+  });
+
+  // ── blockedMcpServers threaded through config build path (F7) ───────────────
+
+  it('blockedMcpServers is populated when settings.allowMCPServers filters out servers', async () => {
+    const settings: Settings = {
+      ...settingsWithMcpServers({
+        serverA: { command: 'cmd-a' },
+        serverB: { command: 'cmd-b' },
+      }),
+      allowMCPServers: ['serverA'],
+    };
+    const blocked = await getBlockedMcpServers(settings);
+    const blockedNames = blocked.map((s) => s.name);
+    expect(blockedNames).toContain('serverB');
+    expect(blockedNames).not.toContain('serverA');
+  });
+
+  it('blockedMcpServers is populated when argv --allowed-mcp-server-names filters out servers', async () => {
+    const settings = settingsWithMcpServers({
+      serverA: { command: 'cmd-a' },
+      serverB: { command: 'cmd-b' },
+      serverC: { command: 'cmd-c' },
+    });
+    const blocked = await getBlockedMcpServers(settings, [
+      '--allowed-mcp-server-names',
+      'serverB',
+    ]);
+    const blockedNames = blocked.map((s) => s.name);
+    expect(blockedNames).toContain('serverA');
+    expect(blockedNames).toContain('serverC');
+    expect(blockedNames).not.toContain('serverB');
+  });
+
+  it('blockedMcpServers is empty when no filtering is applied', async () => {
+    const settings = settingsWithMcpServers({
+      serverA: { command: 'cmd-a' },
+      serverB: { command: 'cmd-b' },
+    });
+    const blocked = await getBlockedMcpServers(settings);
+    expect(blocked).toHaveLength(0);
   });
 });

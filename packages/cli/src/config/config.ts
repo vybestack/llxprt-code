@@ -9,17 +9,13 @@
 import process from 'node:process';
 import {
   Config,
-  OutputFormat,
-  isRipgrepAvailable,
   type GeminiCLIExtension,
   SettingsService,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 
 import { Settings } from './settings.js';
-import { createPolicyEngineConfig } from './policy.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
-import { allowedMcpServers, mergeMcpServers } from './mcpServerConfig.js';
+import { resolveMcpServers } from './mcpServerConfig.js';
 import { type CliArgs } from './cliArgParser.js';
 import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
@@ -27,232 +23,23 @@ import type { ExtensionEnablementManager } from './extensions/extensionEnablemen
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
+  type BootstrapRuntimeState,
 } from './profileBootstrap.js';
 
 import {
   resolveProfileToLoad,
   loadAndPrepareProfile,
+  type ProfileLoadResult,
 } from './profileResolution.js';
 import { resolveContextAndEnvironment } from './interactiveContext.js';
-import { loadHierarchicalLlxprtMemory } from './environmentLoader.js';
+import { resolveMemoryContent } from './environmentLoader.js';
 import { resolveApprovalMode } from './approvalModeResolver.js';
 import { resolveProviderAndModel } from './providerModelResolver.js';
 import { buildConfig } from './configBuilder.js';
 import { finalizeConfig } from './postConfigRuntime.js';
-import {
-  mergeExcludeTools,
-  createToolExclusionFilter,
-} from './toolGovernance.js';
-
-import {
-  ShellTool,
-  EditTool,
-  WriteFileTool,
-  ApprovalMode,
-  type MCPServerConfig,
-  type PolicyEngineConfig,
-} from '@vybestack/llxprt-code-core';
+import { resolveIntermediateConfig } from './intermediateConfig.js';
 
 import type { ContextResolutionResult } from './interactiveContext.js';
-
-const logger = new DebugLogger('llxprt:config');
-
-// ─── Sub-functions ────────────────────────────────────────────────────────────
-
-async function resolveMemoryContent(
-  cwd: string,
-  context: ContextResolutionResult,
-  effectiveSettings: Settings,
-): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
-  if (context.jitContextEnabled) {
-    return { memoryContent: '', fileCount: 0, filePaths: [] };
-  }
-  const memoryResult = await loadHierarchicalLlxprtMemory(
-    cwd,
-    context.resolvedLoadMemoryFromIncludeDirectories
-      ? (context.includeDirectories as string[])
-      : [],
-    context.debugMode,
-    context.fileService,
-    effectiveSettings,
-    context.allExtensions,
-    context.trustedFolder,
-    context.memoryImportFormat,
-    context.memoryFileFiltering,
-  );
-  return {
-    memoryContent: memoryResult.memoryContent,
-    fileCount: memoryResult.fileCount,
-    filePaths: memoryResult.filePaths,
-  };
-}
-
-function resolveMcpServers(
-  effectiveSettings: Settings,
-  context: ContextResolutionResult,
-  allowedMcpServerNames: string[] | undefined,
-): {
-  mcpServers: Record<string, MCPServerConfig>;
-  blockedMcpServers: Array<{ name: string; extensionName: string }>;
-} {
-  let mcpServers = mergeMcpServers(effectiveSettings, context.activeExtensions);
-  const blockedMcpServers: Array<{ name: string; extensionName: string }> = [];
-
-  if (!allowedMcpServerNames) {
-    if (effectiveSettings.allowMCPServers) {
-      mcpServers = allowedMcpServers(
-        mcpServers,
-        effectiveSettings.allowMCPServers,
-        blockedMcpServers,
-      );
-    }
-    if (effectiveSettings.excludeMCPServers) {
-      const excludedNames = new Set(
-        effectiveSettings.excludeMCPServers.filter(Boolean),
-      );
-      if (excludedNames.size > 0) {
-        mcpServers = Object.fromEntries(
-          Object.entries(mcpServers).filter(([key]) => !excludedNames.has(key)),
-        );
-      }
-    }
-  }
-  if (allowedMcpServerNames) {
-    mcpServers = allowedMcpServers(
-      mcpServers,
-      allowedMcpServerNames,
-      blockedMcpServers,
-    );
-  }
-
-  return { mcpServers, blockedMcpServers };
-}
-
-interface IntermediateConfig {
-  screenReader: boolean;
-  allowedTools: string[];
-  allowedToolsSet: Set<string>;
-  effectiveSettingsWithTools: Settings;
-  policyEngineConfig: PolicyEngineConfig;
-  outputFormat: OutputFormat;
-  useRipgrepSetting: boolean | undefined;
-  mcpEnabled: boolean;
-  extensionsEnabled: boolean;
-  adminSkillsEnabled: boolean;
-  excludeTools: readonly string[];
-  question: string;
-}
-
-function resolveNonInteractiveExcludes(
-  argv: CliArgs,
-  context: ContextResolutionResult,
-  effectiveSettings: Settings,
-  approvalMode: ApprovalMode,
-  allowedTools: string[],
-  allowedToolsSet: Set<string>,
-): readonly string[] {
-  const extraExcludes: string[] = [];
-  if (!context.interactive && !argv.experimentalAcp) {
-    const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
-    const autoEditExcludes = [ShellTool.Name];
-    const toolExclusionFilter = createToolExclusionFilter(
-      allowedTools,
-      allowedToolsSet,
-    );
-    switch (approvalMode) {
-      case ApprovalMode.DEFAULT:
-        extraExcludes.push(...defaultExcludes.filter(toolExclusionFilter));
-        break;
-      case ApprovalMode.AUTO_EDIT:
-        extraExcludes.push(...autoEditExcludes.filter(toolExclusionFilter));
-        break;
-      default:
-        break;
-    }
-  }
-  return mergeExcludeTools(
-    effectiveSettings,
-    context.activeExtensions,
-    extraExcludes.length > 0 ? extraExcludes : undefined,
-  );
-}
-
-async function resolveIntermediateConfig(
-  argv: CliArgs,
-  settings: Settings,
-  effectiveSettings: Settings,
-  context: ContextResolutionResult,
-  approvalMode: ApprovalMode,
-): Promise<IntermediateConfig> {
-  const screenReader =
-    argv.screenReader !== undefined
-      ? argv.screenReader
-      : (effectiveSettings.accessibility?.screenReader ?? false);
-
-  const allowedTools = argv.allowedTools || settings.allowedTools || [];
-  const allowedToolsSet = new Set(allowedTools);
-
-  let effectiveSettingsWithTools = effectiveSettings;
-  if (allowedTools.length > 0) {
-    effectiveSettingsWithTools = {
-      ...effectiveSettings,
-      tools: { ...effectiveSettings.tools, allowed: allowedTools },
-    };
-  }
-
-  const policyEngineConfig = await createPolicyEngineConfig(
-    effectiveSettingsWithTools,
-    approvalMode,
-  );
-
-  const outputFormat =
-    argv.outputFormat === OutputFormat.JSON
-      ? OutputFormat.JSON
-      : OutputFormat.TEXT;
-
-  let useRipgrepSetting = effectiveSettings.useRipgrep;
-  if (useRipgrepSetting === undefined) {
-    const ripgrepAvailable = await isRipgrepAvailable();
-    useRipgrepSetting = ripgrepAvailable;
-    logger.debug(() =>
-      ripgrepAvailable
-        ? 'Ripgrep detected, auto-enabling for faster searches'
-        : 'Ripgrep not detected, using default grep implementation',
-    );
-  }
-
-  const mcpEnabled = effectiveSettings.admin?.mcp?.enabled ?? true;
-  const extensionsEnabled =
-    effectiveSettings.admin?.extensions?.enabled ?? true;
-  const adminSkillsEnabled = effectiveSettings.admin?.skills?.enabled ?? true;
-
-  const excludeTools = resolveNonInteractiveExcludes(
-    argv,
-    context,
-    effectiveSettings,
-    approvalMode,
-    allowedTools,
-    allowedToolsSet,
-  );
-
-  const question =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
-
-  return {
-    screenReader,
-    allowedTools,
-    allowedToolsSet,
-    effectiveSettingsWithTools,
-    policyEngineConfig,
-    outputFormat,
-    useRipgrepSetting,
-    mcpEnabled,
-    extensionsEnabled,
-    adminSkillsEnabled,
-    excludeTools,
-    question,
-  };
-}
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
 
@@ -293,16 +80,16 @@ async function bootstrapAndLoadProfile(
 /** Steps 7-8: Resolve approval mode and provider/model, sync to SettingsService */
 function resolveApprovalAndProvider(
   argv: CliArgs,
-  effectiveSettings: Settings,
-  context: ReturnType<typeof resolveContextAndEnvironment>,
-  profileResult: Awaited<ReturnType<typeof loadAndPrepareProfile>>,
-  runtimeState: Awaited<ReturnType<typeof prepareRuntimeForProfile>>,
+  profileMergedSettings: Settings,
+  context: ContextResolutionResult,
+  profileResult: ProfileLoadResult,
+  runtimeState: BootstrapRuntimeState,
 ) {
   const approvalMode = resolveApprovalMode({
     cliApprovalMode: argv.approvalMode,
     cliYolo: argv.yolo,
-    disableYoloMode: effectiveSettings.security?.disableYoloMode,
-    secureModeEnabled: effectiveSettings.admin?.secureModeEnabled,
+    disableYoloMode: profileMergedSettings.security?.disableYoloMode,
+    secureModeEnabled: profileMergedSettings.admin?.secureModeEnabled,
     trustedFolder: context.trustedFolder,
   });
   const providerModel = resolveProviderAndModel({
@@ -311,7 +98,7 @@ function resolveApprovalAndProvider(
     envDefaultProvider: process.env.LLXPRT_DEFAULT_PROVIDER,
     cliModel: argv.model,
     profileModel: profileResult.profileModel,
-    settingsModel: effectiveSettings.model,
+    settingsModel: profileMergedSettings.model,
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
     envGeminiModel: process.env.GEMINI_MODEL,
   });
@@ -343,11 +130,11 @@ export async function loadCliConfig(
 ): Promise<Config> {
   const { bootstrapArgs, runtimeState, profileResult } =
     await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
-  const effectiveSettings = profileResult.effectiveSettings;
+  const profileMergedSettings = profileResult.profileMergedSettings;
 
   const context = resolveContextAndEnvironment({
     argv,
-    effectiveSettings,
+    profileMergedSettings,
     originalSettings: settings,
     cwd,
     extensions,
@@ -356,17 +143,17 @@ export async function loadCliConfig(
   const { memoryContent, fileCount, filePaths } = await resolveMemoryContent(
     cwd,
     context,
-    effectiveSettings,
+    profileMergedSettings,
   );
-  const { mcpServers } = resolveMcpServers(
-    effectiveSettings,
+  const { mcpServers, blockedMcpServers } = resolveMcpServers(
+    profileMergedSettings,
     context,
     argv.allowedMcpServerNames,
   );
 
   const { approvalMode, providerModel } = resolveApprovalAndProvider(
     argv,
-    effectiveSettings,
+    profileMergedSettings,
     context,
     profileResult,
     runtimeState,
@@ -374,22 +161,23 @@ export async function loadCliConfig(
   const intermediate = await resolveIntermediateConfig(
     argv,
     settings,
-    effectiveSettings,
+    profileMergedSettings,
     context,
     approvalMode,
   );
-  const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
+  const sandboxConfig = await loadSandboxConfig(profileMergedSettings, argv);
 
   const config = buildConfig({
     sessionId,
     cwd,
     argv,
-    effectiveSettings: intermediate.effectiveSettingsWithTools,
+    profileSettingsWithTools: intermediate.profileSettingsWithTools,
     context,
     approvalMode,
     providerModel,
     sandboxConfig,
     mcpServers,
+    blockedMcpServers,
     excludeTools: intermediate.excludeTools,
     memoryContent,
     fileCount,
@@ -410,10 +198,10 @@ export async function loadCliConfig(
     runtimeState,
     bootstrapArgs,
     argv,
-    effectiveSettings: intermediate.effectiveSettingsWithTools,
+    profileSettingsWithTools: intermediate.profileSettingsWithTools,
     profileLoadResult: profileResult,
     providerModelResult: providerModel,
-    defaultDisabledTools: effectiveSettings.defaultDisabledTools ?? [],
+    defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
     runtimeOverrides,
     approvalMode,
     interactive: context.interactive,

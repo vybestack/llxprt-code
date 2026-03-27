@@ -5,7 +5,10 @@
  */
 
 import { DebugLogger, type Profile } from '@vybestack/llxprt-code-core';
-import { applyProfileSnapshot } from '../runtime/profileSnapshot.js';
+import {
+  applyProfileSnapshot,
+  type ProfileLoadResult,
+} from '../runtime/profileSnapshot.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { BootstrapProfileArgs } from './profileBootstrap.js';
 
@@ -35,6 +38,34 @@ export interface ProfileRuntimeApplicationResult {
   readonly resolvedBaseUrlAfterProfile: string | undefined;
   readonly resolvedFinalProvider: string;
   readonly profileWarnings: readonly string[];
+}
+
+interface SnapshotLocalState {
+  appliedResult: ProfileSnapshotResult | null;
+  resolvedProviderAfterProfile: string | undefined;
+  resolvedModelAfterProfile: string | undefined;
+  resolvedBaseUrlAfterProfile: string | undefined;
+}
+
+/** Maps snapshot result fields and warnings into the shared local-state object. */
+function collectSnapshotResult(
+  snapshotResult: ProfileLoadResult,
+  mutableWarnings: string[],
+): SnapshotLocalState {
+  if (snapshotResult.warnings.length > 0) {
+    mutableWarnings.push(...snapshotResult.warnings);
+  }
+  return {
+    appliedResult: {
+      providerName: snapshotResult.providerName,
+      modelName: snapshotResult.modelName,
+      baseUrl: snapshotResult.baseUrl,
+      warnings: snapshotResult.warnings,
+    },
+    resolvedProviderAfterProfile: snapshotResult.providerName,
+    resolvedModelAfterProfile: snapshotResult.modelName,
+    resolvedBaseUrlAfterProfile: snapshotResult.baseUrl,
+  };
 }
 
 /**
@@ -102,20 +133,12 @@ export async function applyProfileToRuntime(
       profileName: 'cli-args',
     });
 
-    resolvedProviderAfterProfile = snapshotResult.providerName;
-    resolvedModelAfterProfile = snapshotResult.modelName;
-    if (snapshotResult.baseUrl) {
-      resolvedBaseUrlAfterProfile = snapshotResult.baseUrl;
-    }
-    if (snapshotResult.warnings.length > 0) {
-      mutableWarnings.push(...snapshotResult.warnings);
-    }
-    appliedResult = {
-      providerName: snapshotResult.providerName,
-      modelName: snapshotResult.modelName,
-      baseUrl: snapshotResult.baseUrl,
-      warnings: snapshotResult.warnings,
-    };
+    ({
+      appliedResult,
+      resolvedProviderAfterProfile,
+      resolvedModelAfterProfile,
+      resolvedBaseUrlAfterProfile,
+    } = collectSnapshotResult(snapshotResult, mutableWarnings));
     logger.debug(
       () =>
         `[bootstrap] Applied CLI auth -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,
@@ -130,20 +153,12 @@ export async function applyProfileToRuntime(
       profileName: profileToLoad || 'inline-profile',
     });
 
-    resolvedProviderAfterProfile = snapshotResult.providerName;
-    resolvedModelAfterProfile = snapshotResult.modelName;
-    if (snapshotResult.baseUrl) {
-      resolvedBaseUrlAfterProfile = snapshotResult.baseUrl;
-    }
-    if (snapshotResult.warnings.length > 0) {
-      mutableWarnings.push(...snapshotResult.warnings);
-    }
-    appliedResult = {
-      providerName: snapshotResult.providerName,
-      modelName: snapshotResult.modelName,
-      baseUrl: snapshotResult.baseUrl,
-      warnings: snapshotResult.warnings,
-    };
+    ({
+      appliedResult,
+      resolvedProviderAfterProfile,
+      resolvedModelAfterProfile,
+      resolvedBaseUrlAfterProfile,
+    } = collectSnapshotResult(snapshotResult, mutableWarnings));
     // @plan:PLAN-20251211issue486b - Update finalProvider after applyProfile
     if (
       resolvedProviderAfterProfile &&

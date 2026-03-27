@@ -4,9 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ShellTool, SHELL_TOOL_NAMES } from '@vybestack/llxprt-code-core';
+import {
+  ShellTool,
+  EditTool,
+  WriteFileTool,
+  SHELL_TOOL_NAMES,
+  type ApprovalMode,
+  ApprovalMode as ApprovalModeEnum,
+} from '@vybestack/llxprt-code-core';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
+import type { CliArgs } from './cliArgParser.js';
+import type { ContextResolutionResult } from './interactiveContext.js';
 
 export const READ_ONLY_TOOL_NAMES = [
   'glob',
@@ -111,4 +120,38 @@ export function mergeExcludeTools(
     }
   }
   return [...allExcludeTools];
+}
+
+export function resolveNonInteractiveExcludes(
+  argv: CliArgs,
+  context: ContextResolutionResult,
+  profileMergedSettings: Settings,
+  approvalMode: ApprovalMode,
+  allowedTools: string[],
+  allowedToolsSet: Set<string>,
+): readonly string[] {
+  const extraExcludes: string[] = [];
+  if (!context.interactive && !argv.experimentalAcp) {
+    const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
+    const autoEditExcludes = [ShellTool.Name];
+    const toolExclusionFilter = createToolExclusionFilter(
+      allowedTools,
+      allowedToolsSet,
+    );
+    switch (approvalMode) {
+      case ApprovalModeEnum.DEFAULT:
+        extraExcludes.push(...defaultExcludes.filter(toolExclusionFilter));
+        break;
+      case ApprovalModeEnum.AUTO_EDIT:
+        extraExcludes.push(...autoEditExcludes.filter(toolExclusionFilter));
+        break;
+      default:
+        break;
+    }
+  }
+  return mergeExcludeTools(
+    profileMergedSettings,
+    context.activeExtensions,
+    extraExcludes.length > 0 ? extraExcludes : undefined,
+  );
 }

@@ -10,6 +10,7 @@ import type {
   GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
+import type { ContextResolutionResult } from './interactiveContext.js';
 
 const logger = new DebugLogger('llxprt:config:mcpServerConfig');
 
@@ -64,4 +65,48 @@ export function allowedMcpServers(
     );
     return {};
   }
+}
+
+export function resolveMcpServers(
+  profileMergedSettings: Settings,
+  context: ContextResolutionResult,
+  allowedMcpServerNames: string[] | undefined,
+): {
+  mcpServers: Record<string, MCPServerConfig>;
+  blockedMcpServers: Array<{ name: string; extensionName: string }>;
+} {
+  let mcpServers = mergeMcpServers(
+    profileMergedSettings,
+    context.activeExtensions,
+  );
+  const blockedMcpServers: Array<{ name: string; extensionName: string }> = [];
+
+  if (!allowedMcpServerNames) {
+    if (profileMergedSettings.allowMCPServers) {
+      mcpServers = allowedMcpServers(
+        mcpServers,
+        profileMergedSettings.allowMCPServers,
+        blockedMcpServers,
+      );
+    }
+    if (profileMergedSettings.excludeMCPServers) {
+      const excludedNames = new Set(
+        profileMergedSettings.excludeMCPServers.filter(Boolean),
+      );
+      if (excludedNames.size > 0) {
+        mcpServers = Object.fromEntries(
+          Object.entries(mcpServers).filter(([key]) => !excludedNames.has(key)),
+        );
+      }
+    }
+  }
+  if (allowedMcpServerNames) {
+    mcpServers = allowedMcpServers(
+      mcpServers,
+      allowedMcpServerNames,
+      blockedMcpServers,
+    );
+  }
+
+  return { mcpServers, blockedMcpServers };
 }
