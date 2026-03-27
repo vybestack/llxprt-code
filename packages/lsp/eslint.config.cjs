@@ -7,7 +7,6 @@
 const eslint = require('@eslint/js');
 const tseslint = require('typescript-eslint');
 const prettierConfig = require('eslint-config-prettier');
-const path = require('node:path');
 
 const projectRoot = __dirname;
 
