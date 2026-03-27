@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_wc1","name":"run_shell_command","parameters":{"command":"wc -l \"{{CWD}}/test.txt\"","description":"Count lines in test.txt"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"The file test.txt has 3 lines."}],"metadata":{"usage":{"promptTokens":200,"completionTokens":10,"totalTokens":210}}}]}
