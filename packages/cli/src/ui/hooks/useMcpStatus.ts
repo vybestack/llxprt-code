@@ -29,9 +29,13 @@ export function useMcpStatus(config: Config) {
       if (manager) {
         setDiscoveryState(manager.getDiscoveryState());
         setMcpServerCount(manager.getMcpServerCount());
+      } else {
+        setDiscoveryState(MCPDiscoveryState.NOT_STARTED);
+        setMcpServerCount(0);
       }
     };
 
+    onChange();
     coreEvents.on(CoreEvent.McpClientUpdate, onChange);
     return () => {
       coreEvents.off(CoreEvent.McpClientUpdate, onChange);

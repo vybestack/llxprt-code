@@ -108,7 +108,9 @@ describe('shell-parser', () => {
       await initializeParser();
       if (!isParserAvailable()) return;
 
-      vi.spyOn(DebugLogger.prototype, 'error').mockImplementation(() => {});
+      const errorSpy = vi
+        .spyOn(DebugLogger.prototype, 'error')
+        .mockImplementation(() => {});
       const nowSpy = vi.spyOn(performance, 'now');
       // First call sets the deadline, subsequent calls simulate time passing past it
       nowSpy.mockReturnValueOnce(0).mockReturnValue(2000000);

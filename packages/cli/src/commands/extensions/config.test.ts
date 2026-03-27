@@ -482,16 +482,26 @@ describe('extensions config command', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should proceed when experimental.extensionConfig is not set (defaults to enabled)', async () => {
+    it('should show error and exit when experimental.extensionConfig is not set (defaults to disabled)', async () => {
       mockLoadSettings.mockReturnValue({
         merged: {},
       });
 
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
       const parser = yargs([]).command(configCommand).fail(false);
       await parser.parseAsync('config test-ext TEST_VAR');
 
-      // When extensionConfig is not set, defaults to true via ?? true, so it should proceed
-      expect(mockGetExtensionAndConfig).toHaveBeenCalledWith('test-ext');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Extension configuration is currently disabled',
+        ),
+      );
+      expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
     });
 
     it('should proceed when experimental.extensionConfig is true', async () => {

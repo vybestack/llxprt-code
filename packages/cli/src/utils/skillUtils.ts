@@ -91,69 +91,70 @@ export async function installSkill(
   let sourcePath = source;
   let tempDirToClean: string | undefined = undefined;
 
-  const isGitUrl =
-    source.startsWith('git@') ||
-    source.startsWith('http://') ||
-    source.startsWith('https://');
-
-  const isSkillFile = source.toLowerCase().endsWith('.skill');
-
-  if (isGitUrl) {
-    tempDirToClean = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-skill-'));
-    sourcePath = tempDirToClean;
-
-    onLog(`Cloning skill from ${source}...`);
-    // Reuse existing robust git cloning utility from extension manager.
-    await cloneFromGit(
-      {
-        source,
-        type: 'git',
-      },
-      tempDirToClean,
-    );
-  } else if (isSkillFile) {
-    tempDirToClean = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-skill-'));
-    sourcePath = tempDirToClean;
-
-    onLog(`Extracting skill from ${source}...`);
-    await extract(path.resolve(source), { dir: tempDirToClean });
-  }
-
-  // If a subpath is provided, resolve it against the cloned/local root.
-  if (subpath) {
-    sourcePath = path.join(sourcePath, subpath);
-  }
-
-  sourcePath = path.resolve(sourcePath);
-
-  // Quick security check to prevent directory traversal out of temp dir when cloning
-  if (tempDirToClean && !sourcePath.startsWith(path.resolve(tempDirToClean))) {
-    if (tempDirToClean) {
-      await fs.rm(tempDirToClean, { recursive: true, force: true });
-    }
-    throw new Error('Invalid path: Directory traversal not allowed.');
-  }
-
-  onLog(`Searching for skills in ${sourcePath}...`);
-  const skills = await loadSkillsFromDir(sourcePath);
-
-  if (skills.length === 0) {
-    if (tempDirToClean) {
-      await fs.rm(tempDirToClean, { recursive: true, force: true });
-    }
-    throw new Error(
-      `No valid skills found in ${source}${subpath ? ` at path "${subpath}"` : ''}. Ensure a SKILL.md file exists with valid frontmatter.`,
-    );
-  }
-
-  const workspaceDir = process.cwd();
-  const storage = new Storage(workspaceDir);
-  const targetDir =
-    scope === 'workspace'
-      ? storage.getProjectSkillsDir()
-      : Storage.getUserSkillsDir();
-
   try {
+    const isGitUrl =
+      source.startsWith('git@') ||
+      source.startsWith('http://') ||
+      source.startsWith('https://');
+
+    const isSkillFile = source.toLowerCase().endsWith('.skill');
+
+    if (isGitUrl) {
+      tempDirToClean = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-skill-'),
+      );
+      sourcePath = tempDirToClean;
+
+      onLog(`Cloning skill from ${source}...`);
+      // Reuse existing robust git cloning utility from extension manager.
+      await cloneFromGit(
+        {
+          source,
+          type: 'git',
+        },
+        tempDirToClean,
+      );
+    } else if (isSkillFile) {
+      tempDirToClean = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'llxprt-skill-'),
+      );
+      sourcePath = tempDirToClean;
+
+      onLog(`Extracting skill from ${source}...`);
+      await extract(path.resolve(source), { dir: tempDirToClean });
+    }
+
+    // If a subpath is provided, resolve it against the cloned/local root.
+    if (subpath) {
+      sourcePath = path.join(sourcePath, subpath);
+    }
+
+    sourcePath = path.resolve(sourcePath);
+
+    // Quick security check to prevent directory traversal out of temp dir when cloning
+    if (
+      tempDirToClean &&
+      !sourcePath.startsWith(path.resolve(tempDirToClean))
+    ) {
+      throw new Error('Invalid path: Directory traversal not allowed.');
+    }
+
+    onLog(`Searching for skills in ${sourcePath}...`);
+    const skills = await loadSkillsFromDir(sourcePath);
+
+    if (skills.length === 0) {
+      throw new Error(
+        `No valid skills found in ${source}${subpath ? ` at path "${subpath}"` : ''}. Ensure a SKILL.md file exists with valid frontmatter.`,
+      );
+    }
+
+    const workspaceDir = process.cwd();
+    const storage = new Storage(workspaceDir);
+    const targetDir =
+      scope === 'workspace'
+        ? storage.getProjectSkillsDir()
+        : Storage.getUserSkillsDir();
+
     if (!(await requestConsent(skills, targetDir))) {
       throw new Error('Skill installation cancelled by user.');
     }

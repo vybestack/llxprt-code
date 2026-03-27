@@ -38,6 +38,7 @@ export class McpClientManager {
   private discoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
   private readonly eventEmitter?: EventEmitter;
   private pendingRefreshPromise: Promise<void> | null = null;
+  private refreshRequestedWhilePending = false;
   private readonly blockedMcpServers: Array<{
     name: string;
     extensionName: string;
@@ -370,14 +371,18 @@ export class McpClientManager {
 
   private async scheduleMcpContextRefresh(): Promise<void> {
     if (this.pendingRefreshPromise) {
+      this.refreshRequestedWhilePending = true;
       return this.pendingRefreshPromise;
     }
 
     this.pendingRefreshPromise = (async () => {
-      // Debounce to coalesce multiple rapid updates
-      await new Promise((resolve) => setTimeout(resolve, 300));
       try {
-        await this.cliConfig.refreshMcpContext();
+        do {
+          this.refreshRequestedWhilePending = false;
+          // Debounce to coalesce multiple rapid updates
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          await this.cliConfig.refreshMcpContext();
+        } while (this.refreshRequestedWhilePending);
       } catch (error) {
         debugLogger.error(
           `Error refreshing MCP context: ${getErrorMessage(error)}`,

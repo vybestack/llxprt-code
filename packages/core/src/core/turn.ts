@@ -122,6 +122,7 @@ export interface ToolCallResponseInfo {
   error: Error | undefined;
   errorType: ToolErrorType | undefined;
   agentId?: string;
+  outputFile?: string;
   /**
    * Optional flag to suppress display of this tool result
    * @requirement:HOOK-132 - AfterTool suppressOutput support
