@@ -750,10 +750,10 @@ export class LspClient {
   private handleMessage(message: JsonRpcMessage): void {
     if (
       'id' in message &&
-      (message as JsonRpcResponse).jsonrpc === '2.0' &&
+      message.jsonrpc === '2.0' &&
       !('method' in message)
     ) {
-      const response = message as JsonRpcResponse;
+      const response = message;
       const pending = this.pending.get(response.id);
       if (!pending) {
         return;
