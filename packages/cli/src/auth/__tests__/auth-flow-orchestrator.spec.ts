@@ -358,6 +358,72 @@ describe('AuthFlowOrchestrator', () => {
     });
   });
 
+  describe('authenticateMultipleBuckets() — progress display (issue #1620)', () => {
+    it('passes unauthenticated bucket count to onPrompt, not total bucket count', async () => {
+      const { getEphemeralSetting } = await import(
+        '../../runtime/runtimeSettings.js'
+      );
+      vi.mocked(getEphemeralSetting).mockImplementation((key: string) => {
+        if (key === 'auth-bucket-prompt') return true;
+        if (key === 'auth-bucket-delay') return 0;
+        return undefined;
+      });
+
+      const tokenStore = createTokenStore();
+      const validToken = makeToken('already-authed', 3600);
+
+      vi.mocked(tokenStore.getToken).mockImplementation(
+        async (_provider: string, bucket?: string) => {
+          if (bucket === 'bucket1' || bucket === 'bucket2') {
+            return validToken;
+          }
+          return null;
+        },
+      );
+
+      const registry = new ProviderRegistry();
+      const provider = createProvider('anthropic');
+      registry.registerProvider(provider);
+
+      const facadeRef = createFacadeRef();
+      const orchestrator = createOrchestrator(tokenStore, registry, facadeRef);
+
+      const confirmationCalls: Array<{
+        bucketIndex: number;
+        totalBuckets: number;
+      }> = [];
+      const mockMessageBus = {
+        requestBucketAuthConfirmation: vi.fn(
+          async (
+            _provider: string,
+            _bucket: string,
+            bucketIndex: number,
+            totalBuckets: number,
+          ) => {
+            confirmationCalls.push({ bucketIndex, totalBuckets });
+            return true;
+          },
+        ),
+      };
+
+      orchestrator.setRuntimeMessageBus(
+        mockMessageBus as unknown as import('@vybestack/llxprt-code-core').MessageBus,
+      );
+
+      await orchestrator.authenticateMultipleBuckets('anthropic', [
+        'bucket1',
+        'bucket2',
+        'bucket3',
+      ]);
+
+      expect(confirmationCalls).toHaveLength(1);
+      expect(confirmationCalls[0]).toEqual({
+        bucketIndex: 1,
+        totalBuckets: 1,
+      });
+    });
+  });
+
   describe('requireRuntimeMessageBus()', () => {
     it('throws descriptive error when no messageBus is configured and auth-bucket-prompt is enabled', async () => {
       // Enable prompt mode so the onPrompt callback is invoked and calls requireRuntimeMessageBus
