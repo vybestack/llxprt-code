@@ -450,12 +450,6 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
       () =>
         `[cli-runtime] Preserved user-set context-limit=${context.contextLimitBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
     );
-  } else {
-    context.config.setEphemeralSetting('context-limit', 190000);
-    logger.debug(
-      () =>
-        '[cli-runtime] Set default context-limit=190000 for Anthropic OAuth mode (Issue #181)',
-    );
   }
 
   if (context.maxTokensBeforeSwitch !== undefined) {
@@ -478,13 +472,7 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
     );
     logger.debug(
       () =>
-        `[cli-runtime] Restored maxOutputTokens=${context.maxOutputTokensBeforeSwitch} for Anthropic OAuth mode, skipping max_tokens default (Issue #1769)`,
-    );
-  } else {
-    context.config.setEphemeralSetting('max_tokens', 10000);
-    logger.debug(
-      () =>
-        '[cli-runtime] Set default max_tokens=10000 for Anthropic OAuth mode (Issue #181)',
+        `[cli-runtime] Restored maxOutputTokens=${context.maxOutputTokensBeforeSwitch} for Anthropic OAuth mode (Issue #1769)`,
     );
   }
 

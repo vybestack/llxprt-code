@@ -1201,13 +1201,13 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       disableOAuth();
     });
 
-    it('should inject max_tokens=10000 default when neither max_tokens nor maxOutputTokens is set', async () => {
+    it('should not inject max_tokens default when neither max_tokens nor maxOutputTokens is set (Issue #1769)', async () => {
       pushAnthropicAlias();
       enableOAuth();
 
       await switchActiveProvider('anthropic');
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(10000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
       disableOAuth();
     });
@@ -1220,7 +1220,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       await switchActiveProvider('anthropic');
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(10000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
       disableOAuth();
     });
@@ -1233,7 +1233,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       await switchActiveProvider('anthropic');
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(10000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
       disableOAuth();
     });
@@ -1246,7 +1246,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       await switchActiveProvider('anthropic');
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(10000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
 
       disableOAuth();
     });
