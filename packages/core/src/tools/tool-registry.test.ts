@@ -475,382 +475,357 @@ describe('ToolRegistry', () => {
       expect(result.llmContent).toContain('Exit Code: 1');
     });
 
-    // NOTE: MCP discovery was decoupled from ToolRegistry in the Extensions MCP Refactor.
-    // MCP servers are now discovered via McpClientManager.startConfiguredMcpServers()
-    // which is called separately by the extension loading system, not by ToolRegistry.
-    // This test is skipped because discoverAllTools no longer invokes MCP discovery.
-    it.skip('should discover tools using MCP servers defined in getMcpServers', async () => {
-      const discoverSpy = vi.spyOn(
-        McpClientManager.prototype,
-        'startConfiguredMcpServers',
-      );
-      mockConfigGetToolDiscoveryCommand.mockReturnValue(undefined);
-      vi.spyOn(config, 'getMcpServerCommand').mockReturnValue(undefined);
-      const mcpServerConfigVal = {
-        'my-mcp-server': {
-          command: 'mcp-server-cmd',
-          args: ['--port', '1234'],
-          trust: true,
+    describe('disabled tools functionality', () => {
+      it('should filter out disabled tools in getFunctionDeclarations', () => {
+        // Mock ephemeral settings with disabled tools
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+          'disabled-tools': ['test-tool'],
+        });
+
+        const tool1 = new MockTool('test-tool', 'Test Tool');
+        const tool2 = new MockTool('another-tool', 'Another Tool');
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+
+        const declarations = toolRegistry.getFunctionDeclarations();
+        expect(declarations).toHaveLength(1);
+        expect(declarations[0].name).toBe('another-tool');
+      });
+
+      it('should return all tools when no tools are disabled', () => {
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+        const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
+        const tool2 = new MockTool(
+          'another-tool',
+          'Another Tool',
+          'Another test tool',
+        );
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+
+        const declarations = toolRegistry.getFunctionDeclarations();
+        expect(declarations).toHaveLength(2);
+      });
+
+      it('should filter out disabled tools in getEnabledTools', () => {
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+          'disabled-tools': ['test-tool', 'disabled-tool'],
+        });
+
+        const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
+        const tool2 = new MockTool(
+          'another-tool',
+          'Another Tool',
+          'Another test tool',
+        );
+        const tool3 = new MockTool(
+          'disabled-tool',
+          'Disabled Tool',
+          'A disabled tool',
+        );
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+        toolRegistry.registerTool(tool3);
+
+        const enabledTools = toolRegistry.getEnabledTools();
+        expect(enabledTools).toHaveLength(1);
+        expect(enabledTools[0].name).toBe('another-tool');
+      });
+
+      it('should return all tools in getAllTools regardless of disabled status', () => {
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+          'disabled-tools': ['test-tool'],
+        });
+
+        const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
+        const tool2 = new MockTool(
+          'another-tool',
+          'Another Tool',
+          'Another test tool',
+        );
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+
+        const allTools = toolRegistry.getAllTools();
+        expect(allTools).toHaveLength(2);
+      });
+
+      it('should filter out excluded tools from configuration in getFunctionDeclarations', () => {
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+        vi.spyOn(config, 'getExcludeTools').mockReturnValue([
+          'todo_write',
+          'todo_read',
+        ]);
+
+        const tool1 = new MockTool('todo_write', 'Todo Write');
+        const tool2 = new MockTool('todo_read', 'Todo Read');
+        const tool3 = new MockTool('another-tool', 'Another Tool');
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+        toolRegistry.registerTool(tool3);
+
+        const declarations = toolRegistry.getFunctionDeclarations();
+        expect(declarations).toHaveLength(1);
+        expect(declarations[0].name).toBe('another-tool');
+      });
+
+      it('should filter out both disabled and excluded tools in getFunctionDeclarations', () => {
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+          'disabled-tools': ['test-tool'],
+        });
+        vi.spyOn(config, 'getExcludeTools').mockReturnValue(['todo_write']);
+
+        const tool1 = new MockTool('test-tool', 'Test Tool');
+        const tool2 = new MockTool('todo_write', 'Todo Write');
+        const tool3 = new MockTool('another-tool', 'Another Tool');
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+        toolRegistry.registerTool(tool3);
+
+        const declarations = toolRegistry.getFunctionDeclarations();
+        expect(declarations).toHaveLength(1);
+        expect(declarations[0].name).toBe('another-tool');
+      });
+
+      it('should filter out excluded tools in getEnabledTools', () => {
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+        vi.spyOn(config, 'getExcludeTools').mockReturnValue([
+          'todo_write',
+          'todo_read',
+        ]);
+
+        const tool1 = new MockTool('todo_write', 'Todo Write');
+        const tool2 = new MockTool('todo_read', 'Todo Read');
+        const tool3 = new MockTool('another-tool', 'Another Tool');
+
+        toolRegistry.registerTool(tool1);
+        toolRegistry.registerTool(tool2);
+        toolRegistry.registerTool(tool3);
+
+        const enabledTools = toolRegistry.getEnabledTools();
+        expect(enabledTools).toHaveLength(1);
+        expect(enabledTools[0].name).toBe('another-tool');
+      });
+    });
+
+    describe('DiscoveredToolInvocation', () => {
+      it('should return the stringified params from getDescription', () => {
+        const tool = new DiscoveredTool(
+          config,
+          'test-tool',
+          'A test tool',
+          {},
+          messageBus,
+        );
+        const params = { param: 'testValue' };
+        const invocation = tool.build(params);
+        const description = invocation.getDescription();
+        expect(description).toBe(JSON.stringify(params));
+      });
+    });
+
+    describe('Schema transformations for async subagents', () => {
+      const taskSchemaWithAsync = {
+        type: 'object',
+        properties: {
+          subagent_name: { type: 'string' },
+          goal_prompt: { type: 'string' },
+          async: { type: 'boolean' },
         },
       };
-      vi.spyOn(config, 'getMcpServers').mockReturnValue(mcpServerConfigVal);
 
-      await toolRegistry.discoverAllTools();
+      it('should hide async parameter from task tool when global asyncEnabled is false', () => {
+        const mockSettingsService = {
+          get: vi.fn().mockReturnValue(true), // profile setting enabled
+          getAllGlobalSettings: vi.fn().mockReturnValue({
+            subagents: { asyncEnabled: false },
+          }),
+        };
+        vi.spyOn(config, 'getSettingsService').mockReturnValue(
+          mockSettingsService as unknown as ReturnType<
+            typeof config.getSettingsService
+          >,
+        );
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
 
-      expect(discoverSpy).toHaveBeenCalled();
-    });
-  });
+        const taskTool = new MockTool(
+          'task',
+          'Task Tool',
+          'A task tool',
+          taskSchemaWithAsync,
+        );
+        toolRegistry.registerTool(taskTool);
 
-  describe('disabled tools functionality', () => {
-    it('should filter out disabled tools in getFunctionDeclarations', () => {
-      // Mock ephemeral settings with disabled tools
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
-        'disabled-tools': ['test-tool'],
+        const declarations = toolRegistry.getFunctionDeclarations();
+        const taskSchema = declarations.find((d) => d.name === 'task');
+
+        expect(taskSchema).toBeDefined();
+        expect(
+          (
+            taskSchema?.parametersJsonSchema?.properties as Record<
+              string,
+              unknown
+            >
+          )?.async,
+        ).toBeUndefined();
+        expect(
+          (
+            taskSchema?.parametersJsonSchema?.properties as Record<
+              string,
+              unknown
+            >
+          )?.subagent_name,
+        ).toBeDefined();
       });
 
-      const tool1 = new MockTool('test-tool', 'Test Tool');
-      const tool2 = new MockTool('another-tool', 'Another Tool');
+      it('should hide async parameter from task tool when profile async.enabled is false', () => {
+        const mockSettingsService = {
+          get: vi.fn().mockReturnValue(false), // profile setting disabled
+          getAllGlobalSettings: vi.fn().mockReturnValue({
+            subagents: { asyncEnabled: true },
+          }),
+        };
+        vi.spyOn(config, 'getSettingsService').mockReturnValue(
+          mockSettingsService as unknown as ReturnType<
+            typeof config.getSettingsService
+          >,
+        );
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
 
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
+        const taskTool = new MockTool(
+          'task',
+          'Task Tool',
+          'A task tool',
+          taskSchemaWithAsync,
+        );
+        toolRegistry.registerTool(taskTool);
 
-      const declarations = toolRegistry.getFunctionDeclarations();
-      expect(declarations).toHaveLength(1);
-      expect(declarations[0].name).toBe('another-tool');
-    });
+        const declarations = toolRegistry.getFunctionDeclarations();
+        const taskSchema = declarations.find((d) => d.name === 'task');
 
-    it('should return all tools when no tools are disabled', () => {
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-
-      const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
-      const tool2 = new MockTool(
-        'another-tool',
-        'Another Tool',
-        'Another test tool',
-      );
-
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
-
-      const declarations = toolRegistry.getFunctionDeclarations();
-      expect(declarations).toHaveLength(2);
-    });
-
-    it('should filter out disabled tools in getEnabledTools', () => {
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
-        'disabled-tools': ['test-tool', 'disabled-tool'],
+        expect(taskSchema).toBeDefined();
+        expect(
+          (
+            taskSchema?.parametersJsonSchema?.properties as Record<
+              string,
+              unknown
+            >
+          )?.async,
+        ).toBeUndefined();
       });
 
-      const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
-      const tool2 = new MockTool(
-        'another-tool',
-        'Another Tool',
-        'Another test tool',
-      );
-      const tool3 = new MockTool(
-        'disabled-tool',
-        'Disabled Tool',
-        'A disabled tool',
-      );
+      it('should keep async parameter when both global and profile settings are enabled', () => {
+        const mockSettingsService = {
+          get: vi.fn().mockReturnValue(true),
+          getAllGlobalSettings: vi.fn().mockReturnValue({
+            subagents: { asyncEnabled: true },
+          }),
+        };
+        vi.spyOn(config, 'getSettingsService').mockReturnValue(
+          mockSettingsService as unknown as ReturnType<
+            typeof config.getSettingsService
+          >,
+        );
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
 
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
-      toolRegistry.registerTool(tool3);
+        const taskTool = new MockTool(
+          'task',
+          'Task Tool',
+          'A task tool',
+          taskSchemaWithAsync,
+        );
+        toolRegistry.registerTool(taskTool);
 
-      const enabledTools = toolRegistry.getEnabledTools();
-      expect(enabledTools).toHaveLength(1);
-      expect(enabledTools[0].name).toBe('another-tool');
-    });
+        const declarations = toolRegistry.getFunctionDeclarations();
+        const taskSchema = declarations.find((d) => d.name === 'task');
 
-    it('should return all tools in getAllTools regardless of disabled status', () => {
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
-        'disabled-tools': ['test-tool'],
+        expect(taskSchema).toBeDefined();
+        expect(
+          (
+            taskSchema?.parametersJsonSchema?.properties as Record<
+              string,
+              unknown
+            >
+          )?.async,
+        ).toBeDefined();
       });
 
-      const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
-      const tool2 = new MockTool(
-        'another-tool',
-        'Another Tool',
-        'Another test tool',
-      );
+      it('should apply schema transforms to getFunctionDeclarationsFiltered as well', () => {
+        const mockSettingsService = {
+          get: vi.fn().mockReturnValue(false), // disabled
+          getAllGlobalSettings: vi.fn().mockReturnValue({}),
+        };
+        vi.spyOn(config, 'getSettingsService').mockReturnValue(
+          mockSettingsService as unknown as ReturnType<
+            typeof config.getSettingsService
+          >,
+        );
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
 
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
+        const taskTool = new MockTool(
+          'task',
+          'Task Tool',
+          'A task tool',
+          taskSchemaWithAsync,
+        );
+        toolRegistry.registerTool(taskTool);
 
-      const allTools = toolRegistry.getAllTools();
-      expect(allTools).toHaveLength(2);
-    });
+        const declarations = toolRegistry.getFunctionDeclarationsFiltered([
+          'task',
+        ]);
+        const taskSchema = declarations.find((d) => d.name === 'task');
 
-    it('should filter out excluded tools from configuration in getFunctionDeclarations', () => {
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-      vi.spyOn(config, 'getExcludeTools').mockReturnValue([
-        'todo_write',
-        'todo_read',
-      ]);
-
-      const tool1 = new MockTool('todo_write', 'Todo Write');
-      const tool2 = new MockTool('todo_read', 'Todo Read');
-      const tool3 = new MockTool('another-tool', 'Another Tool');
-
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
-      toolRegistry.registerTool(tool3);
-
-      const declarations = toolRegistry.getFunctionDeclarations();
-      expect(declarations).toHaveLength(1);
-      expect(declarations[0].name).toBe('another-tool');
-    });
-
-    it('should filter out both disabled and excluded tools in getFunctionDeclarations', () => {
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
-        'disabled-tools': ['test-tool'],
+        expect(taskSchema).toBeDefined();
+        expect(
+          (
+            taskSchema?.parametersJsonSchema?.properties as Record<
+              string,
+              unknown
+            >
+          )?.async,
+        ).toBeUndefined();
       });
-      vi.spyOn(config, 'getExcludeTools').mockReturnValue(['todo_write']);
 
-      const tool1 = new MockTool('test-tool', 'Test Tool');
-      const tool2 = new MockTool('todo_write', 'Todo Write');
-      const tool3 = new MockTool('another-tool', 'Another Tool');
+      it('should not modify original tool schema (uses clone)', () => {
+        const mockSettingsService = {
+          get: vi.fn().mockReturnValue(false), // disabled
+          getAllGlobalSettings: vi.fn().mockReturnValue({}),
+        };
+        vi.spyOn(config, 'getSettingsService').mockReturnValue(
+          mockSettingsService as unknown as ReturnType<
+            typeof config.getSettingsService
+          >,
+        );
+        vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
 
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
-      toolRegistry.registerTool(tool3);
+        const taskTool = new MockTool(
+          'task',
+          'Task Tool',
+          'A task tool',
+          taskSchemaWithAsync,
+        );
+        toolRegistry.registerTool(taskTool);
 
-      const declarations = toolRegistry.getFunctionDeclarations();
-      expect(declarations).toHaveLength(1);
-      expect(declarations[0].name).toBe('another-tool');
-    });
+        // Call getFunctionDeclarations which should transform the schema
+        toolRegistry.getFunctionDeclarations();
 
-    it('should filter out excluded tools in getEnabledTools', () => {
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-      vi.spyOn(config, 'getExcludeTools').mockReturnValue([
-        'todo_write',
-        'todo_read',
-      ]);
-
-      const tool1 = new MockTool('todo_write', 'Todo Write');
-      const tool2 = new MockTool('todo_read', 'Todo Read');
-      const tool3 = new MockTool('another-tool', 'Another Tool');
-
-      toolRegistry.registerTool(tool1);
-      toolRegistry.registerTool(tool2);
-      toolRegistry.registerTool(tool3);
-
-      const enabledTools = toolRegistry.getEnabledTools();
-      expect(enabledTools).toHaveLength(1);
-      expect(enabledTools[0].name).toBe('another-tool');
-    });
-  });
-
-  describe('DiscoveredToolInvocation', () => {
-    it('should return the stringified params from getDescription', () => {
-      const tool = new DiscoveredTool(
-        config,
-        'test-tool',
-        'A test tool',
-        {},
-        messageBus,
-      );
-      const params = { param: 'testValue' };
-      const invocation = tool.build(params);
-      const description = invocation.getDescription();
-      expect(description).toBe(JSON.stringify(params));
-    });
-  });
-
-  describe('Schema transformations for async subagents', () => {
-    const taskSchemaWithAsync = {
-      type: 'object',
-      properties: {
-        subagent_name: { type: 'string' },
-        goal_prompt: { type: 'string' },
-        async: { type: 'boolean' },
-      },
-    };
-
-    it('should hide async parameter from task tool when global asyncEnabled is false', () => {
-      const mockSettingsService = {
-        get: vi.fn().mockReturnValue(true), // profile setting enabled
-        getAllGlobalSettings: vi.fn().mockReturnValue({
-          subagents: { asyncEnabled: false },
-        }),
-      };
-      vi.spyOn(config, 'getSettingsService').mockReturnValue(
-        mockSettingsService as unknown as ReturnType<
-          typeof config.getSettingsService
-        >,
-      );
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-
-      const taskTool = new MockTool(
-        'task',
-        'Task Tool',
-        'A task tool',
-        taskSchemaWithAsync,
-      );
-      toolRegistry.registerTool(taskTool);
-
-      const declarations = toolRegistry.getFunctionDeclarations();
-      const taskSchema = declarations.find((d) => d.name === 'task');
-
-      expect(taskSchema).toBeDefined();
-      expect(
-        (
-          taskSchema?.parametersJsonSchema?.properties as Record<
-            string,
-            unknown
-          >
-        )?.async,
-      ).toBeUndefined();
-      expect(
-        (
-          taskSchema?.parametersJsonSchema?.properties as Record<
-            string,
-            unknown
-          >
-        )?.subagent_name,
-      ).toBeDefined();
-    });
-
-    it('should hide async parameter from task tool when profile async.enabled is false', () => {
-      const mockSettingsService = {
-        get: vi.fn().mockReturnValue(false), // profile setting disabled
-        getAllGlobalSettings: vi.fn().mockReturnValue({
-          subagents: { asyncEnabled: true },
-        }),
-      };
-      vi.spyOn(config, 'getSettingsService').mockReturnValue(
-        mockSettingsService as unknown as ReturnType<
-          typeof config.getSettingsService
-        >,
-      );
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-
-      const taskTool = new MockTool(
-        'task',
-        'Task Tool',
-        'A task tool',
-        taskSchemaWithAsync,
-      );
-      toolRegistry.registerTool(taskTool);
-
-      const declarations = toolRegistry.getFunctionDeclarations();
-      const taskSchema = declarations.find((d) => d.name === 'task');
-
-      expect(taskSchema).toBeDefined();
-      expect(
-        (
-          taskSchema?.parametersJsonSchema?.properties as Record<
-            string,
-            unknown
-          >
-        )?.async,
-      ).toBeUndefined();
-    });
-
-    it('should keep async parameter when both global and profile settings are enabled', () => {
-      const mockSettingsService = {
-        get: vi.fn().mockReturnValue(true),
-        getAllGlobalSettings: vi.fn().mockReturnValue({
-          subagents: { asyncEnabled: true },
-        }),
-      };
-      vi.spyOn(config, 'getSettingsService').mockReturnValue(
-        mockSettingsService as unknown as ReturnType<
-          typeof config.getSettingsService
-        >,
-      );
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-
-      const taskTool = new MockTool(
-        'task',
-        'Task Tool',
-        'A task tool',
-        taskSchemaWithAsync,
-      );
-      toolRegistry.registerTool(taskTool);
-
-      const declarations = toolRegistry.getFunctionDeclarations();
-      const taskSchema = declarations.find((d) => d.name === 'task');
-
-      expect(taskSchema).toBeDefined();
-      expect(
-        (
-          taskSchema?.parametersJsonSchema?.properties as Record<
-            string,
-            unknown
-          >
-        )?.async,
-      ).toBeDefined();
-    });
-
-    it('should apply schema transforms to getFunctionDeclarationsFiltered as well', () => {
-      const mockSettingsService = {
-        get: vi.fn().mockReturnValue(false), // disabled
-        getAllGlobalSettings: vi.fn().mockReturnValue({}),
-      };
-      vi.spyOn(config, 'getSettingsService').mockReturnValue(
-        mockSettingsService as unknown as ReturnType<
-          typeof config.getSettingsService
-        >,
-      );
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-
-      const taskTool = new MockTool(
-        'task',
-        'Task Tool',
-        'A task tool',
-        taskSchemaWithAsync,
-      );
-      toolRegistry.registerTool(taskTool);
-
-      const declarations = toolRegistry.getFunctionDeclarationsFiltered([
-        'task',
-      ]);
-      const taskSchema = declarations.find((d) => d.name === 'task');
-
-      expect(taskSchema).toBeDefined();
-      expect(
-        (
-          taskSchema?.parametersJsonSchema?.properties as Record<
-            string,
-            unknown
-          >
-        )?.async,
-      ).toBeUndefined();
-    });
-
-    it('should not modify original tool schema (uses clone)', () => {
-      const mockSettingsService = {
-        get: vi.fn().mockReturnValue(false), // disabled
-        getAllGlobalSettings: vi.fn().mockReturnValue({}),
-      };
-      vi.spyOn(config, 'getSettingsService').mockReturnValue(
-        mockSettingsService as unknown as ReturnType<
-          typeof config.getSettingsService
-        >,
-      );
-      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
-
-      const taskTool = new MockTool(
-        'task',
-        'Task Tool',
-        'A task tool',
-        taskSchemaWithAsync,
-      );
-      toolRegistry.registerTool(taskTool);
-
-      // Call getFunctionDeclarations which should transform the schema
-      toolRegistry.getFunctionDeclarations();
-
-      // Original tool schema should still have async (getter returns new object each time)
-      expect(
-        (
-          taskTool.schema.parametersJsonSchema?.properties as Record<
-            string,
-            unknown
-          >
-        )?.async,
-      ).toBeDefined();
+        // Original tool schema should still have async (getter returns new object each time)
+        expect(
+          (
+            taskTool.schema.parametersJsonSchema?.properties as Record<
+              string,
+              unknown
+            >
+          )?.async,
+        ).toBeDefined();
+      });
     });
   });
 });

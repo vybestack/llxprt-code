@@ -22,40 +22,6 @@ function getLineCountCommand(): { command: string; tool: string } {
   }
 }
 
-function getAllowedListCommand(): string {
-  switch (shell) {
-    case 'powershell':
-      return 'Get-ChildItem';
-    case 'cmd':
-      return 'dir';
-    case 'bash':
-    default:
-      return 'ls';
-  }
-}
-
-function getChainedEchoCommand(): { allowPattern: string; command: string } {
-  const secondCommand = getAllowedListCommand();
-  switch (shell) {
-    case 'powershell':
-      return {
-        allowPattern: 'Write-Output',
-        command: `Write-Output "foo" && ${secondCommand}`,
-      };
-    case 'cmd':
-      return {
-        allowPattern: 'echo',
-        command: `echo "foo" && ${secondCommand}`,
-      };
-    case 'bash':
-    default:
-      return {
-        allowPattern: 'echo',
-        command: `echo "foo" && ${secondCommand}`,
-      };
-  }
-}
-
 describe('run_shell_command', () => {
   let rig: TestRig;
 
@@ -374,33 +340,6 @@ describe('run_shell_command', () => {
       'Expected failing run_shell_command invocation',
     ).toBeTruthy();
     expect(failureLog!.toolRequest.success).toBe(false);
-  });
-
-  // TODO(#11966): Deflake this test and re-enable once the underlying race is resolved.
-  it.skip('should reject chained commands when only the first segment is allowlisted in non-interactive mode', async () => {
-    await rig.setup(
-      'should reject chained commands when only the first segment is allowlisted',
-    );
-
-    const chained = getChainedEchoCommand();
-    const shellInjection = `!{${chained.command}}`;
-
-    await rig.run({
-      args: `--allowed-tools=ShellTool(${chained.allowPattern})`,
-      stdin: `${shellInjection}\n`,
-      yolo: false,
-    });
-
-    // CLI should refuse to execute the chained command without scheduling run_shell_command.
-    const toolLogs = rig
-      .readToolLogs()
-      .filter((log) => log.toolRequest.name === 'run_shell_command');
-
-    // Success is false because tool is in the scheduled state.
-    for (const log of toolLogs) {
-      expect(log.toolRequest.success).toBe(false);
-      expect(log.toolRequest.args).toContain('&&');
-    }
   });
 
   it('should allow all with "ShellTool" and other specific tools', async () => {

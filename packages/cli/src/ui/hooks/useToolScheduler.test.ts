@@ -1014,39 +1014,6 @@ describe('useReactToolScheduler', () => {
     });
     expect(result.current[0]).toEqual([]);
   });
-
-  it.skip('should throw error if scheduling while already running', async () => {
-    mockToolRegistry.getTool.mockReturnValue(mockTool);
-    const longExecutePromise = new Promise<ToolResult>((resolve) =>
-      setTimeout(
-        () =>
-          resolve({
-            llmContent: 'done',
-            returnDisplay: 'done display',
-          }),
-        50,
-      ),
-    );
-    mockTool.executeFn.mockReturnValue(longExecutePromise);
-    (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(null);
-
-    const { result } = renderScheduler();
-    const schedule = result.current[1];
-    const request1 = buildRequest({
-      callId: 'run1',
-      name: 'mockTool',
-      args: {},
-    });
-    const request2 = buildRequest({
-      callId: 'run2',
-      name: 'mockTool',
-      args: {},
-    });
-
-    expect(schedule).toBeDefined();
-    expect(request1.name).toBe('mockTool');
-    expect(request2.callId).toBe('run2');
-  });
 });
 
 describe('mapToDisplay', () => {
