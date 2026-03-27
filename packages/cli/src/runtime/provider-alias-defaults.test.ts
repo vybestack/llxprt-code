@@ -1150,4 +1150,105 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       ).toBeUndefined();
     });
   });
+
+  describe('Anthropic OAuth maxOutputTokens respect (Issue #1769)', () => {
+    const enableOAuth = () =>
+      vi
+        .mocked(
+          (
+            mockOAuthManager as unknown as {
+              isOAuthEnabled: ReturnType<typeof vi.fn>;
+            }
+          ).isOAuthEnabled,
+        )
+        .mockReturnValue(true);
+    const disableOAuth = () =>
+      vi
+        .mocked(
+          (
+            mockOAuthManager as unknown as {
+              isOAuthEnabled: ReturnType<typeof vi.fn>;
+            }
+          ).isOAuthEnabled,
+        )
+        .mockReturnValue(false);
+
+    it('should restore maxOutputTokens and not inject max_tokens=10000 when user had maxOutputTokens configured', async () => {
+      pushAnthropicAlias();
+      enableOAuth();
+
+      stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+
+      disableOAuth();
+    });
+
+    it('should prefer explicit max_tokens over maxOutputTokens when both are set', async () => {
+      pushAnthropicAlias();
+      enableOAuth();
+
+      stubConfig.setEphemeralSetting('max_tokens', 50000);
+      stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+
+      disableOAuth();
+    });
+
+    it('should not inject max_tokens default when neither max_tokens nor maxOutputTokens is set (Issue #1769)', async () => {
+      pushAnthropicAlias();
+      enableOAuth();
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+
+      disableOAuth();
+    });
+
+    it('should treat maxOutputTokens=0 as not configured and use default', async () => {
+      pushAnthropicAlias();
+      enableOAuth();
+
+      stubConfig.setEphemeralSetting('maxOutputTokens', 0);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+
+      disableOAuth();
+    });
+
+    it('should treat negative maxOutputTokens as not configured and use default', async () => {
+      pushAnthropicAlias();
+      enableOAuth();
+
+      stubConfig.setEphemeralSetting('maxOutputTokens', -1);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+
+      disableOAuth();
+    });
+
+    it('should treat non-numeric maxOutputTokens as not configured and use default', async () => {
+      pushAnthropicAlias();
+      enableOAuth();
+
+      stubConfig.setEphemeralSetting('maxOutputTokens', '40000');
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+
+      disableOAuth();
+    });
+  });
 });

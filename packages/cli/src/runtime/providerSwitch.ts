@@ -82,6 +82,7 @@ interface ProviderSwitchContext {
   authOnlyBeforeSwitch: unknown;
   contextLimitBeforeSwitch: unknown;
   maxTokensBeforeSwitch: unknown;
+  maxOutputTokensBeforeSwitch: unknown;
   infoMessages: string[];
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
@@ -156,6 +157,7 @@ function clearEphemeralsForSwitch(
   authOnlyBeforeSwitch: unknown;
   contextLimitBeforeSwitch: unknown;
   maxTokensBeforeSwitch: unknown;
+  maxOutputTokensBeforeSwitch: unknown;
   preAliasEphemeralKeys: Set<string>;
 } {
   const existingEphemerals =
@@ -166,6 +168,7 @@ function clearEphemeralsForSwitch(
   const authOnlyBeforeSwitch = existingEphemerals.authOnly;
   const contextLimitBeforeSwitch = existingEphemerals['context-limit'];
   const maxTokensBeforeSwitch = existingEphemerals.max_tokens;
+  const maxOutputTokensBeforeSwitch = existingEphemerals.maxOutputTokens;
 
   for (const key of Object.keys(existingEphemerals)) {
     const shouldPreserve =
@@ -179,6 +182,7 @@ function clearEphemeralsForSwitch(
     authOnlyBeforeSwitch,
     contextLimitBeforeSwitch,
     maxTokensBeforeSwitch,
+    maxOutputTokensBeforeSwitch,
     preAliasEphemeralKeys: new Set(
       Object.keys(context.config.getEphemeralSettings()),
     ),
@@ -446,12 +450,6 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
       () =>
         `[cli-runtime] Preserved user-set context-limit=${context.contextLimitBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
     );
-  } else {
-    context.config.setEphemeralSetting('context-limit', 190000);
-    logger.debug(
-      () =>
-        '[cli-runtime] Set default context-limit=190000 for Anthropic OAuth mode (Issue #181)',
-    );
   }
 
   if (context.maxTokensBeforeSwitch !== undefined) {
@@ -463,11 +461,18 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
       () =>
         `[cli-runtime] Preserved user-set max_tokens=${context.maxTokensBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
     );
-  } else {
-    context.config.setEphemeralSetting('max_tokens', 10000);
+  } else if (
+    typeof context.maxOutputTokensBeforeSwitch === 'number' &&
+    Number.isFinite(context.maxOutputTokensBeforeSwitch) &&
+    context.maxOutputTokensBeforeSwitch > 0
+  ) {
+    context.config.setEphemeralSetting(
+      'maxOutputTokens',
+      context.maxOutputTokensBeforeSwitch,
+    );
     logger.debug(
       () =>
-        '[cli-runtime] Set default max_tokens=10000 for Anthropic OAuth mode (Issue #181)',
+        `[cli-runtime] Restored maxOutputTokens=${context.maxOutputTokensBeforeSwitch} for Anthropic OAuth mode (Issue #1769)`,
     );
   }
 
@@ -668,6 +673,7 @@ function createProviderSwitchContext(
       authOnlyBeforeSwitch: undefined,
       contextLimitBeforeSwitch: undefined,
       maxTokensBeforeSwitch: undefined,
+      maxOutputTokensBeforeSwitch: undefined,
       infoMessages: [],
       addItem: options.addItem,
     };
@@ -699,6 +705,7 @@ function createProviderSwitchContext(
     authOnlyBeforeSwitch: undefined,
     contextLimitBeforeSwitch: undefined,
     maxTokensBeforeSwitch: undefined,
+    maxOutputTokensBeforeSwitch: undefined,
     infoMessages: [],
     addItem: options.addItem,
   };
@@ -707,6 +714,8 @@ function createProviderSwitchContext(
   context.authOnlyBeforeSwitch = ephemeralSnapshot.authOnlyBeforeSwitch;
   context.contextLimitBeforeSwitch = ephemeralSnapshot.contextLimitBeforeSwitch;
   context.maxTokensBeforeSwitch = ephemeralSnapshot.maxTokensBeforeSwitch;
+  context.maxOutputTokensBeforeSwitch =
+    ephemeralSnapshot.maxOutputTokensBeforeSwitch;
   context.preAliasEphemeralKeys = ephemeralSnapshot.preAliasEphemeralKeys;
 
   return context;
