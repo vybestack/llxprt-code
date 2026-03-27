@@ -337,6 +337,74 @@ describe('subagentRuntimeSetup', () => {
     });
   });
 
+  describe('createToolExecutionConfig — scheduler delegation', () => {
+    it('should forward toolRegistry to foregroundConfig.getOrCreateScheduler', async () => {
+      const capturedDeps: Record<string, unknown> = {};
+      const sentinelRegistry = { sentinel: 'subagent-registry' };
+      const runtimeBundle = {
+        runtimeContext: { state: { sessionId: 'sess-fwd' } },
+      };
+      const foregroundConfig = {
+        getOrCreateScheduler: (
+          _sid: string,
+          _cb: unknown,
+          _opts: unknown,
+          deps: Record<string, unknown>,
+        ) => {
+          Object.assign(capturedDeps, deps);
+          return Promise.resolve({});
+        },
+        disposeScheduler: () => {},
+      };
+
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        sentinelRegistry,
+        foregroundConfig,
+      );
+      await config.getOrCreateScheduler('sess-fwd', {} as never, undefined, {});
+
+      expect(capturedDeps.toolRegistry).toBe(sentinelRegistry);
+    });
+
+    it('should allow caller to override toolRegistry via dependencies', async () => {
+      const capturedDeps: Record<string, unknown> = {};
+      const defaultRegistry = { default: true };
+      const overrideRegistry = { override: true };
+      const runtimeBundle = {
+        runtimeContext: { state: { sessionId: 'sess-override' } },
+      };
+      const foregroundConfig = {
+        getOrCreateScheduler: (
+          _sid: string,
+          _cb: unknown,
+          _opts: unknown,
+          deps: Record<string, unknown>,
+        ) => {
+          Object.assign(capturedDeps, deps);
+          return Promise.resolve({});
+        },
+        disposeScheduler: () => {},
+      };
+
+      const config = createToolExecutionConfig(
+        runtimeBundle,
+        defaultRegistry,
+        foregroundConfig,
+      );
+      await config.getOrCreateScheduler(
+        'sess-override',
+        {} as never,
+        undefined,
+        {
+          toolRegistry: overrideRegistry,
+        } as never,
+      );
+
+      expect(capturedDeps.toolRegistry).toBe(overrideRegistry);
+    });
+  });
+
   describe('createSchedulerConfig', () => {
     it('should return a Config-shaped object', () => {
       const mockToolExecCtx = {
@@ -367,6 +435,128 @@ describe('subagentRuntimeSetup', () => {
       const config = createSchedulerConfig(mockToolExecCtx, mockConfig);
       expect(config).toBeDefined();
       expect(typeof config.getSessionId).toBe('function');
+    });
+
+    it('should delegate getOrCreateScheduler through toolExecutorContext, not foregroundConfig', async () => {
+      let toolExecCalled = false;
+      let foregroundCalled = false;
+      const mockToolExecCtx = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'test-session',
+        getEphemeralSettings: () => ({}),
+        getEphemeralSetting: () => undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: (..._args: unknown[]) => {
+          toolExecCalled = true;
+          return Promise.resolve({});
+        },
+        disposeScheduler: () => {},
+      };
+      const mockConfig = {
+        getApprovalMode: () => 'DEFAULT',
+        getPolicyEngine: () => undefined,
+        getOrCreateScheduler: () => {
+          foregroundCalled = true;
+          return Promise.resolve({});
+        },
+        disposeScheduler: () => {},
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getAllowedTools: () => undefined,
+        getEnableHooks: () => false,
+        getHooks: () => undefined,
+        getHookSystem: () => undefined,
+        getWorkingDir: () => '/tmp',
+        getTargetDir: () => '/tmp',
+      };
+      const config = createSchedulerConfig(mockToolExecCtx, mockConfig);
+      await config.getOrCreateScheduler('test-session', {} as never);
+
+      expect(toolExecCalled).toBe(true);
+      expect(foregroundCalled).toBe(false);
+    });
+
+    it('should inject interactiveMode into scheduler options', async () => {
+      let capturedOptions: Record<string, unknown> = {};
+      const mockToolExecCtx = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'test-session',
+        getEphemeralSettings: () => ({}),
+        getEphemeralSetting: () => undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: (
+          _sid: string,
+          _cb: unknown,
+          opts: Record<string, unknown>,
+        ) => {
+          capturedOptions = opts;
+          return Promise.resolve({});
+        },
+        disposeScheduler: () => {},
+      };
+      const mockConfig = {
+        getApprovalMode: () => 'DEFAULT',
+        getPolicyEngine: () => undefined,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {},
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getAllowedTools: () => undefined,
+        getEnableHooks: () => false,
+        getHooks: () => undefined,
+        getHookSystem: () => undefined,
+        getWorkingDir: () => '/tmp',
+        getTargetDir: () => '/tmp',
+      };
+      const config = createSchedulerConfig(mockToolExecCtx, mockConfig, {
+        interactive: true,
+      });
+      await config.getOrCreateScheduler('test-session', {} as never);
+
+      expect(capturedOptions.interactiveMode).toBe(true);
+    });
+
+    it('should delegate disposeScheduler through toolExecutorContext', () => {
+      let toolExecDisposeCalled = false;
+      let foregroundDisposeCalled = false;
+      const mockToolExecCtx = {
+        getToolRegistry: () => ({}),
+        getSessionId: () => 'test-session',
+        getEphemeralSettings: () => ({}),
+        getEphemeralSetting: () => undefined,
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {
+          toolExecDisposeCalled = true;
+        },
+      };
+      const mockConfig = {
+        getApprovalMode: () => 'DEFAULT',
+        getPolicyEngine: () => undefined,
+        getOrCreateScheduler: () => Promise.resolve({}),
+        disposeScheduler: () => {
+          foregroundDisposeCalled = true;
+        },
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+        getTelemetryLogPromptsEnabled: () => false,
+        getAllowedTools: () => undefined,
+        getEnableHooks: () => false,
+        getHooks: () => undefined,
+        getHookSystem: () => undefined,
+        getWorkingDir: () => '/tmp',
+        getTargetDir: () => '/tmp',
+      };
+      const config = createSchedulerConfig(mockToolExecCtx, mockConfig);
+      config.disposeScheduler('test-session');
+
+      expect(toolExecDisposeCalled).toBe(true);
+      expect(foregroundDisposeCalled).toBe(false);
     });
   });
 });

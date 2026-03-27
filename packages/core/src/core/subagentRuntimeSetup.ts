@@ -147,6 +147,16 @@ export function buildEphemeralSettings(
   return ephemerals;
 }
 
+/**
+ * Creates the bottom-layer tool execution configuration for subagents.
+ *
+ * This is the single source of truth for tool-related configuration in the
+ * subagent, including scheduler creation. It interfaces directly with
+ * `foregroundConfig` and is responsible for injecting default dependencies
+ * (`messageBus` and `toolRegistry`) that callers may not provide.
+ *
+ * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
+ */
 export function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
   toolRegistry: ToolRegistry,
@@ -172,6 +182,7 @@ export function createToolExecutionConfig(
     getOrCreateScheduler: (sessionId, callbacks, options, dependencies) =>
       foregroundConfig.getOrCreateScheduler(sessionId, callbacks, options, {
         messageBus: dependencies?.messageBus ?? messageBus,
+        toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
       }),
     disposeScheduler: (sessionId) =>
       foregroundConfig.disposeScheduler(sessionId),
@@ -341,6 +352,15 @@ Important Rules:
 // Scheduler config
 // ---------------------------------------------------------------------------
 
+/**
+ * Creates a higher-level Config facade for the CoreToolScheduler.
+ *
+ * This facade delegates scheduler operations (`getOrCreateScheduler`,
+ * `disposeScheduler`) through `toolExecutorContext` rather than bypassing
+ * it. The only policy this layer adds is the `interactiveMode` flag.
+ *
+ * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
+ */
 export function createSchedulerConfig(
   toolExecutorContext: ToolExecutionConfig,
   foregroundConfig: Config,
@@ -405,16 +425,17 @@ export function createSchedulerConfig(
       schedulerOptions?: SchedulerOptions,
       dependencies?: {
         messageBus?: MessageBus;
+        toolRegistry?: ToolRegistry;
       },
     ) =>
-      foregroundConfig.getOrCreateScheduler(
+      toolExecutorContext.getOrCreateScheduler(
         sessionId,
         callbacks,
         { ...schedulerOptions, interactiveMode: isInteractive },
         dependencies,
       ),
     disposeScheduler: (sessionId: string) => {
-      foregroundConfig.disposeScheduler(sessionId);
+      toolExecutorContext.disposeScheduler(sessionId);
     },
     getEnableHooks: () => foregroundConfig.getEnableHooks?.() ?? false,
     getHooks: () => foregroundConfig.getHooks?.(),
