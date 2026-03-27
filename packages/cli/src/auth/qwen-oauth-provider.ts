@@ -212,7 +212,7 @@ export class QwenOAuthProvider implements OAuthProvider {
       );
     }
 
-    return this.addItem ?? globalOAuthUI.getAddItem() ?? undefined;
+    return this.addItem ?? undefined;
   }
 
   /**

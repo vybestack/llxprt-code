@@ -380,29 +380,30 @@ export class CodexOAuthProvider implements OAuthProvider {
       url: authUrl,
     };
 
-    const addItem = this.addItem ?? globalOAuthUI.getAddItem();
-    if (addItem) {
-      addItem(urlHistoryItem);
-      addItem({
-        type: 'info',
-        text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
-      });
-    } else {
-      globalOAuthUI.callAddItem(urlHistoryItem);
-      globalOAuthUI.callAddItem({
-        type: 'info',
-        text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
-      });
-      if (globalOAuthUI.getPendingCount() === 0) {
-        process.stdout.write('\nCodex Device Authorization\n');
-        process.stdout.write('─'.repeat(40) + '\n');
-        process.stdout.write(`Visit: ${authUrl}\n`);
-        process.stdout.write(`Code:  ${userCode}\n`);
-        process.stdout.write('(Code expires in 15 minutes)\n\n');
-      }
+    const deviceCodeItem: Omit<HistoryItemWithoutId, 'id'> = {
+      type: 'info',
+      text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
+    };
+
+    if (this.addItem) {
+      this.addItem(urlHistoryItem);
+      this.addItem(deviceCodeItem);
+      return this.addItem;
     }
 
-    return addItem ?? undefined;
+    const urlDelivered = globalOAuthUI.callAddItem(urlHistoryItem);
+    globalOAuthUI.callAddItem(deviceCodeItem);
+
+    if (urlDelivered === undefined) {
+      process.stdout.write('\nCodex Device Authorization\n');
+      process.stdout.write('─'.repeat(40) + '\n');
+      process.stdout.write(`Visit: ${authUrl}\n`);
+      process.stdout.write(`Code:  ${userCode}\n`);
+      process.stdout.write('(Code expires in 15 minutes)\n\n');
+    }
+
+    return undefined;
+
   }
 
   /**
