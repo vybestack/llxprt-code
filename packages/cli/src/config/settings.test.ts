@@ -747,31 +747,6 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.chatCompression).toEqual({});
     });
 
-    // Test removed - chatCompression validation was removed in upstream commit e6e60861
-    it.skip('should ignore chatCompression if contextPercentageThreshold is invalid', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      (mockFsExistsSync as Mock).mockImplementation(
-        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
-      );
-      const userSettingsContent = {
-        chatCompression: { contextPercentageThreshold: 1.5 },
-      };
-      (fs.readFileSync as Mock).mockImplementation(
-        (p: fs.PathOrFileDescriptor) => {
-          if (p === USER_SETTINGS_PATH)
-            return JSON.stringify(userSettingsContent);
-          return '{}';
-        },
-      );
-
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.chatCompression).toBeUndefined();
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Invalid value for chatCompression.contextPercentageThreshold: "1.5". Please use a value between 0 and 1. Using default compression settings.',
-      );
-      warnSpy.mockRestore();
-    });
-
     it('should deep merge chatCompression settings', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
