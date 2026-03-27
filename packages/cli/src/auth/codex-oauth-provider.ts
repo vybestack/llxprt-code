@@ -394,13 +394,18 @@ export class CodexOAuthProvider implements OAuthProvider {
     const urlDelivered = globalOAuthUI.callAddItem(urlHistoryItem);
     globalOAuthUI.callAddItem(deviceCodeItem);
 
-    if (urlDelivered === undefined) {
-      process.stdout.write('\nCodex Device Authorization\n');
-      process.stdout.write('─'.repeat(40) + '\n');
-      process.stdout.write(`Visit: ${authUrl}\n`);
-      process.stdout.write(`Code:  ${userCode}\n`);
-      process.stdout.write('(Code expires in 15 minutes)\n\n');
+    if (urlDelivered !== undefined) {
+      return (
+        itemData: Omit<HistoryItemWithoutId, 'id'>,
+        baseTimestamp?: number,
+      ): number => globalOAuthUI.callAddItem(itemData, baseTimestamp) ?? -1;
     }
+
+    process.stdout.write('\nCodex Device Authorization\n');
+    process.stdout.write('─'.repeat(40) + '\n');
+    process.stdout.write(`Visit: ${authUrl}\n`);
+    process.stdout.write(`Code:  ${userCode}\n`);
+    process.stdout.write('(Code expires in 15 minutes)\n\n');
 
     return undefined;
   }
