@@ -221,6 +221,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+vi.mock('../providers/providerAliases.js', () => ({
+  loadProviderAliasEntries: () => [],
+}));
+
 const {
   switchActiveProvider,
   setCliRuntimeContext,
