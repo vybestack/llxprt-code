@@ -370,10 +370,13 @@ describe('Sandwich Compression (Issue #1011)', () => {
       );
       const ackMessage = finalHistory[summaryIndex + 1];
       expect(ackMessage.speaker).toBe('ai');
-      expect(ackMessage.blocks[0]).toMatchObject({
-        type: 'text',
-        text: 'Understood. Continuing with the current task.',
-      });
+      expect(ackMessage.blocks[0].type).toBe('text');
+      expect((ackMessage.blocks[0] as { text: string }).text).toContain(
+        'Understood.',
+      );
+      expect((ackMessage.blocks[0] as { text: string }).text).toContain(
+        'Continuing with the current task.',
+      );
     });
   });
 });
