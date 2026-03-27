@@ -474,7 +474,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     const onAuthBucket = this.buildOnAuthBucketCallback(providerName);
     const onPrompt = this.buildOnPromptCallback(
       providerName,
-      buckets,
+      unauthenticatedBuckets,
       getEphemeralSetting,
     );
     const onDelay = async (ms: number, bucket: string): Promise<void> => {
