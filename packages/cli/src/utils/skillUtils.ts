@@ -131,12 +131,13 @@ export async function installSkill(
 
     sourcePath = path.resolve(sourcePath);
 
-    // Quick security check to prevent directory traversal out of temp dir when cloning
-    if (
-      tempDirToClean &&
-      !sourcePath.startsWith(path.resolve(tempDirToClean))
-    ) {
-      throw new Error('Invalid path: Directory traversal not allowed.');
+    // Security check to prevent directory traversal out of temp dir when cloning
+    if (tempDirToClean) {
+      const tempRoot = path.resolve(tempDirToClean);
+      const relative = path.relative(tempRoot, sourcePath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new Error('Invalid path: Directory traversal not allowed.');
+      }
     }
 
     onLog(`Searching for skills in ${sourcePath}...`);

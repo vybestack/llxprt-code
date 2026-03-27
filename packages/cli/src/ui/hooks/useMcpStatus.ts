@@ -42,10 +42,14 @@ export function useMcpStatus(config: Config) {
     };
   }, [config]);
 
-  // We are ready if discovery has completed, OR if it hasn't even started and there are no servers.
+  // We are ready if discovery has completed, OR if it hasn't started and no MCP servers are configured.
+  const configuredMcpServerCount = Object.keys(
+    config.getMcpServers() ?? {},
+  ).length;
   const isMcpReady =
     discoveryState === MCPDiscoveryState.COMPLETED ||
-    (discoveryState === MCPDiscoveryState.NOT_STARTED && mcpServerCount === 0);
+    (discoveryState === MCPDiscoveryState.NOT_STARTED &&
+      configuredMcpServerCount === 0);
 
   return {
     discoveryState,

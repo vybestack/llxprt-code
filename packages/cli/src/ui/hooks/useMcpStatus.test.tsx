@@ -21,6 +21,7 @@ describe('useMcpStatus', () => {
     getDiscoveryState: Mock<() => MCPDiscoveryState>;
     getMcpServerCount: Mock<() => number>;
   };
+  let mockGetMcpServers: Mock<() => Record<string, unknown> | undefined>;
 
   beforeEach(() => {
     mockMcpClientManager = {
@@ -28,8 +29,11 @@ describe('useMcpStatus', () => {
       getMcpServerCount: vi.fn().mockReturnValue(0),
     };
 
+    mockGetMcpServers = vi.fn().mockReturnValue({});
+
     mockConfig = {
       getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
+      getMcpServers: mockGetMcpServers,
     } as unknown as Config;
   });
 
@@ -57,8 +61,14 @@ describe('useMcpStatus', () => {
     expect(result.current.isMcpReady).toBe(true);
   });
 
-  it('should initialize with correct values (with servers, not started)', () => {
-    mockMcpClientManager.getMcpServerCount.mockReturnValue(1);
+  it('should initialize with correct values (with configured servers, not started)', () => {
+    mockGetMcpServers.mockReturnValue({
+      server1: {
+        command: 'npx',
+        args: ['-y', 'server'],
+      },
+    });
+    mockMcpClientManager.getMcpServerCount.mockReturnValue(0);
     const { result } = renderMcpStatusHook(mockConfig);
 
     expect(result.current.isMcpReady).toBe(false);

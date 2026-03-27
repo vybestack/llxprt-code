@@ -383,6 +383,7 @@ export class Turn {
             type: GeminiEventType.AgentExecutionStopped,
             reason: streamEvent.reason,
             systemMessage: streamEvent.systemMessage,
+            contextCleared: streamEvent.contextCleared,
           };
           return;
         }
@@ -393,6 +394,7 @@ export class Turn {
             type: GeminiEventType.AgentExecutionBlocked,
             reason: streamEvent.reason,
             systemMessage: streamEvent.systemMessage,
+            contextCleared: streamEvent.contextCleared,
           };
           continue;
         }
