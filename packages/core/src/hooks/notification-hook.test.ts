@@ -132,9 +132,7 @@ describe('Notification Hook (ToolPermission)', () => {
       expect(result?.details.title).toBe('Write to important.txt');
       expect(result?.details.fileName).toBe('important.txt');
       // onConfirm should NOT be in the serialized details (not serializable)
-      expect(
-        typeof (result?.details as Record<string, unknown>).onConfirm,
-      ).not.toBe('function');
+      expect(result?.details).not.toHaveProperty('onConfirm');
     });
   });
 });

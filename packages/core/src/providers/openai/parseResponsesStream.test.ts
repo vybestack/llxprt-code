@@ -66,7 +66,10 @@ describe('parseResponsesStream', () => {
       m.blocks.some((block) => block.type === 'tool_call'),
     );
     expect(toolCallMessage).toBeDefined();
-    expect(toolCallMessage?.blocks[0]).toEqual({
+    const toolCallBlock = toolCallMessage!.blocks.find(
+      (b) => b.type === 'tool_call',
+    );
+    expect(toolCallBlock).toEqual({
       type: 'tool_call',
       id: 'call_123',
       name: 'search',
