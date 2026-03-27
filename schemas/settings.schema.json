@@ -967,51 +967,6 @@
           "default": false,
           "type": "boolean"
         },
-        "codebaseInvestigatorSettings": {
-          "title": "Codebase Investigator Settings",
-          "description": "Configuration for Codebase Investigator.",
-          "markdownDescription": "Configuration for Codebase Investigator.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `{}`",
-          "default": {},
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "title": "Enable Codebase Investigator",
-              "description": "Enable the Codebase Investigator agent.",
-              "markdownDescription": "Enable the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `true`",
-              "default": true,
-              "type": "boolean"
-            },
-            "maxNumTurns": {
-              "title": "Codebase Investigator Max Num Turns",
-              "description": "Maximum number of turns for the Codebase Investigator agent.",
-              "markdownDescription": "Maximum number of turns for the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `10`",
-              "default": 10,
-              "type": "number"
-            },
-            "maxTimeMinutes": {
-              "title": "Max Time (Minutes)",
-              "description": "Maximum time for the Codebase Investigator agent (in minutes).",
-              "markdownDescription": "Maximum time for the Codebase Investigator agent (in minutes).\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `3`",
-              "default": 3,
-              "type": "number"
-            },
-            "thinkingBudget": {
-              "title": "Thinking Budget",
-              "description": "The thinking budget for the Codebase Investigator agent.",
-              "markdownDescription": "The thinking budget for the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `8192`",
-              "default": 8192,
-              "type": "number"
-            },
-            "model": {
-              "title": "Model",
-              "description": "The model to use for the Codebase Investigator agent.",
-              "markdownDescription": "The model to use for the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `auto`",
-              "default": "auto",
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        },
         "introspectionAgentSettings": {
           "title": "Introspection Agent Settings",
           "description": "Configuration for Introspection Agent.",

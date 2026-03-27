@@ -60,7 +60,6 @@ export {
   type SummarizeToolOutputSettings,
   type ComplexityAnalyzerSettings,
   type OutputSettings,
-  type CodebaseInvestigatorSettings,
   type IntrospectionAgentSettings,
   type TelemetrySettings,
   type GeminiCLIExtension,
