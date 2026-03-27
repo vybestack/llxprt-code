@@ -25,14 +25,13 @@ import {
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,
+  compactFolderStructureSnapshot,
   type CoreSystemPromptOptions,
 } from './prompts.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import * as folderStructureModule from '../utils/getFolderStructure.js';
-import * as settingsServiceInstance from '../settings/settingsServiceInstance.js';
 
 describe('prompts async integration', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -125,7 +124,7 @@ describe('prompts async integration', () => {
       expect(prompt).toContain(userMemory);
     });
 
-    it.skip('should handle different models', async () => {
+    it('should handle different models', async () => {
       const prompt = await callPrompt({ model: 'gemini-2.5-flash' });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
@@ -191,44 +190,18 @@ describe('prompts async integration', () => {
       expect(prompt).toMatch(/---\s*Custom user preferences here/);
     });
 
-    it.skip('truncates oversized folder structure payloads for provider safety', async () => {
-      // TODO: Skipped as part of #680 - include-folder-structure defaults to false for cache optimization
-      // This test needs to be updated to properly re-initialize the prompt system with the mocked setting
-      // include-folder-structure defaults to false for better cache hit rates,
-      // so we need to mock the settings service to return true for this test
-      const mockSettingsService = {
-        get: vi.fn().mockImplementation((key: string) => {
-          if (key === 'include-folder-structure') return true;
-          return undefined;
-        }),
-      };
-      const settingsSpy = vi
-        .spyOn(settingsServiceInstance, 'getSettingsService')
-        .mockReturnValue(
-          mockSettingsService as unknown as ReturnType<
-            typeof settingsServiceInstance.getSettingsService
-          >,
-        );
-
+    it('truncates oversized folder structure payloads for provider safety', () => {
       const longStructure = buildLargeFolderStructure(80);
-      const folderSpy = vi
-        .spyOn(folderStructureModule, 'getFolderStructure')
-        .mockResolvedValue(longStructure);
-      try {
-        const prompt = await callPrompt({
-          tools: ['read_file', 'web_fetch'],
-        });
-        expect(folderSpy).toHaveBeenCalled();
-        expect(prompt).toContain(
-          'folder structure truncated for provider limits',
-        );
-        expect(prompt).toContain('├───folder-0/');
-        expect(prompt).toContain('├───folder-19/');
-        expect(prompt).not.toContain('├───folder-40/');
-      } finally {
-        folderSpy.mockRestore();
-        settingsSpy.mockRestore();
-      }
+
+      const result = compactFolderStructureSnapshot(longStructure);
+
+      expect(result).toBeDefined();
+      expect(result).toContain(
+        'folder structure truncated for provider limits',
+      );
+      expect(result).toContain('├───folder-0/');
+      expect(result).toContain('├───folder-19/');
+      expect(result).not.toContain('├───folder-40/');
     });
   });
 
