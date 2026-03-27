@@ -122,7 +122,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   ephemeral: {} as Record<string, unknown>,
 }));
 
-vi.mock('../runtime/runtimeSettings.js', () => {
+vi.mock('../../runtime/runtimeSettings.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -432,11 +432,10 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     const allowed = config.getEphemeralSetting('tools.allowed') as
       | string[]
       | undefined;
-    if (allowed !== undefined) {
-      const normalizedAllowed = allowed.map((t) => t.trim().toLowerCase());
-      for (const readOnlyTool of READ_ONLY_TOOL_NAMES) {
-        expect(normalizedAllowed).toContain(readOnlyTool.trim().toLowerCase());
-      }
+    expect(allowed).toBeDefined();
+    const normalizedAllowed = allowed!.map((t) => t.trim().toLowerCase());
+    for (const readOnlyTool of READ_ONLY_TOOL_NAMES) {
+      expect(normalizedAllowed).toContain(readOnlyTool.trim().toLowerCase());
     }
   });
 
@@ -451,10 +450,9 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     const allowed = config.getEphemeralSetting('tools.allowed') as
       | string[]
       | undefined;
-    if (allowed !== undefined) {
-      const normalizedAllowed = allowed.map((t) => t.trim().toLowerCase());
-      expect(normalizedAllowed).toContain('replace');
-    }
+    expect(allowed).toBeDefined();
+    const normalizedAllowed = allowed!.map((t) => t.trim().toLowerCase());
+    expect(normalizedAllowed).toContain('replace');
   });
 
   it('non-interactive DEFAULT with explicit --allowed-tools: union with read-only set', async () => {
@@ -468,10 +466,9 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     const allowed = config.getEphemeralSetting('tools.allowed') as
       | string[]
       | undefined;
-    if (allowed !== undefined) {
-      const normalizedAllowed = allowed.map((t) => t.trim().toLowerCase());
-      expect(normalizedAllowed).toContain('read_file');
-    }
+    expect(allowed).toBeDefined();
+    const normalizedAllowed = allowed!.map((t) => t.trim().toLowerCase());
+    expect(normalizedAllowed).toContain('read_file');
   });
 
   it('non-interactive YOLO with explicit --allowed-tools: only explicit set', async () => {
@@ -486,9 +483,9 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     const allowed = config.getEphemeralSetting('tools.allowed') as
       | string[]
       | undefined;
-    if (allowed !== undefined) {
-      expect(allowed.map((t) => t.trim().toLowerCase())).toContain('read_file');
-    }
+    expect(allowed).toBeDefined();
+    const normalizedAllowed = allowed!.map((t) => t.trim().toLowerCase());
+    expect(normalizedAllowed).toContain('read_file');
   });
 
   it('non-interactive YOLO with no explicit allowed tools: tools.allowed is undefined (all allowed)', async () => {

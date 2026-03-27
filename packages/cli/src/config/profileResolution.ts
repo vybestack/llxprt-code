@@ -72,6 +72,8 @@ export function prepareProfileForApplication(
   argv: Pick<CliArgs, 'provider'>,
   baseSettings: Settings,
 ): ProfilePreparationResult {
+  // When --provider overrides, ignore profile's provider/model selection
+  // but preserve profileModelParams — they apply regardless of provider source
   const profileProvider =
     argv.provider !== undefined ? undefined : profile.provider;
   const profileModel = argv.provider !== undefined ? undefined : profile.model;

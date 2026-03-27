@@ -17,6 +17,7 @@ import {
   type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import { resolvePath } from '../utils/resolvePath.js';
+import { isDebugMode } from './environmentLoader.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { annotateActiveExtensions } from './extension.js';
 import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
@@ -68,12 +69,7 @@ function resolveTrustAndIdeContext(
 > {
   const { argv, effectiveSettings, originalSettings } = input;
 
-  const debugMode =
-    argv.debug ||
-    [process.env.DEBUG, process.env.DEBUG_MODE].some(
-      (v) => v === 'true' || v === '1',
-    ) ||
-    false;
+  const debugMode = isDebugMode(argv);
 
   const memoryImportFormat = effectiveSettings.ui?.memoryImportFormat || 'tree';
 

@@ -121,7 +121,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   oauthManager: null as unknown,
 }));
 
-vi.mock('../runtime/runtimeSettings.js', () => {
+vi.mock('../../runtime/runtimeSettings.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
@@ -302,12 +302,8 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     );
 
     expect(isWorkspaceTrusted).toHaveBeenCalled();
-    // The settings passed to isWorkspaceTrusted must be the original (not profile-merged)
-    expect(capturedTrustCheckSettings).toBeDefined();
-    // Critical: must NOT have extra profile-merged keys that weren't in original
-    expect(Object.keys(capturedTrustCheckSettings!)).toEqual(
-      expect.arrayContaining(Object.keys(originalSettings)),
-    );
+    // The settings passed to isWorkspaceTrusted must be the exact original object
+    expect(capturedTrustCheckSettings).toBe(originalSettings);
   });
 
   it('folder untrusted (via isWorkspaceTrusted returning false) → approval forced to DEFAULT', async () => {

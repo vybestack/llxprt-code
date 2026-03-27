@@ -127,7 +127,7 @@ const runtimeSettingsState = vi.hoisted(() => ({
   oauthManager: null as unknown,
 }));
 
-vi.mock('../runtime/runtimeSettings.js', () => {
+vi.mock('../../runtime/runtimeSettings.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
     ({
