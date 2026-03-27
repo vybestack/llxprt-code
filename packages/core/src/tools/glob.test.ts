@@ -316,7 +316,7 @@ describe('GlobTool', () => {
         path: '../../../../../../../../../../tmp',
       }; // Definitely outside
       expect(() => specificGlobTool.build(paramsOutside)).toThrow(
-        /resolves outside the allowed workspace directories/,
+        /must be within one of the workspace directories/,
       );
     });
 
@@ -345,7 +345,7 @@ describe('GlobTool', () => {
 
       expect(() => globTool.build(validPath)).not.toThrow();
       expect(() => globTool.build(invalidPath)).toThrow(
-        /resolves outside the allowed workspace directories/,
+        /must be within one of the workspace directories/,
       );
     });
 
@@ -353,7 +353,7 @@ describe('GlobTool', () => {
       const invalidPath = { pattern: '*.ts', path: '/etc' };
 
       expect(() => globTool.build(invalidPath)).toThrow(
-        /resolves outside the allowed workspace directories/,
+        /must be within one of the workspace directories/,
       );
     });
 

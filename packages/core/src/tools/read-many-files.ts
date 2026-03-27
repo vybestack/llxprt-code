@@ -32,6 +32,7 @@ import {
 import { stat } from 'fs/promises';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 // Simple token estimation - roughly 4 characters per token
 function estimateTokens(text: string): number {
@@ -228,14 +229,14 @@ ${finalExclusionPatternsForDescription
 
       for (const absoluteFilePath of entries) {
         // Security check: ensure the glob library didn't return something outside the workspace.
-        if (
-          !this.config
-            .getWorkspaceContext()
-            .isPathWithinWorkspace(absoluteFilePath)
-        ) {
+        const pathError = validatePathWithinWorkspace(
+          this.config.getWorkspaceContext(),
+          absoluteFilePath,
+        );
+        if (pathError) {
           skippedFiles.push({
             path: absoluteFilePath,
-            reason: `Security: Glob library returned path outside workspace. Path: ${absoluteFilePath}`,
+            reason: 'Security: ' + pathError,
           });
           continue;
         }

@@ -18,6 +18,7 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
+import { validatePathWithinWorkspace } from '@vybestack/llxprt-code-core';
 import {
   HistoryItem,
   IndividualToolCallDisplay,
@@ -277,10 +278,9 @@ export async function handleAtCommand({
     }
 
     const workspaceContext = config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(pathName)) {
-      onDebugMessage(
-        `Path ${pathName} is not in the workspace and will be skipped.`,
-      );
+    const pathError = validatePathWithinWorkspace(workspaceContext, pathName);
+    if (pathError) {
+      onDebugMessage(pathError);
       continue;
     }
 

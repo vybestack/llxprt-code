@@ -19,6 +19,7 @@ import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 /**
  * Parameters for the LS tool
@@ -365,11 +366,13 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(dirPath)) {
-      const directories = workspaceContext.getDirectories();
-      return `Path must be within one of the workspace directories: ${directories.join(
-        ', ',
-      )}`;
+    const pathError = validatePathWithinWorkspace(
+      workspaceContext,
+      dirPath,
+      'Path',
+    );
+    if (pathError) {
+      return pathError;
     }
     const noValidationError = null;
     return noValidationError;

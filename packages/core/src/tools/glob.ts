@@ -14,6 +14,7 @@ import { type Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
 export interface GlobPath {
@@ -130,13 +131,17 @@ class GlobToolInvocation extends BaseToolInvocation<
           this.config.getTargetDir(),
           dirPath,
         );
-        if (!workspaceContext.isPathWithinWorkspace(searchDirAbsolute)) {
-          const rawError = `Error: Path "${dirPath}" is not within any workspace directory`;
+        const pathError = validatePathWithinWorkspace(
+          workspaceContext,
+          searchDirAbsolute,
+          'Search path',
+        );
+        if (pathError) {
           return {
-            llmContent: rawError,
-            returnDisplay: `Path is not within workspace`,
+            llmContent: pathError,
+            returnDisplay: 'Path is not within workspace',
             error: {
-              message: rawError,
+              message: pathError,
               type: ToolErrorType.PATH_NOT_IN_WORKSPACE,
             },
           };
@@ -353,9 +358,13 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
     );
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(searchDirAbsolute)) {
-      const directories = workspaceContext.getDirectories();
-      return `Search path ("${searchDirAbsolute}") resolves outside the allowed workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(
+      workspaceContext,
+      searchDirAbsolute,
+      'Search path',
+    );
+    if (pathError) {
+      return pathError;
     }
 
     const targetDir = searchDirAbsolute || this.config.getTargetDir();
