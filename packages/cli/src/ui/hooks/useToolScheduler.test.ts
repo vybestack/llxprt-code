@@ -997,7 +997,7 @@ describe('useReactToolScheduler', () => {
 
     // Start scheduling — tool will run execute() and capture updateFn
     await act(async () => {
-      schedule(request, new AbortController().signal);
+      void schedule(request, new AbortController().signal);
     });
 
     // Wait for capturedUpdateFn to be set (means tool's execute is running)

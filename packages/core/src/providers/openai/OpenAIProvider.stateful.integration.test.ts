@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, beforeAll, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 // ConversationContext is not available in core package
 // import { ConversationContext } from '../../../utils/ConversationContext.js';
@@ -67,7 +67,7 @@ describe('OpenAIProvider Stateful Integration', () => {
   });
 
   // Helper function to consume the async iterator and collect content
-  async function collectResponse(
+  async function _collectResponse(
     stream: AsyncIterableIterator<IContent>,
   ): Promise<string> {
     let fullContent = '';
@@ -82,7 +82,7 @@ describe('OpenAIProvider Stateful Integration', () => {
     return fullContent;
   }
 
-  const buildCallOptions = (contents: IContent[]) => {
+  const _buildCallOptions = (contents: IContent[]) => {
     if (!runtimeSettingsService || !runtimeContext) {
       throw new Error('Runtime context not initialised');
     }

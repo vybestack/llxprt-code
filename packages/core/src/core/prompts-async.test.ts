@@ -13,15 +13,7 @@
  * 3. Delegation markers are stripped from final prompts
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  beforeAll,
-  vi,
-} from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,

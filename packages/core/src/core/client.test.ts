@@ -57,14 +57,12 @@ import {
   ContentGenerator,
   ContentGeneratorConfig,
 } from './contentGenerator.js';
-import type { Mock } from 'vitest';
+
 import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { GeminiEventType, Turn } from './turn.js';
-import { getCoreSystemPrompt as _getCoreSystemPrompt } from './prompts.js';
-import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { retryWithBackoff } from '../utils/retry.js';
@@ -77,7 +75,6 @@ import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
 import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
-import { coreEvents } from '../utils/events.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();

@@ -17,7 +17,6 @@ import { MockTool } from '../test-utils/tools.js';
 
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 
-import { McpClientManager } from './mcp-client-manager.js';
 import { ToolErrorType } from './tool-error.js';
 import {
   createProviderRuntimeContext,
