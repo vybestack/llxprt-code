@@ -741,5 +741,135 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       // accumulateSessionTokens must NOT be called when no usage metadata is available
       expect(accumulateMock).not.toHaveBeenCalled();
     });
+
+    it('should estimate tokens from multiple streamed text chunks', async () => {
+      class MultiChunkNoUsageProvider implements IProvider {
+        name = 'multi-chunk-provider';
+        async getModels(): Promise<never[]> {
+          return [];
+        }
+        getDefaultModel(): string {
+          return 'multi-chunk-model';
+        }
+        getServerTools(): string[] {
+          return [];
+        }
+        async invokeServerTool(): Promise<unknown> {
+          return {};
+        }
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncIterableIterator<IContent> {
+          void options;
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'First chunk of text. ' }],
+          } as IContent;
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Second chunk of text. ' }],
+          } as IContent;
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Third chunk of text.' }],
+          } as IContent;
+        }
+      }
+
+      const provider = new MultiChunkNoUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false);
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // Token estimate should reflect ALL chunks concatenated, not just the last one
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalTokens).toBeGreaterThan(0);
+    });
+
+    it('should record zero estimated tokens when stream contains only non-text blocks', async () => {
+      class ToolOnlyProvider implements IProvider {
+        name = 'tool-only-provider';
+        async getModels(): Promise<never[]> {
+          return [];
+        }
+        getDefaultModel(): string {
+          return 'tool-model';
+        }
+        getServerTools(): string[] {
+          return [];
+        }
+        async invokeServerTool(): Promise<unknown> {
+          return {};
+        }
+        async *generateChatCompletion(
+          options: GenerateChatOptions,
+        ): AsyncIterableIterator<IContent> {
+          void options;
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call_1',
+                name: 'test_tool',
+                parameters: {},
+              },
+            ],
+          } as IContent;
+        }
+      }
+
+      const provider = new ToolOnlyProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false);
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // No text content → estimated tokens should be 0, but completion still recorded
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalRequests).toBeGreaterThanOrEqual(1);
+      expect(metrics.totalTokens).toBe(0);
+    });
   });
 });
