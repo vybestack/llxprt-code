@@ -596,9 +596,44 @@ describe('LoggingProviderWrapper API Telemetry', () => {
         // Consume the stream
       }
 
-      // recordCompletion must have been called even though no usage metadata was emitted
+      // recordCompletion must have been called even though no usage metadata was emitted,
+      // and totalTokens must be > 0 because we estimate from the streamed text
       const metrics = wrapper.getPerformanceMetrics();
       expect(metrics.totalRequests).toBeGreaterThanOrEqual(1);
+      expect(metrics.totalTokens).toBeGreaterThan(0);
+    });
+
+    it('should estimate output tokens from streamed text when provider emits no usage metadata', async () => {
+      const provider = new NoUsageProvider(); // yields 'Hello from no-usage provider'
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // Estimated token count from 'Hello from no-usage provider' should be > 0 and < 100
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalTokens).toBeGreaterThan(0);
+      expect(metrics.totalTokens).toBeLessThan(100);
     });
 
     it('should record performance metrics when provider emits token usage metadata', async () => {

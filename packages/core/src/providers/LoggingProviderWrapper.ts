@@ -34,6 +34,7 @@ import {
   ApiErrorEvent,
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
+import { estimateTokens } from '../utils/toolOutputLimiter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
@@ -696,6 +697,7 @@ export class LoggingProviderWrapper implements IProvider {
     const startTime = performance.now();
     let latestTokenUsage: UsageStats | undefined;
     let lastFinishReason: string | undefined;
+    let streamedText = '';
 
     try {
       for await (const chunk of stream) {
@@ -711,6 +713,15 @@ export class LoggingProviderWrapper implements IProvider {
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
+
+          // Accumulate text content for token estimation fallback (only when no real usage yet)
+          if (!latestTokenUsage && content.blocks) {
+            for (const block of content.blocks) {
+              if (block.type === 'text') {
+                streamedText += block.text;
+              }
+            }
+          }
         }
 
         yield chunk;
@@ -722,7 +733,8 @@ export class LoggingProviderWrapper implements IProvider {
         ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
         : {
             input_token_count: 0,
-            output_token_count: 0,
+            output_token_count:
+              streamedText.length > 0 ? estimateTokens(streamedText) : 0,
             cached_content_token_count: 0,
             thoughts_token_count: 0,
             tool_token_count: 0,
