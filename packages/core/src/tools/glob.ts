@@ -134,7 +134,7 @@ class GlobToolInvocation extends BaseToolInvocation<
         const pathError = validatePathWithinWorkspace(
           workspaceContext,
           searchDirAbsolute,
-          'Path',
+          'Search path',
         );
         if (pathError) {
           return {
