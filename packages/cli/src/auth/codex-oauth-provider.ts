@@ -403,7 +403,6 @@ export class CodexOAuthProvider implements OAuthProvider {
     }
 
     return undefined;
-
   }
 
   /**
