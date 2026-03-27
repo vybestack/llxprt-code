@@ -382,12 +382,45 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     }
   }
 
-  const cliSetResult = applyCliSetArguments(config, argv.set);
+  // In non-interactive mode, tool governance is enforced from approval mode,
+  // so /set must not override governance-managed keys after step 15.
+  // Interactive mode retains /set control for tools.allowed/tools.disabled.
+  const GOVERNANCE_KEYS = new Set([
+    'tools.allowed',
+    'tools.disabled',
+    'disabled-tools',
+  ]);
+  const rawSetArgs = argv.set ?? [];
+  const enforceGovernanceSetProtection = !input.interactive;
+  const setArgsForApplication = enforceGovernanceSetProtection
+    ? rawSetArgs.filter((entry) => {
+        const eqIdx = entry.indexOf('=');
+        if (eqIdx === -1) return true; // malformed entry — let applyCliSetArguments handle/reject it
+        const key = entry.slice(0, eqIdx).trim();
+        return !GOVERNANCE_KEYS.has(key);
+      })
+    : rawSetArgs;
+  const hadGovernanceOverrides =
+    enforceGovernanceSetProtection &&
+    setArgsForApplication.length < rawSetArgs.length;
+
+  const cliSetResult = applyCliSetArguments(config, setArgsForApplication);
 
   if (Object.keys(cliSetResult.modelParams).length > 0) {
     (
       config as Config & { _cliModelParams?: Record<string, unknown> }
     )._cliModelParams = cliSetResult.modelParams;
+  }
+
+  // Reapply tool governance if /set attempted to override governance keys
+  if (hadGovernanceOverrides) {
+    applyToolPolicies({
+      config,
+      argv,
+      profileSettingsWithTools,
+      approvalMode: input.approvalMode,
+      interactive: input.interactive,
+    });
   }
 }
 

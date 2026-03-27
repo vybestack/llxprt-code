@@ -113,8 +113,16 @@ export async function loadHierarchicalLlxprtMemory(
   fileFilteringOptions?: FileFilteringOptions,
 ): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
   // FIX: Use real, canonical paths for a reliable comparison to handle symlinks.
-  const realCwd = fs.realpathSync(path.resolve(currentWorkingDirectory));
-  const realHome = fs.realpathSync(path.resolve(homedir()));
+  // Fallback to non-canonical comparison if realpathSync fails (deleted dir, broken symlink).
+  let realCwd: string;
+  let realHome: string;
+  try {
+    realCwd = fs.realpathSync(path.resolve(currentWorkingDirectory));
+    realHome = fs.realpathSync(path.resolve(homedir()));
+  } catch {
+    realCwd = path.resolve(currentWorkingDirectory);
+    realHome = path.resolve(homedir());
+  }
   const isHomeDirectory = realCwd === realHome;
 
   // If it is the home directory, pass an empty string to the core memory

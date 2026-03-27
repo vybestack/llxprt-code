@@ -296,6 +296,11 @@ describe('approvalModeParity: approval mode resolution', () => {
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    // Scrub env vars that may leak from CI environment
+    delete process.env.LLXPRT_PROFILE;
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
     process.argv = ['node', 'script.js'];
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
     setActiveProviderRuntimeContext(createProviderRuntimeContext());

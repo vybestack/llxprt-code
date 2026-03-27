@@ -51,7 +51,9 @@ export async function resolveIntermediateConfig(
 
   const allowedTools =
     argv.allowedTools ||
+    profileMergedSettings.tools?.allowed ||
     profileMergedSettings.allowedTools ||
+    settings.tools?.allowed ||
     settings.allowedTools ||
     [];
   const allowedToolsSet = buildNormalizedToolSet(allowedTools);

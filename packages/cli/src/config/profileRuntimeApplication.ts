@@ -102,6 +102,7 @@ export async function applyProfileToRuntime(
     argv.provider &&
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.keyNameOverride ||
       bootstrapArgs.baseurlOverride)
   ) {
     // CRITICAL FIX for #492: synthetic profile for CLI auth args
@@ -123,6 +124,10 @@ export async function applyProfileToRuntime(
     if (bootstrapArgs.keyfileOverride) {
       syntheticProfile.ephemeralSettings['auth-keyfile'] =
         bootstrapArgs.keyfileOverride;
+    }
+    if (bootstrapArgs.keyNameOverride) {
+      syntheticProfile.ephemeralSettings['auth-key-name'] =
+        bootstrapArgs.keyNameOverride;
     }
     if (bootstrapArgs.baseurlOverride) {
       syntheticProfile.ephemeralSettings['base-url'] =

@@ -388,6 +388,7 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
+    delete process.env.LLXPRT_PROFILE;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
@@ -450,6 +451,7 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
+    delete process.env.LLXPRT_PROFILE;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
@@ -518,6 +520,7 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
     delete process.env.LLXPRT_DEFAULT_MODEL;
     delete process.env.GEMINI_MODEL;
+    delete process.env.LLXPRT_PROFILE;
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     vi.stubEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];

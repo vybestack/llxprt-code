@@ -293,6 +293,11 @@ describe('toolGovernanceParity: interactive mode', () => {
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
     runtimeSettingsState.ephemeral = {};
+    // Scrub env vars that may leak from CI environment
+    delete process.env.LLXPRT_PROFILE;
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
   });
 
   afterEach(() => {
@@ -345,6 +350,11 @@ describe('toolGovernanceParity: non-interactive mode', () => {
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
     runtimeSettingsState.ephemeral = {};
+    // Scrub env vars that may leak from CI environment
+    delete process.env.LLXPRT_PROFILE;
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
   });
 
   afterEach(() => {
@@ -447,6 +457,11 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
     runtimeSettingsState.ephemeral = {};
+    // Scrub env vars that may leak from CI environment
+    delete process.env.LLXPRT_PROFILE;
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.GEMINI_MODEL;
   });
 
   afterEach(() => {
