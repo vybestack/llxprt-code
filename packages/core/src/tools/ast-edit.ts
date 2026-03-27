@@ -44,6 +44,7 @@ import { ASTContextCollector } from './ast-edit/context-collector.js';
 import { applyReplacement } from './ast-edit/edit-helpers.js';
 import { ASTEditToolInvocation } from './ast-edit/ast-edit-invocation.js';
 import { ASTReadFileToolInvocation } from './ast-edit/ast-read-file-invocation.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 // Re-export types and constants for external consumers
 export type { EnhancedDeclaration, ASTEditToolParams, ASTReadFileToolParams };
@@ -130,9 +131,12 @@ export class ASTEditTool
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(params.file_path)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(
+      workspaceContext,
+      params.file_path,
+    );
+    if (pathError) {
+      return pathError;
     }
 
     return null;
@@ -256,9 +260,12 @@ export class ASTReadFileTool extends BaseDeclarativeTool<
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(params.file_path)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(
+      workspaceContext,
+      params.file_path,
+    );
+    if (pathError) {
+      return pathError;
     }
 
     return null;

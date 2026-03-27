@@ -26,6 +26,7 @@ import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 import {
   getGitLineChanges,
   GitLineChangeMarker,
@@ -335,9 +336,12 @@ If git status cannot be read, the tool will still return file content and includ
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(params.absolute_path)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(
+      workspaceContext,
+      params.absolute_path,
+    );
+    if (pathError) {
+      return pathError;
     }
 
     if (params.start_line < 1) {
