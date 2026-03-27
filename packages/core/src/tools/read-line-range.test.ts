@@ -343,4 +343,54 @@ describe('ReadLineRangeTool', () => {
     expect(result.llmContent).toContain('\nD\n');
     expect(result.llmContent).toContain('░two');
   });
+
+  it('should report total line count for files with trailing newline', async () => {
+    const filePath = path.join(tempRootDir, 'trailing-newline.txt');
+    await fsp.writeFile(filePath, 'line1\nline2\nline3\n', 'utf-8');
+
+    const params: ReadLineRangeToolParams = {
+      absolute_path: filePath,
+      start_line: 1,
+      end_line: 2,
+    };
+
+    const invocation = tool.build(params);
+    const result = await invocation.execute(abortSignal);
+
+    expect(typeof result.llmContent).toBe('string');
+    expect(result.llmContent).toContain('of 3 total lines');
+  });
+
+  it('should report correct line count for files without trailing newline', async () => {
+    const filePath = path.join(tempRootDir, 'no-trailing-newline.txt');
+    await fsp.writeFile(filePath, 'line1\nline2\nline3', 'utf-8');
+
+    const params: ReadLineRangeToolParams = {
+      absolute_path: filePath,
+      start_line: 1,
+      end_line: 2,
+    };
+
+    const invocation = tool.build(params);
+    const result = await invocation.execute(abortSignal);
+
+    expect(typeof result.llmContent).toBe('string');
+    expect(result.llmContent).toContain('of 3 total lines');
+  });
+
+  it('should return empty content for an empty file', async () => {
+    const filePath = path.join(tempRootDir, 'empty.txt');
+    await fsp.writeFile(filePath, '', 'utf-8');
+
+    const params: ReadLineRangeToolParams = {
+      absolute_path: filePath,
+      start_line: 1,
+      end_line: 1,
+    };
+
+    const invocation = tool.build(params);
+    const result = await invocation.execute(abortSignal);
+    expect(typeof result.llmContent).toBe('string');
+    expect((result.llmContent as string).trim()).toBe('');
+  });
 });

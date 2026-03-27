@@ -304,6 +304,12 @@ export interface ProcessedFileReadResult {
   linesShown?: [number, number]; // For text files [startLine, endLine] (1-based for display)
 }
 
+export function countLines(lines: string[]): number {
+  return lines.length > 0 && lines[lines.length - 1] === ''
+    ? lines.length - 1
+    : lines.length;
+}
+
 /**
  * Reads and processes a single file, handling text, images, and PDFs.
  * @param filePath Absolute path to the file.
@@ -381,7 +387,7 @@ export async function processSingleFileContent(
         // Use BOM-aware reader to avoid leaving a BOM character in content and to support UTF-16/32 transparently
         const content = await readFileWithEncoding(filePath);
         const lines = content.split('\n');
-        const originalLineCount = lines.length;
+        const originalLineCount = countLines(lines);
 
         const startLine = offset || 0;
         const effectiveLimit =

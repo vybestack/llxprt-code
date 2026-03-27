@@ -15,6 +15,7 @@ import {
 import { ToolErrorType } from '../tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
 import { isNodeError } from '../../utils/errors.js';
+import { countLines } from '../../utils/fileUtils.js';
 import { Config } from '../../config/config.js';
 import type { AnsiOutput } from '../../utils/terminalSerializer.js';
 
@@ -62,13 +63,14 @@ export class ASTReadFileToolInvocation
 
       // Process line range
       const lines = content.split('\n');
+      const totalLineCount = countLines(lines);
       const startLine = Math.min(
         this.params.offset ? Math.max(1, this.params.offset) - 1 : 0,
-        lines.length,
+        totalLineCount,
       );
       const endLine = this.params.limit
-        ? Math.min(lines.length, startLine + this.params.limit)
-        : lines.length;
+        ? Math.min(totalLineCount, startLine + this.params.limit)
+        : totalLineCount;
       const selectedContent = lines.slice(startLine, endLine).join('\n');
 
       // Collect enhanced context (same as ASTEdit)
@@ -83,7 +85,7 @@ export class ASTReadFileToolInvocation
       const readLlmContent = [
         `LLXPRT READ: ${this.params.file_path}`,
         `- Language: ${enhancedContext.language}`,
-        `- Lines ${Math.min(startLine + 1, lines.length)}-${endLine} of ${lines.length}`,
+        `- Lines ${Math.min(startLine + 1, totalLineCount)}-${endLine} of ${totalLineCount}`,
         `- Declarations: ${enhancedContext.declarations.length}`,
         '',
         'CONTEXT ANALYSIS:',
