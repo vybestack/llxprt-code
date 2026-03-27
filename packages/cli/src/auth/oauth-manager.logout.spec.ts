@@ -53,7 +53,8 @@ vi.mock('../runtime/runtimeSettings.js', async () => {
   };
 });
 
-import { OAuthManager, type OAuthProvider } from './oauth-manager.js';
+import { OAuthManager } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 
 describe('OAuthManager.logout runtime cache handling', () => {

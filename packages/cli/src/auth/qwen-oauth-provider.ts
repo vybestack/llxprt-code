@@ -9,7 +9,7 @@
  * Qwen OAuth Provider Implementation
  */
 
-import { OAuthProvider } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import {
   OAuthToken,
   QwenDeviceFlow,
@@ -27,13 +27,7 @@ import {
 import { ClipboardService } from '../services/ClipboardService.js';
 import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
-
-enum InitializationState {
-  NotStarted = 'not-started',
-  InProgress = 'in-progress',
-  Completed = 'completed',
-  Failed = 'failed',
-}
+import { InitializationGuard, isTokenExpired } from './oauth-provider-base.js';
 
 export class QwenOAuthProvider implements OAuthProvider {
   /**
@@ -43,9 +37,7 @@ export class QwenOAuthProvider implements OAuthProvider {
    */
   name = 'qwen';
   private deviceFlow: QwenDeviceFlow;
-  private initializationState = InitializationState.NotStarted;
-  private initializationPromise?: Promise<void>;
-  private initializationError?: Error;
+  private initGuard: InitializationGuard;
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
@@ -74,6 +66,7 @@ export class QwenOAuthProvider implements OAuthProvider {
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:qwen');
     this.addItem = addItem;
+    this.initGuard = new InitializationGuard('wrap', this.name);
 
     /**
      * @plan PLAN-20250823-AUTHFIXES.P16
@@ -113,47 +106,8 @@ export class QwenOAuthProvider implements OAuthProvider {
     this.addItem = addItem;
   }
 
-  /**
-   * Lazy initialization with proper state management
-   * Ensures initialization only happens once and handles concurrent calls
-   */
   private async ensureInitialized(): Promise<void> {
-    // If already completed, return immediately
-    if (this.initializationState === InitializationState.Completed) {
-      return;
-    }
-
-    // If failed, allow retry by resetting to NotStarted
-    if (this.initializationState === InitializationState.Failed) {
-      this.initializationState = InitializationState.NotStarted;
-      this.initializationPromise = undefined;
-      this.initializationError = undefined;
-    }
-
-    // If not started, start initialization
-    if (this.initializationState === InitializationState.NotStarted) {
-      this.initializationState = InitializationState.InProgress;
-      this.initializationPromise = this.initializeToken();
-    }
-
-    // Wait for initialization to complete (handles concurrent calls)
-    if (this.initializationPromise) {
-      try {
-        await this.initializationPromise;
-        this.initializationState = InitializationState.Completed;
-      } catch (error) {
-        this.initializationState = InitializationState.Failed;
-        this.initializationError =
-          error instanceof OAuthError
-            ? error
-            : OAuthErrorFactory.fromUnknown(
-                this.name,
-                error,
-                'ensureInitialized',
-              );
-        throw this.initializationError;
-      }
-    }
+    return this.initGuard.ensureInitialized(() => this.initializeToken());
   }
 
   /**
@@ -168,7 +122,7 @@ export class QwenOAuthProvider implements OAuthProvider {
         const savedToken = await this.tokenStore?.getToken('qwen');
 
         // Line 20: IF savedToken AND NOT this.isTokenExpired(savedToken)
-        if (savedToken && !this.isTokenExpired(savedToken)) {
+        if (savedToken && !isTokenExpired(savedToken)) {
           // Line 21: RETURN
           return;
         }
@@ -189,120 +143,28 @@ export class QwenOAuthProvider implements OAuthProvider {
 
     return this.errorHandler.wrapMethod(
       async () => {
-        // Line 33: SET deviceCodeResponse = AWAIT this.deviceFlow.initiateDeviceFlow()
         const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
 
-        // Lines 34-35: SET authUrl
         const authUrl =
           deviceCodeResponse.verification_uri_complete ||
           `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
-        // Try instance addItem first, fallback to global
-        const addItem = this.addItem || globalOAuthUI.getAddItem();
+        await this.displayQwenAuthUrl(authUrl);
+        await this.openQwenBrowserIfInteractive(authUrl);
 
-        // Always show OAuth URL in the TUI first, before attempting browser (like Gemini does)
-        const historyItem: HistoryItemOAuthURL = {
-          type: 'oauth_url',
-          text: `Please visit the following URL to authorize with Qwen:\\n${authUrl}`,
-          url: authUrl,
-        };
-        if (addItem) {
-          addItem(historyItem);
-        } else {
-          // Lines 37-38: PRINT
-          debugLogger.log('\nQwen OAuth Authentication');
-          debugLogger.log('─'.repeat(40));
+        this.emitUIMessage(
+          { type: 'info', text: 'Waiting for authorization...' },
+          Date.now(),
+        );
 
-          debugLogger.log('Please visit the following URL to authorize:');
-          debugLogger.log(authUrl);
-        }
-
-        // Copy URL to clipboard with error handling
-        try {
-          await ClipboardService.copyToClipboard(authUrl);
-        } catch (error) {
-          // Clipboard copy is non-critical, continue without it
-          this.logger.debug(
-            () =>
-              `Failed to copy URL to clipboard: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-          );
-        }
-
-        // Line 40: IF shouldLaunchBrowser()
-        let noBrowser = false;
-        try {
-          const { getEphemeralSetting } = await import(
-            '../runtime/runtimeSettings.js'
-          );
-          noBrowser =
-            (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
-        } catch {
-          // Runtime not initialized (e.g., tests) — use default
-        }
-        if (shouldLaunchBrowser({ forceManual: noBrowser })) {
-          // Line 41: PRINT
-          if (addItem) {
-            addItem(
-              { type: 'info', text: 'Opening browser for authentication...' },
-              Date.now(),
-            );
-          } else {
-            debugLogger.log('Opening browser for authentication...');
-          }
-
-          // Lines 42-46: TRY
-          try {
-            await openBrowserSecurely(authUrl);
-          } catch (error) {
-            // Line 45: PRINT - browser failure is not critical
-            if (addItem) {
-              addItem(
-                {
-                  type: 'warning',
-                  text: 'Failed to open browser automatically.',
-                },
-                Date.now(),
-              );
-            } else {
-              debugLogger.log('Failed to open browser automatically.');
-            }
-            this.logger.debug(
-              () =>
-                `Browser launch error: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-            );
-          }
-        }
-
-        if (addItem) {
-          // Line 52: PRINT
-          addItem(
-            { type: 'info', text: 'Waiting for authorization...' },
-            Date.now(),
-          );
-        } else {
-          debugLogger.log('─'.repeat(40));
-          // Line 52: PRINT
-          debugLogger.log('Waiting for authorization...\n');
-        }
-
-        // Line 54: SET token = AWAIT this.deviceFlow.pollForToken
         const token = await this.deviceFlow.pollForToken(
           deviceCodeResponse.device_code,
         );
 
-        // Line 56: PRINT
-        if (addItem) {
-          addItem(
-            { type: 'info', text: 'Authentication successful!' },
-            Date.now(),
-          );
-        } else {
-          debugLogger.log('Authentication successful!');
-        }
+        this.emitUIMessage(
+          { type: 'info', text: 'Authentication successful!' },
+          Date.now(),
+        );
 
         return token;
       },
@@ -312,17 +174,103 @@ export class QwenOAuthProvider implements OAuthProvider {
   }
 
   /**
-   * @plan PLAN-20250823-AUTHFIXES.P05
-   * @requirement REQ-001.1
-   * @pseudocode lines 27-31
+   * Display the Qwen auth URL in TUI and copy to clipboard.
+   * Returns the addItem callback for subsequent messages.
    */
-  private isTokenExpired(token: OAuthToken): boolean {
-    // Line 28: SET now = Date.now() / 1000
-    const now = Date.now() / 1000;
-    // Line 29: SET buffer = 30
-    const buffer = 30;
-    // Line 30: RETURN token.expiry <= (now + buffer)
-    return token.expiry <= now + buffer;
+  private async displayQwenAuthUrl(
+    authUrl: string,
+  ): Promise<
+    | ((item: Omit<HistoryItemWithoutId, 'id'>, ts?: number) => number)
+    | undefined
+  > {
+    const historyItem: HistoryItemOAuthURL = {
+      type: 'oauth_url',
+      text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
+      url: authUrl,
+    };
+
+    if (this.addItem) {
+      this.addItem(historyItem);
+    } else {
+      const delivered = globalOAuthUI.callAddItem(historyItem);
+      if (delivered === undefined) {
+        debugLogger.log('\nQwen OAuth Authentication');
+        debugLogger.log('─'.repeat(40));
+        debugLogger.log('Please visit the following URL to authorize:');
+        debugLogger.log(authUrl);
+      }
+    }
+
+    try {
+      await ClipboardService.copyToClipboard(authUrl);
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Failed to copy URL to clipboard: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+
+    return this.addItem ?? undefined;
+  }
+
+  /**
+   * Emit a UI message via the instance addItem or the global buffer.
+   */
+  private emitUIMessage(
+    itemData: Omit<HistoryItemWithoutId, 'id'>,
+    baseTimestamp?: number,
+  ): void {
+    if (this.addItem) {
+      this.addItem(itemData, baseTimestamp);
+    } else {
+      const delivered = globalOAuthUI.callAddItem(itemData, baseTimestamp);
+      if (delivered === undefined) {
+        debugLogger.log(
+          'text' in itemData ? (itemData.text as string) : 'OAuth event',
+        );
+      }
+    }
+  }
+
+  /**
+   * Optionally open the browser for Qwen auth if interactive mode is enabled.
+   */
+  private async openQwenBrowserIfInteractive(authUrl: string): Promise<void> {
+    let noBrowser = false;
+    try {
+      const { getEphemeralSetting } = await import(
+        '../runtime/runtimeSettings.js'
+      );
+      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+    } catch {
+      // Runtime not initialized (e.g., tests) — use default
+    }
+
+    if (!shouldLaunchBrowser({ forceManual: noBrowser })) {
+      return;
+    }
+
+    this.emitUIMessage(
+      { type: 'info', text: 'Opening browser for authentication...' },
+      Date.now(),
+    );
+
+    try {
+      await openBrowserSecurely(authUrl);
+    } catch (error) {
+      this.emitUIMessage(
+        { type: 'warning', text: 'Failed to open browser automatically.' },
+        Date.now(),
+      );
+      this.logger.debug(
+        () =>
+          `Browser launch error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
   }
 
   /**
@@ -344,19 +292,6 @@ export class QwenOAuthProvider implements OAuthProvider {
       this.name,
       'getToken',
     );
-  }
-
-  /**
-   * @plan PLAN-20250823-AUTHFIXES.P05
-   * @requirement REQ-001.1
-   * @pseudocode lines 61-85
-   */
-  async refreshIfNeeded(): Promise<OAuthToken | null> {
-    this.logger.debug(
-      () =>
-        'refreshIfNeeded() is deprecated — refresh is handled by OAuthManager',
-    );
-    return null;
   }
 
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
@@ -427,14 +362,19 @@ export class QwenOAuthProvider implements OAuthProvider {
 
         // Line 89: PRINT "Successfully logged out from Qwen"
         if (!token) {
-          const addItem = this.addItem || globalOAuthUI.getAddItem();
-          if (addItem) {
-            addItem(
+          if (this.addItem) {
+            this.addItem(
               { type: 'info', text: 'Successfully logged out from Qwen' },
               Date.now(),
             );
           } else {
-            debugLogger.log('Successfully logged out from Qwen');
+            const delivered = globalOAuthUI.callAddItem(
+              { type: 'info', text: 'Successfully logged out from Qwen' },
+              Date.now(),
+            );
+            if (delivered === undefined) {
+              debugLogger.log('Successfully logged out from Qwen');
+            }
           }
         }
       },

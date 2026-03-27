@@ -11,7 +11,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { ToolFormatOverrideLiteral } from '../../runtime/runtimeSettings.js';
+import type { ToolFormatOverrideLiteral } from '../../runtime/providerMutations.js';
 
 const STRUCTURED_FORMATS = [
   'openai',

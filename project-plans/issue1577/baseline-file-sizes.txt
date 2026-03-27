@@ -1,0 +1,5 @@
+    2734 /Users/acoliver/projects/llxprt/branch-5/llxprt-code/packages/cli/src/ui/components/shared/text-buffer.ts
+    2341 /Users/acoliver/projects/llxprt/branch-5/llxprt-code/packages/cli/src/ui/components/shared/text-buffer.test.ts
+     814 /Users/acoliver/projects/llxprt/branch-5/llxprt-code/packages/cli/src/ui/components/shared/vim-buffer-actions.ts
+    1120 /Users/acoliver/projects/llxprt/branch-5/llxprt-code/packages/cli/src/ui/components/shared/vim-buffer-actions.test.ts
+    7009 total

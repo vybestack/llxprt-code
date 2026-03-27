@@ -152,15 +152,8 @@ export type ToolCallsUpdateHandler = (toolCalls: ToolCall[]) => void;
 
 /**
  * @requirement TS-TYPE-001
- * Internal Types - Queue management and policy context
+ * Internal Types - Policy context
  */
-
-export interface QueuedRequest {
-  request: ToolCallRequestInfo | ToolCallRequestInfo[];
-  signal: AbortSignal;
-  resolve: () => void;
-  reject: (reason?: Error) => void;
-}
 
 export type PolicyContext = {
   toolName: string;

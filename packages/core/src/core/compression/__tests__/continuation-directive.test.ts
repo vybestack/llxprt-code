@@ -56,4 +56,33 @@ describe('buildContinuationDirective', () => {
     expect(result).not.toContain('Add caching');
     expect(result).not.toContain('Update docs');
   });
+
+  it('includes last user prompt context when provided without todos', () => {
+    const result = buildContinuationDirective(
+      undefined,
+      'Fix the failing test in auth module',
+    );
+    expect(result).toContain('Fix the failing test in auth module');
+    expect(result).toContain('most recent request');
+  });
+
+  it('combines todos and last user prompt context', () => {
+    const todos = '- [in_progress] Fix auth bug';
+    const result = buildContinuationDirective(
+      todos,
+      'The test is still failing after the last change',
+    );
+    expect(result).toContain('Fix auth bug');
+    expect(result).toContain('The test is still failing after the last change');
+  });
+
+  it('ignores empty last user prompt context', () => {
+    const result = buildContinuationDirective(undefined, '');
+    expect(result).toBe('Understood. Continuing with the current task.');
+  });
+
+  it('ignores whitespace-only last user prompt context', () => {
+    const result = buildContinuationDirective(undefined, '   \n  ');
+    expect(result).toBe('Understood. Continuing with the current task.');
+  });
 });

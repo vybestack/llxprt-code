@@ -65,12 +65,10 @@ import {
 } from './profileBootstrap.js';
 import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
-import {
-  applyProfileSnapshot,
-  getCliRuntimeContext,
-  setCliRuntimeContext,
-  switchActiveProvider,
-} from '../runtime/runtimeSettings.js';
+import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
+import { applyProfileSnapshot } from '../runtime/profileSnapshot.js';
+import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
+import { switchActiveProvider } from '../runtime/providerSwitch.js';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 import { loadProviderAliasEntries } from '../providers/providerAliases.js';
@@ -160,7 +158,6 @@ export interface CliArgs {
   allowedMcpServerNames: string[] | undefined;
   allowedTools: string[] | undefined;
   experimentalAcp: boolean | undefined;
-  experimentalUi: boolean | undefined;
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
   provider: string | undefined;
@@ -302,11 +299,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('experimental-acp', {
           type: 'boolean',
           description: 'Starts the agent in ACP mode',
-        })
-        .option('experimental-ui', {
-          type: 'boolean',
-          description:
-            'Use experimental terminal UI (requires bun and @vybestack/llxprt-ui)',
         })
         .option('allowed-mcp-server-names', {
           type: 'array',
@@ -500,11 +492,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       type: 'boolean',
       description: 'Starts the agent in ACP mode',
     })
-    .option('experimental-ui', {
-      type: 'boolean',
-      description:
-        'Use experimental terminal UI (requires bun and @vybestack/llxprt-ui)',
-    })
     .option('allowed-mcp-server-names', {
       type: 'array',
       string: true,
@@ -690,7 +677,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     telemetryOutfile: result.telemetryOutfile,
     allowedMcpServerNames: result.allowedMcpServerNames,
     experimentalAcp: result.experimentalAcp,
-    experimentalUi: result.experimentalUi,
     extensions: result.extensions,
     listExtensions: result.listExtensions,
     provider: result.provider,
@@ -1077,9 +1063,14 @@ export async function loadCliConfig(
     ...effectiveSettings.fileFiltering,
   };
 
+  const { enableFuzzySearch, ...fileFilteringFromSettings } =
+    effectiveSettings.fileFiltering ?? {};
+
   const fileFiltering = {
     ...DEFAULT_FILE_FILTERING_OPTIONS,
-    ...effectiveSettings.fileFiltering,
+    ...fileFilteringFromSettings,
+    disableFuzzySearch:
+      typeof enableFuzzySearch === 'boolean' ? !enableFuzzySearch : false,
   };
 
   const includeDirectoriesFromSettings =
@@ -1379,7 +1370,6 @@ export async function loadCliConfig(
 
   const config = new Config({
     sessionId,
-    clientVersion: await getCliVersion(),
     embeddingModel: undefined, // No embedding model configured for llxprt-code
     sandbox: sandboxConfig,
     targetDir: cwd,
@@ -2007,4 +1997,4 @@ export {
   getCliProviderManager,
   getActiveProviderStatus,
   listProviders as listRuntimeProviders,
-} from '../runtime/runtimeSettings.js';
+} from '../runtime/runtimeAccessors.js';

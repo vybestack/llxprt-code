@@ -13,7 +13,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OAuthManager, type OAuthProvider } from '../oauth-manager.js';
+import { OAuthManager } from '../oauth-manager.js';
+import type { OAuthProvider } from '../types.js';
 import type { TokenStore, OAuthToken } from '../types.js';
 
 /**

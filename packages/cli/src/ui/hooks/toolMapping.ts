@@ -123,13 +123,19 @@ export function mapToDisplay(
             resultDisplay: trackedCall.response.resultDisplay,
             confirmationDetails: undefined,
           };
-        case 'awaiting_approval':
+        case 'awaiting_approval': {
+          const confirmationDetails =
+            'onConfirm' in trackedCall.confirmationDetails
+              ? trackedCall.confirmationDetails
+              : undefined;
+
           return {
             ...baseDisplayProperties,
             status: mapCoreStatusToDisplayStatus(trackedCall.status),
             resultDisplay: undefined,
-            confirmationDetails: trackedCall.confirmationDetails,
+            confirmationDetails,
           };
+        }
         case 'executing': {
           return {
             ...baseDisplayProperties,

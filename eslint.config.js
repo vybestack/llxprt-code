@@ -456,6 +456,28 @@ export default tseslint.config(
       'max-lines-per-function': 'off',
     },
   },
+  // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
+  // These files are being decomposed; error-level rules catch regressions during
+  // and after the decomposition. Test files are excluded (they already have
+  // max-lines-per-function: 'off' via the vitest block above).
+  {
+    files: [
+      'packages/cli/src/ui/AppContainerRuntime.tsx',
+      'packages/cli/src/ui/containers/AppContainer/**/*.ts',
+      'packages/cli/src/ui/containers/AppContainer/**/*.tsx',
+    ],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
   // Settings for eslint-rules directory
   {
     files: ['./eslint-rules/**/*.js'],
@@ -534,6 +556,236 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // ============================================================================
+  // Issue #1577: text-buffer.ts decomposition - Architecture Enforcement
+  // ============================================================================
+
+  // Domain modules must be pure (no React, no side effects)
+  {
+    files: [
+      'packages/cli/src/ui/components/shared/buffer-types.ts',
+      'packages/cli/src/ui/components/shared/word-navigation.ts',
+      'packages/cli/src/ui/components/shared/buffer-operations.ts',
+      'packages/cli/src/ui/components/shared/transformations.ts',
+      'packages/cli/src/ui/components/shared/visual-layout.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react',
+              message:
+                'Domain modules must be pure. React only allowed in text-buffer.ts',
+            },
+            {
+              name: '@vybestack/llxprt-code-core',
+              importNames: ['debugLogger'],
+              message:
+                'Domain modules must be side-effect free. No logging.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['node:fs', 'node:child_process', 'node:os'],
+              message:
+                'Domain modules must be pure. No Node.js I/O modules.',
+            },
+          ],
+        },
+      ],
+      complexity: ['error', 15],
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+
+  // vim-buffer-actions.ts specific restrictions
+  {
+    files: ['packages/cli/src/ui/components/shared/vim-buffer-actions.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: './text-buffer.js',
+              message:
+                'Import from buffer-types, buffer-operations, or word-navigation directly',
+            },
+            {
+              name: './buffer-reducer.js',
+              message:
+                'vim-buffer-actions must not import buffer-reducer (creates cycle)',
+            },
+            {
+              name: 'react',
+              message: 'vim-buffer-actions must be pure logic. No React.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['**/shared/text-buffer.js'],
+              message: 'Import from specific module, not text-buffer.js',
+            },
+          ],
+        },
+      ],
+      complexity: ['error', 15],
+      'max-lines-per-function': ['error', 80],
+    },
+  },
+
+  // buffer-reducer.ts specific restrictions
+  {
+    files: ['packages/cli/src/ui/components/shared/buffer-reducer.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react',
+              message: 'buffer-reducer must be pure logic. No React.',
+            },
+          ],
+        },
+      ],
+      complexity: ['error', 15],
+      'max-lines-per-function': ['error', 80],
+    },
+  },
+
+  // text-buffer.ts size limits (React allowed here only)
+  // useTextBuffer is a React hook composition root; its size comes from
+  // useCallback/useMemo declarations, not from logic complexity.
+  {
+    files: ['packages/cli/src/ui/components/shared/text-buffer.ts'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+
+  // Migration: Warn on utility imports from text-buffer.js in CLI src
+  {
+    files: ['packages/cli/src/**/*.ts', 'packages/cli/src/**/*.tsx'],
+    ignores: [
+      'packages/cli/src/ui/components/shared/text-buffer.ts',
+      'packages/cli/src/ui/components/shared/text-buffer.test.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          paths: [],
+          patterns: [
+            {
+              group: ['**/shared/text-buffer.js'],
+              importNames: [
+                'offsetToLogicalPos',
+                'logicalPosToOffset',
+                'textBufferReducer',
+                'pushUndo',
+                'replaceRangeInternal',
+                'findNextWordStartInLine',
+                'findPrevWordStartInLine',
+                'findWordEndInLine',
+                'getPositionFromOffsets',
+                'getLineRangeOffsets',
+              ],
+              message:
+                'Import from buffer-operations.js, word-navigation.js, or buffer-types.js directly. See Issue #1577.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1577
+  // ============================================================================
+
+  // ============================================================================
+  // Issue #1581: subagent.ts decomposition - Size enforcement
+  // ============================================================================
+  //
+  // Error-level max-lines and max-lines-per-function rules on the four new
+  // modules ensure they never grow past their design targets. The coordinator
+  // file (subagent.ts) uses 'warn' during the decomposition (Phases 1-4) and
+  // will be promoted to 'error' in Phase 5 once the file is thin enough.
+  // These rules target files that don't exist yet — ESLint silently ignores
+  // unmatched globs, so CI stays green during Phase 0.
+  {
+    files: [
+      'packages/core/src/core/subagentTypes.ts',
+      'packages/core/src/core/subagentRuntimeSetup.ts',
+      'packages/core/src/core/subagentToolProcessing.ts',
+      'packages/core/src/core/subagentExecution.ts',
+    ],
+    ignores: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // subagent.ts coordinator: warn during decomposition, promoted to error in Phase 5
+  {
+    files: ['packages/core/src/core/subagent.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'max-lines': [
+        'warn',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+      'max-lines-per-function': [
+        'warn',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // Enforce execution -> runtimeSetup dependency boundary.
+  // subagentExecution.ts must not import from subagentRuntimeSetup.js.
+  // All runtime artifacts must be passed as parameters by the coordinator.
+  // See project-plans/issue1581/README.md §Dependency Graph.
+  {
+    files: ['packages/core/src/core/subagentExecution.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: './subagentRuntimeSetup.js',
+              message:
+                'subagentExecution must not import from subagentRuntimeSetup. ' +
+                'All runtime artifacts must be passed as parameters by the coordinator (subagent.ts). ' +
+                'See project-plans/issue1581/README.md §Dependency Graph.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1581
+  // ============================================================================
+
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node

@@ -9,7 +9,7 @@ import { describe, it, expect, vi, Mock, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
-import { useGeminiStream } from './useGeminiStream.js';
+import { useGeminiStream } from './geminiStream/index.js';
 import {
   useReactToolScheduler,
   TrackedCompletedToolCall,
@@ -134,9 +134,11 @@ const MockedGeminiClientClass = vi.hoisted(() =>
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('./useReactToolScheduler.js')>();
+  const { mapToDisplay } = await import('./toolMapping.js');
   return {
     ...original,
     useReactToolScheduler: vi.fn(),
+    mapToDisplay,
   };
 });
 

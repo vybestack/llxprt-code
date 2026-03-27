@@ -8,7 +8,7 @@
  * Anthropic OAuth Provider Implementation
  */
 
-import { OAuthProvider } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import {
   OAuthToken,
   AnthropicDeviceFlow,
@@ -29,13 +29,12 @@ import {
   startLocalOAuthCallback,
 } from './local-oauth-callback.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
-
-enum InitializationState {
-  NotStarted = 'not-started',
-  InProgress = 'in-progress',
-  Completed = 'completed',
-  Failed = 'failed',
-}
+import {
+  InitializationGuard,
+  AuthCodeDialog,
+  hasValidRefreshToken,
+  isTokenExpired,
+} from './oauth-provider-base.js';
 
 const CALLBACK_PORT_RANGE: [number, number] = [8765, 8795];
 const CALLBACK_TIMEOUT_MS = 3 * 60 * 1000;
@@ -43,12 +42,9 @@ const CALLBACK_TIMEOUT_MS = 3 * 60 * 1000;
 export class AnthropicOAuthProvider implements OAuthProvider {
   name = 'anthropic';
   private deviceFlow: AnthropicDeviceFlow;
-  private authCodeResolver?: (code: string) => void;
-  private authCodeRejecter?: (error: Error) => void;
   private pendingAuthPromise?: Promise<string>;
-  private initializationState = InitializationState.NotStarted;
-  private initializationPromise?: Promise<void>;
-  private initializationError?: Error;
+  private initGuard: InitializationGuard;
+  private dialog: AuthCodeDialog;
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
@@ -77,6 +73,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:anthropic');
     this.addItem = addItem;
+    this.initGuard = new InitializationGuard('wrap', this.name);
+    this.dialog = new AuthCodeDialog();
 
     /**
      * @plan PLAN-20250823-AUTHFIXES.P16
@@ -109,82 +107,25 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Wait for authorization code from UI dialog
    */
   waitForAuthCode(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      this.authCodeResolver = resolve;
-      this.authCodeRejecter = reject;
-    });
+    return this.dialog.waitForAuthCode();
   }
 
   /**
    * Submit authorization code from UI dialog
    */
   submitAuthCode(code: string): void {
-    if (this.authCodeResolver) {
-      this.authCodeResolver(code);
-      this.authCodeResolver = undefined;
-      this.authCodeRejecter = undefined;
-    }
+    this.dialog.submitAuthCode(code);
   }
 
   /**
    * Cancel OAuth flow
    */
   cancelAuth(): void {
-    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
-      false;
-    if (this.authCodeRejecter) {
-      const error = OAuthErrorFactory.fromUnknown(
-        this.name,
-        new Error('OAuth authentication cancelled'),
-        'cancelAuth',
-      );
-      this.authCodeRejecter(error);
-      this.authCodeResolver = undefined;
-      this.authCodeRejecter = undefined;
-    }
+    this.dialog.cancelAuth(this.name);
   }
 
-  /**
-   * Lazy initialization with proper state management
-   * Ensures initialization only happens once and handles concurrent calls
-   */
   private async ensureInitialized(): Promise<void> {
-    // If already completed, return immediately
-    if (this.initializationState === InitializationState.Completed) {
-      return;
-    }
-
-    // If failed, allow retry by resetting to NotStarted
-    if (this.initializationState === InitializationState.Failed) {
-      this.initializationState = InitializationState.NotStarted;
-      this.initializationPromise = undefined;
-      this.initializationError = undefined;
-    }
-
-    // If not started, start initialization
-    if (this.initializationState === InitializationState.NotStarted) {
-      this.initializationState = InitializationState.InProgress;
-      this.initializationPromise = this.initializeToken();
-    }
-
-    // Wait for initialization to complete (handles concurrent calls)
-    if (this.initializationPromise) {
-      try {
-        await this.initializationPromise;
-        this.initializationState = InitializationState.Completed;
-      } catch (error) {
-        this.initializationState = InitializationState.Failed;
-        this.initializationError =
-          error instanceof OAuthError
-            ? error
-            : OAuthErrorFactory.fromUnknown(
-                this.name,
-                error,
-                'ensureInitialized',
-              );
-        throw this.initializationError;
-      }
-    }
+    return this.initGuard.ensureInitialized(() => this.initializeToken());
   }
 
   async initiateAuth(): Promise<OAuthToken> {
@@ -198,176 +139,16 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         this.currentAuthAttemptId = attemptId;
 
         await this.ensureInitialized();
-        const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
-        let noBrowser = false;
-        try {
-          const { getEphemeralSetting } = await import(
-            '../runtime/runtimeSettings.js'
-          );
-          noBrowser =
-            (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
-        } catch {
-          // Runtime not initialized (e.g., tests) — use default
-        }
-        const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
-        let localCallback: LocalOAuthCallbackServer | null = null;
+        const { localCallback } = await this.setupDeviceFlowAndDisplay();
 
-        if (interactive) {
-          try {
-            const state = this.deviceFlow.getState();
-            localCallback = await startLocalOAuthCallback({
-              state,
-              portRange: CALLBACK_PORT_RANGE,
-              timeoutMs: CALLBACK_TIMEOUT_MS,
-            });
-          } catch (error) {
-            this.logger.debug(
-              () =>
-                `Local OAuth callback unavailable: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-            );
-          }
-        }
+        this.armPendingAuthDialog();
 
-        // Always build the device code URL for user-facing display
-        const deviceCodeUrl =
-          deviceCodeResponse.verification_uri_complete ||
-          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
-
-        // Build callback URL for browser if local callback is available
-        const callbackUrl = localCallback
-          ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
-          : null;
-
-        // Always display the device code URL to the user (never the callback URL)
-        const message = `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`;
-        const historyItem: HistoryItemOAuthURL = {
-          type: 'oauth_url',
-          text: message,
-          url: deviceCodeUrl,
-        };
-        // Try instance addItem first, fallback to global
-        const addItem = this.addItem || globalOAuthUI.getAddItem();
-        if (addItem) {
-          addItem(historyItem);
-        }
-
-        debugLogger.log('Visit the following URL to authorize:');
-        debugLogger.log(deviceCodeUrl);
-
-        // Copy device code URL to clipboard with error handling
-        try {
-          await ClipboardService.copyToClipboard(deviceCodeUrl);
-        } catch (error) {
-          // Clipboard copy is non-critical, continue without it
-          this.logger.debug(
-            () =>
-              `Failed to copy URL to clipboard: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-          );
-        }
-
-        if (interactive) {
-          debugLogger.log('Opening browser for authentication...');
-
-          // Open browser with callback URL if available, else device code URL
-          const browserUrl = callbackUrl || deviceCodeUrl;
-          try {
-            await openBrowserSecurely(browserUrl);
-          } catch (error) {
-            this.logger.debug(() => `Browser launch error: ${error}`);
-          }
-        }
-
-        // Set up the manual code entry dialog (paste box) for ALL modes
-        // In interactive mode, this races against the callback
-        (global as unknown as { __oauth_provider: string }).__oauth_provider =
-          'anthropic';
-
-        this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
-          this.authCodeResolver = resolve;
-          this.authCodeRejecter = reject;
-          setTimeout(
-            () => {
-              const timeoutError = OAuthErrorFactory.fromUnknown(
-                this.name,
-                new Error('OAuth authentication timed out after 5 minutes'),
-                'authentication timeout',
-              );
-              reject(timeoutError);
-            },
-            5 * 60 * 1000,
-          );
-        });
-
-        (
-          global as unknown as { __oauth_needs_code: boolean }
-        ).__oauth_needs_code = true;
-
-        // If we have a local callback server, race callback against manual code entry
         if (localCallback) {
-          const callbackPromise = localCallback
-            .waitForCallback()
-            .then(({ code, state }) => `${code}#${state}`);
-
-          try {
-            const authCode = await Promise.race([
-              callbackPromise,
-              this.pendingAuthPromise,
-            ]);
-
-            // Suppress unhandled rejection from the losing branch
-            this.pendingAuthPromise.catch(() => {});
-            callbackPromise.catch(() => {});
-
-            // Whichever succeeded, clean up the other
-            await localCallback.shutdown().catch(() => undefined);
-            (
-              global as unknown as { __oauth_needs_code: boolean }
-            ).__oauth_needs_code = false;
-            // Signal that browser auth completed successfully (Issue #1404)
-            (
-              global as unknown as { __oauth_browser_auth_complete: boolean }
-            ).__oauth_browser_auth_complete = true;
-
-            if (this.currentAuthAttemptId === attemptId) {
-              return await this.completeAuth(authCode);
-            }
-            throw new Error('Auth attempt cancelled');
-          } catch (error) {
-            // Suppress unhandled rejection from the losing branch
-            callbackPromise.catch(() => {});
-            this.pendingAuthPromise.catch(() => {});
-
-            // Both paths failed or callback failed - fall through to manual entry
-            await localCallback.shutdown().catch(() => undefined);
-            this.logger.debug(
-              () =>
-                `Local OAuth callback failed, falling back to manual entry: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-            );
-
-            // If the pending auth promise also rejected (timeout), re-throw
-            // Otherwise, the dialog is still open for manual entry
-            if (this.authCodeResolver) {
-              // Dialog is still open, wait for manual code entry
-              const authCode = await this.pendingAuthPromise;
-              if (this.currentAuthAttemptId === attemptId) {
-                return this.completeAuth(authCode);
-              }
-              throw new Error('Auth attempt cancelled');
-            }
-            throw error;
-          }
+          return this.raceCallbackVsManualEntry(attemptId, localCallback);
         }
 
-        // Non-interactive mode (no browser, no local callback)
-        // Wait for manual code entry via paste box
-        const authCode = await this.pendingAuthPromise;
-
+        // Non-interactive: wait for manual code entry via paste box
+        const authCode = await this.pendingAuthPromise!;
         if (this.currentAuthAttemptId === attemptId) {
           return this.completeAuth(authCode);
         }
@@ -376,6 +157,186 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       this.name,
       'initiateAuth',
     )();
+  }
+
+  /**
+   * Start the device flow, optionally start a local callback server,
+   * display the auth URL to the user, copy to clipboard, and open browser.
+   * Returns the URLs and callback handle needed by the calling flow.
+   */
+  private async setupDeviceFlowAndDisplay(): Promise<{
+    localCallback: LocalOAuthCallbackServer | null;
+  }> {
+    const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
+    let noBrowser = false;
+    try {
+      const { getEphemeralSetting } = await import(
+        '../runtime/runtimeSettings.js'
+      );
+      noBrowser = (getEphemeralSetting('auth.noBrowser') as boolean) ?? false;
+    } catch {
+      // Runtime not initialized (e.g., tests) — use default
+    }
+    const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
+    let localCallback: LocalOAuthCallbackServer | null = null;
+
+    if (interactive) {
+      try {
+        const state = this.deviceFlow.getState();
+        localCallback = await startLocalOAuthCallback({
+          state,
+          portRange: CALLBACK_PORT_RANGE,
+          timeoutMs: CALLBACK_TIMEOUT_MS,
+        });
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Local OAuth callback unavailable: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      }
+    }
+
+    const deviceCodeUrl =
+      deviceCodeResponse.verification_uri_complete ||
+      `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
+    const callbackUrl = localCallback
+      ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
+      : null;
+
+    const historyItem: HistoryItemOAuthURL = {
+      type: 'oauth_url',
+      text: `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`,
+      url: deviceCodeUrl,
+    };
+    if (this.addItem) {
+      this.addItem(historyItem);
+    } else {
+      globalOAuthUI.callAddItem(historyItem);
+    }
+    debugLogger.log('Visit the following URL to authorize:');
+    debugLogger.log(deviceCodeUrl);
+
+    try {
+      await ClipboardService.copyToClipboard(deviceCodeUrl);
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Failed to copy URL to clipboard: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+
+    if (interactive) {
+      debugLogger.log('Opening browser for authentication...');
+      const browserUrl = callbackUrl || deviceCodeUrl;
+      try {
+        await openBrowserSecurely(browserUrl);
+      } catch (error) {
+        this.logger.debug(() => `Browser launch error: ${error}`);
+      }
+    }
+
+    return { localCallback };
+  }
+
+  /**
+   * Set up the manual code entry dialog with a 5-minute timeout.
+   * Assigns this.pendingAuthPromise and this.dialog, and marks global auth state.
+   */
+  private armPendingAuthDialog(): void {
+    (global as unknown as { __oauth_provider: string }).__oauth_provider =
+      'anthropic';
+
+    this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
+      const innerDialog = new AuthCodeDialog();
+      const innerPromise = innerDialog.waitForAuthCode();
+      this.dialog = innerDialog;
+
+      const timeout = setTimeout(
+        () => {
+          const timeoutError = OAuthErrorFactory.fromUnknown(
+            this.name,
+            new Error('OAuth authentication timed out after 5 minutes'),
+            'authentication timeout',
+          );
+          innerDialog.rejectWithError(timeoutError);
+        },
+        5 * 60 * 1000,
+      );
+
+      innerPromise.then(
+        (code) => {
+          clearTimeout(timeout);
+          resolve(code);
+        },
+        (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      );
+    });
+
+    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
+      true;
+  }
+
+  /**
+   * Race the local OAuth callback against manual code entry via the dialog.
+   * Whichever succeeds first wins; the loser is suppressed.
+   */
+  private async raceCallbackVsManualEntry(
+    attemptId: string,
+    localCallback: LocalOAuthCallbackServer,
+  ): Promise<OAuthToken> {
+    const callbackPromise = localCallback
+      .waitForCallback()
+      .then(({ code, state }) => `${code}#${state}`);
+
+    try {
+      const authCode = await Promise.race([
+        callbackPromise,
+        this.pendingAuthPromise!,
+      ]);
+
+      this.pendingAuthPromise!.catch(() => {});
+      callbackPromise.catch(() => {});
+
+      await localCallback.shutdown().catch(() => undefined);
+      (
+        global as unknown as { __oauth_needs_code: boolean }
+      ).__oauth_needs_code = false;
+      (
+        global as unknown as { __oauth_browser_auth_complete: boolean }
+      ).__oauth_browser_auth_complete = true;
+
+      if (this.currentAuthAttemptId === attemptId) {
+        return await this.completeAuth(authCode);
+      }
+      throw new Error('Auth attempt cancelled');
+    } catch (error) {
+      callbackPromise.catch(() => {});
+      this.pendingAuthPromise!.catch(() => {});
+
+      await localCallback.shutdown().catch(() => undefined);
+      this.logger.debug(
+        () =>
+          `Local OAuth callback failed, falling back to manual entry: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+
+      if (this.dialog.hasPendingPromise()) {
+        const authCode = await this.pendingAuthPromise!;
+        if (this.currentAuthAttemptId === attemptId) {
+          return this.completeAuth(authCode);
+        }
+        throw new Error('Auth attempt cancelled');
+      }
+      throw error;
+    }
   }
 
   /**
@@ -426,7 +387,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         // @pseudocode line 19: Load saved token from store
         const savedToken = await this._tokenStore!.getToken('anthropic');
         // @pseudocode lines 20-22: Check if token exists and not expired
-        if (savedToken && !this.isTokenExpired(savedToken)) {
+        if (savedToken && !isTokenExpired(savedToken)) {
           return; // Token is valid, ready to use
         }
       },
@@ -456,30 +417,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     );
   }
 
-  /**
-   * @plan PLAN-20250823-AUTHFIXES.P08
-   * @requirement REQ-001.1
-   * @pseudocode lines 74-98
-   *
-   * Issue #1159: Prevents race conditions when multiple clients refresh the same token
-   * Flow:
-   * 1. Check disk for updated token (another client may have already refreshed)
-   * 2. Try to acquire refresh lock
-   * 3. If lock acquired, re-check disk and refresh if still needed
-   * 4. If lock not acquired, wait and re-check disk
-   */
-  async refreshIfNeeded(): Promise<OAuthToken | null> {
-    this.logger.debug(
-      () =>
-        'refreshIfNeeded() is deprecated — refresh is handled by OAuthManager',
-    );
-    return null;
-  }
-
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
     await this.ensureInitialized();
 
-    if (this.hasValidRefreshToken(currentToken)) {
+    if (hasValidRefreshToken(currentToken)) {
       try {
         const refreshedToken = await this.deviceFlow.refreshToken(
           currentToken.refresh_token,
@@ -542,63 +483,5 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     // @pseudocode line 112: Log successful logout
     this.logger.debug(() => 'Logged out of Anthropic Claude');
-  }
-
-  private hasValidRefreshToken(
-    token: OAuthToken,
-  ): token is OAuthToken & { refresh_token: string } {
-    return (
-      typeof token.refresh_token === 'string' &&
-      token.refresh_token.trim().length > 0 &&
-      token.refresh_token.length < 1000
-    );
-  }
-
-  /**
-   * @plan PLAN-20250823-AUTHFIXES.P08
-   * @requirement REQ-003.1
-   * @pseudocode lines 27-30
-   */
-  private isTokenExpired(token: OAuthToken): boolean {
-    // @pseudocode line 28: Get current time
-    const now = Date.now() / 1000;
-    // @pseudocode line 29: 30-second buffer
-    const buffer = 30;
-    // @pseudocode line 30: Check expiry with buffer
-    return token.expiry <= now + buffer;
-  }
-
-  /**
-   * Get usage information from Anthropic OAuth endpoint
-   * Returns full usage data for Claude Code/Max plans
-   * Only works with OAuth tokens (sk-ant-oat01-...), not API keys
-   */
-  async getUsageInfo(): Promise<Record<string, unknown> | null> {
-    await this.ensureInitialized();
-    if (!this._tokenStore) {
-      return null;
-    }
-
-    const token = await this._tokenStore.getToken('anthropic');
-    if (!token) {
-      return null;
-    }
-
-    try {
-      const { fetchAnthropicUsage } = await import(
-        '@vybestack/llxprt-code-core'
-      );
-      const usageInfo = await fetchAnthropicUsage(token.access_token);
-
-      return usageInfo;
-    } catch (error) {
-      this.logger.debug(
-        () =>
-          `Error fetching usage info: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-      return null;
-    }
   }
 }

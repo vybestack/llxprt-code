@@ -6,7 +6,11 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OAuthBucketManager } from '../OAuthBucketManager.js';
-import type { TokenStore, OAuthToken } from '../types.js';
+import type {
+  TokenStore,
+  OAuthToken,
+  OAuthTokenRequestMetadata,
+} from '../types.js';
 
 /**
  * Mock TokenStore for testing bucket manager
@@ -234,85 +238,97 @@ describe('OAuthBucketManager', () => {
     });
   });
 
-  describe('Bucket Resolution', () => {
-    /**
-     * @requirement Phase 3 - Bucket resolution
-     * @scenario Resolve bucket with session override
-     * @given Session bucket set to 'work@company.com'
-     * @when resolveBucket('anthropic', ['bucket1', 'bucket2']) called
-     * @then Returns session override 'work@company.com'
-     * @and Ignores profile buckets
-     */
-    it('should prioritize session override over profile buckets', () => {
-      bucketManager.setSessionBucket('anthropic', 'work@company.com');
-      const result = bucketManager.resolveBucket('anthropic', [
-        'bucket1',
-        'bucket2',
-      ]);
+  describe('Session Bucket Scoping', () => {
+    const metadataProd = {
+      profileId: 'prod',
+      providerId: 'anthropic',
+    } satisfies OAuthTokenRequestMetadata;
+
+    const metadataDev = {
+      profileId: 'dev',
+      providerId: 'anthropic',
+    } satisfies OAuthTokenRequestMetadata;
+
+    it('stores scoped key when metadata is provided', () => {
+      bucketManager.setSessionBucket(
+        'anthropic',
+        'work@company.com',
+        metadataProd,
+      );
+
+      const result = bucketManager.getSessionBucket('anthropic', metadataProd);
       expect(result).toBe('work@company.com');
     });
 
-    /**
-     * @requirement Phase 3 - Bucket resolution
-     * @scenario Resolve bucket with profile buckets
-     * @given No session override
-     * @when resolveBucket('anthropic', ['bucket1', 'bucket2']) called
-     * @then Returns first profile bucket 'bucket1'
-     */
-    it('should use first profile bucket when no session override', () => {
-      const result = bucketManager.resolveBucket('anthropic', [
-        'bucket1',
-        'bucket2',
-      ]);
-      expect(result).toBe('bucket1');
+    it('stores unscoped key when metadata is omitted', () => {
+      bucketManager.setSessionBucket('anthropic', 'default-bucket');
+
+      const result = bucketManager.getSessionBucket('anthropic');
+      expect(result).toBe('default-bucket');
     });
 
-    /**
-     * @requirement Phase 3 - Bucket resolution
-     * @scenario Resolve bucket with no session or profile buckets
-     * @given No session override and no profile buckets
-     * @when resolveBucket('anthropic') called
-     * @then Returns 'default'
-     */
-    it('should default to "default" bucket when no session or profile buckets', () => {
-      const result = bucketManager.resolveBucket('anthropic');
-      expect(result).toBe('default');
+    it('does not return scoped value for unscoped lookup', () => {
+      bucketManager.setSessionBucket(
+        'anthropic',
+        'scoped-bucket',
+        metadataProd,
+      );
+
+      const result = bucketManager.getSessionBucket('anthropic');
+      expect(result).toBeUndefined();
     });
 
-    /**
-     * @requirement Phase 3 - Bucket resolution
-     * @scenario Resolve bucket with empty profile buckets array
-     * @given No session override and empty profile buckets
-     * @when resolveBucket('anthropic', []) called
-     * @then Returns 'default'
-     */
-    it('should default to "default" bucket when profile buckets empty', () => {
-      const result = bucketManager.resolveBucket('anthropic', []);
-      expect(result).toBe('default');
+    it('clears only the scoped entry for matching metadata', () => {
+      bucketManager.setSessionBucket('anthropic', 'prod-bucket', metadataProd);
+      bucketManager.setSessionBucket('anthropic', 'dev-bucket', metadataDev);
+
+      bucketManager.clearSessionBucket('anthropic', metadataProd);
+
+      expect(
+        bucketManager.getSessionBucket('anthropic', metadataProd),
+      ).toBeUndefined();
+      expect(bucketManager.getSessionBucket('anthropic', metadataDev)).toBe(
+        'dev-bucket',
+      );
     });
 
-    /**
-     * @requirement Phase 3 - Bucket resolution
-     * @scenario Resolution priority order
-     * @given Session override, profile buckets, and default all available
-     * @when resolveBucket called
-     * @then Priority: session > profile > default
-     */
-    it('should follow resolution priority: session > profile > default', () => {
-      bucketManager.setSessionBucket('anthropic', 'session-bucket');
-      const result = bucketManager.resolveBucket('anthropic', [
-        'profile-bucket',
-      ]);
-      expect(result).toBe('session-bucket');
+    it('clears all scoped and unscoped entries for provider', () => {
+      bucketManager.setSessionBucket('anthropic', 'unscoped-bucket');
+      bucketManager.setSessionBucket('anthropic', 'prod-bucket', metadataProd);
+      bucketManager.setSessionBucket('anthropic', 'dev-bucket', metadataDev);
+      bucketManager.setSessionBucket('gemini', 'other-provider-bucket');
 
-      bucketManager.clearSessionBucket('anthropic');
-      const result2 = bucketManager.resolveBucket('anthropic', [
-        'profile-bucket',
-      ]);
-      expect(result2).toBe('profile-bucket');
+      bucketManager.clearAllSessionBuckets('anthropic');
 
-      const result3 = bucketManager.resolveBucket('anthropic');
-      expect(result3).toBe('default');
+      expect(bucketManager.getSessionBucket('anthropic')).toBeUndefined();
+      expect(
+        bucketManager.getSessionBucket('anthropic', metadataProd),
+      ).toBeUndefined();
+      expect(
+        bucketManager.getSessionBucket('anthropic', metadataDev),
+      ).toBeUndefined();
+      expect(bucketManager.getSessionBucket('gemini')).toBe(
+        'other-provider-bucket',
+      );
+    });
+
+    it('getSessionBucketScopeKey uses provider for undefined metadata', () => {
+      const result = bucketManager.getSessionBucketScopeKey('anthropic');
+      expect(result).toBe('anthropic');
+    });
+
+    it('getSessionBucketScopeKey appends trimmed profileId when provided', () => {
+      const result = bucketManager.getSessionBucketScopeKey('anthropic', {
+        profileId: '  prod  ',
+      });
+      expect(result).toBe('anthropic::prod');
+    });
+
+    it('getSessionBucketScopeKey ignores empty profileId', () => {
+      const result = bucketManager.getSessionBucketScopeKey('anthropic', {
+        profileId: '   ',
+      });
+      expect(result).toBe('anthropic');
     });
   });
 
@@ -668,9 +684,7 @@ describe('OAuthBucketManager', () => {
 
       bucketManager.setSessionBucket('anthropic', 'work@company.com');
 
-      const resolved = bucketManager.resolveBucket('anthropic', [
-        'personal@gmail.com',
-      ]);
+      const resolved = bucketManager.getSessionBucket('anthropic');
       expect(resolved).toBe('work@company.com');
 
       const status = await bucketManager.getBucketStatus(

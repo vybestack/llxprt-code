@@ -6,7 +6,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageBus, PolicyEngine } from '@vybestack/llxprt-code-core';
-import { OAuthManager, type OAuthProvider } from './oauth-manager.js';
+import { OAuthManager } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import type { OAuthToken, TokenStore } from './types.js';
 
 const mockEphemeralSettings = new Map<string, unknown>();

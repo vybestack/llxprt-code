@@ -94,7 +94,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
         task.status === 'running'
           ? ''
           : task.status === 'completed'
-            ? '[OK]'
+            ? '✓'
             : task.status === 'failed'
               ? '[FAILED]'
               : '';
@@ -111,7 +111,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
         t.status === 'running'
           ? ''
           : t.status === 'completed'
-            ? '[OK]'
+            ? '✓'
             : t.status === 'failed'
               ? '[FAILED]'
               : '';
@@ -231,7 +231,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
       task.status === 'running'
         ? ''
         : task.status === 'completed'
-          ? '[OK]'
+          ? '✓'
           : task.status === 'failed'
             ? '[FAILED]'
             : '';

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import '../../../test-utils/customMatchers.js';
 import { handleVimAction } from './vim-buffer-actions.js';
-import type { TextBufferState } from './text-buffer.js';
+import type { TextBufferState } from './buffer-types.js';
 
 // Helper to create test state
 const createTestState = (

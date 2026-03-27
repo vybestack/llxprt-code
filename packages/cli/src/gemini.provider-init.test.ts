@@ -7,7 +7,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as gemini from './gemini.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
-import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  IContent,
+  SessionRecordingService,
+  LockHandle,
+} from '@vybestack/llxprt-code-core';
 import { OutputFormat, ExitCodes } from '@vybestack/llxprt-code-core';
 
 vi.mock('./config/settings.js', async (importOriginal) => {
@@ -121,40 +126,47 @@ vi.mock('./utils/sessionCleanup.js', () => ({
   cleanupExpiredSessions: vi.fn(() => Promise.resolve()),
 }));
 
-function makeResumeResult(historyText = 'resumed'): ResumeResult {
+vi.mock('ink', () => ({
+  render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
+}));
+
+function makeResumeResult(content: string) {
+  const history: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: content }],
+    },
+  ];
+
   return {
-    ok: true,
-    history: [
-      { speaker: 'human', blocks: [{ type: 'text', text: historyText }] },
-    ],
+    ok: true as const,
+    history,
     metadata: {
-      sessionId: 'resumed-session',
-      projectHash: 'project-hash',
+      sessionId: 'test-session-id',
+      projectHash: 'hash',
       provider: 'gemini',
       model: 'gemini-2.5-pro',
       workspaceDirs: ['/tmp/project'],
       startTime: new Date().toISOString(),
     },
     recording: {
-      dispose: vi.fn().mockResolvedValue(undefined),
-      flush: vi.fn().mockResolvedValue(undefined),
-      isActive: vi.fn().mockReturnValue(true),
-      getFilePath: vi.fn().mockReturnValue('/tmp/session.jsonl'),
-      getSessionId: vi.fn().mockReturnValue('resumed-session'),
-      recordContent: vi.fn(),
-      recordCompressed: vi.fn(),
-      recordRewind: vi.fn(),
-      recordProviderSwitch: vi.fn(),
-      recordSessionEvent: vi.fn(),
-      recordDirectoriesChanged: vi.fn(),
-      initializeForResume: vi.fn(),
-      enqueue: vi.fn(),
-    } as unknown as ResumeResult['recording'],
+      appendEvent: vi.fn(),
+      updateProvider: vi.fn(),
+      updateModel: vi.fn(),
+      updateDirectories: vi.fn(),
+      flush: vi.fn(() => Promise.resolve()),
+      dispose: vi.fn(() => Promise.resolve()),
+      getSessionId: vi.fn(() => 'test-session-id'),
+      getFilePath: vi.fn(() => '/tmp/session-test-session-id.jsonl'),
+      getIsMaterialized: vi.fn(() => true),
+      getEnospcError: vi.fn(() => null),
+      hasPendingEvents: vi.fn(() => false),
+    } as unknown as SessionRecordingService,
     lockHandle: {
-      lockPath: '/tmp/resumed-session.lock',
-      release: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ResumeResult['lockHandle'],
-    warnings: [],
+      lockPath: '/tmp/test-session-id.lock',
+      release: vi.fn(() => Promise.resolve()),
+    } as unknown as LockHandle,
+    warnings: [] as string[],
   };
 }
 
@@ -211,6 +223,8 @@ describe('gemini main provider initialization', () => {
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: () => ['/tmp/project'],
       })),
+      getScreenReader: vi.fn(() => false),
+      getTerminalBackground: vi.fn(() => undefined),
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
@@ -224,19 +238,12 @@ describe('gemini main provider initialization', () => {
       prompt: undefined,
       promptWords: [],
       experimentalAcp: false,
-      experimentalUi: true,
       provider: 'gemini',
       profileLoad: undefined,
       outputFormat: OutputFormat.TEXT,
       extensions: [],
       sessionSummary: undefined,
     } as unknown as import('./config/config.js').CliArgs);
-
-    const startInteractiveSpy = vi
-      .spyOn(gemini, 'startInteractiveUI')
-      .mockImplementation(async () => {
-        throw new Error('STOP_INTERACTIVE');
-      });
 
     const exitSpy = vi
       .spyOn(process, 'exit')
@@ -247,10 +254,15 @@ describe('gemini main provider initialization', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    await expect(gemini.main()).rejects.toThrow(/STOP_INTERACTIVE|EXIT_1/);
+    // main() should complete (or throw on process.exit) — either way,
+    // refreshAuth must have been called as part of provider initialization.
+    try {
+      await gemini.main();
+    } catch {
+      // Ignore exits or other throws; we only care about refreshAuth
+    }
 
     expect(mockConfig.refreshAuth).toHaveBeenCalledTimes(1);
-    startInteractiveSpy.mockRestore();
     exitSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
@@ -301,6 +313,7 @@ describe('gemini main provider initialization', () => {
         getDirectories: () => ['/tmp/project'],
       })),
       getScreenReader: vi.fn(() => false),
+      getTerminalBackground: vi.fn(() => undefined),
       getGeminiClient,
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
@@ -321,7 +334,6 @@ describe('gemini main provider initialization', () => {
       prompt: undefined,
       promptWords: [],
       experimentalAcp: false,
-      experimentalUi: true,
       provider: 'gemini',
       profileLoad: undefined,
       outputFormat: OutputFormat.TEXT,
@@ -341,20 +353,17 @@ describe('gemini main provider initialization', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    // main() flow: resume → restoreHistory throws → catch swallows error →
-    // continues to experimentalUi bun check → process.exit(1) → EXIT_1.
-    // If the try/catch didn't swallow the restore error, main() would
-    // throw 'restore failed on purpose' instead of reaching EXIT_1.
-    await expect(gemini.main()).rejects.toThrow(/EXIT_1/);
+    // main() flow: resume → restoreHistory throws → catch logs warning and
+    // continues. main() resolves without throwing because the restoreHistory
+    // error is swallowed.
+    await gemini.main();
 
     // resumeSession was called to load the session
     expect(resumeSessionMock).toHaveBeenCalledTimes(1);
     // restoreHistory was called with the resumed content
     expect(restoreHistory).toHaveBeenCalledTimes(1);
     // The rejection from restoreHistory did NOT propagate — flow continued
-    // past the try/catch to the experimentalUi bun check (EXIT_1 proves
-    // this; the restore error message 'restore failed on purpose' never
-    // escaped main()).
+    // past the try/catch and main() resolved successfully.
 
     resumeSessionMock.mockReset();
     exitSpy.mockRestore();

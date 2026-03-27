@@ -55,7 +55,7 @@ describe('useAtCompletion', () => {
         respectGeminiIgnore: true,
       })),
       getEnableRecursiveFileSearch: () => true,
-      getFileFilteringEnableFuzzySearch: () => true,
+      getFileFilteringDisableFuzzySearch: () => false,
     } as unknown as Config;
     vi.clearAllMocks();
   });
@@ -518,7 +518,7 @@ describe('useAtCompletion', () => {
           respectGitIgnore: true,
           respectGeminiIgnore: true,
         })),
-        getFileFilteringEnableFuzzySearch: () => true,
+        getFileFilteringDisableFuzzySearch: () => false,
       } as unknown as Config;
 
       const { result } = renderHook(() =>

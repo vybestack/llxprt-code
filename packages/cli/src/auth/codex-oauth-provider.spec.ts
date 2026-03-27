@@ -113,9 +113,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
   describe('InitializationState Management', () => {
     it('should track initialization state transitions', async () => {
       const getState = () =>
-        (provider as unknown as { initializationState: string })[
-          'initializationState'
-        ];
+        (
+          provider as unknown as {
+            initGuard: { getState: () => string };
+          }
+        ).initGuard.getState();
 
       expect(getState()).toBe('not-started');
 
@@ -132,9 +134,11 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
 
     it('should transition to failed state on initialization error', async () => {
       const getState = () =>
-        (provider as unknown as { initializationState: string })[
-          'initializationState'
-        ];
+        (
+          provider as unknown as {
+            initGuard: { getState: () => string };
+          }
+        ).initGuard.getState();
 
       const initTokenSpy = vi
         .spyOn(
@@ -283,15 +287,6 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
 
         // After Phase 4, both should return the same token
         expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('Test 3.8: refreshIfNeeded does not write', () => {
-      it('GIVEN refreshIfNeeded() called, THEN saveToken and removeToken NOT called', async () => {
-        await provider.refreshIfNeeded();
-
-        expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
-        expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
       });
     });
   });

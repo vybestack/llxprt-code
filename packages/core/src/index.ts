@@ -61,7 +61,7 @@ export {
 export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js';
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
 // Export SubagentTerminateMode for OutputObject types
-export { SubagentTerminateMode } from './core/subagent.js';
+export { SubagentTerminateMode } from './core/subagentTypes.js';
 
 // Export types
 export * from './types/modelParams.js';

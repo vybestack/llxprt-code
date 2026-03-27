@@ -24,6 +24,7 @@ import { createOrchestrator } from './service/orchestrator.js';
 import {
   getBuiltinServers,
   mergeUserConfig,
+  type ServerRegistryEntry,
 } from './service/server-registry.js';
 
 type LspServerConfig = {
@@ -218,7 +219,7 @@ export async function main(): Promise<void> {
   const bootstrap = parseBootstrapFromEnv();
   const mergedServers = mergeUserConfig(
     getBuiltinServers(),
-    bootstrap.config.servers as any,
+    bootstrap.config.servers as unknown as ServerRegistryEntry[],
   ).map((s) => ({
     id: s.id,
     command: s.command,

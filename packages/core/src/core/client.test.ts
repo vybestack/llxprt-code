@@ -15,12 +15,27 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock prompts module before imports
 vi.mock('./prompts.js', () => ({
-  getCoreSystemPromptAsync: vi
-    .fn()
-    .mockResolvedValue('Test system instruction'),
-  getCoreSystemPrompt: vi.fn().mockReturnValue('Test system instruction'),
-  getCompressionPrompt: vi.fn().mockReturnValue('Test compression prompt'),
-  initializePromptSystem: vi.fn().mockResolvedValue(undefined),
+  getCoreSystemPromptAsync: vi.fn(() =>
+    Promise.resolve('Test system instruction'),
+  ),
+  getCoreSystemPrompt: vi.fn(() => 'Test system instruction'),
+  getCompressionPrompt: vi.fn(() => 'Test compression prompt'),
+  initializePromptSystem: vi.fn(() => Promise.resolve(undefined)),
+}));
+
+// Mock clientToolGovernance module so tests can control tool name/governance returns
+vi.mock('./clientToolGovernance.js', () => ({
+  getToolGovernanceEphemerals: vi.fn(() => undefined),
+  readToolList: vi.fn((v: unknown) =>
+    Array.isArray(v)
+      ? (v as unknown[]).filter(
+          (e): e is string => typeof e === 'string' && e.trim().length > 0,
+        )
+      : [],
+  ),
+  buildToolDeclarationsFromView: vi.fn(() => []),
+  getEnabledToolNamesForPrompt: vi.fn(() => []),
+  shouldIncludeSubagentDelegationForConfig: vi.fn(() => Promise.resolve(false)),
 }));
 
 import {
@@ -54,6 +69,10 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { ideContext } from '../ide/ideContext.js';
+import {
+  getEnabledToolNamesForPrompt,
+  shouldIncludeSubagentDelegationForConfig,
+} from './clientToolGovernance.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
@@ -597,25 +616,10 @@ describe('Gemini Client (client.ts)', () => {
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
 
-      const toolNamesSpy = vi
-        .spyOn(
-          client as unknown as {
-            getEnabledToolNamesForPrompt: () => string[];
-          },
-          'getEnabledToolNamesForPrompt',
-        )
-        .mockReturnValue(['tool_a']);
-
-      const subagentSpy = vi
-        .spyOn(
-          client as unknown as {
-            shouldIncludeSubagentDelegation: (
-              tools: string[],
-            ) => Promise<boolean>;
-          },
-          'shouldIncludeSubagentDelegation',
-        )
-        .mockResolvedValue(true);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue(['tool_a']);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        true,
+      );
 
       vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
         'prompt body with new memory',
@@ -623,8 +627,11 @@ describe('Gemini Client (client.ts)', () => {
 
       await client.updateSystemInstruction();
 
-      expect(toolNamesSpy).toHaveBeenCalled();
-      expect(subagentSpy).toHaveBeenCalledWith(['tool_a']);
+      expect(getEnabledToolNamesForPrompt).toHaveBeenCalled();
+      expect(shouldIncludeSubagentDelegationForConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        ['tool_a'],
+      );
       expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           userMemory: 'new memory',
@@ -671,21 +678,10 @@ describe('Gemini Client (client.ts)', () => {
         'Always respond in JSON',
       );
 
-      vi.spyOn(
-        client as unknown as {
-          getEnabledToolNamesForPrompt: () => string[];
-        },
-        'getEnabledToolNamesForPrompt',
-      ).mockReturnValue([]);
-
-      vi.spyOn(
-        client as unknown as {
-          shouldIncludeSubagentDelegation: (
-            tools: string[],
-          ) => Promise<boolean>;
-        },
-        'shouldIncludeSubagentDelegation',
-      ).mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
       vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
         'prompt with core directives',
@@ -734,21 +730,10 @@ sub memory
       );
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
-      vi.spyOn(
-        client as unknown as {
-          getEnabledToolNamesForPrompt: () => string[];
-        },
-        'getEnabledToolNamesForPrompt',
-      ).mockReturnValue([]);
-
-      vi.spyOn(
-        client as unknown as {
-          shouldIncludeSubagentDelegation: (
-            tools: string[],
-          ) => Promise<boolean>;
-        },
-        'shouldIncludeSubagentDelegation',
-      ).mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
       vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt with jit');
 
@@ -797,21 +782,10 @@ sub memory
       vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue('');
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
-      vi.spyOn(
-        client as unknown as {
-          getEnabledToolNamesForPrompt: () => string[];
-        },
-        'getEnabledToolNamesForPrompt',
-      ).mockReturnValue([]);
-
-      vi.spyOn(
-        client as unknown as {
-          shouldIncludeSubagentDelegation: (
-            tools: string[],
-          ) => Promise<boolean>;
-        },
-        'shouldIncludeSubagentDelegation',
-      ).mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
       vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt no jit');
 
@@ -1046,29 +1020,31 @@ sub memory
 
   describe('recordModelActivity', () => {
     it('only counts completed tool call responses toward reminders', () => {
-      (
-        client as unknown as { todoToolsAvailable: boolean }
-      ).todoToolsAvailable = true;
+      const svc = (
+        client as unknown as {
+          todoContinuationService: {
+            todoToolsAvailable: boolean;
+            toolActivityCount: number;
+            toolCallReminderLevel: string;
+            recordModelActivity: (event: unknown) => void;
+          };
+        }
+      ).todoContinuationService;
 
-      const recordActivity = client['recordModelActivity'].bind(client);
+      svc.todoToolsAvailable = true;
 
       for (let i = 0; i < 5; i++) {
-        recordActivity({
+        svc.recordModelActivity({
           type: GeminiEventType.Content,
           value: 'intermediate',
-        } as unknown as Parameters<typeof recordActivity>[0]);
+        });
       }
 
-      expect(
-        (client as unknown as { toolActivityCount: number }).toolActivityCount,
-      ).toBe(0);
-      expect(
-        (client as unknown as { toolCallReminderLevel: string })
-          .toolCallReminderLevel,
-      ).toBe('none');
+      expect(svc.toolActivityCount).toBe(0);
+      expect(svc.toolCallReminderLevel).toBe('none');
 
       for (let i = 0; i < 4; i++) {
-        recordActivity({
+        svc.recordModelActivity({
           type: GeminiEventType.ToolCallResponse,
           value: {
             callId: `call-${i}`,
@@ -1077,21 +1053,20 @@ sub memory
             error: undefined,
             errorType: undefined,
           },
-        } as unknown as Parameters<typeof recordActivity>[0]);
+        });
       }
 
-      expect(
-        (client as unknown as { toolCallReminderLevel: string })
-          .toolCallReminderLevel,
-      ).toBe('base');
+      expect(svc.toolCallReminderLevel).toBe('base');
     });
   });
 
   describe('sendMessageStream', () => {
     beforeEach(() => {
       (
-        client as unknown as { todoToolsAvailable: boolean }
-      ).todoToolsAvailable = true;
+        client as unknown as {
+          todoContinuationService: { todoToolsAvailable: boolean };
+        }
+      ).todoContinuationService.todoToolsAvailable = true;
     });
 
     it('retries once when no tool work and todos unchanged', async () => {
@@ -1104,12 +1079,17 @@ sub memory
       vi.mocked(reminderService.getEscalatedActiveTodoReminder).mockReturnValue(
         followUpReminderText,
       );
-      (
-        client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = reminderService as unknown as TodoReminderService;
-      (
-        client as unknown as { todoToolsAvailable: boolean }
-      ).todoToolsAvailable = true;
+      const svcForRetry = (
+        client as unknown as {
+          todoContinuationService: {
+            todoReminderService: TodoReminderService;
+            todoToolsAvailable: boolean;
+          };
+        }
+      ).todoContinuationService;
+      svcForRetry.todoReminderService =
+        reminderService as unknown as TodoReminderService;
+      svcForRetry.todoToolsAvailable = true;
 
       todoStoreReadMock.mockResolvedValue([
         {
@@ -1176,12 +1156,17 @@ sub memory
       vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
         '---\nSystem Note: Update the active todo before replying.\n---',
       );
-      (
-        client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = reminderService as unknown as TodoReminderService;
-      (
-        client as unknown as { todoToolsAvailable: boolean }
-      ).todoToolsAvailable = true;
+      const svcForPause = (
+        client as unknown as {
+          todoContinuationService: {
+            todoReminderService: TodoReminderService;
+            todoToolsAvailable: boolean;
+          };
+        }
+      ).todoContinuationService;
+      svcForPause.todoReminderService =
+        reminderService as unknown as TodoReminderService;
+      svcForPause.todoToolsAvailable = true;
 
       todoStoreReadMock.mockResolvedValue([
         {
@@ -2325,7 +2310,9 @@ sub memory
       })();
 
       beforeEach(() => {
-        client['forceFullIdeContext'] = false; // Reset before each delta test
+        // Reset the ideContextTracker so it is in "delta mode" (not forced full)
+        // by calling recordSentContext with a dummy context
+        client['ideContextTracker']['forceFullIdeContext'] = false;
         vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
         mockTurnRunFn.mockReturnValue(mockStream);
 
@@ -2461,8 +2448,8 @@ sub memory
           currentActiveFile,
           shouldSendContext,
         }) => {
-          // Setup previous context
-          client['lastSentIdeContext'] = {
+          // Setup previous context (via ideContextTracker internal state)
+          client['ideContextTracker']['lastSentIdeContext'] = {
             workspaceState: {
               openFiles: [
                 {
@@ -2522,8 +2509,8 @@ sub memory
           selectedText: 'hello',
         };
 
-        // Setup previous context
-        client['lastSentIdeContext'] = {
+        // Setup previous context (via ideContextTracker internal state)
+        client['ideContextTracker']['lastSentIdeContext'] = {
           workspaceState: {
             openFiles: [
               {
@@ -3184,7 +3171,7 @@ sub memory
 
       // Assert
       expect(client['_previousHistory']).toEqual(history);
-      expect(client['forceFullIdeContext']).toBe(true);
+      expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
 
     it('should update chat immediately when chat is initialized', async () => {
@@ -3208,7 +3195,7 @@ sub memory
       // Assert
       expect(mockChat.setHistory).toHaveBeenCalledWith(history);
       expect(client['_previousHistory']).toEqual(history);
-      expect(client['forceFullIdeContext']).toBe(true);
+      expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
 
     it('should reset IDE context tracking when history changes', async () => {
@@ -3227,13 +3214,13 @@ sub memory
       ];
 
       // Initialize forceFullIdeContext to false to test that it gets reset to true
-      client['forceFullIdeContext'] = false;
+      client['ideContextTracker']['forceFullIdeContext'] = false;
 
       // Act
       await client.setHistory(history);
 
       // Assert
-      expect(client['forceFullIdeContext']).toBe(true);
+      expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
   });
 
@@ -3268,21 +3255,10 @@ sub memory
       vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
 
-      vi.spyOn(
-        client as unknown as {
-          getEnabledToolNamesForPrompt: () => string[];
-        },
-        'getEnabledToolNamesForPrompt',
-      ).mockReturnValue([]);
-
-      vi.spyOn(
-        client as unknown as {
-          shouldIncludeSubagentDelegation: (
-            tools: string[],
-          ) => Promise<boolean>;
-        },
-        'shouldIncludeSubagentDelegation',
-      ).mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
       vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
 
@@ -3325,21 +3301,10 @@ sub memory
       vi.spyOn(config, 'getMcpClientManager').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(false);
 
-      vi.spyOn(
-        client as unknown as {
-          getEnabledToolNamesForPrompt: () => string[];
-        },
-        'getEnabledToolNamesForPrompt',
-      ).mockReturnValue([]);
-
-      vi.spyOn(
-        client as unknown as {
-          shouldIncludeSubagentDelegation: (
-            tools: string[],
-          ) => Promise<boolean>;
-        },
-        'shouldIncludeSubagentDelegation',
-      ).mockResolvedValue(false);
+      vi.mocked(getEnabledToolNamesForPrompt).mockReturnValue([]);
+      vi.mocked(shouldIncludeSubagentDelegationForConfig).mockResolvedValue(
+        false,
+      );
 
       vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('prompt');
 

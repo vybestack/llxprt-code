@@ -217,7 +217,7 @@ export const todoCommand: SlashCommand = {
           const pos = idx + 1;
           const statusIcon =
             todo.status === 'completed'
-              ? '[OK]'
+              ? '✓'
               : todo.status === 'in_progress'
                 ? '▸'
                 : '○';

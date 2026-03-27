@@ -10,7 +10,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OAuthManager, type OAuthProvider } from './oauth-manager.js';
+import { OAuthManager } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import type { OAuthToken, TokenStore } from './types.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';

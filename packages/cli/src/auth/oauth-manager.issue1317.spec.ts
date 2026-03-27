@@ -16,7 +16,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OAuthManager, OAuthProvider } from './oauth-manager.js';
+import { OAuthManager } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import { OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';

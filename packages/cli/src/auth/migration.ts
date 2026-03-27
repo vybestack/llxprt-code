@@ -13,7 +13,7 @@
  * to the new standardized TokenStore persistence system.
  */
 
-import { OAuthProvider } from './oauth-manager.js';
+import type { OAuthProvider } from './types.js';
 import { TokenStore, debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
