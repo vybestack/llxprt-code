@@ -381,7 +381,10 @@ export async function processSingleFileContent(
         // Use BOM-aware reader to avoid leaving a BOM character in content and to support UTF-16/32 transparently
         const content = await readFileWithEncoding(filePath);
         const lines = content.split('\n');
-        const originalLineCount = lines.length;
+        const originalLineCount =
+          lines.length > 0 && lines[lines.length - 1] === ''
+            ? lines.length - 1
+            : lines.length;
 
         const startLine = offset || 0;
         const effectiveLimit =

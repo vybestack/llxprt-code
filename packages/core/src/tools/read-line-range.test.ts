@@ -343,4 +343,60 @@ describe('ReadLineRangeTool', () => {
     expect(result.llmContent).toContain('\nD\n');
     expect(result.llmContent).toContain('░two');
   });
+
+  it('should report total line count matching wc -l for files with trailing newline', async () => {
+    const filePath = path.join(tempRootDir, 'trailing-newline.txt');
+    await fsp.writeFile(filePath, 'line1\nline2\nline3\n', 'utf-8');
+
+    const params: ReadLineRangeToolParams = {
+      absolute_path: filePath,
+      start_line: 1,
+      end_line: 2,
+    };
+
+    const invocation = tool.build(params);
+    const result = await invocation.execute(abortSignal);
+
+    expect(typeof result.llmContent).toBe('string');
+    expect(result.llmContent).toContain('of 3 total lines');
+  });
+
+  it('should report total line count matching wc -l for files without trailing newline', async () => {
+    const filePath = path.join(tempRootDir, 'no-trailing-newline.txt');
+    await fsp.writeFile(filePath, 'line1\nline2\nline3', 'utf-8');
+
+    const params: ReadLineRangeToolParams = {
+      absolute_path: filePath,
+      start_line: 1,
+      end_line: 2,
+    };
+
+    const invocation = tool.build(params);
+    const result = await invocation.execute(abortSignal);
+
+    expect(typeof result.llmContent).toBe('string');
+    expect(result.llmContent).toContain('of 3 total lines');
+  });
+
+  it('should report 0 total lines for an empty file via originalLineCount', async () => {
+    const filePath = path.join(tempRootDir, 'empty.txt');
+    await fsp.writeFile(filePath, '', 'utf-8');
+
+    await fsp.writeFile(
+      path.join(tempRootDir, 'big-trailing.txt'),
+      'line1\nline2\nline3\n',
+      'utf-8',
+    );
+
+    const bigParams: ReadLineRangeToolParams = {
+      absolute_path: path.join(tempRootDir, 'big-trailing.txt'),
+      start_line: 1,
+      end_line: 1,
+    };
+
+    const invocation = tool.build(bigParams);
+    const bigResult = await invocation.execute(abortSignal);
+    expect(typeof bigResult.llmContent).toBe('string');
+    expect(bigResult.llmContent).toContain('of 3 total lines');
+  });
 });
