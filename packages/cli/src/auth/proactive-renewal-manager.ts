@@ -257,8 +257,25 @@ export class ProactiveRenewalManager {
     );
 
     if (!lockAcquired) {
-      // Lock timeout - retry later
-      this.scheduleProactiveRetry(providerName, normalizedBucket);
+      // Issue #1781: Before retrying, check if another process already
+      // refreshed the token while holding the lock. If the on-disk token
+      // differs from the one we scheduled this renewal for, the other
+      // process handled it — reschedule based on the new token instead of
+      // incrementing the failure counter.
+      const diskToken = await this.tokenStore.getToken(
+        providerName,
+        normalizedBucket,
+      );
+      if (diskToken && this.isTokenRefreshed(key, diskToken)) {
+        this.proactiveRenewals.delete(key);
+        this.scheduleProactiveRenewal(
+          providerName,
+          normalizedBucket,
+          diskToken,
+        );
+      } else {
+        this.scheduleProactiveRetry(providerName, normalizedBucket);
+      }
       return;
     }
 
@@ -352,6 +369,15 @@ export class ProactiveRenewalManager {
     // Direct runProactiveRenewal call (no prior schedule) — use expiry-based check
     const nowInSeconds = Math.floor(Date.now() / 1000);
     return currentToken.expiry > nowInSeconds + 30;
+  }
+
+  /**
+   * Issue #1781: Check whether a disk token differs from the scheduled snapshot
+   * or has a valid expiry, indicating another process already refreshed it.
+   * Used by acquireAndRefresh when the lock times out.
+   */
+  private isTokenRefreshed(key: string, diskToken: OAuthToken): boolean {
+    return this.hasTokenBeenRefreshedExternally(key, diskToken);
   }
 
   async configureProactiveRenewalsForProfile(profile: unknown): Promise<void> {
