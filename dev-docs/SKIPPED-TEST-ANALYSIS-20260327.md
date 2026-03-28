@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Started:** 172 skipped tests across 59 files (vs. 28 skips in upstream gemini-cli).
+**Started:** 172 hard-skipped tests (`it.skip`/`describe.skip`) across 59 files (vs. 28 in upstream gemini-cli).
 
 ### Actions Taken
 
@@ -13,13 +13,15 @@
 | Deleted (additional cleanup)               |     2 | settings.test.ts chatCompression validation (obsolete), cli-args provider override (unfinished)                                                                                                                                                              |
 | Enabled (Phase 2 — E2E + integration)      |    18 | run_shell_command (5→0), replace (3→0), file-system (1→0), read_many_files (1→0), token-tracking (1→0), OpenAI stateless (3+2→0), ide-client (3+1→0), config telemetry (1→0)                                                                                 |
 
-### Current State: 77 hard skips + 81 conditional (down from 172)
+### Current State: 77 hard skips (down from 172)
+
+The original 172 count measured only hard skips (`it.skip`/`describe.skip`). This PR reduced that to **77**. The 81 conditional skips below (`skipIf`/`runIf`) were never part of the 172 — they are correct platform/environment guards that existed before and remain unchanged.
 
 | Category                         | Count | Notes                                                 |
 | -------------------------------- | ----: | ----------------------------------------------------- |
 | Hard `it.skip` / `describe.skip` |    77 | E2E infra, platform-gated, auth, provider integration |
-| Conditional `skipIf(platform)`   |   ~50 | Windows/macOS/Linux platform gating — correct         |
-| Conditional `skipIf(CI)`         |   ~31 | CI environment, credentials, flakiness — correct      |
+| Conditional `skipIf(platform)`   |   ~50 | Windows/macOS/Linux platform gating — unchanged       |
+| Conditional `skipIf(CI)`         |   ~31 | CI environment, credentials — unchanged               |
 
 ### Remaining Hard Skips by File (77 total)
 
