@@ -8,39 +8,59 @@
 
 | Action                                     | Tests | Details                                                                                                                                                                                                                                                      |
 | ------------------------------------------ | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deleted (obsolete/mock-theater/unfinished) |   ~80 | 7 files fully deleted, 14 files cleaned of skip blocks                                                                                                                                                                                                       |
+| Deleted (obsolete/mock-theater/unfinished) |   ~80 | 7 files fully deleted, 14+ files cleaned of skip blocks                                                                                                                                                                                                      |
 | Fixed and enabled                          |    22 | parseResponsesStream (5), useToolScheduler (3), nonInteractiveCli (2), notification-hook (4), loopDetectionService (2), prompts-async (1), hooks-caller-integration deleted as redundant (9→0, covered by geminiChatHookTriggers + hooks-caller-application) |
 | Deleted (additional cleanup)               |     2 | settings.test.ts chatCompression validation (obsolete), cli-args provider override (unfinished)                                                                                                                                                              |
+| Enabled (Phase 2 — E2E + integration)      |    18 | run_shell_command (5→0), replace (3→0), file-system (1→0), read_many_files (1→0), token-tracking (1→0), OpenAI stateless (3+2→0), ide-client (3+1→0), config telemetry (1→0)                                                                                |
 
-### Current State: 95 remaining skips (down from 172)
+### Current State: 77 hard skips + 81 conditional (down from 172)
 
 | Category                         | Count | Notes                                                                     |
 | -------------------------------- | ----: | ------------------------------------------------------------------------- |
-| Hard `it.skip` / `describe.skip` |   ~19 | Mostly E2E integration tests needing infra                                |
-| Conditional `skipIf(platform)`   |   ~45 | Windows/macOS/Linux platform gating — correct                             |
-| Conditional `skipIf(CI)`         |   ~20 | CI environment, credentials, flakiness — correct                          |
-| Config.test.ts infra issue       |   ~11 | 61 tests fail due to missing ProviderManager setup (pre-existing on main) |
+| Hard `it.skip` / `describe.skip` |    77 | E2E infra, platform-gated, auth, provider integration                     |
+| Conditional `skipIf(platform)`   |   ~50 | Windows/macOS/Linux platform gating — correct                             |
+| Conditional `skipIf(CI)`         |   ~31 | CI environment, credentials, flakiness — correct                          |
 
-### Remaining Hard Skips (not conditional)
+### Remaining Hard Skips by File (77 total)
 
-**E2E Integration Tests (11)** — need `INTEGRATION_TEST_FILE_DIR`, `LLXPRT_DEFAULT_PROVIDER`, and proper `globalSetup.ts` to run:
+**Core package (28):**
 
-- `integration-tests/replace.test.ts` — 3 skips ($ handling, multiline insert, block delete)
-- `integration-tests/run_shell_command.test.ts` — 5 skips (allowed-tools, ShellTool alias, platform listing)
-- `integration-tests/file-system.test.ts` — 1 skip (replace multiple instances)
-- `integration-tests/read_many_files.test.ts` — 1 skip
-- `integration-tests/token-tracking.test.ts` — 1 skip (retry throttle wait times)
+- `multi-provider.integration.test.ts` — 11 (needs live API credentials)
+- `prompt-installer.test.ts` — 6 (platform-specific install paths)
+- `workspaceContext.test.ts` — 2 (git submodule setup)
+- `prompt-loader.test.ts` — 2 (template resolution edge cases)
+- `paths.test.ts` — 2 (platform path handling)
+- `shell.test.ts` — 1 (shell provider integration)
+- `shell-utils.test.ts` — 1 (platform-specific shell behavior)
+- `shellExecutionService.windows.test.ts` — 1 (Windows encoding)
+- `shellExecutionService.windows.multibyte.test.ts` — 1 (Windows multibyte)
+- `OpenAIProvider.integration.test.ts` — 1 (needs live API)
 
-**E2E Suites (3 describe.skip):**
+**CLI package (37):**
 
-- `integration-tests/stdin-context.test.ts` — entire suite (stdin piping)
-- `integration-tests/ide-client.test.ts` — 3 suites + 1 test (needs IDE companion server)
+- `platform-matrix.test.ts` — 11 (auth platform matrix)
+- `platform-uds-probe.test.ts` — 8 (Unix domain socket probing)
+- `security.integration.test.ts` — 4 (security sandbox tests)
+- `authCommand-logout.test.ts` — 4 (auth logout flows)
+- `settings.env.test.ts` — 3 (env var settings)
+- `App.test.tsx` — 2 (app integration)
+- `test-utils.test.ts` — 2 (test utility validation)
+- `FileCommandLoader.test.ts` — 2 (command loading)
+- `auth-e2e.integration.test.ts` — 1 (auth E2E)
 
-**Provider/Config (3):**
+**Integration tests (11):**
 
-- `OpenAIProvider.callResponses.stateless.test.ts` — suite needs fixture rewrite for Responses API
-- `config.test.ts` — telemetry env var suite needs provider runtime setup
-- `multi-provider.integration.test.ts` — 1 test needs live API (KEEP-SKIPPED)
+- `shell-service.test.ts` — 5 (shell service integration)
+- `stdin-context.test.ts` — 1 (stdin piping)
+- `simple-mcp-server.test.ts` — 1 (MCP server)
+- `ctrl-c-exit.test.ts` — 1 (signal handling)
+- `todo-reminder.e2e.test.ts` — 1 (todo reminder E2E)
+- `google_web_search.test.ts` — 1 (web search integration)
+- `mcp_server_cyclic_schema.test.ts` — 1 (MCP cyclic schema)
+
+**Other (1):**
+
+- `extension-multi-folder.test.ts` — 1 (VS Code multi-folder)
 
 ---
 
