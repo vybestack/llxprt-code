@@ -14,31 +14,40 @@ import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
 import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
+// Shared quota/auth guidance strings
+const AUTH_QUOTA_DOC_URL =
+  'https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md';
+const AI_STUDIO_KEY_URL = 'https://aistudio.google.com/apikey';
+const FREE_TIER_GUIDANCE = `For more information about authentication and quota limits, see ${AUTH_QUOTA_DOC_URL}, or use /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
+const PAID_TIER_THANKS =
+  'We appreciate you for choosing Gemini Code Assist and the Gemini CLI.';
+const PAID_TIER_AUTH_HINT = `consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
+
 // Free Tier message functions
 const getRateLimitErrorMessageGoogleFree = () =>
-  `\nPossible quota limitations in place or slow response times detected. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nPossible quota limitations in place or slow response times detected. ${FREE_TIER_GUIDANCE}`;
 
 const getRateLimitErrorMessageGoogleProQuotaFree = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
-  `\nYou have reached your daily ${currentModel} quota limit. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily ${currentModel} quota limit. ${FREE_TIER_GUIDANCE}`;
 
 const getRateLimitErrorMessageGoogleGenericQuotaFree = () =>
-  `\nYou have reached your daily quota limit. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily quota limit. ${FREE_TIER_GUIDANCE}`;
 
 // Legacy/Standard Tier message functions
 const getRateLimitErrorMessageGooglePaid = () =>
-  `\nPossible quota limitations in place or slow response times detected. We appreciate you for choosing Gemini Code Assist and the Gemini CLI. Consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nPossible quota limitations in place or slow response times detected. ${PAID_TIER_THANKS} Consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
 
 const getRateLimitErrorMessageGoogleProQuotaPaid = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
-  `\nYou have reached your daily ${currentModel} quota limit. We appreciate you for choosing Gemini Code Assist and the Gemini CLI. To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily ${currentModel} quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
 
 const getRateLimitErrorMessageGoogleGenericQuotaPaid = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
-  `\nYou have reached your daily quota limit. We appreciate you for choosing Gemini Code Assist and the Gemini CLI. To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
 
 function buildStatusSuffix(status?: number, statusLabel?: string): string {
   const parts: string[] = [];
