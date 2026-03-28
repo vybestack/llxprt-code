@@ -385,11 +385,7 @@ export class CompressionHandler {
       return;
     }
 
-    // Capture token count before compression to measure effectiveness
-    const preCompressionProjected = this.computeProjectedTokens(
-      pendingTokens,
-      completionBudget,
-    );
+    const preCompressionProjected = postOptProjected;
 
     await this.performCompression(promptId, { bypassCooldown: true });
     await this.historyService.waitForTokenUpdates();
