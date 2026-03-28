@@ -393,8 +393,11 @@ export class GeminiChat {
     this.compressionHandler.setActiveTodosProvider(provider);
   }
 
-  async performCompression(prompt_id: string): Promise<void> {
-    return this.compressionHandler.performCompression(prompt_id);
+  async performCompression(
+    prompt_id: string,
+    options?: { bypassCooldown?: boolean },
+  ): Promise<void> {
+    return this.compressionHandler.performCompression(prompt_id, options);
   }
 
   getLastPromptTokenCount(): number {
