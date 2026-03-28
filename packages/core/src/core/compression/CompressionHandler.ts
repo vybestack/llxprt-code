@@ -45,6 +45,7 @@ export class CompressionHandler {
   static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   static readonly COMPRESSION_COOLDOWN_MS = 60_000;
   static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
+  static readonly INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
 
   private compressionPromise: Promise<void> | null = null;
   private compressionFailureCount: number = 0;
@@ -440,7 +441,8 @@ export class CompressionHandler {
     const reductionRatio =
       preCompressionProjected > 0 ? reduction / preCompressionProjected : 0;
     if (
-      reductionRatio >= 0.05 ||
+      reductionRatio >=
+        CompressionHandler.INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD ||
       postCompressionProjected <= marginAdjustedLimit
     ) {
       return postCompressionProjected;

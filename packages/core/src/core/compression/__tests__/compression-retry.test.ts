@@ -1054,9 +1054,13 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       errorMessage = (err as Error).message;
     }
 
-    expect(errorMessage).toContain('compression reduced');
-    expect(errorMessage).toContain('completionBudget');
-    expect(errorMessage).toContain('maxOutputTokens');
+    expect(errorMessage).toContain('compression reduced 0 tokens');
+    expect(errorMessage).toContain('completionBudget=90000');
+    expect(errorMessage).toContain('tokensStillNeeded=81000');
+    expect(errorMessage).toContain(
+      'consumes more than 80% of the context window (100000)',
+    );
+    expect(errorMessage).toContain('Consider lowering maxOutputTokens.');
   });
 
   /**
