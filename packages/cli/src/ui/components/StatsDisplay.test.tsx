@@ -734,7 +734,7 @@ describe('<StatsDisplay />', () => {
 
       expect(output).not.toContain('Throughput:');
       expect(output).not.toContain('TTFT:');
-      expect(output).not.toContain('Output Rate:');
+      expect(output).not.toContain('Token Rate:');
       expect(output).not.toContain('NaN');
       expect(output).not.toContain('Infinity');
       expect(output).toMatchSnapshot();
@@ -768,7 +768,7 @@ describe('<StatsDisplay />', () => {
 
       expect(output).not.toContain('Throughput:');
       expect(output).not.toContain('TTFT:');
-      expect(output).not.toContain('Output Rate:');
+      expect(output).not.toContain('Token Rate:');
       expect(output).toMatchSnapshot();
     });
 
@@ -801,7 +801,7 @@ describe('<StatsDisplay />', () => {
       expect(output).toContain('Throughput:');
       expect(output).toContain('250.00 TPM');
       expect(output).not.toContain('TTFT:');
-      expect(output).not.toContain('Output Rate:');
+      expect(output).not.toContain('Token Rate:');
       expect(output).toMatchSnapshot();
     });
   });
