@@ -707,7 +707,7 @@ export class LspClient {
       }
 
       const payload = this.buffer.subarray(start, end).toString('utf8');
-      this.buffer = this.buffer.subarray(end);
+      this.buffer = Buffer.from(this.buffer.subarray(end));
 
       let message: JsonRpcMessage;
       try {
@@ -734,7 +734,7 @@ export class LspClient {
         .subarray(0, newlineIndex)
         .toString('utf8')
         .trim();
-      this.buffer = this.buffer.subarray(newlineIndex + 1);
+      this.buffer = Buffer.from(this.buffer.subarray(newlineIndex + 1));
 
       if (line.length === 0) {
         continue;
