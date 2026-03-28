@@ -23,10 +23,11 @@ const PAID_TIER_THANKS =
   'We appreciate you for choosing Gemini Code Assist and the Gemini CLI.';
 const PAID_TIER_AUTH_HINT = `consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
 
-// Free Tier message functions
-const getRateLimitErrorMessageGoogleFree = () =>
-  `\nPossible quota limitations in place or slow response times detected. ${FREE_TIER_GUIDANCE}`;
+// Provider-neutral rate limit message (used when no Google-specific quota detector matches)
+const GENERIC_RATE_LIMIT_MESSAGE =
+  '\nRate limit exceeded. Please wait a moment and retry, or use /model to switch to a different model.';
 
+// Google Free Tier message functions
 const getRateLimitErrorMessageGoogleProQuotaFree = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
@@ -35,10 +36,7 @@ const getRateLimitErrorMessageGoogleProQuotaFree = (
 const getRateLimitErrorMessageGoogleGenericQuotaFree = () =>
   `\nYou have reached your daily quota limit. ${FREE_TIER_GUIDANCE}`;
 
-// Legacy/Standard Tier message functions
-const getRateLimitErrorMessageGooglePaid = () =>
-  `\nPossible quota limitations in place or slow response times detected. ${PAID_TIER_THANKS} Consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
-
+// Google Legacy/Standard Tier message functions
 const getRateLimitErrorMessageGoogleProQuotaPaid = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
@@ -144,9 +142,7 @@ function getRateLimitMessage(
       : getRateLimitErrorMessageGoogleGenericQuotaFree();
   }
 
-  return isPaidTier
-    ? getRateLimitErrorMessageGooglePaid()
-    : getRateLimitErrorMessageGoogleFree();
+  return GENERIC_RATE_LIMIT_MESSAGE;
 }
 
 export function parseAndFormatApiError(
