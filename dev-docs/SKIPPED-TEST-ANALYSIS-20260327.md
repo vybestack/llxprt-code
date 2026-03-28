@@ -60,7 +60,7 @@ What WAS happening: during cherry-picking from upstream, some tests got `it.skip
 
 ---
 
-## Files Deleted (6 entire test files)
+## Files Deleted (7 entire test files)
 
 1. `AgentRuntimeState.stub.test.ts` — Phase 03 stubs superseded by Phase 05 implementation
 2. `useGeminiStream.integration.test.tsx` — Todo continuation never implemented

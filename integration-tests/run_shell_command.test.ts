@@ -102,10 +102,10 @@ describe('run_shell_command', () => {
     });
 
     rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { tool } = getLineCountCommand();
 
+    // Use 'wc' directly — the fake response fixture always emits 'wc -l'
     const result = await rig.run({
-      args: [`--allowed-tools=run_shell_command(${tool})`],
+      args: ['--allowed-tools=run_shell_command(wc)'],
       yolo: false,
     });
 
@@ -114,7 +114,7 @@ describe('run_shell_command', () => {
     if (!foundToolCall) {
       printDebugInfo(rig, result, {
         'Found tool call': foundToolCall,
-        'Allowed tools flag': `run_shell_command(${tool})`,
+        'Allowed tools flag': 'run_shell_command(wc)',
       });
     }
 
@@ -213,10 +213,10 @@ describe('run_shell_command', () => {
     });
 
     rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { tool } = getLineCountCommand();
 
+    // Use 'wc' directly — the fake response fixture always emits 'wc -l'
     const result = await rig.run({
-      args: `--allowed-tools=ShellTool(${tool})`,
+      args: '--allowed-tools=ShellTool(wc)',
       yolo: false,
     });
 
@@ -225,7 +225,7 @@ describe('run_shell_command', () => {
     if (!foundToolCall) {
       printDebugInfo(rig, result, {
         'Found tool call': foundToolCall,
-        'Allowed tools flag': `ShellTool(${tool})`,
+        'Allowed tools flag': 'ShellTool(wc)',
       });
     }
 
@@ -251,17 +251,16 @@ describe('run_shell_command', () => {
       ),
     });
 
-    const { tool } = getLineCountCommand();
-
+    // Use 'wc' directly — the fake response fixture always emits 'wc -l'
     const result = await rig.run({
       args: [
-        `--allowed-tools=run_shell_command(${tool})`,
+        '--allowed-tools=run_shell_command(wc)',
         '--allowed-tools=run_shell_command(ls)',
       ],
       yolo: false,
     });
 
-    for (const expected of ['ls', tool]) {
+    for (const expected of ['ls', 'wc']) {
       const foundToolCall = await rig.waitForToolCall(
         'run_shell_command',
         15000,
