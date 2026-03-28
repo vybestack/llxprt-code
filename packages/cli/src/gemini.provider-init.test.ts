@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as gemini from './gemini.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
 
 vi.mock('./config/settings.js', async (importOriginal) => {
@@ -30,6 +30,9 @@ vi.mock('./config/settings.js', async (importOriginal) => {
 
 vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn(),
+}));
+
+vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
 }));
 
@@ -125,6 +128,43 @@ vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
+function makeResumeResult(historyText = 'resumed'): ResumeResult {
+  return {
+    ok: true,
+    history: [
+      { speaker: 'human', blocks: [{ type: 'text', text: historyText }] },
+    ],
+    metadata: {
+      sessionId: 'resumed-session',
+      projectHash: 'project-hash',
+      provider: 'gemini',
+      model: 'gemini-2.5-pro',
+      workspaceDirs: ['/tmp/project'],
+      startTime: new Date().toISOString(),
+    },
+    recording: {
+      dispose: vi.fn().mockResolvedValue(undefined),
+      flush: vi.fn().mockResolvedValue(undefined),
+      isActive: vi.fn().mockReturnValue(true),
+      getFilePath: vi.fn().mockReturnValue('/tmp/session.jsonl'),
+      getSessionId: vi.fn().mockReturnValue('resumed-session'),
+      recordContent: vi.fn(),
+      recordCompressed: vi.fn(),
+      recordRewind: vi.fn(),
+      recordProviderSwitch: vi.fn(),
+      recordSessionEvent: vi.fn(),
+      recordDirectoriesChanged: vi.fn(),
+      initializeForResume: vi.fn(),
+      enqueue: vi.fn(),
+    } as unknown as ResumeResult['recording'],
+    lockHandle: {
+      lockPath: '/tmp/resumed-session.lock',
+      release: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ResumeResult['lockHandle'],
+    warnings: [],
+  };
+}
+
 describe('gemini main provider initialization', () => {
   const originalIsTTY = process.stdin.isTTY;
 
@@ -180,25 +220,26 @@ describe('gemini main provider initialization', () => {
       })),
       getScreenReader: vi.fn(() => false),
       getTerminalBackground: vi.fn(() => undefined),
+
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
     } as unknown as Config;
 
-    const { loadCliConfig, parseArguments } = await import(
-      './config/config.js'
-    );
+    const { loadCliConfig } = await import('./config/config.js');
+    const { parseArguments } = await import('./config/cliArgParser.js');
     vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
     vi.mocked(parseArguments).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
       promptWords: [],
       experimentalAcp: false,
+      experimentalUi: true,
       provider: 'gemini',
       profileLoad: undefined,
       outputFormat: OutputFormat.TEXT,
       extensions: [],
       sessionSummary: undefined,
-    } as unknown as import('./config/config.js').CliArgs);
+    } as unknown as import('./config/cliArgParser.js').CliArgs);
 
     const exitSpy = vi
       .spyOn(process, 'exit')
@@ -209,16 +250,120 @@ describe('gemini main provider initialization', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    // main() should complete (or throw on process.exit) — either way,
-    // refreshAuth must have been called as part of provider initialization.
+    // main() may complete or throw from process.exit in this mocked environment.
+    // We only need to verify that provider initialization refreshes auth.
     try {
       await gemini.main();
     } catch {
-      // Ignore exits or other throws; we only care about refreshAuth
+      // Ignore exits or other throws.
     }
 
     expect(mockConfig.refreshAuth).toHaveBeenCalledTimes(1);
     exitSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('warns and continues to interactive startup when restoreHistory fails during --continue flow', async () => {
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getServerToolsProvider: vi.fn().mockReturnValue(null),
+      hasActiveProvider: vi.fn().mockReturnValue(true),
+      setActiveProvider: vi.fn().mockReturnValue(undefined),
+    };
+
+    const restoreHistory = vi
+      .fn()
+      .mockRejectedValue(new Error('restore failed on purpose'));
+    const getGeminiClient = vi.fn(() => ({ restoreHistory }));
+
+    const mockConfig = {
+      initialize: vi.fn().mockResolvedValue(undefined),
+      refreshAuth: vi.fn().mockResolvedValue(undefined),
+      getProviderManager: vi.fn(() => providerManager),
+      getProvider: vi.fn(() => 'gemini'),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getMcpServers: vi.fn(() => ({})),
+      getDebugMode: vi.fn(() => false),
+      getIdeMode: vi.fn(() => false),
+      getIdeClient: vi.fn(() => null),
+      getListExtensions: vi.fn(() => false),
+      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
+      getToolRegistryInfo: vi.fn(() => ({
+        registered: [],
+        unregistered: [],
+      })),
+      getSandbox: vi.fn(() => false),
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getProjectRoot: vi.fn(() => '/tmp/project'),
+      isInteractive: vi.fn(() => true),
+      getSessionId: vi.fn(() => 'session-1'),
+      adoptSessionId: vi.fn(),
+      getQuestion: vi.fn(() => ''),
+      getExperimentalZedIntegration: vi.fn(() => false),
+      getZedIntegrationEnabled: vi.fn(() => false),
+      getTrustedFolder: vi.fn(() => true),
+      getProjectTempDir: vi.fn(() => '/tmp/project-temp'),
+      getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: () => ['/tmp/project'],
+      })),
+      getScreenReader: vi.fn(() => false),
+      getTerminalBackground: vi.fn(() => undefined),
+
+      getGeminiClient,
+      setTerminalBackground: vi.fn(),
+      getPolicyEngine: vi.fn(() => null),
+    } as unknown as Config;
+
+    const coreModule = await import('@vybestack/llxprt-code-core');
+    const resumeSessionMock = vi.mocked(coreModule.resumeSession);
+    resumeSessionMock.mockResolvedValueOnce(
+      makeResumeResult('restored user content'),
+    );
+
+    const { loadCliConfig } = await import('./config/config.js');
+    const { parseArguments } = await import('./config/cliArgParser.js');
+    vi.mocked(loadCliConfig).mockResolvedValueOnce(mockConfig);
+    vi.mocked(parseArguments).mockResolvedValueOnce({
+      promptInteractive: undefined,
+      prompt: undefined,
+      promptWords: [],
+      experimentalAcp: false,
+      experimentalUi: true,
+      provider: 'gemini',
+      profileLoad: undefined,
+      outputFormat: OutputFormat.TEXT,
+      extensions: [],
+      sessionSummary: undefined,
+    } as unknown as import('./config/cliArgParser.js').CliArgs);
+
+    const exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null | undefined) => {
+        throw new Error(`EXIT_${code ?? 'unknown'}`);
+      });
+    const consoleWarnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => {});
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    // main() flow: resume → restoreHistory throws → catch swallows error →
+    // continues startup. If the try/catch didn't swallow the restore error,
+    // main() would throw 'restore failed on purpose'.
+    await expect(gemini.main()).resolves.toBeUndefined();
+
+    // resumeSession was called to load the session
+    expect(resumeSessionMock).toHaveBeenCalledTimes(1);
+    // restoreHistory was called with the resumed content
+    expect(restoreHistory).toHaveBeenCalledTimes(1);
+    // The rejection from restoreHistory did NOT propagate.
+
+    resumeSessionMock.mockReset();
+    exitSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
 });

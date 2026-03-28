@@ -15,7 +15,8 @@ import {
   isRipgrepAvailable,
   ApprovalMode,
 } from '@vybestack/llxprt-code-core';
-import { loadCliConfig, parseArguments } from './config.js';
+import { loadCliConfig } from './config.js';
+import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
@@ -229,6 +230,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
         Promise.resolve({
           memoryContent: extensionPaths?.join(',') || '',
           fileCount: extensionPaths?.length || 0,
+          filePaths: [],
         }),
     ),
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {

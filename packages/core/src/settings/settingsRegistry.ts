@@ -1266,21 +1266,21 @@ export function separateSettings(
     }
   }
 
-  const effectiveSettings = { ...mixed, ...providerOverrides };
+  const mergedProviderSettings = { ...mixed, ...providerOverrides };
 
-  if (isPlainObject(effectiveSettings['reasoning'])) {
-    const reasoningObj = effectiveSettings['reasoning'];
+  if (isPlainObject(mergedProviderSettings['reasoning'])) {
+    const reasoningObj = mergedProviderSettings['reasoning'];
 
     for (const [subKey, subValue] of Object.entries(reasoningObj)) {
       const fullKey = `reasoning.${subKey}`;
 
-      if (!(fullKey in effectiveSettings)) {
-        effectiveSettings[fullKey] = subValue;
+      if (!(fullKey in mergedProviderSettings)) {
+        mergedProviderSettings[fullKey] = subValue;
       }
     }
   }
 
-  for (const [rawKey, value] of Object.entries(effectiveSettings)) {
+  for (const [rawKey, value] of Object.entries(mergedProviderSettings)) {
     if (value === undefined || value === null) continue;
 
     if (

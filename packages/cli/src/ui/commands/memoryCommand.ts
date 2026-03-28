@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
 import { MessageType } from '../types.js';
-import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
+import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 
