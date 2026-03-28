@@ -65,6 +65,7 @@ const DEFAULT_FIRST_TOUCH_TIMEOUT_MS = 10_000;
 const DEBOUNCE_MS = 120;
 const DEADLINE_SAFETY_MARGIN_MS = 5;
 const TOUCH_CRASH_OBSERVATION_WINDOW_MS = 25;
+const HEADER_SEPARATOR = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a]);
 
 function toFileUri(filePath: string): string {
   if (filePath.startsWith('file://')) {
@@ -84,7 +85,7 @@ export class LspClient {
   private process: ChildProcessWithoutNullStreams | null = null;
   private readonly pending = new Map<JsonRpcId, PendingRequest>();
   private readonly eventBus = new EventEmitter();
-  private buffer = '';
+  private buffer: Buffer = Buffer.alloc(0);
   private nextRequestId = 1;
   private useLineDelimitedTransport = false;
   private alive = false;
@@ -165,7 +166,10 @@ export class LspClient {
     });
 
     proc.stdout.on('data', (chunk: Buffer | string) => {
-      this.buffer += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      this.buffer = Buffer.concat([
+        this.buffer,
+        typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk,
+      ]);
       this.drainBuffer();
     });
 
@@ -682,12 +686,12 @@ export class LspClient {
     }
 
     while (true) {
-      const headerEnd = this.buffer.indexOf('\r\n\r\n');
+      const headerEnd = this.buffer.indexOf(HEADER_SEPARATOR);
       if (headerEnd < 0) {
         return;
       }
 
-      const header = this.buffer.slice(0, headerEnd);
+      const header = this.buffer.subarray(0, headerEnd).toString('utf8');
       const match = header.match(/Content-Length:\s*(\d+)/i);
       if (!match) {
         this.markBroken(`Malformed LSP header from '${this.config.config.id}'`);
@@ -695,15 +699,15 @@ export class LspClient {
       }
 
       const contentLength = Number.parseInt(match[1], 10);
-      const start = headerEnd + 4;
+      const start = headerEnd + HEADER_SEPARATOR.length;
       const end = start + contentLength;
 
       if (this.buffer.length < end) {
         return;
       }
 
-      const payload = this.buffer.slice(start, end);
-      this.buffer = this.buffer.slice(end);
+      const payload = this.buffer.subarray(start, end).toString('utf8');
+      this.buffer = this.buffer.subarray(end);
 
       let message: JsonRpcMessage;
       try {
@@ -721,13 +725,16 @@ export class LspClient {
 
   private drainLineDelimitedBuffer(): void {
     while (true) {
-      const newlineIndex = this.buffer.indexOf('\n');
+      const newlineIndex = this.buffer.indexOf(0x0a);
       if (newlineIndex < 0) {
         return;
       }
 
-      const line = this.buffer.slice(0, newlineIndex).trim();
-      this.buffer = this.buffer.slice(newlineIndex + 1);
+      const line = this.buffer
+        .subarray(0, newlineIndex)
+        .toString('utf8')
+        .trim();
+      this.buffer = this.buffer.subarray(newlineIndex + 1);
 
       if (line.length === 0) {
         continue;
