@@ -989,6 +989,63 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
   });
 
   /**
+   * @requirement REQ-1791.5
+   * Hard-limit gate uses API-observed prompt baseline when available.
+   */
+  it('uses lastPromptTokenCount in hard-limit gate projection when available', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 1_000,
+      contextLimit: 100_000,
+      maxOutputTokens: 10_000,
+    });
+
+    // If hard-limit gate used raw history (1,000), projection would be:
+    // 1,000 + 10,000 + 10,000 = 21,000 <= 99,000 and compression would not run.
+    // With API-observed baseline (95,000), projection is:
+    // 95,000 + 10,000 + 10,000 = 115,000 > 99,000 and compression should run.
+    // Set API-observed prompt baseline directly on compression handler via private field.
+    (
+      chat as unknown as {
+        compressionHandler: { lastPromptTokenCount: number };
+      }
+    ).compressionHandler.lastPromptTokenCount = 95_000;
+
+    let compressionAttempts = 0;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
+        name: 'middle-out' as const,
+        requiresLLM: true,
+        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+        compress: vi.fn().mockImplementation(async () => {
+          compressionAttempts++;
+          return {
+            newHistory: [
+              { role: 'user', parts: [{ text: 'hello' }] },
+              { role: 'model', parts: [{ text: 'hi' }] },
+            ],
+            metadata: {
+              originalMessageCount: 10,
+              compressedMessageCount: 9,
+              strategyUsed: 'middle-out' as const,
+              llmCallMade: true,
+            },
+          };
+        }),
+      }),
+    );
+
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(1_000);
+
+    try {
+      await chat['enforceContextWindow'](10_000, 'test-prompt');
+    } catch {
+      // We only care that hard-limit path did not early-return and attempted compression.
+    }
+
+    expect(compressionAttempts).toBeGreaterThan(0);
+  });
+
+  /**
    * @requirement REQ-1791.3
    * Error message includes reduction amount, completion budget, and budget warning.
    */
@@ -1054,7 +1111,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       errorMessage = (err as Error).message;
     }
 
-    expect(errorMessage).toContain('compression reduced 0 tokens');
+    expect(errorMessage).toContain(
+      'Request still exceeds the safety-adjusted context limit (99000 tokens).',
+    );
+    expect(errorMessage).toContain(
+      'density optimization and compression reduced 0 tokens',
+    );
     expect(errorMessage).toContain('completionBudget=90000');
     expect(errorMessage).toContain('tokensStillNeeded=81000');
     expect(errorMessage).toContain(

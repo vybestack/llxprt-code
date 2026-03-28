@@ -313,6 +313,16 @@ export class CompressionHandler {
    * @plan PLAN-20260220-DECOMPOSE.P03
    */
   /**
+   * Compute the baseline prompt token count for hard-limit projection.
+   * Prefer API-observed prompt tokens when available (includes cache read/write).
+   */
+  private getProjectedPromptBaseline(): number {
+    return this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0
+      ? this.lastPromptTokenCount
+      : this.getEffectiveTokenCount();
+  }
+
+  /**
    * Compute the projected token count for a pending request.
    */
   private computeProjectedTokens(
@@ -320,7 +330,7 @@ export class CompressionHandler {
     completionBudget: number,
   ): number {
     return (
-      this.getEffectiveTokenCount() +
+      this.getProjectedPromptBaseline() +
       Math.max(0, pendingTokens) +
       completionBudget
     );
@@ -471,8 +481,12 @@ export class CompressionHandler {
         },
       );
       await this.historyService.waitForTokenUpdates();
-    } catch {
-      // Fallback failed — we'll report the overflow error below
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          '[CompressionHandler] Truncation fallback failed during hard-limit enforcement',
+        error,
+      );
     } finally {
       this._suppressDensityDirty = false;
     }
@@ -481,7 +495,7 @@ export class CompressionHandler {
   }
 
   /**
-   * Build a diagnostic error for context window overflow after all compression attempts.
+   * Build a diagnostic error for context window overflow after all reduction attempts.
    */
   private buildContextOverflowError(
     limit: number,
@@ -491,10 +505,11 @@ export class CompressionHandler {
     completionBudget: number,
   ): Error {
     const totalReduction = Math.max(0, initialProjected - finalProjected);
+    const tokensStillNeeded = finalProjected - marginAdjustedLimit;
     const parts: string[] = [
-      `Request would exceed the ${limit} token context window even after compression.`,
-      `compression reduced ${totalReduction} tokens (from ${initialProjected} to ${finalProjected} projected).`,
-      `completionBudget=${completionBudget}, tokensStillNeeded=${finalProjected - marginAdjustedLimit}.`,
+      `Request still exceeds the safety-adjusted context limit (${marginAdjustedLimit} tokens).`,
+      `density optimization and compression reduced ${totalReduction} tokens (from ${initialProjected} to ${finalProjected} projected).`,
+      `completionBudget=${completionBudget}, tokensStillNeeded=${tokensStillNeeded}.`,
     ];
     if (completionBudget > 0.8 * limit) {
       parts.push(
