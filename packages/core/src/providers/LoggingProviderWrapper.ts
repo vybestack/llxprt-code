@@ -790,7 +790,12 @@ export class LoggingProviderWrapper implements IProvider {
     } catch (error) {
       // Record error in performance tracker
       const duration = performance.now() - startTime;
-      this.performanceTracker.recordError(duration, String(error));
+      this.performanceTracker.recordError(
+        duration,
+        String(error),
+        firstChunkTime,
+        chunkCount,
+      );
 
       // Issue #684: Log API error telemetry
       if (config) {

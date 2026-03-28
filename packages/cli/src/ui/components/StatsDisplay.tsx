@@ -372,7 +372,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
           )}
         {metrics.tokenTracking.timeToFirstToken !== null &&
           Number.isFinite(metrics.tokenTracking.timeToFirstToken) && (
-            <SubStatRow title="TTFT:">
+            <SubStatRow title="TTFT (last):">
               <Text color={theme.text.primary}>
                 {metrics.tokenTracking.timeToFirstToken.toFixed(0)}ms
               </Text>
@@ -380,9 +380,13 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
           )}
         {Number.isFinite(metrics.tokenTracking.tokensPerSecond) &&
           metrics.tokenTracking.tokensPerSecond > 0 && (
-            <SubStatRow title="Token Rate:">
+            <SubStatRow title="Token Rate (avg):">
               <Text color={theme.text.primary}>
                 {metrics.tokenTracking.tokensPerSecond.toFixed(2)} tok/s
+                <Text color={theme.text.secondary}>
+                  {' '}
+                  (session input+output)
+                </Text>
               </Text>
             </SubStatRow>
           )}

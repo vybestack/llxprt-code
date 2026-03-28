@@ -1012,6 +1012,36 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
     }
 
+    class TextThenErrorProvider implements IProvider {
+      name = 'text-then-error';
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return 'test-model';
+      }
+      getServerTools(): string[] {
+        return [];
+      }
+      async invokeServerTool(): Promise<unknown> {
+        return {};
+      }
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'partial' }],
+        } as IContent;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: ' response' }],
+        } as IContent;
+        throw new Error('Stream interrupted after partial output');
+      }
+    }
+
     it('should pass total tokens (input + output) to performanceTracker via processStreamForMetrics', async () => {
       const provider = new MultiChunkWithUsageProvider();
       const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
@@ -1173,6 +1203,42 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       const metrics = wrapper.getPerformanceMetrics();
       expect(metrics.timeToFirstToken).not.toBeNull();
       expect(metrics.timeToFirstToken!).toBeGreaterThanOrEqual(20);
+    });
+
+    it('should preserve first-chunk TTFT and chunk count when processStreamForMetrics errors', async () => {
+      const provider = new TextThenErrorProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      await expect(async () => {
+        for await (const _chunk of iterator) {
+          // Consume until stream throws
+        }
+      }).rejects.toThrow('Stream interrupted after partial output');
+
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.timeToFirstToken).not.toBeNull();
+      expect(metrics.timeToFirstToken!).toBeGreaterThanOrEqual(0);
+      expect(metrics.chunksReceived).toBe(2);
+      expect(metrics.errors.length).toBeGreaterThan(0);
     });
 
     it('should compute tokensPerSecond as cumulative average', async () => {

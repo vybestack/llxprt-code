@@ -203,8 +203,8 @@ exports[`<StatsDisplay /> > Issue #1805 metrics display > shows throughput, TTFT
 │    » API Time:               2.5s (90.9%)                                                        │
 │    » Tool Time:              250ms (9.1%)                                                        │
 │    » Throughput:             1.23k TPM (input+output)                                            │
-│    » TTFT:                   187ms                                                               │
-│    » Token Rate:             42.42 tok/s                                                         │
+│    » TTFT (last):            187ms                                                               │
+│    » Token Rate (avg):       42.42 tok/s (session input+output)                                  │
 │                                                                                                  │
 │                                                                                                  │
 │  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │

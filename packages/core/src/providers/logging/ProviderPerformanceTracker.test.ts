@@ -148,6 +148,18 @@ describe('ProviderPerformanceTracker', () => {
     expect(metrics.errorRate).toBe(0.5); // 1 error / 2 attempts
   });
 
+  it('should retain partial TTFT and chunk metadata when recording stream errors', () => {
+    const tracker = new ProviderPerformanceTracker('test-provider');
+
+    tracker.recordError(750, 'Stream interrupted', 180, 4);
+
+    const metrics = tracker.getLatestMetrics();
+    expect(metrics.timeToFirstToken).toBe(180);
+    expect(metrics.chunksReceived).toBe(4);
+    expect(metrics.errors).toHaveLength(1);
+    expect(metrics.errorRate).toBe(1);
+  });
+
   it('should add throttle wait time correctly', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
 

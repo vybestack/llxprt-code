@@ -699,10 +699,11 @@ describe('<StatsDisplay />', () => {
       expect(output).toContain('Throughput:');
       expect(output).toContain('1.23k TPM');
       expect(output).toContain('(input+output)');
-      expect(output).toContain('TTFT:');
+      expect(output).toContain('TTFT (last):');
       expect(output).toContain('187ms');
-      expect(output).toContain('Token Rate:');
+      expect(output).toContain('Token Rate (avg):');
       expect(output).toContain('42.42 tok/s');
+      expect(output).toContain('(session input+output)');
       expect(output).toMatchSnapshot();
     });
 

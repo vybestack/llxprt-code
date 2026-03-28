@@ -102,7 +102,20 @@ export class ProviderPerformanceTracker {
   /**
    * Record an error that occurred during request
    */
-  recordError(duration: number, error: string): void {
+  recordError(
+    duration: number,
+    error: string,
+    timeToFirstToken?: number | null,
+    chunkCount?: number,
+  ): void {
+    if (timeToFirstToken !== undefined && timeToFirstToken !== null) {
+      this.metrics.timeToFirstToken = timeToFirstToken;
+    }
+
+    if (chunkCount !== undefined) {
+      this.metrics.chunksReceived = chunkCount;
+    }
+
     this.metrics.errors.push({
       timestamp: Date.now(),
       duration,
