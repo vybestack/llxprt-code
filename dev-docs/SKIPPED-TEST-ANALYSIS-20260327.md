@@ -11,15 +11,15 @@
 | Deleted (obsolete/mock-theater/unfinished) |   ~80 | 7 files fully deleted, 14+ files cleaned of skip blocks                                                                                                                                                                                                      |
 | Fixed and enabled                          |    22 | parseResponsesStream (5), useToolScheduler (3), nonInteractiveCli (2), notification-hook (4), loopDetectionService (2), prompts-async (1), hooks-caller-integration deleted as redundant (9→0, covered by geminiChatHookTriggers + hooks-caller-application) |
 | Deleted (additional cleanup)               |     2 | settings.test.ts chatCompression validation (obsolete), cli-args provider override (unfinished)                                                                                                                                                              |
-| Enabled (Phase 2 — E2E + integration)      |    18 | run_shell_command (5→0), replace (3→0), file-system (1→0), read_many_files (1→0), token-tracking (1→0), OpenAI stateless (3+2→0), ide-client (3+1→0), config telemetry (1→0)                                                                                |
+| Enabled (Phase 2 — E2E + integration)      |    18 | run_shell_command (5→0), replace (3→0), file-system (1→0), read_many_files (1→0), token-tracking (1→0), OpenAI stateless (3+2→0), ide-client (3+1→0), config telemetry (1→0)                                                                                 |
 
 ### Current State: 77 hard skips + 81 conditional (down from 172)
 
-| Category                         | Count | Notes                                                                     |
-| -------------------------------- | ----: | ------------------------------------------------------------------------- |
-| Hard `it.skip` / `describe.skip` |    77 | E2E infra, platform-gated, auth, provider integration                     |
-| Conditional `skipIf(platform)`   |   ~50 | Windows/macOS/Linux platform gating — correct                             |
-| Conditional `skipIf(CI)`         |   ~31 | CI environment, credentials, flakiness — correct                          |
+| Category                         | Count | Notes                                                 |
+| -------------------------------- | ----: | ----------------------------------------------------- |
+| Hard `it.skip` / `describe.skip` |    77 | E2E infra, platform-gated, auth, provider integration |
+| Conditional `skipIf(platform)`   |   ~50 | Windows/macOS/Linux platform gating — correct         |
+| Conditional `skipIf(CI)`         |   ~31 | CI environment, credentials, flakiness — correct      |
 
 ### Remaining Hard Skips by File (77 total)
 
