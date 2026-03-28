@@ -134,6 +134,8 @@ describe('useGeminiStream duplicate tool call deduplication (issue #1040)', () =
         model: 'test-model',
       }),
       getGeminiClient: () => mockGeminiClient,
+      getMcpClientManager: () => undefined,
+      getMcpServers: () => undefined,
       getSettingsService: () => undefined,
       getCheckpointingEnabled: () => false,
       storage: {

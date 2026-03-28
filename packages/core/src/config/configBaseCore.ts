@@ -190,7 +190,7 @@ export abstract class ConfigBaseCore {
     | undefined;
   protected disabledHooks: string[] = [];
   protected readonly projectHooks:
-    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
+    | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
   protected skillManager!: SkillManager;
   protected readonly skillsSupport!: boolean;
@@ -655,9 +655,7 @@ export abstract class ConfigBaseCore {
   getEnableInteractiveShell(): boolean {
     return this.shouldUseNodePtyShell;
   }
-  getProjectHooks():
-    | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
-    | undefined {
+  getProjectHooks(): { [K in HookEventName]?: HookDefinition[] } | undefined {
     return this.projectHooks;
   }
   getOutputSettings(): OutputSettings {

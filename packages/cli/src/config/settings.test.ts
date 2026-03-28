@@ -1405,6 +1405,86 @@ describe('Settings Loading and Merging', () => {
       // Merged reflects system scope (system overrides defaults)
       expect(settings.merged.enableAutoUpdateNotification).toBe(false);
     });
+
+    it('should migrate disableAutoUpdate to enableAutoUpdate in user settings', () => {
+      const userSettingsContent = {
+        disableAutoUpdate: true,
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableAutoUpdate=true → enableAutoUpdate=false)
+      expect(
+        (settings.user.settings as Record<string, unknown>)['enableAutoUpdate'],
+      ).toBe(false);
+      expect(settings.merged.enableAutoUpdate).toBe(false);
+    });
+
+    it('should migrate accessibility.disableLoadingPhrases to accessibility.enableLoadingPhrases', () => {
+      const userSettingsContent = {
+        accessibility: {
+          disableLoadingPhrases: true,
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableLoadingPhrases=true → enableLoadingPhrases=false)
+      expect(
+        (settings.user.settings.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
+    it('should migrate fileFiltering.disableFuzzySearch to fileFiltering.enableFuzzySearch', () => {
+      const userSettingsContent = {
+        fileFiltering: {
+          disableFuzzySearch: true,
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableFuzzySearch=true → enableFuzzySearch=false)
+      expect(
+        (settings.user.settings.fileFiltering as Record<string, unknown>)[
+          'enableFuzzySearch'
+        ],
+      ).toBe(false);
+      expect(settings.merged.fileFiltering?.enableFuzzySearch).toBe(false);
+    });
   });
 
   describe('LoadedSettings class', () => {
@@ -2249,6 +2329,124 @@ describe('Settings Loading and Merging', () => {
         'error',
         'There was an error saving your latest settings changes.',
         error,
+      );
+    });
+  });
+
+  describe('hooks split merge behavior', () => {
+    it('hooksConfig merges fields across user and workspace scopes rather than replacing', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        hooksConfig: {
+          enabled: true,
+        },
+      };
+      const workspaceSettingsContent = {
+        hooksConfig: {
+          notifications: false,
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.hooksConfig).toMatchObject({
+        enabled: true,
+        notifications: false,
+      });
+      // Verify both scopes contributed (not replaced wholesale)
+      expect(settings.merged.hooksConfig.enabled).toBe(true);
+      expect(settings.merged.hooksConfig.notifications).toBe(false);
+    });
+
+    it('hooks event-map merges by event key across scopes', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userHooks = {
+        BeforeTool: [
+          {
+            matcher: 'ReadFile',
+            hooks: [{ type: 'command', command: 'user-before.sh' }],
+          },
+        ],
+      };
+      const workspaceHooks = {
+        AfterTool: [
+          {
+            matcher: 'WriteFile',
+            hooks: [{ type: 'command', command: 'workspace-after.sh' }],
+          },
+        ],
+      };
+      const userSettingsContent = { hooks: userHooks };
+      const workspaceSettingsContent = { hooks: workspaceHooks };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Both event keys should be present in merged hooks
+      expect(settings.merged.hooks).toEqual({
+        BeforeTool: userHooks.BeforeTool,
+        AfterTool: workspaceHooks.AfterTool,
+      });
+    });
+
+    it('later scope overrides same event key array in hooks', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userHooks = {
+        BeforeTool: [
+          {
+            matcher: 'ReadFile',
+            hooks: [{ type: 'command', command: 'user-before.sh' }],
+          },
+        ],
+      };
+      const workspaceHooks = {
+        BeforeTool: [
+          {
+            matcher: 'WriteFile',
+            hooks: [{ type: 'command', command: 'workspace-before.sh' }],
+          },
+        ],
+      };
+      const userSettingsContent = { hooks: userHooks };
+      const workspaceSettingsContent = { hooks: workspaceHooks };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Workspace BeforeTool should replace user BeforeTool
+      expect(settings.merged.hooks.BeforeTool).toEqual(
+        workspaceHooks.BeforeTool,
+      );
+      expect(settings.merged.hooks.BeforeTool).not.toEqual(
+        userHooks.BeforeTool,
       );
     });
   });

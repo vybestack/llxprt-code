@@ -115,7 +115,7 @@ const mockUseUIActions = vi.mocked(useUIActions);
 function createConfigStub() {
   return {
     getScreenReader: () => false,
-    getAccessibility: () => ({ enableLoadingPhrases: true }),
+    getAccessibility: () => ({ disableLoadingPhrases: false }),
     getMcpServers: () => [],
     getBlockedMcpServers: () => [],
     getTargetDir: () => '/tmp',

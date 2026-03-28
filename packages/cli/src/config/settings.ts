@@ -346,6 +346,20 @@ function mergeSettings(
     // It only exists in memory for the UI and manipulates excludeTools/allowedTools
     // But it should have schema defaults for proper UI display
     coreToolSettings: schemaDefaults.coreToolSettings || {},
+    hooksConfig: {
+      ...(schemaDefaults.hooksConfig || {}),
+      ...(systemDefaults.hooksConfig || {}),
+      ...(user.hooksConfig || {}),
+      ...(safeWorkspace.hooksConfig || {}),
+      ...(system.hooksConfig || {}),
+    },
+    hooks: {
+      ...(schemaDefaults.hooks || {}),
+      ...(systemDefaults.hooks || {}),
+      ...(user.hooks || {}),
+      ...(safeWorkspace.hooks || {}),
+      ...(system.hooks || {}),
+    },
   };
 
   const prioritizedTheme =

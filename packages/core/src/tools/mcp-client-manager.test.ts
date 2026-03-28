@@ -7,11 +7,14 @@
 import { vi, describe, it, expect } from 'vitest';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
+import { MCPDiscoveryState } from './mcp-client.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from './tool-registry.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
 import type { WorkspaceContext } from '../utils/workspaceContext.js';
+import { EventEmitter } from 'node:events';
+import { CoreEvent } from '../utils/events.js';
 
 vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
@@ -373,6 +376,142 @@ describe('McpClientManager', () => {
       expect(instructions).not.toContain(
         "The following are instructions provided by the tool server 'server-without-instructions':",
       );
+    });
+  });
+
+  describe('discovery state transitions', () => {
+    const createManager = (servers: Record<string, unknown> = {}) => {
+      const eventEmitter = new EventEmitter();
+      const mockedMcpClient = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({}),
+        getInstructions: vi.fn().mockReturnValue(''),
+      };
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getMcpServers: () => servers,
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getResourceRegistry: () => ({}) as ResourceRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getGeminiClient: () => ({
+          isInitialized: () => false,
+        }),
+        refreshMcpContext: vi.fn(),
+      } as unknown as Config;
+      const manager = new McpClientManager(
+        '0.0.1',
+        {} as ToolRegistry,
+        mockConfig,
+        eventEmitter,
+      );
+      return { manager, eventEmitter, mockedMcpClient, mockConfig };
+    };
+
+    it('should start with NOT_STARTED state', () => {
+      const { manager } = createManager();
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.NOT_STARTED);
+    });
+
+    it('should transition to COMPLETED immediately when no servers are configured', async () => {
+      const { manager, eventEmitter } = createManager({});
+      const events: string[] = [];
+      eventEmitter.on(CoreEvent.McpClientUpdate, () =>
+        events.push('McpClientUpdate'),
+      );
+
+      await manager.startConfiguredMcpServers();
+
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+      // Zero-server fast-path should still emit McpClientUpdate
+      expect(events.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should transition NOT_STARTED → IN_PROGRESS → COMPLETED for configured servers', async () => {
+      const { manager, eventEmitter } = createManager({
+        'test-server': {},
+      });
+      const states: string[] = [];
+      eventEmitter.on(CoreEvent.McpClientUpdate, () => {
+        states.push(manager.getDiscoveryState());
+      });
+
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.NOT_STARTED);
+
+      await manager.startConfiguredMcpServers();
+
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+      // Should have seen IN_PROGRESS at some point during discovery
+      expect(states).toContain(MCPDiscoveryState.IN_PROGRESS);
+      // Should have seen COMPLETED at the end
+      expect(states).toContain(MCPDiscoveryState.COMPLETED);
+    });
+
+    it('should emit McpClientUpdate on COMPLETED transition', async () => {
+      const { manager, eventEmitter } = createManager({
+        'test-server': {},
+      });
+      const payloads: unknown[] = [];
+      eventEmitter.on(CoreEvent.McpClientUpdate, (payload) => {
+        payloads.push(payload);
+      });
+
+      await manager.startConfiguredMcpServers();
+
+      // At least one payload should have been emitted (the COMPLETED one)
+      expect(payloads.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should not change state when folder is not trusted', async () => {
+      const mockedMcpClient = {
+        connect: vi.fn(),
+        discover: vi.fn(),
+        disconnect: vi.fn(),
+        getStatus: vi.fn(),
+        getServerConfig: vi.fn().mockReturnValue({}),
+      };
+      vi.mocked(McpClient).mockReturnValue(
+        mockedMcpClient as unknown as McpClient,
+      );
+      const mockConfig = {
+        isTrustedFolder: () => false,
+        getMcpServers: () => ({ 'test-server': {} }),
+        getMcpServerCommand: () => '',
+        getPromptRegistry: () => ({}) as PromptRegistry,
+        getResourceRegistry: () => ({}) as ResourceRegistry,
+        getDebugMode: () => false,
+        getWorkspaceContext: () => ({}) as WorkspaceContext,
+        getEnableExtensionReloading: () => false,
+        getExtensionEvents: () => undefined,
+        getAllowedMcpServers: () => undefined,
+        getBlockedMcpServers: () => undefined,
+        getGeminiClient: () => ({
+          isInitialized: () => false,
+        }),
+        refreshMcpContext: vi.fn(),
+      } as unknown as Config;
+      const manager = new McpClientManager(
+        '0.0.1',
+        {} as ToolRegistry,
+        mockConfig,
+      );
+
+      await manager.startConfiguredMcpServers();
+
+      // Untrusted folder means startConfiguredMcpServers returns early
+      // without touching discovery state — stays NOT_STARTED
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.NOT_STARTED);
     });
   });
 });

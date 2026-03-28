@@ -1265,6 +1265,112 @@ describe('useTextBuffer', () => {
       expect(getBufferState(result).cursor).toEqual([0, 2]);
     });
 
+    it('should handle up/down arrow keys for vertical movement via handleInput', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          initialText: 'abc\ndef\nghi',
+          viewport,
+          isValidPath: () => false,
+        }),
+      );
+      // Start at [0,0], move down twice then up
+      act(() =>
+        result.current.handleInput({
+          name: 'down',
+          ctrl: false,
+          meta: false,
+          shift: false,
+          sequence: '\x1b[B',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([1, 0]);
+      act(() =>
+        result.current.handleInput({
+          name: 'down',
+          ctrl: false,
+          meta: false,
+          shift: false,
+          sequence: '\x1b[B',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([2, 0]);
+      act(() =>
+        result.current.handleInput({
+          name: 'up',
+          ctrl: false,
+          meta: false,
+          shift: false,
+          sequence: '\x1b[A',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([1, 0]);
+    });
+
+    it('should use keyMatchers for MOVE_UP/MOVE_DOWN (honors command mapping)', () => {
+      // The default MOVE_UP binding is { key: 'up', ctrl: false, command: false },
+      // so pressing up with meta/command held should NOT trigger move('up').
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          initialText: 'abc\ndef',
+          viewport,
+          isValidPath: () => false,
+        }),
+      );
+      // Move to line 1
+      act(() => result.current.move('down'));
+      expect(getBufferState(result).cursor).toEqual([1, 0]);
+
+      // Press up with meta (command) held — should NOT move up because
+      // the default binding requires command=false.
+      act(() =>
+        result.current.handleInput({
+          name: 'up',
+          ctrl: false,
+          meta: true,
+          shift: false,
+          sequence: '\x1b[A',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([1, 0]); // Still on line 1
+
+      // Press plain up — should move up
+      act(() =>
+        result.current.handleInput({
+          name: 'up',
+          ctrl: false,
+          meta: false,
+          shift: false,
+          sequence: '\x1b[A',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([0, 0]);
+
+      // Press down with ctrl held — should NOT move down because
+      // the default binding requires ctrl=false.
+      act(() =>
+        result.current.handleInput({
+          name: 'down',
+          ctrl: true,
+          meta: false,
+          shift: false,
+          sequence: '\x1b[B',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([0, 0]); // Still on line 0
+
+      // Press plain down — should move down
+      act(() =>
+        result.current.handleInput({
+          name: 'down',
+          ctrl: false,
+          meta: false,
+          shift: false,
+          sequence: '\x1b[B',
+        }),
+      );
+      expect(getBufferState(result).cursor).toEqual([1, 0]);
+    });
+
     it('should strip ANSI escape codes when pasting text', () => {
       const { result } = renderHook(() =>
         useTextBuffer({ viewport, isValidPath: () => false }),

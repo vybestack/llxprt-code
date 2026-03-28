@@ -1407,6 +1407,10 @@ export async function loadCliConfig(
       effectiveSettings.admin?.secureModeEnabled,
     accessibility: {
       ...effectiveSettings.accessibility,
+      // Bridge: convert enable* setting back to disable* for core layer compatibility
+      disableLoadingPhrases: !(
+        effectiveSettings.accessibility?.enableLoadingPhrases ?? true
+      ),
       screenReader,
     },
     telemetry: {

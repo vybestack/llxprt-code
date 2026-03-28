@@ -319,8 +319,7 @@ function useDialogsProfiles(p: AppDialogsParams) {
     setLlxprtMdFileCount,
   });
   const useAlternateBuffer =
-    settings.merged.ui?.useAlternateBuffer === true &&
-    !config.getScreenReader();
+    settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
   return {
     isLoadProfileDialogOpen: loadProfile.showDialog,
     openLoadProfileDialog: loadProfile.openDialog,

@@ -62,12 +62,18 @@ import type { CompressionContext } from './compression/types.js';
 export class AgentExecutionStoppedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
+  readonly contextCleared?: boolean;
 
-  constructor(reason: string, systemMessage?: string) {
+  constructor(
+    reason: string,
+    systemMessage?: string,
+    contextCleared?: boolean,
+  ) {
     super(`Agent execution stopped: ${systemMessage || reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
+    this.contextCleared = contextCleared;
   }
 }
 
@@ -78,17 +84,20 @@ export class AgentExecutionBlockedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
   readonly syntheticResponse?: GenerateContentResponse;
+  readonly contextCleared?: boolean;
 
   constructor(
     reason: string,
     syntheticResponse?: GenerateContentResponse,
     systemMessage?: string,
+    contextCleared?: boolean,
   ) {
     super(`Agent execution blocked: ${systemMessage || reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
     this.syntheticResponse = syntheticResponse;
+    this.contextCleared = contextCleared;
   }
 }
 

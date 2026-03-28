@@ -90,6 +90,7 @@ import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
+import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
@@ -123,7 +124,7 @@ export class Config extends ConfigBase {
     this.resourceRegistry = new ResourceRegistry();
     this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
-      'unknown',
+      await getCoreVersion(),
       this.toolRegistry,
       this,
       this.eventEmitter,
@@ -764,7 +765,7 @@ export class Config extends ConfigBase {
    */
   getDisabledHooks(): string[] {
     if (this.disabledHooks.length === 0) {
-      const persisted = this.settingsService.get('hooks.disabled') as
+      const persisted = this.settingsService.get('hooksConfig.disabled') as
         | string[]
         | undefined;
       if (persisted && persisted.length > 0) {

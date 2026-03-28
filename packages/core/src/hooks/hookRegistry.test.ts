@@ -572,14 +572,14 @@ describe('HookRegistry', () => {
       );
     });
 
-    it('should skip known config fields and warn on invalid event names', async () => {
+    it('should warn on misplaced hooksConfig fields and on invalid event names', async () => {
       const emitSpy = vi.spyOn(coreEvents, 'emit');
 
       const configWithExtras = {
-        disabled: [], // known config field — must be skipped silently
-        enabled: true, // known config field — must be skipped silently
-        notifications: true, // known config field — must be skipped silently
-        InvalidEvent: [], // unknown event name — must trigger warning
+        disabled: [], // hooksConfig field — must produce migration warning
+        enabled: true, // hooksConfig field — must produce migration warning
+        notifications: true, // hooksConfig field — must produce migration warning
+        InvalidEvent: [], // unknown event name — must trigger invalid-event warning
         BeforeTool: [
           {
             hooks: [{ type: 'command', command: './test.sh' }],
@@ -598,7 +598,17 @@ describe('HookRegistry', () => {
       // Should only load the valid hook (BeforeTool), not InvalidEvent
       expect(hookRegistry.getAllHooks()).toHaveLength(1);
 
-      // Should have emitted exactly one Output warning for InvalidEvent
+      // Should have emitted migration-style warnings for each misplaced hooksConfig field
+      for (const field of ['disabled', 'enabled', 'notifications']) {
+        expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {
+          chunk: expect.stringContaining(
+            `"${field}" is a hooksConfig field, not a hook event`,
+          ),
+          isStderr: true,
+        });
+      }
+
+      // Should have emitted exactly one invalid-event warning for InvalidEvent
       const invalidEventWarnings = emitSpy.mock.calls.filter(
         ([event, payload]) =>
           event === CoreEvent.Output &&
@@ -615,27 +625,6 @@ describe('HookRegistry', () => {
         ),
         isStderr: true,
       });
-
-      // Should NOT have emitted warnings for known config fields
-      const allCalls = emitSpy.mock.calls;
-      const warningCallsForKnownFields = allCalls.filter(([, payload]) => {
-        if (
-          typeof payload !== 'object' ||
-          payload === null ||
-          !('chunk' in payload) ||
-          typeof (payload as { chunk: string }).chunk !== 'string'
-        ) {
-          return false;
-        }
-
-        const chunk = (payload as { chunk: string }).chunk;
-        return (
-          chunk.includes('"disabled"') ||
-          chunk.includes('"enabled"') ||
-          chunk.includes('"notifications"')
-        );
-      });
-      expect(warningCallsForKnownFields).toHaveLength(0);
 
       emitSpy.mockRestore();
     });

@@ -259,6 +259,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
       getGeminiClient: mockGetGeminiClient,
+      getMcpClientManager: vi.fn(() => undefined),
+      getMcpServers: vi.fn(() => undefined),
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       addHistory: vi.fn(),

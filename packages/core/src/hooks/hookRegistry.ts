@@ -209,8 +209,13 @@ export class HookRegistry {
     source: ConfigSource,
   ): void {
     for (const [eventName, definitions] of Object.entries(hooksConfig)) {
-      // Skip known config fields without warning
+      // Warn about config keys that belong under hooksConfig, not hooks
       if (HOOKS_CONFIG_FIELDS.includes(eventName)) {
+        coreEvents.emit(CoreEvent.Output, {
+          chunk: `Warning: "${eventName}" is a hooksConfig field, not a hook event. It is ignored under "hooks" — move it to "hooksConfig". Skipping.
+`,
+          isStderr: true,
+        });
         continue;
       }
 
