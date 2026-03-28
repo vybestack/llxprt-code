@@ -817,6 +817,22 @@ export function SettingsDialog({
     (key) => {
       const { name } = key;
 
+      if (name === 'tab') {
+        if (focusSection === 'settings' && isSearching) {
+          setIsSearching(false);
+        } else if (focusSection === 'settings' && !isSearching) {
+          if (showScopeSelection) {
+            setFocusSection('scope');
+          } else {
+            setIsSearching(true);
+          }
+        } else if (focusSection === 'scope') {
+          setIsSearching(true);
+          setFocusSection('settings');
+        }
+        return;
+      }
+
       if (isSearching) {
         if (keyMatchers[Command.ESCAPE](key)) {
           setIsSearching(false);
@@ -831,32 +847,20 @@ export function SettingsDialog({
           setSearchQuery((prev) => prev.slice(0, -1));
           return;
         }
+
+        const ch = stripUnsafeCharacters(key.sequence ?? '');
         if (
-          key.sequence &&
-          key.sequence.length === 1 &&
+          ch.length === 1 &&
           !key.ctrl &&
           !key.meta &&
           !keyMatchers[Command.DIALOG_NAVIGATION_UP](key) &&
           !keyMatchers[Command.DIALOG_NAVIGATION_DOWN](key)
         ) {
-          setSearchQuery((prev) => prev + key.sequence);
+          setSearchQuery((prev) => prev + ch);
           return;
         }
-      }
 
-      if (name === 'tab') {
-        if (focusSection === 'settings' && isSearching) {
-          setIsSearching(false);
-        } else if (focusSection === 'settings' && !isSearching) {
-          if (showScopeSelection) {
-            setFocusSection('scope');
-          } else {
-            setIsSearching(true);
-          }
-        } else if (focusSection === 'scope') {
-          setIsSearching(true);
-          setFocusSection('settings');
-        }
+        return;
       }
       if (
         focusSection === 'settings' &&

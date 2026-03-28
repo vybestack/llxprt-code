@@ -263,6 +263,13 @@ describe('SettingsDialog', () => {
 
       const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
+      // Exit search mode first (dialog starts in search mode)
+      await pressEnter(stdin);
+
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Enter.*select/);
+      });
+
       // Try to go up from first item
       act(() => {
         stdin.write(TerminalKeys.UP_ARROW);
