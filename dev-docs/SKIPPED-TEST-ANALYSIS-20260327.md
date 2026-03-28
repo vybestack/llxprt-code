@@ -8,7 +8,7 @@
 
 | Action                                     | Tests | Details                                                                                                                                                                                                                                                      |
 | ------------------------------------------ | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Deleted (obsolete/mock-theater/unfinished) |   ~80 | 7 files fully deleted, 14+ files cleaned of skip blocks                                                                                                                                                                                                      |
+| Deleted (obsolete/mock-theater/unfinished) |   ~80 | 7 files fully deleted, 16 files cleaned of skip blocks                                                                                                                                                                                                       |
 | Fixed and enabled                          |    22 | parseResponsesStream (5), useToolScheduler (3), nonInteractiveCli (2), notification-hook (4), loopDetectionService (2), prompts-async (1), hooks-caller-integration deleted as redundant (9→0, covered by geminiChatHookTriggers + hooks-caller-application) |
 | Deleted (additional cleanup)               |     2 | settings.test.ts chatCompression validation (obsolete), cli-args provider override (unfinished)                                                                                                                                                              |
 | Enabled (Phase 2 — E2E + integration)      |    18 | run_shell_command (5→0), replace (3→0), file-system (1→0), read_many_files (1→0), token-tracking (1→0), OpenAI stateless (3+2→0), ide-client (3+1→0), config telemetry (1→0)                                                                                 |
@@ -92,7 +92,7 @@ What WAS happening: during cherry-picking from upstream, some tests got `it.skip
 6. `performance.test.ts` — Non-falsifiable perf thresholds
 7. `hooks-caller-integration.test.ts` — All 9 tests redundant with passing test suites
 
-## Files Cleaned (skip blocks removed from 14+ files)
+## Files Cleaned (skip blocks removed from 16 files)
 
 client.test.ts, coreToolScheduler.test.ts, retry.test.ts, orphaned-tools-comprehensive.test.ts,
 tool-registry.test.ts, DebugLogger.test.ts, shellExecutionService.windows.test.ts,
