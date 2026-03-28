@@ -32,12 +32,42 @@ vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
 const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 const useRuntimeApiMock = vi.mocked(RuntimeContext.useRuntimeApi);
 
-const renderWithMockedStats = (metrics: SessionMetrics) => {
+const defaultTokenTracking = {
+  tokensPerMinute: 0,
+  throttleWaitTimeMs: 0,
+  timeToFirstToken: null as number | null,
+  tokensPerSecond: 0,
+  sessionTokenUsage: {
+    input: 0,
+    output: 0,
+    cache: 0,
+    tool: 0,
+    thought: 0,
+    total: 0,
+  },
+};
+
+const withTokenTracking = (
+  partial: Omit<SessionMetrics, 'tokenTracking'> & {
+    tokenTracking?: SessionMetrics['tokenTracking'];
+  },
+): SessionMetrics => ({
+  ...partial,
+  tokenTracking: partial.tokenTracking ?? { ...defaultTokenTracking },
+});
+
+const renderWithMockedStats = (
+  metrics: Omit<SessionMetrics, 'tokenTracking'> & {
+    tokenTracking?: SessionMetrics['tokenTracking'];
+  },
+) => {
+  const withDefaults = withTokenTracking(metrics);
+
   useSessionStatsMock.mockReturnValue({
     stats: {
       sessionId: 'test-session-id',
       sessionStartTime: new Date(),
-      metrics,
+      metrics: withDefaults,
       lastPromptTokenCount: 0,
       promptCount: 5,
     },
@@ -81,6 +111,7 @@ const defaultZeroMetrics: SessionMetrics = {
     totalLinesAdded: 0,
     totalLinesRemoved: 0,
   },
+  tokenTracking: { ...defaultTokenTracking },
 };
 
 const defaultStatsReturnValue = {
@@ -119,8 +150,9 @@ describe('<StatsDisplay />', () => {
       }),
     } as unknown as ReturnType<typeof RuntimeContext.useRuntimeApi>);
   });
+
   it('renders only the Performance section in its zero state', () => {
-    const zeroMetrics: SessionMetrics = {
+    const zeroMetrics = withTokenTracking({
       models: {},
       tools: {
         totalCalls: 0,
@@ -134,7 +166,7 @@ describe('<StatsDisplay />', () => {
         totalLinesAdded: 0,
         totalLinesRemoved: 0,
       },
-    };
+    });
 
     const { lastFrame } = renderWithMockedStats(zeroMetrics);
     const output = lastFrame();
@@ -143,11 +175,12 @@ describe('<StatsDisplay />', () => {
     expect(output).not.toContain('Interaction Summary');
     expect(output).not.toContain('Efficiency & Optimizations');
     expect(output).not.toContain('Model'); // The table header
+    expect(output).not.toContain('Throughput:');
     expect(output).toMatchSnapshot();
   });
 
   it('renders a table with two models correctly', () => {
-    const metrics: SessionMetrics = {
+    const metrics = withTokenTracking({
       models: {
         'gemini-2.5-pro': {
           api: { totalRequests: 3, totalErrors: 0, totalLatencyMs: 15000 },
@@ -186,7 +219,7 @@ describe('<StatsDisplay />', () => {
         totalLinesAdded: 0,
         totalLinesRemoved: 0,
       },
-    };
+    });
 
     const { lastFrame } = renderWithMockedStats(metrics);
     const output = lastFrame();
@@ -199,7 +232,7 @@ describe('<StatsDisplay />', () => {
   });
 
   it('renders all sections when all data is present', () => {
-    const metrics: SessionMetrics = {
+    const metrics = withTokenTracking({
       models: {
         'gemini-2.5-pro': {
           api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
@@ -234,7 +267,7 @@ describe('<StatsDisplay />', () => {
         totalLinesAdded: 0,
         totalLinesRemoved: 0,
       },
-    };
+    });
 
     const { lastFrame } = renderWithMockedStats(metrics);
     const output = lastFrame();
@@ -249,7 +282,7 @@ describe('<StatsDisplay />', () => {
 
   describe('Conditional Rendering Tests', () => {
     it('hides User Agreement when no decisions are made', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {},
         tools: {
           totalCalls: 2,
@@ -271,7 +304,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
 
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
@@ -283,7 +316,7 @@ describe('<StatsDisplay />', () => {
     });
 
     it('hides Efficiency section when cache is not used', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
             api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
@@ -310,7 +343,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
 
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
@@ -321,7 +354,7 @@ describe('<StatsDisplay />', () => {
 
   describe('Conditional Color Tests', () => {
     it('renders success rate in green for high values', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {},
         tools: {
           totalCalls: 10,
@@ -335,13 +368,13 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
       const { lastFrame } = renderWithMockedStats(metrics);
       expect(lastFrame()).toMatchSnapshot();
     });
 
     it('renders success rate in yellow for medium values', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {},
         tools: {
           totalCalls: 10,
@@ -355,13 +388,13 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
       const { lastFrame } = renderWithMockedStats(metrics);
       expect(lastFrame()).toMatchSnapshot();
     });
 
     it('renders success rate in red for low values', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {},
         tools: {
           totalCalls: 10,
@@ -375,7 +408,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
       const { lastFrame } = renderWithMockedStats(metrics);
       expect(lastFrame()).toMatchSnapshot();
     });
@@ -383,7 +416,7 @@ describe('<StatsDisplay />', () => {
 
   describe('Code Changes Display', () => {
     it('displays Code Changes when line counts are present', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {},
         tools: {
           totalCalls: 1,
@@ -397,7 +430,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 42,
           totalLinesRemoved: 18,
         },
-      };
+      });
 
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
@@ -409,7 +442,7 @@ describe('<StatsDisplay />', () => {
     });
 
     it('hides Code Changes when no lines are added or removed', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {},
         tools: {
           totalCalls: 1,
@@ -423,7 +456,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
 
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
@@ -434,7 +467,7 @@ describe('<StatsDisplay />', () => {
   });
 
   describe('Title Rendering', () => {
-    const zeroMetrics: SessionMetrics = {
+    const zeroMetrics = withTokenTracking({
       models: {},
       tools: {
         totalCalls: 0,
@@ -448,7 +481,7 @@ describe('<StatsDisplay />', () => {
         totalLinesAdded: 0,
         totalLinesRemoved: 0,
       },
-    };
+    });
 
     it('renders the default title when no title prop is provided', () => {
       const { lastFrame } = renderWithMockedStats(zeroMetrics);
@@ -471,7 +504,7 @@ describe('<StatsDisplay />', () => {
 
   describe('Quota Display', () => {
     it('renders quota information when quotaLines are provided', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
             api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
@@ -498,7 +531,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
 
       const quotaLines = [
         '## Anthropic Quota Information\n',
@@ -546,7 +579,7 @@ describe('<StatsDisplay />', () => {
 
   describe('Model Usage Table Updates', () => {
     it('should display separate Input Tokens and Cache Reads columns', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
             api: { totalRequests: 5, totalErrors: 0, totalLatencyMs: 1000 },
@@ -572,7 +605,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
 
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
@@ -585,7 +618,7 @@ describe('<StatsDisplay />', () => {
     });
 
     it('should apply color to cache efficiency percentage', () => {
-      const metrics: SessionMetrics = {
+      const metrics = withTokenTracking({
         models: {
           'gemini-2.5-pro': {
             api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
@@ -611,7 +644,7 @@ describe('<StatsDisplay />', () => {
           totalLinesAdded: 0,
           totalLinesRemoved: 0,
         },
-      };
+      });
 
       const { lastFrame } = renderWithMockedStats(metrics);
       const output = lastFrame();
@@ -619,6 +652,122 @@ describe('<StatsDisplay />', () => {
       expect(output).toContain('Savings Highlight');
       expect(output).toContain('50.0%');
       // Snapshot will verify color codes are present
+      expect(output).toMatchSnapshot();
+    });
+  });
+
+  describe('Issue #1805 metrics display', () => {
+    it('shows throughput, TTFT, and output rate in performance section when available', () => {
+      const metrics = withTokenTracking({
+        models: {
+          'gemini-2.5-pro': {
+            api: { totalRequests: 2, totalErrors: 0, totalLatencyMs: 2500 },
+            tokens: {
+              input: 600,
+              prompt: 900,
+              candidates: 400,
+              total: 1300,
+              cached: 300,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: 1,
+          totalSuccess: 1,
+          totalFail: 0,
+          totalDurationMs: 250,
+          totalDecisions: { accept: 1, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+        tokenTracking: {
+          ...defaultTokenTracking,
+          tokensPerMinute: 1234,
+          timeToFirstToken: 187,
+          tokensPerSecond: 42.42,
+        },
+      });
+
+      const { lastFrame } = renderWithMockedStats(metrics);
+      const output = lastFrame();
+
+      expect(output).toContain('Throughput:');
+      expect(output).toContain('1.23k TPM');
+      expect(output).toContain('(input+output)');
+      expect(output).toContain('TTFT:');
+      expect(output).toContain('187ms');
+      expect(output).toContain('Output Rate:');
+      expect(output).toContain('42.42 tok/s');
+      expect(output).toMatchSnapshot();
+    });
+
+    it('hides throughput, TTFT, and output rate when values are unavailable', () => {
+      const metrics = withTokenTracking({
+        models: {},
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+        tokenTracking: {
+          ...defaultTokenTracking,
+          tokensPerMinute: 0,
+          timeToFirstToken: null,
+          tokensPerSecond: 0,
+        },
+      });
+
+      const { lastFrame } = renderWithMockedStats(metrics);
+      const output = lastFrame();
+
+      expect(output).not.toContain('Throughput:');
+      expect(output).not.toContain('TTFT:');
+      expect(output).not.toContain('Output Rate:');
+      expect(output).toMatchSnapshot();
+    });
+
+    it('shows throughput when TPM is present even if TTFT/output rate are unavailable', () => {
+      const metrics = withTokenTracking({
+        models: {},
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+        tokenTracking: {
+          ...defaultTokenTracking,
+          tokensPerMinute: 250,
+          timeToFirstToken: null,
+          tokensPerSecond: 0,
+        },
+      });
+
+      const { lastFrame } = renderWithMockedStats(metrics);
+      const output = lastFrame();
+
+      expect(output).toContain('Throughput:');
+      expect(output).toContain('250.00 TPM');
+      expect(output).not.toContain('TTFT:');
+      expect(output).not.toContain('Output Rate:');
       expect(output).toMatchSnapshot();
     });
   });

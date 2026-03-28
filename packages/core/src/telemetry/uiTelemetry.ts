@@ -72,6 +72,8 @@ export interface SessionMetrics {
   tokenTracking: {
     tokensPerMinute: number;
     throttleWaitTimeMs: number;
+    timeToFirstToken: number | null;
+    tokensPerSecond: number;
     sessionTokenUsage: {
       input: number;
       output: number;
@@ -123,6 +125,8 @@ const createInitialMetrics = (): SessionMetrics => ({
   tokenTracking: {
     tokensPerMinute: 0,
     throttleWaitTimeMs: 0,
+    timeToFirstToken: null,
+    tokensPerSecond: 0,
     sessionTokenUsage: {
       input: 0,
       output: 0,
@@ -180,6 +184,8 @@ export class UiTelemetryService extends EventEmitter {
   setTokenTrackingMetrics(metrics: {
     tokensPerMinute: number;
     throttleWaitTimeMs: number;
+    timeToFirstToken: number | null;
+    tokensPerSecond: number;
     sessionTokenUsage: {
       input: number;
       output: number;

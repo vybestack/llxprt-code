@@ -203,4 +203,126 @@ describe('ProviderPerformanceTracker', () => {
       'Provider: test-provider, Requests: 1, Avg Latency: 1000.00ms, Tokens/sec: 500.00, Error Rate: 50.0%',
     );
   });
+
+  describe('Issue #1805: TPM numerator uses total tokens (input + output)', () => {
+    it('should accumulate totalTokens as input + output for each completion', () => {
+      vi.useRealTimers();
+      const tracker = new ProviderPerformanceTracker('test-provider');
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
+
+      // Simulate: 100 input + 50 output = 150 total tokens
+      tracker.recordCompletion(1000, null, 150, 1);
+      expect(tracker.getLatestMetrics().totalTokens).toBe(150);
+
+      // Simulate: 200 input + 100 output = 300 total tokens
+      tracker.recordCompletion(1000, null, 300, 1);
+      expect(tracker.getLatestMetrics().totalTokens).toBe(450);
+
+      vi.useRealTimers();
+    });
+
+    it('should compute TPM from total tokens (input+output), not just output tokens', () => {
+      vi.useRealTimers();
+      const tracker = new ProviderPerformanceTracker('test-provider');
+      vi.useFakeTimers();
+      const now = new Date('2025-01-01T00:00:00Z').getTime();
+      vi.setSystemTime(now);
+
+      // 150 total tokens (input+output), not 50 output-only
+      tracker.recordCompletion(1000, null, 150, 1);
+      const metrics = tracker.getLatestMetrics();
+      expect(metrics.totalTokens).toBe(150);
+      expect(metrics.tokensPerMinute).toBeGreaterThan(0);
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('Issue #1805: TTFT (timeToFirstToken) tracking', () => {
+    it('should store timeToFirstToken when provided', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+      tracker.recordCompletion(1000, 250, 100, 3);
+      expect(tracker.getLatestMetrics().timeToFirstToken).toBe(250);
+    });
+
+    it('should keep timeToFirstToken as null when not provided', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+      tracker.recordCompletion(1000, null, 100, 3);
+      expect(tracker.getLatestMetrics().timeToFirstToken).toBeNull();
+    });
+
+    it('should update TTFT only when non-null', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+
+      tracker.recordCompletion(1000, null, 100, 1);
+      expect(tracker.getLatestMetrics().timeToFirstToken).toBeNull();
+
+      tracker.recordCompletion(1000, 300, 100, 1);
+      expect(tracker.getLatestMetrics().timeToFirstToken).toBe(300);
+    });
+  });
+
+  describe('Issue #1805: chunkCount tracking', () => {
+    it('should track chunkCount from recordCompletion', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+      tracker.recordCompletion(1000, null, 100, 42);
+      expect(tracker.getLatestMetrics().chunksReceived).toBe(42);
+    });
+
+    it('should reflect last chunkCount when multiple completions recorded', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+      tracker.recordCompletion(500, null, 50, 5);
+      tracker.recordCompletion(600, null, 60, 10);
+      // chunksReceived is set to the last value, not accumulated
+      expect(tracker.getLatestMetrics().chunksReceived).toBe(10);
+    });
+  });
+
+  describe('Issue #1805: tokensPerSecond cumulative rolling average', () => {
+    it('should compute tokensPerSecond as cumulative average across completions', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+
+      // First request: 100 tokens in 1000ms = 100 tok/s
+      tracker.recordCompletion(1000, null, 100, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(100, 1);
+
+      // Second request: 200 tokens in 1000ms
+      // Cumulative: 300 tokens / 2000ms = 150 tok/s
+      tracker.recordCompletion(1000, null, 200, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(150, 1);
+
+      // Third request: 300 tokens in 2000ms
+      // Cumulative: 600 tokens / 4000ms = 150 tok/s
+      tracker.recordCompletion(2000, null, 300, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(150, 1);
+    });
+
+    it('should reset totalGenerationTimeMs on reset()', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+
+      tracker.recordCompletion(1000, null, 100, 1);
+      tracker.reset();
+      tracker.recordCompletion(1000, null, 200, 1);
+
+      // After reset, tokensPerSecond = 200/1 = 200 (not (200+100)/2)
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(200, 1);
+    });
+
+    it('should not overwrite tokensPerSecond but accumulate generation time', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+
+      // First: 1000 tokens in 500ms = 2000 tok/s
+      tracker.recordCompletion(500, null, 1000, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(2000, 1);
+
+      // Second: 1000 tokens in 500ms, cumulative: 2000 tokens / 1000ms = 2000 tok/s
+      tracker.recordCompletion(500, null, 1000, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(2000, 1);
+
+      // Third: 1000 tokens in 3000ms, cumulative: 3000 tokens / 4000ms = 750 tok/s
+      tracker.recordCompletion(3000, null, 1000, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(750, 1);
+    });
+  });
 });

@@ -872,4 +872,363 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       expect(metrics.totalTokens).toBe(0);
     });
   });
+
+  describe('Issue #1805: processStreamForMetrics enhanced metrics', () => {
+    // Provider that yields multiple chunks with token usage in final chunk
+    class MultiChunkWithUsageProvider implements IProvider {
+      name = 'multi-chunk-usage';
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return 'test-model';
+      }
+      getServerTools(): string[] {
+        return [];
+      }
+      async invokeServerTool(): Promise<unknown> {
+        return {};
+      }
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        } as IContent;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: ' World' }],
+        } as IContent;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: '!' }],
+          metadata: {
+            usage: {
+              promptTokens: 100,
+              completionTokens: 50,
+              totalTokens: 150,
+              cachedTokens: 10,
+            },
+            finishReason: 'STOP',
+          },
+        } as IContent;
+      }
+    }
+
+    class MetadataThenTextProvider implements IProvider {
+      name = 'metadata-then-text';
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return 'test-model';
+      }
+      getServerTools(): string[] {
+        return [];
+      }
+      async invokeServerTool(): Promise<unknown> {
+        return {};
+      }
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            finishReason: 'IN_PROGRESS',
+          },
+        } as IContent;
+
+        await new Promise((resolve) => setTimeout(resolve, 30));
+
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'ready' }],
+          metadata: {
+            usage: {
+              promptTokens: 20,
+              completionTokens: 10,
+              totalTokens: 30,
+              cachedTokens: 0,
+            },
+            finishReason: 'STOP',
+          },
+        } as IContent;
+      }
+    }
+
+    it('should pass total tokens (input + output) to performanceTracker via processStreamForMetrics', async () => {
+      const provider = new MultiChunkWithUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // totalTokens should be 100 + 50 = 150 (input + output), NOT just 50 (output)
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalTokens).toBe(150);
+    });
+
+    it('should capture TTFT (timeToFirstToken) on first chunk via processStreamForMetrics', async () => {
+      const provider = new MultiChunkWithUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // TTFT should have been captured since the provider yields multiple chunks
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.timeToFirstToken).not.toBeNull();
+      expect(metrics.timeToFirstToken!).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should count chunks correctly via processStreamForMetrics', async () => {
+      const provider = new MultiChunkWithUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      const chunks: IContent[] = [];
+      for await (const chunk of iterator) {
+        chunks.push(chunk);
+      }
+
+      // MultiChunkWithUsageProvider yields 3 chunks
+      expect(chunks).toHaveLength(3);
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.chunksReceived).toBe(3);
+    });
+
+    it('should capture TTFT on first token-bearing chunk (ignoring metadata-only chunks)', async () => {
+      const provider = new MetadataThenTextProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.timeToFirstToken).not.toBeNull();
+      expect(metrics.timeToFirstToken!).toBeGreaterThanOrEqual(20);
+    });
+
+    it('should compute tokensPerSecond as cumulative average', async () => {
+      const provider = new MultiChunkWithUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false);
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // tokensPerSecond should be computed from totalTokens / totalGenerationTimeMs
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.tokensPerSecond).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Issue #1805: logResponseStream enhanced metrics', () => {
+    class MultiChunkForLoggingProvider implements IProvider {
+      name = 'multi-chunk-logging';
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return 'test-model';
+      }
+      getServerTools(): string[] {
+        return [];
+      }
+      async invokeServerTool(): Promise<unknown> {
+        return {};
+      }
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'First' }],
+        } as IContent;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: ' Second' }],
+          metadata: {
+            usage: {
+              promptTokens: 200,
+              completionTokens: 80,
+              totalTokens: 280,
+              cachedTokens: 20,
+            },
+            finishReason: 'STOP',
+          },
+        } as IContent;
+      }
+    }
+
+    it('should pass total tokens (input + output) to performanceTracker via logResponseStream', async () => {
+      const provider = new MultiChunkForLoggingProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      // totalTokens should be 200 + 80 = 280 (input + output), NOT just 80 (output)
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalTokens).toBe(280);
+    });
+
+    it('should capture TTFT and chunkCount via logResponseStream', async () => {
+      const provider = new MultiChunkForLoggingProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      const metrics = wrapper.getPerformanceMetrics();
+      // TTFT should be captured on first chunk
+      expect(metrics.timeToFirstToken).not.toBeNull();
+      expect(metrics.timeToFirstToken!).toBeGreaterThanOrEqual(0);
+      // chunkCount should be 2 (provider yields 2 chunks)
+      expect(metrics.chunksReceived).toBe(2);
+    });
+  });
 });

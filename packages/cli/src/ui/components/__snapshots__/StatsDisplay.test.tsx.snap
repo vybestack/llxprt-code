@@ -7,7 +7,7 @@ exports[`<StatsDisplay /> > Code Changes Display > displays Code Changes when li
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 1 ( [OK] 1 x 0 )                                                    │
+│  Tool Calls:                 1 ( ✓ 1 x 0 )                                                       │
 │  Success Rate:               100.0%                                                              │
 │  Code Changes:               +42 -18                                                             │
 │                                                                                                  │
@@ -28,7 +28,7 @@ exports[`<StatsDisplay /> > Code Changes Display > hides Code Changes when no li
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 1 ( [OK] 1 x 0 )                                                    │
+│  Tool Calls:                 1 ( ✓ 1 x 0 )                                                       │
 │  Success Rate:               100.0%                                                              │
 │                                                                                                  │
 │  Performance                                                                                     │
@@ -48,7 +48,7 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in gr
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 10 ( [OK] 10 x 0 )                                                  │
+│  Tool Calls:                 10 ( ✓ 10 x 0 )                                                     │
 │  Success Rate:               100.0%                                                              │
 │                                                                                                  │
 │  Performance                                                                                     │
@@ -68,7 +68,7 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in re
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 10 ( [OK] 5 x 5 )                                                   │
+│  Tool Calls:                 10 ( ✓ 5 x 5 )                                                      │
 │  Success Rate:               50.0%                                                               │
 │                                                                                                  │
 │  Performance                                                                                     │
@@ -88,7 +88,7 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in ye
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 10 ( [OK] 9 x 1 )                                                   │
+│  Tool Calls:                 10 ( ✓ 9 x 1 )                                                      │
 │  Success Rate:               90.0%                                                               │
 │                                                                                                  │
 │  Performance                                                                                     │
@@ -127,7 +127,7 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement w
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 2 ( [OK] 1 x 1 )                                                    │
+│  Tool Calls:                 2 ( ✓ 1 x 1 )                                                       │
 │  Success Rate:               50.0%                                                               │
 │                                                                                                  │
 │  Performance                                                                                     │
@@ -136,6 +136,67 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement w
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              123ms (100.0%)                                                      │
 │                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<StatsDisplay /> > Issue #1805 metrics display > hides throughput, TTFT, and output rate when values are unavailable 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Session Stats                                                                                   │
+│                                                                                                  │
+│  Performance                                                                                     │
+│  Wall Time:                  1s                                                                  │
+│  Agent Active:               0s                                                                  │
+│    » API Time:               0s (0.0%)                                                           │
+│    » Tool Time:              0s (0.0%)                                                           │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<StatsDisplay /> > Issue #1805 metrics display > shows throughput when TPM is present even if TTFT/output rate are unavailable 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Session Stats                                                                                   │
+│                                                                                                  │
+│  Performance                                                                                     │
+│  Wall Time:                  1s                                                                  │
+│  Agent Active:               0s                                                                  │
+│    » API Time:               0s (0.0%)                                                           │
+│    » Tool Time:              0s (0.0%)                                                           │
+│    » Throughput:             250.00 TPM (input+output)                                           │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
+exports[`<StatsDisplay /> > Issue #1805 metrics display > shows throughput, TTFT, and output rate in performance section when available 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Session Stats                                                                                   │
+│                                                                                                  │
+│  Interaction Summary                                                                             │
+│  Session ID:                 test-session-id                                                     │
+│  Tool Calls:                 1 ( ✓ 1 x 0 )                                                       │
+│  Success Rate:               100.0%                                                              │
+│  User Agreement:             100.0% (1 reviewed)                                                 │
+│                                                                                                  │
+│  Performance                                                                                     │
+│  Wall Time:                  1s                                                                  │
+│  Agent Active:               2.8s                                                                │
+│    » API Time:               2.5s (90.9%)                                                        │
+│    » Tool Time:              250ms (9.1%)                                                        │
+│    » Throughput:             1.23k TPM (input+output)                                            │
+│    » TTFT:                   187ms                                                               │
+│    » Output Rate:            42.42 tok/s                                                         │
+│                                                                                                  │
+│                                                                                                  │
+│  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │
+│  ────────────────────────────────────────────────────────────────────────────                    │
+│  gemini-2.5-pro                 2            600           300            400                    │
+│                                                                                                  │
+│  Savings Highlight: 300 (33.3%) of input tokens were served from the cache, reducing costs.      │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -300,7 +361,7 @@ exports[`<StatsDisplay /> > renders all sections when all data is present 1`] = 
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                 test-session-id                                                     │
-│  Tool Calls:                 2 ( [OK] 1 x 1 )                                                    │
+│  Tool Calls:                 2 ( ✓ 1 x 1 )                                                       │
 │  Success Rate:               50.0%                                                               │
 │  User Agreement:             100.0% (1 reviewed)                                                 │
 │                                                                                                  │
