@@ -48,8 +48,6 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { SettingDefinition as _SettingDefinition } from '../../config/settingsSchema.js';
 import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
-import { useUIState } from '../contexts/UIStateContext.js';
-import { useTextBuffer } from './shared/text-buffer.js';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
 interface FzfResult {
@@ -70,28 +68,25 @@ interface SettingsDialogProps {
 
 interface TextInputProps {
   focus: boolean;
-  buffer: ReturnType<typeof useTextBuffer>;
+  value: string;
   placeholder?: string;
 }
 
 /**
  * Simple text input component for search.
  */
-function TextInput({ focus, buffer, placeholder }: TextInputProps) {
-  const displayText = buffer.text;
-  const showPlaceholder = !displayText && placeholder;
+function TextInput({ focus, value, placeholder }: TextInputProps) {
+  const showPlaceholder = !value && placeholder;
 
   if (showPlaceholder) {
     return <Text color={Colors.Gray}>{placeholder}</Text>;
   }
 
-  const [cursorRow, cursorCol] = buffer.cursor;
-
-  // Simple single-line display with cursor
-  const text = buffer.lines[cursorRow] || '';
-  const beforeCursor = text.slice(0, cursorCol);
-  const atCursor = text[cursorCol] || ' ';
-  const afterCursor = text.slice(cursorCol + 1);
+  const text = value;
+  const cursorPos = text.length;
+  const beforeCursor = text.slice(0, cursorPos);
+  const atCursor = text[cursorPos] || ' ';
+  const afterCursor = text.slice(cursorPos + 1);
 
   return (
     <>
@@ -190,7 +185,7 @@ export function SettingsDialog({
   const [showRestartPrompt, setShowRestartPrompt] = useState(false);
 
   // Search state
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearching, setIsSearching] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredKeys, setFilteredKeys] = useState<string[]>(() =>
     getDialogSettingKeys(),
@@ -850,7 +845,29 @@ export function SettingsDialog({
       }
 
       if (name === 'tab') {
-        setFocusSection((prev) => (prev === 'settings' ? 'scope' : 'settings'));
+        if (focusSection === 'settings' && isSearching) {
+          setIsSearching(false);
+        } else if (focusSection === 'settings' && !isSearching) {
+          if (showScopeSelection) {
+            setFocusSection('scope');
+          } else {
+            setIsSearching(true);
+          }
+        } else if (focusSection === 'scope') {
+          setIsSearching(true);
+          setFocusSection('settings');
+        }
+      }
+      if (
+        focusSection === 'settings' &&
+        !isSearching &&
+        !editingKey &&
+        key.sequence === '/' &&
+        !key.ctrl &&
+        !key.meta
+      ) {
+        setIsSearching(true);
+        return;
       }
       if (focusSection === 'settings') {
         // If editing, capture input and control keys
@@ -1271,21 +1288,6 @@ export function SettingsDialog({
     { isActive: true },
   );
 
-  const { mainAreaWidth } = useUIState();
-  const viewportWidth = mainAreaWidth - 8;
-
-  const buffer = useTextBuffer({
-    initialText: '',
-    initialCursorOffset: 0,
-    viewport: {
-      width: viewportWidth,
-      height: 1,
-    },
-    isValidPath: () => false,
-    singleLine: true,
-    onChange: (text) => setSearchQuery(text),
-  });
-
   const maxLabelOrDescriptionWidth = useMemo(() => {
     const allKeys = getDialogSettingKeys();
     let max = 0;
@@ -1346,8 +1348,8 @@ export function SettingsDialog({
           marginTop={1}
         >
           <TextInput
-            focus={focusSection === 'settings' && !editingKey}
-            buffer={buffer}
+            focus={focusSection === 'settings' && isSearching && !editingKey}
+            value={searchQuery}
             placeholder="Search to filter"
           />
         </Box>
@@ -1599,8 +1601,9 @@ export function SettingsDialog({
         <Box height={1} />
         <Box marginX={1}>
           <Text color={Colors.Gray}>
-            (Use Enter to select
-            {showScopeSelection ? ', Tab to change focus' : ''}, Esc to close)
+            {isSearching
+              ? '(Type to search, Esc to clear, Enter to navigate)'
+              : `(Use Enter to select${showScopeSelection ? ', Tab to change focus' : ''}, / to search, Esc to close)`}
           </Text>
         </Box>
         {showRestartPrompt && (
