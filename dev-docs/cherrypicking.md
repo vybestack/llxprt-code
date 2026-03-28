@@ -111,7 +111,7 @@ These upstream features have been completely removed from llxprt for privacy/sec
 
 - **ClearcutLogger (Google telemetry)** - All Google telemetry collection has been completely removed from llxprt. The codebase now uses only local file logging for telemetry, with no data sent to Google servers. Any upstream commits that add ClearcutLogger functionality should be skipped entirely.
 - **NextSpeakerChecker** - removed this as it wastes tokens and causes loops
-- **FlashFallback** - presently disabled but slated to be removed - no one wants to auto fall back to flash to code with if they were using a better model.
+- **FlashFallback** - completely removed. LLxprt does not auto-fallback to a flash model on quota errors. Any upstream commits that add flash fallback logic, "Switching to the gemini-2.5-flash model" messages, or `fallbackModel` parameters to error formatting functions must be skipped. Quota error messages should inform the user about limits and link to docs, not silently switch models.
 - **Smart Edit (`smart_edit`, `useSmartEdit`)** - removed; llxprt uses deterministic edits (`replace` + fuzzy edit). Skip all upstream Smart Edit tools/settings/tests.
 
 #### Handling Conflicts:
