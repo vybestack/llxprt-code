@@ -140,6 +140,21 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement w
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
+exports[`<StatsDisplay /> > Issue #1805 metrics display > hides throughput, TTFT, and output rate when values are non-finite 1`] = `
+"╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│  Session Stats                                                                                   │
+│                                                                                                  │
+│  Performance                                                                                     │
+│  Wall Time:                  1s                                                                  │
+│  Agent Active:               0s                                                                  │
+│    » API Time:               0s (0.0%)                                                           │
+│    » Tool Time:              0s (0.0%)                                                           │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
+`;
+
 exports[`<StatsDisplay /> > Issue #1805 metrics display > hides throughput, TTFT, and output rate when values are unavailable 1`] = `
 "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │                                                                                                  │

@@ -298,6 +298,17 @@ describe('ProviderPerformanceTracker', () => {
       expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(150, 1);
     });
 
+    it('should ignore token-only completions with zero elapsed time for cumulative rate', () => {
+      const tracker = new ProviderPerformanceTracker('test-provider');
+
+      tracker.recordCompletion(1000, null, 100, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(100, 1);
+
+      // Zero-time completion should not change the cumulative measured rate
+      tracker.recordCompletion(0, null, 500, 1);
+      expect(tracker.getLatestMetrics().tokensPerSecond).toBeCloseTo(100, 1);
+    });
+
     it('should reset totalGenerationTimeMs on reset()', () => {
       const tracker = new ProviderPerformanceTracker('test-provider');
 

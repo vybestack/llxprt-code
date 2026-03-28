@@ -20,6 +20,7 @@ export class ProviderPerformanceTracker {
     tokenCount: number;
   }>;
   private totalGenerationTimeMs = 0;
+  private totalTokensWithMeasuredTime = 0;
   private logger: DebugLogger;
 
   constructor(private providerName: string) {
@@ -82,8 +83,9 @@ export class ProviderPerformanceTracker {
 
     if (totalTime > 0) {
       this.totalGenerationTimeMs += totalTime;
+      this.totalTokensWithMeasuredTime += tokenCount;
       this.metrics.tokensPerSecond =
-        this.metrics.totalTokens / (this.totalGenerationTimeMs / 1000);
+        this.totalTokensWithMeasuredTime / (this.totalGenerationTimeMs / 1000);
     }
 
     this.metrics.chunksReceived = chunkCount;
@@ -137,6 +139,7 @@ export class ProviderPerformanceTracker {
     this.metrics = this.initializeMetrics();
     this.tokenTimestamps = [];
     this.totalGenerationTimeMs = 0;
+    this.totalTokensWithMeasuredTime = 0;
   }
 
   /**

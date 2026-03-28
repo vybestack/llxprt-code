@@ -961,6 +961,57 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       }
     }
 
+    class ToolCallOnlyProvider implements IProvider {
+      name = 'tool-call-only';
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return 'test-model';
+      }
+      getServerTools(): string[] {
+        return [];
+      }
+      async invokeServerTool(): Promise<unknown> {
+        return {};
+      }
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            finishReason: 'IN_PROGRESS',
+          },
+        } as IContent;
+
+        await new Promise((resolve) => setTimeout(resolve, 30));
+
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_1',
+              name: 'test_tool',
+              parameters: { foo: 'bar' },
+            },
+          ],
+          metadata: {
+            usage: {
+              promptTokens: 20,
+              completionTokens: 10,
+              totalTokens: 30,
+              cachedTokens: 0,
+            },
+            finishReason: 'STOP',
+          },
+        } as IContent;
+      }
+    }
+
     it('should pass total tokens (input + output) to performanceTracker via processStreamForMetrics', async () => {
       const provider = new MultiChunkWithUsageProvider();
       const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
@@ -1062,6 +1113,38 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
     it('should capture TTFT on first token-bearing chunk (ignoring metadata-only chunks)', async () => {
       const provider = new MetadataThenTextProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.timeToFirstToken).not.toBeNull();
+      expect(metrics.timeToFirstToken!).toBeGreaterThanOrEqual(20);
+    });
+
+    it('should treat tool_call blocks as token-bearing for TTFT detection', async () => {
+      const provider = new ToolCallOnlyProvider();
       const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
 
       const settings = new SettingsService();

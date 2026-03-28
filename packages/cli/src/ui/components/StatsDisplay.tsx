@@ -359,30 +359,33 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
             </Text>
           </Text>
         </SubStatRow>
-        {metrics.tokenTracking.tokensPerMinute > 0 && (
-          <SubStatRow title="Throughput:">
-            <Text color={theme.text.primary}>
-              {metrics.tokenTracking.tokensPerMinute < 1000
-                ? `${metrics.tokenTracking.tokensPerMinute.toFixed(2)} TPM`
-                : `${(metrics.tokenTracking.tokensPerMinute / 1000).toFixed(2)}k TPM`}
-              <Text color={theme.text.secondary}> (input+output)</Text>
-            </Text>
-          </SubStatRow>
-        )}
-        {metrics.tokenTracking.timeToFirstToken !== null && (
-          <SubStatRow title="TTFT:">
-            <Text color={theme.text.primary}>
-              {metrics.tokenTracking.timeToFirstToken.toFixed(0)}ms
-            </Text>
-          </SubStatRow>
-        )}
-        {metrics.tokenTracking.tokensPerSecond > 0 && (
-          <SubStatRow title="Output Rate:">
-            <Text color={theme.text.primary}>
-              {metrics.tokenTracking.tokensPerSecond.toFixed(2)} tok/s
-            </Text>
-          </SubStatRow>
-        )}
+        {Number.isFinite(metrics.tokenTracking.tokensPerMinute) &&
+          metrics.tokenTracking.tokensPerMinute > 0 && (
+            <SubStatRow title="Throughput:">
+              <Text color={theme.text.primary}>
+                {metrics.tokenTracking.tokensPerMinute < 1000
+                  ? `${metrics.tokenTracking.tokensPerMinute.toFixed(2)} TPM`
+                  : `${(metrics.tokenTracking.tokensPerMinute / 1000).toFixed(2)}k TPM`}
+                <Text color={theme.text.secondary}> (input+output)</Text>
+              </Text>
+            </SubStatRow>
+          )}
+        {metrics.tokenTracking.timeToFirstToken !== null &&
+          Number.isFinite(metrics.tokenTracking.timeToFirstToken) && (
+            <SubStatRow title="TTFT:">
+              <Text color={theme.text.primary}>
+                {metrics.tokenTracking.timeToFirstToken.toFixed(0)}ms
+              </Text>
+            </SubStatRow>
+          )}
+        {Number.isFinite(metrics.tokenTracking.tokensPerSecond) &&
+          metrics.tokenTracking.tokensPerSecond > 0 && (
+            <SubStatRow title="Output Rate:">
+              <Text color={theme.text.primary}>
+                {metrics.tokenTracking.tokensPerSecond.toFixed(2)} tok/s
+              </Text>
+            </SubStatRow>
+          )}
       </Section>
       <ModelUsageTable
         models={models}

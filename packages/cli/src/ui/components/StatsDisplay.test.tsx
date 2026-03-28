@@ -706,6 +706,40 @@ describe('<StatsDisplay />', () => {
       expect(output).toMatchSnapshot();
     });
 
+    it('hides throughput, TTFT, and output rate when values are non-finite', () => {
+      const metrics = withTokenTracking({
+        models: {},
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+        files: {
+          totalLinesAdded: 0,
+          totalLinesRemoved: 0,
+        },
+        tokenTracking: {
+          ...defaultTokenTracking,
+          tokensPerMinute: Number.NaN,
+          timeToFirstToken: Number.POSITIVE_INFINITY,
+          tokensPerSecond: Number.NEGATIVE_INFINITY,
+        },
+      });
+
+      const { lastFrame } = renderWithMockedStats(metrics);
+      const output = lastFrame();
+
+      expect(output).not.toContain('Throughput:');
+      expect(output).not.toContain('TTFT:');
+      expect(output).not.toContain('Output Rate:');
+      expect(output).not.toContain('NaN');
+      expect(output).not.toContain('Infinity');
+      expect(output).toMatchSnapshot();
+    });
+
     it('hides throughput, TTFT, and output rate when values are unavailable', () => {
       const metrics = withTokenTracking({
         models: {},

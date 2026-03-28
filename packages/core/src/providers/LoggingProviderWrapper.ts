@@ -904,7 +904,11 @@ export class LoggingProviderWrapper implements IProvider {
         if (block.type === 'text') {
           return typeof block.text === 'string' && block.text.length > 0;
         }
-        return block.type === 'thinking' || block.type === 'code';
+        return (
+          block.type === 'thinking' ||
+          block.type === 'code' ||
+          block.type === 'tool_call'
+        );
       });
     }
 
