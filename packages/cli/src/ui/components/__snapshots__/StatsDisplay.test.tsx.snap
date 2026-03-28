@@ -204,7 +204,7 @@ exports[`<StatsDisplay /> > Issue #1805 metrics display > shows throughput, TTFT
 │    » Tool Time:              250ms (9.1%)                                                        │
 │    » Throughput:             1.23k TPM (input+output)                                            │
 │    » TTFT:                   187ms                                                               │
-│    » Output Rate:            42.42 tok/s                                                         │
+│    » Token Rate:             42.42 tok/s                                                         │
 │                                                                                                  │
 │                                                                                                  │
 │  Model Usage                 Reqs   Input Tokens   Cache Reads  Output Tokens                    │

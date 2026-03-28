@@ -380,7 +380,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
           )}
         {Number.isFinite(metrics.tokenTracking.tokensPerSecond) &&
           metrics.tokenTracking.tokensPerSecond > 0 && (
-            <SubStatRow title="Output Rate:">
+            <SubStatRow title="Token Rate:">
               <Text color={theme.text.primary}>
                 {metrics.tokenTracking.tokensPerSecond.toFixed(2)} tok/s
               </Text>
