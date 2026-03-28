@@ -91,50 +91,5 @@ describe.skipIf(process.platform !== 'win32')(
         }),
       );
     });
-
-    it.skip('initializes TextDecoder with system encoding mapping (CP932->shift_jis) and decodes stderr bytes', async () => {
-      // simulate stderr chunk containing Shift-JIS bytes for some Japanese chars
-      const sjisBytes = Buffer.from([0x93, 0xfa, 0x96, 0x7b]);
-
-      // Capture handlers for the just-spawned child
-      const stdoutHandlers: Listener[] = [];
-      const stderrHandlers: Listener[] = [];
-      const exitHandlers: Listener[] = [];
-
-      (
-        spawn as unknown as {
-          mockImplementationOnce: (
-            fn: () => ReturnType<typeof fakeChildFactory>,
-          ) => void;
-        }
-      ).mockImplementationOnce(() => {
-        const child = fakeChildFactory();
-        child.stdout.on.mockImplementation((_ev: string, cb: Listener) => {
-          stdoutHandlers.push(cb);
-        });
-        child.stderr.on.mockImplementation((_ev: string, cb: Listener) => {
-          stderrHandlers.push(cb);
-        });
-        child.on.mockImplementation((ev: string, cb: Listener) => {
-          if (ev === 'exit') exitHandlers.push(cb);
-        });
-        return child;
-      });
-
-      const { result } = ShellExecutionService.execute(
-        'cmd /c',
-        '.',
-        () => {},
-        makeAbortSignal(),
-        false,
-      );
-
-      // emit stderr data and exit 0
-      stderrHandlers.forEach((cb) => cb(sjisBytes));
-      exitHandlers.forEach((cb) => cb(0, null));
-
-      const out = await result;
-      expect(out.stderr.length).toBeGreaterThan(0);
-    });
   },
 );

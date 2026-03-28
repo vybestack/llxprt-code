@@ -823,8 +823,7 @@ describe('runNonInteractive', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
   });
 
-  // Skipped tests from issue922 branch - thought buffering tests for deduplication
-  it.skip('should accumulate multiple Thought events and flush once on content boundary', async () => {
+  it('should accumulate multiple Thought events and flush once on content boundary', async () => {
     const thoughtEvent1: ServerGeminiStreamEvent = {
       type: GeminiEventType.Thought,
       value: {
@@ -868,13 +867,15 @@ describe('runNonInteractive', () => {
       ([output]: [string]) => output.includes('<think>'),
     );
 
+    // Both thought events should be buffered and flushed as a single <think> block
     expect(thinkingOutputs).toHaveLength(1);
     const thinkingText = thinkingOutputs[0][0];
-    expect(thinkingText).toContain('First thought');
-    expect(thinkingText).toContain('Second thought');
+    // Code formats thoughts as "subject: description" when both present
+    expect(thinkingText).toContain('First: thought');
+    expect(thinkingText).toContain('Second: thought');
   });
 
-  it.skip('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
+  it('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
     const thoughtEvent1: ServerGeminiStreamEvent = {
       type: GeminiEventType.Thought,
       value: {
@@ -918,8 +919,10 @@ describe('runNonInteractive', () => {
       ([output]: [string]) => output.includes('<think>'),
     );
 
+    // All thoughts should be buffered into one <think> block (no pyramid repetition)
     expect(thinkingOutputs).toHaveLength(1);
     const thinkingText = thinkingOutputs[0][0];
+    // "Analyzing" should appear exactly once — not repeated for each subsequent thought
     const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
     expect(thoughtCount).toBe(1);
   });

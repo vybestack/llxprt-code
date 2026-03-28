@@ -1,0 +1,2 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_ls2","name":"run_shell_command","parameters":{"command":"ls","description":"List files in current directory"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"Here are the files in the current directory."}],"metadata":{"usage":{"promptTokens":200,"completionTokens":10,"totalTokens":210}}}]}

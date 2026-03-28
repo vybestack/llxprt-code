@@ -202,43 +202,6 @@ describe('CLI --profile-load Integration Tests', () => {
   });
 
   describe('CLI Argument Precedence', () => {
-    it.skip('should allow --provider to override profile provider', async () => {
-      const profile: Profile = {
-        version: 1,
-        provider: 'gemini',
-        model: 'gemini-exp-1206',
-        modelParams: {},
-        ephemeralSettings: {},
-      };
-
-      await profileManager.saveProfile('test-profile', profile);
-      const keyfilePath = await createTempKeyfile(tempDir, 'test-api-key');
-
-      const result = await runCli(
-        [
-          '--profile-load',
-          'test-profile',
-          // Note: we can't test provider override since only gemini is registered
-          // '--provider',
-          // 'anthropic',
-          '--keyfile',
-          keyfilePath,
-          '--prompt',
-          'test',
-          '--debug',
-        ],
-        {
-          HOME: tempDir,
-        },
-      );
-
-      // Profile should be loaded
-      const fullOutput = result.stdout + result.stderr;
-      expect(fullOutput).toMatch(
-        /Loaded profile.*test-profile|Loading profile.*test-profile/i,
-      );
-    });
-
     it('should allow --model to override profile model', async () => {
       const profile: Profile = {
         version: 1,

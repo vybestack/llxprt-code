@@ -1,0 +1,3 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_ls1","name":"run_shell_command","parameters":{"command":"ls","description":"List files in current directory"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_wc4","name":"run_shell_command","parameters":{"command":"wc -l","description":"Count lines"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"I ran both ls and wc commands."}],"metadata":{"usage":{"promptTokens":200,"completionTokens":10,"totalTokens":210}}}]}

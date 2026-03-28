@@ -313,8 +313,9 @@ export class PromptResolver {
     // a. Convert to lowercase
     let result = component.toLowerCase();
 
-    // b. Replace sequences of non-alphanumeric chars with single hyphen
-    result = result.replace(/[^a-z0-9]+/g, '-');
+    // b. Replace sequences of chars that are not alphanumeric, dot, or hyphen with a single hyphen.
+    // Dots are preserved to support version numbers in model names (e.g. gemini-2.5-flash).
+    result = result.replace(/[^a-z0-9.-]+/g, '-');
 
     // c. Remove leading and trailing hyphens
     result = result.replace(/^-+|-+$/g, '');

@@ -16,59 +16,31 @@
  * - Every line of production code is written in response to a failing test
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { triggerToolNotificationHook } from '../core/coreToolHookTriggers.js';
 import { NotificationType } from './types.js';
 import type { Config } from '../config/config.js';
-import type { HookDefinition, HookType } from './types.js';
 import { HookSystem } from './hookSystem.js';
 import type { ToolCallConfirmationDetails } from '../tools/tools.js';
 
-function createTestConfigWithNotificationHook(command: string): Config {
-  const hookDef: HookDefinition = {
-    hooks: [
-      {
-        type: 'command' as HookType.Command,
-        command,
-        timeout: 5000,
-      },
-    ],
-  };
-
-  const hooks: Record<string, HookDefinition[]> = {
-    Notification: [hookDef],
-  };
-
-  let hookSystem: HookSystem | undefined;
-
-  const config = {
-    getEnableHooks: () => true,
-    getHooks: () => hooks,
-    getSessionId: () => 'test-session-' + Date.now(),
-    getWorkingDir: () => '/tmp/test',
-    getTargetDir: () => '/tmp/test',
-    getExtensions: () => [],
-    getDisabledHooks: () => [],
-    getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
-    getHookSystem: () => {
-      if (!hookSystem) {
-        hookSystem = new HookSystem(config);
-      }
-      return hookSystem;
-    },
-  } as unknown as Config;
-
-  return config;
-}
-
 describe('Notification Hook (ToolPermission)', () => {
-  describe('triggerToolNotificationHook', () => {
-    it.skip('should fire Notification hook with ToolPermission type for edit confirmation', async () => {
-      const config = createTestConfigWithNotificationHook(
-        'echo \'{"received": true}\'',
-      );
+  let mockConfig: Config;
+  let mockHookSystem: HookSystem;
 
+  beforeEach(() => {
+    mockHookSystem = {
+      initialize: vi.fn(async () => {}),
+      fireNotificationEvent: vi.fn(async () => ({})),
+    } as unknown as HookSystem;
+
+    mockConfig = {
+      getEnableHooks: vi.fn(() => true),
+      getHookSystem: vi.fn(() => mockHookSystem),
+    } as unknown as Config;
+  });
+
+  describe('triggerToolNotificationHook', () => {
+    it('should fire Notification hook with ToolPermission type for edit confirmation', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'edit',
         title: 'Write to test.txt',
@@ -82,19 +54,18 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        config,
+        mockConfig,
         confirmationDetails,
       );
 
       expect(result).toBeDefined();
       expect(result?.notificationType).toBe(NotificationType.ToolPermission);
+      expect(result?.message).toContain('Write to test.txt');
+      expect(result?.details.type).toBe('edit');
+      expect(result?.details.title).toBe('Write to test.txt');
     });
 
-    it.skip('should fire Notification hook with ToolPermission type for exec confirmation', async () => {
-      const config = createTestConfigWithNotificationHook(
-        'echo \'{"received": true}\'',
-      );
-
+    it('should fire Notification hook with ToolPermission type for exec confirmation', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'exec',
         title: 'Run shell command',
@@ -104,26 +75,21 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        config,
+        mockConfig,
         confirmationDetails,
       );
 
       expect(result).toBeDefined();
       expect(result?.notificationType).toBe(NotificationType.ToolPermission);
+      expect(result?.message).toContain('Run shell command');
+      expect(result?.details.type).toBe('exec');
+      expect(result?.details.command).toBe('rm -rf /');
     });
 
-    it.skip('should return undefined when hooks are disabled', async () => {
-      const config = {
-        getEnableHooks: () => false,
-        getHooks: () => ({}),
-        getDisabledHooks: () => [],
-        getSessionId: () => 'test-session-disabled',
-        getWorkingDir: () => '/tmp/test',
-        getTargetDir: () => '/tmp/test',
-        getExtensions: () => [],
-        getModel: () => 'test-model',
-        getSessionRecordingService: () => undefined,
-        getHookSystem: () => undefined,
+    it('should return undefined when hooks are disabled', async () => {
+      const disabledConfig = {
+        getEnableHooks: vi.fn(() => false),
+        getHookSystem: vi.fn(() => undefined),
       } as unknown as Config;
 
       const confirmationDetails: ToolCallConfirmationDetails = {
@@ -135,19 +101,14 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        config,
+        disabledConfig,
         confirmationDetails,
       );
 
       expect(result).toBeUndefined();
     });
 
-    it.skip('should include serialized confirmation details in hook input', async () => {
-      let capturedInput: string | undefined;
-      const config = createTestConfigWithNotificationHook(
-        'cat > /tmp/notification-test-input.json',
-      );
-
+    it('should include serialized confirmation details in result', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'edit',
         title: 'Write to important.txt',
@@ -160,23 +121,18 @@ describe('Notification Hook (ToolPermission)', () => {
         onConfirm: async () => {},
       };
 
-      await triggerToolNotificationHook(config, confirmationDetails);
+      const result = await triggerToolNotificationHook(
+        mockConfig,
+        confirmationDetails,
+      );
 
-      const fs = await import('fs/promises');
-      try {
-        capturedInput = await fs.readFile(
-          '/tmp/notification-test-input.json',
-          'utf-8',
-        );
-        const parsed = JSON.parse(capturedInput);
-        expect(parsed.notification_type).toBe('ToolPermission');
-        expect(parsed.details).toBeDefined();
-        expect(parsed.details.type).toBe('edit');
-        expect(parsed.details.title).toBe('Write to important.txt');
-        expect(parsed.details.fileName).toBe('important.txt');
-      } finally {
-        await fs.unlink('/tmp/notification-test-input.json').catch(() => {});
-      }
+      expect(result).toBeDefined();
+      expect(result?.notificationType).toBe(NotificationType.ToolPermission);
+      expect(result?.details.type).toBe('edit');
+      expect(result?.details.title).toBe('Write to important.txt');
+      expect(result?.details.fileName).toBe('important.txt');
+      // onConfirm should NOT be in the serialized details (not serializable)
+      expect(result?.details).not.toHaveProperty('onConfirm');
     });
   });
 });
