@@ -65,6 +65,9 @@ const toTitleCase = (input: string): string =>
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
+const normalizeModelParamKey = (key: string): string =>
+  key === 'model_param' ? 'modelparam' : key;
+
 type SettingCompleter = NonNullable<ValueArgument['completer']>;
 type SettingLiteralSpec = {
   value: string;
@@ -167,7 +170,7 @@ const setSchema: CommandArgumentSchema = [
             description: 'nested key for specific settings',
             hint: async (_ctx, tokens: TokenInfo) => {
               const key = tokens.tokens[1];
-              if (key === 'modelparam') {
+              if (normalizeModelParamKey(key) === 'modelparam') {
                 return 'model parameter name (e.g., temperature, max_tokens)';
               }
               if (key === 'custom-headers') {
@@ -179,7 +182,7 @@ const setSchema: CommandArgumentSchema = [
               const key = tokens.tokens[1];
               const enableFuzzy = getFuzzyEnabled(ctx);
 
-              if (key === 'modelparam') {
+              if (normalizeModelParamKey(key) === 'modelparam') {
                 const params = getRuntimeApi().getActiveModelParams();
                 const paramNames = Object.keys(params);
                 const filtered = filterStrings(paramNames, partial, {
@@ -380,7 +383,7 @@ export const setCommand: SlashCommand = {
     const parts = trimmedArgs.split(/\s+/);
     const key = parts[0];
 
-    if (key === 'modelparam') {
+    if (normalizeModelParamKey(key) === 'modelparam') {
       if (parts.length < 3) {
         return {
           type: 'message',
@@ -433,7 +436,7 @@ export const setCommand: SlashCommand = {
       const targetKey = parts[1];
       const subKey = parts[2];
 
-      if (targetKey === 'modelparam') {
+      if (normalizeModelParamKey(targetKey) === 'modelparam') {
         if (!subKey) {
           return {
             type: 'message',
@@ -445,6 +448,7 @@ export const setCommand: SlashCommand = {
 
         try {
           runtime.clearActiveModelParam(subKey);
+          runtime.setEphemeralSetting(subKey, undefined);
         } catch (error) {
           return {
             type: 'message',
