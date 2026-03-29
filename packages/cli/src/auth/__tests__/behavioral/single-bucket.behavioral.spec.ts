@@ -293,13 +293,7 @@ describe('SB-10: Auth flow mid-turn timeout returns null', () => {
       providers: [provider],
     });
 
-    let result: string | null = null;
-    try {
-      result = await manager.getToken(PROVIDER);
-    } catch {
-      result = null;
-    }
-
+    const result = await manager.getToken(PROVIDER).catch(() => null);
     expect(result).toBeNull();
   });
 });

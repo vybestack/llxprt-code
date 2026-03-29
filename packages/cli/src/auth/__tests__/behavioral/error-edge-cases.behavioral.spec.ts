@@ -27,9 +27,7 @@ describe('Error and edge case behavioral scenarios', () => {
     const expiredToken = makeExpiredToken('expired-access');
     await tokenStore.saveToken(PROVIDER, expiredToken);
 
-    const provider = createTestProvider(PROVIDER, {
-      refreshTokenResult: null,
-    });
+    const provider = createTestProvider(PROVIDER);
     provider.refreshToken = async () => {
       throw new Error('network timeout');
     };
@@ -58,11 +56,11 @@ describe('Error and edge case behavioral scenarios', () => {
     });
 
     afterEach(() => {
-      proactiveManager.clearAllTimers();
+      proactiveManager?.clearAllTimers();
       vi.useRealTimers();
     });
 
-    it('EC-02: Token store lock stale detection', async () => {
+    it('retries refresh after lock acquisition fails then succeeds', async () => {
       const token = makeToken('lock-test', { expiresInSec: 600 });
       const refreshedToken = makeToken('refreshed-lock', {
         expiresInSec: 3600,
@@ -114,13 +112,7 @@ describe('Error and edge case behavioral scenarios', () => {
       providers: [provider],
     });
 
-    let result: string | null = null;
-    try {
-      result = await manager.getToken(PROVIDER);
-    } catch {
-      result = null;
-    }
-
+    const result = await manager.getToken(PROVIDER).catch(() => null);
     expect(result).toBeNull();
 
     const stored = await tokenStore.getToken(PROVIDER);

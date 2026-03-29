@@ -16,6 +16,19 @@ import type {
   OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 
+vi.mock('../runtime/runtimeSettings.js', () => ({
+  getCliRuntimeServices: vi.fn(() => ({
+    config: undefined,
+    settings: undefined,
+  })),
+  getEphemeralSetting: vi.fn((key: string) => {
+    if (key === 'auth-bucket-delay') {
+      return 0;
+    }
+    return undefined;
+  }),
+}));
+
 describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
   let oauthManager: OAuthManager;
   let mockConfig: Config;
@@ -206,36 +219,7 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       'getProfileBuckets',
     ).mockResolvedValue(['bucket-a', 'bucket-b']);
 
-    const orchestrator = (
-      oauthManager as unknown as {
-        authFlowOrchestrator: {
-          authenticateMultipleBuckets: (
-            providerName: string,
-            buckets: string[],
-            requestMetadata?: OAuthTokenRequestMetadata,
-          ) => Promise<void>;
-        };
-      }
-    ).authFlowOrchestrator;
-
-    vi.spyOn(orchestrator, 'authenticateMultipleBuckets').mockImplementation(
-      async (
-        providerName: string,
-        buckets: string[],
-        requestMetadata?: OAuthTokenRequestMetadata,
-      ) => {
-        const { BucketFailoverHandlerImpl } = await import(
-          './BucketFailoverHandlerImpl.js'
-        );
-        const handler = new BucketFailoverHandlerImpl(
-          buckets,
-          providerName,
-          oauthManager,
-          requestMetadata,
-        );
-        mockConfig.setBucketFailoverHandler(handler);
-      },
-    );
+    vi.spyOn(oauthManager, 'authenticate').mockResolvedValue(undefined);
 
     await oauthManager.authenticateMultipleBuckets(
       'anthropic',

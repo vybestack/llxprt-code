@@ -36,7 +36,11 @@ export class MemoryTokenStore implements TokenStore {
   }
 
   async listProviders(): Promise<string[]> {
-    return [];
+    const providers = new Set<string>();
+    for (const key of this.tokens.keys()) {
+      providers.add(key.split(':')[0]);
+    }
+    return Array.from(providers);
   }
 
   async listBuckets(provider: string): Promise<string[]> {
