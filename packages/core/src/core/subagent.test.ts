@@ -1029,14 +1029,16 @@ describe('subagent.ts', () => {
         expect(history).toEqual([...initialMessages]);
       });
 
-      it('should throw an error if template variables are missing', async () => {
+      it('should substitute placeholders for missing template variables', async () => {
         const { config } = await createMockConfig();
+        vi.mocked(GeminiChat).mockClear();
         const promptConfig: PromptConfig = {
           systemPrompt: 'Hello ${name}, you are missing ${missing}.',
         };
         const context = new ContextState();
         context.set('name', 'Agent');
-        // 'missing' is not set
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
         const { overrides: missingOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
@@ -1050,19 +1052,23 @@ describe('subagent.ts', () => {
           missingOverrides,
         );
 
-        // The error from templating causes the runNonInteractive to reject and the terminate_reason to be ERROR.
-        await expect(scope.runNonInteractive(context)).rejects.toThrow(
-          'Missing context values for the following keys: missing',
-        );
-        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+        await scope.runNonInteractive(context);
+
+        const generationConfig = getGenerationConfigFromMock();
+        const systemInstruction = generationConfig.systemInstruction as string;
+        expect(systemInstruction).toContain('Hello Agent');
+        expect(systemInstruction).toContain('<missing:missing>');
       });
 
-      it('should throw an error if sessionId template variable is missing', async () => {
+      it('should substitute placeholder for missing sessionId template variable', async () => {
         const { config } = await createMockConfig();
+        vi.mocked(GeminiChat).mockClear();
         const promptConfig: PromptConfig = {
           systemPrompt: 'Session ${sessionId}',
         };
         const context = new ContextState();
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
         const { overrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
@@ -1076,10 +1082,11 @@ describe('subagent.ts', () => {
           overrides,
         );
 
-        await expect(scope.runNonInteractive(context)).rejects.toThrow(
-          'Missing context values for the following keys: sessionId',
-        );
-        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+        await scope.runNonInteractive(context);
+
+        const generationConfig = getGenerationConfigFromMock();
+        const systemInstruction = generationConfig.systemInstruction as string;
+        expect(systemInstruction).toContain('Session <missing:sessionId>');
       });
 
       it('should validate that systemPrompt and initialMessages are mutually exclusive', async () => {
