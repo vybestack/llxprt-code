@@ -77,10 +77,18 @@ describe('subagentTypes', () => {
       );
     });
 
-    it('should throw when a required variable key is missing from context', () => {
+    it('should substitute placeholder when a variable key is missing from context', () => {
       const context = new ContextState();
-      expect(() => templateString('Hello, ${missing}!', context)).toThrow(
-        /Missing context values/,
+      expect(templateString('Hello, ${missing}!', context)).toBe(
+        'Hello, <missing:missing>!',
+      );
+    });
+
+    it('should substitute placeholders for missing keys while replacing present ones', () => {
+      const context = new ContextState();
+      context.set('name', 'World');
+      expect(templateString('${greeting}, ${name}!', context)).toBe(
+        '<missing:greeting>, World!',
       );
     });
 

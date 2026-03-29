@@ -208,27 +208,11 @@ export function templateString(
 ): string {
   const templateTokenRegex = /\$\{(\w+)\}/g;
 
-  // First, find all unique keys required by the template.
-  const requiredKeys = new Set(
-    Array.from(template.matchAll(templateTokenRegex), (match) => match[1]),
-  );
-
-  // Check if all required keys exist in the context.
-  const contextKeys = new Set(context.get_keys());
-  const missingKeys = Array.from(requiredKeys).filter(
-    (key) => !contextKeys.has(key),
-  );
-
-  if (missingKeys.length > 0) {
-    throw new Error(
-      `Missing context values for the following keys: ${missingKeys.join(
-        ', ',
-      )}`,
-    );
-  }
-
-  // Perform the replacement using a replacer function.
-  return template.replace(templateTokenRegex, (_match, key) =>
-    String(context.get(key)),
-  );
+  return template.replace(templateTokenRegex, (_match, key: string) => {
+    const value = context.get(key);
+    if (value === undefined) {
+      return `<missing:${key}>`;
+    }
+    return String(value);
+  });
 }

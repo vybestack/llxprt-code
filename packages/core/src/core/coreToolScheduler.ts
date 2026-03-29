@@ -504,7 +504,14 @@ export class CoreToolScheduler {
         onLiveOutput: scheduledCall.tool.canUpdateOutput
           ? (id: string, chunk: string | AnsiOutput) => {
               if (this.outputUpdateHandler) {
-                this.outputUpdateHandler(id, chunk);
+                try {
+                  this.outputUpdateHandler(id, chunk);
+                } catch (error) {
+                  toolSchedulerLogger.debug(
+                    () =>
+                      `Error in outputUpdateHandler for ${id}: ${error instanceof Error ? error.message : String(error)}`,
+                  );
+                }
               }
               this.toolCalls = this.toolCalls.map((tc) =>
                 tc.request.callId === id && tc.status === 'executing'
