@@ -2,57 +2,65 @@
 
 **Key insight:** ESLint's JSON output includes "suggestion" fixes for ~6,500 of 15,937 warnings. A script (`scripts/codemods/apply-eslint-suggestions.mjs`) can apply these automatically. The remaining ~9,400 are MANUAL and need subagent work in small batches.
 
-**Branch:** `issue1569b` (2 commits done: Phase 4.0 config + Phase 0 auto-fix)
+**Branch:** `issue1569b` (4 commits done)
 
-**Current state:** 15,937 warnings (core: 8,851, cli: 6,832, a2a: 208, vsc: 46)
+**Current state:** 13,496 warnings (core: 7,558, cli: 5,693, a2a: 202, vsc: 43)
+
+**Progress:**
+- Phase 4.0: Disabled 11 sonarjs rules (-13,064 warnings) [OK]
+- Phase 0: Safe auto-fix sweep (minimal) [OK]
+- Phase S1: Safe suggestion script fixes (-2,441 warnings) [OK]
+
+### Lessons Learned (IMPORTANT for future phases)
+
+1. **`prefer-nullish-coalescing` is RISKY:** `||` → `??` changes behavior when values like `0`, `''`, or `false` are valid. Broke 146 test files in core. Must handle per-file with context understanding.
+
+2. **`switch-exhaustiveness-check` suggestions are DANGEROUS:** ESLint adds `throw new Error('Not implemented yet')` cases to switches that intentionally have `default: break`. Broke 12 test files. These need manual review — some switches intentionally ignore unhandled cases.
+
+3. **`no-undefined-argument` is RISKY:** Removing trailing `undefined` from function calls can break tests that assert specific argument passing (e.g., `expect(fn).toHaveBeenCalledWith(x, undefined)`).
+
+4. **`prefer-regexp-exec` with global flag is WRONG:** `.match(/pattern/g)` returns all matches; `.exec()` only returns one. ESLint's suggestion doesn't check for `g` flag.
+
+5. **`toStrictEqual` may fail for `undefined` properties:** Some objects have `undefined` properties that `toEqual` ignores but `toStrictEqual` catches. ~8 test files needed to be reverted.
+
+6. **Mixed `||` and `??` operators:** When `prefer-nullish-coalescing` changes one `||` to `??` in a chain like `a || b || ''`, it creates `a || b ?? ''` which TypeScript/esbuild reject. Must add parens or convert all operators.
+
+7. **Subagent timeout:** Even 8 files was too much for a single subagent call. Need 2-3 files max per call.
+
+8. **Subagent accuracy:** The `typescriptexpert` subagent incorrectly removed optional chains that were needed at runtime (TypeScript types said non-null, but mocks provided null). Subagent work needs immediate test verification.
 
 ---
 
 ## Strategy: Script-First, Subagent-Second
 
-### Tier 1: Safe Script Fixes (~3,900 warnings)
+### Tier 1: Safe Script Fixes — COMPLETED
 
-ESLint suggestions that are purely syntactic — no behavioral change possible.
+Applied 2,441 fixes via `scripts/codemods/apply-eslint-suggestions.mjs`.
 
-Apply with:
-```bash
-node scripts/codemods/apply-eslint-suggestions.mjs <path> --rules <rules>
-```
+**Rules applied:** vitest/prefer-strict-equal, sonarjs/prefer-regexp-exec, 
+sonarjs/no-unused-function-argument, sonarjs/no-undefined-argument,
+@typescript-eslint/prefer-optional-chain, sonarjs/public-static-readonly,
+sonarjs/no-redundant-jump, sonarjs/unused-import, sonarjs/no-primitive-wrappers,
+sonarjs/no-redundant-optional, sonarjs/prefer-single-boolean-return,
+sonarjs/no-inverted-boolean-check, sonarjs/no-redundant-boolean
 
-**Safe rules:**
-| Rule | Count | What it does |
-|------|------:|-------------|
-| vitest/prefer-strict-equal | 2,440 | .toEqual() → .toStrictEqual() |
-| @typescript-eslint/prefer-nullish-coalescing | 1,047 | `\|\|` → `??` |
-| sonarjs/prefer-regexp-exec | 121 | .match() → .exec() |
-| sonarjs/no-unused-function-argument | 97 | prefix unused params with _ |
-| sonarjs/no-undefined-argument | 63 | remove trailing undefined args |
-| @typescript-eslint/prefer-optional-chain | 43 | manual null checks → ?. |
-| @typescript-eslint/switch-exhaustiveness-check | 41 | add missing switch cases |
-| sonarjs/public-static-readonly | 18 | add public static readonly |
-| sonarjs/no-redundant-jump | 15 | remove redundant return/continue |
-| sonarjs/unused-import | 8 | remove unused import |
-| sonarjs/no-primitive-wrappers | 6 | remove wrapper constructors |
-| no-console | 4 | replace/remove console |
-| sonarjs/no-redundant-optional | 4 | remove redundant ? |
-| sonarjs/prefer-single-boolean-return | 4 | simplify boolean returns |
-| sonarjs/no-inverted-boolean-check | 1 | fix inverted check |
-| sonarjs/no-redundant-boolean | 1 | remove redundant boolean |
-| **Total** | **~3,913** | |
+**Rules moved to risky/manual:**
+- prefer-nullish-coalescing → RISKY (changes falsy behavior)
+- switch-exhaustiveness-check → DANGEROUS (adds throwing to intentional defaults)
+- no-undefined-argument → RISKY (breaks tests asserting undefined args)
 
-### Tier 2: Risky Script Fixes (~2,600 warnings)
+### Tier 2: Risky Script Fixes (~3,640 warnings)
 
 ESLint suggestions that change behavior — must test per-directory batch.
+Apply with the suggestion script, then run tests. Revert any batch that fails.
 
-| Rule | Count | Risk |
-|------|------:|------|
-| @typescript-eslint/strict-boolean-expressions | 1,321 | Changes condition logic; mocks may not match types |
-| @typescript-eslint/no-unnecessary-condition | 1,065 | Removes ?. that runtime may need despite types |
-| sonarjs/different-types-comparison | 108 | Changes comparison operators |
-| sonarjs/no-alphabetical-sort | 99 | Changes sort implementation |
-| sonarjs/no-misleading-array-reverse | 23 | Changes array mutation pattern |
-
-**Strategy:** Apply per-directory, run tests after each batch. Revert any batch that fails tests.
+| Rule | Count | Risk | Strategy |
+|------|------:|------|----------|
+| @typescript-eslint/strict-boolean-expressions | 1,321 | Changes condition logic | Per-directory + test |
+| @typescript-eslint/no-unnecessary-condition | 1,065 | Removes ?. needed at runtime | Per-directory + test |
+| @typescript-eslint/prefer-nullish-coalescing | 1,047 | Changes || falsy behavior | Per-FILE with context review |
+| sonarjs/different-types-comparison | 108 | Changes comparison operators | Per-directory + test |
+| sonarjs/no-alphabetical-sort | 99 | Changes sort implementation | Per-directory + test |
 
 ### Tier 3: Manual Fixes (~9,400 warnings)
 
@@ -119,35 +127,59 @@ cd packages/cli && npx vitest run
 
 ### Phase S2: Risky Script Fixes [COORDINATOR per-directory]
 
-Apply risky suggestions one directory at a time. Test after each. Revert on failure.
+Write `scripts/codemods/apply-risky-suggestions.sh` — a shell script that:
+1. Iterates over each top-level subdirectory in each package
+2. For each directory: applies suggestions, runs typecheck, runs vitest for that directory
+3. If typecheck or tests fail: reverts that directory and logs it as "needs manual fix"
+4. Commits successful batches
 
-**S2.1** `no-unnecessary-condition` — per subdirectory of core, then cli:
 ```bash
-for dir in providers core tools utils hooks services mcp prompt-config recording storage auth debug scheduler ide lsp policy; do
-  echo "=== core/$dir ==="
-  node scripts/codemods/apply-eslint-suggestions.mjs packages/core/src/$dir --rules @typescript-eslint/no-unnecessary-condition
-  npm run typecheck || { git checkout -- packages/core/src/$dir; echo "REVERTED $dir"; continue; }
-  cd packages/core && npx vitest run src/$dir || { cd ..; git checkout -- packages/core/src/$dir; echo "REVERTED $dir (tests)"; continue; }
-  cd ..
-  echo "=== $dir OK ==="
+#!/bin/bash
+# scripts/codemods/apply-risky-suggestions.sh
+RULES="@typescript-eslint/no-unnecessary-condition,@typescript-eslint/strict-boolean-expressions,sonarjs/different-types-comparison,sonarjs/no-alphabetical-sort,sonarjs/no-misleading-array-reverse"
+
+for pkg in core cli; do
+  for dir in packages/$pkg/src/*/; do
+    dirname=$(basename "$dir")
+    echo "=== $pkg/$dirname ==="
+    
+    # Apply suggestions
+    node scripts/codemods/apply-eslint-suggestions.mjs "$dir" --rules "$RULES"
+    
+    # Check if anything changed
+    if git diff --quiet "$dir"; then
+      echo "  No changes, skipping"
+      continue
+    fi
+    
+    # Typecheck
+    if ! npm run typecheck 2>&1 | tail -1 | grep -q "^$"; then
+      echo "  TYPECHECK FAILED - reverting $dirname"
+      git checkout -- "$dir"
+      continue
+    fi
+    
+    # Run tests for this directory
+    if ! cd "packages/$pkg" && npx vitest run "src/$dirname" 2>&1 | grep "Test Files" | grep -qv "failed"; then
+      echo "  TESTS FAILED - reverting $dirname"
+      cd ../..
+      git checkout -- "$dir"
+      continue
+    fi
+    cd ../..
+    
+    echo "  OK - $dirname passed"
+  done
 done
 ```
-Same pattern for cli subdirectories.
 
-**S2.2** `strict-boolean-expressions` — same per-directory pattern.
+Run the script, then manually handle the "needs manual fix" directories.
+After each package is done, run full test suite and commit.
 
-**S2.3** `different-types-comparison`, `no-alphabetical-sort`, `no-misleading-array-reverse` — apply all at once per package (small counts).
-
-**S2.4** Re-run suggestion script multiple passes (overlaps resolve after first pass):
-```bash
-# Run 3 passes to catch overlaps that resolve
-for i in 1 2 3; do
-  node scripts/codemods/apply-eslint-suggestions.mjs packages/core/src --rules <all-safe-and-tested-risky-rules>
-  node scripts/codemods/apply-eslint-suggestions.mjs packages/cli/src --rules <all-safe-and-tested-risky-rules>
-done
-npm run format && npm run typecheck && npm run test
-```
-
+**S2.1** Run the script for core package
+**S2.2** Run the script for cli package  
+**S2.3** Handle `prefer-nullish-coalescing` separately — per-file with subagent review
+**S2.4** Multi-pass to catch overlaps: re-run 2-3 times on successful directories
 **S2.5** Commit: `fix(lint): apply risky eslint suggestion fixes with per-directory verification (Phase S2)`
 
 ---
@@ -222,21 +254,26 @@ Each subagent call handles one directory's worth. Commit after each sub-phase.
 
 This is the hardest phase: nested-control-flow, cyclomatic/cognitive complexity, elseif-without-else, expression-complexity. ~1,400 warnings requiring genuine refactoring.
 
-**M5.1-M5.10 [typescriptexpert]** One directory per subagent call:
-- M5.1: packages/cli/src/ui/components/ 
-- M5.2: packages/cli/src/ui/containers/ + hooks/
-- M5.3: packages/cli/src/config/ + auth/
-- M5.4: packages/core/src/providers/openai/
-- M5.5: packages/core/src/providers/anthropic/ + rest
-- M5.6: packages/core/src/tools/
-- M5.7: packages/core/src/core/
-- M5.8: packages/core/src/services/ + prompt-config/
-- M5.9: packages/core/src/utils/ + recording/ + rest
-- M5.10: packages/cli/src/ remaining + a2a + vscode
+**Critical: max 2-3 source files per subagent call** (learned from timeout issues).
 
-Each call: extract helper functions, use early returns, simplify conditionals. Run tests after each.
+For each subagent call:
+1. Run ESLint on target directory to get exact file:line:warning list
+2. Pick 2-3 files with most warnings
+3. Delegate to typescriptexpert with exact file list + warning list
+4. After completion: typecheck + run tests for that directory
+5. If tests fail, revert and note for manual review
 
-**M5.11 [deepthinker]** Review complexity refactoring for correctness.
+**M5.1-M5.20 [typescriptexpert]** ~20 subagent calls of 2-3 files each:
+Split by sub-sub-directory within each package. Example:
+- M5.1: packages/core/src/providers/openai/OpenAIProvider.ts + OpenAIStreamProcessor.ts
+- M5.2: packages/core/src/providers/openai/OpenAIResponseParser.ts + OpenAIRequestBuilder.ts
+- M5.3: packages/core/src/providers/anthropic/ (top 3 files)
+- ... etc.
+
+Each call: extract helper functions, use early returns, simplify conditionals.
+After all calls: run full test suite.
+
+**M5.21 [deepthinker]** Review complexity refactoring for correctness.
 
 ---
 
@@ -277,17 +314,21 @@ node scripts/start.js --profile-load synthetic "write me a haiku and nothing els
 
 ## Summary
 
-| Phase | Approach | Warnings | Subagent Calls |
-|-------|----------|----------|---------------|
-| S1 | Script (safe suggestions) | ~3,913 | 0 |
-| S2 | Script (risky, per-directory) | ~2,600 | 0 |
-| M1 | Codemod script | ~727 | 1 (write script) |
-| M2 | Subagent batches | ~359 | 4 |
-| M3 | Subagent batches | ~336 | 4 |
-| M4 | Subagent batches | ~500 | 9 |
-| M5 | Subagent batches | ~1,400 | 10 |
-| M6 | Subagent batches | ~600 | 6 |
-| F | Coordinator | 0 | 0 |
-| **Total** | | **~10,435** | **~34** |
+| Phase | Approach | Warnings | Subagent Calls | Status |
+|-------|----------|----------|---------------|--------|
+| 4.0 | Config disable rules | ~13,064 | 0 | DONE |
+| 0 | Auto-fix | ~11 | 0 | DONE |
+| S1 | Script (safe suggestions) | ~2,441 | 0 | DONE |
+| S2 | Script (risky, per-dir+test) | ~3,640 | 0 | TODO |
+| M1 | Codemod script | ~727 | 1 (write script) | TODO |
+| M2 | Subagent batches (2-3 files) | ~359 | 4-6 | TODO |
+| M3 | Subagent batches (2-3 files) | ~336 | 4-6 | TODO |
+| M4 | Subagent batches (2-3 files) | ~500 | 6-9 | TODO |
+| M5 | Subagent batches (2-3 files) | ~1,400 | 15-20 | TODO |
+| M6 | Subagent batches (2-3 files) | ~600 | 6-10 | TODO |
+| F | Coordinator | 0 | 0 | TODO |
+| **Total** | | **~23,078** | **~36-52** | |
 
-Note: Numbers are estimates. Some warnings share the same line and will be resolved together. Re-running suggestions after each phase picks up more as overlaps resolve.
+Starting: ~28,948 warnings | Now: 13,496 | Eliminated: 15,452 (53%)
+
+Note: Numbers are estimates. Some warnings share the same line and will be resolved together. Re-running suggestions after each phase picks up more as overlaps resolve. Expect reverts on ~10-15% of risky batches.
