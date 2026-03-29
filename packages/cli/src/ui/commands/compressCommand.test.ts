@@ -382,6 +382,48 @@ describe('compressCommand', () => {
     );
   });
 
+  it('uses COMPRESSION_FAILED_INFLATED_TOKEN_COUNT when core reports COMPRESSED but token count increases', async () => {
+    if (!compressCommand.action) {
+      throw new Error('compressCommand must have an action.');
+    }
+
+    const performCompression = vi
+      .fn()
+      .mockResolvedValue(PerformCompressionResult.COMPRESSED);
+    const getTotalTokens = vi
+      .fn()
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(1200);
+
+    const chat = {
+      performCompression,
+      getHistoryService: () => ({
+        getTotalTokens,
+      }),
+      wasRecentlyCompressed: vi.fn().mockReturnValue(true),
+    };
+
+    context.services.config = {
+      getGeminiClient: () =>
+        ({
+          hasChatInitialized: () => true,
+          getChat: () => chat,
+        }) as unknown as GeminiClient,
+    } as CommandContext['services']['config'];
+
+    await compressCommand.action(context, '');
+
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.COMPRESSION,
+        compression: expect.objectContaining({
+          compressionStatus:
+            CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
+        }),
+      }),
+    );
+  });
+
   it('shows error when performCompression throws an exception', async () => {
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');

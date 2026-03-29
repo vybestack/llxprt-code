@@ -83,6 +83,9 @@ export const compressCommand: SlashCommand = {
         case PerformCompressionResult.COMPRESSED:
           if (newTokenCount < originalTokenCount) {
             compressionStatus = CompressionStatus.COMPRESSED;
+          } else if (newTokenCount > originalTokenCount) {
+            compressionStatus =
+              CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT;
           } else if (wasRecentlyCompressedBeforeCommand) {
             compressionStatus = CompressionStatus.ALREADY_COMPRESSED;
           } else {

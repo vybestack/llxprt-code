@@ -672,11 +672,11 @@ export class CompressionHandler {
         maxDelayMs: 10000,
         shouldRetryOnError: (err) => shouldRetryCompressionError(err),
       });
+      applyResult(newHistory);
       // Primary strategy succeeded — reset failure counters
       this.compressionFailureCount = 0;
       this.lastCompressionFailureTime = null;
       this.logger.debug('Compression completed with primary strategy');
-      applyResult(newHistory);
       return true;
     } catch (err) {
       primaryError = err;
@@ -709,13 +709,14 @@ export class CompressionHandler {
       // Use the strategy factory so tests can intercept
       const fallback = getCompressionStrategy('top-down-truncation');
       const result = await fallback.compress(context);
+      applyResult(result.newHistory);
       // Fallback succeeded — reset failure counters
       this.compressionFailureCount = 0;
       this.lastCompressionFailureTime = null;
+      this.lastSuccessfulCompressionTime = Date.now();
       this.logger.debug(
         'Compression completed with fallback (TopDownTruncation)',
       );
-      applyResult(result.newHistory);
       return true;
     } catch (fallbackError) {
       // Both strategies failed — track the failure and continue without compression
