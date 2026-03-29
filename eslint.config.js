@@ -333,6 +333,18 @@ export default tseslint.config(
       // Expensive heuristic — NLP analysis on comments with no value for this codebase
       'sonarjs/no-commented-code': 'off',
 
+      // False-positive or redundant sonarjs rules — see project-plans/issue1569b/README.md
+      'sonarjs/declarations-in-global-scope': 'off', // ESM false positives
+      'sonarjs/no-unused-vars': 'off', // Redundant with @typescript-eslint/no-unused-vars
+      'sonarjs/max-lines-per-function': 'off', // Redundant with base max-lines-per-function at 80
+      'sonarjs/process-argv': 'off', // CLI tool legitimately uses process.argv
+      'sonarjs/standard-input': 'off', // CLI tool legitimately uses stdin
+      'sonarjs/publicly-writable-directories': 'off', // Test /tmp usage is intentional
+      'sonarjs/pseudo-random': 'off', // Non-cryptographic context (IDs, shuffles)
+      'sonarjs/no-reference-error': 'off', // TypeScript ambient/global false positives
+      'sonarjs/no-undefined-assignment': 'off', // TypeScript undefined convention
+      'sonarjs/arrow-function-convention': 'off', // Conflicts with Prettier arrowParens: "always" default
+
       // ESLint comments (recommended rules downgraded to warn)
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
@@ -454,6 +466,7 @@ export default tseslint.config(
 
       // Relax complexity rules for test files
       'max-lines-per-function': 'off',
+      'sonarjs/no-duplicate-string': 'off', // Tests repeat strings legitimately
     },
   },
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
