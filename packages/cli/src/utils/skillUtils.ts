@@ -62,9 +62,8 @@ export function renderSkillActionFeedback(
 
     if (isEnable) {
       return `Skill "${skillName}" ${actionVerb} ${preposition} ${s1} and ${s2} settings.`;
-    } else {
-      return `Skill "${skillName}" is now disabled in both ${s1} and ${s2} settings.`;
     }
+    return `Skill "${skillName}" is now disabled in both ${s1} and ${s2} settings.`;
   }
 
   const s = formatScopeItem(totalAffectedScopes[0]);

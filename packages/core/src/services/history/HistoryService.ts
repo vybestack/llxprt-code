@@ -1485,14 +1485,13 @@ export class HistoryService
               error: toolResponse.error,
               isComplete: toolResponse.isComplete,
             } as ToolResponseBlock;
-          } else {
-            // Other blocks should be safe to clone
-            try {
-              return JSON.parse(JSON.stringify(block));
-            } catch {
-              // If any block fails, return minimal version
-              return { ...block };
-            }
+          }
+          // Other blocks should be safe to clone
+          try {
+            return JSON.parse(JSON.stringify(block));
+          } catch {
+            // If any block fails, return minimal version
+            return { ...block };
           }
         }),
         metadata: content.metadata ? { ...content.metadata } : {},

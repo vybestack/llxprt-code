@@ -2211,12 +2211,11 @@ async function ensureSandboxImageIsPresent(
     if (await imageExists(sandbox, image)) {
       debugLogger.log(`Sandbox image ${image} is now available after pulling.`);
       return true;
-    } else {
-      debugLogger.warn(
-        `Sandbox image ${image} still not found after a pull attempt. This might indicate an issue with the image name or registry, or the pull command reported success but failed to make the image available.`,
-      );
-      return false;
     }
+    debugLogger.warn(
+      `Sandbox image ${image} still not found after a pull attempt. This might indicate an issue with the image name or registry, or the pull command reported success but failed to make the image available.`,
+    );
+    return false;
   }
 
   debugLogger.error(

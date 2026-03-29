@@ -250,11 +250,9 @@ export class FileTokenStore extends BaseTokenStore {
     this.validateServerName(serverName);
 
     const tokens = await this.loadTokens();
-    const credential = tokens.get(serverName) || null;
-
     // Return credential if found
 
-    return credential;
+    return tokens.get(serverName) || null;
   }
 
   /**

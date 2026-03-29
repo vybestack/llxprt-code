@@ -167,15 +167,16 @@ export const useSlashCommandProcessor = (
     return new GitService(config.getProjectRoot(), config.storage);
   }, [config]);
 
-  const logger = useMemo(() => {
-    const l = new Logger(
-      config?.getSessionId() || '',
-      config?.storage ?? new Storage(process.cwd()),
-    );
-    // The logger's initialize is async, but we can create the instance
-    // synchronously. Commands that use it will await its initialization.
-    return l;
-  }, [config]);
+  const logger = useMemo(
+    () =>
+      // The logger's initialize is async, but we can create the instance
+      // synchronously. Commands that use it will await its initialization.
+      new Logger(
+        config?.getSessionId() || '',
+        config?.storage ?? new Storage(process.cwd()),
+      ),
+    [config],
+  );
 
   /**
    * Initialize ProfileManager and SubagentManager for command context

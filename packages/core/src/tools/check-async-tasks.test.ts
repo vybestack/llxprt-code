@@ -13,10 +13,7 @@ import { CheckAsyncTasksTool } from './check-async-tasks.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
 
 describe('CheckAsyncTasksTool', () => {
-  const createMockManager = (): AsyncTaskManager => {
-    const manager = new AsyncTaskManager(5);
-    return manager;
-  };
+  const createMockManager = (): AsyncTaskManager => new AsyncTaskManager(5);
 
   const buildDependencies = (manager?: AsyncTaskManager) => ({
     getAsyncTaskManager: () => manager,

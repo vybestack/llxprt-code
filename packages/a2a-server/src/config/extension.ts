@@ -151,8 +151,7 @@ export function loadInstallMetadata(
   const metadataFilePath = path.join(extensionDir, INSTALL_METADATA_FILENAME);
   try {
     const configContent = fs.readFileSync(metadataFilePath, 'utf-8');
-    const metadata = JSON.parse(configContent) as ExtensionInstallMetadata;
-    return metadata;
+    return JSON.parse(configContent) as ExtensionInstallMetadata;
   } catch (e) {
     logger.warn(
       `Failed to load or parse extension install metadata at ${metadataFilePath}: ${e}`,

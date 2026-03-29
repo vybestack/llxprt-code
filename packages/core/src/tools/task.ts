@@ -281,8 +281,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     taskLogger.debug(() => {
       const summary =
-        launchRequest.toolConfig &&
-        launchRequest.toolConfig.tools &&
+        launchRequest.toolConfig?.tools &&
         launchRequest.toolConfig.tools.length > 0
           ? `${launchRequest.toolConfig.tools.length} tools`
           : 'no tools provided';
@@ -570,8 +569,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (!error || typeof error !== 'object') {
       return false;
     }
-    const result = (error as { name?: string }).name === 'AbortError';
-    return result;
+    return (error as { name?: string }).name === 'AbortError';
   }
 
   private buildContextState(): ContextState {

@@ -443,12 +443,11 @@ export class HookRunner {
         decision: 'deny',
         reason: text,
       };
-    } else {
-      // Non-blocking error (EXIT_CODE_NON_BLOCKING_ERROR or any other code)
-      return {
-        decision: 'allow',
-        systemMessage: `Warning: ${text}`,
-      };
     }
+    // Non-blocking error (EXIT_CODE_NON_BLOCKING_ERROR or any other code)
+    return {
+      decision: 'allow',
+      systemMessage: `Warning: ${text}`,
+    };
   }
 }

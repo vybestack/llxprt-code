@@ -58,8 +58,7 @@ function getOpenUrlsCommands(readmeUrl: string): string[] {
   }
 
   // Create and join the individual commands
-  const commands = urlsToOpen.map((url) => `${openCmd} "${url}"`);
-  return commands;
+  return urlsToOpen.map((url) => `${openCmd} "${url}"`);
 }
 
 // Add LLxprt Code specific entries to .gitignore file

@@ -35,8 +35,7 @@ function expandTilde(filePath: string): string {
 export function needsBaseUrlConfig(provider: string | null): boolean {
   if (!provider) return false;
   const providerOption = PROVIDER_OPTIONS.find((p) => p.value === provider);
-  const result = providerOption?.needsBaseUrl ?? false;
-  return result;
+  return providerOption?.needsBaseUrl ?? false;
 }
 
 export function generateProfileNameSuggestions(

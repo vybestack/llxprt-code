@@ -102,13 +102,12 @@ export const toolkeyfileCommand: SlashCommand = {
           messageType: 'info',
           content: `${entry.displayName} keyfile: ${currentPath}`,
         };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `No keyfile configured for '${entry.displayName}'`,
-        };
       }
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `No keyfile configured for '${entry.displayName}'`,
+      };
     }
 
     // @pseudocode lines 355-358: Clear keyfile (case-insensitive "none")

@@ -288,27 +288,26 @@ export async function checkForExtensionUpdate(
       }
       setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
       return;
-    } else {
-      const { source, releaseTag } = installMetadata;
-      if (!source) {
-        debugLogger.error(`No "source" provided for extension.`);
-        setExtensionUpdateState(ExtensionUpdateState.ERROR);
-        return;
-      }
-      const { owner, repo } = parseGitHubRepoForReleases(source);
-
-      const releaseData = await fetchReleaseFromGithub(
-        owner,
-        repo,
-        installMetadata.ref,
-      );
-      if (releaseData.tag_name !== releaseTag) {
-        setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
-        return;
-      }
-      setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+    }
+    const { source, releaseTag } = installMetadata;
+    if (!source) {
+      debugLogger.error(`No "source" provided for extension.`);
+      setExtensionUpdateState(ExtensionUpdateState.ERROR);
       return;
     }
+    const { owner, repo } = parseGitHubRepoForReleases(source);
+
+    const releaseData = await fetchReleaseFromGithub(
+      owner,
+      repo,
+      installMetadata.ref,
+    );
+    if (releaseData.tag_name !== releaseTag) {
+      setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+      return;
+    }
+    setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+    return;
   } catch (error) {
     debugLogger.error(
       `Failed to check for updates for extension "${installMetadata.source}": ${getErrorMessage(error)}`,
@@ -345,14 +344,12 @@ export async function downloadFromGitHubRelease(
     if (asset) {
       archiveUrl = asset.url;
       fileName = asset.name;
-    } else {
-      if (releaseData.tarball_url) {
-        archiveUrl = releaseData.tarball_url;
-        isTar = true;
-      } else if (releaseData.zipball_url) {
-        archiveUrl = releaseData.zipball_url;
-        isZip = true;
-      }
+    } else if (releaseData.tarball_url) {
+      archiveUrl = releaseData.tarball_url;
+      isTar = true;
+    } else if (releaseData.zipball_url) {
+      archiveUrl = releaseData.zipball_url;
+      isZip = true;
     }
     if (!archiveUrl) {
       throw new Error(

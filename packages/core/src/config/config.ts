@@ -773,8 +773,7 @@ export class Config extends ConfigBase {
   getHookSystem(): HookSystem | undefined {
     // @requirement:HOOK-002 - Return no hook system when hooks are disabled.
     if (!this.enableHooks) {
-      const disabledHookSystem = undefined;
-      return disabledHookSystem;
+      return undefined;
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access

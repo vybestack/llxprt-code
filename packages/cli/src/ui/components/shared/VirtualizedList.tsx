@@ -109,14 +109,13 @@ function VirtualizedList<T>(
 
     return { index: 0, offset: 0 };
   });
-  const [isStickingToBottom, setIsStickingToBottom] = useState(() => {
-    const scrollToEnd =
+  const [isStickingToBottom, setIsStickingToBottom] = useState(
+    () =>
       initialScrollIndex === SCROLL_TO_ITEM_END ||
       (typeof initialScrollIndex === 'number' &&
         initialScrollIndex >= data.length - 1 &&
-        initialScrollOffsetInIndex === SCROLL_TO_ITEM_END);
-    return scrollToEnd;
-  });
+        initialScrollOffsetInIndex === SCROLL_TO_ITEM_END),
+  );
   const containerRef = useRef<DOMElement>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   const itemRefs = useRef<Array<DOMElement | null>>([]);

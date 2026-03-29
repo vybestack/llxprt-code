@@ -121,9 +121,8 @@ export const useExtensionUpdates = (
           return true;
         }
         return scheduledUpdate.names?.includes(extension.name) === true;
-      } else {
-        return extension.installMetadata?.autoUpdate === true;
       }
+      return extension.installMetadata?.autoUpdate === true;
     }
 
     const pendingUpdates: string[] = [];

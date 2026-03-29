@@ -130,12 +130,10 @@ export const getSessionFiles = async (
   const allFiles = await getAllSessionFiles(chatsDir, currentSessionId);
 
   // Filter out corrupted files and extract SessionInfo
-  const validSessions = allFiles
+  return allFiles
     .filter(
       (entry): entry is { fileName: string; sessionInfo: SessionInfo } =>
         entry.sessionInfo !== null,
     )
     .map((entry) => entry.sessionInfo);
-
-  return validSessions;
 };

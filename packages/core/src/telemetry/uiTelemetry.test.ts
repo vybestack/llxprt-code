@@ -64,31 +64,30 @@ const createFakeCompletedToolCall = (
       durationMs: duration,
       outcome,
     } as SuccessfulToolCall;
-  } else {
-    return {
-      status: 'error',
-      request,
-      tool,
-      response: {
-        callId: request.callId,
-        responseParts: [
-          {
-            functionResponse: {
-              id: request.callId,
-              name,
-              response: { error: 'Tool failed' },
-            },
-          },
-        ],
-        error: error || new Error('Tool failed'),
-        errorType: ToolErrorType.UNKNOWN,
-        resultDisplay: 'Failure!',
-        agentId: 'primary',
-      },
-      durationMs: duration,
-      outcome,
-    } as ErroredToolCall;
   }
+  return {
+    status: 'error',
+    request,
+    tool,
+    response: {
+      callId: request.callId,
+      responseParts: [
+        {
+          functionResponse: {
+            id: request.callId,
+            name,
+            response: { error: 'Tool failed' },
+          },
+        },
+      ],
+      error: error || new Error('Tool failed'),
+      errorType: ToolErrorType.UNKNOWN,
+      resultDisplay: 'Failure!',
+      agentId: 'primary',
+    },
+    durationMs: duration,
+    outcome,
+  } as ErroredToolCall;
 };
 
 describe('UiTelemetryService', () => {

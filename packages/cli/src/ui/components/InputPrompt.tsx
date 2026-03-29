@@ -440,7 +440,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
-      if (vimHandleInput && vimHandleInput(key)) {
+      if (vimHandleInput?.(key)) {
         return;
       }
 

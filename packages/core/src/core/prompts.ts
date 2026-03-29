@@ -476,8 +476,8 @@ export async function getCoreSystemPromptAsync(
     ) as boolean | undefined;
     if (allMemoriesAreCore) {
       // Merge user memory into core memory; leave user memory empty
-      const parts = [effectiveCoreMemory, effectiveUserMemory].filter(
-        (p) => p && p.trim(),
+      const parts = [effectiveCoreMemory, effectiveUserMemory].filter((p) =>
+        p?.trim(),
       );
       effectiveCoreMemory = parts.join('\n\n') || undefined;
       effectiveUserMemory = undefined;
@@ -487,9 +487,9 @@ export async function getCoreSystemPromptAsync(
   }
 
   // Append MCP instructions to core memory if available
-  if (mcpInstructions && mcpInstructions.trim()) {
-    const parts = [effectiveCoreMemory, mcpInstructions.trim()].filter(
-      (p) => p && p.trim(),
+  if (mcpInstructions?.trim()) {
+    const parts = [effectiveCoreMemory, mcpInstructions.trim()].filter((p) =>
+      p?.trim(),
     );
     effectiveCoreMemory = parts.join('\n\n') || undefined;
   }

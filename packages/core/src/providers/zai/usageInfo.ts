@@ -181,9 +181,8 @@ function formatResetTime(nextResetTime: number | undefined): string {
     return `in ${diffHours}h ${remainingMins}m`;
   } else if (diffMins > 0) {
     return `in ${diffMins}m`;
-  } else {
-    return 'soon';
   }
+  return 'soon';
 }
 
 /**

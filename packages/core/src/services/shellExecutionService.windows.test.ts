@@ -13,17 +13,14 @@ vi.mock('os');
 // create a controllable fake child each time spawn is called
 type Listener = (...args: unknown[]) => void;
 
-const fakeChildFactory = () => {
-  const child = {
-    stdout: { on: vi.fn<(event: string, cb: Listener) => void>() },
-    stderr: { on: vi.fn<(event: string, cb: Listener) => void>() },
-    on: vi.fn<(event: string, cb: Listener) => void>(),
-    once: vi.fn<(event: string, cb: Listener) => void>(),
-    pid: 2222,
-    kill: vi.fn<(signal?: NodeJS.Signals) => boolean>(),
-  };
-  return child;
-};
+const fakeChildFactory = () => ({
+  stdout: { on: vi.fn<(event: string, cb: Listener) => void>() },
+  stderr: { on: vi.fn<(event: string, cb: Listener) => void>() },
+  on: vi.fn<(event: string, cb: Listener) => void>(),
+  once: vi.fn<(event: string, cb: Listener) => void>(),
+  pid: 2222,
+  kill: vi.fn<(signal?: NodeJS.Signals) => boolean>(),
+});
 
 vi.mock('child_process', async (orig) => {
   const mod = await orig();

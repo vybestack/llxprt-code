@@ -1249,7 +1249,7 @@ export class LoggingProviderWrapper implements IProvider {
       if (result && typeof result === 'object' && 'metadata' in result) {
         const metadata = (result as { metadata?: { gitStats?: unknown } })
           .metadata;
-        if (metadata && metadata.gitStats) {
+        if (metadata?.gitStats) {
           gitStats = metadata.gitStats;
         }
       }

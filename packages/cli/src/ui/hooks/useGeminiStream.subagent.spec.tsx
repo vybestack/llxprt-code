@@ -166,10 +166,9 @@ describe('useGeminiStream subagent isolation', () => {
       vertexai: false,
     };
 
-    const mockGetGeminiClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedGeminiClientClass(mockConfig);
-      return clientInstance;
-    });
+    const mockGetGeminiClient = vi
+      .fn()
+      .mockImplementation(() => new MockedGeminiClientClass(mockConfig));
 
     mockConfig = {
       apiKey: 'test-api-key',

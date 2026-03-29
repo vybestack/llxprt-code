@@ -43,14 +43,12 @@ function buildCodexCallOptions(
         }
       : invocation;
 
-  const options = createProviderCallOptions({
+  return createProviderCallOptions({
     providerName: provider.name,
     contents,
     invocation: invocationWithToken,
     ...rest,
   });
-
-  return options;
 }
 
 const originalFetch = global.fetch;

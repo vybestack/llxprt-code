@@ -31,12 +31,11 @@ import { HistoryService } from '../../services/history/HistoryService.js';
  * Test helper: Create minimal Config for testing
  */
 function createTestConfig(): Config {
-  const config = new Config({
+  // Note: We don't set provider/model/auth here because runtime state should override them
+  return new Config({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
   } as unknown as import('../../config/config.js').ConfigParameters);
-  // Note: We don't set provider/model/auth here because runtime state should override them
-  return config;
 }
 
 /**

@@ -106,7 +106,7 @@ describe('EditTool', () => {
         // The problematic_snippet is the last part of the user's content
         const userContent = contents.find((c: Content) => c.role === 'user');
         let promptText = '';
-        if (userContent && userContent.parts) {
+        if (userContent?.parts) {
           promptText = userContent.parts
             .filter((p: Part) => typeof (p as any).text === 'string')
             .map((p: Part) => (p as any).text)

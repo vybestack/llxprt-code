@@ -62,8 +62,7 @@ export async function fetchWithTimeout(
   }
 
   try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    return response;
+    return await fetch(url, { ...init, signal: controller.signal });
   } catch (error: unknown) {
     if (
       (isNodeError(error) && error.code === 'ABORT_ERR') ||

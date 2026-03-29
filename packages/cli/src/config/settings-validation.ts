@@ -120,15 +120,14 @@ function buildEnumSchema(
         ...Array<z.ZodLiteral<number>>,
       ],
     );
-  } else {
-    return z.union(
-      values.map((v) => z.literal(v)) as [
-        z.ZodLiteral<unknown>,
-        z.ZodLiteral<unknown>,
-        ...Array<z.ZodLiteral<unknown>>,
-      ],
-    );
   }
+  return z.union(
+    values.map((v) => z.literal(v)) as [
+      z.ZodLiteral<unknown>,
+      z.ZodLiteral<unknown>,
+      ...Array<z.ZodLiteral<unknown>>,
+    ],
+  );
 }
 
 /**
@@ -295,8 +294,7 @@ export function validateSettings(data: unknown): {
   data?: unknown;
   error?: z.ZodError;
 } {
-  const result = settingsZodSchema.safeParse(data);
-  return result;
+  return settingsZodSchema.safeParse(data);
 }
 
 /**

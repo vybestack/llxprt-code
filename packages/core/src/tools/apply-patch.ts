@@ -369,7 +369,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       // Append LSP diagnostics after successful patch for content-write files
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient && lspClient.isAlive()) {
+        if (lspClient?.isAlive()) {
           // Only check files that had content writes (triggers LSP analysis)
           for (const contentFile of classification.contentWriteFiles) {
             const absoluteFilePath = path.resolve(

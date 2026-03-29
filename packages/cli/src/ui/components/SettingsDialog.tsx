@@ -345,9 +345,8 @@ export function SettingsDialog({
   const generateSettingsItems = () => {
     if (subSettingsMode.isActive) {
       return generateSubSettingsItems(subSettingsMode.parentKey);
-    } else {
-      return generateNormalSettingsItems();
     }
+    return generateNormalSettingsItems();
   };
 
   const generateSubSettingsItems = (parentKey: string) => {
@@ -475,10 +474,7 @@ export function SettingsDialog({
           if (!requiresRestart(fullKey)) {
             saveSingleSetting(fullKey, newValue, settings, selectedScope);
           } else {
-            setModifiedSettings((prev) => {
-              const updated = new Set(prev).add(fullKey);
-              return updated;
-            });
+            setModifiedSettings((prev) => new Set(prev).add(fullKey));
           }
         },
       };

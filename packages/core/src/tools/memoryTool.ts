@@ -173,31 +173,30 @@ function computeNewContent(currentContent: string, fact: string): string {
       currentContent +
       `${separator}${MEMORY_SECTION_HEADER}\n${newMemoryItem}\n`
     );
-  } else {
-    // Header found, find where to insert the new memory entry
-    const startOfSectionContent = headerIndex + MEMORY_SECTION_HEADER.length;
-    let endOfSectionIndex = currentContent.indexOf(
-      '\n## ',
-      startOfSectionContent,
-    );
-    if (endOfSectionIndex === -1) {
-      endOfSectionIndex = currentContent.length; // End of file
-    }
-
-    const beforeSectionMarker = currentContent
-      .substring(0, startOfSectionContent)
-      .trimEnd();
-    let sectionContent = currentContent
-      .substring(startOfSectionContent, endOfSectionIndex)
-      .trimEnd();
-    const afterSectionMarker = currentContent.substring(endOfSectionIndex);
-
-    sectionContent += `\n${newMemoryItem}`;
-    return (
-      `${beforeSectionMarker}\n${sectionContent.trimStart()}\n${afterSectionMarker}`.trimEnd() +
-      '\n'
-    );
   }
+  // Header found, find where to insert the new memory entry
+  const startOfSectionContent = headerIndex + MEMORY_SECTION_HEADER.length;
+  let endOfSectionIndex = currentContent.indexOf(
+    '\n## ',
+    startOfSectionContent,
+  );
+  if (endOfSectionIndex === -1) {
+    endOfSectionIndex = currentContent.length; // End of file
+  }
+
+  const beforeSectionMarker = currentContent
+    .substring(0, startOfSectionContent)
+    .trimEnd();
+  let sectionContent = currentContent
+    .substring(startOfSectionContent, endOfSectionIndex)
+    .trimEnd();
+  const afterSectionMarker = currentContent.substring(endOfSectionIndex);
+
+  sectionContent += `\n${newMemoryItem}`;
+  return (
+    `${beforeSectionMarker}\n${sectionContent.trimStart()}\n${afterSectionMarker}`.trimEnd() +
+    '\n'
+  );
 }
 
 class MemoryToolInvocation extends BaseToolInvocation<
@@ -312,22 +311,21 @@ class MemoryToolInvocation extends BaseToolInvocation<
           }),
           returnDisplay: successMessage,
         };
-      } else {
-        // Use the normal memory entry logic
-        await MemoryTool.performAddMemoryEntry(fact, memoryFilePath, {
-          readFile: fs.readFile,
-          writeFile: fs.writeFile,
-          mkdir: fs.mkdir,
-        });
-        const successMessage = `Okay, I've remembered that: "${fact}"`;
-        return {
-          llmContent: JSON.stringify({
-            success: true,
-            message: successMessage,
-          }),
-          returnDisplay: successMessage,
-        };
       }
+      // Use the normal memory entry logic
+      await MemoryTool.performAddMemoryEntry(fact, memoryFilePath, {
+        readFile: fs.readFile,
+        writeFile: fs.writeFile,
+        mkdir: fs.mkdir,
+      });
+      const successMessage = `Okay, I've remembered that: "${fact}"`;
+      return {
+        llmContent: JSON.stringify({
+          success: true,
+          message: successMessage,
+        }),
+        returnDisplay: successMessage,
+      };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

@@ -47,10 +47,7 @@ function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
  * Creates a temp directory for use as toolsDir in tests.
  */
 async function createTempToolsDir(): Promise<string> {
-  const tmpDir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'tool-key-storage-test-'),
-  );
-  return tmpDir;
+  return fs.mkdtemp(path.join(os.tmpdir(), 'tool-key-storage-test-'));
 }
 
 // ─── Registry Tests ──────────────────────────────────────────────────────────

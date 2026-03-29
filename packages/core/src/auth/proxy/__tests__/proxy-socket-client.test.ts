@@ -34,7 +34,7 @@ function createTempSocketPath(): string {
  * Helper: starts a server that auto-replies to handshake then echoes requests.
  */
 function createAutoReplyServer(_socketPath: string): net.Server {
-  const server = net.createServer((socket) => {
+  return net.createServer((socket) => {
     const decoder = new FrameDecoder();
     socket.on('data', (chunk) => {
       const frames = decoder.feed(chunk);
@@ -56,8 +56,6 @@ function createAutoReplyServer(_socketPath: string): net.Server {
       }
     });
   });
-
-  return server;
 }
 
 describe('ProxySocketClient', () => {

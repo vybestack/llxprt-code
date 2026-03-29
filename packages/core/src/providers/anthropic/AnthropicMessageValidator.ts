@@ -54,7 +54,7 @@ export function validateToolResults(
         `Found ${orphanedResults.length} orphaned tool results, removing them`,
     );
 
-    const filteredMessages = messages.filter((msg) => {
+    return messages.filter((msg) => {
       if (msg.role === 'user' && Array.isArray(msg.content)) {
         const filteredContent = msg.content.filter(
           (block) =>
@@ -68,8 +68,6 @@ export function validateToolResults(
       }
       return true;
     });
-
-    return filteredMessages;
   }
 
   return messages;

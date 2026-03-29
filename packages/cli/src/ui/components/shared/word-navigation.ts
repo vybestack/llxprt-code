@@ -168,13 +168,12 @@ export const findPrevWordStartInLine = (
       i--;
     }
     return i + 1;
-  } else {
-    // We're in punctuation, move to its beginning
-    while (i >= 0 && !isWordCharStrict(chars[i]) && !isWhitespace(chars[i])) {
-      i--;
-    }
-    return i + 1;
   }
+  // We're in punctuation, move to its beginning
+  while (i >= 0 && !isWordCharStrict(chars[i]) && !isWhitespace(chars[i])) {
+    i--;
+  }
+  return i + 1;
 };
 
 /**

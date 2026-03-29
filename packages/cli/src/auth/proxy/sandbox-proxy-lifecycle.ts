@@ -113,13 +113,11 @@ class CodexFlowAdapter implements OAuthFlowInterface {
     );
 
     // Complete the device auth flow
-    const token = await this.flow.completeDeviceAuth(
+    return this.flow.completeDeviceAuth(
       codeResult.authorization_code,
       codeResult.code_verifier,
       'https://auth.openai.com/deviceauth/callback',
     );
-
-    return token;
   }
 
   /**

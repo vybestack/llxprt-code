@@ -56,14 +56,13 @@ async function configureSetting(
   settingKey: string,
   scope: ExtensionSettingScope,
 ): Promise<boolean> {
-  const success = await updateSetting(
+  return updateSetting(
     extensionName,
     extensionPath,
     settingKey,
     promptForSetting,
     scope,
   );
-  return success;
 }
 
 /**

@@ -21,8 +21,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
-import type { OAuthProvider } from '../types.js';
-import type { OAuthToken, TokenStore } from '../types.js';
+import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 
 // --------------------------------------------------------------------------

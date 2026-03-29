@@ -616,12 +616,11 @@ function convertThinkingBlockToAnthropic(
     );
     if (shouldRedactThinkingBase) {
       return { type: 'text', text: block.thought };
-    } else {
-      return {
-        type: 'thinking',
-        thinking: block.thought,
-      };
     }
+    return {
+      type: 'thinking',
+      thinking: block.thought,
+    };
   }
 
   const shouldRedact =
@@ -633,13 +632,12 @@ function convertThinkingBlockToAnthropic(
       type: 'redacted_thinking',
       data: block.signature,
     };
-  } else {
-    return {
-      type: 'thinking',
-      thinking: block.thought,
-      signature: block.signature,
-    };
   }
+  return {
+    type: 'thinking',
+    thinking: block.thought,
+    signature: block.signature,
+  };
 }
 
 function buildAIMessageContent(

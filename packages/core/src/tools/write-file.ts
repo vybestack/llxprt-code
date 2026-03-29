@@ -443,7 +443,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
        */
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient && lspClient.isAlive()) {
+        if (lspClient?.isAlive()) {
           // Check the written file to trigger diagnostics
           await lspClient.checkFile(filePath);
 

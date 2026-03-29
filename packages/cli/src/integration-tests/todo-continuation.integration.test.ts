@@ -265,8 +265,7 @@ describe('Todo Continuation Integration Tests', () => {
           value: 'test',
         } as ServerGeminiStreamEvent;
         // Create a mock Turn object
-        const mockTurn = {} as Turn;
-        return mockTurn;
+        return {} as Turn;
       });
 
       // When: Send ephemeral message

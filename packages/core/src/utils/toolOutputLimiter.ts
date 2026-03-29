@@ -229,59 +229,55 @@ export function limitOutputTokens(
       originalTokens,
       message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
     };
-  } else {
-    // 'sample' mode - for line-based content, sample evenly
-    const lines = content.split('\n');
-    if (lines.length > 1) {
-      const targetLines = Math.max(1, Math.floor(effectiveLimit / 10)); // Rough estimate of tokens per line
-      const step = Math.ceil(lines.length / targetLines);
-      const sampledLines: string[] = [];
-
-      for (let i = 0; i < lines.length; i += step) {
-        sampledLines.push(lines[i]);
-        if (estimateTokens(sampledLines.join('\n')) > effectiveLimit) {
-          break;
-        }
-      }
-
-      return {
-        content:
-          sampledLines.join('\n') +
-          `\n\n[Sampled ${sampledLines.length} of ${lines.length} lines due to token limit]`,
-        wasTruncated: true,
-        originalTokens,
-        message: `Output sampled to fit within ${limits.maxTokens} token limit`,
-      };
-    } else {
-      // Single line or non-line content, fall back to truncate with escape buffer
-      const encoder = getEncoder();
-      const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
-
-      let truncatedContent = '';
-      let truncatedTokenCount = 0;
-
-      if (encodedContent && encoder) {
-        const truncatedTokens = encodedContent.subarray(0, targetTokenCount);
-        truncatedContent = utf8Decoder.decode(encoder.decode(truncatedTokens));
-        truncatedTokenCount = truncatedTokens.length;
-      } else {
-        const ratio =
-          originalTokens > 0
-            ? Math.min(1, targetTokenCount / originalTokens)
-            : 0;
-        const approxChars = Math.floor(content.length * ratio);
-        truncatedContent = content.slice(0, approxChars);
-        truncatedTokenCount = Math.ceil(truncatedContent.length / 3);
-      }
-
-      return {
-        content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
-        wasTruncated: true,
-        originalTokens,
-        message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
-      };
-    }
   }
+  // 'sample' mode - for line-based content, sample evenly
+  const lines = content.split('\n');
+  if (lines.length > 1) {
+    const targetLines = Math.max(1, Math.floor(effectiveLimit / 10)); // Rough estimate of tokens per line
+    const step = Math.ceil(lines.length / targetLines);
+    const sampledLines: string[] = [];
+
+    for (let i = 0; i < lines.length; i += step) {
+      sampledLines.push(lines[i]);
+      if (estimateTokens(sampledLines.join('\n')) > effectiveLimit) {
+        break;
+      }
+    }
+
+    return {
+      content:
+        sampledLines.join('\n') +
+        `\n\n[Sampled ${sampledLines.length} of ${lines.length} lines due to token limit]`,
+      wasTruncated: true,
+      originalTokens,
+      message: `Output sampled to fit within ${limits.maxTokens} token limit`,
+    };
+  }
+  // Single line or non-line content, fall back to truncate with escape buffer
+  const encoder = getEncoder();
+  const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
+
+  let truncatedContent = '';
+  let truncatedTokenCount = 0;
+
+  if (encodedContent && encoder) {
+    const truncatedTokens = encodedContent.subarray(0, targetTokenCount);
+    truncatedContent = utf8Decoder.decode(encoder.decode(truncatedTokens));
+    truncatedTokenCount = truncatedTokens.length;
+  } else {
+    const ratio =
+      originalTokens > 0 ? Math.min(1, targetTokenCount / originalTokens) : 0;
+    const approxChars = Math.floor(content.length * ratio);
+    truncatedContent = content.slice(0, approxChars);
+    truncatedTokenCount = Math.ceil(truncatedContent.length / 3);
+  }
+
+  return {
+    content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
+    wasTruncated: true,
+    originalTokens,
+    message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
+  };
 }
 
 /**

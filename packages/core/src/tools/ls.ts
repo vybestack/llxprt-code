@@ -374,7 +374,6 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
     if (pathError) {
       return pathError;
     }
-    const noValidationError = null;
-    return noValidationError;
+    return null;
   }
 }

@@ -219,7 +219,7 @@ export function createMockConfig(
               },
             );
 
-          const scheduler = {
+          return {
             schedule,
             cancelAll: vi.fn(),
             dispose: vi.fn(),
@@ -230,8 +230,6 @@ export function createMockConfig(
               getTool: vi.fn(),
             },
           } as unknown as CoreToolScheduler;
-
-          return scheduler;
         },
       ),
     ...overrides,

@@ -128,12 +128,10 @@ const createCombinedCallbacks = (
           }
         }
       : undefined,
-    getPreferredEditor: () => {
-      const preferredEditor = preferredEditorSelectors
+    getPreferredEditor: () =>
+      preferredEditorSelectors
         .map((handler) => handler())
-        .find((result) => result !== undefined);
-      return preferredEditor;
-    },
+        .find((result) => result !== undefined),
     onEditorClose: () => {
       for (const callbacks of callbackList) {
         callbacks.onEditorClose();

@@ -224,10 +224,9 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       'todo-continuation': true,
     }));
 
-    const mockGetGeminiClient = vi.fn().mockImplementation(() => {
-      const clientInstance = new MockedGeminiClientClass(mockConfig);
-      return clientInstance;
-    });
+    const mockGetGeminiClient = vi
+      .fn()
+      .mockImplementation(() => new MockedGeminiClientClass(mockConfig));
 
     const contentGeneratorConfig = {
       model: 'test-model',

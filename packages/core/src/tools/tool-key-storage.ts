@@ -311,8 +311,7 @@ export class ToolKeyStorage {
         debugLogger.warn('Keyfile is empty:', filePath);
         return null;
       }
-      const firstLine = trimmed.split('\n')[0].trim();
-      return firstLine;
+      return trimmed.split('\n')[0].trim();
     } catch (error) {
       const err = error as Error;
       debugLogger.warn('Failed to read keyfile:', filePath, err.message);

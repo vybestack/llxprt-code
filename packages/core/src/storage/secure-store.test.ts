@@ -59,8 +59,7 @@ function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
  * Creates a temp directory for use as fallbackDir in tests.
  */
 async function createTempFallbackDir(): Promise<string> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'secure-store-test-'));
-  return tmpDir;
+  return fs.mkdtemp(path.join(os.tmpdir(), 'secure-store-test-'));
 }
 
 // ─── Keyring Access (R1) ─────────────────────────────────────────────────────

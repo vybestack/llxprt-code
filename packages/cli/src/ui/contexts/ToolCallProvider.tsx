@@ -99,17 +99,15 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
   const contextValue = useMemo<ToolCallContextType>(
     () => ({
       getExecutingToolCalls,
-      subscribe: (callback: () => void) => {
-        const unsubscribe = ToolCallTrackerService.subscribeToUpdates(
+      subscribe: (callback: () => void) =>
+        ToolCallTrackerService.subscribeToUpdates(
           sessionId,
           () => {
             updateExecutingToolCalls();
             callback();
           },
           scopedAgentId,
-        );
-        return unsubscribe;
-      },
+        ),
     }),
     [getExecutingToolCalls, scopedAgentId, sessionId, updateExecutingToolCalls],
   );

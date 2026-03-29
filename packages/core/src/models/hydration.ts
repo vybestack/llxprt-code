@@ -194,9 +194,7 @@ function calculateMatchScore(
 
   // Score based on proportion of matching tokens
   const maxTokens = Math.max(idTokens.size, keyTokens.size);
-  const tokenScore = (matchingTokens / maxTokens) * 60;
-
-  return tokenScore;
+  return (matchingTokens / maxTokens) * 60;
 }
 
 /**

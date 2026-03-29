@@ -54,17 +54,16 @@ const formatTimestamp = (timestamp: string, isNarrow: boolean): string => {
       minute: '2-digit',
       hour12: false,
     });
-  } else {
-    // Full format for wider screens
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
   }
+  // Full format for wider screens
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 };
 
 const formatContent = (content: string, maxLength: number): string => {

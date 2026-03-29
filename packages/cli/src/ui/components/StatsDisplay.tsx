@@ -74,7 +74,7 @@ const buildModelRows = (models: Record<string, ModelMetrics>) => {
   const getBaseModelName = (name: string) => name.replace('-001', '');
 
   // Models with active usage
-  const activeRows = Object.entries(models).map(
+  return Object.entries(models).map(
     ([name, metrics]: [string, ModelMetrics]) => {
       const modelName = getBaseModelName(name);
       const cachedTokens = metrics.tokens.cached;
@@ -91,8 +91,6 @@ const buildModelRows = (models: Record<string, ModelMetrics>) => {
       };
     },
   );
-
-  return activeRows;
 };
 
 const ModelUsageTable: React.FC<{

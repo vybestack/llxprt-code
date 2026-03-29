@@ -455,7 +455,7 @@ export const hooksCommand: SlashCommand = {
         disableAllCommand,
       ].find((cmd) => cmd.name === subCommandName);
 
-      if (subCommand && subCommand.action) {
+      if (subCommand?.action) {
         await subCommand.action(context, subArgs);
       } else {
         await listHooks(context);

@@ -168,9 +168,8 @@ class GrepToolInvocation extends BaseToolInvocation<
           type: ToolErrorType.EXECUTION_FAILED,
         },
       };
-    } else {
-      signal.addEventListener('abort', onUserAbort);
     }
+    signal.addEventListener('abort', onUserAbort);
 
     // Use the combined signal for all operations
     const combinedSignal = timeoutController.signal;

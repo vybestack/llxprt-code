@@ -46,7 +46,7 @@ function createTestServer(
   socketPath: string,
   handler: RequestHandler,
 ): net.Server {
-  const server = net.createServer((socket) => {
+  return net.createServer((socket) => {
     const decoder = new FrameDecoder();
     socket.on('data', (chunk) => {
       const frames = decoder.feed(chunk);
@@ -64,7 +64,6 @@ function createTestServer(
       }
     });
   });
-  return server;
 }
 
 function listenAsync(server: net.Server, socketPath: string): Promise<void> {

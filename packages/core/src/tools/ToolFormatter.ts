@@ -330,7 +330,7 @@ export class ToolFormatter implements IToolFormatter {
             tool.function.parameters,
           );
 
-          const converted = {
+          return {
             type: 'function' as const,
             function: {
               name: tool.function.name,
@@ -338,7 +338,6 @@ export class ToolFormatter implements IToolFormatter {
               parameters: convertedParams,
             },
           };
-          return converted;
         });
       case 'anthropic':
         return tools.map((tool) => ({
@@ -399,9 +398,7 @@ export class ToolFormatter implements IToolFormatter {
         };
 
         if (
-          !openAiToolCall ||
-          !openAiToolCall.function ||
-          !openAiToolCall.function.name ||
+          !openAiToolCall?.function?.name ||
           !openAiToolCall.function.arguments
         ) {
           throw new Error(`Invalid ${format} tool call format`);
@@ -444,11 +441,7 @@ export class ToolFormatter implements IToolFormatter {
           input?: unknown;
         };
 
-        if (
-          !anthropicToolCall ||
-          !anthropicToolCall.id ||
-          !anthropicToolCall.name
-        ) {
+        if (!anthropicToolCall?.id || !anthropicToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
@@ -468,7 +461,7 @@ export class ToolFormatter implements IToolFormatter {
           arguments: Record<string, unknown>;
         };
 
-        if (!hermesToolCall || !hermesToolCall.name) {
+        if (!hermesToolCall?.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
@@ -488,7 +481,7 @@ export class ToolFormatter implements IToolFormatter {
           arguments: Record<string, unknown>;
         };
 
-        if (!xmlToolCall || !xmlToolCall.name) {
+        if (!xmlToolCall?.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 

@@ -154,12 +154,12 @@ describe('useGeminiStream', () => {
 
     mockAddItem = vi.fn();
     // Define the mock for getGeminiClient
-    const _mockGetGeminiClient = vi.fn().mockImplementation(() => {
-      // MockedGeminiClientClass is defined in the module scope by the previous change.
-      // It will use the mockStartChat and mockSendMessageStream that are managed within beforeEach.
-      const clientInstance = new MockedGeminiClientClass(mockConfig);
-      return clientInstance;
-    });
+    const _mockGetGeminiClient = vi.fn().mockImplementation(
+      () =>
+        // MockedGeminiClientClass is defined in the module scope by the previous change.
+        // It will use the mockStartChat and mockSendMessageStream that are managed within beforeEach.
+        new MockedGeminiClientClass(mockConfig),
+    );
 
     const contentGeneratorConfig = {
       model: 'test-model',

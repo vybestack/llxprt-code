@@ -352,15 +352,13 @@ export class GeminiClient {
     if (!this.hasChatInitialized()) {
       return null;
     }
-    const historyService = this.getChat().getHistoryService();
     // Removed verbose debug logging
-    return historyService;
+    return this.getChat().getHistoryService();
   }
 
   hasChatInitialized(): boolean {
-    const result = this.chat !== undefined;
     // Removed verbose debug logging
-    return result;
+    return this.chat !== undefined;
   }
 
   isInitialized(): boolean {

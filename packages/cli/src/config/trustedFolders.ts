@@ -208,8 +208,7 @@ export function saveTrustedFolders(
 /** Is folder trust feature enabled per the current applied settings */
 export function isFolderTrustEnabled(settings: Settings): boolean {
   // In llxprt, we use flat settings structure
-  const folderTrustSetting = settings.folderTrust ?? false;
-  return folderTrustSetting;
+  return settings.folderTrust ?? false;
 }
 
 function getWorkspaceTrustFromLocalConfig(): boolean | undefined {

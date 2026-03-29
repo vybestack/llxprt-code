@@ -334,13 +334,12 @@ export abstract class BaseProvider implements IProvider {
 
     // IMPORTANT: includeOAuth: false for config-time checks
     // OAuth should ONLY trigger during actual prompt sends
-    const token =
+    return (
       (await this.authResolver.resolveAuthentication({
         settingsService,
         includeOAuth: false,
-      })) ?? '';
-
-    return token;
+      })) ?? ''
+    );
   }
 
   /**
@@ -361,13 +360,12 @@ export abstract class BaseProvider implements IProvider {
     const settingsService = this.resolveSettingsService();
 
     // includeOAuth: true - OAuth is allowed during prompt send
-    const token =
+    return (
       (await this.authResolver.resolveAuthentication({
         settingsService,
         includeOAuth: true,
-      })) ?? '';
-
-    return token;
+      })) ?? ''
+    );
   }
 
   /**
@@ -912,10 +910,9 @@ export abstract class BaseProvider implements IProvider {
       : {
           settingsService: input.settings!,
           config: input.config ?? undefined,
-          runtimeId:
-            currentRuntimeId && currentRuntimeId.trim()
-              ? currentRuntimeId
-              : `${input.providerKey}:${input.stage}`,
+          runtimeId: currentRuntimeId?.trim()
+            ? currentRuntimeId
+            : `${input.providerKey}:${input.stage}`,
           metadata,
         };
 

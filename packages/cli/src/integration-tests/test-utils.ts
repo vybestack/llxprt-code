@@ -16,8 +16,7 @@ import { Config, MessageBus, Profile } from '@vybestack/llxprt-code-core';
  */
 export async function createTempDirectory(): Promise<string> {
   const prefix = 'llxprt-test-';
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  return tempDir;
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
 /**

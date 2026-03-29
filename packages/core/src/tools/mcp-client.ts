@@ -1201,8 +1201,7 @@ export async function discoverResources(
     return [];
   }
 
-  const resources = await listResources(mcpServerName, mcpClient);
-  return resources;
+  return listResources(mcpServerName, mcpClient);
 }
 
 async function listResources(
@@ -1365,12 +1364,10 @@ export async function invokeMcpPrompt(
       }
     }
 
-    const response = await mcpClient.getPrompt({
+    return await mcpClient.getPrompt({
       name: promptName,
       arguments: sanitizedParams,
     });
-
-    return response;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -1506,10 +1503,9 @@ export async function connectToMcpServer(
           httpReturned404,
         );
         return mcpClient;
-      } else {
-        // No stored token, show auth required message
-        await showAuthRequiredMessage(mcpServerName);
       }
+      // No stored token, show auth required message
+      await showAuthRequiredMessage(mcpServerName);
     }
 
     // If not 401 and URL config has no explicit type, try SSE fallback
@@ -1538,9 +1534,8 @@ export async function connectToMcpServer(
               storedToken,
             );
             return mcpClient;
-          } else {
-            await showAuthRequiredMessage(mcpServerName);
           }
+          await showAuthRequiredMessage(mcpServerName);
         }
         // SSE fallback failed for non-auth reason, fall through to original error handling
       }
@@ -1965,7 +1960,7 @@ export function isEnabled(
   const { includeTools, excludeTools } = mcpServerConfig;
 
   // excludeTools takes precedence over includeTools
-  if (excludeTools && excludeTools.includes(funcDecl.name)) {
+  if (excludeTools?.includes(funcDecl.name)) {
     return false;
   }
 

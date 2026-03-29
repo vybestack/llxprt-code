@@ -489,8 +489,7 @@ export function loadInstallMetadata(
   const metadataFilePath = path.join(extensionDir, INSTALL_METADATA_FILENAME);
   try {
     const configContent = fs.readFileSync(metadataFilePath, 'utf-8');
-    const metadata = JSON.parse(configContent) as ExtensionInstallMetadata;
-    return metadata;
+    return JSON.parse(configContent) as ExtensionInstallMetadata;
   } catch (_e) {
     return undefined;
   }
@@ -549,10 +548,7 @@ export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
   console.info(consentDescription);
-  const result = await promptForConsentNonInteractive(
-    'Do you want to continue? [Y/n]: ',
-  );
-  return result;
+  return promptForConsentNonInteractive('Do you want to continue? [Y/n]: ');
 }
 
 /**

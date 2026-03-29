@@ -209,7 +209,7 @@ class ThemeManager {
 
     const allThemes = [...builtInThemes, ...customThemes];
 
-    const sortedThemes = allThemes.sort((a, b) => {
+    return allThemes.sort((a, b) => {
       const typeOrder = (type: ThemeType): number => {
         switch (type) {
           case 'dark':
@@ -231,8 +231,6 @@ class ThemeManager {
       }
       return a.name.localeCompare(b.name);
     });
-
-    return sortedThemes;
   }
 
   /**

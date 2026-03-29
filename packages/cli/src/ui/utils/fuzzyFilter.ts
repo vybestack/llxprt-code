@@ -45,13 +45,12 @@ export function filterCompletions(
 
     const results = fzf.find(query);
     return results.map((result: FzfResultItem<Option>) => result.item);
-  } else {
-    // Use exact prefix matching
-    const lowerQuery = query.toLowerCase();
-    return options.filter((option) =>
-      option.value.toLowerCase().startsWith(lowerQuery),
-    );
   }
+  // Use exact prefix matching
+  const lowerQuery = query.toLowerCase();
+  return options.filter((option) =>
+    option.value.toLowerCase().startsWith(lowerQuery),
+  );
 }
 
 /**
@@ -82,11 +81,10 @@ export function filterStrings(
 
     const results = fzf.find(query);
     return results.map((result: FzfResultItem<string>) => result.item);
-  } else {
-    // Use exact prefix matching
-    const lowerQuery = query.toLowerCase();
-    return items.filter((item) => item.toLowerCase().startsWith(lowerQuery));
   }
+  // Use exact prefix matching
+  const lowerQuery = query.toLowerCase();
+  return items.filter((item) => item.toLowerCase().startsWith(lowerQuery));
 }
 
 /**

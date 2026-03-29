@@ -64,19 +64,18 @@ export async function promptForSetting(
       };
       stdin.on('data', onData);
     });
-  } else {
-    const readline = await import('node:readline');
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    return new Promise<string>((resolve) => {
-      rl.question(prompt, (answer) => {
-        rl.close();
-        resolve(answer);
-      });
-    });
   }
+  const readline = await import('node:readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise<string>((resolve) => {
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
 }
 
 /**

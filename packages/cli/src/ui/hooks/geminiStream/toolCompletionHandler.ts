@@ -16,16 +16,18 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import { GeminiClient } from '@vybestack/llxprt-code-core';
-import type { Part } from '@google/genai';
-import { DEFAULT_AGENT_ID, DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  GeminiClient,
+  DEFAULT_AGENT_ID,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
+import type { Part, PartListUnion } from '@google/genai';
 import {
   TrackedToolCall,
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from '../useReactToolScheduler.js';
 import { splitPartsByRole } from './streamUtils.js';
-import type { PartListUnion } from '@google/genai';
 
 const geminiStreamLogger = new DebugLogger('llxprt:ui:gemini-stream');
 

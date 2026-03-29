@@ -113,7 +113,7 @@ export function getGitHubRepoInfo(): { owner: string; repo: string } {
   );
 
   // If the regex fails match, throw an error.
-  if (!match || !match[1] || !match[2]) {
+  if (!match?.[1] || !match[2]) {
     throw new Error(
       `Owner & repo could not be extracted from remote URL: ${remoteUrl}`,
     );

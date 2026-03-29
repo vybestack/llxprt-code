@@ -598,10 +598,9 @@ export class ToolRegistry {
    * Returns an array of all registered and discovered tool instances.
    */
   getAllTools(): AnyDeclarativeTool[] {
-    const tools = Array.from(this.tools.values()).sort((a, b) =>
+    return Array.from(this.tools.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
-    return tools;
   }
 
   /**

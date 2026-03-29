@@ -710,10 +710,7 @@ describe('RetryOrchestrator', () => {
 
       const failoverHandler = {
         getBuckets: () => buckets,
-        getCurrentBucket: () => {
-          const prev = currentBucket;
-          return prev;
-        },
+        getCurrentBucket: () => currentBucket,
         tryFailover: async () => {
           const oldBucket = currentBucket;
           bucketIndex++;

@@ -774,9 +774,7 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          const apiKeyResult =
-            await contentGenerator.generateContent(apiKeyRequest);
-          return apiKeyResult;
+          return contentGenerator.generateContent(apiKeyRequest);
         }
 
         case 'vertex-ai': {
@@ -808,9 +806,7 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          const vertexResult =
-            await vertexContentGenerator.generateContent(vertexRequest);
-          return vertexResult;
+          return vertexContentGenerator.generateContent(vertexRequest);
         }
 
         case 'oauth': {
@@ -949,9 +945,7 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          const apiKeyResult =
-            await contentGenerator.generateContent(apiKeyRequest);
-          return apiKeyResult;
+          return contentGenerator.generateContent(apiKeyRequest);
         }
 
         case 'vertex-ai': {
@@ -983,9 +977,7 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          const vertexResult =
-            await vertexContentGenerator.generateContent(vertexRequest);
-          return vertexResult;
+          return vertexContentGenerator.generateContent(vertexRequest);
         }
 
         case 'oauth': {
@@ -1011,11 +1003,10 @@ export class GeminiProvider extends BaseProvider {
           };
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
           // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
-          const result = await oauthContentGenerator.generateContent(
+          return oauthContentGenerator.generateContent(
             oauthRequest,
             'google-web-fetch-oauth', // userPromptId for OAuth web fetch
           );
-          return result;
         }
 
         default:

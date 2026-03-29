@@ -223,10 +223,9 @@ export function getEnvFilePath(
       extensionName,
       '.env',
     );
-  } else {
-    // User settings go in extension directory .env
-    return path.join(extensionDir, '.env');
   }
+  // User settings go in extension directory .env
+  return path.join(extensionDir, '.env');
 }
 
 /**

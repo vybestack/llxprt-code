@@ -38,12 +38,10 @@ export function useStableCallback<T extends (...args: unknown[]) => unknown>(
   });
 
   // Return a stable callback that always calls the latest version
-  const stableCallback = useCallback(
+  return useCallback(
     (...args: Parameters<T>) => callbackRef.current(...args),
     [], // Empty deps = stable reference
   ) as T;
-
-  return stableCallback;
 }
 
 /**

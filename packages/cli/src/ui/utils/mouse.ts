@@ -89,24 +89,22 @@ export function getMouseEventName(
   } else if ((buttonCode & 64) === 64) {
     if ((buttonCode & 1) === 0) {
       return 'scroll-up';
-    } else {
-      return 'scroll-down';
     }
+    return 'scroll-down';
   } else if (isMove) {
     return 'move';
-  } else {
-    const button = buttonCode & 3;
-    const type = isRelease ? 'release' : 'press';
-    switch (button) {
-      case 0:
-        return `left-${type}`;
-      case 1:
-        return `middle-${type}`;
-      case 2:
-        return `right-${type}`;
-      default:
-        return null;
-    }
+  }
+  const button = buttonCode & 3;
+  const type = isRelease ? 'release' : 'press';
+  switch (button) {
+    case 0:
+      return `left-${type}`;
+    case 1:
+      return `middle-${type}`;
+    case 2:
+      return `right-${type}`;
+    default:
+      return null;
   }
 }
 

@@ -210,14 +210,7 @@ export async function modifyWithEditor<ToolParams>(
     }
 
     await openDiff(oldPath, newPath, editorType, onEditorClose);
-    const result = getUpdatedParams(
-      oldPath,
-      newPath,
-      originalParams,
-      modifyContext,
-    );
-
-    return result;
+    return getUpdatedParams(oldPath, newPath, originalParams, modifyContext);
   } finally {
     deleteTempFiles(oldPath, newPath, dirPath);
   }

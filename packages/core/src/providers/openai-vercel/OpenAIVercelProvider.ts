@@ -1515,12 +1515,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         }
       }
 
-      const sortedModels =
-        models.length > 0
-          ? models.sort((a, b) => a.name.localeCompare(b.name))
-          : this.getFallbackModels();
-
-      return sortedModels;
+      return models.length > 0
+        ? models.sort((a, b) => a.name.localeCompare(b.name))
+        : this.getFallbackModels();
     } catch (error) {
       logger.debug(
         () => `Error fetching models from OpenAI via Vercel provider: ${error}`,

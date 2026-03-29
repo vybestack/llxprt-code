@@ -55,7 +55,7 @@ vi.stubGlobal(
 
 const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
   const { isTTY = false, writeReturn = true } = opts ?? {};
-  const stream = Object.assign(new EventEmitter(), {
+  return Object.assign(new EventEmitter(), {
     write: vi.fn().mockReturnValue(writeReturn),
     end: vi.fn(),
     destroy: vi.fn(),
@@ -68,7 +68,6 @@ const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
     end: Mock;
     isTTY?: boolean;
   };
-  return stream;
 };
 
 const resetEnv = () => {

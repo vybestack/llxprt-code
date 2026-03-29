@@ -188,8 +188,7 @@ export async function executeWithBucketFailover(
     const bucket = buckets[i];
 
     try {
-      const response = await executor(request, bucket);
-      return response;
+      return await executor(request, bucket);
     } catch (error) {
       const err = error as Error;
       lastError = err;

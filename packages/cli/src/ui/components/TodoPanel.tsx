@@ -88,12 +88,13 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({
   }, [todos]);
 
   // Subscribe to tool call updates to re-render when they change
-  useEffect(() => {
-    const unsubscribe = subscribe(() => {
-      setContentKey((prev) => prev + 1);
-    });
-    return unsubscribe;
-  }, [subscribe]);
+  useEffect(
+    () =>
+      subscribe(() => {
+        setContentKey((prev) => prev + 1);
+      }),
+    [subscribe],
+  );
 
   const maxVisibleItems = useMemo(() => calculateMaxVisibleItems(rows), [rows]);
   const currentTodoIndex = todos.findIndex(

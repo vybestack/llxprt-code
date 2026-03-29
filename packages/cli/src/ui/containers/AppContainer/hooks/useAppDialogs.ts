@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
@@ -37,7 +37,6 @@ import type {
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { HistoryItem, ConsoleMessageItem } from '../../../types.js';
-import React from 'react';
 
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 

@@ -73,17 +73,17 @@ export function getCliRuntimeContext() {
   const identity = resolveActiveRuntimeIdentity();
   const entry = runtimeRegistry.get(identity.runtimeId);
 
-  if (!entry || !entry.config) {
+  if (!entry?.config) {
     const registeredIds = Array.from(runtimeRegistry.keys());
     const scope = getCurrentRuntimeScope();
     const activeCtx = peekActiveProviderRuntimeContext();
     logger.debug(
       () =>
-        `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!(entry && entry.config)}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+        `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!entry?.config}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`,
     );
   }
 
-  if (entry && entry.config) {
+  if (entry?.config) {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-004 - Remove singleton fallbacks when stateless hardening is enabled
     const settingsService = entry.settingsService;

@@ -46,9 +46,9 @@ export function getKeychainServiceName(
   const sanitized = extensionName.replace(/[^a-zA-Z0-9-_]/g, '');
 
   // Check if this is a workspace-scoped path
-  const isWorkspaceScope =
-    extensionDir &&
-    extensionDir.replace(/\\/g, '/').includes('.llxprt/extensions');
+  const isWorkspaceScope = extensionDir
+    ?.replace(/\\/g, '/')
+    .includes('.llxprt/extensions');
 
   if (isWorkspaceScope) {
     // Include workspace identifier for workspace scope

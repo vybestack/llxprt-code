@@ -16,7 +16,7 @@ export function createMockWorkspaceContext(
 ): WorkspaceContext {
   const allDirs = [rootDir, ...additionalDirs];
 
-  const mockWorkspaceContext = {
+  return {
     addDirectory: vi.fn<WorkspaceContext['addDirectory']>(),
     getDirectories: vi
       .fn<WorkspaceContext['getDirectories']>()
@@ -27,6 +27,4 @@ export function createMockWorkspaceContext(
         allDirs.some((dir) => path.startsWith(dir)),
       ),
   } as unknown as WorkspaceContext;
-
-  return mockWorkspaceContext;
 }

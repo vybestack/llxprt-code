@@ -282,12 +282,10 @@ export class QwenOAuthProvider implements OAuthProvider {
     await this.ensureInitialized();
 
     return this.errorHandler.handleGracefully(
-      async () => {
+      async () =>
         // Line 59: RETURN AWAIT this.tokenStore.getToken('qwen')
         // Read-only - OAuthManager owns all refresh operations
-        const token = (await this.tokenStore?.getToken('qwen')) || null;
-        return token;
-      },
+        (await this.tokenStore?.getToken('qwen')) || null,
       null, // Return null on error
       this.name,
       'getToken',

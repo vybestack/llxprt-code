@@ -71,8 +71,7 @@ export class QwenDeviceFlow {
     const data = await response.json();
 
     // Validate response with Zod schema
-    const validatedResponse = DeviceCodeResponseSchema.parse(data);
-    return validatedResponse;
+    return DeviceCodeResponseSchema.parse(data);
   }
 
   /**

@@ -75,16 +75,15 @@ export const Help: React.FC<Help> = ({ commands }) => (
             </Text>
             {command.description && ' - ' + command.description}
           </Text>
-          {command.subCommands &&
-            command.subCommands.map((subCommand) => (
-              <Text key={subCommand.name} color={Colors.Foreground}>
-                <Text bold color={Colors.AccentPurple}>
-                  {'   '}
-                  {subCommand.name}
-                </Text>
-                {subCommand.description && ' - ' + subCommand.description}
+          {command.subCommands?.map((subCommand) => (
+            <Text key={subCommand.name} color={Colors.Foreground}>
+              <Text bold color={Colors.AccentPurple}>
+                {'   '}
+                {subCommand.name}
               </Text>
-            ))}
+              {subCommand.description && ' - ' + subCommand.description}
+            </Text>
+          ))}
         </Box>
       ))}
     <Text color={Colors.Foreground}>

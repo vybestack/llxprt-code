@@ -331,10 +331,7 @@ export async function retryWithBackoff<T>(
       consecutive429s = 0;
       consecutiveAuthErrors = 0;
 
-      if (
-        shouldRetryOnContent &&
-        shouldRetryOnContent(result as GenerateContentResponse)
-      ) {
+      if (shouldRetryOnContent?.(result as GenerateContentResponse)) {
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
         await delay(delayWithJitter, signal);

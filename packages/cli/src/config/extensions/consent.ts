@@ -175,10 +175,7 @@ export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
   debugLogger.log(consentDescription);
-  const result = await promptForConsentNonInteractive(
-    'Do you want to continue? [Y/n]: ',
-  );
-  return result;
+  return promptForConsentNonInteractive('Do you want to continue? [Y/n]: ');
 }
 
 /**

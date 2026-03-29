@@ -185,10 +185,9 @@ describe('retryWithBackoff', () => {
 
   it('should use default shouldRetry if not provided, retrying on generic error with status 429', async () => {
     const mockFn = vi.fn(async () => {
-      const error = Object.assign(new Error('Too Many Requests'), {
+      throw Object.assign(new Error('Too Many Requests'), {
         status: 429,
       });
-      throw error;
     });
 
     const promise = retryWithBackoff(mockFn, {
@@ -207,8 +206,7 @@ describe('retryWithBackoff', () => {
 
   it('should use default shouldRetry if not provided, not retrying on generic error with status 400', async () => {
     const mockFn = vi.fn(async () => {
-      const error = Object.assign(new Error('Bad Request'), { status: 400 });
-      throw error;
+      throw Object.assign(new Error('Bad Request'), { status: 400 });
     });
 
     const promise = retryWithBackoff(mockFn, {
@@ -294,8 +292,7 @@ describe('retryWithBackoff', () => {
         attempts++;
         if (attempts === 1) {
           // Simulate undici termination error
-          const error = new TypeError('terminated');
-          throw error;
+          throw new TypeError('terminated');
         }
         return 'success';
       });
@@ -339,10 +336,9 @@ describe('retryWithBackoff', () => {
       const mockFn = vi.fn(async () => {
         attempts++;
         if (attempts === 1) {
-          const error = Object.assign(new Error('socket hang up'), {
+          throw Object.assign(new Error('socket hang up'), {
             code: 'ECONNRESET',
           });
-          throw error;
         }
         return 'success';
       });

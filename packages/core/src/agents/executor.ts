@@ -407,8 +407,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
                 .getGeminiClient?.()
                 ?.getContentGenerator();
             } catch {
-              const unavailableContentGenerator = void 0;
-              return unavailableContentGenerator;
+              return void 0;
             }
           })(),
         },

@@ -212,7 +212,7 @@ export function createProviderCallOptions(
   runtime: ProviderRuntimeContext;
   invocation: RuntimeInvocationContext;
 } {
-  if (!init || !init.providerName) {
+  if (!init?.providerName) {
     throw new Error(
       'createProviderCallOptions requires a providerName to be specified.',
     );

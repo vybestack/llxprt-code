@@ -194,11 +194,11 @@ export class ProfileManager {
       const files = await fs.readdir(this.profilesDir);
 
       // Filter for .json files and remove extension
-      const profileNames = files
-        .filter((file) => file.endsWith('.json'))
-        .map((file) => file.slice(0, -5)); // Remove .json extension
+      // Remove .json extension
 
-      return profileNames;
+      return files
+        .filter((file) => file.endsWith('.json'))
+        .map((file) => file.slice(0, -5));
     } catch (_error) {
       // If directory doesn't exist or other error, return empty array
       return [];

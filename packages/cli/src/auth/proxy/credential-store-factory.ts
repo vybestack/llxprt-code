@@ -56,12 +56,11 @@ export function createTokenStore(): TokenStore {
       proxyTokenStore = new ProxyTokenStore(socketPath);
     }
     return proxyTokenStore;
-  } else {
-    if (!directTokenStore) {
-      directTokenStore = new KeyringTokenStore();
-    }
-    return directTokenStore;
   }
+  if (!directTokenStore) {
+    directTokenStore = new KeyringTokenStore();
+  }
+  return directTokenStore;
 }
 
 /**
@@ -83,12 +82,11 @@ export function createProviderKeyStorage(): ProviderKeyStorage {
       proxyKeyStorage = new ProxyProviderKeyStorage(client);
     }
     return proxyKeyStorage as unknown as ProviderKeyStorage;
-  } else {
-    if (!directKeyStorage) {
-      directKeyStorage = getProviderKeyStorage();
-    }
-    return directKeyStorage;
   }
+  if (!directKeyStorage) {
+    directKeyStorage = getProviderKeyStorage();
+  }
+  return directKeyStorage;
 }
 
 /**

@@ -99,14 +99,13 @@ const logoutCompleter: CompleterFn = withFuzzyFilter(
 
       const oauthManager = getOAuthManager();
       const buckets = await oauthManager.listBuckets(provider);
-      const options = [
+      return [
         { value: '--all', description: 'Logout from all buckets' },
         ...buckets.map((bucket) => ({
           value: bucket,
           description: `Logout from bucket: ${bucket}`,
         })),
       ];
-      return options;
     } catch {
       return [];
     }
@@ -298,9 +297,8 @@ export class AuthCommandExecutor {
             messageType: 'info',
             content: status,
           };
-        } else {
-          status += ' (authenticated)';
         }
+        status += ' (authenticated)';
       } else if (isEnabled && !isAuthenticated) {
         status += ' (not authenticated)';
       }
