@@ -293,7 +293,7 @@ export class SkillManager {
    * Returns the list of enabled discovered skills.
    */
   getSkills(): SkillDefinition[] {
-    return this.skills.filter((s) => !s.disabled);
+    return this.skills.filter((s) => !(s.disabled ?? false));
   }
 
   /**

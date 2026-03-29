@@ -443,7 +443,7 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     const uniqueKeys = [...new Set(keys)];
     expect(keys).toStrictEqual(uniqueKeys);
     // Sorted
-    expect(keys).toStrictEqual([...keys].sort());
+    expect(keys).toStrictEqual([...keys].sort((a, b) => a.localeCompare(b)));
   });
 });
 

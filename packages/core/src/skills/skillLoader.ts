@@ -49,7 +49,7 @@ export async function loadSkillsFromDir(
   try {
     const absoluteSearchPath = path.resolve(dir);
     const stats = await fs.stat(absoluteSearchPath).catch(() => null);
-    if (!stats?.isDirectory()) {
+    if (!(stats?.isDirectory() ?? false)) {
       return [];
     }
 
@@ -100,7 +100,7 @@ export async function loadSkillFromFile(
     }
 
     const frontmatter = yaml.load(match[1]);
-    if (!frontmatter || typeof frontmatter !== 'object') {
+    if (!Boolean(frontmatter) || typeof frontmatter !== 'object') {
       return null;
     }
 
@@ -134,7 +134,7 @@ function loadSkillFromFileSync(
     }
 
     const frontmatter = yaml.load(match[1]);
-    if (!frontmatter || typeof frontmatter !== 'object') {
+    if (!Boolean(frontmatter) || typeof frontmatter !== 'object') {
       return null;
     }
 

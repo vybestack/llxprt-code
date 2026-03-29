@@ -285,7 +285,7 @@ export function createProviderManager(
 
   logger.debug('createProviderManager config check', {
     hasConfig: !!config,
-    configType: config?.constructor?.name,
+    configType: config?.constructor.name,
   });
 
   if (config != null) {
@@ -301,7 +301,7 @@ export function createProviderManager(
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
 
   const settingsData = loadedSettings?.merged || {};
-  const ephemeralSettings = config?.getEphemeralSettings?.() ?? {};
+  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
   const effectiveOpenaiResponsesEnabled: boolean | undefined =
     ephemeralSettings.openaiResponsesEnabled !== undefined
       ? Boolean(ephemeralSettings.openaiResponsesEnabled)
@@ -332,7 +332,7 @@ export function createProviderManager(
   let openaiApiKey: string | undefined;
 
   if (
-    ephemeralAuthKey &&
+    Boolean(ephemeralAuthKey) &&
     typeof ephemeralAuthKey === 'string' &&
     ephemeralAuthKey.trim() !== ''
   ) {
@@ -353,7 +353,7 @@ export function createProviderManager(
   const ephemeralBaseUrl = ephemeralSettings['base-url'];
   const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
   const openaiBaseUrl =
-    ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
+    Boolean(ephemeralBaseUrl) && typeof ephemeralBaseUrl === 'string'
       ? ephemeralBaseUrl
       : providerBaseUrl && typeof providerBaseUrl === 'string'
         ? providerBaseUrl
@@ -605,7 +605,7 @@ export function bindOpenAIAliasIdentity(
 }
 
 function bindProviderAliasIdentity(provider: unknown, alias: string): void {
-  const aliasName = alias?.trim();
+  const aliasName = alias.trim();
   if (!aliasName) {
     return;
   }
@@ -907,7 +907,7 @@ function createAnthropicAliasProvider(
 ): AnthropicProvider | null {
   let aliasApiKey: string | undefined;
   // Only use environment variable API key if authOnly is not enabled
-  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
+  if (!(authOnlyEnabled ?? false) && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);

@@ -263,7 +263,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
         this.config as Config & {
           getConversationLoggingEnabled?: () => boolean;
         }
-      ).getConversationLoggingEnabled?.() ?? false
+      ).getConversationLoggingEnabled() ?? false
     );
   }
 }

@@ -132,7 +132,8 @@ async function handleList(args: ListArgs): Promise<void> {
     return;
   }
 
-  const scopeLabel = scope ? ` (${scope} scope)` : ' (merged user + workspace)';
+  const scopeLabel =
+    scope != null ? ` (${scope} scope)` : ' (merged user + workspace)';
   console.log(`Settings for extension "${args.name}"${scopeLabel}:`);
   for (const { name, value } of contents) {
     console.log(`  ${name}: ${value}`);

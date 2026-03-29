@@ -47,7 +47,7 @@ vi.mock('node:readline', () => ({
             ? 'Database URL'
             : 'unknown',
       );
-      callback(shouldOverwrite ? 'y' : 'n');
+      callback(Boolean(shouldOverwrite) ? 'y' : 'n');
     }),
     close: vi.fn(),
   })),

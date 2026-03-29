@@ -432,7 +432,7 @@ export async function createPolicyEngineConfig(
     for (const [serverName, serverConfig] of Object.entries(
       settings.mcpServers,
     )) {
-      if (serverConfig.trust) {
+      if (serverConfig.trust ?? false) {
         // Trust all tools from this MCP server
         // Using pattern matching for MCP tool names which are formatted as "serverName__toolName"
         rules.push({
@@ -521,7 +521,7 @@ export function createPolicyUpdater(
       }
 
       // PERSISTENCE LOGIC - Save to TOML if persist=true
-      if (message.persist) {
+      if (message.persist ?? false) {
         try {
           const userPoliciesDir = Storage.getUserPoliciesDir();
           await fs.mkdir(userPoliciesDir, { recursive: true });

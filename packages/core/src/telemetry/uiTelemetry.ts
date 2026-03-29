@@ -267,7 +267,7 @@ export class UiTelemetryService extends EventEmitter {
       toolStats.fail++;
     }
 
-    if (event.decision) {
+    if (event.decision != null) {
       tools.totalDecisions[event.decision]++;
       toolStats.decisions[event.decision]++;
     }

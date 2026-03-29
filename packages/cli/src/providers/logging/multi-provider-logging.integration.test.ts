@@ -691,7 +691,9 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     expect(entries).toHaveLength(3);
 
     // Verify each provider was logged correctly
-    const providerNames = entries.map((e) => e.provider_name).sort();
+    const providerNames = entries
+      .map((e) => e.provider_name)
+      .sort((a, b) => a.localeCompare(b));
     expect(providerNames).toStrictEqual([
       'concurrent-1',
       'concurrent-2',

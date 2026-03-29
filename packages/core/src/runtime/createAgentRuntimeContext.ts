@@ -67,7 +67,7 @@ export function createAgentRuntimeContext(
     snapshotValue: T | undefined,
   ): T | undefined => {
     // First check the live settings service for runtime changes
-    const settingsService = options.providerRuntime?.settingsService;
+    const settingsService = options.providerRuntime.settingsService;
     if (settingsService) {
       const liveValue = settingsService.get(key) as T | undefined;
       if (liveValue !== undefined) {

@@ -74,10 +74,12 @@ describe('getProviderManager runtime OAuth MessageBus composition', () => {
 
     expect(oauthManager).not.toBeNull();
 
-    const registeredProviders = manager.listProviders().sort();
+    const registeredProviders = manager
+      .listProviders()
+      .sort((a, b) => a.localeCompare(b));
     const supportedOAuthProviders = oauthManager!
       .getSupportedProviders()
-      .sort();
+      .sort((a, b) => a.localeCompare(b));
 
     expect(registeredProviders).toStrictEqual(
       expect.arrayContaining(['anthropic', 'codex', 'gemini', 'openai']),

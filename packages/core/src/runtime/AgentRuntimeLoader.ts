@@ -88,12 +88,12 @@ function buildToolGovernance(
   profile: AgentRuntimeProfileSnapshot,
 ): ToolGovernance {
   const allowedRaw = Array.isArray(profile.settings.tools?.allowed)
-    ? profile.settings.tools?.allowed
+    ? profile.settings.tools.allowed
     : undefined;
   const disabledRaw = Array.isArray(profile.settings.tools?.disabled)
-    ? profile.settings.tools?.disabled
+    ? profile.settings.tools.disabled
     : undefined;
-  const excludedRaw = profile.config.getExcludeTools?.() ?? [];
+  const excludedRaw = profile.config.getExcludeTools() ?? [];
 
   return {
     allowed: new Set(
@@ -161,9 +161,9 @@ function createFilteredToolRegistryView(
             ? (tool as { description: string }).description
             : '';
       const parameterSchema =
-        (schema as { parameters?: Record<string, unknown> })?.parameters ??
+        (schema as { parameters?: Record<string, unknown> }).parameters ??
         (schema as { parametersJsonSchema?: Record<string, unknown> })
-          ?.parametersJsonSchema;
+          .parametersJsonSchema;
 
       return {
         name: (tool as { name?: string }).name ?? name,
@@ -182,7 +182,7 @@ export async function loadAgentRuntime(
     throw new Error('AgentRuntimeLoader requires a profile option.');
   }
 
-  if (signal?.aborted) {
+  if (signal?.aborted ?? false) {
     const error = new Error('Runtime load aborted');
     error.name = 'AbortError';
     throw error;
@@ -193,7 +193,7 @@ export async function loadAgentRuntime(
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
     createProviderAdapterFromManager(
-      profile.providerManager ?? profile.config.getProviderManager?.(),
+      profile.providerManager ?? profile.config.getProviderManager(),
     );
 
   const telemetryAdapter: AgentRuntimeTelemetryAdapter =
@@ -204,7 +204,7 @@ export async function loadAgentRuntime(
   const toolsView: ToolRegistryView =
     overrides.toolsView ??
     createFilteredToolRegistryView(
-      profile.toolRegistry ?? profile.config.getToolRegistry?.(),
+      profile.toolRegistry ?? profile.config.getToolRegistry(),
       governance,
     );
 

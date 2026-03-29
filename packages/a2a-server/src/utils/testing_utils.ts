@@ -155,14 +155,14 @@ export function createMockConfig(
                 const confirmationResults = await Promise.all(
                   scheduledCalls.map(async (call) => {
                     const tool = mockConfig
-                      .getToolRegistry?.()
+                      .getToolRegistry()
                       ?.getTool?.(call.request.name);
-                    if (!tool || typeof tool.build !== 'function') {
+                    if (!Boolean(tool) || typeof tool.build !== 'function') {
                       return false;
                     }
                     const invocation = tool.build(call.request.args);
                     if (
-                      !invocation ||
+                      !Boolean(invocation) ||
                       typeof invocation.shouldConfirmExecute !== 'function'
                     ) {
                       return false;
@@ -226,7 +226,7 @@ export function createMockConfig(
             toolCalls: [],
             getPreferredEditor: callbacks.getPreferredEditor ?? vi.fn(),
             config: mockConfig,
-            toolRegistry: mockConfig?.getToolRegistry?.() || {
+            toolRegistry: mockConfig.getToolRegistry() || {
               getTool: vi.fn(),
             },
           } as unknown as CoreToolScheduler;
@@ -296,7 +296,7 @@ export function assertUniqueFinalEventIsLast(
   expect(finalEvent.metadata?.['coderAgent']).toMatchObject({
     kind: 'state-change',
   });
-  expect(finalEvent.status?.state).toBe('input-required');
+  expect(finalEvent.status.state).toBe('input-required');
   expect(finalEvent.final).toBe(true);
 
   // There is only one event with final and its the last

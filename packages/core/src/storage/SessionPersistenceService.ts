@@ -191,7 +191,7 @@ export class SessionPersistenceService {
         .filter(
           (f) => f.startsWith(PERSISTED_SESSION_PREFIX) && f.endsWith('.json'),
         )
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
         .reverse(); // Most recent first (timestamp-based naming)
 
       if (sessionFiles.length === 0) {
@@ -280,7 +280,7 @@ export class SessionPersistenceService {
         .filter(
           (f) => f.startsWith(PERSISTED_SESSION_PREFIX) && f.endsWith('.json'),
         )
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
         .reverse();
 
       if (sessionFiles.length > 0) {

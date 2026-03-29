@@ -43,7 +43,7 @@ export class GitStatsTracker {
   constructor(private config: Config) {
     // Handle invalid config gracefully
     try {
-      this.enabled = this.config?.getConversationLoggingEnabled?.() ?? false;
+      this.enabled = this.config.getConversationLoggingEnabled() ?? false;
     } catch (_error) {
       this.enabled = false;
     }
@@ -66,10 +66,10 @@ export class GitStatsTracker {
     }
 
     // Handle null/undefined content gracefully
-    if (oldContent === null || oldContent === undefined) {
+    if (oldContent == null || oldContent == undefined) {
       oldContent = '';
     }
-    if (newContent === null || newContent === undefined) {
+    if (newContent == null || newContent == undefined) {
       newContent = '';
     }
 
@@ -143,7 +143,7 @@ export class GitStatsTracker {
   isEnabled(): boolean {
     // Update enabled state based on current config
     try {
-      this.enabled = this.config?.getConversationLoggingEnabled?.() ?? false;
+      this.enabled = this.config.getConversationLoggingEnabled() ?? false;
     } catch (_error) {
       this.enabled = false;
     }
@@ -175,7 +175,7 @@ export class GitStatsTracker {
   getSummary(): SessionSummary {
     let sessionId = '';
     try {
-      sessionId = this.config?.getSessionId?.() ?? '';
+      sessionId = this.config.getSessionId() ?? '';
     } catch (_error) {
       sessionId = '';
     }

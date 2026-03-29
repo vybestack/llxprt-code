@@ -180,7 +180,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
-      if (!current[k] || typeof current[k] !== 'object') {
+      if (!Boolean(current[k]) || typeof current[k] !== 'object') {
         current[k] = {};
       }
       current = current[k] as Record<string, unknown>;
@@ -294,7 +294,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     this.settings.providers = {};
 
     // Import profile data
-    if (profileData && typeof profileData === 'object') {
+    if (Boolean(profileData) && typeof profileData === 'object') {
       const data = profileData as {
         defaultProvider?: string;
         providers?: Record<string, Record<string, unknown>>;
@@ -322,10 +322,10 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       }
 
       const toolsAllowed = Array.isArray(data.tools?.allowed)
-        ? (data.tools?.allowed as unknown[]).map((name) => String(name))
+        ? (data.tools.allowed as unknown[]).map((name) => String(name))
         : [];
       const toolsDisabled = Array.isArray(data.tools?.disabled)
-        ? (data.tools?.disabled as unknown[]).map((name) => String(name))
+        ? (data.tools.disabled as unknown[]).map((name) => String(name))
         : [];
 
       this.settings.tools = this.settings.tools ?? {};

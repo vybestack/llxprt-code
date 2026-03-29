@@ -92,7 +92,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
     }>,
   ): AsyncIterableIterator<IContent> {
     // This should log the conversation request when logging is enabled
-    if (this.config.getConversationLoggingEnabled?.()) {
+    if (this.config.getConversationLoggingEnabled()) {
       try {
         const redactedMessages = messages.map((msg) =>
           this.redactor.redactMessage(msg, this.provider.name),

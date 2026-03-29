@@ -378,7 +378,7 @@ export async function loadPoliciesFromToml(
               });
             });
           })
-          .filter((rule): rule is PolicyRule => rule !== null);
+          .filter((rule): rule is PolicyRule => rule != null);
 
         rules.push(...parsedRules);
       } catch (e) {

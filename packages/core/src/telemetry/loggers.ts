@@ -183,7 +183,7 @@ export function logToolCall(
 
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
-    body: `Tool call: ${event.function_name}${event.decision ? `. Decision: ${event.decision}` : ''}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
+    body: `Tool call: ${event.function_name}${event.decision != null ? `. Decision: ${event.decision}` : ''}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };
   logger.emit(logRecord);
@@ -232,7 +232,7 @@ export function logFileOperation(
     operation: event.operation,
   };
 
-  if (event.lines) {
+  if (event.lines != null) {
     attributes['lines'] = event.lines;
   }
   if (event.mimetype) {

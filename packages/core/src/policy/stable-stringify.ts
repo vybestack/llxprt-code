@@ -81,7 +81,7 @@ export function stableStringify(
         }
 
         // Handle objects
-        const keys = Object.keys(val).sort();
+        const keys = Object.keys(val).sort((a, b) => a.localeCompare(b));
         const pairs: string[] = [];
         const nextIndent = space ? indent + getIndentString(space) : '';
         const separator = space ? '\n' : '';

@@ -50,7 +50,7 @@ export function ensureOAuthProviderRegistered(
     return;
   }
 
-  const effectiveTokenStore = tokenStore ?? oauthManager.getTokenStore?.();
+  const effectiveTokenStore = tokenStore ?? oauthManager.getTokenStore();
   if (!effectiveTokenStore) {
     oauthLogger.debug(
       () =>
@@ -80,7 +80,7 @@ export function ensureOAuthProviderRegistered(
 
   // Note: setAddItem is still called as a fallback for providers that don't accept it in constructor
   if (oauthProvider && addItem != null) {
-    oauthProvider.setAddItem?.(addItem);
+    oauthProvider.setAddItem(addItem);
   }
 
   if (oauthProvider) {

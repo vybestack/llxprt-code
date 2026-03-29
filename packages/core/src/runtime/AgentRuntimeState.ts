@@ -260,7 +260,7 @@ function deepFreeze<T>(obj: T): T {
   Object.freeze(obj);
   Object.getOwnPropertyNames(obj).forEach((prop) => {
     const value = (obj as Record<string, unknown>)[prop];
-    if (value && typeof value === 'object') {
+    if (Boolean(value) && typeof value === 'object') {
       deepFreeze(value);
     }
   });
@@ -442,7 +442,7 @@ export function subscribeToAgentRuntimeState(
   // Store subscription (lines 298-302)
   subscribers.set(subscriptionId, {
     callback,
-    async: options?.async || false,
+    async: (options?.async ?? false) || false,
   });
 
   // Return unsubscribe function (lines 303-306)

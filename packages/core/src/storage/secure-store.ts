@@ -94,7 +94,7 @@ function classifyError(error: unknown): SecureStoreErrorCode {
   if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
   if (msg.includes('not found')) return 'NOT_FOUND';
   const errObj = error as NodeJS.ErrnoException;
-  if (errObj?.code === 'ENOENT') return 'NOT_FOUND';
+  if (errObj.code === 'ENOENT') return 'NOT_FOUND';
   return 'UNAVAILABLE';
 }
 
@@ -205,13 +205,13 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     const isModuleMissing =
-      err?.code === 'ERR_MODULE_NOT_FOUND' ||
-      err?.code === 'MODULE_NOT_FOUND' ||
-      err?.code === 'ERR_DLOPEN_FAILED' ||
-      err?.message?.includes('@napi-rs/keyring');
+      err.code === 'ERR_MODULE_NOT_FOUND' ||
+      err.code === 'MODULE_NOT_FOUND' ||
+      err.code === 'ERR_DLOPEN_FAILED' ||
+      err.message.includes('@napi-rs/keyring');
     if (!isModuleMissing && process.env.DEBUG) {
       debugLogger.warn(
-        `[SecureStore] Unexpected error loading @napi-rs/keyring: ${err?.message}`,
+        `[SecureStore] Unexpected error loading @napi-rs/keyring: ${err.message}`,
       );
     }
     return null;
@@ -577,7 +577,7 @@ export class SecureStore {
       }
     }
 
-    const sorted = Array.from(keys).sort();
+    const sorted = Array.from(keys).sort((a, b) => a.localeCompare(b));
     this.logger.debug(() => `[list] found ${sorted.length} key(s)`);
     return sorted;
   }

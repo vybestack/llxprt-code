@@ -58,7 +58,7 @@ export class PolicyEngine {
         SHELL_TOOL_NAMES.includes(toolName) &&
         decision === PolicyDecision.ALLOW
       ) {
-        const command = (args as { command?: string })?.command;
+        const command = (args as { command?: string }).command;
         if (command) {
           const subCommands = splitCommands(command);
 
@@ -102,7 +102,10 @@ export class PolicyEngine {
           }
 
           // Check for redirections in allowed commands
-          if (!matchingRule.allowRedirection && /[>&|]/.test(command)) {
+          if (
+            !(matchingRule.allowRedirection ?? false) &&
+            /[>&|]/.test(command)
+          ) {
             // Downgrade to ASK_USER unless explicitly allowed
             return this.nonInteractive
               ? PolicyDecision.DENY
@@ -131,7 +134,7 @@ export class PolicyEngine {
       SHELL_TOOL_NAMES.includes(toolName) &&
       defaultResult !== PolicyDecision.DENY
     ) {
-      const command = (args as { command?: string })?.command;
+      const command = (args as { command?: string }).command;
       if (command) {
         const subCommands = splitCommands(command);
 

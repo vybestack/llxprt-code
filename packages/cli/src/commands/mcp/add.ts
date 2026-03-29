@@ -209,7 +209,7 @@ export const addCommand: CommandModule = {
       })
       .middleware((argv) => {
         // Handle -- separator args as server args if present
-        if (argv['--']) {
+        if (Boolean(argv['--'])) {
           const existingArgs = (argv.args as Array<string | number>) || [];
           argv.args = [...existingArgs, ...(argv['--'] as string[])];
         }

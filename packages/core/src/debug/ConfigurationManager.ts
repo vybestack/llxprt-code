@@ -109,7 +109,7 @@ export class ConfigurationManager {
         try {
           const content = fs.readFileSync(configPath, 'utf8');
           const parsed = JSON.parse(content);
-          if (parsed.debug) {
+          if (Boolean(parsed.debug)) {
             this.userConfig = parsed.debug;
           }
         } catch {
@@ -134,7 +134,7 @@ export class ConfigurationManager {
         try {
           const content = fs.readFileSync(configPath, 'utf8');
           const parsed = JSON.parse(content);
-          if (parsed.debug) {
+          if (Boolean(parsed.debug)) {
             this.projectConfig = parsed.debug;
           }
         } catch {

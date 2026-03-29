@@ -65,8 +65,8 @@ export class StartSessionEvent {
     const generatorConfig = config.getContentGeneratorConfig();
     const mcpServers = config.getMcpServers();
 
-    const useGemini = !!generatorConfig?.apiKey && !generatorConfig?.vertexai;
-    const useVertex = !!generatorConfig?.vertexai;
+    const useGemini = !!generatorConfig?.apiKey && !generatorConfig.vertexai;
+    const useVertex = !!(generatorConfig?.vertexai ?? false);
 
     this['event.name'] = 'cli_config';
     this.model = config.getModel();
@@ -138,9 +138,8 @@ export class ToolCallEvent {
     this.function_args = call.request.args;
     this.duration_ms = call.durationMs ?? 0;
     this.success = call.status === 'success';
-    this.decision = call.outcome
-      ? getDecisionFromOutcome(call.outcome)
-      : undefined;
+    this.decision =
+      call.outcome != null ? getDecisionFromOutcome(call.outcome) : undefined;
     this.error = call.response.error?.message;
     this.error_type = call.response.errorType;
     this.prompt_id = call.request.prompt_id;
@@ -153,7 +152,7 @@ export class ToolCallEvent {
     if (
       call.status === 'success' &&
       typeof call.response.resultDisplay === 'object' &&
-      call.response.resultDisplay !== null &&
+      call.response.resultDisplay != null &&
       'diffStat' in call.response.resultDisplay
     ) {
       const diffStat = call.response.resultDisplay.diffStat;

@@ -47,7 +47,7 @@ export async function loadConfig(
     question: '', // Not used in server mode directly like CLI
     coreTools: settings.coreTools || undefined,
     excludeTools: settings.excludeTools || undefined,
-    showMemoryUsage: settings.showMemoryUsage || false,
+    showMemoryUsage: (settings.showMemoryUsage ?? false) || false,
     approvalMode:
       process.env['GEMINI_YOLO_MODE'] === 'true'
         ? ApprovalMode.YOLO

@@ -218,7 +218,7 @@ export class ModelRegistry {
     }, REFRESH_INTERVAL_MS);
 
     // Don't prevent process exit
-    this.refreshTimer.unref?.();
+    this.refreshTimer.unref();
   }
 
   /**
@@ -283,7 +283,7 @@ export class ModelRegistry {
 
     if (query.maxPrice !== undefined) {
       results = results.filter(
-        (m) => m.pricing && m.pricing.input <= query.maxPrice!,
+        (m) => (m.pricing && m.pricing.input <= query.maxPrice!) ?? false,
       );
     }
 

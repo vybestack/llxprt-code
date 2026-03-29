@@ -34,7 +34,8 @@ export class ListExtensionsCommand implements Command {
     _: string[],
   ): Promise<CommandExecutionResponse> {
     const extensions = listExtensions(context.config);
-    const data = extensions.length ? extensions : 'No extensions installed.';
+    const data =
+      extensions.length > 0 ? extensions : 'No extensions installed.';
 
     return { name: this.name, data };
   }

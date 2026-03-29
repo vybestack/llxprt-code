@@ -1191,7 +1191,7 @@ export function resolveAlias(key: string): string {
   }
 
   for (const spec of SETTINGS_REGISTRY) {
-    if (spec.aliases?.includes(key)) {
+    if (spec.aliases?.includes(key) ?? false) {
       return spec.key;
     }
   }

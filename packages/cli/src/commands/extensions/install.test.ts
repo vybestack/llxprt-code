@@ -98,7 +98,7 @@ describe('handleInstall', () => {
   ])(
     'should install an extension from a $type',
     async ({ source, name, needsStat }) => {
-      if (needsStat) {
+      if (needsStat ?? false) {
         mockStat.mockResolvedValue({} as Stats);
       }
       mockInstallOrUpdateExtension.mockResolvedValue(name);

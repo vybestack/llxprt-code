@@ -36,7 +36,7 @@ describe('Provider Alias Static Models (Issue #1206)', () => {
       expect(qwenEntry?.config.defaultModel).toBeDefined();
 
       const defaultModelInList = qwenEntry?.config.staticModels?.some(
-        (m) => m.id === qwenEntry?.config.defaultModel,
+        (m) => m.id === qwenEntry.config.defaultModel,
       );
       expect(defaultModelInList).toBe(true);
     });
