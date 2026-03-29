@@ -297,6 +297,7 @@ describe('subagentExecution', () => {
         [makeToken('valid')],
         undefined as never,
         null as never,
+        { content: 'bad' } as never,
         [makeToken('also valid')],
       ];
       channel.outputUpdateHandler('call-1', ansiOutput);
