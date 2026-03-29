@@ -145,6 +145,19 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+
+      - name: Setup Bun
+        uses: 'oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fix rollup platform dependency
+        run: |
+          npm install @rollup/rollup-linux-x64-gnu --no-save || true
+
       - name: Get the version
         id: version
         run: |
