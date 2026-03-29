@@ -28,6 +28,7 @@ import { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import { DebugLogger } from '../../debug/index.js';
 import { retryWithBackoff } from '../../utils/retry.js';
 import { tokenLimit } from '../tokenLimits.js';
+import { PerformCompressionResult } from '../turn.js';
 import {
   estimatePendingTokens,
   getCompletionBudget,
@@ -46,10 +47,12 @@ export class CompressionHandler {
   static readonly COMPRESSION_COOLDOWN_MS = 60_000;
   static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
   static readonly INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
+  static readonly RECENT_COMPRESSION_WINDOW_MS = 60_000;
 
-  private compressionPromise: Promise<void> | null = null;
+  private compressionPromise: Promise<PerformCompressionResult> | null = null;
   private compressionFailureCount: number = 0;
   private lastCompressionFailureTime: number | null = null;
+  private lastSuccessfulCompressionTime: number | null = null;
   densityDirty: boolean = true;
   _suppressDensityDirty: boolean = false;
   private activeTodosProvider?: () => Promise<string | undefined>;
@@ -528,7 +531,7 @@ export class CompressionHandler {
   async performCompression(
     prompt_id: string,
     options?: { bypassCooldown?: boolean },
-  ): Promise<void> {
+  ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
     if (!options?.bypassCooldown && this.isCompressionInCooldown()) {
@@ -539,14 +542,14 @@ export class CompressionHandler {
           lastFailureTime: this.lastCompressionFailureTime,
         },
       );
-      return;
+      return PerformCompressionResult.SKIPPED_COOLDOWN;
     }
 
     // Skip compression if history is empty
     const currentHistory = this.historyService.getCurated();
     if (currentHistory.length === 0) {
       this.logger.debug('Skipping compression — empty history');
-      return;
+      return PerformCompressionResult.SKIPPED_EMPTY;
     }
 
     this.logger.debug('Starting compression');
@@ -563,19 +566,25 @@ export class CompressionHandler {
       this.historyService.getStatistics().totalMessages;
     this.historyService.startCompression();
     let compressionSummary: IContent | undefined;
+    let compressionSucceeded = false;
     // @plan PLAN-20260211-HIGHDENSITY.P20
     // @requirement REQ-HD-002.6
     // Suppress densityDirty during compression rebuild (clear+add loop)
     this._suppressDensityDirty = true;
+    let didCompress = false;
     try {
-      await this.runCompressionWithRetryAndFallback(prompt_id, (newHistory) => {
-        // Apply result: clear history, add each entry from newHistory
-        this.historyService.clear();
-        for (const content of newHistory) {
-          this.historyService.add(content, this.runtimeContext.state.model);
-        }
-        compressionSummary = newHistory[0];
-      });
+      didCompress = await this.runCompressionWithRetryAndFallback(
+        prompt_id,
+        (newHistory) => {
+          // Apply result: clear history, add each entry from newHistory
+          this.historyService.clear();
+          for (const content of newHistory) {
+            this.historyService.add(content, this.runtimeContext.state.model);
+          }
+          compressionSummary = newHistory[0];
+          compressionSucceeded = true;
+        },
+      );
     } finally {
       this._suppressDensityDirty = false;
       this.historyService.endCompression(
@@ -585,6 +594,18 @@ export class CompressionHandler {
     }
 
     await this.historyService.waitForTokenUpdates();
+    if (didCompress && compressionSucceeded) {
+      this.lastSuccessfulCompressionTime = Date.now();
+      return PerformCompressionResult.COMPRESSED;
+    }
+
+    if (didCompress) {
+      this.logger.warn(
+        'Compression strategy reported success without applying history updates',
+      );
+    }
+
+    return PerformCompressionResult.FAILED;
   }
 
   /**
@@ -608,6 +629,20 @@ export class CompressionHandler {
   }
 
   /**
+   * Returns true if compression completed successfully within the recent window.
+   * Used to distinguish ALREADY_COMPRESSED from NOOP in the /compress command.
+   */
+  wasRecentlyCompressed(): boolean {
+    if (this.lastSuccessfulCompressionTime === null) {
+      return false;
+    }
+    return (
+      Date.now() - this.lastSuccessfulCompressionTime <
+      CompressionHandler.RECENT_COMPRESSION_WINDOW_MS
+    );
+  }
+
+  /**
    * Execute compression with retry for transient errors and fallback to truncation.
    *
    * @plan PLAN-20260218-COMPRESSION-RETRY.P01
@@ -616,7 +651,7 @@ export class CompressionHandler {
   private async runCompressionWithRetryAndFallback(
     promptId: string,
     applyResult: (newHistory: IContent[]) => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const context = await this.buildCompressionContext(promptId);
 
     const attemptPrimary = async (): Promise<IContent[]> => {
@@ -641,7 +676,7 @@ export class CompressionHandler {
       this.lastCompressionFailureTime = null;
       this.logger.debug('Compression completed with primary strategy');
       applyResult(newHistory);
-      return;
+      return true;
     } catch (err) {
       primaryError = err;
     }
@@ -655,7 +690,7 @@ export class CompressionHandler {
       'Primary compression strategy failed after retries (transient), attempting fallback',
       primaryError,
     );
-    await this.performFallbackCompression(context, primaryError, applyResult);
+    return this.performFallbackCompression(context, primaryError, applyResult);
   }
 
   /**
@@ -668,7 +703,7 @@ export class CompressionHandler {
     context: CompressionContext,
     primaryError: unknown,
     applyResult: (newHistory: IContent[]) => void,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       // Use the strategy factory so tests can intercept
       const fallback = getCompressionStrategy('top-down-truncation');
@@ -680,6 +715,7 @@ export class CompressionHandler {
         'Compression completed with fallback (TopDownTruncation)',
       );
       applyResult(result.newHistory);
+      return true;
     } catch (fallbackError) {
       // Both strategies failed — track the failure and continue without compression
       this.compressionFailureCount++;
@@ -689,6 +725,7 @@ export class CompressionHandler {
         { primaryError, fallbackError },
       );
       // Swallow error to avoid blocking the conversation turn
+      return false;
     }
   }
 

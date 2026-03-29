@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CompressionStatus } from '@vybestack/llxprt-code-core';
+import {
+  CompressionStatus,
+  PerformCompressionResult,
+} from '@vybestack/llxprt-code-core';
 import { HistoryItemCompression, MessageType } from '../types.js';
 import { CommandKind, SlashCommand } from './types.js';
 
@@ -64,12 +67,26 @@ export const compressCommand: SlashCommand = {
         return;
       }
       const originalTokenCount = historyService.getTotalTokens();
-      await chat.performCompression(promptId);
+      const wasRecentlyCompressedBeforeCommand = chat.wasRecentlyCompressed();
+      const result = await chat.performCompression(promptId);
       const newTokenCount = historyService.getTotalTokens();
-      const compressionStatus =
-        newTokenCount < originalTokenCount
-          ? CompressionStatus.COMPRESSED
-          : CompressionStatus.NOOP;
+
+      let compressionStatus: CompressionStatus;
+      if (newTokenCount < originalTokenCount) {
+        compressionStatus = CompressionStatus.COMPRESSED;
+      } else if (
+        result === PerformCompressionResult.FAILED ||
+        result === PerformCompressionResult.SKIPPED_COOLDOWN
+      ) {
+        compressionStatus = CompressionStatus.COMPRESSION_FAILED;
+      } else if (
+        result === PerformCompressionResult.COMPRESSED &&
+        wasRecentlyCompressedBeforeCommand
+      ) {
+        compressionStatus = CompressionStatus.ALREADY_COMPRESSED;
+      } else {
+        compressionStatus = CompressionStatus.NOOP;
+      }
       const compressionResult: HistoryItemCompression = {
         type: MessageType.COMPRESSION,
         compression: {

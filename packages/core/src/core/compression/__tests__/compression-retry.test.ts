@@ -23,6 +23,7 @@ import {
   UnknownStrategyError,
   PromptResolutionError,
 } from '../types.js';
+import { PerformCompressionResult } from '../../turn.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { GeminiChat } from '../../geminiChat.js';
 import { createGeminiChatRuntime } from '../../../test-utils/runtime.js';
@@ -581,10 +582,10 @@ describe('GeminiChat compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.
       }),
     );
 
-    // When both primary and fallback fail, should not throw
-    await expect(
-      chat.performCompression('test-prompt'),
-    ).resolves.toBeUndefined();
+    // When both primary and fallback fail, should not throw and should return FAILED
+    await expect(chat.performCompression('test-prompt')).resolves.toBe(
+      PerformCompressionResult.FAILED,
+    );
   });
 });
 

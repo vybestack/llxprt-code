@@ -55,6 +55,7 @@ export {
 
 import type { StreamEvent } from './geminiChatTypes.js';
 import type { CompressionContext } from './compression/types.js';
+import { PerformCompressionResult } from './turn.js';
 
 /**
  * Error thrown when agent execution is stopped by a hook.
@@ -396,8 +397,12 @@ export class GeminiChat {
   async performCompression(
     prompt_id: string,
     options?: { bypassCooldown?: boolean },
-  ): Promise<void> {
+  ): Promise<PerformCompressionResult> {
     return this.compressionHandler.performCompression(prompt_id, options);
+  }
+
+  wasRecentlyCompressed(): boolean {
+    return this.compressionHandler.wasRecentlyCompressed();
   }
 
   getLastPromptTokenCount(): number {
