@@ -613,7 +613,7 @@ describe('statsCommand', () => {
 
       // Set up provider config with different URL (should be ignored)
       const mockProvider = {
-        providerConfig: { baseUrl: 'https://api.synthetic.new/v2' },
+        providerConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('kimi');
       getCliProviderManagerMock.mockReturnValue({
@@ -673,7 +673,7 @@ describe('statsCommand', () => {
 
       // Provider config has Synthetic base URL
       const mockProvider = {
-        providerConfig: { baseUrl: 'https://api.synthetic.new/v2' },
+        providerConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('kimi'); // Name suggests kimi, but config wins
       getCliProviderManagerMock.mockReturnValue({
@@ -719,7 +719,7 @@ describe('statsCommand', () => {
       // Provider has baseProviderConfig with Kimi URL
       const mockProvider = {
         providerConfig: {}, // No baseUrl here
-        baseProviderConfig: { baseURL: 'https://api.moonshot.cn/v1' },
+        baseProviderConfig: { 'base-url': 'https://api.moonshot.cn/v1' },
       };
       getActiveProviderNameMock.mockReturnValue('synthetic'); // Name suggests synthetic, but config wins
       getCliProviderManagerMock.mockReturnValue({
@@ -809,8 +809,8 @@ describe('statsCommand', () => {
 
       // Real-world scenario: alias "synthetic" pointing to baseProviderConfig
       const mockProvider = {
-        providerConfig: { baseUrl: undefined },
-        baseProviderConfig: { baseURL: 'https://api.synthetic.new/v2' },
+        providerConfig: { 'base-url': undefined },
+        baseProviderConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('synthetic');
       getCliProviderManagerMock.mockReturnValue({
@@ -856,7 +856,7 @@ describe('statsCommand', () => {
       // Real-world scenario: alias "kimi" pointing to baseProviderConfig
       const mockProvider = {
         providerConfig: {},
-        baseProviderConfig: { baseURL: 'https://api.moonshot.cn/v1' },
+        baseProviderConfig: { 'base-url': 'https://api.moonshot.cn/v1' },
       };
       getActiveProviderNameMock.mockReturnValue('kimi');
       getCliProviderManagerMock.mockReturnValue({
