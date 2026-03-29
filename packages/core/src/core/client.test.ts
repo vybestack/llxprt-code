@@ -1693,6 +1693,173 @@ sub memory
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
     });
 
+    it('should retry with tool-name message when 413 error is received', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      // Arrange: first stream yields a 413 error, second yields content
+      const mockStream1 = (async function* () {
+        yield {
+          type: GeminiEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        };
+      })();
+      const mockStream2 = (async function* () {
+        yield { type: GeminiEventType.Content, value: 'Retried content' };
+      })();
+
+      mockTurnRunFn
+        .mockReturnValueOnce(mockStream1)
+        .mockReturnValueOnce(mockStream2);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      // Include functionResponse parts to test tool name extraction
+      const initialRequest = [
+        { text: 'Hi' },
+        {
+          functionResponse: {
+            name: 'read_file',
+            response: { content: 'large content...' },
+          },
+        },
+        {
+          functionResponse: {
+            name: 'search_file',
+            response: { content: 'more large content...' },
+          },
+        },
+      ];
+      const promptId = 'prompt-id-413-retry';
+      const signal = new AbortController().signal;
+
+      // Act
+      const stream = client.sendMessageStream(initialRequest, signal, promptId);
+      const events = await fromAsync(stream);
+
+      // Assert: both the error event and the retried content should appear
+      expect(events).toEqual([
+        {
+          type: GeminiEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        },
+        { type: GeminiEventType.Content, value: 'Retried content' },
+      ]);
+
+      // turn.run should be called twice
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+
+      // Second call should include the 413 system message with tool names
+      expect(mockTurnRunFn).toHaveBeenNthCalledWith(
+        2,
+        [
+          {
+            text: 'System: The previous tool calls produced a response that was too large (HTTP 413). The tools involved were: read_file, search_file. Please retry with fewer or more focused queries.',
+          },
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('should not retry on 413 when getContinueOnFailedApiCall returns false', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        false,
+      );
+      // Arrange
+      const mockStream1 = (async function* () {
+        yield {
+          type: GeminiEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        };
+      })();
+
+      mockTurnRunFn.mockReturnValueOnce(mockStream1);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const initialRequest = [{ text: 'Hi' }];
+      const promptId = 'prompt-id-413-no-retry';
+      const signal = new AbortController().signal;
+
+      // Act
+      const stream = client.sendMessageStream(initialRequest, signal, promptId);
+      const events = await fromAsync(stream);
+
+      // Assert: only the error event, no retry
+      expect(events).toEqual([
+        {
+          type: GeminiEventType.Error,
+          value: {
+            error: { message: 'Payload too large', status: 413 },
+          },
+        },
+      ]);
+
+      // turn.run should be called only once
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop recursing after one retry when 413 errors are repeatedly received', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        true,
+      );
+      // Arrange: always return a 413 error
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: GeminiEventType.Error,
+            value: {
+              error: { message: 'Payload too large', status: 413 },
+            },
+          };
+        })(),
+      );
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const initialRequest = [{ text: 'Hi' }];
+      const promptId = 'prompt-id-413-infinite';
+      const signal = new AbortController().signal;
+
+      // Act
+      const stream = client.sendMessageStream(initialRequest, signal, promptId);
+      const events = await fromAsync(stream);
+
+      // Assert: exactly 2 Error events (original + 1 retry), no infinite loop
+      expect(events.length).toBe(2);
+      expect(
+        events.every(
+          (e) =>
+            e.type === GeminiEventType.Error &&
+            (e.value as { error: { status?: number } }).error?.status === 413,
+        ),
+      ).toBe(true);
+
+      // turn.run should be called exactly twice
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+    });
+
     it('should auto-continue when model generates thinking-only output', async () => {
       const forwardedRequests: Part[][] = [];
       let callCount = 0;
