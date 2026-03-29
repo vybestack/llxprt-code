@@ -200,7 +200,9 @@ export class ContextState {
 
 /**
  * Performs template string interpolation using ${var} syntax.
- * Throws if any required template variable is missing from the context.
+ * Missing context keys are substituted with `<missing:key>` placeholders
+ * rather than throwing, since LLM-generated prompts may contain dollar-brace
+ * syntax that is not intended as template variables.
  */
 export function templateString(
   template: string,

@@ -301,8 +301,7 @@ describe('subagentExecution', () => {
       ];
       channel.outputUpdateHandler('call-1', ansiOutput);
       const result = onMessage.mock.calls[0][0] as string;
-      expect(result).toContain('valid');
-      expect(result).toContain('also valid');
+      expect(result).toBe('valid\nalso valid');
     });
 
     it('should not call onMessage when output is falsy', () => {
