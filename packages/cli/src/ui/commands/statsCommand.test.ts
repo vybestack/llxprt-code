@@ -890,5 +890,109 @@ describe('statsCommand', () => {
 
       vi.restoreAllMocks();
     });
+
+    it('should detect provider from kebab-case base-url in providerConfig (issue #1828)', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Real-world scenario: alias config uses kebab-case 'base-url'
+      const mockProvider = {
+        providerConfig: { 'base-url': 'https://api.z.ai/v1' },
+      };
+      getActiveProviderNameMock.mockReturnValue('zai');
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          msg: 'OK',
+          data: {
+            limits: [
+              {
+                type: 'TOKENS_LIMIT',
+                unit: 3,
+                number: 10,
+                percentage: 20,
+                nextResetTime: Date.now() + 3600000,
+              },
+            ],
+            level: 'pro',
+          },
+          success: true,
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Z.ai from kebab-case base-url in providerConfig
+      expect(lastItem.text).toContain('Z.ai Quota Information');
+
+      vi.restoreAllMocks();
+    });
+
+    it('should detect provider from kebab-case base-url in baseProviderConfig (issue #1828)', async () => {
+      getCliOAuthManagerMock.mockReturnValue(null);
+
+      getEphemeralSettingMock.mockImplementation((key: string) => {
+        if (key === 'auth-key') return 'test-key';
+        return undefined;
+      });
+
+      // Real-world scenario: alias config uses kebab-case 'base-url' in baseProviderConfig
+      const mockProvider = {
+        providerConfig: {},
+        baseProviderConfig: { 'base-url': 'https://api.synthetic.new/v2' },
+      };
+      getActiveProviderNameMock.mockReturnValue('synthetic');
+      getCliProviderManagerMock.mockReturnValue({
+        getProviderByName: vi.fn().mockReturnValue(mockProvider),
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          subscription: { limit: 1000, requests: 300, renewsAt: null },
+        }),
+      } as Response);
+      vi.stubGlobal('fetch', fetchMock);
+
+      const quotaSubCommand = statsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'quota',
+      );
+      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+
+      await quotaSubCommand.action(mockContext, '');
+
+      const addItemCalls = vi.mocked(mockContext.ui.addItem).mock.calls;
+      const lastItem = addItemCalls[addItemCalls.length - 1]?.[0] as {
+        type: MessageType;
+        text?: string;
+      };
+
+      // Should detect Synthetic from kebab-case base-url in baseProviderConfig
+      expect(lastItem.text).toContain('Synthetic Quota Information');
+      expect(lastItem.text).toContain('300/1000 used');
+
+      vi.restoreAllMocks();
+    });
   });
 });

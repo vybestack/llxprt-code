@@ -116,15 +116,21 @@ async function fetchApiKeyProviderQuota(
       const providerInstance =
         providerManager.getProviderByName?.(activeProviderName);
       if (providerInstance) {
-        // Try providerConfig.baseUrl/baseURL first
+        // Try providerConfig.baseUrl/baseURL/base-url first (kebab-case for alias configs)
         const providerConfig = (
           providerInstance as {
-            providerConfig?: { baseUrl?: string; baseURL?: string };
+            providerConfig?: {
+              baseUrl?: string;
+              baseURL?: string;
+              'base-url'?: string;
+            };
           }
         ).providerConfig;
         if (providerConfig) {
           const configBaseUrl =
-            providerConfig.baseUrl ?? providerConfig.baseURL;
+            providerConfig['base-url'] ??
+            providerConfig.baseUrl ??
+            providerConfig.baseURL;
           if (configBaseUrl) {
             provider = detectApiKeyProvider(configBaseUrl);
             baseUrlForFetch = configBaseUrl;
@@ -136,16 +142,22 @@ async function fetchApiKeyProviderQuota(
           }
         }
 
-        // Try baseProviderConfig.baseURL/baseUrl if still not found
+        // Try baseProviderConfig.baseURL/baseUrl/base-url if still not found
         if (!provider) {
           const baseProviderConfig = (
             providerInstance as {
-              baseProviderConfig?: { baseURL?: string; baseUrl?: string };
+              baseProviderConfig?: {
+                baseURL?: string;
+                baseUrl?: string;
+                'base-url'?: string;
+              };
             }
           ).baseProviderConfig;
           if (baseProviderConfig) {
             const baseConfigUrl =
-              baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl;
+              baseProviderConfig['base-url'] ??
+              baseProviderConfig.baseURL ??
+              baseProviderConfig.baseUrl;
             if (baseConfigUrl) {
               provider = detectApiKeyProvider(baseConfigUrl);
               baseUrlForFetch = baseConfigUrl;
