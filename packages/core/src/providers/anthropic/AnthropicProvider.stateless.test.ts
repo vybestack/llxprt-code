@@ -148,6 +148,26 @@ class TestAnthropicProvider extends AnthropicProvider {
   protected override async getAuthToken(): Promise<string> {
     return this.nextAuthToken;
   }
+
+  protected override async getAuthTokenForPrompt(): Promise<string> {
+    return this.nextAuthToken;
+  }
+}
+
+class TestAnthropicProviderOAuth extends AnthropicProvider {
+  constructor() {
+    super(undefined, 'https://api.anthropic.com', {
+      getEphemeralSettings: () => ({ streaming: 'disabled' }),
+    });
+  }
+
+  protected override async getAuthToken(): Promise<string> {
+    return '';
+  }
+
+  protected override async getAuthTokenForPrompt(): Promise<string> {
+    return 'oauth-token-resolved';
+  }
 }
 
 const createSettings = (runtimeId: string): SettingsService => {
@@ -332,5 +352,31 @@ describe('Anthropic provider stateless contract tests', () => {
       temperature: 0.3,
     });
     expect(getEphemerals).not.toHaveBeenCalled();
+  });
+
+  it('uses OAuth token from getAuthTokenForPrompt in fallback path when no resolved token is provided', async () => {
+    const provider = new TestAnthropicProviderOAuth();
+    const baselineInstances = FakeAnthropicClass.created.length;
+    const settings = createSettings('runtime-oauth');
+    const config = createRuntimeConfigStub(settings);
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'runtime-oauth',
+      settingsService: settings,
+      config,
+    });
+
+    await provider
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings,
+          runtime,
+          config,
+        }),
+      )
+      .next();
+
+    const created = FakeAnthropicClass.created.slice(baselineInstances);
+    expect(created).toHaveLength(1);
+    expect(created[0].options.apiKey).toBe('oauth-token-resolved');
   });
 });

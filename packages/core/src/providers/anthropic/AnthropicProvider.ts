@@ -180,7 +180,7 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     if (!authToken) {
-      authToken = await this.getAuthToken();
+      authToken = await this.getAuthTokenForPrompt();
     }
 
     if (!authToken) {
