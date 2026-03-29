@@ -352,43 +352,6 @@ describe('setCommand runtime integration', () => {
     });
   });
 
-  it('handles model_param (with underscore) in unset path', async () => {
-    const result = await setCommand.action!(
-      context,
-      'unset model_param max_tokens',
-    );
-
-    expect(mockRuntime.clearActiveModelParam).toHaveBeenCalledWith(
-      'max_tokens',
-    );
-    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
-      'max_tokens',
-      undefined,
-    );
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content: "Model parameter 'max_tokens' cleared",
-    });
-  });
-
-  it('handles model_param (with underscore) in set path', async () => {
-    const result = await setCommand.action!(
-      context,
-      'model_param temperature 0.7',
-    );
-
-    expect(mockRuntime.setActiveModelParam).toHaveBeenCalledWith(
-      'temperature',
-      0.7,
-    );
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content: "Model parameter 'temperature' set to 0.7",
-    });
-  });
-
   it('surfaces error from clearActiveModelParam even when ephemeral also cleared', async () => {
     mockRuntime.clearActiveModelParam.mockImplementationOnce(() => {
       throw new Error('cannot clear');

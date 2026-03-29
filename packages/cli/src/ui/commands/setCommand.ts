@@ -65,9 +65,6 @@ const toTitleCase = (input: string): string =>
     .trim()
     .replace(/\b\w/g, (char) => char.toUpperCase());
 
-const normalizeModelParamKey = (key: string): string =>
-  key === 'model_param' ? 'modelparam' : key;
-
 type SettingCompleter = NonNullable<ValueArgument['completer']>;
 type SettingLiteralSpec = {
   value: string;
@@ -185,7 +182,6 @@ const setSchema: CommandArgumentSchema = [
 
           const specialKeys = [
             'modelparam',
-            'model_param',
             'custom-headers',
             ...Array.from(directSettingKeys),
           ];
@@ -207,7 +203,7 @@ const setSchema: CommandArgumentSchema = [
             description: 'nested key for specific settings',
             hint: async (_ctx, tokens: TokenInfo) => {
               const key = tokens.tokens[1];
-              if (normalizeModelParamKey(key) === 'modelparam') {
+              if (key === 'modelparam') {
                 return 'model parameter name (e.g., temperature, max_tokens)';
               }
               if (key === 'custom-headers') {
@@ -219,7 +215,7 @@ const setSchema: CommandArgumentSchema = [
               const key = tokens.tokens[1];
               const enableFuzzy = getFuzzyEnabled(ctx);
 
-              if (normalizeModelParamKey(key) === 'modelparam') {
+              if (key === 'modelparam') {
                 const params = getRuntimeApi().getActiveModelParams();
                 const paramNames = Object.keys(params);
                 const filtered = filterStrings(paramNames, partial, {
@@ -258,13 +254,6 @@ const setSchema: CommandArgumentSchema = [
     kind: 'literal',
     value: 'modelparam',
     description: 'Model parameter option',
-    stopPropagation: true,
-    next: modelParamSchemaNext,
-  },
-  {
-    kind: 'literal',
-    value: 'model_param',
-    description: 'Model parameter option (alias)',
     stopPropagation: true,
     next: modelParamSchemaNext,
   },
@@ -389,7 +378,7 @@ export const setCommand: SlashCommand = {
     const parts = trimmedArgs.split(/\s+/);
     const key = parts[0];
 
-    if (normalizeModelParamKey(key) === 'modelparam') {
+    if (key === 'modelparam') {
       if (parts.length < 3) {
         return {
           type: 'message',
@@ -442,7 +431,7 @@ export const setCommand: SlashCommand = {
       const targetKey = parts[1];
       const subKey = parts[2];
 
-      if (normalizeModelParamKey(targetKey) === 'modelparam') {
+      if (targetKey === 'modelparam') {
         if (!subKey) {
           return {
             type: 'message',
