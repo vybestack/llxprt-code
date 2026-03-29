@@ -13,7 +13,8 @@ import {
   vi,
   type MockedFunction,
 } from 'vitest';
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useEditorSettings } from './useEditorSettings.js';
 import { type LoadedSettings, SettingScope } from '../../config/settings.js';

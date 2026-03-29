@@ -9,9 +9,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Text } from 'ink';
 import { renderWithProviders } from '../test-utils/render.js';
 import { AppWrapper as App } from './App.js';
-import {
-  Config as ServerConfig,
+import type {
   MCPServerConfig,
+  Config as ServerConfig,
   ApprovalMode,
   type ToolRegistry,
   type AccessibilitySettings,

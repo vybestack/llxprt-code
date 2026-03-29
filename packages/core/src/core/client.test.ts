@@ -38,9 +38,9 @@ vi.mock('./clientToolGovernance.js', () => ({
   shouldIncludeSubagentDelegationForConfig: vi.fn(() => Promise.resolve(false)),
 }));
 
+import type { Content } from '@google/genai';
 import {
   type Chat,
-  Content,
   type EmbedContentResponse,
   type GenerateContentResponse,
   GoogleGenAI,

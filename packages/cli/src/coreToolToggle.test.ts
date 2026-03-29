@@ -19,8 +19,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Config } from '@vybestack/llxprt-code-core';
 import type {
+  Config,
   DiscoveredTool,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-core';

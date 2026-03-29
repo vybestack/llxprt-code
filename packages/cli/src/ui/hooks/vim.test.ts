@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import React, { act } from 'react';
+import type React from 'react';
+import { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useVim } from './vim.js';
 import type { TextBuffer } from '../components/shared/buffer-types.js';

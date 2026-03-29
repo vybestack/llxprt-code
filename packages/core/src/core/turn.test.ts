@@ -13,10 +13,10 @@ import {
   type ServerGeminiStreamEvent,
   DEFAULT_AGENT_ID,
 } from './turn.js';
+import type { Content } from '@google/genai';
 import {
   type GenerateContentResponse,
   type Part,
-  Content,
   type FinishReason,
 } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
