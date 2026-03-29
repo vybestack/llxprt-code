@@ -27,6 +27,7 @@ import type { ContentGenerator } from '../contentGenerator.js';
 import type { CompressionContext } from '../compression/types.js';
 import { triggerPreCompressHook } from '../lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '../../hooks/types.js';
+import { PerformCompressionResult } from '../turn.js';
 
 // Mock the lifecycle hook triggers
 vi.mock('../lifecycleHookTriggers.js', () => ({
@@ -530,9 +531,9 @@ describe('Compression Dispatcher Integration (P13)', () => {
       );
 
       // Compression should still succeed despite hook failure
-      await expect(
-        chat.performCompression('test-prompt-id'),
-      ).resolves.toBeUndefined();
+      await expect(chat.performCompression('test-prompt-id')).resolves.toBe(
+        PerformCompressionResult.COMPRESSED,
+      );
 
       // Verify compression still ran (provider was called to generate summary)
       expect(localMockProvider.generateChatCompletion).toHaveBeenCalled();
