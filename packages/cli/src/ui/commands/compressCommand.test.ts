@@ -507,7 +507,7 @@ describe('compressCommand', () => {
     );
   });
 
-  it('shows COMPRESSED even when result is FAILED but tokens decreased', async () => {
+  it('uses COMPRESSION_FAILED when result is FAILED even if tokens decreased', async () => {
     if (!compressCommand.action) {
       throw new Error('compressCommand must have an action.');
     }
@@ -542,7 +542,7 @@ describe('compressCommand', () => {
       expect.objectContaining({
         type: MessageType.COMPRESSION,
         compression: expect.objectContaining({
-          compressionStatus: CompressionStatus.COMPRESSED,
+          compressionStatus: CompressionStatus.COMPRESSION_FAILED,
         }),
       }),
     );

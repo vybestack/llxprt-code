@@ -47,7 +47,8 @@ export class CompressionHandler {
   static readonly COMPRESSION_COOLDOWN_MS = 60_000;
   static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
   static readonly INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
-  static readonly RECENT_COMPRESSION_WINDOW_MS = 60_000;
+  static readonly RECENT_COMPRESSION_WINDOW_MS =
+    CompressionHandler.COMPRESSION_COOLDOWN_MS;
 
   private compressionPromise: Promise<PerformCompressionResult> | null = null;
   private compressionFailureCount: number = 0;

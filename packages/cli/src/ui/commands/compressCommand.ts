@@ -72,20 +72,25 @@ export const compressCommand: SlashCommand = {
       const newTokenCount = historyService.getTotalTokens();
 
       let compressionStatus: CompressionStatus;
-      if (newTokenCount < originalTokenCount) {
-        compressionStatus = CompressionStatus.COMPRESSED;
-      } else if (
-        result === PerformCompressionResult.FAILED ||
-        result === PerformCompressionResult.SKIPPED_COOLDOWN
-      ) {
-        compressionStatus = CompressionStatus.COMPRESSION_FAILED;
-      } else if (
-        result === PerformCompressionResult.COMPRESSED &&
-        wasRecentlyCompressedBeforeCommand
-      ) {
-        compressionStatus = CompressionStatus.ALREADY_COMPRESSED;
-      } else {
-        compressionStatus = CompressionStatus.NOOP;
+      switch (result) {
+        case PerformCompressionResult.FAILED:
+        case PerformCompressionResult.SKIPPED_COOLDOWN:
+          compressionStatus = CompressionStatus.COMPRESSION_FAILED;
+          break;
+        case PerformCompressionResult.SKIPPED_EMPTY:
+          compressionStatus = CompressionStatus.NOOP;
+          break;
+        case PerformCompressionResult.COMPRESSED:
+          if (newTokenCount < originalTokenCount) {
+            compressionStatus = CompressionStatus.COMPRESSED;
+          } else if (wasRecentlyCompressedBeforeCommand) {
+            compressionStatus = CompressionStatus.ALREADY_COMPRESSED;
+          } else {
+            compressionStatus = CompressionStatus.NOOP;
+          }
+          break;
+        default:
+          compressionStatus = CompressionStatus.NOOP;
       }
       const compressionResult: HistoryItemCompression = {
         type: MessageType.COMPRESSION,
