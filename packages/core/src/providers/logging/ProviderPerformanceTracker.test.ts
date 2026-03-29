@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ProviderPerformanceTracker } from './ProviderPerformanceTracker.js';
 
 describe('ProviderPerformanceTracker', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   it('should initialize metrics correctly', () => {
     const tracker = new ProviderPerformanceTracker('test-provider');
     const metrics = tracker.getLatestMetrics();
@@ -51,8 +54,6 @@ describe('ProviderPerformanceTracker', () => {
     expect(metrics.tokensPerSecond).toBe(500);
     expect(metrics.chunksReceived).toBe(10);
     expect(metrics.tokensPerMinute).toBe(30000);
-
-    vi.useRealTimers();
   });
 
   it('should accumulate tokens per minute correctly', () => {
@@ -75,8 +76,6 @@ describe('ProviderPerformanceTracker', () => {
 
     const updatedMetrics = tracker.getLatestMetrics();
     expect(updatedMetrics.tokensPerMinute).toBeCloseTo(758.43, 1);
-
-    vi.useRealTimers();
   });
 
   it('should not produce inflated TPM when requests complete close together after long delays', () => {
@@ -94,8 +93,6 @@ describe('ProviderPerformanceTracker', () => {
     const metrics = tracker.getLatestMetrics();
     expect(metrics.tokensPerMinute).toBeLessThan(20000);
     expect(metrics.tokensPerMinute).toBeGreaterThan(0);
-
-    vi.useRealTimers();
   });
 
   it('should produce accurate TPM for long-running request', () => {
@@ -109,8 +106,6 @@ describe('ProviderPerformanceTracker', () => {
 
     const metrics = tracker.getLatestMetrics();
     expect(metrics.tokensPerMinute).toBe(10000);
-
-    vi.useRealTimers();
   });
 
   it('should record error metrics correctly', () => {
@@ -218,7 +213,6 @@ describe('ProviderPerformanceTracker', () => {
 
   describe('Issue #1805: TPM numerator uses total tokens (input + output)', () => {
     it('should accumulate totalTokens as input + output for each completion', () => {
-      vi.useRealTimers();
       const tracker = new ProviderPerformanceTracker('test-provider');
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2025-01-01T00:00:00Z').getTime());
@@ -230,12 +224,9 @@ describe('ProviderPerformanceTracker', () => {
       // Simulate: 200 input + 100 output = 300 total tokens
       tracker.recordCompletion(1000, null, 300, 1);
       expect(tracker.getLatestMetrics().totalTokens).toBe(450);
-
-      vi.useRealTimers();
     });
 
     it('should compute TPM from total tokens (input+output), not just output tokens', () => {
-      vi.useRealTimers();
       const tracker = new ProviderPerformanceTracker('test-provider');
       vi.useFakeTimers();
       const now = new Date('2025-01-01T00:00:00Z').getTime();
@@ -246,8 +237,6 @@ describe('ProviderPerformanceTracker', () => {
       const metrics = tracker.getLatestMetrics();
       expect(metrics.totalTokens).toBe(150);
       expect(metrics.tokensPerMinute).toBeGreaterThan(0);
-
-      vi.useRealTimers();
     });
   });
 

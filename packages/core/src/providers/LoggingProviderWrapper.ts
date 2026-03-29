@@ -968,15 +968,24 @@ export class LoggingProviderWrapper implements IProvider {
       // Accumulate token usage for session tracking
       this.accumulateTokenUsage(tokenCounts, config);
 
-      // Record performance metrics (TPM tracks total tokens: input+output)
+      // Record performance metrics; failed streams are recorded as errors
       const perfTotalTokens =
         tokenCounts.input_token_count + tokenCounts.output_token_count;
-      this.performanceTracker.recordCompletion(
-        duration,
-        timeToFirstToken ?? null,
-        perfTotalTokens,
-        chunkCount ?? 0,
-      );
+      if (success) {
+        this.performanceTracker.recordCompletion(
+          duration,
+          timeToFirstToken ?? null,
+          perfTotalTokens,
+          chunkCount ?? 0,
+        );
+      } else {
+        this.performanceTracker.recordError(
+          duration,
+          error ? String(error) : 'Unknown stream error',
+          timeToFirstToken ?? null,
+          chunkCount ?? 0,
+        );
+      }
 
       // Calculate total for telemetry event
       const totalTokens =
@@ -1375,6 +1384,7 @@ export class LoggingProviderWrapper implements IProvider {
     // Reset conversation logging state
     this.conversationId = this.generateConversationId();
     this.turnNumber = 0;
+    this.performanceTracker.reset();
   }
 
   setConfig?(config: unknown): void {

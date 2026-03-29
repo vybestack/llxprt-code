@@ -1379,5 +1379,135 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       // chunkCount should be 2 (provider yields 2 chunks)
       expect(metrics.chunksReceived).toBe(2);
     });
+
+    class TextThenErrorWithUsageProvider implements IProvider {
+      name = 'text-then-error-with-usage';
+      async getModels(): Promise<never[]> {
+        return [];
+      }
+      getDefaultModel(): string {
+        return 'test-model';
+      }
+      getServerTools(): string[] {
+        return [];
+      }
+      async invokeServerTool(): Promise<unknown> {
+        return {};
+      }
+      async *generateChatCompletion(
+        options: GenerateChatOptions,
+      ): AsyncIterableIterator<IContent> {
+        void options;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'First partial chunk' }],
+          metadata: {
+            usage: {
+              promptTokens: 120,
+              completionTokens: 20,
+              totalTokens: 140,
+              cachedTokens: 5,
+            },
+          },
+        } as IContent;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Second partial chunk' }],
+          metadata: {
+            usage: {
+              promptTokens: 120,
+              completionTokens: 30,
+              totalTokens: 150,
+              cachedTokens: 5,
+            },
+          },
+        } as IContent;
+        throw new Error('stream failed after usage metadata');
+      }
+    }
+
+    it('should record failed logResponseStream calls as errors instead of completions', async () => {
+      const provider = new TextThenErrorWithUsageProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      await expect(async () => {
+        for await (const _chunk of iterator) {
+          // consume chunks until the stream fails
+        }
+      }).rejects.toThrow('stream failed after usage metadata');
+
+      const metrics = wrapper.getPerformanceMetrics();
+      expect(metrics.totalRequests).toBe(0);
+      expect(metrics.totalTokens).toBe(0);
+      expect(metrics.errors.length).toBe(1);
+      expect(metrics.errorRate).toBe(1);
+      expect(metrics.chunksReceived).toBe(2);
+      expect(metrics.timeToFirstToken).not.toBeNull();
+    });
+
+    it('should reset performance tracker metrics when clearState is called', async () => {
+      const provider = new MultiChunkForLoggingProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true);
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume the stream
+      }
+
+      const metricsBeforeClear = wrapper.getPerformanceMetrics();
+      expect(metricsBeforeClear.totalRequests).toBeGreaterThan(0);
+      expect(metricsBeforeClear.totalTokens).toBeGreaterThan(0);
+      expect(metricsBeforeClear.tokensPerSecond).toBeGreaterThan(0);
+      expect(metricsBeforeClear.tokensPerMinute).toBeGreaterThan(0);
+
+      wrapper.clearState?.();
+
+      const metricsAfterClear = wrapper.getPerformanceMetrics();
+      expect(metricsAfterClear.totalRequests).toBe(0);
+      expect(metricsAfterClear.totalTokens).toBe(0);
+      expect(metricsAfterClear.tokensPerSecond).toBe(0);
+      expect(metricsAfterClear.tokensPerMinute).toBe(0);
+      expect(metricsAfterClear.chunksReceived).toBe(0);
+      expect(metricsAfterClear.timeToFirstToken).toBeNull();
+      expect(metricsAfterClear.errors).toHaveLength(0);
+      expect(metricsAfterClear.errorRate).toBe(0);
+    });
   });
 });
