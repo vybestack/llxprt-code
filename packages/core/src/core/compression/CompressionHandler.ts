@@ -45,6 +45,7 @@ export class CompressionHandler {
   static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   static readonly COMPRESSION_COOLDOWN_MS = 60_000;
   static readonly COMPRESSION_FAILURE_THRESHOLD = 3;
+  static readonly INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD = 0.05;
 
   private compressionPromise: Promise<void> | null = null;
   private compressionFailureCount: number = 0;
@@ -312,6 +313,16 @@ export class CompressionHandler {
    * @plan PLAN-20260220-DECOMPOSE.P03
    */
   /**
+   * Compute the baseline prompt token count for hard-limit projection.
+   * Prefer API-observed prompt tokens when available (includes cache read/write).
+   */
+  private getProjectedPromptBaseline(): number {
+    return this.lastPromptTokenCount !== null && this.lastPromptTokenCount > 0
+      ? this.lastPromptTokenCount
+      : this.getEffectiveTokenCount();
+  }
+
+  /**
    * Compute the projected token count for a pending request.
    */
   private computeProjectedTokens(
@@ -319,7 +330,7 @@ export class CompressionHandler {
     completionBudget: number,
   ): number {
     return (
-      this.getEffectiveTokenCount() +
+      this.getProjectedPromptBaseline() +
       Math.max(0, pendingTokens) +
       completionBudget
     );
@@ -348,18 +359,23 @@ export class CompressionHandler {
       limit - CompressionHandler.TOKEN_SAFETY_MARGIN,
     );
 
-    const projected = this.computeProjectedTokens(
+    const initialProjected = this.computeProjectedTokens(
       pendingTokens,
       completionBudget,
     );
-    if (projected <= marginAdjustedLimit) {
+    if (initialProjected <= marginAdjustedLimit) {
       return;
     }
 
     this.logger.warn(
       () =>
         `[CompressionHandler] Projected token usage exceeds context limit, attempting compression`,
-      { projected, marginAdjustedLimit, completionBudget, pendingTokens },
+      {
+        projected: initialProjected,
+        marginAdjustedLimit,
+        completionBudget,
+        pendingTokens,
+      },
     );
 
     // @plan PLAN-20260211-HIGHDENSITY.P18
@@ -380,10 +396,12 @@ export class CompressionHandler {
       return;
     }
 
-    await this.performCompression(promptId);
+    const preCompressionProjected = postOptProjected;
+
+    await this.performCompression(promptId, { bypassCooldown: true });
     await this.historyService.waitForTokenUpdates();
 
-    const recomputed = this.computeProjectedTokens(
+    let recomputed = this.computeProjectedTokens(
       pendingTokens,
       completionBudget,
     );
@@ -395,21 +413,125 @@ export class CompressionHandler {
       return;
     }
 
-    throw new Error(
-      `Request would exceed the ${limit} token context window even after compression (projected ${recomputed} tokens including system prompt and a ${completionBudget} token completion budget). Reduce earlier history or lower maxOutputTokens.`,
+    // If compression barely reduced tokens, force truncation fallback
+    recomputed = await this.forceTruncationIfIneffective(
+      promptId,
+      preCompressionProjected,
+      recomputed,
+      marginAdjustedLimit,
+      pendingTokens,
+      completionBudget,
     );
+    if (recomputed <= marginAdjustedLimit) {
+      return;
+    }
+
+    throw this.buildContextOverflowError(
+      limit,
+      initialProjected,
+      recomputed,
+      marginAdjustedLimit,
+      completionBudget,
+    );
+  }
+
+  /**
+   * Force truncation fallback when primary compression was ineffective.
+   * Returns the recomputed projected token count after fallback attempt.
+   */
+  private async forceTruncationIfIneffective(
+    promptId: string,
+    preCompressionProjected: number,
+    postCompressionProjected: number,
+    marginAdjustedLimit: number,
+    pendingTokens: number,
+    completionBudget: number,
+  ): Promise<number> {
+    const reduction = preCompressionProjected - postCompressionProjected;
+    const reductionRatio =
+      preCompressionProjected > 0 ? reduction / preCompressionProjected : 0;
+    if (
+      reductionRatio >=
+        CompressionHandler.INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD ||
+      postCompressionProjected <= marginAdjustedLimit
+    ) {
+      return postCompressionProjected;
+    }
+
+    this.logger.warn(
+      () =>
+        '[CompressionHandler] Primary compression was ineffective, forcing truncation fallback',
+      {
+        preCompressionProjected,
+        postCompressionProjected,
+        reductionRatio,
+      },
+    );
+    this._suppressDensityDirty = true;
+    try {
+      const context = await this.buildCompressionContext(promptId);
+      await this.performFallbackCompression(
+        context,
+        new Error('Primary compression was ineffective'),
+        (newHistory) => {
+          this.historyService.clear();
+          for (const content of newHistory) {
+            this.historyService.add(content, this.runtimeContext.state.model);
+          }
+        },
+      );
+      await this.historyService.waitForTokenUpdates();
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          '[CompressionHandler] Truncation fallback failed during hard-limit enforcement',
+        error,
+      );
+    } finally {
+      this._suppressDensityDirty = false;
+    }
+
+    return this.computeProjectedTokens(pendingTokens, completionBudget);
+  }
+
+  /**
+   * Build a diagnostic error for context window overflow after all reduction attempts.
+   */
+  private buildContextOverflowError(
+    limit: number,
+    initialProjected: number,
+    finalProjected: number,
+    marginAdjustedLimit: number,
+    completionBudget: number,
+  ): Error {
+    const totalReduction = Math.max(0, initialProjected - finalProjected);
+    const tokensStillNeeded = finalProjected - marginAdjustedLimit;
+    const parts: string[] = [
+      `Request still exceeds the safety-adjusted context limit (${marginAdjustedLimit} tokens).`,
+      `density optimization and compression reduced ${totalReduction} tokens (from ${initialProjected} to ${finalProjected} projected).`,
+      `completionBudget=${completionBudget}, tokensStillNeeded=${tokensStillNeeded}.`,
+    ];
+    if (completionBudget > 0.8 * limit) {
+      parts.push(
+        `The completion budget (${completionBudget}) consumes more than 80% of the context window (${limit}). Consider lowering maxOutputTokens.`,
+      );
+    }
+    return new Error(parts.join(' '));
   }
 
   /**
    * Perform compression with retry, fallback, and cooldown logic.
    *
-   * @plan PLAN-20260211-COMPRESSION.P14
    * @plan PLAN-20260218-COMPRESSION-RETRY.P01
    * @requirement REQ-CS-006.1, REQ-CS-002.9, REQ-CR-003-005
    */
-  async performCompression(prompt_id: string): Promise<void> {
+  async performCompression(
+    prompt_id: string,
+    options?: { bypassCooldown?: boolean },
+  ): Promise<void> {
     // Cooldown: skip compression if we have too many recent failures
-    if (this.isCompressionInCooldown()) {
+    // When bypassCooldown is true (called from enforceContextWindow), skip this check
+    if (!options?.bypassCooldown && this.isCompressionInCooldown()) {
       this.logger.debug(
         'Skipping compression — in cooldown after repeated failures',
         {
