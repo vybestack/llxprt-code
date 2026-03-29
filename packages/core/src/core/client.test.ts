@@ -63,7 +63,6 @@ import type { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { GeminiEventType, Turn } from './turn.js';
-import type { getCoreSystemPrompt as _getCoreSystemPrompt } from './prompts.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';

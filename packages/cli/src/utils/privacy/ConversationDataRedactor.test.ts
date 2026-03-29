@@ -513,7 +513,7 @@ describe('Conversation Data Redaction', () => {
 
     expect(redacted.metadata?.id).toBe('msg_123');
     expect(redacted.speaker).toBe('human');
-    expect(redacted.metadata?.usage).toEqual({
+    expect(redacted.metadata?.usage).toStrictEqual({
       promptTokens: 50,
       completionTokens: 30,
       totalTokens: 80,
@@ -579,6 +579,6 @@ describe('Conversation Data Redaction', () => {
 
     const redactedEmptyTool = redactor.redactToolCall(emptyTool);
     expect(redactedEmptyTool.function.name).toBe('empty_tool');
-    expect(redactedEmptyTool.function.parameters).toEqual({});
+    expect(redactedEmptyTool.function.parameters).toStrictEqual({});
   });
 });

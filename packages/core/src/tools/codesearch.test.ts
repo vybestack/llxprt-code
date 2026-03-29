@@ -7,7 +7,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CodeSearchTool, type CodeSearchToolParams } from './codesearch.js';
 import type { Config } from '../config/config.js';
-import type { ToolResult as _ToolResult } from './tools.js';
 import fetch from 'node-fetch';
 
 vi.mock('node-fetch');

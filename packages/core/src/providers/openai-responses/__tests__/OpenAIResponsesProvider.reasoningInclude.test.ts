@@ -114,7 +114,7 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
         include?: string[];
       };
 
-      expect(parsedBody.include).toEqual(['reasoning.encrypted_content']);
+      expect(parsedBody.include).toStrictEqual(['reasoning.encrypted_content']);
     });
 
     it('should add include=["reasoning.encrypted_content"] when reasoning.effort is set (without reasoning.enabled)', async () => {
@@ -178,7 +178,7 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
         reasoning?: { effort?: string };
       };
 
-      expect(parsedBody.include).toEqual(['reasoning.encrypted_content']);
+      expect(parsedBody.include).toStrictEqual(['reasoning.encrypted_content']);
       expect(parsedBody.reasoning?.effort).toBe('high');
     });
 

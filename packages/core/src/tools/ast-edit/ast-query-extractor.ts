@@ -215,13 +215,13 @@ export class ASTQueryExtractor {
   }
 
   private extractNameBasic(line: string): string {
-    const match = line.match(/(?:function|def|class)\s+(\w+)/);
+    const match = RegExp(/(?:function|def|class)\s+(\w+)/).exec(line);
     return match != null ? match[1] : 'unknown';
   }
 
   private extractSignatureBasic(line: string): string {
     // Try to capture parameters: ( ... )
-    const match = line.match(/\(([^)]*)\)/);
+    const match = RegExp(/\(([^)]*)\)/).exec(line);
     if (match != null) {
       return `(${match[1]})`;
     }

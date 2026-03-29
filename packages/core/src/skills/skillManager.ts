@@ -220,7 +220,7 @@ export class SkillManager {
           const content = await fs.readFile(filePath, 'utf-8');
           // Extract body after frontmatter if present
           const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)/;
-          const match = content.match(frontmatterRegex);
+          const match = RegExp(frontmatterRegex).exec(content);
           return match != null ? match[1].trim() : content.trim();
         }
       } catch {

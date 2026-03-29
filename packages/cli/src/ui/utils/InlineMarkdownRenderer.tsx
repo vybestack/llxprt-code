@@ -99,8 +99,8 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.endsWith('`') &&
         fullMatch.length > INLINE_CODE_MARKER_LENGTH
       ) {
-        const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
-        if (codeMatch != null && codeMatch[2]) {
+        const codeMatch = RegExp(/^(`+)(.+?)\1$/s).exec(fullMatch);
+        if (codeMatch?.[2]) {
           renderedNode = (
             <Text key={key} color={theme.text.accent}>
               {codeMatch[2]}
@@ -112,7 +112,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.includes('](') &&
         fullMatch.endsWith(')')
       ) {
-        const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
+        const linkMatch = RegExp(/\[(.*?)\]\((.*?)\)/).exec(fullMatch);
         if (linkMatch != null) {
           const linkText = linkMatch[1];
           const url = linkMatch[2];
@@ -137,7 +137,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
             )}
           </Text>
         );
-      } else if (fullMatch.match(/^https?:\/\//) != null) {
+      } else if (RegExp(/^https?:\/\//).exec(fullMatch) != null) {
         renderedNode = (
           <Text key={key} color={theme.text.link}>
             {fullMatch}

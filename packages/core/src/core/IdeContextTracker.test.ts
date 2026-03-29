@@ -66,14 +66,14 @@ describe('IdeContextTracker', () => {
     it('returns empty array when no IDE context available', () => {
       mockGetIdeContext.mockReturnValue(undefined);
       const result = tracker.buildFullContext();
-      expect(result.contextParts).toEqual([]);
+      expect(result.contextParts).toStrictEqual([]);
       expect(result.newIdeContext).toBeUndefined();
     });
 
     it('returns empty array when no open files', () => {
       mockGetIdeContext.mockReturnValue({ workspaceState: { openFiles: [] } });
       const result = tracker.buildFullContext();
-      expect(result.contextParts).toEqual([]);
+      expect(result.contextParts).toStrictEqual([]);
     });
 
     it('includes active file in context', () => {
@@ -148,7 +148,7 @@ describe('IdeContextTracker', () => {
     it('returns empty array when no current IDE context', () => {
       mockGetIdeContext.mockReturnValue(undefined);
       const result = tracker.buildIncrementalDelta();
-      expect(result.contextParts).toEqual([]);
+      expect(result.contextParts).toStrictEqual([]);
     });
 
     it('returns empty array when no lastSentIdeContext', () => {
@@ -157,7 +157,7 @@ describe('IdeContextTracker', () => {
       );
       // fresh tracker has no lastSentIdeContext — delta returns empty
       const result = tracker.buildIncrementalDelta();
-      expect(result.contextParts).toEqual([]);
+      expect(result.contextParts).toStrictEqual([]);
     });
 
     it('returns empty array when nothing changed', () => {
@@ -165,7 +165,7 @@ describe('IdeContextTracker', () => {
       mockGetIdeContext.mockReturnValue(ctx);
       tracker.recordSentContext(ctx);
       const result = tracker.buildIncrementalDelta();
-      expect(result.contextParts).toEqual([]);
+      expect(result.contextParts).toStrictEqual([]);
     });
 
     it('detects opened files', () => {
@@ -275,7 +275,7 @@ describe('IdeContextTracker', () => {
       tracker.recordSentContext(ctx); // clears forceFullIdeContext flag
       // No changes => empty delta
       const result = tracker.getContextParts(false);
-      expect(result.contextParts).toEqual([]);
+      expect(result.contextParts).toStrictEqual([]);
     });
 
     it('returns full context after reset', () => {
@@ -296,7 +296,7 @@ describe('IdeContextTracker', () => {
       tracker.recordSentContext(ctx);
 
       // Without reset, no delta
-      expect(tracker.getContextParts(false).contextParts).toEqual([]);
+      expect(tracker.getContextParts(false).contextParts).toStrictEqual([]);
 
       // After reset, should get full context
       tracker.resetContext();
@@ -316,7 +316,7 @@ describe('IdeContextTracker', () => {
       ).toBeGreaterThan(0);
       // After recording, delta (no change) = empty
       tracker.recordSentContext(ctx);
-      expect(tracker.getContextParts(false).contextParts).toEqual([]);
+      expect(tracker.getContextParts(false).contextParts).toStrictEqual([]);
     });
   });
 });

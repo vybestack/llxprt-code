@@ -220,7 +220,7 @@ class Foo {
         language: 'typescript',
         path: tempDir,
       });
-      expect(meta(result).matches).toEqual([]);
+      expect(meta(result).matches).toStrictEqual([]);
       expect(meta(result).truncated).toBe(false);
     });
   });

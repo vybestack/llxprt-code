@@ -187,7 +187,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('returns empty suggestions when value has no options or completer @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
       await fc.assert(
         fc.asyncProperty(fc.string(), async (input) => {
-          const schema: CommandArgumentSchema = [value('mode', '', undefined)];
+          const schema: CommandArgumentSchema = [value('mode', '')];
           const handler = createCompletionHandler(schema);
           const result = await handler(mockContext, '', `/command ${input}`);
           expect(result.suggestions).toEqual([]);

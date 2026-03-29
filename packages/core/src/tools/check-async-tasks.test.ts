@@ -87,7 +87,7 @@ describe('CheckAsyncTasksTool', () => {
       const result = await invocation.execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
-      expect(result.metadata).toEqual({ count: 0 });
+      expect(result.metadata).toStrictEqual({ count: 0 });
       expect(result.llmContent).toBe('No async tasks.');
       expect(result.returnDisplay).toContain(
         'No async tasks are currently running or completed',
@@ -286,7 +286,7 @@ describe('CheckAsyncTasksTool', () => {
   });
 
   it('throws when AsyncTaskManager is unavailable', () => {
-    const tool = new CheckAsyncTasksTool(buildDependencies(undefined));
+    const tool = new CheckAsyncTasksTool(buildDependencies());
     expect(() => tool.build({})).toThrow(
       'AsyncTaskManager service is unavailable. Please configure async tasks before invoking this tool.',
     );

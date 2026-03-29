@@ -75,7 +75,7 @@ describe('BaseLLMClient', () => {
         model: 'gemini-pro',
       });
 
-      expect(result).toEqual({ name: 'test', value: 42 });
+      expect(result).toStrictEqual({ name: 'test', value: 42 });
       expect(mockContentGenerator.generateContent).toHaveBeenCalledTimes(1);
     });
 
@@ -100,7 +100,7 @@ describe('BaseLLMClient', () => {
         model: 'gemini-pro',
       });
 
-      expect(result).toEqual({ status: 'ok' });
+      expect(result).toStrictEqual({ status: 'ok' });
     });
 
     it('should use provided schema for validation', async () => {
@@ -135,7 +135,7 @@ describe('BaseLLMClient', () => {
 
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
         .calls[0][0];
-      expect(callArgs.config?.responseJsonSchema).toEqual(schema);
+      expect(callArgs.config?.responseJsonSchema).toStrictEqual(schema);
       expect(callArgs.config?.responseMimeType).toBe('application/json');
     });
 
@@ -247,7 +247,7 @@ describe('BaseLLMClient', () => {
         model: 'embedding-001',
       });
 
-      expect(result).toEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
+      expect(result).toStrictEqual([0.1, 0.2, 0.3, 0.4, 0.5]);
       expect(mockContentGenerator.embedContent).toHaveBeenCalledTimes(1);
     });
 
@@ -265,7 +265,7 @@ describe('BaseLLMClient', () => {
         model: 'embedding-001',
       });
 
-      expect(result).toEqual([
+      expect(result).toStrictEqual([
         [0.1, 0.2],
         [0.3, 0.4],
       ]);
@@ -392,7 +392,7 @@ describe('BaseLLMClient', () => {
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock
         .calls[0][0];
       expect(callArgs.model).toBe('test-model');
-      expect(callArgs.contents).toEqual(options.contents);
+      expect(callArgs.contents).toStrictEqual(options.contents);
       expect(callArgs.config?.temperature).toBe(0);
       expect(callArgs.config?.topP).toBe(1);
     });

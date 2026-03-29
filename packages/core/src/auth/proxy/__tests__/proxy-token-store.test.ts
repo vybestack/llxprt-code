@@ -43,7 +43,7 @@ type RequestHandler = (
  * Performs handshake automatically, then delegates request handling to the provided handler.
  */
 function createTestServer(
-  socketPath: string,
+  _socketPath: string,
   handler: RequestHandler,
 ): net.Server {
   return net.createServer((socket) => {

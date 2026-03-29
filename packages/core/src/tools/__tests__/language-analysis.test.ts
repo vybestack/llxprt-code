@@ -42,11 +42,11 @@ const x = 1;`;
 
         expect(imports).toHaveLength(2);
         expect(imports[0].module).toBe('./bar');
-        expect(imports[0].items).toEqual(['foo']);
+        expect(imports[0].items).toStrictEqual(['foo']);
         expect(imports[0].line).toBe(1);
 
         expect(imports[1].module).toBe('../utils');
-        expect(imports[1].items).toEqual([]);
+        expect(imports[1].items).toStrictEqual([]);
         expect(imports[1].line).toBe(2);
       });
 
@@ -56,12 +56,12 @@ const x = 1;`;
 
         expect(imports).toHaveLength(1);
         expect(imports[0].module).toBe('./greek');
-        expect(imports[0].items).toEqual(['alpha', 'beta', 'gamma']);
+        expect(imports[0].items).toStrictEqual(['alpha', 'beta', 'gamma']);
       });
 
       it('should handle empty content', () => {
         const imports = extractImports('', 'typescript');
-        expect(imports).toEqual([]);
+        expect(imports).toStrictEqual([]);
       });
     });
 
@@ -77,7 +77,7 @@ import sys`;
         expect(imports[0].line).toBe(1);
 
         expect(imports[1].module).toBe('pathlib');
-        expect(imports[1].items).toEqual(['Path']);
+        expect(imports[1].items).toStrictEqual(['Path']);
         expect(imports[1].line).toBe(2);
 
         expect(imports[2].module).toBe('sys');
@@ -90,7 +90,7 @@ import sys`;
 
         expect(imports).toHaveLength(1);
         expect(imports[0].module).toBe('typing');
-        expect(imports[0].items).toEqual(['List', 'Dict', 'Optional']);
+        expect(imports[0].items).toStrictEqual(['List', 'Dict', 'Optional']);
       });
 
       it('should handle dotted module names', () => {
@@ -99,7 +99,7 @@ import sys`;
 
         expect(imports).toHaveLength(1);
         expect(imports[0].module).toBe('os.path');
-        expect(imports[0].items).toEqual(['join', 'exists']);
+        expect(imports[0].items).toStrictEqual(['join', 'exists']);
       });
     });
 
@@ -107,7 +107,7 @@ import sys`;
       it('should return empty array for unknown language', () => {
         const content = `some random content`;
         const imports = extractImports(content, 'unknown');
-        expect(imports).toEqual([]);
+        expect(imports).toStrictEqual([]);
       });
     });
   });

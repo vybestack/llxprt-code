@@ -138,9 +138,9 @@ describe('TodoPanel Responsive Behavior', () => {
       const hasFullContent = output!.includes(
         'This is a very long todo item that should be truncated at different widths',
       );
-      const hasTruncatedContent = output!.match(
+      const hasTruncatedContent = RegExp(
         /This is a very long todo.*\.\.\./,
-      );
+      ).exec(output!);
 
       // Either full content is shown or it's truncated but with much more content visible
       expect(hasFullContent || hasTruncatedContent).toBe(true);
@@ -282,7 +282,9 @@ describe('TodoPanel Responsive Behavior', () => {
       // This means more of the content should be visible before truncation
 
       // Count visible characters before truncation
-      const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+      const contentMatch = RegExp(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/).exec(
+        output!,
+      );
       expect(contentMatch).toBeDefined();
       const visibleContent = contentMatch![1];
 
@@ -328,7 +330,9 @@ describe('TodoPanel Responsive Behavior', () => {
         );
 
         const output = lastFrame();
-        const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+        const contentMatch = RegExp(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/).exec(
+          output!,
+        );
 
         expect(contentMatch).toBeDefined();
         const visibleContent = contentMatch![1];

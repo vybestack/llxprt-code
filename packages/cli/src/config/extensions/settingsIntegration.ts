@@ -334,7 +334,7 @@ export async function getEnvContents(
  * Checks both .env files and keychain for sensitive settings.
  */
 export async function getMissingSettings(
-  extensionName: string,
+  _extensionName: string,
   extensionDir: string,
 ): Promise<Array<import('../extension.js').ExtensionSetting>> {
   const settings = loadExtensionSettingsFromManifest(extensionDir);

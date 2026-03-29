@@ -176,14 +176,14 @@ describe('iContentToHistoryItems', () => {
   });
 
   it('returns empty array for empty input', () => {
-    expect(iContentToHistoryItems([])).toEqual([]);
+    expect(iContentToHistoryItems([])).toStrictEqual([]);
   });
 
   it('skips human message with only empty text blocks', () => {
     const input: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: '' }] },
     ];
-    expect(iContentToHistoryItems(input)).toEqual([]);
+    expect(iContentToHistoryItems(input)).toStrictEqual([]);
   });
 
   it('preserves original order of mixed text and code blocks', () => {
@@ -221,6 +221,6 @@ describe('iContentToHistoryItems', () => {
       },
     ];
     // Orphan responses are indexed but produce no visible items
-    expect(iContentToHistoryItems(input)).toEqual([]);
+    expect(iContentToHistoryItems(input)).toStrictEqual([]);
   });
 });

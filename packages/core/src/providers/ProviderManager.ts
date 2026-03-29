@@ -1176,7 +1176,7 @@ export class ProviderManager implements IProviderManager {
    * Accumulate token usage for the current session
    */
   accumulateSessionTokens(
-    providerName: string,
+    _providerName: string,
     usage: {
       input: number;
       output: number;
@@ -1485,7 +1485,7 @@ export class ProviderManager implements IProviderManager {
 
   private generateProviderRecommendation(
     provider1: string,
-    provider2: string,
+    _provider2: string,
     cap1: ProviderCapabilities,
     cap2: ProviderCapabilities,
   ): string {

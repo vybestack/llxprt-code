@@ -91,7 +91,7 @@ describe('PKCESessionStore', () => {
     expect(session.bucket).toBe('default');
     expect(session.flowType).toBe('pkce_redirect');
     expect(session.flowInstance).toBe(flowInstance);
-    expect(session.peerIdentity).toEqual(peerA);
+    expect(session.peerIdentity).toStrictEqual(peerA);
     expect(session.createdAt).toBe(baseNow);
     expect(session.used).toBe(false);
   });

@@ -84,7 +84,7 @@ describe('FileDiscoveryService', () => {
 
       const service = new FileDiscoveryService(projectRoot);
 
-      expect(service.filterFiles(files)).toEqual(
+      expect(service.filterFiles(files)).toStrictEqual(
         ['src/index.ts', 'README.md'].map((f) => path.join(projectRoot, f)),
       );
     });
@@ -107,7 +107,7 @@ describe('FileDiscoveryService', () => {
       // Note: Even when respectGitIgnore is false, llxprtIgnoreFilter still uses GitIgnoreParser
       // which loads .gitignore patterns. Additionally, .git is always ignored.
       // logs/ is filtered by .llxprtignore
-      expect(filtered).toEqual(
+      expect(filtered).toStrictEqual(
         ['src/index.ts'].map((f) => path.join(projectRoot, f)),
       );
     });
@@ -126,7 +126,7 @@ describe('FileDiscoveryService', () => {
         respectLlxprtIgnore: false,
       });
 
-      expect(filtered).toEqual(
+      expect(filtered).toStrictEqual(
         ['src/index.ts', 'logs/latest.log'].map((f) =>
           path.join(projectRoot, f),
         ),
@@ -136,7 +136,7 @@ describe('FileDiscoveryService', () => {
     it('should handle empty file list', () => {
       const service = new FileDiscoveryService(projectRoot);
 
-      expect(service.filterFiles([])).toEqual([]);
+      expect(service.filterFiles([])).toStrictEqual([]);
     });
 
     it('should respect gitignore located at repository root when initialized from nested workspace', async () => {
@@ -162,7 +162,7 @@ describe('FileDiscoveryService', () => {
           respectGitIgnore: true,
           respectLlxprtIgnore: true,
         }),
-      ).toEqual([fsSync.realpathSync(visiblePath)]);
+      ).toStrictEqual([fsSync.realpathSync(visiblePath)]);
     });
 
     it('should bypass gitignore when caller opts out even in nested workspace', async () => {
@@ -188,7 +188,7 @@ describe('FileDiscoveryService', () => {
           respectGitIgnore: false,
           respectLlxprtIgnore: true,
         }),
-      ).toEqual([
+      ).toStrictEqual([
         fsSync.realpathSync(secretPath),
         fsSync.realpathSync(visiblePath),
       ]);
@@ -213,7 +213,7 @@ describe('FileDiscoveryService', () => {
       const service = new FileDiscoveryService(projectRoot);
       const report = service.filterFilesWithReport(files);
 
-      expect(report.filteredPaths).toEqual(
+      expect(report.filteredPaths).toStrictEqual(
         ['src/index.ts', 'README.md'].map((f) => path.join(projectRoot, f)),
       );
       expect(report.ignoredCount).toBe(2);
@@ -227,7 +227,7 @@ describe('FileDiscoveryService', () => {
       const service = new FileDiscoveryService(projectRoot);
       const report = service.filterFilesWithReport(files);
 
-      expect(report.filteredPaths).toEqual(files);
+      expect(report.filteredPaths).toStrictEqual(files);
       expect(report.ignoredCount).toBe(0);
     });
   });
@@ -297,7 +297,7 @@ describe('FileDiscoveryService', () => {
         path.join(projectRoot, f),
       );
 
-      expect(service.filterFiles(files, undefined)).toEqual([
+      expect(service.filterFiles(files)).toStrictEqual([
         path.join(projectRoot, 'src/index.ts'),
       ]);
     });
@@ -317,7 +317,7 @@ describe('FileDiscoveryService', () => {
       );
 
       const filtered = service.filterFiles(files);
-      expect(filtered).toEqual([path.join(projectRoot, 'important.txt')]);
+      expect(filtered).toStrictEqual([path.join(projectRoot, 'important.txt')]);
     });
 
     it('should un-ignore a directory in .llxprtignore that is ignored in .gitignore', async () => {
@@ -330,7 +330,7 @@ describe('FileDiscoveryService', () => {
       );
 
       const filtered = service.filterFiles(files);
-      expect(filtered).toEqual(files);
+      expect(filtered).toStrictEqual(files);
     });
 
     it('should extend ignore rules in .llxprtignore', async () => {
@@ -343,7 +343,7 @@ describe('FileDiscoveryService', () => {
       );
 
       const filtered = service.filterFiles(files);
-      expect(filtered).toEqual([]);
+      expect(filtered).toStrictEqual([]);
     });
 
     it('should use .gitignore rules if respectLlxprtIgnore is false', async () => {
@@ -360,7 +360,7 @@ describe('FileDiscoveryService', () => {
         respectLlxprtIgnore: false,
       });
 
-      expect(filtered).toEqual([]);
+      expect(filtered).toStrictEqual([]);
     });
 
     it('should use .llxprtignore rules if respectGitIgnore is false', async () => {
@@ -380,7 +380,7 @@ describe('FileDiscoveryService', () => {
       // Even when respectGitIgnore is false, llxprtIgnoreFilter uses GitIgnoreParser
       // which still loads .gitignore patterns, so *.txt IS applied.
       // .llxprtignore ignores temp/
-      expect(filtered).toEqual([]);
+      expect(filtered).toStrictEqual([]);
     });
   });
 });

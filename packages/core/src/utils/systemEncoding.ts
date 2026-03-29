@@ -57,7 +57,7 @@ export function getSystemEncoding(): string | null {
   if (os.platform() === 'win32') {
     try {
       const output = execSync('chcp', { encoding: 'utf8' });
-      const match = output.match(/:\s*(\d+)/);
+      const match = RegExp(/:\s*(\d+)/).exec(output);
       if (match != null) {
         const codePage = parseInt(match[1], 10);
         if (!isNaN(codePage)) {
@@ -96,8 +96,8 @@ export function getSystemEncoding(): string | null {
     }
   }
 
-  const match = locale.match(/\.(.+)/); // e.g., "en_US.UTF-8"
-  if (match != null && match[1]) {
+  const match = RegExp(/\.(.+)/).exec(locale); // e.g., "en_US.UTF-8"
+  if (match?.[1]) {
     return match[1].toLowerCase();
   }
 

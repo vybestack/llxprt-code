@@ -32,7 +32,7 @@ describe('`/set` schema contract for useSlashCompletion @plan:PLAN-20251013-AUTO
         ?.filter((node) => node.kind === 'literal')
         ?.map((node) => node.value) ?? [];
 
-    expect(literalValues).toEqual(
+    expect(literalValues).toStrictEqual(
       expect.arrayContaining(['unset', 'modelparam', 'emojifilter']),
     );
   });

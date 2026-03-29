@@ -39,7 +39,7 @@ describe('useHookDisplayState', () => {
   it('returns an empty array when no hooks are active', () => {
     const bus = createTestMessageBus();
     const { result } = renderHook(() => useHookDisplayState(bus));
-    expect(result.current).toEqual([]);
+    expect(result.current).toStrictEqual([]);
   });
 
   it('adds an active hook on request event', () => {
@@ -106,7 +106,7 @@ describe('useHookDisplayState', () => {
   });
 
   it('returns empty when no messageBus is provided', () => {
-    const { result } = renderHook(() => useHookDisplayState(undefined));
-    expect(result.current).toEqual([]);
+    const { result } = renderHook(() => useHookDisplayState());
+    expect(result.current).toStrictEqual([]);
   });
 });

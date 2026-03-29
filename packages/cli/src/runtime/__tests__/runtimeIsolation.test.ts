@@ -213,7 +213,7 @@ describe('CLI runtime isolation', () => {
     );
     expect(
       runtimeA.handle.config.getEphemeralSetting('custom-headers'),
-    ).toEqual({ 'x-runtime': runtimeA.id });
+    ).toStrictEqual({ 'x-runtime': runtimeA.id });
     expect(aSecondarySettings.temperature).toBe(0.6);
     expect(aSecondarySettings.apiKey).toBe('alpha-updated-key');
     expect(aSecondarySettings['base-url']).toBe(
@@ -239,7 +239,7 @@ describe('CLI runtime isolation', () => {
     );
     expect(
       runtimeB.handle.config.getEphemeralSetting('custom-headers'),
-    ).toEqual({ 'x-runtime': runtimeB.id });
+    ).toStrictEqual({ 'x-runtime': runtimeB.id });
     expect(bSecondarySettings.temperature).toBe(0.4);
     expect(bSecondarySettings.apiKey).toBe('beta-updated-key');
     expect(bSecondarySettings['base-url']).toBe(

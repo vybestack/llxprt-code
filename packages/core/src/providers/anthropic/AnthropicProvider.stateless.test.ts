@@ -25,12 +25,12 @@ vi.mock('../../core/prompts.js', () => ({
 
 vi.mock('@anthropic-ai/sdk', () => {
   class FakeAnthropic {
-    static created: Array<{
+    static readonly created: Array<{
       instanceId: symbol;
       options: Record<string, unknown>;
     }> = [];
 
-    static requests: Array<{
+    static readonly requests: Array<{
       request: unknown;
     }> = [];
 

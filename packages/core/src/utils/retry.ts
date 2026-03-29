@@ -678,7 +678,7 @@ function logRetryAttempt(
         () =>
           `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff... Error: ${error}`,
       );
-    } else if (error.message.match(/5\d{2}/) != null) {
+    } else if (RegExp(/5\d{2}/).exec(error.message) != null) {
       logger.error(
         () =>
           `Attempt ${attempt} failed with 5xx error. Retrying with backoff... Error: ${error}`,

@@ -94,7 +94,7 @@ export async function loadSkillFromFile(
 ): Promise<SkillDefinition | null> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    const match = content.match(FRONTMATTER_REGEX);
+    const match = RegExp(FRONTMATTER_REGEX).exec(content);
     if (match == null) {
       return null;
     }
@@ -128,7 +128,7 @@ function loadSkillFromFileSync(
 ): SkillDefinition | null {
   try {
     const content = fsSync.readFileSync(filePath, 'utf-8');
-    const match = content.match(FRONTMATTER_REGEX);
+    const match = RegExp(FRONTMATTER_REGEX).exec(content);
     if (match == null) {
       return null;
     }

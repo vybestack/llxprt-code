@@ -373,8 +373,8 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should return empty object when config is undefined', () => {
-    const toolSettings = generateDynamicToolSettings(undefined);
-    expect(toolSettings).toEqual({});
+    const toolSettings = generateDynamicToolSettings();
+    expect(toolSettings).toStrictEqual({});
   });
 
   it('should handle empty tool registry', () => {
@@ -384,7 +384,7 @@ describe('generateDynamicToolSettings', () => {
     });
 
     const toolSettings = generateDynamicToolSettings(mockConfig);
-    expect(toolSettings).toEqual({});
+    expect(toolSettings).toStrictEqual({});
   });
 
   it('should handle only unregistered tools', () => {
@@ -407,7 +407,7 @@ describe('generateDynamicToolSettings', () => {
     } as unknown as Config;
 
     const toolSettings = generateDynamicToolSettings(errorConfig);
-    expect(toolSettings).toEqual({});
+    expect(toolSettings).toStrictEqual({});
     expect(mockDebugLoggerError).toHaveBeenCalledWith(
       '[generateDynamicToolSettings] Error:',
       expect.any(Error),

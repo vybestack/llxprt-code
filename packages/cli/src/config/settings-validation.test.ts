@@ -122,7 +122,9 @@ describe('settings-validation', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       if (result.error != null) {
-        expect(result.error.issues[0]?.path).toEqual(['disableAutoUpdate']);
+        expect(result.error.issues[0]?.path).toStrictEqual([
+          'disableAutoUpdate',
+        ]);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
     });
@@ -133,7 +135,9 @@ describe('settings-validation', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       if (result.error != null) {
-        expect(result.error.issues[0]?.path).toEqual(['mcpServerCommand']);
+        expect(result.error.issues[0]?.path).toStrictEqual([
+          'mcpServerCommand',
+        ]);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
     });
@@ -173,7 +177,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       if (result.error != null) {
-        expect(result.error.issues[0]?.path).toEqual(['ui']);
+        expect(result.error.issues[0]?.path).toStrictEqual(['ui']);
       }
     });
 
@@ -182,7 +186,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       if (result.error != null) {
-        expect(result.error.issues[0]?.path).toEqual(['ui', 'theme']);
+        expect(result.error.issues[0]?.path).toStrictEqual(['ui', 'theme']);
       }
     });
 
@@ -193,7 +197,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       if (result.error != null) {
-        expect(result.error.issues[0]?.path).toEqual([
+        expect(result.error.issues[0]?.path).toStrictEqual([
           'ui',
           'footer',
           'hideCWD',

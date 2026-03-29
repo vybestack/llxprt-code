@@ -154,7 +154,7 @@ describe('FileTokenStore', () => {
       const tokens = await tokenStore.loadTokens();
 
       expect(tokens.size).toBe(1);
-      expect(tokens.get('test-server')).toEqual(mockCredentials);
+      expect(tokens.get('test-server')).toStrictEqual(mockCredentials);
     });
 
     it('should support legacy plaintext token files', async () => {
@@ -164,7 +164,7 @@ describe('FileTokenStore', () => {
       const tokens = await tokenStore.loadTokens();
 
       expect(tokens.size).toBe(1);
-      expect(tokens.get('test-server')).toEqual(mockCredentials);
+      expect(tokens.get('test-server')).toStrictEqual(mockCredentials);
     });
 
     it('should handle corrupted token file gracefully', async () => {
@@ -198,7 +198,7 @@ describe('FileTokenStore', () => {
       const tokens = await tokenStore.loadTokens();
 
       expect(tokens.size).toBe(1);
-      expect(tokens.get('test-server')).toEqual(mockCredentials);
+      expect(tokens.get('test-server')).toStrictEqual(mockCredentials);
     });
 
     it('should handle file read errors other than ENOENT', async () => {
@@ -232,7 +232,7 @@ describe('FileTokenStore', () => {
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0];
       expect(writeCall[0]).toBe(testTokenPath);
       expect(writeCall[1]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
-      expect(writeCall[2]).toEqual({ mode: 0o600 });
+      expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
     });
 
     it('should update existing token for same server', async () => {
@@ -305,7 +305,7 @@ describe('FileTokenStore', () => {
 
       const result = await tokenStore.getToken('test-server');
 
-      expect(result).toEqual(mockCredentials);
+      expect(result).toStrictEqual(mockCredentials);
     });
 
     it('should return null for non-existent server', async () => {

@@ -93,7 +93,7 @@ async function writePortAndWorkspace({
 
 function sendIdeContextUpdateNotification(
   transport: StreamableHTTPServerTransport,
-  log: (message: string) => void,
+  _log: (message: string) => void,
   openFilesManager: OpenFilesManager,
 ) {
   const ideContext = openFilesManager.state;
@@ -331,15 +331,17 @@ export class IDEServer {
 
       app.get('/mcp', handleSessionRequest);
 
-      app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-        this.log(`Error processing request: ${err.message}`);
-        this.log(`Stack trace: ${err.stack}`);
-        if (err instanceof CORSError) {
-          res.status(403).json({ error: 'Request denied by CORS policy.' });
-        } else {
-          next(err);
-        }
-      });
+      app.use(
+        (err: Error, _req: Request, res: Response, next: NextFunction) => {
+          this.log(`Error processing request: ${err.message}`);
+          this.log(`Stack trace: ${err.stack}`);
+          if (err instanceof CORSError) {
+            res.status(403).json({ error: 'Request denied by CORS policy.' });
+          } else {
+            next(err);
+          }
+        },
+      );
 
       this.server = app.listen(0, '127.0.0.1', async () => {
         const address = (this.server as HTTPServer).address();

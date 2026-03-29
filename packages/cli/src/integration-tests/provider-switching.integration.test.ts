@@ -124,7 +124,7 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.setActiveProvider('providerA');
     setActiveModelParam('temperature', 0.7);
     setActiveModelParam('top_p', 0.9);
-    expect(getActiveModelParams()).toEqual({
+    expect(getActiveModelParams()).toStrictEqual({
       temperature: 0.7,
       top_p: 0.9,
     });
@@ -133,16 +133,16 @@ describe('Runtime Provider Switching Integration', () => {
     expect(
       config.getSettingsService().getProviderSettings('providerA').temperature,
     ).toBeUndefined();
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
 
     setActiveModelParam('temperature', 0.3);
-    expect(getActiveModelParams()).toEqual({ temperature: 0.3 });
+    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.3 });
 
     await switchActiveProvider('providerA');
     expect(
       config.getSettingsService().getProviderSettings('providerB').temperature,
     ).toBeUndefined();
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
   });
 
   it('does not clear server tools provider state when switching active provider', async () => {

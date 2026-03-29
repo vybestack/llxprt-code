@@ -60,7 +60,7 @@ export const toolkeyCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: toolkeySchema,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
     // @pseudocode lines 276-278: Parse arguments

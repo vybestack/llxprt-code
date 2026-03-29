@@ -31,7 +31,7 @@ describe('fuzzyFilter', () => {
     it('returns all items when query is empty', () => {
       const result = filterCompletions(mockOptions, '', { enableFuzzy: true });
       expect(result).toHaveLength(5);
-      expect(result).toEqual(mockOptions);
+      expect(result).toStrictEqual(mockOptions);
     });
 
     it('performs fuzzy matching when enabled', () => {
@@ -61,7 +61,7 @@ describe('fuzzyFilter', () => {
       const result = filterCompletions(mockOptions, 'xyz', {
         enableFuzzy: true,
       });
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('is case insensitive', () => {
@@ -104,7 +104,7 @@ describe('fuzzyFilter', () => {
     it('returns all items when query is empty', () => {
       const result = filterStrings(testStrings, '', { enableFuzzy: true });
       expect(result).toHaveLength(5);
-      expect(result).toEqual(testStrings);
+      expect(result).toStrictEqual(testStrings);
     });
 
     it('performs fuzzy matching when enabled', () => {
@@ -116,12 +116,12 @@ describe('fuzzyFilter', () => {
 
     it('performs exact prefix matching when fuzzy disabled', () => {
       const result = filterStrings(testStrings, 'top', { enableFuzzy: false });
-      expect(result).toEqual(['top_p']);
+      expect(result).toStrictEqual(['top_p']);
     });
 
     it('returns empty array when no matches found', () => {
       const result = filterStrings(testStrings, 'xyz', { enableFuzzy: true });
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('is case insensitive', () => {
@@ -288,7 +288,7 @@ describe('fuzzyFilter', () => {
       const wrappedCompleter = withFuzzyFilter(baseCompleter);
       const result = await wrappedCompleter(mockContext, 'test', mockTokens);
 
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('preserves description fields from original options', async () => {

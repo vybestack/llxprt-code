@@ -118,7 +118,9 @@ function checkForTempDirectories(): string[] {
   try {
     const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
-    const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
+    const nodeModulesMatch = RegExp(/(.*[\\/]node_modules)[\\/]/).exec(
+      realPath,
+    );
 
     if (nodeModulesMatch == null) {
       return [];
@@ -182,7 +184,9 @@ export function handleAutoUpdate(
     }
     const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
-    const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
+    const nodeModulesMatch = RegExp(/(.*[\\/]node_modules)[\\/]/).exec(
+      realPath,
+    );
     const cleanupPath =
       nodeModulesMatch != null
         ? path.dirname(nodeModulesMatch[1])

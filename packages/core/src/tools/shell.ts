@@ -449,7 +449,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           timeoutController.signal.aborted && !signal.aborted;
         if (timeoutTriggered) {
           llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
-          if (rawOutput && rawOutput.trim()) {
+          if (rawOutput?.trim()) {
             llmContent += ` Partial output:\n${rawOutput}`;
           } else {
             llmContent += ' There was no output before timeout.';
@@ -459,7 +459,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent =
             'Command was cancelled by user before it could complete.';
-          if (rawOutput && rawOutput.trim()) {
+          if (rawOutput?.trim()) {
             llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
           } else {
             llmContent += ' There was no output before it was cancelled.';
@@ -467,7 +467,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
           if (this.config.getDebugMode()) {
             returnDisplayMessage = llmContent;
-          } else if (filteredOutput && filteredOutput.trim()) {
+          } else if (filteredOutput?.trim()) {
             returnDisplayMessage = filteredOutput;
           } else {
             returnDisplayMessage = 'Command cancelled by user.';
@@ -498,7 +498,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
         if (this.config.getDebugMode()) {
           returnDisplayMessage = llmContent;
-        } else if (filteredOutput && filteredOutput.trim()) {
+        } else if (filteredOutput?.trim()) {
           returnDisplayMessage = filteredOutput;
         } else if (result.signal) {
           returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
@@ -781,7 +781,7 @@ export class ShellTool extends BaseDeclarativeTool<
   ShellToolParams,
   ToolResult
 > {
-  static Name: string = 'run_shell_command';
+  static readonly Name: string = 'run_shell_command';
   private allowlist: Set<string> = new Set();
 
   constructor(

@@ -163,7 +163,7 @@ export async function replaySession(
         // @pseudocode line 79-86: content
         case 'content': {
           const contentPayload = payload as unknown as ContentPayload;
-          if (contentPayload.content && contentPayload.content.speaker) {
+          if (contentPayload.content?.speaker) {
             history.push(contentPayload.content);
           } else {
             malformedCount++;
@@ -178,8 +178,7 @@ export async function replaySession(
         case 'compressed': {
           const compPayload = payload as unknown as CompressedPayload;
           if (
-            compPayload.summary &&
-            compPayload.summary.speaker &&
+            compPayload.summary?.speaker &&
             compPayload.itemsCompressed !== undefined
           ) {
             history = [compPayload.summary];

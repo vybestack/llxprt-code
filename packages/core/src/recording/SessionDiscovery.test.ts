@@ -217,7 +217,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         chatsDir,
         'non-existent-hash',
       );
-      expect(sessions).toEqual([]);
+      expect(sessions).toStrictEqual([]);
     });
 
     /**
@@ -234,7 +234,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         path.join(tempDir, 'nonexistent-dir'),
         PROJECT_HASH,
       );
-      expect(sessions).toEqual([]);
+      expect(sessions).toStrictEqual([]);
     });
 
     /**
@@ -781,7 +781,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             localChatsDir,
             queryHash,
           );
-          expect(sessions).toEqual([]);
+          expect(sessions).toStrictEqual([]);
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -884,7 +884,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
           );
 
           // Same order both times
-          expect(result1.map((s) => s.sessionId)).toEqual(
+          expect(result1.map((s) => s.sessionId)).toStrictEqual(
             result2.map((s) => s.sessionId),
           );
 

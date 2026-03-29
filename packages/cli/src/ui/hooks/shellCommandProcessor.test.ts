@@ -233,7 +233,7 @@ describe('useShellCommandProcessor', () => {
 
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith(null);
     expect(addItemToHistoryMock).toHaveBeenCalledTimes(2); // Initial + final
-    expect(addItemToHistoryMock.mock.calls[1][0]).toEqual(
+    expect(addItemToHistoryMock.mock.calls[1][0]).toStrictEqual(
       expect.objectContaining({
         tools: [
           expect.objectContaining({
@@ -346,7 +346,7 @@ describe('useShellCommandProcessor', () => {
       });
 
       // Verify second output was cumulative
-      expect(pendingHistoryItemState).toEqual(
+      expect(pendingHistoryItemState).toStrictEqual(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello world' })],
         }),
@@ -373,7 +373,7 @@ describe('useShellCommandProcessor', () => {
       });
 
       // The implementation now uses an updater function, so check the resulting state
-      expect(pendingHistoryItemState).toEqual(
+      expect(pendingHistoryItemState).toStrictEqual(
         expect.objectContaining({
           tools: [
             expect.objectContaining({
@@ -395,7 +395,7 @@ describe('useShellCommandProcessor', () => {
       });
 
       // The implementation now uses an updater function, so check the resulting state
-      expect(pendingHistoryItemState).toEqual(
+      expect(pendingHistoryItemState).toStrictEqual(
         expect.objectContaining({
           tools: [
             expect.objectContaining({
@@ -417,7 +417,6 @@ describe('useShellCommandProcessor', () => {
           setShellInputFocusedMock,
           80,
           24,
-          undefined,
         ),
       );
 
@@ -441,7 +440,7 @@ describe('useShellCommandProcessor', () => {
         mockShellOutputCallback({ type: 'data', chunk: 'hello' });
       });
 
-      expect(pendingHistoryItemState).toEqual(
+      expect(pendingHistoryItemState).toStrictEqual(
         expect.objectContaining({
           tools: [expect.objectContaining({ resultDisplay: 'hello' })],
         }),
@@ -543,7 +542,7 @@ describe('useShellCommandProcessor', () => {
 
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith(null);
     expect(addItemToHistoryMock).toHaveBeenCalledTimes(2);
-    expect(addItemToHistoryMock.mock.calls[1][0]).toEqual({
+    expect(addItemToHistoryMock.mock.calls[1][0]).toStrictEqual({
       type: 'error',
       text: 'An unexpected error occurred: Unexpected failure',
     });
@@ -571,7 +570,7 @@ describe('useShellCommandProcessor', () => {
 
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith(null);
     expect(addItemToHistoryMock).toHaveBeenCalledTimes(2);
-    expect(addItemToHistoryMock.mock.calls[1][0]).toEqual({
+    expect(addItemToHistoryMock.mock.calls[1][0]).toStrictEqual({
       type: 'error',
       text: 'An unexpected error occurred: Synchronous spawn error',
     });

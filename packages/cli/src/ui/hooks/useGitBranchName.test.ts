@@ -125,7 +125,7 @@ describe('useGitBranchName', () => {
     let watchCallback: ((eventType: string) => void) | null = null;
     const watchSpy = vi
       .mocked(fs.watch)
-      .mockImplementation((path, callback) => {
+      .mockImplementation((_path, callback) => {
         watchCallback = callback as (eventType: string) => void;
         return mockWatcher as unknown as fs.FSWatcher;
       });

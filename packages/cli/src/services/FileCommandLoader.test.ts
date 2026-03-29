@@ -519,7 +519,7 @@ describe('FileCommandLoader', () => {
 
       expect(commands).toHaveLength(3);
       const commandNames = commands.map((cmd) => cmd.name);
-      expect(commandNames).toEqual(['user', 'project', 'ext']);
+      expect(commandNames).toStrictEqual(['user', 'project', 'ext']);
 
       const extCommand = commands.find((cmd) => cmd.name === 'ext');
       expect(extCommand?.extensionName).toBe('test-ext');
@@ -760,7 +760,7 @@ describe('FileCommandLoader', () => {
       expect(commands).toHaveLength(3);
 
       const commandNames = commands.map((cmd) => cmd.name).sort();
-      expect(commandNames).toEqual(['b:c', 'b:d:e', 'simple']);
+      expect(commandNames).toStrictEqual(['b:c', 'b:d:e', 'simple']);
 
       const nestedCmd = commands.find((cmd) => cmd.name === 'b:c');
       expect(nestedCmd?.extensionName).toBe('a');
@@ -945,7 +945,7 @@ describe('FileCommandLoader', () => {
         result?.type === 'confirm_shell_commands',
         'Incorrect action type',
       );
-      expect(result.commandsToConfirm).toEqual(['rm -rf /']);
+      expect(result.commandsToConfirm).toStrictEqual(['rm -rf /']);
       expect(result.originalInvocation.raw).toBe(rawInvocation);
     });
 
@@ -1090,7 +1090,7 @@ describe('FileCommandLoader', () => {
       assert(result?.type === 'submit_prompt', 'Incorrect action type');
       // AtFileProcessor is not actually used by FileCommandLoader
       // so the @{} syntax is not processed
-      expect(result.content).toEqual('Context from file: @{./test.txt}');
+      expect(result.content).toStrictEqual('Context from file: @{./test.txt}');
     });
   });
 

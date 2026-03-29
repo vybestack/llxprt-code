@@ -292,7 +292,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
     vi.mocked(isWorkspaceTrusted).mockImplementation((s: Settings) => {
       capturedTrustCheckSettings = s;
       // Return the original trust value from the captured settings
-      return !(s.folderTrust === false);
+      return s.folderTrust !== false;
     });
   });
 

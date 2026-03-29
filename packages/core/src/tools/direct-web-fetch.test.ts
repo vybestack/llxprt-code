@@ -10,7 +10,6 @@ import {
   type DirectWebFetchToolParams,
 } from './direct-web-fetch.js';
 import type { Config } from '../config/config.js';
-import type { ToolResult as _ToolResult } from './tools.js';
 import fetch from 'node-fetch';
 
 vi.mock('node-fetch');

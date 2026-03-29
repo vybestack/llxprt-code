@@ -78,9 +78,11 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
       expect(entry?.config.modelDefaults).toBeInstanceOf(Array);
       expect(entry?.config.modelDefaults).toHaveLength(1);
       expect(entry?.config.modelDefaults?.[0]?.pattern).toBe('gpt-4.*');
-      expect(entry?.config.modelDefaults?.[0]?.ephemeralSettings).toEqual({
-        'reasoning.enabled': true,
-      });
+      expect(entry?.config.modelDefaults?.[0]?.ephemeralSettings).toStrictEqual(
+        {
+          'reasoning.enabled': true,
+        },
+      );
     });
   });
 
@@ -99,7 +101,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'regex-test');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -149,7 +151,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'nonstring-pattern');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -173,7 +175,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'missing-ephemeral');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -193,7 +195,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'empty-defaults');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
     });
   });
 
@@ -260,7 +262,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'non-objects');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       // One warning per non-object entry
       const nonObjectWarnings = warnSpy.mock.calls.filter(
@@ -287,7 +289,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'pattern-number');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -310,7 +312,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'pattern-bool');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -335,7 +337,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'ephemeral-array');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -358,7 +360,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'ephemeral-string');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -388,11 +390,13 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
       const entry = entries.find((e) => e.alias === 'nested-values');
       expect(entry).toBeDefined();
       expect(entry?.config.modelDefaults).toHaveLength(1);
-      expect(entry?.config.modelDefaults?.[0]?.ephemeralSettings).toEqual({
-        'reasoning.enabled': true,
-        nested: { deeply: { value: 42 } },
-        anArray: [1, 2, 3],
-      });
+      expect(entry?.config.modelDefaults?.[0]?.ephemeralSettings).toStrictEqual(
+        {
+          'reasoning.enabled': true,
+          nested: { deeply: { value: 42 } },
+          anArray: [1, 2, 3],
+        },
+      );
     });
   });
 
@@ -411,7 +415,7 @@ describe('providerAliases modelDefaults parsing (Phase 01)', () => {
 
       const entry = entries.find((e) => e.alias === 'empty-pattern');
       expect(entry).toBeDefined();
-      expect(entry?.config.modelDefaults).toEqual([]);
+      expect(entry?.config.modelDefaults).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining(

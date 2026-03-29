@@ -117,8 +117,8 @@ describe('SimpleExtensionLoader', () => {
           ? [[activeExtension]]
           : [];
 
-        expect(actualStartCalls).toEqual(expectedStartCallArguments);
-        expect(actualStopCalls).toEqual(expectedStopCallArguments);
+        expect(actualStartCalls).toStrictEqual(expectedStartCallArguments);
+        expect(actualStopCalls).toStrictEqual(expectedStopCallArguments);
       },
     );
   });

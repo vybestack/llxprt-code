@@ -162,7 +162,7 @@ describe('handleLink', () => {
     await handleLink({ path: '/custom/path' });
 
     const callArgs = mockInstallOrUpdateExtension.mock.calls[0];
-    expect(callArgs[0]).toEqual({ source: '/custom/path', type: 'link' });
+    expect(callArgs[0]).toStrictEqual({ source: '/custom/path', type: 'link' });
     expect(callArgs[1]).toBe(mockRequestConsentNonInteractive);
     expect(callArgs[2]).toBe(process.cwd());
   });

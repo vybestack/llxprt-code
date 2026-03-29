@@ -78,8 +78,7 @@ export async function handleUpdate(args: UpdateArgs) {
           if (action.type === 'SET_STATE') {
             updateState = action.payload.state;
           }
-        },
-        undefined, // enableExtensionReloading - undefined means use default behavior
+        }, // enableExtensionReloading - undefined means use default behavior
       ))!;
       if (
         updatedExtensionInfo.originalVersion !==

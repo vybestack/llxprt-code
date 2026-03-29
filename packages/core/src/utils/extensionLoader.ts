@@ -115,7 +115,6 @@ export abstract class ExtensionLoader {
     if (this.config?.getEnableExtensionReloading()) {
       return this.startExtension(extension);
     }
-    return;
   }
 
   /**
@@ -210,7 +209,6 @@ export abstract class ExtensionLoader {
     if (this.config?.getEnableExtensionReloading()) {
       return this.stopExtension(extension);
     }
-    return;
   }
 
   /**

@@ -59,7 +59,7 @@ describe('syntheticUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should parse full response with all fields', async () => {
@@ -89,7 +89,7 @@ describe('syntheticUsageInfo', () => {
       } as Response);
 
       const result = await fetchSyntheticUsage('test-key-123');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle HTTP errors gracefully', async () => {
@@ -137,9 +137,11 @@ describe('syntheticUsageInfo', () => {
 
       const result = await fetchSyntheticUsage('test-key-123');
       expect(result).toBeDefined();
-      expect((result as Record<string, unknown>)['someNewField']).toEqual({
-        data: 'extra',
-      });
+      expect((result as Record<string, unknown>)['someNewField']).toStrictEqual(
+        {
+          data: 'extra',
+        },
+      );
     });
 
     it('should include AbortSignal timeout', async () => {

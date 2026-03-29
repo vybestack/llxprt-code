@@ -51,7 +51,7 @@ describe('initCommand', () => {
     const result = await initCommand.action!(mockContext, '');
 
     // Assert: Check for the correct informational message
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -98,7 +98,7 @@ describe('initCommand', () => {
     const result = await initCommand.action!(noConfigContext, '');
 
     // Assert: Check for the correct error message
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'Configuration not available.',

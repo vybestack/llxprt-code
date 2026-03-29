@@ -28,7 +28,7 @@ describe('mouseCommand', () => {
     const result = await runMouseCommand('on');
 
     expect(isMouseEventsActive()).toBe(true);
-    expect(result).toEqual(
+    expect(result).toStrictEqual(
       expect.objectContaining({
         type: 'message',
         messageType: 'info',
@@ -42,7 +42,7 @@ describe('mouseCommand', () => {
     const result = await runMouseCommand('off');
 
     expect(isMouseEventsActive()).toBe(false);
-    expect(result).toEqual(
+    expect(result).toStrictEqual(
       expect.objectContaining({
         type: 'message',
         messageType: 'info',
@@ -54,7 +54,7 @@ describe('mouseCommand', () => {
     const result = await runMouseCommand('');
 
     expect(isMouseEventsActive()).toBe(true);
-    expect(result).toEqual(
+    expect(result).toStrictEqual(
       expect.objectContaining({
         type: 'message',
         messageType: 'info',
@@ -66,7 +66,7 @@ describe('mouseCommand', () => {
     const result = await runMouseCommand('maybe');
 
     expect(isMouseEventsActive()).toBe(false);
-    expect(result).toEqual(
+    expect(result).toStrictEqual(
       expect.objectContaining({
         type: 'message',
         messageType: 'error',

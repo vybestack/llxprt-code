@@ -185,7 +185,7 @@ describe('SubagentInvocation', () => {
 
       expect(mockExecutorInstance.run).toHaveBeenCalledWith(params, signal);
 
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           text: expect.stringContaining(
             "Subagent 'MockAgent' finished.\nTermination Reason: GOAL\nResult:\nAnalysis complete.",
@@ -280,7 +280,7 @@ describe('SubagentInvocation', () => {
 
       const result = await invocation.execute(signal, updateOutput);
 
-      expect(result.error).toEqual({
+      expect(result.error).toStrictEqual({
         message: error.message,
         type: ToolErrorType.EXECUTION_FAILED,
       });
@@ -289,7 +289,7 @@ describe('SubagentInvocation', () => {
       );
       expect(typeof result.llmContent).not.toBe('string');
       expect(Array.isArray(result.llmContent)).toBe(true);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           text: `Subagent 'MockAgent' failed. Error: ${error.message}`,
         },
@@ -303,14 +303,14 @@ describe('SubagentInvocation', () => {
       const result = await invocation.execute(signal, updateOutput);
 
       expect(mockExecutorInstance.run).not.toHaveBeenCalled();
-      expect(result.error).toEqual({
+      expect(result.error).toStrictEqual({
         message: creationError.message,
         type: ToolErrorType.EXECUTION_FAILED,
       });
       expect(result.returnDisplay).toContain(`Error: ${creationError.message}`);
       expect(typeof result.llmContent).not.toBe('string');
       expect(Array.isArray(result.llmContent)).toBe(true);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           text: `Subagent 'MockAgent' failed. Error: ${creationError.message}`,
         },

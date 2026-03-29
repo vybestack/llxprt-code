@@ -52,7 +52,7 @@ export function resolveApprovalMode(input: ApprovalModeInput): ApprovalMode {
         );
     }
   } else {
-    approvalMode = cliYolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
+    approvalMode = cliYolo ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
   }
 
   if (disableYoloMode || secureModeEnabled) {

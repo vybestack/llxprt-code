@@ -675,7 +675,7 @@ describe('Integration: failure envelope from buildFailureEnvelope (DELTA-HFAIL-0
     expect(Array.isArray(envelope.errors)).toBe(true);
     expect(envelope.errors.length).toBeGreaterThan(0);
     expect(envelope.errors[0].message).toContain('hook script crashed');
-    expect(envelope.allOutputs).toEqual([]);
+    expect(envelope.allOutputs).toStrictEqual([]);
 
     system.dispose();
   });

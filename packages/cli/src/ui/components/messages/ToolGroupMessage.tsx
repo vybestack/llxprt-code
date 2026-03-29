@@ -37,7 +37,7 @@ const extractCountFromText = (text?: string): number | undefined => {
   if (!text) {
     return undefined;
   }
-  const match = text.match(/(\d+)\s+(tasks?|items?)/i);
+  const match = RegExp(/(\d+)\s+(tasks?|items?)/i).exec(text);
   if (match == null) {
     return undefined;
   }

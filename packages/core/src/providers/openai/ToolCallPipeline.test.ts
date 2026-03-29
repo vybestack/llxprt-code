@@ -34,7 +34,7 @@ describe('ToolCallPipeline (Simplified)', () => {
 
       expect(result.normalized).toHaveLength(1);
       expect(result.normalized[0].name).toBe('test_tool');
-      expect(result.normalized[0].args).toEqual({ param: 'value' });
+      expect(result.normalized[0].args).toStrictEqual({ param: 'value' });
       expect(result.failed).toHaveLength(0);
     });
 
@@ -61,7 +61,9 @@ describe('ToolCallPipeline (Simplified)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual({ value: 'invalid json' });
+      expect(result.normalized[0].args).toStrictEqual({
+        value: 'invalid json',
+      });
       expect(result.failed).toHaveLength(0);
     });
 
@@ -72,7 +74,7 @@ describe('ToolCallPipeline (Simplified)', () => {
 
       expect(result.normalized).toHaveLength(1);
       expect(result.normalized[0].name).toBe('test_tool');
-      expect(result.normalized[0].args).toEqual({});
+      expect(result.normalized[0].args).toStrictEqual({});
       expect(result.failed).toHaveLength(0);
     });
 
@@ -122,7 +124,7 @@ describe('ToolCallPipeline (Simplified)', () => {
 
       expect(result.normalized).toHaveLength(1);
       expect(result.normalized[0].name).toBe('_tool'); // name overwrites
-      expect(result.normalized[0].args).toEqual({ param: 'value' }); // args accumulate
+      expect(result.normalized[0].args).toStrictEqual({ param: 'value' }); // args accumulate
     });
   });
 
@@ -197,7 +199,7 @@ describe('ToolCallPipeline (Simplified)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual({});
+      expect(result.normalized[0].args).toStrictEqual({});
     });
 
     it('should handle undefined arguments', async () => {
@@ -207,7 +209,7 @@ describe('ToolCallPipeline (Simplified)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual({});
+      expect(result.normalized[0].args).toStrictEqual({});
     });
 
     it('should handle empty string arguments', async () => {
@@ -217,7 +219,7 @@ describe('ToolCallPipeline (Simplified)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual({});
+      expect(result.normalized[0].args).toStrictEqual({});
     });
   });
 });

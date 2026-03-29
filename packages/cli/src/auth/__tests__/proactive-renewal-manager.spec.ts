@@ -563,7 +563,7 @@ describe('ProactiveRenewalManager', () => {
     });
 
     it('should return "default" for undefined', () => {
-      expect(manager.normalizeBucket(undefined)).toBe('default');
+      expect(manager.normalizeBucket()).toBe('default');
     });
 
     it('should return "default" for empty string', () => {

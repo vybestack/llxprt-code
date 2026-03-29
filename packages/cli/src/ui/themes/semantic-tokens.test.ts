@@ -253,7 +253,7 @@ describe('semantic tokens system', () => {
       const semanticColors = themeManager.getSemanticColors();
 
       // Verify structure matches interface
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: expect.any(String),
           secondary: expect.any(String),

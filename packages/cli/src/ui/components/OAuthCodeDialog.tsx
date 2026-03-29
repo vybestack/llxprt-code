@@ -90,7 +90,6 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
           // Replace the entire code with the pasted content (don't append)
           setCode(cleanInput);
         }
-        return;
       }
 
       // Explicitly ignore ALL other input including:

@@ -204,7 +204,7 @@ async function countFileEvents(filePath: string): Promise<number> {
  */
 function extractSessionId(filePath: string): string {
   const basename = path.basename(filePath);
-  const match = basename.match(/^session-(.+)\.jsonl$/);
+  const match = RegExp(/^session-(.+)\.jsonl$/).exec(basename);
   if (match == null) throw new Error(`Invalid session file path: ${filePath}`);
   return match[1];
 }

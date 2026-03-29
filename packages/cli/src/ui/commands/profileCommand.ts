@@ -280,10 +280,9 @@ const saveCommand: SlashCommand = {
       let bucketArgs: string[] = [];
 
       // Check if profile name is quoted
-      const profileNameMatch = parts
-        .slice(1)
-        .join(' ')
-        .match(/^"([^"]+)"(?:\s+(.+))?$/);
+      const profileNameMatch = RegExp(/^"([^"]+)"(?:\s+(.+))?$/).exec(
+        parts.slice(1).join(' '),
+      );
       if (profileNameMatch != null) {
         profileName = profileNameMatch[1];
         if (profileNameMatch[2]) {
@@ -518,7 +517,7 @@ const loadCommand: SlashCommand = {
     }
 
     // Extract profile name - handle quoted names
-    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
+    const profileNameMatch = RegExp(/^"([^"]+)"$/).exec(trimmedArgs);
     const profileName =
       profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
@@ -710,7 +709,7 @@ const deleteCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: profileDeleteSchema,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     // Parse profile name from args
@@ -726,7 +725,7 @@ const deleteCommand: SlashCommand = {
     }
 
     // Extract profile name - handle quoted names
-    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
+    const profileNameMatch = RegExp(/^"([^"]+)"$/).exec(trimmedArgs);
     const profileName =
       profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
@@ -806,7 +805,7 @@ const setDefaultCommand: SlashCommand = {
     }
 
     // Extract profile name - handle quoted names
-    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
+    const profileNameMatch = RegExp(/^"([^"]+)"$/).exec(trimmedArgs);
     const profileName =
       profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
@@ -948,7 +947,7 @@ const showCommand: SlashCommand = {
     }
 
     // Extract profile name - handle quoted names
-    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
+    const profileNameMatch = RegExp(/^"([^"]+)"$/).exec(trimmedArgs);
     const profileName =
       profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
@@ -1015,7 +1014,7 @@ const editCommand: SlashCommand = {
     }
 
     // Extract profile name - handle quoted names
-    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
+    const profileNameMatch = RegExp(/^"([^"]+)"$/).exec(trimmedArgs);
     const profileName =
       profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 

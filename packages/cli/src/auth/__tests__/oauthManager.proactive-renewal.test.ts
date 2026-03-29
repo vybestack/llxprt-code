@@ -321,7 +321,7 @@ describe('Proactive renewal @plan:PLAN-20260223-ISSUE1598.P13', () => {
 
     // Mock getToken to return tokens for different buckets
     vi.mocked(tokenStore.getToken).mockImplementation(
-      async (providerName, bucket) => {
+      async (_providerName, bucket) => {
         if (bucket === 'bucket1') return tokenBucket1;
         if (bucket === 'bucket2') return tokenBucket2;
         return null;

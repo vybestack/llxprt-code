@@ -62,16 +62,16 @@ describe('tools governance integration', () => {
     const settings = new SettingsService();
     const profileManager = new ProfileManager();
     const loadedProfile = await profileManager.loadProfile(PROFILE_NAME);
-    expect(loadedProfile.ephemeralSettings['tools.disabled']).toEqual([
+    expect(loadedProfile.ephemeralSettings['tools.disabled']).toStrictEqual([
       'code-editor',
     ]);
     const setSpy = vi.spyOn(settings, 'set');
     await profileManager.load(PROFILE_NAME, settings);
     expect(setSpy).toHaveBeenCalledWith('tools.disabled', ['code-editor']);
     expect(setSpy).toHaveBeenCalledWith('tools.allowed', []);
-    expect(settings.get('tools.disabled')).toEqual(['code-editor']);
+    expect(settings.get('tools.disabled')).toStrictEqual(['code-editor']);
     const exported = await settings.exportForProfile();
-    expect(exported.tools?.disabled).toEqual(['code-editor']);
+    expect(exported.tools?.disabled).toStrictEqual(['code-editor']);
 
     const mockToolRegistry = {
       getAllTools: () => [
@@ -116,6 +116,6 @@ describe('tools governance integration', () => {
     expect(listMessage).toContain('Code Editor [disabled]');
 
     await toolsCommand.action(context, 'enable code-editor');
-    expect(settings.get('tools.disabled')).toEqual([]);
+    expect(settings.get('tools.disabled')).toStrictEqual([]);
   });
 });

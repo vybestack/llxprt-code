@@ -467,7 +467,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   private async runMultiBucketAuth(
     MultiBucketAuthenticator: MultiBucketAuthenticatorLike,
     providerName: string,
-    buckets: string[],
+    _buckets: string[],
     unauthenticatedBuckets: string[],
     getEphemeralSetting: <T>(key: string) => T | undefined,
   ): Promise<MultiBucketAuthResult> {
@@ -607,7 +607,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Uses TUI dialog if available, falls back to TTY stdin, then delay.
    */
   private buildOnPromptCallback(
-    providerName: string,
+    _providerName: string,
     buckets: string[],
     getEphemeralSetting: <T>(key: string) => T | undefined,
   ): (provider: string, bucket: string) => Promise<boolean> {

@@ -456,7 +456,7 @@ describe('SecureStore — CRUD Operations', () => {
 
     // List with keyring available should return deduplicated sorted list
     const keys = await keyringStore.list();
-    expect(keys).toEqual(['a', 'b', 'c']);
+    expect(keys).toStrictEqual(['a', 'b', 'c']);
   });
 
   /**

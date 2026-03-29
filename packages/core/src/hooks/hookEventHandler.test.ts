@@ -147,7 +147,7 @@ describe('HookEventHandler', () => {
       const result = await eventHandler.fireBeforeModelEvent({
         messages: [{ role: 'user', content: 'Hello' }],
       });
-      expect(result).toEqual(EMPTY_SUCCESS_RESULT);
+      expect(result).toStrictEqual(EMPTY_SUCCESS_RESULT);
     });
 
     it('should call planner with BeforeModel event name', async () => {
@@ -179,7 +179,7 @@ describe('HookEventHandler', () => {
         { messages: [] },
         { text: 'Response text' },
       );
-      expect(result).toEqual(EMPTY_SUCCESS_RESULT);
+      expect(result).toStrictEqual(EMPTY_SUCCESS_RESULT);
     });
 
     it('should call planner with AfterModel event name', async () => {
@@ -213,7 +213,7 @@ describe('HookEventHandler', () => {
       const result = await eventHandler.fireBeforeToolSelectionEvent({
         messages: [],
       });
-      expect(result).toEqual(EMPTY_SUCCESS_RESULT);
+      expect(result).toStrictEqual(EMPTY_SUCCESS_RESULT);
     });
 
     it('should call planner with BeforeToolSelection event name', async () => {

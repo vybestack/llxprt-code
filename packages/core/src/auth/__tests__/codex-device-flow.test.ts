@@ -184,8 +184,8 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     const authUrl2 = deviceFlow.buildAuthorizationUrl(redirectUri, state + '2');
 
     // Extract challenges from URLs
-    const challenge1Match = authUrl1.match(/code_challenge=([^&]+)/);
-    const challenge2Match = authUrl2.match(/code_challenge=([^&]+)/);
+    const challenge1Match = RegExp(/code_challenge=([^&]+)/).exec(authUrl1);
+    const challenge2Match = RegExp(/code_challenge=([^&]+)/).exec(authUrl2);
 
     expect(challenge1Match).not.toBeNull();
     expect(challenge2Match).not.toBeNull();
@@ -212,7 +212,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
     const authUrl = deviceFlow.buildAuthorizationUrl(redirectUri, state);
 
-    const scopeMatch = authUrl.match(/scope=([^&]+)/);
+    const scopeMatch = RegExp(/scope=([^&]+)/).exec(authUrl);
     expect(scopeMatch).not.toBeNull();
 
     const scopes = decodeURIComponent(scopeMatch![1]).split(' ');
@@ -393,7 +393,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     };
 
     testServer.removeAllListeners('request');
-    testServer.on('request', (req, res) => {
+    testServer.on('request', (_req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(mockTokenResponseNoIdToken));
     });

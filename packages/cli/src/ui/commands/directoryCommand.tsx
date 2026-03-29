@@ -166,7 +166,6 @@ export const directoryCommand: SlashCommand = {
             Date.now(),
           );
         }
-        return;
       },
     },
     {

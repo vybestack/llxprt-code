@@ -401,7 +401,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
           key.sequence.length === 1 &&
           !key.ctrl &&
           !key.meta &&
-          key.sequence.match(/[\x20-\x7E]/) != null
+          RegExp(/[\x20-\x7E]/).exec(key.sequence) != null
         ) {
           setState((prev) => ({
             ...prev,

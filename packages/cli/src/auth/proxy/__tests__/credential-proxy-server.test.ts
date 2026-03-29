@@ -209,7 +209,7 @@ describe('CredentialProxyServer', () => {
     server = createServer();
     const socketPath = await server.start();
 
-    expect(socketPath).toEqual(expect.any(String));
+    expect(socketPath).toStrictEqual(expect.any(String));
     expect(socketPath.endsWith('.sock')).toBe(true);
     const stat = fs.statSync(socketPath);
     expect(stat.isSocket()).toBe(true);

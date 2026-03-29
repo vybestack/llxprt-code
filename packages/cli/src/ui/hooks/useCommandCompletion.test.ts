@@ -18,11 +18,7 @@ import {
   type UseAtCompletionProps,
   useAtCompletion,
 } from './useAtCompletion.js';
-import {
-  type UseSlashCompletionProps as _UseSlashCompletionProps,
-  useSlashCompletion,
-} from './useSlashCompletion.js';
-import type { useCompletion as _useCompletion } from './useCompletion.js';
+import { useSlashCompletion } from './useSlashCompletion.js';
 
 vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),
@@ -267,7 +263,7 @@ describe('useCommandCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);

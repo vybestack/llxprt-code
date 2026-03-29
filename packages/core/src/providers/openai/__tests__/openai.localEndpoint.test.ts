@@ -24,10 +24,10 @@ import { isLocalEndpoint } from '../../utils/localEndpoint.js';
 
 vi.mock('openai', () => {
   class FakeOpenAI {
-    static instances: Set<symbol> = new Set();
-    static created: symbol[] = [];
-    static requests: Array<{ request: Record<string, unknown> }> = [];
-    static lastOptions: Record<string, unknown> | null = null;
+    static readonly instances: Set<symbol> = new Set();
+    static readonly created: symbol[] = [];
+    static readonly requests: Array<{ request: Record<string, unknown> }> = [];
+    static readonly lastOptions: Record<string, unknown> | null = null;
 
     static reset(): void {
       FakeOpenAI.instances.clear();

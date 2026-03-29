@@ -1182,7 +1182,6 @@ describe('useSlashCompletion', () => {
             testRootDir,
             [],
             mockCommandContext,
-            undefined,
           ),
         );
 

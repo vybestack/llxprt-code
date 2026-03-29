@@ -226,7 +226,7 @@ export class StreamProcessor {
           contents: requestContents as unknown as Content[],
         });
         // If hook modified contents, update requestContents
-        if (modifiedRequest && modifiedRequest.contents) {
+        if (modifiedRequest?.contents) {
           requestContents = modifiedRequest.contents as unknown as IContent[];
         }
       }

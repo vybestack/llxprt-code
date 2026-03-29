@@ -134,9 +134,9 @@ describe('SessionPersistenceService', () => {
       expect(parsed.projectHash.length).toBe(64); // SHA-256 hex length
       expect(parsed.createdAt).toBeDefined();
       expect(parsed.updatedAt).toBeDefined();
-      expect(parsed.history).toEqual(history);
-      expect(parsed.uiHistory).toEqual(uiHistory);
-      expect(parsed.metadata).toEqual(metadata);
+      expect(parsed.history).toStrictEqual(history);
+      expect(parsed.uiHistory).toStrictEqual(uiHistory);
+      expect(parsed.metadata).toStrictEqual(metadata);
     });
 
     it('should preserve createdAt across multiple saves', async () => {
@@ -266,7 +266,7 @@ describe('SessionPersistenceService', () => {
 
       const result = await service.loadMostRecent();
 
-      expect(result).toEqual(mockSession);
+      expect(result).toStrictEqual(mockSession);
       expect(fs.promises.readFile).toHaveBeenCalledWith(
         expect.stringContaining('2026-01-03'),
         'utf-8',
@@ -362,7 +362,7 @@ describe('SessionPersistenceService', () => {
 
       const result = await service.loadMostRecent();
 
-      expect(result?.uiHistory).toEqual(uiHistory);
+      expect(result?.uiHistory).toStrictEqual(uiHistory);
     });
 
     it('should handle readdir failure gracefully', async () => {
@@ -488,9 +488,7 @@ describe('SessionPersistenceService', () => {
       vi.mocked(fs.promises.writeFile).mockResolvedValue();
       vi.mocked(fs.promises.rename).mockResolvedValue();
 
-      await expect(
-        service.save([], undefined, undefined),
-      ).resolves.not.toThrow();
+      await expect(service.save([], undefined)).resolves.not.toThrow();
     });
 
     it('should handle large history arrays', async () => {
@@ -508,7 +506,6 @@ describe('SessionPersistenceService', () => {
           largeHistory as unknown as Array<
             import('../services/history/IContent.js').IContent
           >,
-          undefined,
           undefined,
         ),
       ).resolves.not.toThrow();

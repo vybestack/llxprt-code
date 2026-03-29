@@ -57,7 +57,7 @@ describe('fileDiffUtils', () => {
 
   describe('computeAddedAndRemovedLines', () => {
     it('returns 0 added and 0 removed if stats is undefined', () => {
-      expect(computeAddedAndRemovedLines(undefined)).toEqual({
+      expect(computeAddedAndRemovedLines(undefined)).toStrictEqual({
         addedLines: 0,
         removedLines: 0,
       });
@@ -76,7 +76,7 @@ describe('fileDiffUtils', () => {
       };
 
       const result = computeAddedAndRemovedLines(stats);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         addedLines: 12, // 10 + 2
         removedLines: 6, // 5 + 1
       });
@@ -95,7 +95,7 @@ describe('fileDiffUtils', () => {
       };
 
       const result = computeAddedAndRemovedLines(stats);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         addedLines: 0,
         removedLines: 0,
       });

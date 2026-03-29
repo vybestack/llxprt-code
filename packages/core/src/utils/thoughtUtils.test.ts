@@ -75,6 +75,6 @@ describe('parseThought', () => {
       expected: { subject: '', description: 'A thought with  in the middle.' },
     },
   ])('should correctly parse $name', ({ rawText, expected }) => {
-    expect(parseThought(rawText)).toEqual(expected);
+    expect(parseThought(rawText)).toStrictEqual(expected);
   });
 });

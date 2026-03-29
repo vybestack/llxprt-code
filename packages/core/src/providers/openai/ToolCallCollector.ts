@@ -165,14 +165,11 @@ export class ToolCallCollector {
   ): boolean {
     // Only check for duplicate names, not args
     // Args fragments should be accumulated, not treated as duplicates
-    if (
+    return !!(
       existing.name &&
       newFragment.name &&
       existing.name === newFragment.name
-    ) {
-      return true;
-    }
-    return false;
+    );
   }
 
   /**

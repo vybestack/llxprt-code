@@ -278,7 +278,7 @@ describe('secure-browser-launcher', () => {
 
     it('returns true when options is undefined on a desktop environment', () => {
       setPlatform('darwin');
-      expect(shouldLaunchBrowser(undefined)).toBe(true);
+      expect(shouldLaunchBrowser()).toBe(true);
     });
 
     it('returns false when forceManual is true even if environment allows browser', () => {

@@ -716,11 +716,11 @@ describe('useVim hook', () => {
         result.current.handleInput({ sequence: 'a' });
       });
       expect(result.current.mode).toBe('INSERT');
-      expect(testBuffer.cursor).toEqual([0, 11]);
+      expect(testBuffer.cursor).toStrictEqual([0, 11]);
 
       exitInsertMode(result);
       expect(result.current.mode).toBe('NORMAL');
-      expect(testBuffer.cursor).toEqual([0, 10]);
+      expect(testBuffer.cursor).toStrictEqual([0, 10]);
     });
   });
 
@@ -806,7 +806,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "hello " (word + space), leaving "world test"
-        expect(result.lines).toEqual(['world test']);
+        expect(result.lines).toStrictEqual(['world test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -820,7 +820,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "llo " (rest of word + space), leaving "he world test"
-        expect(result.lines).toEqual(['heworld test']);
+        expect(result.lines).toStrictEqual(['heworld test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(2);
       });
@@ -834,7 +834,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "world" (no trailing space at end), leaving "hello "
-        expect(result.lines).toEqual(['hello ']);
+        expect(result.lines).toStrictEqual(['hello ']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(6);
       });
@@ -1299,7 +1299,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "ello" (from cursor to end of word), leaving "h world test"
-        expect(result.lines).toEqual(['h world test']);
+        expect(result.lines).toStrictEqual(['h world test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(1);
       });
@@ -1317,7 +1317,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "ello world" (to end of second word), leaving "h test more"
-        expect(result.lines).toEqual(['h test more']);
+        expect(result.lines).toStrictEqual(['h test more']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(1);
       });
@@ -1333,7 +1333,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "world" (previous word only), leaving "hello  test"
-        expect(result.lines).toEqual(['hello  test']);
+        expect(result.lines).toStrictEqual(['hello  test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(6);
       });
@@ -1351,7 +1351,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "world test " (two words backward), leaving "hello more"
-        expect(result.lines).toEqual(['hello more']);
+        expect(result.lines).toStrictEqual(['hello more']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(6);
       });
@@ -1367,7 +1367,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "hello " (word + space), leaving "world test"
-        expect(result.lines).toEqual(['world test']);
+        expect(result.lines).toStrictEqual(['world test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -1385,7 +1385,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "hello world " (two words), leaving "test more"
-        expect(result.lines).toEqual(['test more']);
+        expect(result.lines).toStrictEqual(['test more']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -1401,7 +1401,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "ello" (from cursor to end of word), leaving "h world test"
-        expect(result.lines).toEqual(['h world test']);
+        expect(result.lines).toStrictEqual(['h world test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(1);
       });
@@ -1415,7 +1415,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "ello world" (to end of second word), leaving "h test"
-        expect(result.lines).toEqual(['h test']);
+        expect(result.lines).toStrictEqual(['h test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(1);
       });
@@ -1431,7 +1431,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "world" (previous word only), leaving "hello  test"
-        expect(result.lines).toEqual(['hello  test']);
+        expect(result.lines).toStrictEqual(['hello  test']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(6);
       });
@@ -1446,7 +1446,7 @@ describe('useVim hook', () => {
           payload: { count: 1 },
         });
 
-        expect(result.lines).toEqual(['']);
+        expect(result.lines).toStrictEqual(['']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -1465,7 +1465,7 @@ describe('useVim hook', () => {
           payload: { count: 1 },
         });
 
-        expect(result.lines).toEqual(['line1', 'line3']);
+        expect(result.lines).toStrictEqual(['line1', 'line3']);
         expect(result.cursorRow).toBe(1);
         expect(result.cursorCol).toBe(0);
       });
@@ -1483,7 +1483,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete lines 1 and 2
-        expect(result.lines).toEqual(['line1', 'line4']);
+        expect(result.lines).toStrictEqual(['line1', 'line4']);
         expect(result.cursorRow).toBe(1);
         expect(result.cursorCol).toBe(0);
       });
@@ -1497,7 +1497,7 @@ describe('useVim hook', () => {
         });
 
         // Should leave an empty line when deleting the only line
-        expect(result.lines).toEqual(['']);
+        expect(result.lines).toStrictEqual(['']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -1512,7 +1512,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "world test", leaving "hello "
-        expect(result.lines).toEqual(['hello ']);
+        expect(result.lines).toStrictEqual(['hello ']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(6);
       });
@@ -1525,7 +1525,7 @@ describe('useVim hook', () => {
         });
 
         // Should not change anything when at end of line
-        expect(result.lines).toEqual(['hello world']);
+        expect(result.lines).toStrictEqual(['hello world']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(11);
       });
@@ -1540,7 +1540,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete "world test", leaving "hello "
-        expect(result.lines).toEqual(['hello ']);
+        expect(result.lines).toStrictEqual(['hello ']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(6);
       });
@@ -1553,7 +1553,7 @@ describe('useVim hook', () => {
         });
 
         // Should delete entire line content
-        expect(result.lines).toEqual(['']);
+        expect(result.lines).toStrictEqual(['']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });

@@ -142,7 +142,7 @@ describe('AgentRuntimeState - Stub Verification', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).toBeInstanceOf(RuntimeStateError);
     expect(error.code).toBe(RuntimeStateErrorCode.PROVIDER_MISSING);
-    expect(error.details).toEqual({ provider: '' });
+    expect(error.details).toStrictEqual({ provider: '' });
     expect(error.message).toContain('provider.missing');
   });
 });

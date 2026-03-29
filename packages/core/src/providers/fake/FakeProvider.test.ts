@@ -152,7 +152,7 @@ describe('FakeProvider', () => {
     expect(provider.name).toBe('fake');
     expect(provider.getDefaultModel()).toBe('fake-model');
     expect(provider.getCurrentModel()).toBe('fake-model');
-    expect(provider.getServerTools()).toEqual([]);
+    expect(provider.getServerTools()).toStrictEqual([]);
 
     const models = await provider.getModels();
     expect(models).toHaveLength(1);

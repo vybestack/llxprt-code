@@ -49,7 +49,10 @@ describe('getIdeProcessInfo', () => {
 
       const result = await getIdeProcessInfo();
 
-      expect(result).toEqual({ pid: 700, command: '/usr/lib/vscode/code' });
+      expect(result).toStrictEqual({
+        pid: 700,
+        command: '/usr/lib/vscode/code',
+      });
     });
 
     it('should return parent process info if grandparent lookup fails', async () => {
@@ -60,7 +63,7 @@ describe('getIdeProcessInfo', () => {
         .mockResolvedValueOnce({ stdout: '700 /bin/bash' }); // ps -o ppid=,command= -p 800 (final call)
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 800, command: '/bin/bash' });
+      expect(result).toStrictEqual({ pid: 800, command: '/bin/bash' });
     });
   });
 
@@ -99,7 +102,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec.mockResolvedValueOnce({ stdout: JSON.stringify(processes) });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 900, command: 'powershell.exe' });
+      expect(result).toStrictEqual({ pid: 900, command: 'powershell.exe' });
       expect(mockedExec).toHaveBeenCalledWith(
         expect.stringContaining('Get-CimInstance Win32_Process'),
         expect.anything(),
@@ -120,7 +123,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec.mockResolvedValueOnce({ stdout: JSON.stringify(processes) });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: 'node.exe' });
+      expect(result).toStrictEqual({ pid: 1000, command: 'node.exe' });
     });
 
     it('should handle PowerShell failure gracefully', async () => {
@@ -130,7 +133,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec.mockResolvedValueOnce({ stdout: '' }); // ps command fails on windows
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: '' });
+      expect(result).toStrictEqual({ pid: 1000, command: '' });
     });
 
     it('should handle malformed JSON output gracefully', async () => {
@@ -140,7 +143,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec.mockResolvedValueOnce({ stdout: '' });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: '' });
+      expect(result).toStrictEqual({ pid: 1000, command: '' });
     });
 
     it('should handle single process output from ConvertTo-Json', async () => {
@@ -154,7 +157,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec.mockResolvedValueOnce({ stdout: JSON.stringify(process) });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: 'node.exe' });
+      expect(result).toStrictEqual({ pid: 1000, command: 'node.exe' });
     });
 
     it('should handle missing process in map during traversal', async () => {
@@ -178,7 +181,7 @@ describe('getIdeProcessInfo', () => {
 
       const result = await getIdeProcessInfo();
       // Ancestors: [1000, 900]. Length < 3, returns last (900)
-      expect(result).toEqual({ pid: 900, command: 'parent.exe' });
+      expect(result).toStrictEqual({ pid: 900, command: 'parent.exe' });
     });
   });
 });

@@ -252,7 +252,7 @@ describe('OneShotStrategy', () => {
       const strategy = new OneShotStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toEqual([]);
+      expect(result.newHistory).toStrictEqual([]);
       expect(result.metadata.llmCallMade).toBe(false);
       expect(result.metadata.strategyUsed).toBe('one-shot');
     });
@@ -302,11 +302,11 @@ describe('OneShotStrategy', () => {
 
       // Result starts with summary + ack, then preserved tail
       expect(result.newHistory[0].speaker).toBe('human');
-      expect(result.newHistory[0].blocks[0]).toEqual(
+      expect(result.newHistory[0].blocks[0]).toStrictEqual(
         expect.objectContaining({ type: 'text', text: KNOWN_SUMMARY }),
       );
       expect(result.newHistory[1].speaker).toBe('ai');
-      expect(result.newHistory[1].blocks[0]).toEqual(
+      expect(result.newHistory[1].blocks[0]).toStrictEqual(
         expect.objectContaining({
           type: 'text',
           text: 'Understood. Continuing with the current task.',
@@ -317,7 +317,7 @@ describe('OneShotStrategy', () => {
       const preservedCount = result.metadata.bottomPreserved!;
       const expectedTail = history.slice(history.length - preservedCount);
       const actualTail = result.newHistory.slice(2);
-      expect(actualTail).toEqual(expectedTail);
+      expect(actualTail).toStrictEqual(expectedTail);
     });
 
     it('does not preserve any top messages (unlike middle-out)', async () => {

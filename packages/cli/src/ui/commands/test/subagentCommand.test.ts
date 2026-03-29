@@ -688,7 +688,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     const callArgs = mockGeminiClient.generateDirectMessage.mock.calls[0][0];
     expect(callArgs.message).toMatch(/expert Python debugger/);
     expect(callArgs.message).toMatch(/system prompt/i);
-    expect(callArgs.config).toEqual({
+    expect(callArgs.config).toStrictEqual({
       toolConfig: {
         functionCallingConfig: {
           mode: FunctionCallingConfigMode.NONE,

@@ -81,7 +81,7 @@ describe('codexUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle HTTP errors gracefully', async () => {
@@ -119,7 +119,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage('token123', 'account123');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle response with null credits', async () => {
@@ -145,7 +145,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage('token123', 'account123');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle response with unlimited credits', async () => {
@@ -165,7 +165,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage('token123', 'account123');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle response with only primary window', async () => {
@@ -191,7 +191,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage('token123', 'account123');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should accept unknown plan types', async () => {
@@ -221,7 +221,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage('token123', 'account123');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
       expect(result?.plan_type).toBe('premium_plus');
     });
 
@@ -253,7 +253,7 @@ describe('codexUsageInfo', () => {
 
       const result = await fetchCodexUsage('token123', 'account123');
 
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
       expect(result?.rate_limit?.primary_window?.used_percent).toBe(123);
     });
 
@@ -306,7 +306,7 @@ describe('codexUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should include fetch timeout signal in request options', async () => {
@@ -395,7 +395,7 @@ describe('codexUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should derive backend-api root when base URL includes /backend-api/codex segment', async () => {
@@ -442,7 +442,7 @@ describe('codexUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
   });
 

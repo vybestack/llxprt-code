@@ -81,7 +81,9 @@ export function isLocalEndpoint(url: string | undefined): boolean {
  * The entire 127.x.x.x range is reserved for loopback (RFC 1122).
  */
 function isIPv4LoopbackRange(ip: string): boolean {
-  const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  const ipv4Match = RegExp(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/).exec(
+    ip,
+  );
   if (ipv4Match == null) {
     return false;
   }
@@ -106,7 +108,9 @@ function isIPv4LoopbackRange(ip: string): boolean {
  */
 function isPrivateIPv4(ip: string): boolean {
   // Match IPv4 pattern
-  const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  const ipv4Match = RegExp(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/).exec(
+    ip,
+  );
   if (ipv4Match == null) {
     return false;
   }

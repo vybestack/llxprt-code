@@ -394,7 +394,7 @@ describe('messageConversion', () => {
         expect(result).toHaveLength(1);
         const message = result[0] as ToolModelMessage;
         const content = message.content as unknown[];
-        expect(content[0].output).toEqual({
+        expect(content[0].output).toStrictEqual({
           type: 'text',
           value: '{"error":"City not found"}',
         });
@@ -433,7 +433,7 @@ describe('messageConversion', () => {
       it('should handle empty content array', () => {
         const contents: IContent[] = [];
         const result = convertToVercelMessages(contents);
-        expect(result).toEqual([]);
+        expect(result).toStrictEqual([]);
       });
 
       it('should handle content with empty blocks array', () => {
@@ -447,7 +447,7 @@ describe('messageConversion', () => {
         const result = convertToVercelMessages(contents);
 
         // Should not create a message for empty blocks
-        expect(result).toEqual([]);
+        expect(result).toStrictEqual([]);
       });
 
       it('should handle multiple consecutive messages of same type', () => {
@@ -503,7 +503,7 @@ describe('messageConversion', () => {
         expect(result).toHaveLength(1);
         const message = result[0] as AssistantModelMessage;
         const content = message.content as unknown[];
-        expect(content[0].input).toEqual({
+        expect(content[0].input).toStrictEqual({
           nested: {
             array: [1, 2, 3],
             object: { key: 'value' },
@@ -533,7 +533,7 @@ describe('messageConversion', () => {
         expect(result).toHaveLength(1);
         const message = result[0] as ToolModelMessage;
         const content = message.content as unknown[];
-        expect(content[0].output).toEqual({
+        expect(content[0].output).toStrictEqual({
           type: 'text',
           value: '[no tool result]',
         });
@@ -740,7 +740,7 @@ describe('messageConversion', () => {
       it('should handle empty messages array', () => {
         const messages: CoreMessage[] = [];
         const result = convertFromVercelMessages(messages);
-        expect(result).toEqual([]);
+        expect(result).toStrictEqual([]);
       });
 
       it('should handle mixed message types', () => {

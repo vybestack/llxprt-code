@@ -36,9 +36,9 @@ function parseSaveArgs(args: string): {
   mode: 'auto' | 'manual';
   input: string;
 } | null {
-  const match = args.match(
+  const match = RegExp(
     /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/,
-  );
+  ).exec(args);
 
   if (match == null) {
     return null;

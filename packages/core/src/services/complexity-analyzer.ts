@@ -164,7 +164,7 @@ export class ComplexityAnalyzer {
       // Look for patterns like "I need to X, Y, and Z"
       const needToPattern =
         /(?:need to|want to|have to|should|must|will)\s+([^\r\n.?!]+)/i;
-      const match = message.match(needToPattern);
+      const match = RegExp(needToPattern).exec(message);
 
       if (match != null) {
         const taskString = match[1];
@@ -205,9 +205,9 @@ export class ComplexityAnalyzer {
             )
           ) {
             // Extract the main action from the sentence
-            const actionMatch = sentence.match(
+            const actionMatch = RegExp(
               /(?:first,?\s*|then\s*|after that,?\s*|finally,?\s*)?(.+)/i,
-            );
+            ).exec(sentence);
             if (actionMatch != null) {
               const task = this.normalizeTaskText(actionMatch[1]);
               if (task.length > 0 && !tasks.includes(task)) {

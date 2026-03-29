@@ -70,7 +70,7 @@ describe('Provider Switching Integration', () => {
     manager.registerProvider(createMockProvider('provider2'));
 
     const providers = manager.listProviders();
-    expect(providers).toEqual(
+    expect(providers).toStrictEqual(
       expect.arrayContaining(['provider1', 'provider2']),
     );
 

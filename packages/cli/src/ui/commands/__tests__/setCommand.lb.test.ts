@@ -40,7 +40,7 @@ describe('setCommand - load balancer settings', () => {
         'tpm_threshold',
         1000,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -52,7 +52,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'tpm_threshold 0');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'tpm_threshold must be a positive integer',
@@ -63,7 +63,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'tpm_threshold -100');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'tpm_threshold must be a positive integer',
@@ -74,7 +74,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'tpm_threshold 100.5');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'tpm_threshold must be a positive integer',
@@ -85,7 +85,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'tpm_threshold');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -102,7 +102,7 @@ describe('setCommand - load balancer settings', () => {
         'timeout_ms',
         30000,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -114,7 +114,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'timeout_ms 0');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'timeout_ms must be a positive integer',
@@ -125,7 +125,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'timeout_ms -5000');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'timeout_ms must be a positive integer',
@@ -136,7 +136,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'timeout_ms 30000.5');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'timeout_ms must be a positive integer',
@@ -147,7 +147,7 @@ describe('setCommand - load balancer settings', () => {
       const result = await setCommand.action!(context, 'timeout_ms');
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -167,7 +167,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_enabled',
         true,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -185,7 +185,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_enabled',
         false,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -200,7 +200,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: "circuit_breaker_enabled must be either 'true' or 'false'",
@@ -214,7 +214,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -234,7 +234,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_failure_threshold',
         3,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -249,7 +249,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'circuit_breaker_failure_threshold must be a positive integer',
@@ -263,7 +263,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'circuit_breaker_failure_threshold must be a positive integer',
@@ -277,7 +277,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'circuit_breaker_failure_threshold must be a positive integer',
@@ -291,7 +291,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -311,7 +311,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_failure_window_ms',
         60000,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -326,7 +326,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'circuit_breaker_failure_window_ms must be a positive integer',
@@ -340,7 +340,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'circuit_breaker_failure_window_ms must be a positive integer',
@@ -354,7 +354,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'circuit_breaker_failure_window_ms must be a positive integer',
@@ -368,7 +368,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -388,7 +388,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_recovery_timeout_ms',
         30000,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -403,7 +403,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -418,7 +418,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -433,7 +433,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -448,7 +448,7 @@ describe('setCommand - load balancer settings', () => {
       );
 
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -465,7 +465,7 @@ describe('setCommand - load balancer settings', () => {
         'tpm_threshold',
         undefined,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: "Ephemeral setting 'tpm_threshold' cleared",
@@ -479,7 +479,7 @@ describe('setCommand - load balancer settings', () => {
         'timeout_ms',
         undefined,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: "Ephemeral setting 'timeout_ms' cleared",
@@ -496,7 +496,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_enabled',
         undefined,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: "Ephemeral setting 'circuit_breaker_enabled' cleared",
@@ -513,7 +513,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_failure_threshold',
         undefined,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -531,7 +531,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_failure_window_ms',
         undefined,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -549,7 +549,7 @@ describe('setCommand - load balancer settings', () => {
         'circuit_breaker_recovery_timeout_ms',
         undefined,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:

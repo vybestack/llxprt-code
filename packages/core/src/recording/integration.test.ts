@@ -385,7 +385,10 @@ describe('integration: full session recording lifecycle', () => {
     const replay = await replaySession(fp, PROJECT_HASH);
     expect(replay.ok).toBe(true);
     if (!replay.ok) return;
-    expect(replay.metadata.workspaceDirs).toEqual(['/new/dir-a', '/new/dir-b']);
+    expect(replay.metadata.workspaceDirs).toStrictEqual([
+      '/new/dir-a',
+      '/new/dir-b',
+    ]);
   });
 
   // =========================================================================
@@ -1190,7 +1193,7 @@ describe('integration: full session recording lifecycle', () => {
 
     // Extract lock ID from file path
     const basename = path.basename(filePath);
-    const match = basename.match(/^session-(.+)\.jsonl$/);
+    const match = RegExp(/^session-(.+)\.jsonl$/).exec(basename);
     const lockId = match![1];
 
     // Process A acquires lock
@@ -1270,7 +1273,9 @@ describe('integration: full session recording lifecycle', () => {
     // Structurally identical content (ignoring metadata timestamps)
     for (let i = 0; i < replay1.history.length; i++) {
       expect(replay1.history[i].speaker).toBe(replay2.history[i].speaker);
-      expect(replay1.history[i].blocks).toEqual(replay2.history[i].blocks);
+      expect(replay1.history[i].blocks).toStrictEqual(
+        replay2.history[i].blocks,
+      );
     }
 
     // Both files have identical structure (session_start + 2 content)
@@ -1278,7 +1283,7 @@ describe('integration: full session recording lifecycle', () => {
     const lines2 = await readJsonlLines(promptPath);
     expect(lines1).toHaveLength(3); // session_start + 2 content
     expect(lines2).toHaveLength(3);
-    expect(lines1.map((l) => l.type)).toEqual(lines2.map((l) => l.type));
+    expect(lines1.map((l) => l.type)).toStrictEqual(lines2.map((l) => l.type));
   });
 
   // =========================================================================

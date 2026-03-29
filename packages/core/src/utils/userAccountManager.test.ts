@@ -115,7 +115,9 @@ describe('UserAccountManager', () => {
       await userAccountManager.cacheGoogleAccount('test1@google.com');
 
       expect(debugLogSpy).toHaveBeenCalled();
-      expect(JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'))).toEqual({
+      expect(
+        JSON.parse(fs.readFileSync(accountsFile(), 'utf-8')),
+      ).toStrictEqual({
         active: 'test1@google.com',
         old: [],
       });
@@ -134,7 +136,9 @@ describe('UserAccountManager', () => {
       await userAccountManager.cacheGoogleAccount('test2@google.com');
 
       expect(debugLogSpy).toHaveBeenCalled();
-      expect(JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'))).toEqual({
+      expect(
+        JSON.parse(fs.readFileSync(accountsFile(), 'utf-8')),
+      ).toStrictEqual({
         active: 'test2@google.com',
         old: [],
       });
@@ -201,7 +205,10 @@ describe('UserAccountManager', () => {
 
       const stored = JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'));
       expect(stored.active).toBeNull();
-      expect(stored.old).toEqual(['old1@google.com', 'active@google.com']);
+      expect(stored.old).toStrictEqual([
+        'old1@google.com',
+        'active@google.com',
+      ]);
     });
 
     it('should handle empty file gracefully', async () => {
@@ -210,7 +217,7 @@ describe('UserAccountManager', () => {
       await userAccountManager.clearCachedGoogleAccount();
       const stored = JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'));
       expect(stored.active).toBeNull();
-      expect(stored.old).toEqual([]);
+      expect(stored.old).toStrictEqual([]);
     });
 
     it('should handle corrupted JSON by creating a fresh file', async () => {
@@ -225,7 +232,7 @@ describe('UserAccountManager', () => {
       expect(debugLogSpy).toHaveBeenCalled();
       const stored = JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'));
       expect(stored.active).toBeNull();
-      expect(stored.old).toEqual([]);
+      expect(stored.old).toStrictEqual([]);
     });
 
     it('should be idempotent if active account is already null', async () => {
@@ -239,7 +246,7 @@ describe('UserAccountManager', () => {
 
       const stored = JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'));
       expect(stored.active).toBeNull();
-      expect(stored.old).toEqual(['old1@google.com']);
+      expect(stored.old).toStrictEqual(['old1@google.com']);
     });
 
     it('should not add a duplicate to the old list', async () => {
@@ -260,7 +267,7 @@ describe('UserAccountManager', () => {
 
       const stored = JSON.parse(fs.readFileSync(accountsFile(), 'utf-8'));
       expect(stored.active).toBeNull();
-      expect(stored.old).toEqual(['active@google.com']);
+      expect(stored.old).toStrictEqual(['active@google.com']);
     });
   });
 

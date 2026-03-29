@@ -148,11 +148,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     // Check for network transient errors
-    if (isNetworkTransientError(error)) {
-      return true;
-    }
-
-    return false;
+    return !!isNetworkTransientError(error);
   }
 
   /**
@@ -370,7 +366,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
           encrypted_content?: string;
         }
     >,
-    options: NormalizedGenerateChatOptions,
+    _options: NormalizedGenerateChatOptions,
     userMemory: string | undefined,
   ): void {
     const syntheticCallId = this.generateSyntheticCallId();

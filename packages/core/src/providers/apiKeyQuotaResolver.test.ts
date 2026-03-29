@@ -171,7 +171,7 @@ describe('apiKeyQuotaResolver', () => {
         'test-key',
         'https://api.z.ai/v1',
       );
-      expect(result).toEqual({ provider: 'Z.ai', lines: mockLines });
+      expect(result).toStrictEqual({ provider: 'Z.ai', lines: mockLines });
     });
 
     it('should fetch and format Synthetic quota', async () => {
@@ -194,7 +194,7 @@ describe('apiKeyQuotaResolver', () => {
       const result = await fetchApiKeyQuota('synthetic', 'test-key');
 
       expect(fetchSyntheticUsage).toHaveBeenCalledWith('test-key');
-      expect(result).toEqual({ provider: 'Synthetic', lines: mockLines });
+      expect(result).toStrictEqual({ provider: 'Synthetic', lines: mockLines });
     });
 
     it('should fetch and format Chutes quota', async () => {
@@ -219,7 +219,7 @@ describe('apiKeyQuotaResolver', () => {
       const result = await fetchApiKeyQuota('chutes', 'test-key');
 
       expect(fetchChutesUsage).toHaveBeenCalledWith('test-key');
-      expect(result).toEqual({ provider: 'Chutes', lines: mockLines });
+      expect(result).toStrictEqual({ provider: 'Chutes', lines: mockLines });
     });
 
     it('should fetch and format Kimi quota for standard keys', async () => {
@@ -245,7 +245,7 @@ describe('apiKeyQuotaResolver', () => {
         'sk-standard-key',
         'https://api.moonshot.ai/v1',
       );
-      expect(result).toEqual({ provider: 'Kimi', lines: mockLines });
+      expect(result).toStrictEqual({ provider: 'Kimi', lines: mockLines });
     });
 
     it('should fetch and format Kimi Code quota for sk-kimi- keys', async () => {
@@ -275,7 +275,7 @@ describe('apiKeyQuotaResolver', () => {
         'sk-kimi-subscription-key',
         'https://api.kimi.com/coding/v1',
       );
-      expect(result).toEqual({ provider: 'Kimi Code', lines: mockLines });
+      expect(result).toStrictEqual({ provider: 'Kimi Code', lines: mockLines });
     });
 
     it('should return null when Kimi Code fetch returns null', async () => {

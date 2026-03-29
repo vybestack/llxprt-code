@@ -106,7 +106,7 @@ describe('TaskTool', () => {
       '</subagent name="helper" id="agent-42">\n',
     );
     expect(dispose).toHaveBeenCalledTimes(1);
-    expect(result.metadata).toEqual({
+    expect(result.metadata).toStrictEqual({
       agentId: 'agent-42',
       terminateReason: SubagentTerminateMode.GOAL,
       emittedVars: { summary: 'done' },
@@ -686,7 +686,7 @@ describe('TaskTool', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(result.error?.message).toBe('crashed');
     expect(result.returnDisplay).toContain('Details: crashed');
-    expect(result.metadata).toEqual({
+    expect(result.metadata).toStrictEqual({
       agentId: 'agent-99',
       error: 'crashed',
     });

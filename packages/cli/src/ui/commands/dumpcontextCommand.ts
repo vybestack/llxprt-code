@@ -60,7 +60,7 @@ export const dumpcontextCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: dumpcontextSchema,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
     try {

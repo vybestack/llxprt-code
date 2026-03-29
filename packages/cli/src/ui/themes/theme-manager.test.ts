@@ -132,7 +132,7 @@ describe('ThemeManager', () => {
       themeManager.setActiveTheme('Ayu');
       const semanticColors = themeManager.getSemanticColors();
 
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: expect.any(String),
           secondary: expect.any(String),

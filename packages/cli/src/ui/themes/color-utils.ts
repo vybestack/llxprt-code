@@ -321,12 +321,12 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
       // ESC ] 11 ; rgb:RRRR/GGGG/BBBB ESC \ (ST terminator - standard)
       // ESC ] 11 ; rgb:RRRR/GGGG/BBBB BEL   (BEL terminator - legacy terminals)
       // Match either terminator (case-insensitive hex)
-      const matchST = response.match(
+      const matchST = RegExp(
         /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x1b\\/i,
-      );
-      const matchBEL = response.match(
+      ).exec(response);
+      const matchBEL = RegExp(
         /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
-      );
+      ).exec(response);
 
       const match = matchST || matchBEL;
       if (match != null) {

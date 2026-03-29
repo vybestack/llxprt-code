@@ -18,7 +18,7 @@ import { extractPathToken, getPathSuggestions } from './shellPathCompletion.js';
 describe('extractPathToken', () => {
   it('should extract a tilde-slash path token', () => {
     const result = extractPathToken('ls ~/Docu', 9);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '~/Docu',
       tokenStart: 3,
       tokenEnd: 9,
@@ -28,7 +28,7 @@ describe('extractPathToken', () => {
 
   it('should extract bare tilde as path-like', () => {
     const result = extractPathToken('cd ~', 4);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '~',
       tokenStart: 3,
       tokenEnd: 4,
@@ -38,7 +38,7 @@ describe('extractPathToken', () => {
 
   it('should extract a relative path token with ./', () => {
     const result = extractPathToken('cat ./file.txt', 14);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: './file.txt',
       tokenStart: 4,
       tokenEnd: 14,
@@ -48,7 +48,7 @@ describe('extractPathToken', () => {
 
   it('should extract a relative path token with ../', () => {
     const result = extractPathToken('cat ../parent', 13);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '../parent',
       tokenStart: 4,
       tokenEnd: 13,
@@ -58,7 +58,7 @@ describe('extractPathToken', () => {
 
   it('should extract an absolute path token', () => {
     const result = extractPathToken('cat /usr/local/bi', 17);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '/usr/local/bi',
       tokenStart: 4,
       tokenEnd: 17,
@@ -68,7 +68,7 @@ describe('extractPathToken', () => {
 
   it('should extract a token containing / as path-like', () => {
     const result = extractPathToken('cat src/utils', 13);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: 'src/utils',
       tokenStart: 4,
       tokenEnd: 13,
@@ -78,7 +78,7 @@ describe('extractPathToken', () => {
 
   it('should identify non-path tokens as not path-like', () => {
     const result = extractPathToken('echo hello', 10);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: 'hello',
       tokenStart: 5,
       tokenEnd: 10,
@@ -88,7 +88,7 @@ describe('extractPathToken', () => {
 
   it('should handle escaped spaces in path tokens', () => {
     const result = extractPathToken('cat my\\ file.txt', 16);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: 'my\\ file.txt',
       tokenStart: 4,
       tokenEnd: 16,
@@ -98,7 +98,7 @@ describe('extractPathToken', () => {
 
   it('should extract path token when cursor is mid-line', () => {
     const result = extractPathToken('ls ~/Dir suffix', 8);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '~/Dir',
       tokenStart: 3,
       tokenEnd: 8,
@@ -108,7 +108,7 @@ describe('extractPathToken', () => {
 
   it('should return empty token for empty input', () => {
     const result = extractPathToken('', 0);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '',
       tokenStart: 0,
       tokenEnd: 0,
@@ -118,7 +118,7 @@ describe('extractPathToken', () => {
 
   it('should handle cursor at start of line', () => {
     const result = extractPathToken('hello', 0);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '',
       tokenStart: 0,
       tokenEnd: 0,
@@ -128,7 +128,7 @@ describe('extractPathToken', () => {
 
   it('should handle multiple spaces between tokens', () => {
     const result = extractPathToken('ls   ~/foo', 10);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       token: '~/foo',
       tokenStart: 5,
       tokenEnd: 10,
@@ -172,14 +172,14 @@ describe('getPathSuggestions', () => {
 
   it('should append trailing slash for directories', async () => {
     const results = await getPathSuggestions('./sub', testRootDir);
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       { label: 'subdir/', value: './subdir/', isDirectory: true },
     ]);
   });
 
   it('should not append trailing slash for files', async () => {
     const results = await getPathSuggestions('./file1', testRootDir);
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       { label: 'file1.txt', value: './file1.txt', isDirectory: false },
     ]);
   });
@@ -217,7 +217,7 @@ describe('getPathSuggestions', () => {
       './nonexistent/path/',
       testRootDir,
     );
-    expect(results).toEqual([]);
+    expect(results).toStrictEqual([]);
   });
 
   it('should handle tilde expansion', async () => {
@@ -243,7 +243,7 @@ describe('getPathSuggestions', () => {
 
   it('should handle relative paths with cwd', async () => {
     const results = await getPathSuggestions('subdir/', testRootDir);
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       {
         label: 'nested.txt',
         value: 'subdir/nested.txt',
@@ -289,12 +289,12 @@ describe('getPathSuggestions', () => {
 
   it('should return empty array for empty partial path', async () => {
     const results = await getPathSuggestions('', testRootDir);
-    expect(results).toEqual([]);
+    expect(results).toStrictEqual([]);
   });
 
   it('should handle listing a directory with trailing slash', async () => {
     const results = await getPathSuggestions('./subdir/', testRootDir);
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       {
         label: 'nested.txt',
         value: './subdir/nested.txt',
@@ -310,7 +310,7 @@ describe('getPathSuggestions', () => {
     await fs.chmod(restrictedDir, 0o000);
     try {
       const results = await getPathSuggestions('./restricted/', testRootDir);
-      expect(results).toEqual([]);
+      expect(results).toStrictEqual([]);
     } finally {
       await fs.chmod(restrictedDir, 0o755);
     }

@@ -56,6 +56,6 @@ describe('quit cleanup integration', () => {
     const { runExitCleanup } = await import('../../utils/cleanup.js');
     await runExitCleanup();
 
-    expect(callOrder).toEqual(['first', 'second', 'third']);
+    expect(callOrder).toStrictEqual(['first', 'second', 'third']);
   });
 });

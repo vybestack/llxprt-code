@@ -1919,7 +1919,7 @@ describe('InputPrompt', () => {
       });
 
       mockedUseReverseSearchCompletion.mockImplementation(
-        (buffer, shellHistory, reverseSearchActive) => ({
+        (_buffer, _shellHistory, reverseSearchActive) => ({
           ...mockReverseSearchCompletion,
           suggestions: reverseSearchActive
             ? [
@@ -2005,7 +2005,7 @@ describe('InputPrompt', () => {
 
       // Mock the reverse search completion to be active and then reset
       mockedUseReverseSearchCompletion.mockImplementation(
-        (buffer, shellHistory, reverseSearchActiveFromInputPrompt) => ({
+        (_buffer, _shellHistory, reverseSearchActiveFromInputPrompt) => ({
           ...mockReverseSearchCompletion,
           suggestions: reverseSearchActiveFromInputPrompt
             ? [{ label: 'history item', value: 'history item' }]
@@ -2035,7 +2035,7 @@ describe('InputPrompt', () => {
       await waitFor(() => {
         expect(stdout.lastFrame()).not.toContain('(r:)');
         expect(props.buffer.text).toBe(initialText);
-        expect(props.buffer.cursor).toEqual(initialCursor);
+        expect(props.buffer.cursor).toStrictEqual(initialCursor);
       });
 
       unmount();
@@ -2087,7 +2087,7 @@ describe('InputPrompt', () => {
       props.shellModeActive = false;
 
       vi.mocked(useReverseSearchCompletion).mockImplementation(
-        (buffer, data, isActive) => ({
+        (_buffer, _data, isActive) => ({
           ...mockReverseSearchCompletion,
           suggestions: isActive
             ? [

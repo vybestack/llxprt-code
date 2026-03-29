@@ -243,7 +243,7 @@ export const useGeminiStream = (
     cancelAllToolCalls,
     lastToolOutputTime,
   ] = useReactToolScheduler(
-    async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
+    async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) {
         return;
       }

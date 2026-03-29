@@ -14,7 +14,7 @@ describe('buildContinuationDirective', () => {
   });
 
   it('returns simple continue when activeTodos is undefined', () => {
-    const result = buildContinuationDirective(undefined);
+    const result = buildContinuationDirective();
     expect(result).toBe('Understood. Continuing with the current task.');
   });
 

@@ -457,7 +457,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       expect(hasToolCall).toBe(true);
 
       // 5. Block order is correct: thinking, text, tool_call
-      expect(outputIContent.blocks.map((b) => b.type)).toEqual([
+      expect(outputIContent.blocks.map((b) => b.type)).toStrictEqual([
         'thinking',
         'text',
         'tool_call',

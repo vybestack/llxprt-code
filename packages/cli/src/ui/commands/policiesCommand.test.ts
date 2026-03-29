@@ -41,7 +41,7 @@ describe('policiesCommand', () => {
       '',
     ) as MessageActionReturn;
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'Configuration not available',
@@ -68,7 +68,7 @@ describe('policiesCommand', () => {
       '',
     ) as MessageActionReturn;
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No policy rules configured.',

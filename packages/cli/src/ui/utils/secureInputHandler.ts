@@ -61,13 +61,13 @@ export class SecureInputHandler {
       // @requirement REQ-006.1
       // @pseudocode lines 424-445
       // Handle /toolkey BEFORE /key (because /toolkey starts with /key)
-      const toolkeyMatch = text.match(/^\/toolkey\s+\S+\s+([\s\S]*)/);
-      if (toolkeyMatch != null && toolkeyMatch[1]) {
+      const toolkeyMatch = RegExp(/^\/toolkey\s+\S+\s+([\s\S]*)/).exec(text);
+      if (toolkeyMatch?.[1]) {
         const patContent = toolkeyMatch[1];
         const prefixEnd = text.indexOf(patContent);
         const prefix = text.substring(0, prefixEnd);
 
-        const lineBreakMatch = patContent.match(/[\r\n]/);
+        const lineBreakMatch = RegExp(/[\r\n]/).exec(patContent);
         if (lineBreakMatch != null) {
           const keyToMask = patContent.substring(0, lineBreakMatch.index);
           const afterLineBreak = patContent.substring(lineBreakMatch.index!);
@@ -79,11 +79,13 @@ export class SecureInputHandler {
       // @plan PLAN-20260211-SECURESTORE.P15
       // @requirement R20.1
       // /key save <name> <value> — mask only the value, leave subcommand and name visible
-      const keySaveMatch = text.match(/^(\/key\s+save\s+\S+\s+)([\s\S]+)/);
-      if (keySaveMatch != null && keySaveMatch[2]) {
+      const keySaveMatch = RegExp(/^(\/key\s+save\s+\S+\s+)([\s\S]+)/).exec(
+        text,
+      );
+      if (keySaveMatch?.[2]) {
         const prefix = keySaveMatch[1];
         const valueContent = keySaveMatch[2];
-        const lineBreakMatch = valueContent.match(/[\r\n]/);
+        const lineBreakMatch = RegExp(/[\r\n]/).exec(valueContent);
         if (lineBreakMatch != null) {
           const keyToMask = valueContent.substring(0, lineBreakMatch.index);
           const afterLineBreak = valueContent.substring(lineBreakMatch.index!);
@@ -93,9 +95,9 @@ export class SecureInputHandler {
       }
 
       // /key <subcommand> (non-save) — don't mask arguments for load/show/list/delete
-      const keySubcmdMatch = text.match(
+      const keySubcmdMatch = RegExp(
         /^\/key\s+(save|load|show|list|delete)(\s|$)/,
-      );
+      ).exec(text);
       if (keySubcmdMatch != null) {
         // Known subcommand without value to mask (save is handled above)
         return text;
@@ -103,15 +105,15 @@ export class SecureInputHandler {
 
       // Check if text starts with /key or /keyfile followed by space and content
       // @requirement R20.2 — legacy /key <raw-key> masking preserved
-      const keyMatch = text.match(/^\/key\s+([\s\S]*)/);
-      const keyfileMatch = text.match(/^\/keyfile\s+([\s\S]*)/);
+      const keyMatch = RegExp(/^\/key\s+([\s\S]*)/).exec(text);
+      const keyfileMatch = RegExp(/^\/keyfile\s+([\s\S]*)/).exec(text);
 
-      if (keyMatch != null && keyMatch[1]) {
+      if (keyMatch?.[1]) {
         // We have content after "/key "
         const keyContent = keyMatch[1];
 
         // Check if the key contains newlines or carriage returns
-        const lineBreakMatch = keyContent.match(/[\r\n]/);
+        const lineBreakMatch = RegExp(/[\r\n]/).exec(keyContent);
         if (lineBreakMatch != null) {
           const lineBreakIndex = lineBreakMatch.index!;
           // Mask only up to the line break, preserve everything after
@@ -137,7 +139,7 @@ export class SecureInputHandler {
         // No line break, mask the entire key portion
         const maskedKey = this.maskValue(keyContent);
         return `/key ${maskedKey}`;
-      } else if (keyfileMatch != null && keyfileMatch[1]) {
+      } else if (keyfileMatch?.[1]) {
         // We have content after "/keyfile "
         // For /keyfile, we don't mask the file path (it's not sensitive)
         return text;
@@ -203,7 +205,9 @@ export class SecureInputHandler {
       // @requirement REQ-006.2
       // @pseudocode lines 450-462
       // /toolkey MUST be checked BEFORE /key (because /toolkey starts with /key)
-      const toolkeyCommandMatch = command.match(/^(\/toolkey\s+\S+\s+)(.+)$/);
+      const toolkeyCommandMatch = RegExp(/^(\/toolkey\s+\S+\s+)(.+)$/).exec(
+        command,
+      );
       if (toolkeyCommandMatch != null) {
         const prefix = toolkeyCommandMatch[1];
         const keyValue = toolkeyCommandMatch[2];
@@ -212,21 +216,23 @@ export class SecureInputHandler {
 
       // @plan PLAN-20260211-SECURESTORE.P15
       // @requirement R20.1 — /key save <name> <value>: mask only the value
-      const keySaveMatch = command.match(/^(\/key\s+save\s+\S+\s+)(.+)$/);
+      const keySaveMatch = RegExp(/^(\/key\s+save\s+\S+\s+)(.+)$/).exec(
+        command,
+      );
       if (keySaveMatch != null) {
         return `${keySaveMatch[1]}${this.maskValue(keySaveMatch[2])}`;
       }
 
       // /key <subcommand> (non-save) — don't mask arguments
-      const subcommandMatch = command.match(
+      const subcommandMatch = RegExp(
         /^\/key\s+(save|load|show|list|delete)(\s|$)/,
-      );
+      ).exec(command);
       if (subcommandMatch != null) {
         return command;
       }
 
       // @requirement R20.2 — legacy /key <raw-key> masking
-      const keyCommandMatch = command.match(/^(\/key\s+)(.+)$/);
+      const keyCommandMatch = RegExp(/^(\/key\s+)(.+)$/).exec(command);
       if (keyCommandMatch != null) {
         const prefix = keyCommandMatch[1];
         const keyValue = keyCommandMatch[2];

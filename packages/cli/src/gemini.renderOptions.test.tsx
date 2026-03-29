@@ -120,7 +120,7 @@ describe('startInteractiveUI ink render options', () => {
     expect(renderSpy).toHaveBeenCalledTimes(1);
     const [_reactElement, options] = renderSpy.mock.calls[0];
     const expectedRenderOptions = inkRenderOptions(config, settings);
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,
@@ -149,7 +149,7 @@ describe('startInteractiveUI ink render options', () => {
 
     expect(renderSpy).toHaveBeenCalledTimes(1);
     const [_reactElement, options] = renderSpy.mock.calls[0];
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,

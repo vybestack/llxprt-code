@@ -203,7 +203,6 @@ function handleDisplayKeys(
     !enteringConstrainHeightMode
   ) {
     display.setConstrainHeight(false);
-    return;
   }
 }
 

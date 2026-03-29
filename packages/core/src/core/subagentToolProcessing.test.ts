@@ -68,20 +68,18 @@ describe('subagentToolProcessing', () => {
     });
 
     it('should return string resultDisplay', () => {
-      expect(extractToolDetail('Tool not found', undefined)).toBe(
-        'Tool not found',
-      );
+      expect(extractToolDetail('Tool not found')).toBe('Tool not found');
     });
 
     it('should return message from object resultDisplay', () => {
       const display = {
         message: 'Some detail',
       } as unknown as import('../tools/tools.js').ToolResultDisplay;
-      expect(extractToolDetail(display, undefined)).toBe('Some detail');
+      expect(extractToolDetail(display)).toBe('Some detail');
     });
 
     it('should return undefined when neither available', () => {
-      expect(extractToolDetail(undefined, undefined)).toBeUndefined();
+      expect(extractToolDetail(undefined)).toBeUndefined();
     });
   });
 

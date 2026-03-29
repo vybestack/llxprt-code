@@ -106,8 +106,7 @@ function createMockConfig(
     getDebugMode: () => false,
     getApprovalMode: () => options?.approvalMode ?? ApprovalMode.YOLO,
     getEphemeralSettings: () => options?.ephemeralSettings ?? {},
-    getEphemeralSetting: (key: string) =>
-      (options?.ephemeralSettings ?? {})[key],
+    getEphemeralSetting: (key: string) => options?.ephemeralSettings?.[key],
     getAllowedTools: () => [],
     getExcludeTools: () => [],
     getContentGeneratorConfig: () => ({

@@ -176,7 +176,7 @@ describe('Config - Ephemeral Settings', () => {
       const allSettings = config.getEphemeralSettings();
 
       // Then it returns a copy with all settings
-      expect(allSettings).toEqual({
+      expect(allSettings).toStrictEqual({
         'todo-continuation': true,
         'custom-setting': 'test-value',
         tools: {},
@@ -205,7 +205,9 @@ describe('Config - Ephemeral Settings', () => {
       // Object values
       const headers = { 'Content-Type': 'application/json' };
       config.setEphemeralSetting('custom-headers', headers);
-      expect(config.getEphemeralSetting('custom-headers')).toEqual(headers);
+      expect(config.getEphemeralSetting('custom-headers')).toStrictEqual(
+        headers,
+      );
     });
   });
 });

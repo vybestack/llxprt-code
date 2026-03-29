@@ -175,7 +175,7 @@ describe('HybridTokenStorage', () => {
 
       const result = await storage.getCredentials('test-server');
 
-      expect(result).toEqual(credentials);
+      expect(result).toStrictEqual(credentials);
       expect(mockKeychainStorage.getCredentials).toHaveBeenCalledWith(
         'test-server',
       );
@@ -225,7 +225,7 @@ describe('HybridTokenStorage', () => {
 
       const result = await storage.listServers();
 
-      expect(result).toEqual(servers);
+      expect(result).toStrictEqual(servers);
       expect(mockKeychainStorage.listServers).toHaveBeenCalled();
     });
   });
@@ -256,7 +256,7 @@ describe('HybridTokenStorage', () => {
 
       const result = await storage.getAllCredentials();
 
-      expect(result).toEqual(credentialsMap);
+      expect(result).toStrictEqual(credentialsMap);
       expect(mockKeychainStorage.getAllCredentials).toHaveBeenCalled();
     });
   });

@@ -119,7 +119,7 @@ describe('maybePromptForSettings', () => {
 
     const result = await maybePromptForSettings(settings, existingValues);
 
-    expect(result).toEqual({ API_KEY: 'already-set' });
+    expect(result).toStrictEqual({ API_KEY: 'already-set' });
     expect(mockQuestion).not.toHaveBeenCalled();
   });
 
@@ -130,14 +130,14 @@ describe('maybePromptForSettings', () => {
     const existingValues: Record<string, string | undefined> = {};
 
     // Simulate user entering a value
-    mockQuestion.mockImplementation((prompt, callback) => {
+    mockQuestion.mockImplementation((_prompt, callback) => {
       callback('user-entered-value');
     });
 
     const result = await maybePromptForSettings(settings, existingValues);
 
     expect(mockQuestion).toHaveBeenCalled();
-    expect(result).toEqual({ API_KEY: 'user-entered-value' });
+    expect(result).toStrictEqual({ API_KEY: 'user-entered-value' });
   });
 
   it('should return null when user enters empty value for required setting', async () => {
@@ -147,7 +147,7 @@ describe('maybePromptForSettings', () => {
     const existingValues: Record<string, string | undefined> = {};
 
     // Simulate user pressing enter without value (cancel)
-    mockQuestion.mockImplementation((prompt, callback) => {
+    mockQuestion.mockImplementation((_prompt, callback) => {
       callback('');
     });
 
@@ -163,13 +163,13 @@ describe('maybePromptForSettings', () => {
     ];
     const existingValues = { API_URL: 'https://api.example.com' };
 
-    mockQuestion.mockImplementation((prompt, callback) => {
+    mockQuestion.mockImplementation((_prompt, callback) => {
       callback('new-api-key');
     });
 
     const result = await maybePromptForSettings(settings, existingValues);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       API_KEY: 'new-api-key',
       API_URL: 'https://api.example.com',
     });
@@ -180,7 +180,7 @@ describe('maybePromptForSettings', () => {
       { name: 'API Key', envVar: 'API_KEY', sensitive: true },
     ];
 
-    mockQuestion.mockImplementation((prompt, callback) => {
+    mockQuestion.mockImplementation((_prompt, callback) => {
       callback('value');
     });
 

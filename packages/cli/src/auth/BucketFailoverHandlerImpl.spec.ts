@@ -1024,7 +1024,7 @@ describe('BucketFailoverHandlerImpl', () => {
 
       // Mock authenticate to succeed and provide token for bucket-b
       const authenticateSpy = vi.fn(
-        async (provider: string, bucket?: string) => {
+        async (_provider: string, bucket?: string) => {
           if (bucket === 'bucket-b') {
             await tokenStore.saveToken(
               'anthropic',
@@ -1080,7 +1080,7 @@ describe('BucketFailoverHandlerImpl', () => {
 
       // Mock authenticate to succeed for bucket-b
       const authenticateSpy = vi.fn(
-        async (provider: string, bucket?: string) => {
+        async (_provider: string, bucket?: string) => {
           if (bucket === 'bucket-b') {
             await tokenStore.saveToken(
               'anthropic',
@@ -1124,7 +1124,7 @@ describe('BucketFailoverHandlerImpl', () => {
 
       // Mock authenticate to succeed and save token
       oauthManager.authenticate = vi.fn(
-        async (provider: string, bucket?: string) => {
+        async (_provider: string, bucket?: string) => {
           if (bucket === 'bucket-b') {
             await tokenStore.saveToken(
               'anthropic',
@@ -1228,7 +1228,7 @@ describe('BucketFailoverHandlerImpl', () => {
       );
 
       const authenticateSpy = vi.fn(
-        async (provider: string, bucket?: string) => {
+        async (_provider: string, bucket?: string) => {
           if (bucket === 'bucket-b') {
             await tokenStore.saveToken(
               'anthropic',
@@ -1302,7 +1302,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock authenticate to succeed and save valid token
       const reauthToken = makeToken('reauth-success');
       oauthManager.authenticate = vi.fn(
-        async (provider: string, bucket?: string) => {
+        async (_provider: string, bucket?: string) => {
           if (bucket === 'bucket-b') {
             await tokenStore.saveToken('anthropic', reauthToken, bucket);
           }

@@ -104,7 +104,7 @@ describe('OpenAIVercelProvider', () => {
     it('should return empty array for getServerTools', () => {
       const provider = new OpenAIVercelProvider('test-api-key');
       const serverTools = provider.getServerTools();
-      expect(serverTools).toEqual([]);
+      expect(serverTools).toStrictEqual([]);
     });
 
     it('should throw error for invokeServerTool', async () => {
@@ -180,7 +180,7 @@ describe('OpenAIVercelProvider', () => {
             },
           },
         );
-        expect(models).toEqual(
+        expect(models).toStrictEqual(
           expect.arrayContaining([
             expect.objectContaining({
               id: 'custom-model',
@@ -207,7 +207,7 @@ describe('OpenAIVercelProvider', () => {
 
         const models = await provider.getModels();
 
-        expect(models).toEqual(
+        expect(models).toStrictEqual(
           expect.arrayContaining([
             expect.objectContaining({ id: 'gpt-4o', provider: 'openaivercel' }),
           ]),

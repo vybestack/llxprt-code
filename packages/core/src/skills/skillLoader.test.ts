@@ -114,7 +114,7 @@ describe('skillLoader', () => {
 
   it('should return empty array for non-existent directory', async () => {
     const skills = await loadSkillsFromDir('/non/existent/path');
-    expect(skills).toEqual([]);
+    expect(skills).toStrictEqual([]);
     expect(coreEvents.emitFeedback).not.toHaveBeenCalled();
   });
 });

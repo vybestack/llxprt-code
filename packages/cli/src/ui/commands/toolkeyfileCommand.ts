@@ -64,7 +64,7 @@ export const toolkeyfileCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: toolkeyfileSchema,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
     // @pseudocode lines 327-328: Parse arguments

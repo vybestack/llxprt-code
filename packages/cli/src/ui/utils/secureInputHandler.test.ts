@@ -297,7 +297,7 @@ describe('SecureInputHandler', () => {
       };
 
       // What does the regex actually match?
-      const match = afterPaste.match(/^\/key\s+([\s\S]*)/);
+      const match = RegExp(/^\/key\s+([\s\S]*)/).exec(afterPaste);
       const debug3 = {
         matched: !!match,
         groups: match != null ? match.map((g) => JSON.stringify(g)) : null,

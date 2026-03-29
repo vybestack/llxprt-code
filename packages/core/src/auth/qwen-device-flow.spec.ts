@@ -185,7 +185,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       };
 
       testServer.removeAllListeners('request');
-      testServer.on('request', (req, res) => {
+      testServer.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(incompleteResponse));
       });
@@ -469,7 +469,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         let requestCount = 0;
 
         testServer.removeAllListeners('request');
-        testServer.on('request', (req, res) => {
+        testServer.on('request', (_req, res) => {
           timestamps.push(Date.now());
           requestCount++;
 
@@ -524,7 +524,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       };
 
       testServer.removeAllListeners('request');
-      testServer.on('request', (req, res) => {
+      testServer.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(invalidTokenResponse));
       });
@@ -641,7 +641,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
      */
     it('should handle user authorization denial', async () => {
       testServer.removeAllListeners('request');
-      testServer.on('request', (req, res) => {
+      testServer.on('request', (_req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -666,7 +666,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
      */
     it('should handle expired device code', async () => {
       testServer.removeAllListeners('request');
-      testServer.on('request', (req, res) => {
+      testServer.on('request', (_req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -696,7 +696,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         let requestCount = 0;
 
         testServer.removeAllListeners('request');
-        testServer.on('request', (req, res) => {
+        testServer.on('request', (_req, res) => {
           requestCount++;
 
           if (requestCount <= 2) {
@@ -730,7 +730,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
      */
     it('should handle malformed JSON responses', async () => {
       testServer.removeAllListeners('request');
-      testServer.on('request', (req, res) => {
+      testServer.on('request', (_req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end('{ invalid json }');
       });
@@ -748,7 +748,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
      */
     it('should handle HTTP error status codes', async () => {
       testServer.removeAllListeners('request');
-      testServer.on('request', (req, res) => {
+      testServer.on('request', (_req, res) => {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({

@@ -194,7 +194,7 @@ describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
       const result = await provider.getToken();
 
       // Should return expired token as-is (read-only, no refresh attempt)
-      expect(result).toEqual(expiredToken);
+      expect(result).toStrictEqual(expiredToken);
       expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
       expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
     });

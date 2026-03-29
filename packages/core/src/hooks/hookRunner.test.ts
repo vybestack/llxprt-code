@@ -161,7 +161,7 @@ describe('HookRunner', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(result.output).toEqual(mockOutput);
+        expect(result.output).toStrictEqual(mockOutput);
         expect(result.exitCode).toBe(0);
         expect(mockSpawn.stdin.write).toHaveBeenCalledWith(
           JSON.stringify(mockInput),
@@ -440,7 +440,7 @@ describe('HookRunner', () => {
       expect(results.every((r) => r.success)).toBe(true);
       expect(spawn).toHaveBeenCalledTimes(2);
       // Verify they were called sequentially
-      expect(executionOrder).toEqual(['./hook1.sh', './hook2.sh']);
+      expect(executionOrder).toStrictEqual(['./hook1.sh', './hook2.sh']);
     });
 
     it('should continue execution even if a hook fails', async () => {
@@ -531,7 +531,7 @@ describe('HookRunner', () => {
 
       expect(results).toHaveLength(2);
       expect(results[0].success).toBe(true);
-      expect(results[0].output).toEqual(mockOutput1);
+      expect(results[0].output).toStrictEqual(mockOutput1);
 
       // Verify that the second hook received modified input
       const secondHookInput = JSON.parse(
@@ -642,7 +642,7 @@ describe('HookRunner', () => {
       const secondHookInput = JSON.parse(
         vi.mocked(mockSpawn.stdin.write).mock.calls[1][0],
       );
-      expect(firstHookInput).toEqual(secondHookInput);
+      expect(firstHookInput).toStrictEqual(secondHookInput);
     });
   });
 
@@ -680,7 +680,7 @@ describe('HookRunner', () => {
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
       // Should convert plain text to structured output
-      expect(result.output).toEqual({
+      expect(result.output).toStrictEqual({
         decision: 'allow',
         systemMessage: invalidJson,
       });
@@ -712,7 +712,7 @@ describe('HookRunner', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.output).toEqual({
+      expect(result.output).toStrictEqual({
         decision: 'allow',
         systemMessage: malformedJson,
       });
@@ -745,7 +745,7 @@ describe('HookRunner', () => {
 
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
-      expect(result.output).toEqual({
+      expect(result.output).toStrictEqual({
         decision: 'allow',
         systemMessage: `Warning: ${invalidJson}`,
       });
@@ -778,7 +778,7 @@ describe('HookRunner', () => {
 
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(2);
-      expect(result.output).toEqual({
+      expect(result.output).toStrictEqual({
         decision: 'deny',
         reason: invalidJson,
       });
@@ -839,7 +839,7 @@ describe('HookRunner', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.output).toEqual(mockOutput);
+      expect(result.output).toStrictEqual(mockOutput);
     });
   });
 });

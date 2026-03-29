@@ -57,7 +57,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
       const result = await handler(mockContext, '', '/set tea');
 
       // Should find 'teatime' as a direct match
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'teatime' })]),
       );
 
@@ -239,7 +239,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
       const result = await handler(mockContext, '', '/set ');
 
       // Empty query should return at least the single-level options
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'unset' }),
           expect.objectContaining({ value: 'modelparam' }),
@@ -312,13 +312,13 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
 
       // Full match
       const result1 = await handler(mockContext, '', '/cmd create');
-      expect(result1.suggestions).toEqual(
+      expect(result1.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'create' })]),
       );
 
       // Partial match
       const result2 = await handler(mockContext, '', '/cmd cr');
-      expect(result2.suggestions).toEqual(
+      expect(result2.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'create' })]),
       );
 

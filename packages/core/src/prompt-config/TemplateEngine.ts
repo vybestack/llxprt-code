@@ -137,7 +137,7 @@ export class TemplateEngine {
     };
 
     // Add tool-specific variable
-    if (currentTool && currentTool.trim()) {
+    if (currentTool?.trim()) {
       variables['TOOL_NAME'] = currentTool;
     }
 

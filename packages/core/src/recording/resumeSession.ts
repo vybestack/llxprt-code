@@ -79,7 +79,7 @@ export interface ResumeError {
  */
 function extractLockId(filePath: string): string {
   const basename = path.basename(filePath);
-  const match = basename.match(/^session-(.+)\.jsonl$/);
+  const match = RegExp(/^session-(.+)\.jsonl$/).exec(basename);
   if (match == null) {
     throw new Error(`Cannot extract session ID from path: ${filePath}`);
   }

@@ -167,7 +167,7 @@ description: project-desc
       source: 'builtin',
     };
 
-    vi.mocked(loadSkillsFromDir).mockImplementation(async (dir, source) => {
+    vi.mocked(loadSkillsFromDir).mockImplementation(async (_dir, source) => {
       if (source === 'builtin') {
         return [{ ...mockBuiltinSkill }];
       }

@@ -18,6 +18,6 @@ describe('listExtensions', () => {
     const result = listExtensions(mockConfig);
 
     expect(mockConfig.getExtensions).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(mockExtensions);
+    expect(result).toStrictEqual(mockExtensions);
   });
 });

@@ -50,7 +50,7 @@ describe('mouse utils', () => {
       const input = `${ESC}[<0;37;25M`;
       const result = parseSGRMouseEvent(input);
       expect(result).not.toBeNull();
-      expect(result?.event).toEqual({
+      expect(result?.event).toStrictEqual({
         name: 'left-press',
         col: 37,
         row: 25,
@@ -66,7 +66,7 @@ describe('mouse utils', () => {
       const input = `${ESC}[<0;37;25m`;
       const result = parseSGRMouseEvent(input);
       expect(result).not.toBeNull();
-      expect(result?.event).toEqual({
+      expect(result?.event).toStrictEqual({
         name: 'left-release',
         col: 37,
         row: 25,
@@ -81,7 +81,7 @@ describe('mouse utils', () => {
       const input = `${ESC}[<28;10;20M`;
       const result = parseSGRMouseEvent(input);
       expect(result).not.toBeNull();
-      expect(result?.event).toEqual({
+      expect(result?.event).toStrictEqual({
         name: 'left-press',
         col: 10,
         row: 20,
@@ -121,7 +121,7 @@ describe('mouse utils', () => {
       const input = `${ESC}[M !!`;
       const result = parseX11MouseEvent(input);
       expect(result).not.toBeNull();
-      expect(result?.event).toEqual({
+      expect(result?.event).toStrictEqual({
         name: 'left-press',
         col: 1,
         row: 1,

@@ -75,7 +75,7 @@ describe('getGitHubRepoInfo', async () => {
     vi.mocked(child_process.execSync).mockReturnValueOnce(
       'https://github.com/owner/repo.git ',
     );
-    expect(getGitHubRepoInfo()).toEqual({ owner: 'owner', repo: 'repo' });
+    expect(getGitHubRepoInfo()).toStrictEqual({ owner: 'owner', repo: 'repo' });
   });
 });
 

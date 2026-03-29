@@ -694,8 +694,8 @@ describe('HistoryService - Behavioral Tests', () => {
       const importedHistory = newService.getAll();
 
       expect(importedHistory).toHaveLength(originalHistory.length);
-      expect(importedHistory[0]).toEqual(originalHistory[0]);
-      expect(importedHistory[1]).toEqual(originalHistory[1]);
+      expect(importedHistory[0]).toStrictEqual(originalHistory[0]);
+      expect(importedHistory[1]).toStrictEqual(originalHistory[1]);
     });
   });
 
@@ -703,8 +703,8 @@ describe('HistoryService - Behavioral Tests', () => {
     it('should handle empty history operations', () => {
       expect(service.isEmpty()).toBe(true);
       expect(service.length()).toBe(0);
-      expect(service.getAll()).toEqual([]);
-      expect(service.getCurated()).toEqual([]);
+      expect(service.getAll()).toStrictEqual([]);
+      expect(service.getCurated()).toStrictEqual([]);
       expect(service.pop()).toBeUndefined();
       expect(service.getLastUserContent()).toBeUndefined();
       expect(service.getLastAIContent()).toBeUndefined();
@@ -746,7 +746,7 @@ describe('HistoryService - Behavioral Tests', () => {
         ],
       });
 
-      expect(service.getCurated()).toEqual([]);
+      expect(service.getCurated()).toStrictEqual([]);
     });
 
     it('should handle media blocks', () => {

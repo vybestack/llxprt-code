@@ -134,7 +134,7 @@ function enforceAdjacencyForMessage(
 
 function handleAdjacentUserMessage(
   messages: AnthropicMessage[],
-  msgIndex: number,
+  _msgIndex: number,
   nextMsgIndex: number,
   toolUseIdsInMessage: string[],
   logger: { debug: (fn: () => string) => void },
@@ -272,7 +272,7 @@ function removeCollectedResults(
 
 function handleMissingUserMessage(
   messages: AnthropicMessage[],
-  msgIndex: number,
+  _msgIndex: number,
   nextMsgIndex: number,
   toolUseIdsInMessage: string[],
   logger: { debug: (fn: () => string) => void },

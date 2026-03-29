@@ -280,7 +280,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       expect(toolCallBlock).toBeDefined();
 
       // 4. Order must be: thinking, text, tool_call
-      expect(outputIContent.blocks.map((b) => b.type)).toEqual([
+      expect(outputIContent.blocks.map((b) => b.type)).toStrictEqual([
         'thinking',
         'text',
         'tool_call',
@@ -324,7 +324,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       expect((outputIContent.blocks[0] as ThinkingBlock).signature).toBe(
         'sig_fix',
       );
-      expect(outputIContent.blocks.map((b) => b.type)).toEqual([
+      expect(outputIContent.blocks.map((b) => b.type)).toStrictEqual([
         'thinking',
         'text',
         'tool_call',

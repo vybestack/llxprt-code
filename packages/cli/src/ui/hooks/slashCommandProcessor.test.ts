@@ -115,7 +115,7 @@ const coreMocks = vi.hoisted(() => {
     SessionMetrics: class {},
     ModelMetrics: class {},
     DebugLogger: class {
-      static enabled = false;
+      static readonly enabled = false;
       log = vi.fn();
       debug = vi.fn();
       error = vi.fn();
@@ -304,6 +304,6 @@ describe('useSlashCommandProcessor', () => {
       ?.value;
     await commandsPromise;
 
-    expect(latestCommands).toEqual([testCommand]);
+    expect(latestCommands).toStrictEqual([testCommand]);
   });
 });

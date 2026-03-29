@@ -13,7 +13,7 @@ import type { HistoryItem } from '../types.js';
 describe('useHistoryManager', () => {
   it('should initialize with an empty history', () => {
     const { result } = renderHook(() => useHistory());
-    expect(result.current.history).toEqual([]);
+    expect(result.current.history).toStrictEqual([]);
   });
 
   it('should add an item to history with a unique ID', () => {
@@ -29,7 +29,7 @@ describe('useHistoryManager', () => {
     });
 
     expect(result.current.history).toHaveLength(1);
-    expect(result.current.history[0]).toEqual(
+    expect(result.current.history[0]).toStrictEqual(
       expect.objectContaining({
         ...itemData,
         id: expect.any(Number),
@@ -60,9 +60,9 @@ describe('useHistoryManager', () => {
     });
 
     expect(result.current.history).toHaveLength(2);
-    expect(id1).not.toEqual(id2);
-    expect(result.current.history[0].id).toEqual(id1);
-    expect(result.current.history[1].id).toEqual(id2);
+    expect(id1).not.toStrictEqual(id2);
+    expect(result.current.history[0].id).toStrictEqual(id1);
+    expect(result.current.history[1].id).toStrictEqual(id2);
     // IDs should be sequential based on the counter
     expect(id2).toBeGreaterThan(id1);
   });
@@ -86,7 +86,7 @@ describe('useHistoryManager', () => {
     });
 
     expect(result.current.history).toHaveLength(1);
-    expect(result.current.history[0]).toEqual({
+    expect(result.current.history[0]).toStrictEqual({
       ...initialItem,
       id: itemId,
       text: updatedText,
@@ -111,7 +111,7 @@ describe('useHistoryManager', () => {
       result.current.updateItem(99999, { text: 'Should not apply' }); // Nonexistent ID
     });
 
-    expect(result.current.history).toEqual(originalHistory);
+    expect(result.current.history).toStrictEqual(originalHistory);
   });
 
   it('should clear the history', () => {
@@ -137,7 +137,7 @@ describe('useHistoryManager', () => {
       result.current.clearItems();
     });
 
-    expect(result.current.history).toEqual([]);
+    expect(result.current.history).toStrictEqual([]);
   });
 
   it('should not add consecutive duplicate user messages', () => {

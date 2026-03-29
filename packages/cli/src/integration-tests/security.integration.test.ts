@@ -70,7 +70,7 @@ describe('API Key Security Integration Tests', () => {
       // Verify expected settings are present
       expect(parsedSettings.theme).toBe('default');
       expect(parsedSettings.sandbox).toBe(true);
-      expect(parsedSettings.coreTools).toEqual(['ls', 'grep']);
+      expect(parsedSettings.coreTools).toStrictEqual(['ls', 'grep']);
     });
 
     it('should not persist providerApiKeys to settings.json', async () => {

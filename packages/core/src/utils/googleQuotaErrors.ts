@@ -106,7 +106,9 @@ export function classifyGoogleError(error: unknown): unknown {
     const errorMessage =
       googleApiError?.message ||
       (error instanceof Error ? error.message : String(error));
-    const match = errorMessage.match(/Please retry in ([0-9.]+(?:ms|s))/);
+    const match = RegExp(/Please retry in ([0-9.]+(?:ms|s))/).exec(
+      errorMessage,
+    );
     if (match?.[1]) {
       const retryDelaySeconds = parseDurationInSeconds(match[1]);
       if (retryDelaySeconds !== null) {

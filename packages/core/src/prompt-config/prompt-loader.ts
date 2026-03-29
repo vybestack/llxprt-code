@@ -188,10 +188,10 @@ export class PromptLoader {
       // Remove excessive whitespace
       // For list items, preserve leading spaces (indentation)
       if (
-        compressedLine.match(/^\s*[-*+]\s/) != null ||
-        compressedLine.match(/^\s*\d+\.\s/) != null
+        RegExp(/^\s*[-*+]\s/).exec(compressedLine) != null ||
+        RegExp(/^\s*\d+\.\s/).exec(compressedLine) != null
       ) {
-        const leadingSpaces = compressedLine.match(/^\s*/)?.[0] || '';
+        const leadingSpaces = RegExp(/^\s*/).exec(compressedLine)?.[0] || '';
         compressedLine =
           leadingSpaces + compressedLine.trim().replace(/\s+/g, ' ');
       } else {

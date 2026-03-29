@@ -149,7 +149,9 @@ export class TerminalCapabilityManager {
 
         // Check OSC 11
         if (!bgReceived) {
-          const match = buffer.match(TerminalCapabilityManager.OSC_11_REGEX);
+          const match = RegExp(TerminalCapabilityManager.OSC_11_REGEX).exec(
+            buffer,
+          );
           if (match != null) {
             bgReceived = true;
             this.terminalBackgroundColor = this.parseColor(
@@ -170,9 +172,9 @@ export class TerminalCapabilityManager {
 
         // check for modifyOtherKeys support
         if (!modifyOtherKeysReceived) {
-          const match = buffer.match(
+          const match = RegExp(
             TerminalCapabilityManager.MODIFY_OTHER_KEYS_REGEX,
-          );
+          ).exec(buffer);
           if (match != null) {
             modifyOtherKeysReceived = true;
             const level = parseInt(match[1], 10);
@@ -185,9 +187,9 @@ export class TerminalCapabilityManager {
 
         // Check for Terminal Name/Version response.
         if (!terminalNameReceived) {
-          const match = buffer.match(
+          const match = RegExp(
             TerminalCapabilityManager.TERMINAL_NAME_REGEX,
-          );
+          ).exec(buffer);
           if (match != null) {
             terminalNameReceived = true;
             this.terminalName = match[1];
@@ -198,9 +200,9 @@ export class TerminalCapabilityManager {
         // that the terminal has processed all our queries. Since we send it
         // last, receiving it means we can stop waiting.
         if (!deviceAttributesReceived) {
-          const match = buffer.match(
+          const match = RegExp(
             TerminalCapabilityManager.DEVICE_ATTRIBUTES_REGEX,
-          );
+          ).exec(buffer);
           if (match != null) {
             deviceAttributesReceived = true;
             this.deviceAttributesSupported = true;

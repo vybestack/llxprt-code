@@ -958,7 +958,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       expect(result.current).toBeDefined();
       expect(result.current.streamingState).toBe(StreamingState.Idle);
       // Verify the configuration mock is properly set up
-      expect(mockConfig.getEphemeralSettings()).toEqual(settings);
+      expect(mockConfig.getEphemeralSettings()).toStrictEqual(settings);
     });
   });
 

@@ -233,8 +233,8 @@ describe('generateDynamicToolSettings', () => {
     });
 
     it('should return empty object when config is undefined', () => {
-      const toolSettings = generateDynamicToolSettings(undefined);
-      expect(toolSettings).toEqual({});
+      const toolSettings = generateDynamicToolSettings();
+      expect(toolSettings).toStrictEqual({});
     });
 
     it('should handle empty tool registry', () => {
@@ -276,7 +276,7 @@ describe('generateDynamicToolSettings', () => {
       } as unknown as Config;
 
       const toolSettings = generateDynamicToolSettings(errorConfig);
-      expect(toolSettings).toEqual({});
+      expect(toolSettings).toStrictEqual({});
     });
   });
 
@@ -460,8 +460,8 @@ describe('generateDynamicToolSettings', () => {
       const excludeTools = getEffectiveValue('excludeTools', {}, {});
       const allowedTools = getEffectiveValue('allowedTools', {}, {});
 
-      expect(excludeTools).toEqual(['Tool1', 'Tool2']);
-      expect(allowedTools).toEqual(['Tool3']);
+      expect(excludeTools).toStrictEqual(['Tool1', 'Tool2']);
+      expect(allowedTools).toStrictEqual(['Tool3']);
     });
 
     it('should handle empty arrays for excludeTools and allowedTools', async () => {
@@ -479,8 +479,8 @@ describe('generateDynamicToolSettings', () => {
       const excludeTools = getEffectiveValue('excludeTools', {}, {});
       const allowedTools = getEffectiveValue('allowedTools', {}, {});
 
-      expect(excludeTools).toEqual([]);
-      expect(allowedTools).toEqual([]);
+      expect(excludeTools).toStrictEqual([]);
+      expect(allowedTools).toStrictEqual([]);
     });
 
     it('should handle undefined values for excludeTools and allowedTools', async () => {
@@ -498,8 +498,8 @@ describe('generateDynamicToolSettings', () => {
       const excludeTools = getEffectiveValue('excludeTools', {}, {}) || [];
       const allowedTools = getEffectiveValue('allowedTools', {}, {}) || [];
 
-      expect(excludeTools).toEqual([]);
-      expect(allowedTools).toEqual([]);
+      expect(excludeTools).toStrictEqual([]);
+      expect(allowedTools).toStrictEqual([]);
     });
   });
 });

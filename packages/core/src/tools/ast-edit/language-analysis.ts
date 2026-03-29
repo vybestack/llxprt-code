@@ -66,7 +66,7 @@ export function extractImports(content: string, language: string): Import[] {
  * @returns The module path or 'unknown' if not found
  */
 function extractImportModule(line: string): string {
-  const match = line.match(REGEX.IMPORT_MODULE);
+  const match = RegExp(REGEX.IMPORT_MODULE).exec(line);
   return match != null ? match[1] : 'unknown';
 }
 
@@ -76,7 +76,7 @@ function extractImportModule(line: string): string {
  * @returns Array of imported item names
  */
 function extractImportItems(line: string): string[] {
-  const match = line.match(REGEX.IMPORT_ITEMS);
+  const match = RegExp(REGEX.IMPORT_ITEMS).exec(line);
   if (match != null) {
     return match[1].split(',').map((item) => item.trim());
   }
@@ -88,11 +88,11 @@ function extractImportItems(line: string): string[] {
  * Handles: `import os`, `from pathlib import Path`, `from os.path import join`
  */
 function extractPythonImportModule(line: string): string {
-  const fromMatch = line.match(/^from\s+([\w.]+)\s+import/);
+  const fromMatch = RegExp(/^from\s+([\w.]+)\s+import/).exec(line);
   if (fromMatch != null) {
     return fromMatch[1];
   }
-  const importMatch = line.match(/^import\s+([\w.]+)/);
+  const importMatch = RegExp(/^import\s+([\w.]+)/).exec(line);
   if (importMatch != null) {
     return importMatch[1];
   }
@@ -104,7 +104,7 @@ function extractPythonImportModule(line: string): string {
  * Handles: `from typing import List, Dict`, `from os.path import join, exists`
  */
 function extractPythonImportItems(line: string): string[] {
-  const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
+  const fromImportMatch = RegExp(/^from\s+[\w.]+\s+import\s+(.+)/).exec(line);
   if (fromImportMatch != null) {
     return fromImportMatch[1]
       .split(',')

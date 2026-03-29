@@ -146,7 +146,7 @@ describe('partUtils', () => {
 
   describe('getResponseText', () => {
     it('should return undefined when no candidates exist', () => {
-      const response = mockResponse(undefined);
+      const response = mockResponse();
       expect(getResponseText(response)).toBeUndefined();
     });
 

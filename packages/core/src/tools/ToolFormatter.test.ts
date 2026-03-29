@@ -73,7 +73,7 @@ describe('ToolFormatter', () => {
 
       // Check that parameters were converted properly
       expect(tool.function.parameters).toBeDefined();
-      expect(tool.function.parameters).not.toEqual({});
+      expect(tool.function.parameters).not.toStrictEqual({});
 
       // Parameters should have the expected structure
       expect(tool.function.parameters.type).toBe('object');
@@ -96,12 +96,12 @@ describe('ToolFormatter', () => {
       expect(
         tool.function.parameters.properties.todos.items.properties.status,
       ).toBeDefined();
-      expect(tool.function.parameters.required).toEqual(['todos']);
+      expect(tool.function.parameters.required).toStrictEqual(['todos']);
 
       // Check that enums are preserved
       expect(
         tool.function.parameters.properties.todos.items.properties.status.enum,
-      ).toEqual(['pending', 'in_progress', 'completed']);
+      ).toStrictEqual(['pending', 'in_progress', 'completed']);
 
       // Check that minLength was converted from string to number
       expect(
@@ -135,7 +135,7 @@ describe('ToolFormatter', () => {
       expect(result).toHaveLength(1);
 
       const tool = result![0];
-      expect(tool.function.parameters).toEqual({});
+      expect(tool.function.parameters).toStrictEqual({});
     });
 
     it('should handle tools with empty object parameters', () => {
@@ -159,7 +159,7 @@ describe('ToolFormatter', () => {
       expect(result).toHaveLength(1);
 
       const tool = result![0];
-      expect(tool.function.parameters).toEqual({});
+      expect(tool.function.parameters).toStrictEqual({});
     });
 
     it('should convert list_directory tool properly', () => {
@@ -209,7 +209,7 @@ describe('ToolFormatter', () => {
       expect(tool.function.parameters.properties.path.type).toBe('string');
       expect(tool.function.parameters.properties.ignore).toBeDefined();
       expect(tool.function.parameters.properties.ignore.type).toBe('array');
-      expect(tool.function.parameters.required).toEqual(['path']);
+      expect(tool.function.parameters.required).toStrictEqual(['path']);
     });
   });
 
@@ -322,7 +322,11 @@ describe('ToolFormatter', () => {
         geminiSchema,
       ) as Record<string, unknown>;
 
-      expect(result.enum).toEqual(['pending', 'in_progress', 'completed']);
+      expect(result.enum).toStrictEqual([
+        'pending',
+        'in_progress',
+        'completed',
+      ]);
     });
 
     it('should return empty object when given empty object', () => {
@@ -333,7 +337,7 @@ describe('ToolFormatter', () => {
         unknown
       >;
 
-      expect(result).toEqual({});
+      expect(result).toStrictEqual({});
     });
 
     it('should return undefined when given undefined', () => {

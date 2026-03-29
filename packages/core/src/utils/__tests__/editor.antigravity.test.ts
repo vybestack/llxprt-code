@@ -31,7 +31,7 @@ describe('editor.ts antigravity support', () => {
 
   it('getDiffCommand returns --wait --diff for antigravity', () => {
     const cmd = getDiffCommand('/old', '/new', 'antigravity' as EditorType);
-    expect(cmd).toEqual({
+    expect(cmd).toStrictEqual({
       command: expect.any(String),
       args: ['--wait', '--diff', '/old', '/new'],
     });

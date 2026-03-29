@@ -38,7 +38,7 @@ describe('ComplexityAnalyzer', () => {
     const result = analyzer.analyzeComplexity(message);
 
     // File references should no longer be counted as tasks
-    expect(result.detectedTasks).toEqual([]);
+    expect(result.detectedTasks).toStrictEqual([]);
     expect(result.shouldSuggestTodos).toBe(false);
   });
 
@@ -102,7 +102,7 @@ describe('ComplexityAnalyzer', () => {
 
     const result = analyzer.analyzeComplexity(message);
 
-    expect(result.detectedTasks).toEqual([
+    expect(result.detectedTasks).toStrictEqual([
       'deploy the pipeline',
       'verify the QA checklist',
     ]);
@@ -116,7 +116,7 @@ describe('ComplexityAnalyzer', () => {
 
     const result = analyzer.analyzeComplexity(message);
 
-    expect(result.detectedTasks).toEqual([
+    expect(result.detectedTasks).toStrictEqual([
       'coordinate the release',
       'document the decisions',
     ]);

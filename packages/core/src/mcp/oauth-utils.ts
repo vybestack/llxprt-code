@@ -321,7 +321,7 @@ export class OAuthUtils {
    */
   static parseWWWAuthenticateHeader(header: string): string | null {
     // Parse Bearer realm and resource_metadata
-    const match = header.match(/resource_metadata="([^"]+)"/);
+    const match = RegExp(/resource_metadata="([^"]+)"/).exec(header);
     if (match != null) {
       return match[1];
     }

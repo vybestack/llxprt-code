@@ -262,7 +262,6 @@ describe('Telemetry Metrics', () => {
         10,
         'text/plain',
         'txt',
-        undefined,
       );
 
       expect(mockCounterAddFn).toHaveBeenCalledWith(1, {

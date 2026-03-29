@@ -14,8 +14,8 @@ import {
 
 vi.mock('openai', () => {
   class FakeOpenAI {
-    static created: symbol[] = [];
-    static lastOptions: Record<string, unknown> | null = null;
+    static readonly created: symbol[] = [];
+    static readonly lastOptions: Record<string, unknown> | null = null;
 
     static reset(): void {
       FakeOpenAI.created = [];

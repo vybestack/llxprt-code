@@ -86,7 +86,7 @@ describe('providerMutations', () => {
 
     it('returns undefined for null/undefined input', () => {
       expect(normalizeProviderBaseUrl(null)).toBeUndefined();
-      expect(normalizeProviderBaseUrl(undefined)).toBeUndefined();
+      expect(normalizeProviderBaseUrl()).toBeUndefined();
     });
 
     it('returns undefined for empty string', () => {

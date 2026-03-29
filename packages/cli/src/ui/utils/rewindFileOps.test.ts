@@ -124,7 +124,7 @@ describe('rewindFileOps', () => {
       mockConversation.messages = [userMsg, toolMsg, userMsg2];
 
       const stats = calculateTurnStats(mockConversation, userMsg);
-      expect(stats).toEqual({
+      expect(stats).toStrictEqual({
         addedLines: 5,
         removedLines: 2,
         fileCount: 1,
@@ -223,7 +223,7 @@ describe('rewindFileOps', () => {
 
       const stats = calculateRewindImpact(mockConversation, userMsg1);
 
-      expect(stats).toEqual({
+      expect(stats).toStrictEqual({
         addedLines: 8, // 5 + 3
         removedLines: 3, // 2 + 1
         fileCount: 2,

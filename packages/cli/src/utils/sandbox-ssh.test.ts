@@ -51,7 +51,7 @@ describe('setupSshAgentDockerMacOS', () => {
       .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentDockerMacOS(args);
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(args).toHaveLength(0);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('SSH agent forwarding disabled'),
@@ -185,7 +185,7 @@ describe('setupSshAgentForwarding', () => {
     process.env.LLXPRT_SANDBOX_SSH_AGENT = 'off';
     const args: string[] = [];
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(args).toHaveLength(0);
   });
 
@@ -197,7 +197,7 @@ describe('setupSshAgentForwarding', () => {
       .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('SSH_AUTH_SOCK is not set'),
     );
@@ -209,7 +209,7 @@ describe('setupSshAgentForwarding', () => {
     delete process.env.SSH_AUTH_SOCK;
     const args: string[] = [];
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
   });
 
   it('warns and skips when SSH_AUTH_SOCK path does not exist on disk (R4.3)', async () => {
@@ -221,7 +221,7 @@ describe('setupSshAgentForwarding', () => {
       .mockImplementation(() => {});
     const args: string[] = [];
     const result = await setupSshAgentForwarding({ command: 'docker' }, args);
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('SSH_AUTH_SOCK path not found'),
     );
@@ -358,7 +358,7 @@ describe('setupSshAgentPodmanMacOS', () => {
     const args = ['--network', 'none'];
     const result = await setupSshAgentPodmanMacOS(args, '/tmp/auth.sock');
 
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('--network=none is already set'),
     );
@@ -428,7 +428,7 @@ describe('setupSshAgentPodmanMacOS', () => {
     const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
 
     expect(tunnelPort).not.toBe(49152);
-    expect(reserved).toEqual([tunnelPort]);
+    expect(reserved).toStrictEqual([tunnelPort]);
   }, 10000);
 
   it('kills tunnel process when poll timeout expires (R7.8)', async () => {
@@ -624,7 +624,7 @@ describe('setupCredentialProxyPodmanMacOS', () => {
     const tunnelPort = Number(sshArgs[rIdx + 1].split(':')[1]);
 
     expect(tunnelPort).not.toBe(49152);
-    expect(reserved).toEqual([tunnelPort]);
+    expect(reserved).toStrictEqual([tunnelPort]);
   }, 10000);
 
   it('coordinates shared reserved ports across SSH and credential proxy tunnels', async () => {
@@ -821,7 +821,7 @@ describe('setupSshAgentDockerLinux', () => {
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
 
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
     const vol = args.find((a) => a.includes('/tmp/auth.sock:/ssh-agent'));
     expect(vol).toBeDefined();
@@ -860,7 +860,7 @@ describe('setupSshAgentDockerLinux', () => {
     const args: string[] = [];
     const result = await setupSshAgentDockerLinux(args, '/tmp/auth.sock');
 
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
     expect(args).toContain('SSH_AUTH_SOCK=/ssh-agent');
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Defaulting to use current user UID/GID'),

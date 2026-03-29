@@ -101,7 +101,7 @@ describe('GeminiChat Context Limit Enforcement', () => {
 
     // Mock the tokenLimit function to track calls
     vi.spyOn(tokenLimitsModule, 'tokenLimit').mockImplementation(
-      (model, userContextLimit) => {
+      (_model, userContextLimit) => {
         if (userContextLimit) {
           return userContextLimit;
         }

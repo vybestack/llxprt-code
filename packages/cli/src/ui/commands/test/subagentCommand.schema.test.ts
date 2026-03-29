@@ -97,7 +97,7 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
       commandPathLength: 2,
     });
 
-    expect(result.suggestions).toEqual([
+    expect(result.suggestions).toStrictEqual([
       { value: 'agent1', description: 'Profile: default' },
       { value: 'agent2', description: 'Profile: custom' },
       { value: 'code-helper', description: 'Profile: coding' },
@@ -114,7 +114,7 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
       commandPathLength: 2,
     });
 
-    expect(result.suggestions.map((s) => s.value)).toEqual([
+    expect(result.suggestions.map((s) => s.value)).toStrictEqual([
       'agent1',
       'agent2',
     ]);
@@ -129,7 +129,7 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
       commandPathLength: 2,
     });
 
-    expect(result.suggestions.map((s) => s.value)).toEqual(mockProfiles);
+    expect(result.suggestions.map((s) => s.value)).toStrictEqual(mockProfiles);
     expect(result.hint).toBe('Select profile configuration');
     expect(result.position).toBe(2);
   });
@@ -142,7 +142,10 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
       commandPathLength: 2,
     });
 
-    expect(result.suggestions.map((s) => s.value)).toEqual(['auto', 'manual']);
+    expect(result.suggestions.map((s) => s.value)).toStrictEqual([
+      'auto',
+      'manual',
+    ]);
     expect(result.hint).toBe('Select mode');
   });
 
@@ -154,7 +157,7 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
       commandPathLength: 2,
     });
 
-    expect(result.suggestions).toEqual([]);
+    expect(result.suggestions).toStrictEqual([]);
     expect(result.hint).toBe('Enter system prompt for automatic mode');
   });
 });

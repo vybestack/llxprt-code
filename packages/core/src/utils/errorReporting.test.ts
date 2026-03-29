@@ -49,7 +49,7 @@ describe('reportError', () => {
     const reportContent = await fs.readFile(expectedReportPath, 'utf-8');
     const parsedReport = JSON.parse(reportContent);
 
-    expect(parsedReport).toEqual({
+    expect(parsedReport).toStrictEqual({
       error: { message: 'Test error', stack: 'Test stack' },
       context,
     });
@@ -71,7 +71,7 @@ describe('reportError', () => {
     const reportContent = await fs.readFile(expectedReportPath, 'utf-8');
     const parsedReport = JSON.parse(reportContent);
 
-    expect(parsedReport).toEqual({
+    expect(parsedReport).toStrictEqual({
       error: { message: 'Test plain object error' },
     });
 
@@ -91,7 +91,7 @@ describe('reportError', () => {
     const reportContent = await fs.readFile(expectedReportPath, 'utf-8');
     const parsedReport = JSON.parse(reportContent);
 
-    expect(parsedReport).toEqual({
+    expect(parsedReport).toStrictEqual({
       error: { message: 'Just a string error' },
     });
 
@@ -161,7 +161,7 @@ describe('reportError', () => {
     // Check that it writes a minimal report
     const reportContent = await fs.readFile(expectedMinimalReportPath, 'utf-8');
     const parsedReport = JSON.parse(reportContent);
-    expect(parsedReport).toEqual({
+    expect(parsedReport).toStrictEqual({
       error: { message: error.message, stack: error.stack },
     });
 
@@ -182,7 +182,7 @@ describe('reportError', () => {
     const reportContent = await fs.readFile(expectedReportPath, 'utf-8');
     const parsedReport = JSON.parse(reportContent);
 
-    expect(parsedReport).toEqual({
+    expect(parsedReport).toStrictEqual({
       error: { message: 'Error without context', stack: 'No context stack' },
     });
 

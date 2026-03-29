@@ -2130,7 +2130,7 @@ describe('useGeminiStream', () => {
         const expectedMessage = shouldAddMessage
           ? { type: 'info', text: message }
           : undefined;
-        expect(infoMessages[0]?.[0]).toEqual(expectedMessage);
+        expect(infoMessages[0]?.[0]).toStrictEqual(expectedMessage);
       },
     );
   });

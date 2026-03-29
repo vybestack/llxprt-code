@@ -108,9 +108,9 @@ export function getGitHubRepoInfo(): { owner: string; repo: string } {
   }).trim();
 
   // Matches either https://github.com/owner/repo.git or git@github.com:owner/repo.git
-  const match = remoteUrl.match(
+  const match = RegExp(
     /(?:https?:\/\/|git@)github\.com(?::|\/)([^/]+)\/([^/]+?)(?:\.git)?$/,
-  );
+  ).exec(remoteUrl);
 
   // If the regex fails match, throw an error.
   if (!match?.[1] || !match[2]) {

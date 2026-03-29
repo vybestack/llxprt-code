@@ -224,18 +224,18 @@ describe('golden snapshot', () => {
     const sequence = actionCorpus.sequences[0];
     const result1 = applySequence(sequence);
     const result2 = applySequence(sequence);
-    expect(result1).toEqual(result2);
+    expect(result1).toStrictEqual(result2);
   });
 
   it('should handle insert and newlines correctly', () => {
     const state = applySequence(['insert:hello', 'insert:\n', 'insert:world']);
-    expect(state.lines).toEqual(['hello', 'world']);
+    expect(state.lines).toStrictEqual(['hello', 'world']);
     expect(state.cursorRow).toBe(1);
     expect(state.cursorCol).toBe(5);
   });
 
   it('should handle undo/redo correctly', () => {
     const state = applySequence(['insert:hello', 'undo', 'redo']);
-    expect(state.lines).toEqual(['hello']);
+    expect(state.lines).toStrictEqual(['hello']);
   });
 });

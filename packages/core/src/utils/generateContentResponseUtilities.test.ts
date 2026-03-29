@@ -163,7 +163,7 @@ describe('generateContentResponseUtilities', () => {
       const response = mockResponse([
         mockFunctionCallPart(func.name, func.args),
       ]);
-      expect(getFunctionCalls(response)).toEqual([func]);
+      expect(getFunctionCalls(response)).toStrictEqual([func]);
     });
     it('should extract multiple function calls', () => {
       const func1 = { name: 'testFunc1', args: { a: 1 } };
@@ -172,7 +172,7 @@ describe('generateContentResponseUtilities', () => {
         mockFunctionCallPart(func1.name, func1.args),
         mockFunctionCallPart(func2.name, func2.args),
       ]);
-      expect(getFunctionCalls(response)).toEqual([func1, func2]);
+      expect(getFunctionCalls(response)).toStrictEqual([func1, func2]);
     });
     it('should ignore text parts', () => {
       const func = { name: 'testFunc', args: { a: 1 } };
@@ -181,7 +181,7 @@ describe('generateContentResponseUtilities', () => {
         mockFunctionCallPart(func.name, func.args),
         mockTextPart('More text'),
       ]);
-      expect(getFunctionCalls(response)).toEqual([func]);
+      expect(getFunctionCalls(response)).toStrictEqual([func]);
     });
     it('should return undefined if only text parts exist', () => {
       const response = mockResponse([
@@ -200,7 +200,7 @@ describe('generateContentResponseUtilities', () => {
       const func = { name: 'testFunc', args: { a: 1 } };
       expect(
         getFunctionCallsFromParts([mockFunctionCallPart(func.name, func.args)]),
-      ).toEqual([func]);
+      ).toStrictEqual([func]);
     });
     it('should extract multiple function calls', () => {
       const func1 = { name: 'testFunc1', args: { a: 1 } };
@@ -210,7 +210,7 @@ describe('generateContentResponseUtilities', () => {
           mockFunctionCallPart(func1.name, func1.args),
           mockFunctionCallPart(func2.name, func2.args),
         ]),
-      ).toEqual([func1, func2]);
+      ).toStrictEqual([func1, func2]);
     });
     it('should ignore text parts', () => {
       const func = { name: 'testFunc', args: { a: 1 } };
@@ -220,7 +220,7 @@ describe('generateContentResponseUtilities', () => {
           mockFunctionCallPart(func.name, func.args),
           mockTextPart('More text'),
         ]),
-      ).toEqual([func]);
+      ).toStrictEqual([func]);
     });
     it('should return undefined if only text parts exist', () => {
       expect(
@@ -335,15 +335,15 @@ describe('generateContentResponseUtilities', () => {
     };
 
     it('creates a functionResponse part with the provided id, name, and output', () => {
-      expect(createFunctionResponsePart('call-1', 'read_file', 'done')).toEqual(
-        {
-          functionResponse: {
-            id: 'call-1',
-            name: 'read_file',
-            response: { output: 'done' },
-          },
+      expect(
+        createFunctionResponsePart('call-1', 'read_file', 'done'),
+      ).toStrictEqual({
+        functionResponse: {
+          id: 'call-1',
+          name: 'read_file',
+          response: { output: 'done' },
         },
-      );
+      });
     });
 
     it('passes string output through unchanged when no config is provided', () => {
@@ -392,7 +392,7 @@ describe('generateContentResponseUtilities', () => {
         configWithTruncation,
       );
 
-      expect(limitedPart).toEqual({
+      expect(limitedPart).toStrictEqual({
         functionResponse: {
           id: 'call-2',
           name: 'read_file',
@@ -415,7 +415,9 @@ describe('generateContentResponseUtilities', () => {
         },
       };
 
-      expect(toParts(['alpha', functionResponsePart, null, 'beta'])).toEqual([
+      expect(
+        toParts(['alpha', functionResponsePart, null, 'beta']),
+      ).toStrictEqual([
         { text: 'alpha' },
         functionResponsePart,
         { text: 'beta' },
@@ -425,7 +427,7 @@ describe('generateContentResponseUtilities', () => {
     it('wraps string llmContent in a single functionResponse', () => {
       expect(
         convertToFunctionResponse('tool', 'call-4', 'simple output'),
-      ).toEqual([
+      ).toStrictEqual([
         {
           functionResponse: {
             id: 'call-4',
@@ -442,7 +444,7 @@ describe('generateContentResponseUtilities', () => {
           { text: 'line 1' },
           { text: 'line 2' },
         ]),
-      ).toEqual([
+      ).toStrictEqual([
         {
           functionResponse: {
             id: 'call-5',
@@ -467,7 +469,7 @@ describe('generateContentResponseUtilities', () => {
             response: originalResponse,
           },
         }),
-      ).toEqual([
+      ).toStrictEqual([
         {
           functionResponse: {
             id: 'call-6',
@@ -498,7 +500,7 @@ describe('generateContentResponseUtilities', () => {
           inlineDataPart,
           fileDataPart,
         ]),
-      ).toEqual([
+      ).toStrictEqual([
         {
           functionResponse: {
             id: 'call-7',
@@ -521,7 +523,7 @@ describe('generateContentResponseUtilities', () => {
 
       expect(
         convertToFunctionResponse('tool', 'call-8', [inlineDataPart]),
-      ).toEqual([
+      ).toStrictEqual([
         {
           functionResponse: {
             id: 'call-8',
@@ -546,7 +548,7 @@ describe('generateContentResponseUtilities', () => {
         configWithTruncation,
       );
 
-      expect(converted).toEqual([
+      expect(converted).toStrictEqual([
         {
           functionResponse: {
             id: 'call-9',

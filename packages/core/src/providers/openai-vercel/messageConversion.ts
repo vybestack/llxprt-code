@@ -64,7 +64,9 @@ function inferMediaEncoding(imageData: string): {
   const defaultResult = { encoding: 'url' as const, mimeType: 'image/*' };
 
   if (imageData.startsWith('data:image/') && imageData.includes(';base64,')) {
-    const mimeMatch = imageData.slice('data:'.length).match(/^([^;]+);base64,/);
+    const mimeMatch = RegExp(/^([^;]+);base64,/).exec(
+      imageData.slice('data:'.length),
+    );
     const mimeType = mimeMatch?.[1] ?? 'image/*';
     return { encoding: 'base64', mimeType };
   }

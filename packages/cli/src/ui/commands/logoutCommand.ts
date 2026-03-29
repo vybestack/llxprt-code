@@ -18,7 +18,7 @@ export const logoutCommand: SlashCommand = {
     'logout from OAuth authentication for a provider (gemini, qwen, anthropic)',
   kind: CommandKind.BUILT_IN,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
     const provider = args?.trim();

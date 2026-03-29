@@ -38,11 +38,11 @@ describe('parseResponsesStream', () => {
     }
 
     expect(messages).toHaveLength(2);
-    expect(messages[0]).toEqual({
+    expect(messages[0]).toStrictEqual({
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello' }],
     });
-    expect(messages[1]).toEqual({
+    expect(messages[1]).toStrictEqual({
       speaker: 'ai',
       blocks: [{ type: 'text', text: ' world' }],
     });
@@ -65,7 +65,7 @@ describe('parseResponsesStream', () => {
     }
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]).toEqual({
+    expect(messages[0]).toStrictEqual({
       role: ContentGeneratorRole.ASSISTANT,
       content: '',
       tool_calls: [
@@ -99,7 +99,7 @@ describe('parseResponsesStream', () => {
     // Should have content message and final message with usage
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const lastMessage = messages[messages.length - 1];
-    expect(lastMessage.usage).toEqual({
+    expect(lastMessage.usage).toStrictEqual({
       prompt_tokens: 10,
       completion_tokens: 2,
       total_tokens: 12,
@@ -219,7 +219,7 @@ describe('parseErrorResponse', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 100,
       completionTokens: 20,
       totalTokens: 120,
@@ -244,7 +244,7 @@ describe('parseErrorResponse', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 100,
       completionTokens: 20,
       totalTokens: 120,

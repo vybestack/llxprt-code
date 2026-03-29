@@ -78,20 +78,20 @@ describe('clipboardUtils', () => {
 
   describe('splitEscapedPaths', () => {
     it('should return single path when no spaces', () => {
-      expect(splitEscapedPaths('/path/to/image.png')).toEqual([
+      expect(splitEscapedPaths('/path/to/image.png')).toStrictEqual([
         '/path/to/image.png',
       ]);
     });
 
     it('should split simple space-separated paths', () => {
-      expect(splitEscapedPaths('/img1.png /img2.png')).toEqual([
+      expect(splitEscapedPaths('/img1.png /img2.png')).toStrictEqual([
         '/img1.png',
         '/img2.png',
       ]);
     });
 
     it('should split three paths', () => {
-      expect(splitEscapedPaths('/a.png /b.jpg /c.heic')).toEqual([
+      expect(splitEscapedPaths('/a.png /b.jpg /c.heic')).toStrictEqual([
         '/a.png',
         '/b.jpg',
         '/c.heic',
@@ -99,44 +99,43 @@ describe('clipboardUtils', () => {
     });
 
     it('should preserve escaped spaces within filenames', () => {
-      expect(splitEscapedPaths('/my\\\\ image.png')).toEqual([
+      expect(splitEscapedPaths('/my\\\\ image.png')).toStrictEqual([
         '/my\\\\ image.png',
       ]);
     });
 
     it('should handle multiple paths with escaped spaces', () => {
-      expect(splitEscapedPaths('/my\\\\ img1.png /my\\\\ img2.png')).toEqual([
-        '/my\\\\ img1.png',
-        '/my\\\\ img2.png',
-      ]);
+      expect(
+        splitEscapedPaths('/my\\\\ img1.png /my\\\\ img2.png'),
+      ).toStrictEqual(['/my\\\\ img1.png', '/my\\\\ img2.png']);
     });
 
     it('should handle path with multiple escaped spaces', () => {
-      expect(splitEscapedPaths('/path/to/my\\\\ cool\\\\ image.png')).toEqual([
-        '/path/to/my\\\\ cool\\\\ image.png',
-      ]);
+      expect(
+        splitEscapedPaths('/path/to/my\\\\ cool\\\\ image.png'),
+      ).toStrictEqual(['/path/to/my\\\\ cool\\\\ image.png']);
     });
 
     it('should handle multiple consecutive spaces between paths', () => {
-      expect(splitEscapedPaths('/img1.png   /img2.png')).toEqual([
+      expect(splitEscapedPaths('/img1.png   /img2.png')).toStrictEqual([
         '/img1.png',
         '/img2.png',
       ]);
     });
 
     it('should handle trailing and leading whitespace', () => {
-      expect(splitEscapedPaths('  /img1.png /img2.png  ')).toEqual([
+      expect(splitEscapedPaths('  /img1.png /img2.png  ')).toStrictEqual([
         '/img1.png',
         '/img2.png',
       ]);
     });
 
     it('should return empty array for empty string', () => {
-      expect(splitEscapedPaths('')).toEqual([]);
+      expect(splitEscapedPaths('')).toStrictEqual([]);
     });
 
     it('should return empty array for whitespace only', () => {
-      expect(splitEscapedPaths('   ')).toEqual([]);
+      expect(splitEscapedPaths('   ')).toStrictEqual([]);
     });
   });
 
@@ -197,7 +196,7 @@ describe('clipboardUtils', () => {
         validatedPaths.push(p);
         return validPaths.has(p);
       });
-      expect(validatedPaths).toEqual([
+      expect(validatedPaths).toStrictEqual([
         '/my\\ file.txt /other.txt',
         '/my file.txt',
         '/other.txt',

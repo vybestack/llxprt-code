@@ -42,11 +42,11 @@ export function useModelTracking({
       const settingsService = getSettingsService();
 
       // Try to get from SettingsService first (same as diagnostics does)
-      if (settingsService && settingsService.getDiagnosticsData) {
+      if (settingsService?.getDiagnosticsData) {
         try {
           const diagnosticsData = await settingsService.getDiagnosticsData();
           if (!disposed && seq === requestSeq) {
-            if (diagnosticsData && diagnosticsData.model) {
+            if (diagnosticsData?.model) {
               setCurrentModel(diagnosticsData.model);
               return;
             }

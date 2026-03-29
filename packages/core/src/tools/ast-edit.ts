@@ -67,7 +67,7 @@ export class ASTEditTool
   static readonly Name = 'ast_edit';
   private contextCollector: ASTContextCollector;
 
-  static applyReplacement = applyReplacement;
+  static readonly applyReplacement = applyReplacement;
 
   constructor(private readonly config: Config) {
     super(

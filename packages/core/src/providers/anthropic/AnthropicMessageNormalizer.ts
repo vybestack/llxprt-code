@@ -400,7 +400,7 @@ function buildToolResults(
 }
 
 function processHumanContent(
-  c: IContent,
+  _c: IContent,
   blocks: ContentBlock[],
 ): AnthropicMessage | undefined {
   const hasMedia = blocks.some((b) => b.type === 'media');
@@ -705,7 +705,6 @@ function buildAIMessageContent(
         name: options.unprefixToolName(block.name, options.isOAuth),
         input: parametersObj,
       });
-      continue;
     }
   }
 

@@ -22,8 +22,8 @@ describe('ProviderPerformanceTracker', () => {
     expect(metrics.throttleWaitTimeMs).toBe(0);
     expect(metrics.chunksReceived).toBe(0);
     expect(metrics.errorRate).toBe(0);
-    expect(metrics.errors).toEqual([]);
-    expect(metrics.sessionTokenUsage).toEqual({
+    expect(metrics.errors).toStrictEqual([]);
+    expect(metrics.sessionTokenUsage).toStrictEqual({
       input: 0,
       output: 0,
       cache: 0,

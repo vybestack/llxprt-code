@@ -40,7 +40,7 @@ function getContainerPath(hostPath: string): string {
   }
 
   const withForwardSlashes = hostPath.replace(/\\/g, '/');
-  const match = withForwardSlashes.match(/^([A-Z]):\/(.*)/i);
+  const match = RegExp(/^([A-Z]):\/(.*)/i).exec(withForwardSlashes);
   if (match != null) {
     return `/${match[1].toLowerCase()}/${match[2]}`;
   }
@@ -432,7 +432,9 @@ export function getPodmanMachineConnection(): {
   }
 
   // Parse the URI: ssh://user@host:port/path
-  const uriMatch = conn.URI.match(/^ssh:\/\/([^@]+)@([^:]+):(\d+)(\/.*)?$/);
+  const uriMatch = RegExp(/^ssh:\/\/([^@]+)@([^:]+):(\d+)(\/.*)?$/).exec(
+    conn.URI,
+  );
   if (uriMatch == null) {
     throw new FatalSandboxError(
       `Unable to parse Podman connection URI '${conn.URI}'. ` +
@@ -902,7 +904,7 @@ export async function setupPortForwardingPodmanMacOS(
 }
 
 export async function setupCredentialProxyDockerMacOS(
-  args: string[],
+  _args: string[],
   hostCredentialSocketPath: string,
 ): Promise<CredentialProxyBridgeResult> {
   const { port, server } = await createTcpToUdsBridge(hostCredentialSocketPath);
@@ -968,8 +970,8 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
       if (
         osReleaseContent.includes('ID=debian') ||
         osReleaseContent.includes('ID=ubuntu') ||
-        osReleaseContent.match(/^ID_LIKE=.*debian.*/m) != null || // Covers derivatives
-        osReleaseContent.match(/^ID_LIKE=.*ubuntu.*/m) != null // Covers derivatives
+        RegExp(/^ID_LIKE=.*debian.*/m).exec(osReleaseContent) != null || // Covers derivatives
+        RegExp(/^ID_LIKE=.*ubuntu.*/m).exec(osReleaseContent) != null // Covers derivatives
       ) {
         // note here and below we use debugLogger.error for informational messages on stderr
         debugLogger.error(

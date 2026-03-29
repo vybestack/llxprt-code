@@ -394,7 +394,7 @@ describe('ThemeDialog', () => {
   });
 
   it('should work without terminalBackgroundColor (no labels shown)', () => {
-    const { lastFrame } = renderThemeDialog(undefined);
+    const { lastFrame } = renderThemeDialog();
     const output = lastFrame();
 
     // All themes should be shown

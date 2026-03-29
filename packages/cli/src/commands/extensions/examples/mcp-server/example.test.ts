@@ -88,7 +88,7 @@ describe('MCP Server Example', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         'https://jsonplaceholder.typicode.com/posts',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         content: [
           {
             type: 'text',
@@ -103,7 +103,7 @@ describe('MCP Server Example', () => {
     it('should generate a prompt with a title', () => {
       const promptFn = mockRegisterPrompt.mock.calls[0][2];
       const result = promptFn({ title: 'My Poem' });
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         messages: [
           {
             role: 'user',
@@ -119,7 +119,7 @@ describe('MCP Server Example', () => {
     it('should generate a prompt with a title and mood', () => {
       const promptFn = mockRegisterPrompt.mock.calls[0][2];
       const result = promptFn({ title: 'My Poem', mood: 'sad' });
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         messages: [
           {
             role: 'user',

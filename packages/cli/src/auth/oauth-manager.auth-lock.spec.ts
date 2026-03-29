@@ -53,7 +53,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
       let getTokenCallCount = 0;
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async (provider: string, bucket?: string) => {
+        getToken: vi.fn(async (_provider: string, bucket?: string) => {
           getTokenCallCount++;
           // Simulate cross-process write:
           // First call (upfront check for default): returns null (unauthenticated)
@@ -136,7 +136,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
     it('Test 5.2: should filter out already-authenticated buckets in upfront check', async () => {
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async (provider: string, bucket?: string) => {
+        getToken: vi.fn(async (_provider: string, bucket?: string) => {
           if (bucket === 'default') {
             return makeToken('existing-default-token'); // Already authenticated
           }
@@ -416,7 +416,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
 
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async (provider: string, bucket?: string) => {
+        getToken: vi.fn(async (_provider: string, bucket?: string) => {
           getTokenCallCount++;
           // Upfront check calls: bucket1, bucket2, bucket3 (all return null)
           if (getTokenCallCount <= 3) {
@@ -458,7 +458,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
 
       const authenticateSpy = vi
         .spyOn(oauthManager, 'authenticate')
-        .mockImplementation(async (providerName: string, bucket?: string) => {
+        .mockImplementation(async (_providerName: string, bucket?: string) => {
           authenticateCallLog.push(bucket ?? 'default');
         });
 
@@ -766,7 +766,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
     it('should skip all buckets if already authenticated', async () => {
       const tokenStore: TokenStore = {
         saveToken: vi.fn(),
-        getToken: vi.fn(async (provider: string, bucket?: string) =>
+        getToken: vi.fn(async (_provider: string, bucket?: string) =>
           makeToken(`existing-${bucket}`),
         ),
         removeToken: vi.fn(),

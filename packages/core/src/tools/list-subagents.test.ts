@@ -38,7 +38,7 @@ describe('ListSubagentsTool', () => {
     const result = await invocation.execute(new AbortController().signal);
 
     expect(result.error).toBeUndefined();
-    expect(result.metadata).toEqual({ count: 1 });
+    expect(result.metadata).toStrictEqual({ count: 1 });
     expect(result.llmContent).toContain('"name": "alpha"');
     expect(result.llmContent).toContain('"profile": "reviewer"');
     expect(result.returnDisplay).toContain('**alpha**');
@@ -73,14 +73,14 @@ describe('ListSubagentsTool', () => {
     const result = await invocation.execute(new AbortController().signal);
 
     expect(result.error).toBeUndefined();
-    expect(result.metadata).toEqual({ count: 0 });
+    expect(result.metadata).toStrictEqual({ count: 0 });
     expect(result.returnDisplay).toContain(
       'No subagents are currently registered',
     );
   });
 
   it('throws when SubagentManager is unavailable', () => {
-    const tool = new ListSubagentsTool(buildConfig(undefined));
+    const tool = new ListSubagentsTool(buildConfig());
     expect(() => tool.build({})).toThrow(
       'SubagentManager service is unavailable. Please configure subagents before invoking this tool.',
     );

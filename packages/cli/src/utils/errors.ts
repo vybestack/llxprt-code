@@ -66,7 +66,7 @@ function getNumericExitCode(errorCode: string | number): number {
  */
 export function handleError(
   error: unknown,
-  config: Config,
+  _config: Config,
   customErrorCode?: string | number,
 ): never {
   const errorMessage = parseAndFormatApiError(error);
@@ -99,7 +99,7 @@ export function handleError(
 export function handleToolError(
   toolName: string,
   toolError: Error,
-  config: Config,
+  _config: Config,
   errorType?: string,
   resultDisplay?: string,
 ): void {

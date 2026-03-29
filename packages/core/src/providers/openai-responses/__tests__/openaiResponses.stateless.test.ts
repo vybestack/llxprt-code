@@ -23,7 +23,7 @@ import {
 vi.mock('openai', () => ({
   default: class FakeOpenAI {
     readonly options: Record<string, unknown>;
-    static requests: Array<{ request: Record<string, unknown> }> = [];
+    static readonly requests: Array<{ request: Record<string, unknown> }> = [];
 
     constructor(opts: Record<string, unknown>) {
       this.options = opts;

@@ -120,7 +120,7 @@ describe('providerCommand /provider save', () => {
 
     const result = await providerCommand.action(context, 'save myalias');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: expect.stringContaining('myalias'),
@@ -184,7 +184,7 @@ describe('providerCommand /provider switch', () => {
       },
       expect.any(Number),
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Switched from openai to qwen',
@@ -208,7 +208,7 @@ describe('providerCommand /provider switch', () => {
 
     const result = await providerCommand.action(context, 'unknown');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'Failed to switch provider: provider not found',

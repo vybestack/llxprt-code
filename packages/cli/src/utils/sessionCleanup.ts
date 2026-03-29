@@ -305,7 +305,7 @@ async function identifySessionsToDelete(
  * @throws {Error} If the format is invalid
  */
 function parseRetentionPeriod(period: string): number {
-  const match = period.match(/^(\d+)([dhwm])$/);
+  const match = RegExp(/^(\d+)([dhwm])$/).exec(period);
   if (match == null) {
     throw new Error(
       `Invalid retention period format: ${period}. Expected format: <number><unit> where unit is h, d, w, or m`,

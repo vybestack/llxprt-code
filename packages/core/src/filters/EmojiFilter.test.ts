@@ -450,7 +450,7 @@ describe('EmojiFilter', () => {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         content: 'console.log("[OK] Success!");',
         file_path: '/src/test.ts',
       });
@@ -487,7 +487,7 @@ describe('EmojiFilter', () => {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual(args);
+      expect(result.filtered).toStrictEqual(args);
       expect(result.emojiDetected).toBe(false);
       expect(result.blocked).toBe(false);
       expect(result.systemFeedback).toBeUndefined();
@@ -502,7 +502,7 @@ describe('EmojiFilter', () => {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual(args);
+      expect(result.filtered).toStrictEqual(args);
       expect(result.emojiDetected).toBe(false);
       expect(result.blocked).toBe(false);
     });
@@ -528,7 +528,7 @@ describe('EmojiFilter', () => {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         config: {
           database: {
             host: 'localhost',
@@ -565,7 +565,7 @@ describe('EmojiFilter', () => {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         commands: [
           'npm install',
           'npm test [OK]',
@@ -760,7 +760,7 @@ CREATE INDEX idx_user_status ON users(status);`);
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         config: {
           messages: ['[OK] Success', 'WARNING: Warning'],
           status: 'done ',
@@ -834,7 +834,7 @@ CREATE INDEX idx_user_status ON users(status);`);
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         config: {
           settings: {
             notifications: {
@@ -921,7 +921,7 @@ function validate(input) {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         messages: [
           '[OK] Task 1 done',
           'WARNING: Task 2 warning',
@@ -949,7 +949,7 @@ function validate(input) {
 
       const result = filter.filterToolArgs(args);
 
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         config: {
           message: '[OK] Success',
           optional: null,

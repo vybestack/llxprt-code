@@ -162,13 +162,13 @@ describe('word-navigation', () => {
     it('should find next word on same line', () => {
       const lines = ['hello world', 'second line'];
       const result = findNextWordAcrossLines(lines, 0, 0, true);
-      expect(result).toEqual({ row: 0, col: 6 });
+      expect(result).toStrictEqual({ row: 0, col: 6 });
     });
 
     it('should find word on next line', () => {
       const lines = ['hello ', 'world'];
       const result = findNextWordAcrossLines(lines, 0, 6, true);
-      expect(result).toEqual({ row: 1, col: 0 });
+      expect(result).toStrictEqual({ row: 1, col: 0 });
     });
 
     it('should return null if no more words', () => {
@@ -182,13 +182,13 @@ describe('word-navigation', () => {
     it('should find previous word on same line', () => {
       const lines = ['hello world'];
       const result = findPrevWordAcrossLines(lines, 0, 8);
-      expect(result).toEqual({ row: 0, col: 6 }); // Start of 'world'
+      expect(result).toStrictEqual({ row: 0, col: 6 }); // Start of 'world'
     });
 
     it('should find word on previous line', () => {
       const lines = ['hello', ' world'];
       const result = findPrevWordAcrossLines(lines, 1, 1);
-      expect(result).toEqual({ row: 0, col: 0 }); // Start of 'hello'
+      expect(result).toStrictEqual({ row: 0, col: 0 }); // Start of 'hello'
     });
 
     it('should return null at document start', () => {

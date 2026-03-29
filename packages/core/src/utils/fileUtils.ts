@@ -321,7 +321,7 @@ export function countLines(lines: string[]): number {
 export async function processSingleFileContent(
   filePath: string,
   rootDirectory: string,
-  fileSystemService: FileSystemService,
+  _fileSystemService: FileSystemService,
   offset?: number,
   limit?: number,
 ): Promise<ProcessedFileReadResult> {

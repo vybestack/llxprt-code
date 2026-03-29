@@ -154,7 +154,7 @@ function processInsertText(
     opts.paste
   ) {
     let potentialPath = textToInsert.trim();
-    const quoteMatch = potentialPath.match(/^'(.*)'$/);
+    const quoteMatch = RegExp(/^'(.*)'$/).exec(potentialPath);
     if (quoteMatch != null) {
       potentialPath = quoteMatch[1];
     }

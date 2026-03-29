@@ -201,7 +201,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
     const toolCallMessage = collectedMessages.find((m) => m.tool_calls);
     expect(toolCallMessage).toBeDefined();
     expect(toolCallMessage?.tool_calls).toHaveLength(1);
-    expect(toolCallMessage?.tool_calls?.[0]).toEqual({
+    expect(toolCallMessage?.tool_calls?.[0]).toStrictEqual({
       id: 'call_123',
       type: 'function',
       function: {
@@ -278,7 +278,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
     }
 
     expect(collectedMessages).toHaveLength(1);
-    expect(collectedMessages[0]).toEqual({
+    expect(collectedMessages[0]).toStrictEqual({
       role: ContentGeneratorRole.ASSISTANT,
       content: 'Non-streaming response',
       usage: {

@@ -57,8 +57,8 @@ class TrackingToolInvocation extends BaseToolInvocation<
   Record<string, unknown>,
   ToolResult
 > {
-  static executionCount = 0;
-  static lastArgs: Record<string, unknown> | undefined;
+  static readonly executionCount = 0;
+  static readonly lastArgs: Record<string, unknown> | undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(params: Record<string, unknown>, messageBus?: any) {

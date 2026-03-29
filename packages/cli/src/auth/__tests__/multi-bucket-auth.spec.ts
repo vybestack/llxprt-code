@@ -468,7 +468,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       setEphemeralSetting('auth-bucket-delay', 0);
 
       const slowAuthenticator = new MultiBucketAuthenticator(
-        async (provider: string, bucket: string) => {
+        async (_provider: string, bucket: string) => {
           await new Promise((resolve) => setTimeout(resolve, 50));
           authLog.push(`Authenticated ${bucket}`);
         },

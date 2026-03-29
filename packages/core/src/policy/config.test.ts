@@ -37,7 +37,7 @@ describe('policy config', () => {
         const rules = migrateLegacyApprovalMode(config);
 
         expect(rules).toHaveLength(1);
-        expect(rules[0]).toEqual({
+        expect(rules[0]).toStrictEqual({
           // toolName undefined = wildcard
           decision: PolicyDecision.ALLOW,
           priority: 1.999,
@@ -65,7 +65,7 @@ describe('policy config', () => {
         expect(rules.length).toBeGreaterThanOrEqual(4);
 
         const replaceRule = rules.find((r) => r.toolName === 'replace');
-        expect(replaceRule).toEqual({
+        expect(replaceRule).toStrictEqual({
           toolName: 'replace',
           decision: PolicyDecision.ALLOW,
           priority: 1.015,
@@ -104,12 +104,12 @@ describe('policy config', () => {
         const rules = migrateLegacyApprovalMode(config);
 
         expect(rules).toHaveLength(2);
-        expect(rules[0]).toEqual({
+        expect(rules[0]).toStrictEqual({
           toolName: 'edit',
           decision: PolicyDecision.ALLOW,
           priority: 2.3,
         });
-        expect(rules[1]).toEqual({
+        expect(rules[1]).toStrictEqual({
           toolName: 'shell',
           decision: PolicyDecision.ALLOW,
           priority: 2.3,
@@ -142,7 +142,7 @@ describe('policy config', () => {
 
         expect(rules).toHaveLength(4);
         const toolNames = rules.map((r) => r.toolName);
-        expect(toolNames).toEqual(['glob', 'grep', 'ls', 'read_file']);
+        expect(toolNames).toStrictEqual(['glob', 'grep', 'ls', 'read_file']);
       });
 
       it('normalizes ShellTool alias to run_shell_command', () => {

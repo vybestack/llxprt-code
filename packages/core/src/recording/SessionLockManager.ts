@@ -48,7 +48,7 @@ export class SessionLockManager {
   static getLockPathFromFilePath(sessionFilePath: string): string {
     const dir = path.dirname(sessionFilePath);
     const basename = path.basename(sessionFilePath);
-    const match = basename.match(/^session-(.+)\.jsonl$/);
+    const match = RegExp(/^session-(.+)\.jsonl$/).exec(basename);
     if (match == null) {
       throw new Error(
         'Cannot extract session ID from path: ' + sessionFilePath,
@@ -134,10 +134,7 @@ export class SessionLockManager {
         return false;
       } catch (error: unknown) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'EPERM') {
-          return false;
-        }
-        return true;
+        return !(code === 'EPERM');
       }
     } catch {
       return true;

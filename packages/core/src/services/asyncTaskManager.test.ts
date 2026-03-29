@@ -100,7 +100,7 @@ describe('AsyncTaskManager', () => {
       expect(result).toBe(true);
       const task = manager.getTask('task-1');
       expect(task?.status).toBe('completed');
-      expect(task?.output).toEqual({
+      expect(task?.output).toStrictEqual({
         emitted_vars: { key: 'value' },
         terminate_reason: 'GOAL',
       });
@@ -135,7 +135,7 @@ describe('AsyncTaskManager', () => {
 
       expect(result).toBe(false);
       // Original output unchanged
-      expect(manager.getTask('task-1')?.output?.emitted_vars).toEqual({});
+      expect(manager.getTask('task-1')?.output?.emitted_vars).toStrictEqual({});
     });
 
     /**
@@ -293,7 +293,7 @@ describe('AsyncTaskManager', () => {
         abortController: new AbortController(),
       });
 
-      expect(manager.canLaunchAsync()).toEqual({ allowed: true });
+      expect(manager.canLaunchAsync()).toStrictEqual({ allowed: true });
     });
 
     /**
@@ -318,7 +318,7 @@ describe('AsyncTaskManager', () => {
         abortController: new AbortController(),
       });
 
-      expect(manager.canLaunchAsync()).toEqual({
+      expect(manager.canLaunchAsync()).toStrictEqual({
         allowed: false,
         reason: 'Max async tasks (2) reached',
       });
@@ -350,7 +350,7 @@ describe('AsyncTaskManager', () => {
         terminate_reason: 'GOAL',
       });
 
-      expect(manager.canLaunchAsync()).toEqual({ allowed: true });
+      expect(manager.canLaunchAsync()).toStrictEqual({ allowed: true });
     });
 
     /**
@@ -370,7 +370,7 @@ describe('AsyncTaskManager', () => {
           abortController: new AbortController(),
         });
       }
-      expect(manager.canLaunchAsync()).toEqual({ allowed: true });
+      expect(manager.canLaunchAsync()).toStrictEqual({ allowed: true });
     });
   });
 
@@ -975,7 +975,7 @@ describe('AsyncTaskManager', () => {
       const booking = manager.tryReserveAsyncSlot();
       expect(booking).not.toBeNull();
 
-      expect(manager.canLaunchAsync()).toEqual({
+      expect(manager.canLaunchAsync()).toStrictEqual({
         allowed: false,
         reason: 'Max async tasks (1) reached',
       });

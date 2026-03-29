@@ -128,7 +128,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       if (endMarkerIndex === -1) break;
 
       const segment = content.slice(afterStart, endMarkerIndex);
-      const toolNameMatch = segment.match(/^\s*([^\s{]+)\s+/);
+      const toolNameMatch = RegExp(/^\s*([^\s{]+)\s+/).exec(segment);
       if (toolNameMatch == null) {
         searchIndex = endMarkerIndex + endMarker.length;
         continue;
@@ -330,7 +330,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
         // Only parse parameters when there is a valid tool name
         for (let i = 1; i < lines.length; i++) {
-          const argMatch = lines[i].match(/<(\w+)>([^<]*)<\/\1>/);
+          const argMatch = RegExp(/<(\w+)>([^<]*)<\/\1>/).exec(lines[i]);
           if (argMatch != null) {
             const [, key, value] = argMatch;
             result.args[key] = this.parseValue(value.trim());
@@ -401,8 +401,10 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       if (end === -1) break;
 
       const inner = content.slice(start + startTag.length, end);
-      const nameMatch = inner.match(/<name>([^<]+)<\/name>/i);
-      const argsMatch = inner.match(/<arguments>([\s\S]*?)<\/arguments>/i);
+      const nameMatch = RegExp(/<name>([^<]+)<\/name>/i).exec(inner);
+      const argsMatch = RegExp(/<arguments>([\s\S]*?)<\/arguments>/i).exec(
+        inner,
+      );
 
       if (nameMatch == null || argsMatch == null) {
         searchIndex = end + endTag.length;
@@ -613,7 +615,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         }
       }
 
-      const simpleJsonMatch = args.match(/^{[^{]*}$/);
+      const simpleJsonMatch = RegExp(/^{[^{]*}$/).exec(args);
       if (simpleJsonMatch != null) {
         try {
           return JSON.parse(simpleJsonMatch[0]);

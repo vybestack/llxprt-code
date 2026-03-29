@@ -49,7 +49,7 @@ describe('ToolCallNormalizer', () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.args).toEqual(mockProcessed);
+      expect(result?.args).toStrictEqual(mockProcessed);
       expect(processToolParameters).toHaveBeenCalledWith(
         '{"param1": "value1"}',
         'unknown_tool',
@@ -72,7 +72,7 @@ describe('ToolCallNormalizer', () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.args).toEqual({ value: mockProcessed });
+      expect(result?.args).toStrictEqual({ value: mockProcessed });
       expect(processToolParameters).toHaveBeenCalledWith(
         'invalid json that gets returned as string',
         'unknown_tool',
@@ -91,7 +91,7 @@ describe('ToolCallNormalizer', () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.args).toEqual({});
+      expect(result?.args).toStrictEqual({});
     });
 
     it('should handle empty args correctly', () => {
@@ -106,7 +106,7 @@ describe('ToolCallNormalizer', () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.args).toEqual({});
+      expect(result?.args).toStrictEqual({});
     });
 
     it('should handle undefined args correctly', () => {
@@ -121,7 +121,7 @@ describe('ToolCallNormalizer', () => {
       });
 
       expect(result).not.toBeNull();
-      expect(result?.args).toEqual({});
+      expect(result?.args).toStrictEqual({});
     });
 
     it('should normalize tool names to lowercase', () => {

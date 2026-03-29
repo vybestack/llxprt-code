@@ -137,7 +137,7 @@ describe('useTokenMetricsTracking', () => {
       }),
     );
 
-    expect(result.current.tokenMetrics).toEqual({
+    expect(result.current.tokenMetrics).toStrictEqual({
       tokensPerMinute: 42,
       throttleWaitTimeMs: 75,
       sessionTokenTotal: 15,

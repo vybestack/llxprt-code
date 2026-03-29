@@ -56,7 +56,7 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
   }
 
   // Line 53: ELSE IF position matches /^(\d+)\.(\d+|last)$/
-  const subtaskMatch = pos.match(/^(\d+)\.(\d+|last)$/);
+  const subtaskMatch = RegExp(/^(\d+)\.(\d+|last)$/).exec(pos);
   if (subtaskMatch != null) {
     // Line 54: PARSE parent_pos, subtask_pos
     const parentIndex = parseInt(subtaskMatch[1], 10) - 1;
@@ -627,7 +627,7 @@ Examples:
           }
 
           // Check for range pattern (e.g., "2-4")
-          const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
+          const rangeMatch = RegExp(/^(\d+)-(\d+)$/).exec(posStr);
           if (rangeMatch != null) {
             const start = parseInt(rangeMatch[1], 10);
             const end = parseInt(rangeMatch[2], 10);
@@ -817,7 +817,7 @@ Examples:
           }
 
           // Check for range pattern (e.g., "1-3")
-          const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
+          const rangeMatch = RegExp(/^(\d+)-(\d+)$/).exec(posStr);
           if (rangeMatch != null) {
             const start = parseInt(rangeMatch[1], 10);
             const end = parseInt(rangeMatch[2], 10);
@@ -976,7 +976,7 @@ Examples:
           }
 
           // Check for range pattern (e.g., "1-3")
-          const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
+          const rangeMatch = RegExp(/^(\d+)-(\d+)$/).exec(posStr);
           if (rangeMatch != null) {
             const start = parseInt(rangeMatch[1], 10);
             const end = parseInt(rangeMatch[2], 10);

@@ -167,10 +167,7 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
     messageBus.requestBucketAuthConfirmation = vi.fn(
       async (): Promise<boolean> => {
         confirmationCount++;
-        if (confirmationCount === 1) {
-          return false; // User declines on first attempt
-        }
-        return true;
+        return !(confirmationCount === 1);
       },
     );
 

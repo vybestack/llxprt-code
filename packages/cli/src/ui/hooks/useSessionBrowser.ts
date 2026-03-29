@@ -645,7 +645,6 @@ export function useSessionBrowser(
         }
 
         // Characters and backspace are no-op in nav mode
-        return;
       }
     },
     [

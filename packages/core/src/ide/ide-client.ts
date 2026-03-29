@@ -235,7 +235,6 @@ export class IdeClient {
     } catch (err) {
       logger.debug(`closeDiff callTool for ${filePath} failed:`, err);
     }
-    return;
   }
 
   // Closes the diff. Instead of waiting for a notification,

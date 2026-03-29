@@ -65,7 +65,7 @@ describe('getOpenAIProviderInfo runtime integration', () => {
     const info = getOpenAIProviderInfo(providerManager);
     expect(info.currentModel).toBe('settings-model');
     expect(info.isResponsesAPI).toBe(true);
-    expect(info.conversationCache).toEqual({ id: 'cache' });
+    expect(info.conversationCache).toStrictEqual({ id: 'cache' });
     expect(providerStub.shouldUseResponses).not.toHaveBeenCalled();
   });
 

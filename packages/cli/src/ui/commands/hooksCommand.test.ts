@@ -476,7 +476,7 @@ describe('hooksCommand', () => {
 
       const completions = await enableCmd.completion!(context, 'hook');
 
-      expect(completions).toEqual(['hook1', 'hook2', 'hook3']);
+      expect(completions).toStrictEqual(['hook1', 'hook2', 'hook3']);
     });
 
     it('should filter completions by partial arg', async () => {
@@ -486,7 +486,7 @@ describe('hooksCommand', () => {
 
       const completions = await enableCmd.completion!(context, 'hook1');
 
-      expect(completions).toEqual(['hook1']);
+      expect(completions).toStrictEqual(['hook1']);
     });
 
     it('should return empty array if config not loaded', async () => {
@@ -502,7 +502,7 @@ describe('hooksCommand', () => {
 
       const completions = await enableCmd.completion!(contextNoConfig, 'hook');
 
-      expect(completions).toEqual([]);
+      expect(completions).toStrictEqual([]);
     });
   });
 

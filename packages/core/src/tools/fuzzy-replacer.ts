@@ -294,7 +294,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (
           const pattern = words.map((word) => escapeRegExp(word)).join('\\s+');
           try {
             const regex = new RegExp(pattern);
-            const match = line.match(regex);
+            const match = RegExp(regex).exec(line);
             if (match != null) {
               yield match[0];
             }
@@ -329,7 +329,7 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
 
     const minIndent = Math.min(
       ...nonEmptyLines.map((line) => {
-        const match = line.match(/^(\s*)/);
+        const match = RegExp(/^(\s*)/).exec(line);
         return match != null ? match[1].length : 0;
       }),
     );

@@ -180,8 +180,8 @@ export function extractFunctions(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (_language === 'typescript' || _language === 'javascript') {
-      const match = trimmed.match(
-        /function\s+(\w+)\s*\(([^)]*)\)(?::\s*(\w+))?/,
+      const match = RegExp(/function\s+(\w+)\s*\(([^)]*)\)(?::\s*(\w+))?/).exec(
+        trimmed,
       );
       if (match != null) {
         functions.push({
@@ -195,8 +195,8 @@ export function extractFunctions(
         });
       }
     } else if (_language === 'python') {
-      const match = trimmed.match(
-        /def\s+(\w+)\s*\(([^)]*)\)\s*(?:->\s*(\w+))?/,
+      const match = RegExp(/def\s+(\w+)\s*\(([^)]*)\)\s*(?:->\s*(\w+))?/).exec(
+        trimmed,
       );
       if (match != null) {
         functions.push({
@@ -231,7 +231,7 @@ export function extractClasses(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (trimmed.includes(KEYWORDS.CLASS)) {
-      const match = trimmed.match(/class\s+(\w+)/);
+      const match = RegExp(/class\s+(\w+)/).exec(trimmed);
       if (match != null) {
         classes.push({
           name: match[1],
@@ -262,7 +262,9 @@ export function extractVariables(
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (_language === 'typescript' || _language === 'javascript') {
-      const match = trimmed.match(/(?:const|let|var)\s+(\w+)\s*:\s*(\w+)/);
+      const match = RegExp(/(?:const|let|var)\s+(\w+)\s*:\s*(\w+)/).exec(
+        trimmed,
+      );
       if (match != null) {
         variables.push({
           name: match[1],

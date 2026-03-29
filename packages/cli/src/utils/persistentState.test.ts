@@ -46,7 +46,7 @@ describe('PersistentState', () => {
     const state = new PersistentState();
     const counts = { abc123: 3 };
     state.set('defaultBannerShownCount', counts);
-    expect(state.get('defaultBannerShownCount')).toEqual(counts);
+    expect(state.get('defaultBannerShownCount')).toStrictEqual(counts);
   });
 
   it('persists to disk and survives a new instance', () => {
@@ -55,7 +55,7 @@ describe('PersistentState', () => {
 
     // New instance reads from disk
     const state2 = new PersistentState();
-    expect(state2.get('defaultBannerShownCount')).toEqual({ hash1: 2 });
+    expect(state2.get('defaultBannerShownCount')).toStrictEqual({ hash1: 2 });
   });
 
   it('creates parent directory when it does not exist', () => {
@@ -79,6 +79,6 @@ describe('PersistentState', () => {
     const state = new PersistentState();
     state.set('defaultBannerShownCount', { a: 1 });
     state.set('defaultBannerShownCount', { a: 5, b: 2 });
-    expect(state.get('defaultBannerShownCount')).toEqual({ a: 5, b: 2 });
+    expect(state.get('defaultBannerShownCount')).toStrictEqual({ a: 5, b: 2 });
   });
 });

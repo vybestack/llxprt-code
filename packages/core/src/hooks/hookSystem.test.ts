@@ -257,7 +257,7 @@ describe('HookSystem', () => {
 
       const result = await hookSystem.fireBeforeModelEvent({ model: 'test' });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toStrictEqual(mockResult);
     });
   });
 

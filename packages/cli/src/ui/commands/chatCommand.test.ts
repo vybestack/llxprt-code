@@ -165,7 +165,7 @@ describe('chatCommand', () => {
 
     it('should return an error if tag is missing', async () => {
       const result = await saveCommand?.action?.(mockContext, '  ');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Missing tag. Usage: /chat save <tag>',
@@ -175,7 +175,7 @@ describe('chatCommand', () => {
     it('should inform if conversation history is empty or only contains system context', async () => {
       mockGetHistory.mockReturnValue([]);
       let result = await saveCommand?.action?.(mockContext, tag);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'No conversation found to save.',
@@ -185,7 +185,7 @@ describe('chatCommand', () => {
         { role: 'user', parts: [{ text: 'context for our chat' }] },
       ]);
       result = await saveCommand?.action?.(mockContext, tag);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'No conversation found to save.',
@@ -197,7 +197,7 @@ describe('chatCommand', () => {
         { role: 'model', parts: [{ text: 'I am doing well!' }] },
       ]);
       result = await saveCommand?.action?.(mockContext, tag);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: `Conversation checkpoint saved with tag: ${tag}.`,
@@ -237,7 +237,7 @@ describe('chatCommand', () => {
 
       expect(mockCheckpointExists).not.toHaveBeenCalled(); // Should skip existence check
       expect(mockSaveCheckpoint).toHaveBeenCalledWith(history, tag);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: `Conversation checkpoint saved with tag: ${tag}.`,
@@ -334,7 +334,7 @@ describe('chatCommand', () => {
     it('should return an error if tag is missing', async () => {
       const result = await resumeCommand?.action?.(mockContext, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Missing tag. Usage: /chat resume <tag>',
@@ -346,7 +346,7 @@ describe('chatCommand', () => {
 
       const result = await resumeCommand?.action?.(mockContext, badTag);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: `No saved checkpoint found with tag: ${badTag}.`,
@@ -363,7 +363,7 @@ describe('chatCommand', () => {
       const result = await resumeCommand?.action?.(mockContext, goodTag);
 
       // Now returns LoadHistoryActionReturn to properly sync UI and client history
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'load_history',
         history: [
           { type: 'user', text: 'hello gemini' },
@@ -403,7 +403,7 @@ describe('chatCommand', () => {
             }) as Stats) as unknown as typeof fsPromises.stat,
         );
 
-        expect(await runCompletion('a')).toEqual(['alpha']);
+        expect(await runCompletion('a')).toStrictEqual(['alpha']);
       });
 
       it('should suggest filenames sorted by modified time (newest first)', async () => {
@@ -422,7 +422,7 @@ describe('chatCommand', () => {
           return { mtime: new Date(date.getTime() + 1000) } as Stats;
         }) as unknown as typeof fsPromises.stat);
 
-        expect(await runCompletion('')).toEqual(['test2', 'test1']);
+        expect(await runCompletion('')).toStrictEqual(['test2', 'test1']);
       });
     });
   });
@@ -436,7 +436,7 @@ describe('chatCommand', () => {
 
     it('should return an error if tag is missing', async () => {
       const result = await deleteCommand?.action?.(mockContext, '  ');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Missing tag. Usage: /chat delete <tag>',
@@ -466,7 +466,7 @@ describe('chatCommand', () => {
       const result = await deleteCommand?.action?.(mockContext, tag);
 
       expect(mockDeleteCheckpoint).toHaveBeenCalledWith(tag);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: `Deleted checkpoint: ${tag}`,
@@ -500,7 +500,7 @@ describe('chatCommand', () => {
           '/chat delete a',
         );
 
-        expect(result.suggestions.map((option) => option.value)).toEqual([
+        expect(result.suggestions.map((option) => option.value)).toStrictEqual([
           'alpha',
         ]);
       });

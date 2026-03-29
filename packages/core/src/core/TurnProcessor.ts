@@ -398,7 +398,7 @@ export class TurnProcessor {
    */
   private async _executeProviderCall(
     provider: IProvider,
-    params: SendMessageParameters,
+    _params: SendMessageParameters,
     requestContents: IContent[],
     providerBaseUrl: string | undefined,
   ): Promise<GenerateContentResponse> {

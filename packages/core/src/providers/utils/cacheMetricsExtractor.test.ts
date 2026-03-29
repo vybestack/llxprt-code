@@ -12,7 +12,7 @@ describe('extractCacheMetrics', () => {
 
       const result = extractCacheMetrics(usage);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 150,
         cacheCreationTokens: 0,
         cacheMissTokens: 0,
@@ -29,7 +29,7 @@ describe('extractCacheMetrics', () => {
 
       const result = extractCacheMetrics(usage);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 200,
         cacheCreationTokens: 50,
         cacheMissTokens: 0,
@@ -46,7 +46,7 @@ describe('extractCacheMetrics', () => {
 
       const result = extractCacheMetrics(usage);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 300,
         cacheCreationTokens: 0,
         cacheMissTokens: 100,
@@ -64,7 +64,7 @@ describe('extractCacheMetrics', () => {
 
       const result = extractCacheMetrics(usage, headers);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 400,
         cacheCreationTokens: 0,
         cacheMissTokens: 0,
@@ -81,7 +81,7 @@ describe('extractCacheMetrics', () => {
 
       const result = extractCacheMetrics(usage);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 250,
         cacheCreationTokens: 75,
         cacheMissTokens: 0,
@@ -98,7 +98,7 @@ describe('extractCacheMetrics', () => {
 
       const result = extractCacheMetrics(usage);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 0,
         cacheCreationTokens: 0,
         cacheMissTokens: 0,
@@ -110,7 +110,7 @@ describe('extractCacheMetrics', () => {
     it('handles null usage gracefully', () => {
       const result = extractCacheMetrics(null);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 0,
         cacheCreationTokens: 0,
         cacheMissTokens: 0,
@@ -120,7 +120,7 @@ describe('extractCacheMetrics', () => {
     it('handles undefined usage gracefully', () => {
       const result = extractCacheMetrics(undefined);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         cachedTokens: 0,
         cacheCreationTokens: 0,
         cacheMissTokens: 0,

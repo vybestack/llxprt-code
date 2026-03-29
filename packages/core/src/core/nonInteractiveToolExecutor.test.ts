@@ -402,7 +402,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
   function createMockConfig(options?: {
     ephemerals?: Record<string, unknown>;
     approvalMode?: ApprovalMode;
-    allowedTools?: string[] | undefined;
+    allowedTools: string[] | undefined;
     policyEngine?: PolicyEngine;
     messageBus?: MessageBus;
     includePolicyEngine?: boolean;

@@ -340,9 +340,9 @@ describe('ProxySocketClient', () => {
     ]);
 
     // Each response should match its original request despite reverse ordering
-    expect(r1.data).toEqual({ echo: 'alpha' });
-    expect(r2.data).toEqual({ echo: 'beta' });
-    expect(r3.data).toEqual({ echo: 'gamma' });
+    expect(r1.data).toStrictEqual({ echo: 'alpha' });
+    expect(r2.data).toStrictEqual({ echo: 'beta' });
+    expect(r3.data).toStrictEqual({ echo: 'gamma' });
   });
 
   /**

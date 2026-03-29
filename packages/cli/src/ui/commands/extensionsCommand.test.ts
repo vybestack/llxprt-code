@@ -335,7 +335,7 @@ describe('extensionsCommand', () => {
       ])('$description', async ({ extensions, partialArg, expected }) => {
         mockGetExtensions.mockReturnValue(extensions);
         const suggestions = await updateCompletion(mockContext, partialArg);
-        expect(suggestions).toEqual(expected);
+        expect(suggestions).toStrictEqual(expected);
       });
     });
   });

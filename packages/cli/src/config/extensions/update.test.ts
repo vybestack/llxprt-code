@@ -145,7 +145,7 @@ describe('update tests', () => {
         () => {},
       );
 
-      expect(updateInfo).toEqual({
+      expect(updateInfo).toStrictEqual({
         name: 'gemini-extensions',
         originalVersion: '1.0.0',
         updatedVersion: '1.1.0',

@@ -565,7 +565,7 @@ describe('DebugLogger', () => {
 
           // Since minLength: 1, we know args always has elements
           expect(logEntry).toHaveProperty('args');
-          expect(logEntry.args).toEqual(args);
+          expect(logEntry.args).toStrictEqual(args);
         },
       ),
     );

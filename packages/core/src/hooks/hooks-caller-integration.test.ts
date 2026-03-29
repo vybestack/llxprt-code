@@ -137,7 +137,9 @@ describe('Hook Caller Integration', () => {
         }
       ).hookSpecificOutput;
       expect(hookSpecificOutput).toBeDefined();
-      expect(hookSpecificOutput?.tool_input).toEqual({ path: '/safe/path' });
+      expect(hookSpecificOutput?.tool_input).toStrictEqual({
+        path: '/safe/path',
+      });
     });
   });
 
@@ -225,7 +227,7 @@ describe('Hook Caller Integration', () => {
       // Result should have method to get modified tool config
       const toolConfig = result!.applyToolConfigModifications({});
       expect(toolConfig).toBeDefined();
-      expect(toolConfig.toolConfig?.allowedFunctionNames).toEqual([
+      expect(toolConfig.toolConfig?.allowedFunctionNames).toStrictEqual([
         'list_directory',
         'read_file',
       ]);

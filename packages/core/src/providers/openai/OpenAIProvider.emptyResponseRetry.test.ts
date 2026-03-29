@@ -299,8 +299,8 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       .map((m) => m.tool_call_id)
       .filter((id): id is string => typeof id === 'string');
 
-    expect(assistantToolCallIds).toEqual(['call_123']);
-    expect(toolResponseIds).toEqual(assistantToolCallIds);
+    expect(assistantToolCallIds).toStrictEqual(['call_123']);
+    expect(toolResponseIds).toStrictEqual(assistantToolCallIds);
 
     // OpenAI chat-completions tool messages should remain schema-compatible:
     // role/content/tool_call_id only. Some strict OpenAI-compatible backends

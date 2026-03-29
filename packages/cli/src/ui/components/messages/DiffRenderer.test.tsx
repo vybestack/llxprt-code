@@ -297,7 +297,7 @@ index 123..789 100644
           </OverflowProvider>,
         );
         const output = lastFrame();
-        expect(sanitizeOutput(output, terminalWidth)).toEqual(expected);
+        expect(sanitizeOutput(output, terminalWidth)).toStrictEqual(expected);
       },
     );
   });
@@ -329,7 +329,7 @@ fileDiff Index: file.txt
     );
     const output = lastFrame();
 
-    expect(output).toEqual(` 1 - const oldVar = 1;
+    expect(output).toStrictEqual(` 1 - const oldVar = 1;
  1 + const newVar = 1;
 ════════════════════════════════════════════════════════════════════════════════
 20 - const anotherOld = 'test';
@@ -358,7 +358,7 @@ fileDiff Index: Dockerfile
       </OverflowProvider>,
     );
     const output = lastFrame();
-    expect(output).toEqual(`1 FROM node:14
+    expect(output).toStrictEqual(`1 FROM node:14
 2 RUN npm install
 3 RUN npm run build`);
   });

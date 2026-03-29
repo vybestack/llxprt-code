@@ -38,7 +38,11 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual(['src/', '.geminiignore', 'src/not-ignored.js']);
+    expect(results).toStrictEqual([
+      'src/',
+      '.geminiignore',
+      'src/not-ignored.js',
+    ]);
   });
 
   it('should combine .gitignore and .geminiignore rules', async () => {
@@ -64,7 +68,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       'src/',
       '.geminiignore',
       '.gitignore',
@@ -92,7 +96,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual(['src/', 'src/main.js']);
+    expect(results).toStrictEqual(['src/', 'src/main.js']);
   });
 
   it('should handle negated directories', async () => {
@@ -121,7 +125,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       'build/',
       'build/public/',
       'src/',
@@ -154,7 +158,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('**/*.js');
 
-    expect(results).toEqual(['src/main.js']);
+    expect(results).toStrictEqual(['src/main.js']);
   });
 
   it('should handle root-level file negation', async () => {
@@ -178,7 +182,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual(['.gitignore', 'Foo.mk']);
+    expect(results).toStrictEqual(['.gitignore', 'Foo.mk']);
   });
 
   it('should handle directory negation with glob', async () => {
@@ -213,7 +217,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       'third_party/',
       'third_party/foo/',
       'third_party/foo/bar/',
@@ -243,7 +247,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual([
+    expect(results).toStrictEqual([
       'dist/',
       'src/',
       '.gitignore',
@@ -273,7 +277,7 @@ describe('FileSearch', () => {
     // Expect no errors to be thrown during initialization
     await expect(fileSearch.initialize()).resolves.toBeUndefined();
     const results = await fileSearch.search('');
-    expect(results).toEqual(['src/', 'src/file1.js']);
+    expect(results).toStrictEqual(['src/', 'src/file1.js']);
   });
 
   it('should respect maxResults option in search', async () => {
@@ -300,7 +304,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('**/*.js', { maxResults: 2 });
 
-    expect(results).toEqual(['src/file1.js', 'src/file2.js']); // Assuming alphabetical sort
+    expect(results).toStrictEqual(['src/file1.js', 'src/file2.js']); // Assuming alphabetical sort
   });
 
   it('should use fzf for fuzzy matching when pattern does not contain wildcards', async () => {
@@ -326,7 +330,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('sst');
 
-    expect(results).toEqual(['src/style.css']);
+    expect(results).toStrictEqual(['src/style.css']);
   });
 
   it('should not use fzf for fuzzy matching when disableFuzzySearch is true', async () => {
@@ -352,7 +356,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('fle');
 
-    expect(results).toEqual(['src/flexible.js']);
+    expect(results).toStrictEqual(['src/flexible.js']);
   });
 
   it('should use fzf for fuzzy matching when disableFuzzySearch is false', async () => {
@@ -378,7 +382,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('fle');
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['src/file1.js', 'src/flexible.js']),
     );
   });
@@ -402,7 +406,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('nonexistent-file.xyz');
 
-    expect(results).toEqual([]);
+    expect(results).toStrictEqual([]);
   });
 
   it('should throw AbortError when filter is aborted', async () => {
@@ -455,7 +459,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual(['src/', '.gitignore', 'src/main.js']);
+    expect(results).toStrictEqual(['src/', '.gitignore', 'src/main.js']);
   });
 
   it('should always ignore the .git directory', async () => {
@@ -478,7 +482,7 @@ describe('FileSearch', () => {
     await fileSearch.initialize();
     const results = await fileSearch.search('');
 
-    expect(results).toEqual(['src/', 'src/main.js']);
+    expect(results).toStrictEqual(['src/', 'src/main.js']);
   });
 
   it('should be cancellable via AbortSignal', async () => {
@@ -540,7 +544,7 @@ describe('FileSearch', () => {
 
     // Perform a broad search to prime the cache
     const broadResults = await fileSearch.search('src/**');
-    expect(broadResults).toEqual([
+    expect(broadResults).toStrictEqual([
       'src/',
       'src/nested/',
       'src/bar.ts',
@@ -550,7 +554,7 @@ describe('FileSearch', () => {
 
     // Perform a more specific search that should leverage the broad search's cached results
     const specificResults = await fileSearch.search('src/**/*.js');
-    expect(specificResults).toEqual(['src/foo.js', 'src/nested/baz.js']);
+    expect(specificResults).toStrictEqual(['src/foo.js', 'src/nested/baz.js']);
 
     // Although we can't directly inspect ResultCache.hits/misses from here,
     // the correctness of specificResults after a broad search implicitly
@@ -581,21 +585,21 @@ describe('FileSearch', () => {
     // Search with a lowercase pattern
     let results = await fileSearch.search('file*.js');
     expect(results).toHaveLength(3);
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['File1.Js', 'file2.js', 'FILE3.JS']),
     );
 
     // Search with an uppercase pattern
     results = await fileSearch.search('FILE*.JS');
     expect(results).toHaveLength(3);
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['File1.Js', 'file2.js', 'FILE3.JS']),
     );
 
     // Search with a mixed-case pattern
     results = await fileSearch.search('FiLe*.Js');
     expect(results).toHaveLength(3);
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['File1.Js', 'file2.js', 'FILE3.JS']),
     );
   });
@@ -624,7 +628,7 @@ describe('FileSearch', () => {
 
     // 1. Perform a broad search to populate the cache with an exact match.
     const initialResults = await fileSearch.search('*.js');
-    expect(initialResults).toEqual([
+    expect(initialResults).toStrictEqual([
       'file1.js',
       'file2.js',
       'file3.js',
@@ -636,7 +640,7 @@ describe('FileSearch', () => {
     const limitedResults = await fileSearch.search('*.js', { maxResults: 2 });
 
     // 3. Assert that the maxResults limit was respected, even with a cache hit.
-    expect(limitedResults).toEqual(['file1.js', 'file2.js']);
+    expect(limitedResults).toStrictEqual(['file1.js', 'file2.js']);
   });
 
   it('should handle file paths with special characters that need escaping', async () => {
@@ -666,7 +670,7 @@ describe('FileSearch', () => {
       'src/file with \\(special\\) chars.txt',
     );
 
-    expect(results).toEqual(['src/file with (special) chars.txt']);
+    expect(results).toStrictEqual(['src/file with (special) chars.txt']);
   });
 
   describe('DirectoryFileSearch', () => {
@@ -690,7 +694,7 @@ describe('FileSearch', () => {
 
       await fileSearch.initialize();
       const results = await fileSearch.search('*.js');
-      expect(results).toEqual(['file1.js', 'file3.js']);
+      expect(results).toStrictEqual(['file1.js', 'file3.js']);
     });
 
     it('should search for files in a subdirectory', async () => {
@@ -715,7 +719,7 @@ describe('FileSearch', () => {
 
       await fileSearch.initialize();
       const results = await fileSearch.search('src/*.js');
-      expect(results).toEqual(['src/file2.js']);
+      expect(results).toStrictEqual(['src/file2.js']);
     });
 
     it('should list all files in a directory', async () => {
@@ -740,7 +744,7 @@ describe('FileSearch', () => {
 
       await fileSearch.initialize();
       const results = await fileSearch.search('src/');
-      expect(results).toEqual(['src/file2.js', 'src/file3.ts']);
+      expect(results).toStrictEqual(['src/file2.js', 'src/file3.ts']);
     });
 
     it('should respect ignore rules', async () => {
@@ -763,7 +767,7 @@ describe('FileSearch', () => {
 
       await fileSearch.initialize();
       const results = await fileSearch.search('*');
-      expect(results).toEqual(['.gitignore', 'file2.ts']);
+      expect(results).toStrictEqual(['.gitignore', 'file2.ts']);
     });
   });
 });

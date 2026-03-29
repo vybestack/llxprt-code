@@ -10,7 +10,7 @@ import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import type { AppState } from '../reducers/appReducer.js';
 
 export const useAuthCommand = (
-  settings: LoadedSettings,
+  _settings: LoadedSettings,
   appState: AppState,
 ) => {
   const appDispatch = useAppDispatch();

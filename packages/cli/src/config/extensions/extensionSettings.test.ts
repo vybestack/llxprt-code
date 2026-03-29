@@ -85,7 +85,7 @@ describe('ExtensionSettingSchema', () => {
 describe('ExtensionSettingsArraySchema', () => {
   it('should validate empty array', () => {
     const result = ExtensionSettingsArraySchema.parse([]);
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it('should validate array of settings', () => {

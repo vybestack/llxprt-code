@@ -120,7 +120,7 @@ export async function createApp() {
     );
 
     let expressApp = express();
-    expressApp.use((req, res, next) => {
+    expressApp.use((req, _res, next) => {
       requestStorage.run({ req }, next);
     });
 
@@ -232,7 +232,7 @@ export async function createApp() {
       void handleExecuteCommand(req, res, { config, git, agentExecutor });
     });
 
-    expressApp.get('/listCommands', (req, res) => {
+    expressApp.get('/listCommands', (_req, res) => {
       try {
         const transformCommand = (
           command: Command,
@@ -274,7 +274,7 @@ export async function createApp() {
       }
     });
 
-    expressApp.get('/tasks/metadata', async (req, res) => {
+    expressApp.get('/tasks/metadata', async (_req, res) => {
       // This endpoint is only meaningful if the task store is in-memory.
       if (!(taskStoreForExecutor instanceof InMemoryTaskStore)) {
         res.status(501).send({

@@ -40,7 +40,7 @@ describe('toolOutputLimiter', () => {
     it('should not truncate when content is within maxChars', () => {
       const content = 'hello world';
       const result = clipMiddle(content, 100, 0.3, 0.7);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         content,
         wasTruncated: false,
         originalLength: content.length,
@@ -77,7 +77,7 @@ TAIL`;
   describe('getOutputLimits', () => {
     it('should return default values when no settings are provided', () => {
       const limits = getOutputLimits(mockConfig as unknown as Config);
-      expect(limits).toEqual({
+      expect(limits).toStrictEqual({
         maxTokens: DEFAULT_MAX_TOKENS,
         truncateMode: DEFAULT_TRUNCATE_MODE,
       });
@@ -90,7 +90,7 @@ TAIL`;
       });
 
       const limits = getOutputLimits(mockConfig as unknown as Config);
-      expect(limits).toEqual({
+      expect(limits).toStrictEqual({
         maxTokens: 75000,
         truncateMode: 'truncate',
       });
@@ -103,7 +103,7 @@ TAIL`;
       });
 
       const limits = getOutputLimits(mockConfig as unknown as Config);
-      expect(limits).toEqual({
+      expect(limits).toStrictEqual({
         maxTokens: 100000,
         truncateMode: DEFAULT_TRUNCATE_MODE,
       });
@@ -119,7 +119,7 @@ TAIL`;
         'test-tool',
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         content,
         wasTruncated: false,
       });
@@ -259,7 +259,7 @@ TAIL`;
         wasTruncated: false,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent: 'Normal content',
         returnDisplay: 'Normal content',
       });
@@ -272,7 +272,7 @@ TAIL`;
         message: 'Tool output exceeded limit',
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent: 'Tool output exceeded limit',
         returnDisplay: '## Token Limit Exceeded\n\nTool output exceeded limit',
       });
@@ -285,7 +285,7 @@ TAIL`;
         message: 'Output was truncated',
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent: 'Truncated content...',
         returnDisplay: 'Truncated content...\n\n## Note\nOutput was truncated',
       });
@@ -297,7 +297,7 @@ TAIL`;
         wasTruncated: true,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent: 'Truncated content...',
         returnDisplay: 'Truncated content...',
       });

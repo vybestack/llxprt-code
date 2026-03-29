@@ -56,7 +56,7 @@ vi.mock('../agent/task.js', () => {
       this.id = id;
       this.contextId = contextId;
     }
-    static create = vi
+    static readonly create = vi
       .fn()
       .mockImplementation((id, contextId) =>
         Promise.resolve(new MockTask(id, contextId)),

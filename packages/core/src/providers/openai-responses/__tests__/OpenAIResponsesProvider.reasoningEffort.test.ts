@@ -101,6 +101,6 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
       reasoning?: Record<string, unknown>;
     };
 
-    expect(parsedBody.reasoning).toEqual({ effort: 'xhigh' });
+    expect(parsedBody.reasoning).toStrictEqual({ effort: 'xhigh' });
   });
 });

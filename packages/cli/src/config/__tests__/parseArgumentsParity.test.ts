@@ -99,7 +99,7 @@ describe('parseArgumentsParity: positional mapping', () => {
   it('promptWords array populated from positional args', async () => {
     process.argv = ['node', 'script.js', 'hello', 'world'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.promptWords).toEqual(['hello', 'world']);
+    expect(argv.promptWords).toStrictEqual(['hello', 'world']);
   });
 });
 
@@ -203,7 +203,7 @@ describe('parseArgumentsParity: array coercion', () => {
       '/path/a,/path/b',
     ];
     const argv = await parseArguments({} as Settings);
-    expect(argv.includeDirectories).toEqual(['/path/a', '/path/b']);
+    expect(argv.includeDirectories).toStrictEqual(['/path/a', '/path/b']);
   });
 
   it('--set repeated → collects into array', async () => {
@@ -216,7 +216,7 @@ describe('parseArgumentsParity: array coercion', () => {
       'tool-output-max-tokens=4096',
     ];
     const argv = await parseArguments({} as Settings);
-    expect(argv.set).toEqual([
+    expect(argv.set).toStrictEqual([
       'context-limit=32000',
       'tool-output-max-tokens=4096',
     ]);
@@ -230,7 +230,10 @@ describe('parseArgumentsParity: array coercion', () => {
       'read_file,ShellTool(git status)',
     ];
     const argv = await parseArguments({} as Settings);
-    expect(argv.allowedTools).toEqual(['read_file', 'ShellTool(git status)']);
+    expect(argv.allowedTools).toStrictEqual([
+      'read_file',
+      'ShellTool(git status)',
+    ]);
   });
 
   it('--allowed-mcp-server-names comma-separated → split into array', async () => {
@@ -241,13 +244,13 @@ describe('parseArgumentsParity: array coercion', () => {
       'server1,server2',
     ];
     const argv = await parseArguments({} as Settings);
-    expect(argv.allowedMcpServerNames).toEqual(['server1', 'server2']);
+    expect(argv.allowedMcpServerNames).toStrictEqual(['server1', 'server2']);
   });
 
   it('--extensions comma-separated → split into array', async () => {
     process.argv = ['node', 'script.js', '--extensions', 'ext1,ext2'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.extensions).toEqual(['ext1', 'ext2']);
+    expect(argv.extensions).toStrictEqual(['ext1', 'ext2']);
   });
 });
 

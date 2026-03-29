@@ -539,7 +539,7 @@ describe('SettingsUtils', () => {
         const pendingSettings = {};
         setPendingSettingValue('ui.showMemoryUsage', true, pendingSettings);
 
-        expect(pendingSettings).toEqual({});
+        expect(pendingSettings).toStrictEqual({});
       });
     });
 
@@ -587,7 +587,7 @@ describe('SettingsUtils', () => {
         ]);
         const result = getRestartRequiredFromModified(modifiedSettings);
 
-        expect(result).toEqual([]);
+        expect(result).toStrictEqual([]);
       });
     });
 

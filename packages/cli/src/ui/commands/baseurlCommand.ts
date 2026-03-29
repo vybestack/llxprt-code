@@ -17,7 +17,7 @@ export const baseurlCommand: SlashCommand = {
   description: 'set base URL for the current provider',
   kind: CommandKind.BUILT_IN,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
     const baseUrl = args?.trim();

@@ -84,8 +84,8 @@ export interface GenerateContentOptions {
  */
 function extractJsonFromMarkdown(text: string): string {
   // Try to match ```json ... ``` or ``` ... ```
-  const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (markdownMatch != null && markdownMatch[1]) {
+  const markdownMatch = RegExp(/```(?:json)?\s*\n?([\s\S]*?)\n?```/).exec(text);
+  if (markdownMatch?.[1]) {
     return markdownMatch[1].trim();
   }
 

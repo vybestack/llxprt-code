@@ -120,11 +120,10 @@ describe('EditTool', () => {
             .map((p: Part) => (p as any).text)
             .join('\n');
         }
-        const snippetMatch = promptText.match(
+        const snippetMatch = RegExp(
           /Problematic target snippet:\n```\n([\s\S]*?)\n```/,
-        );
-        const problematicSnippet =
-          snippetMatch != null && snippetMatch[1] ? snippetMatch[1] : '';
+        ).exec(promptText);
+        const problematicSnippet = snippetMatch?.[1] ? snippetMatch[1] : '';
 
         if ((schema as any).properties?.corrected_target_snippet) {
           return Promise.resolve({
@@ -134,13 +133,12 @@ describe('EditTool', () => {
         if ((schema as any).properties?.corrected_new_string) {
           // For new_string correction, we might need more sophisticated logic,
           // but for now, returning original is a safe default if not specified by a test.
-          const originalNewStringMatch = promptText.match(
+          const originalNewStringMatch = RegExp(
             /original_new_string \(what was intended to replace original_old_string\):\n```\n([\s\S]*?)\n```/,
-          );
-          const originalNewString =
-            originalNewStringMatch != null && originalNewStringMatch[1]
-              ? originalNewStringMatch[1]
-              : '';
+          ).exec(promptText);
+          const originalNewString = originalNewStringMatch?.[1]
+            ? originalNewStringMatch[1]
+            : '';
           return Promise.resolve({ corrected_new_string: originalNewString });
         }
         return Promise.resolve({}); // Default empty object if schema doesn't match
@@ -256,7 +254,7 @@ describe('EditTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      expect(confirmation).toEqual(
+      expect(confirmation).toStrictEqual(
         expect.objectContaining({
           title: `Confirm Edit: ${testFile}`,
           fileName: testFile,
@@ -303,7 +301,7 @@ describe('EditTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      expect(confirmation).toEqual(
+      expect(confirmation).toStrictEqual(
         expect.objectContaining({
           title: `Confirm Edit: ${newFileName}`,
           fileName: newFileName,

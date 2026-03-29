@@ -47,7 +47,7 @@ export class ToolNameValidator {
    */
   validateToolName(
     rawName: string | undefined,
-    detectedFormat: ToolFormat,
+    _detectedFormat: ToolFormat,
     availableToolNames: string[] = [],
   ): ToolNameValidationResult {
     const result: ToolNameValidationResult = {

@@ -79,8 +79,8 @@ describe('Trusted Folders Loading', () => {
 
   it('should load empty rules if no files exist', () => {
     const { rules, errors } = loadTrustedFolders();
-    expect(rules).toEqual([]);
-    expect(errors).toEqual([]);
+    expect(rules).toStrictEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 
   describe('isPathTrusted', () => {
@@ -141,10 +141,10 @@ describe('Trusted Folders Loading', () => {
     });
 
     const { rules, errors } = loadTrustedFolders();
-    expect(rules).toEqual([
+    expect(rules).toStrictEqual([
       { path: '/user/folder', trustLevel: TrustLevel.TRUST_FOLDER },
     ]);
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 
   it('should handle JSON parsing errors gracefully', () => {
@@ -156,7 +156,7 @@ describe('Trusted Folders Loading', () => {
     });
 
     const { rules, errors } = loadTrustedFolders();
-    expect(rules).toEqual([]);
+    expect(rules).toStrictEqual([]);
     expect(errors.length).toBe(1);
     expect(errors[0].path).toBe(userPath);
     expect(errors[0].message).toContain('Unexpected token');
@@ -176,13 +176,13 @@ describe('Trusted Folders Loading', () => {
     });
 
     const { rules, errors } = loadTrustedFolders();
-    expect(rules).toEqual([
+    expect(rules).toStrictEqual([
       {
         path: '/user/folder/from/env',
         trustLevel: TrustLevel.TRUST_FOLDER,
       },
     ]);
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
 
     delete process.env['LLXPRT_CODE_TRUSTED_FOLDERS_PATH'];
   });

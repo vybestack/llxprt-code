@@ -22,7 +22,7 @@ vi.mock('../gemini.js', () => ({
 describe('skillsCommand', () => {
   it('should have correct command and aliases', () => {
     expect(skillsCommand.command).toBe('skills <command>');
-    expect(skillsCommand.aliases).toEqual(['skill']);
+    expect(skillsCommand.aliases).toStrictEqual(['skill']);
     expect(skillsCommand.describe).toBe('Manage skills.');
   });
 

@@ -100,7 +100,7 @@ describe('OAuthCredentialStorage', () => {
       const result = await oauthStorage.loadCredentials();
 
       expect(storage.getCredentials).toHaveBeenCalledWith('main-account');
-      expect(result).toEqual(mockCredentials);
+      expect(result).toStrictEqual(mockCredentials);
     });
 
     it('should fallback to migrateFromFileStorage if no credentials in KeychainTokenStorage', async () => {
@@ -115,7 +115,7 @@ describe('OAuthCredentialStorage', () => {
       expect(fs.readFile).toHaveBeenCalledWith(llxprtFilePath, 'utf-8');
       expect(storage.setCredentials).toHaveBeenCalled(); // Verify credentials were saved
       expect(fs.rm).toHaveBeenCalledWith(llxprtFilePath, { force: true }); // Verify old file was removed
-      expect(result).toEqual(mockCredentials);
+      expect(result).toStrictEqual(mockCredentials);
     });
 
     it('should migrate from legacy .gemini path when llxprt file is missing', async () => {
@@ -139,7 +139,7 @@ describe('OAuthCredentialStorage', () => {
       expect(fs.readFile).toHaveBeenCalledWith(geminiFilePath, 'utf-8');
       expect(storage.setCredentials).toHaveBeenCalled();
       expect(fs.rm).toHaveBeenCalledWith(geminiFilePath, { force: true });
-      expect(result).toEqual(mockCredentials);
+      expect(result).toStrictEqual(mockCredentials);
     });
 
     it('should return null if no credentials found and no old file to migrate', async () => {
@@ -192,7 +192,7 @@ describe('OAuthCredentialStorage', () => {
 
       const result = await oauthStorage.loadCredentials();
 
-      expect(result).toEqual(mockCredentials);
+      expect(result).toStrictEqual(mockCredentials);
     });
   });
 

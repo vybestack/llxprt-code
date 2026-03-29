@@ -170,18 +170,18 @@ describe('Endpoint Validation Utilities', () => {
   describe('getSuggestedEndpoints', () => {
     it('should return Qwen endpoints for qwen provider', () => {
       const suggestions = getSuggestedEndpoints('qwen');
-      expect(suggestions).toEqual([...QWEN_ENDPOINTS]);
+      expect(suggestions).toStrictEqual([...QWEN_ENDPOINTS]);
       expect(suggestions.length).toBeGreaterThan(0);
     });
 
     it('should return empty array for unknown providers', () => {
       const suggestions = getSuggestedEndpoints('unknown');
-      expect(suggestions).toEqual([]);
+      expect(suggestions).toStrictEqual([]);
     });
 
     it('should return empty array for empty provider', () => {
       const suggestions = getSuggestedEndpoints('');
-      expect(suggestions).toEqual([]);
+      expect(suggestions).toStrictEqual([]);
     });
   });
 

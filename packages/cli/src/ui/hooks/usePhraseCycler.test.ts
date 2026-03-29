@@ -254,7 +254,7 @@ describe('usePhraseCycler', () => {
 
     it('should use LLxprt phrases for "default" style when custom is undefined', () => {
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'default', false, 0, undefined),
+        usePhraseCycler(true, false, 'default', false, 0),
       );
       expect(LLXPRT_PHRASES).toContain(result.current);
     });

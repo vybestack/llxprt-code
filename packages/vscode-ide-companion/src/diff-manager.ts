@@ -159,7 +159,6 @@ export class DiffManager {
       }
       return modifiedContent;
     }
-    return;
   }
 
   /**

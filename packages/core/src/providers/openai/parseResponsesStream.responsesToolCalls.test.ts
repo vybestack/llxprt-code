@@ -43,7 +43,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     );
     expect(toolCallMessage).toBeDefined();
     expect(toolCallMessage?.blocks).toHaveLength(1);
-    expect(toolCallMessage?.blocks[0]).toEqual({
+    expect(toolCallMessage?.blocks[0]).toStrictEqual({
       type: 'tool_call',
       id: 'call_abc123',
       name: 'get_weather',
@@ -71,7 +71,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     const toolCallMessage = messages.find((m) =>
       m.blocks.some((block) => block.type === 'tool_call'),
     );
-    expect(toolCallMessage?.blocks[0]).toEqual({
+    expect(toolCallMessage?.blocks[0]).toStrictEqual({
       type: 'tool_call',
       id: 'call_def456',
       name: 'search_products',
@@ -119,7 +119,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       name: string;
       parameters: unknown;
     };
-    expect(tool1Block).toEqual({
+    expect(tool1Block).toStrictEqual({
       type: 'tool_call',
       id: 'call_001',
       name: 'tool1',
@@ -138,7 +138,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       name: string;
       parameters: unknown;
     };
-    expect(tool2Block).toEqual({
+    expect(tool2Block).toStrictEqual({
       type: 'tool_call',
       id: 'call_002',
       name: 'tool2',
@@ -162,7 +162,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     const toolCallMessage = messages.find((m) =>
       m.blocks.some((block) => block.type === 'tool_call'),
     );
-    expect(toolCallMessage?.blocks[0]).toEqual({
+    expect(toolCallMessage?.blocks[0]).toStrictEqual({
       type: 'tool_call',
       id: 'call_empty',
       name: 'no_args_tool',
@@ -225,7 +225,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       ),
     ).toBe(true);
     const usageMessage = messages.find((m) => m.metadata?.usage);
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 62,
       completionTokens: 23,
       totalTokens: 85,
@@ -250,7 +250,7 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     const toolCallMessage = messages.find((m) =>
       m.blocks.some((block) => block.type === 'tool_call'),
     );
-    expect(toolCallMessage?.blocks[0]).toEqual({
+    expect(toolCallMessage?.blocks[0]).toStrictEqual({
       type: 'tool_call',
       id: 'fc_no_call_id', // Falls back to item.id when call_id is not provided
       name: 'test_tool',

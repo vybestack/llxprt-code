@@ -167,7 +167,7 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'free' });
 
-    await getAnthropicUsageInfo(store, undefined);
+    await getAnthropicUsageInfo(store);
 
     expect(store.getToken).toHaveBeenCalledWith('anthropic', 'default');
   });

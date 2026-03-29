@@ -84,7 +84,7 @@ function parseMemoryLimit(memory: string): string {
   if (trimmed.length === 0) {
     throw new FatalSandboxError('Sandbox memory value cannot be empty');
   }
-  const match = trimmed.match(/^(\d+)([kKmMgG])?$/);
+  const match = RegExp(/^(\d+)([kKmMgG])?$/).exec(trimmed);
   if (match == null) {
     throw new FatalSandboxError(
       `Invalid sandbox memory value '${memory}'. Expected values like 512m or 2g.`,

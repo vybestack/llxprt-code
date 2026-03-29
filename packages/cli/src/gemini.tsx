@@ -780,7 +780,9 @@ export async function main() {
       if (containerMemoryStr) {
         containerMemoryMB = parseDockerMemoryToMB(containerMemoryStr);
       } else if (process.env.SANDBOX_FLAGS) {
-        const match = process.env.SANDBOX_FLAGS.match(/--memory[= ](\S+)/);
+        const match = RegExp(/--memory[= ](\S+)/).exec(
+          process.env.SANDBOX_FLAGS,
+        );
         if (match) {
           containerMemoryMB = parseDockerMemoryToMB(match[1]);
         }

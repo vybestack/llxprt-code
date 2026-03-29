@@ -279,7 +279,7 @@ describe('ProviderKeyStorage — CRUD Operations', () => {
     await storage.saveKey('beta', 'value-2');
 
     const keys = await storage.listKeys();
-    expect(keys).toEqual(['alpha', 'beta', 'gamma']);
+    expect(keys).toStrictEqual(['alpha', 'beta', 'gamma']);
   });
 
   /**
@@ -288,7 +288,7 @@ describe('ProviderKeyStorage — CRUD Operations', () => {
    */
   it('listKeys returns empty array when no keys stored', async () => {
     const keys = await storage.listKeys();
-    expect(keys).toEqual([]);
+    expect(keys).toStrictEqual([]);
   });
 
   /**
@@ -441,9 +441,9 @@ describe('ProviderKeyStorage — Encrypted Fallback', () => {
     expect(keys).toContain('fallback-only');
     // No duplicates
     const uniqueKeys = [...new Set(keys)];
-    expect(keys).toEqual(uniqueKeys);
+    expect(keys).toStrictEqual(uniqueKeys);
     // Sorted
-    expect(keys).toEqual([...keys].sort());
+    expect(keys).toStrictEqual([...keys].sort());
   });
 });
 

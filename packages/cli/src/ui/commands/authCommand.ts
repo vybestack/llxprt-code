@@ -181,7 +181,7 @@ export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
 
   async execute(
-    context: CommandContext,
+    _context: CommandContext,
     args?: string,
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages

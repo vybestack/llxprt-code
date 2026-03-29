@@ -132,7 +132,7 @@ describe('GitService', () => {
     });
 
     it('should resolve false if git --version command fails', async () => {
-      hoistedMockExec.mockImplementation((command, callback) => {
+      hoistedMockExec.mockImplementation((_command, callback) => {
         callback(new Error('git not found'));
         return {} as ChildProcess;
       });
@@ -143,7 +143,7 @@ describe('GitService', () => {
 
   describe('initialize', () => {
     it('should throw an error if Git is not available', async () => {
-      hoistedMockExec.mockImplementation((command, callback) => {
+      hoistedMockExec.mockImplementation((_command, callback) => {
         callback(new Error('git not found'));
         return {} as ChildProcess;
       });

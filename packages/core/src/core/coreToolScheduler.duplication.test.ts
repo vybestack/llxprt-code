@@ -93,7 +93,7 @@ class ExecutionTrackingTool extends BaseDeclarativeTool<
   ToolResult
 > {
   displayName = 'ExecutionTrackingTool';
-  static executionCount = 0;
+  static readonly executionCount = 0;
 
   constructor(
     messageBus: ReturnType<

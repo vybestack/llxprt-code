@@ -9,21 +9,21 @@ import { parseInputForHighlighting } from './highlight.js';
 
 describe('parseInputForHighlighting', () => {
   it('should handle an empty string', () => {
-    expect(parseInputForHighlighting('', 0)).toEqual([
+    expect(parseInputForHighlighting('', 0)).toStrictEqual([
       { text: '', type: 'default' },
     ]);
   });
 
   it('should handle text with no commands or files', () => {
     const text = 'this is a normal sentence';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text, type: 'default' },
     ]);
   });
 
   it('should highlight a single command at the beginning', () => {
     const text = '/help me';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text: '/help', type: 'command' },
       { text: ' me', type: 'default' },
     ]);
@@ -31,7 +31,7 @@ describe('parseInputForHighlighting', () => {
 
   it('should highlight a single file path at the beginning', () => {
     const text = '@path/to/file.txt please';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text: '@path/to/file.txt', type: 'file' },
       { text: ' please', type: 'default' },
     ]);
@@ -39,14 +39,14 @@ describe('parseInputForHighlighting', () => {
 
   it('should highlight a command in the middle', () => {
     const text = 'I need /help with this';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text, type: 'default' },
     ]);
   });
 
   it('should highlight a file path in the middle', () => {
     const text = 'Please check @path/to/file.txt for details';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text: 'Please check ', type: 'default' },
       { text: '@path/to/file.txt', type: 'file' },
       { text: ' for details', type: 'default' },
@@ -55,7 +55,7 @@ describe('parseInputForHighlighting', () => {
 
   it('should highlight multiple commands and files', () => {
     const text = 'Use /run with @file.js and also /format @another/file.ts';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text: 'Use /run with ', type: 'default' },
       { text: '@file.js', type: 'file' },
       { text: ' and also /format ', type: 'default' },
@@ -65,7 +65,7 @@ describe('parseInputForHighlighting', () => {
 
   it('should handle adjacent highlights', () => {
     const text = '/run@file.js';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text: '/run', type: 'command' },
       { text: '@file.js', type: 'file' },
     ]);
@@ -73,14 +73,14 @@ describe('parseInputForHighlighting', () => {
 
   it('should handle highlights at the end of the string', () => {
     const text = 'Get help with /help';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text, type: 'default' },
     ]);
   });
 
   it('should handle file paths with dots and dashes', () => {
     const text = 'Check @./path-to/file-name.v2.txt';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text: 'Check ', type: 'default' },
       { text: '@./path-to/file-name.v2.txt', type: 'file' },
     ]);
@@ -88,21 +88,21 @@ describe('parseInputForHighlighting', () => {
 
   it('should handle commands with dashes and numbers', () => {
     const text = 'Run /command-123 now';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text, type: 'default' },
     ]);
   });
 
   it('should treat slash commands on wrapped lines as default text', () => {
     const text = '/help more';
-    expect(parseInputForHighlighting(text, 1)).toEqual([
+    expect(parseInputForHighlighting(text, 1)).toStrictEqual([
       { text, type: 'default' },
     ]);
   });
 
   it('should highlight file paths that include escaped spaces', () => {
     const text = '@my\\ path/with\\ spaces.txt';
-    expect(parseInputForHighlighting(text, 0)).toEqual([
+    expect(parseInputForHighlighting(text, 0)).toStrictEqual([
       { text, type: 'file' },
     ]);
   });

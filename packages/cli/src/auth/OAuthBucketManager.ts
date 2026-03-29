@@ -159,7 +159,7 @@ export class OAuthBucketManager {
    * Returns undefined if no more buckets available
    */
   getNextBucket(
-    provider: string,
+    _provider: string,
     currentBucket: string,
     profileBuckets: string[],
   ): string | undefined {

@@ -24,8 +24,7 @@ function loadMarkdownFile(filename: string): string {
   let debugLog = false;
   try {
     debugLog =
-      typeof process !== 'undefined' &&
-      process.env &&
+      process?.env &&
       (process.env.DEBUG === '1' || process.env.DEBUG === 'true');
   } catch {
     debugLog = false;
@@ -134,7 +133,7 @@ function loadMarkdownFile(filename: string): string {
     }
 
     // As a last resort, check if we're running from a bundle directory
-    if (typeof process !== 'undefined' && process.cwd().includes('bundle')) {
+    if (process?.cwd().includes('bundle')) {
       const cwdPath = join(process.cwd(), filename);
       if (existsSync(cwdPath)) {
         return readFileSync(cwdPath, 'utf-8');
@@ -143,7 +142,7 @@ function loadMarkdownFile(filename: string): string {
 
     // Additional check for Windows CI where files might be in a different location
     // Check if the file exists relative to the executing script location
-    if (typeof process !== 'undefined' && process.argv[1]) {
+    if (process?.argv[1]) {
       const scriptDir = dirname(process.argv[1]);
       const scriptPath = join(scriptDir, filename);
       if (existsSync(scriptPath)) {

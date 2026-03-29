@@ -75,7 +75,7 @@ describe('bootstrap utilities', () => {
     it('should return empty array when LLXPRT_CODE_NO_RELAUNCH is set', () => {
       process.env.LLXPRT_CODE_NO_RELAUNCH = 'true';
       const result = shouldRelaunchForMemory(false);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should return empty array when current heap is sufficient', () => {
@@ -92,7 +92,8 @@ describe('bootstrap utilities', () => {
       const result = shouldRelaunchForMemory(false);
       // The result should either be empty or contain a --max-old-space-size flag
       expect(
-        result.length === 0 || result[0].match(/--max-old-space-size=\d+/),
+        result.length === 0 ||
+          RegExp(/--max-old-space-size=\d+/).exec(result[0]),
       ).toBeTruthy();
     });
 
@@ -170,12 +171,12 @@ describe('bootstrap utilities', () => {
   describe('computeSandboxMemoryArgs', () => {
     it('should return 50% of container memory when containerMemoryMB is provided', () => {
       const result = computeSandboxMemoryArgs(false, 6144);
-      expect(result).toEqual(['--max-old-space-size=3072']);
+      expect(result).toStrictEqual(['--max-old-space-size=3072']);
     });
 
     it('should return 50% of 4GB container memory', () => {
       const result = computeSandboxMemoryArgs(false, 4096);
-      expect(result).toEqual(['--max-old-space-size=2048']);
+      expect(result).toStrictEqual(['--max-old-space-size=2048']);
     });
 
     it('should fall back to os.totalmem() when no containerMemoryMB', () => {
@@ -209,17 +210,17 @@ describe('bootstrap utilities', () => {
 
     it('should clamp to minimum 128 MB for very small container memory', () => {
       const result = computeSandboxMemoryArgs(false, 64);
-      expect(result).toEqual(['--max-old-space-size=128']);
+      expect(result).toStrictEqual(['--max-old-space-size=128']);
     });
 
     it('should cap at MAX_HEAP_CAP_MB for large container memory', () => {
       const result = computeSandboxMemoryArgs(false, 131072);
-      expect(result).toEqual([`--max-old-space-size=${MAX_HEAP_CAP_MB}`]);
+      expect(result).toStrictEqual([`--max-old-space-size=${MAX_HEAP_CAP_MB}`]);
     });
 
     it('should not cap when 50% of container memory is below the cap', () => {
       const result = computeSandboxMemoryArgs(false, 8192);
-      expect(result).toEqual(['--max-old-space-size=4096']);
+      expect(result).toStrictEqual(['--max-old-space-size=4096']);
     });
   });
 

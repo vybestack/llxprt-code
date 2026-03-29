@@ -135,8 +135,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, previousHooks);
 
-      expect(delta.newHooks).toEqual(['post-install']);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual(['post-install']);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
 
     it('should not require consent for unchanged hooks', () => {
@@ -149,8 +149,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, previousHooks);
 
-      expect(delta.newHooks).toEqual([]);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual([]);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
 
     it('should not require consent for removed hooks', () => {
@@ -164,8 +164,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, previousHooks);
 
-      expect(delta.newHooks).toEqual([]);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual([]);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
 
     it('should require consent for changed hook definitions', () => {
@@ -178,8 +178,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, previousHooks);
 
-      expect(delta.newHooks).toEqual([]);
-      expect(delta.changedHooks).toEqual(['pre-commit']);
+      expect(delta.newHooks).toStrictEqual([]);
+      expect(delta.changedHooks).toStrictEqual(['pre-commit']);
     });
 
     it('should use sorted JSON comparison for hook definitions', () => {
@@ -192,8 +192,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, previousHooks);
 
-      expect(delta.newHooks).toEqual([]);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual([]);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
 
     it('should treat case-sensitive hook names as distinct', () => {
@@ -207,8 +207,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, previousHooks);
 
-      expect(delta.newHooks).toEqual(['pre-commit']);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual(['pre-commit']);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
 
     it('should handle undefined previous hooks', () => {
@@ -218,8 +218,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(currentHooks, undefined);
 
-      expect(delta.newHooks).toEqual(['pre-commit']);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual(['pre-commit']);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
 
     it('should handle undefined current hooks', () => {
@@ -229,8 +229,8 @@ describe('consent', () => {
 
       const delta = computeHookConsentDelta(undefined, previousHooks);
 
-      expect(delta.newHooks).toEqual([]);
-      expect(delta.changedHooks).toEqual([]);
+      expect(delta.newHooks).toStrictEqual([]);
+      expect(delta.changedHooks).toStrictEqual([]);
     });
   });
 
@@ -338,12 +338,7 @@ describe('consent', () => {
 
     it('should request consent if there is no previous config', async () => {
       const requestConsent = vi.fn().mockResolvedValue(true);
-      await maybeRequestConsentOrFail(
-        baseConfig,
-        requestConsent,
-        false,
-        undefined,
-      );
+      await maybeRequestConsentOrFail(baseConfig, requestConsent, false);
       expect(requestConsent).toHaveBeenCalledTimes(1);
     });
 
@@ -383,12 +378,7 @@ describe('consent', () => {
 
     it('should include warning when hooks are present', async () => {
       const requestConsent = vi.fn().mockResolvedValue(true);
-      await maybeRequestConsentOrFail(
-        baseConfig,
-        requestConsent,
-        true,
-        undefined,
-      );
+      await maybeRequestConsentOrFail(baseConfig, requestConsent, true);
 
       expect(requestConsent).toHaveBeenCalledWith(
         expect.stringContaining(

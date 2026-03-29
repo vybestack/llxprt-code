@@ -77,7 +77,7 @@ describe('applyCliSetArguments', () => {
       'modelparam.stop_sequences=["END"]',
     ]);
 
-    expect(result.modelParams).toEqual({
+    expect(result.modelParams).toStrictEqual({
       temperature: 0.7,
       stop_sequences: ['END'],
     });

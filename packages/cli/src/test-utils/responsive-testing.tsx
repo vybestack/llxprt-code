@@ -29,7 +29,7 @@ export function renderAtWidth(
 }
 
 export function testResponsiveBehavior(
-  name: string,
+  _name: string,
   component: React.ReactElement,
   assertions: ResponsiveAssertions,
 ): void {

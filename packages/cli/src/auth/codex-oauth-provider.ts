@@ -168,7 +168,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     });
 
     const port = parseInt(
-      localCallback.redirectUri.match(/:(\d+)\//)?.[1] || '0',
+      RegExp(/:(\d+)\//).exec(localCallback.redirectUri)?.[1] || '0',
       10,
     );
     this.logger.debug(

@@ -10,7 +10,7 @@ import { createOsc8Link } from '../../utils/terminalLinks.js';
 
 // Helper function to extract provider from text (mirrors component logic)
 function extractProvider(text: string): string {
-  const providerMatch = text.match(/authorize with ([^\n:]+)/i);
+  const providerMatch = RegExp(/authorize with ([^\n:]+)/i).exec(text);
   return providerMatch != null ? providerMatch[1] : 'the service';
 }
 

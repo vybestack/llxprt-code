@@ -110,7 +110,7 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
       },
     ];
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
-    expect(newContents).toEqual(history);
+    expect(newContents).toStrictEqual(history);
     expect(
       (newContents[1]?.parts?.[0] as Part & { thoughtSignature?: string })
         ?.thoughtSignature,
@@ -120,13 +120,13 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
   it('should handle an empty history', () => {
     const history: Content[] = [];
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
-    expect(newContents).toEqual([]);
+    expect(newContents).toStrictEqual([]);
   });
 
   it('should handle history with only a user message', () => {
     const history: Content[] = [{ role: 'user', parts: [{ text: 'Hello' }] }];
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
-    expect(newContents).toEqual(history);
+    expect(newContents).toStrictEqual(history);
   });
 
   it('should preserve existing thoughtSignature if already present', () => {
@@ -162,7 +162,7 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
 
     // Text-only model turn - no changes
-    expect(newContents[1]?.parts?.[0]).toEqual({ text: 'Hi there!' });
+    expect(newContents[1]?.parts?.[0]).toStrictEqual({ text: 'Hi there!' });
 
     // Function call in active loop gets signature
     expect(
@@ -186,7 +186,9 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
 
     // Text part unchanged
-    expect(newContents[1]?.parts?.[0]).toEqual({ text: 'Let me check...' });
+    expect(newContents[1]?.parts?.[0]).toStrictEqual({
+      text: 'Let me check...',
+    });
 
     // First functionCall gets signature
     expect(
@@ -259,7 +261,9 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     ).toBe(SYNTHETIC_THOUGHT_SIGNATURE);
 
     // Final text response - unchanged
-    expect(newContents[5]?.parts?.[0]).toEqual({ text: 'Analysis complete' });
+    expect(newContents[5]?.parts?.[0]).toStrictEqual({
+      text: 'Analysis complete',
+    });
   });
 
   it('should return the same reference if no modifications needed', () => {
@@ -269,7 +273,7 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
     ];
     const newContents = ensureActiveLoopHasThoughtSignatures(history);
     // No function calls, so no modifications needed
-    expect(newContents).toEqual(history);
+    expect(newContents).toStrictEqual(history);
   });
 });
 
@@ -383,7 +387,7 @@ describe('stripThoughtsFromHistory', () => {
 
   it('should handle empty history', () => {
     const result = stripThoughtsFromHistory([], 'all');
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it('should preserve user turns unchanged', () => {
@@ -437,6 +441,6 @@ describe('stripThoughtsFromHistory', () => {
 
     const result = stripThoughtsFromHistory(history, 'all');
 
-    expect(result).toEqual(history);
+    expect(result).toStrictEqual(history);
   });
 });

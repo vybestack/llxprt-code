@@ -22,7 +22,7 @@ describe('buildResponsesRequest', () => {
 
       const result = buildResponsesRequest(params);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         model: 'gpt-4o',
         prompt: 'Hello world',
         stream: true,
@@ -41,7 +41,7 @@ describe('buildResponsesRequest', () => {
 
       const result = buildResponsesRequest(params);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         model: 'gpt-4o',
         input: [
           { role: 'user', content: 'Hello' },
@@ -235,7 +235,7 @@ describe('buildResponsesRequest', () => {
 
       // The implementation doesn't warn, just processes the request
       expect(result.input).toHaveLength(1);
-      expect(result.input?.[0]).toEqual({
+      expect(result.input?.[0]).toStrictEqual({
         role: 'user',
         content: 'Hello',
       });
@@ -355,7 +355,7 @@ describe('buildResponsesRequest', () => {
       const result = buildResponsesRequest(params);
 
       expect(result.input).toHaveLength(3); // 2 messages + 1 function_call
-      expect(result.input?.[1]).toEqual({
+      expect(result.input?.[1]).toStrictEqual({
         role: 'assistant',
         content: "I'll check the weather for you.",
       });
@@ -364,7 +364,7 @@ describe('buildResponsesRequest', () => {
       ).toBeUndefined();
 
       // Check that function_call was extracted
-      expect(result.input?.[2]).toEqual({
+      expect(result.input?.[2]).toStrictEqual({
         type: 'function_call',
         call_id: 'call_123',
         name: 'get_weather',
@@ -399,7 +399,7 @@ describe('buildResponsesRequest', () => {
 
       const result = buildResponsesRequest(params);
 
-      expect(result.tools).toEqual(tools);
+      expect(result.tools).toStrictEqual(tools);
       expect(result.tool_choice).toBe('auto');
     });
 
@@ -511,7 +511,7 @@ describe('buildResponsesRequest', () => {
     testCases.forEach(({ name, params, expectedSnapshot }) => {
       it(`should correctly build ${name}`, () => {
         const result = buildResponsesRequest(params);
-        expect(result).toEqual(expectedSnapshot);
+        expect(result).toStrictEqual(expectedSnapshot);
       });
     });
   });

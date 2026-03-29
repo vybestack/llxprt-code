@@ -79,10 +79,10 @@ describe('getProviderManager runtime OAuth MessageBus composition', () => {
       .getSupportedProviders()
       .sort();
 
-    expect(registeredProviders).toEqual(
+    expect(registeredProviders).toStrictEqual(
       expect.arrayContaining(['anthropic', 'codex', 'gemini', 'openai']),
     );
-    expect(supportedOAuthProviders).toEqual(
+    expect(supportedOAuthProviders).toStrictEqual(
       expect.arrayContaining(['anthropic', 'codex', 'gemini', 'qwen']),
     );
     expect(

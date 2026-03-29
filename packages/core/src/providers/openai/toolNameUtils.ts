@@ -36,7 +36,7 @@ export function enhanceToolNameExtraction(
   isComplete: boolean,
 ): { name: string; isFallback: boolean } {
   // If we already have a valid name, keep it
-  if (currentName && currentName.trim()) {
+  if (currentName?.trim()) {
     return { name: currentName.trim(), isFallback: false };
   }
 
@@ -169,7 +169,7 @@ export function processFinalToolName(
   });
 
   // Use a more descriptive fallback that includes debugging information
-  return toolName && toolName.trim()
+  return toolName?.trim()
     ? `tool_name_not_found_${toolName.replace(/[^a-zA-Z0-9]/g, '_')}`
     : 'missing_tool_name';
 }

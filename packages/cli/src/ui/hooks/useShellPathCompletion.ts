@@ -81,7 +81,6 @@ export function useShellPathCompletion(
   useEffect(() => {
     if (!shellModeActive || reverseSearchActive) {
       resetCompletionState();
-      return;
     }
   }, [shellModeActive, reverseSearchActive, resetCompletionState]);
 

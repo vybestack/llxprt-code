@@ -88,7 +88,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     const key = `line-${index}`;
 
     if (inCodeBlock) {
-      const fenceMatch = line.match(codeFenceRegex);
+      const fenceMatch = RegExp(codeFenceRegex).exec(line);
       if (
         fenceMatch != null &&
         fenceMatch[1].startsWith(codeBlockFence[0]) &&
@@ -114,13 +114,13 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       return;
     }
 
-    const codeFenceMatch = line.match(codeFenceRegex);
-    const headerMatch = line.match(headerRegex);
-    const ulMatch = line.match(ulItemRegex);
-    const olMatch = line.match(olItemRegex);
-    const hrMatch = line.match(hrRegex);
-    const tableRowMatch = line.match(tableRowRegex);
-    const tableSeparatorMatch = line.match(tableSeparatorRegex);
+    const codeFenceMatch = RegExp(codeFenceRegex).exec(line);
+    const headerMatch = RegExp(headerRegex).exec(line);
+    const ulMatch = RegExp(ulItemRegex).exec(line);
+    const olMatch = RegExp(olItemRegex).exec(line);
+    const hrMatch = RegExp(hrRegex).exec(line);
+    const tableRowMatch = RegExp(tableRowRegex).exec(line);
+    const tableSeparatorMatch = RegExp(tableSeparatorRegex).exec(line);
 
     if (codeFenceMatch != null) {
       inCodeBlock = true;
@@ -130,7 +130,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       // Potential table start - check if next line is separator
       if (
         index + 1 < lines.length &&
-        lines[index + 1].match(tableSeparatorRegex) != null
+        RegExp(tableSeparatorRegex).exec(lines[index + 1]) != null
       ) {
         inTable = true;
         tableHeaders = tableRowMatch[1].split('|').map((cell) => cell.trim());

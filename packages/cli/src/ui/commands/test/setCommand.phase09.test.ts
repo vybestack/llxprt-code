@@ -109,7 +109,7 @@ describe('setCommand schema integration', () => {
     it('should suggest available subcommands when no input provided @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
       const result = await handler(mockContext, '', '/set ');
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'unset' }),
           expect.objectContaining({ value: 'modelparam' }),
@@ -127,7 +127,7 @@ describe('setCommand schema integration', () => {
 
       // With deep path completion, we now also get nested paths like 'modelparam temperature'
       // The single-level 'modelparam' should still be included and appear first
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'modelparam' }),
         ]),
@@ -155,7 +155,7 @@ describe('setCommand schema integration', () => {
     it('should accept exact literal match and advance to next arguments @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
       const result = await handler(mockContext, '', '/set unset ');
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'context-limit' }),
           expect.objectContaining({ value: 'emojifilter' }),
@@ -171,7 +171,7 @@ describe('setCommand schema integration', () => {
     it('should provide emojifilter mode options after selecting emojifilter @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
       const result = await handler(mockContext, '', '/set emojifilter ');
 
-      expect(result.suggestions).toEqual([
+      expect(result.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'allowed' }),
         expect.objectContaining({ value: 'auto' }),
         expect.objectContaining({ value: 'warn' }),
@@ -188,7 +188,7 @@ describe('setCommand schema integration', () => {
       });
       const result = await handler(mockContext, '', '/set modelparam ');
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({
             value: 'temperature',
@@ -211,7 +211,7 @@ describe('setCommand schema integration', () => {
         '/set modelparam temperature ',
       );
 
-      expect(result.suggestions).toEqual([]); // No predefined options for values
+      expect(result.suggestions).toStrictEqual([]); // No predefined options for values
       expect(result.hint).toBe(
         'value to set for the parameter (number, string, boolean, or JSON)',
       );
@@ -227,7 +227,7 @@ describe('setCommand schema integration', () => {
         '/set context-limit 50000 ',
       );
 
-      expect(result.suggestions).toEqual([]);
+      expect(result.suggestions).toStrictEqual([]);
       expect(result.hint).toBe('');
     });
 
@@ -238,7 +238,7 @@ describe('setCommand schema integration', () => {
         '/set socket-keepalive true ',
       );
 
-      expect(result.suggestions).toEqual([]);
+      expect(result.suggestions).toStrictEqual([]);
       expect(result.hint).toBe('');
     });
   });
@@ -288,7 +288,7 @@ describe('setCommand schema integration', () => {
 
             const result = await handler(mockContext, '', '/set modelparam ');
 
-            expect(result.suggestions.map((s) => s.value)).toEqual(
+            expect(result.suggestions.map((s) => s.value)).toStrictEqual(
               expect.arrayContaining(paramNames),
             );
             expect(result.hint).toBe('parameter name');

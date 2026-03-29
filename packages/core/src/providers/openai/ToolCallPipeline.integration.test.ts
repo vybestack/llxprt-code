@@ -58,7 +58,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
 
       const normalizedCall = result.normalized[0];
       expect(normalizedCall.name).toBe('test_tool');
-      expect(normalizedCall.args).toEqual({
+      expect(normalizedCall.args).toStrictEqual({
         param1: 'value1',
         param2: 'value2',
       });
@@ -80,7 +80,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
 
       const normalizedCall = result.normalized[0];
       expect(normalizedCall.name).toBe('test_tool');
-      expect(normalizedCall.args).toEqual({ value: 'invalid json' });
+      expect(normalizedCall.args).toStrictEqual({ value: 'invalid json' });
       expect(normalizedCall.originalArgs).toBe('invalid json');
     });
 
@@ -103,10 +103,10 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       const call2 = result.normalized.find((c) => c.index === 1);
 
       expect(call1?.name).toBe('test_tool');
-      expect(call1?.args).toEqual({ param: 'value' });
+      expect(call1?.args).toStrictEqual({ param: 'value' });
 
       expect(call2?.name).toBe('another_tool');
-      expect(call2?.args).toEqual({});
+      expect(call2?.args).toStrictEqual({});
     });
 
     it('should handle malformed arguments gracefully', async () => {
@@ -120,7 +120,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       expect(result.failed).toHaveLength(0);
 
       const normalizedCall = result.normalized[0];
-      expect(normalizedCall.args).toEqual({ value: 'malformed' });
+      expect(normalizedCall.args).toStrictEqual({ value: 'malformed' });
     });
 
     it('should handle tools with empty names', async () => {
@@ -144,7 +144,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
 
       const normalizedCall = result.normalized[0];
       expect(normalizedCall.name).toBe('test_tool');
-      expect(normalizedCall.args).toEqual({});
+      expect(normalizedCall.args).toStrictEqual({});
       expect(normalizedCall.originalArgs).toBe('');
     });
   });
@@ -196,7 +196,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       // processToolParameters should handle the double-escaping
       expect(normalizedCall.originalArgs).toBe('"{\\"param\\":\\"value\\"}"');
       // The processed args should be the parsed object with double-escaping fixed
-      expect(normalizedCall.args).toEqual({ param: 'value' });
+      expect(normalizedCall.args).toStrictEqual({ param: 'value' });
     });
 
     it('should handle Qwen fallback to string when JSON is malformed', async () => {
@@ -210,7 +210,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       expect(result.failed).toHaveLength(0);
 
       const normalizedCall = result.normalized[0];
-      expect(normalizedCall.args).toEqual({
+      expect(normalizedCall.args).toStrictEqual({
         value: 'completely malformed {{{',
       });
     });
@@ -244,7 +244,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual({});
+      expect(result.normalized[0].args).toStrictEqual({});
     });
 
     it('should handle undefined arguments', async () => {
@@ -254,7 +254,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual({});
+      expect(result.normalized[0].args).toStrictEqual({});
     });
 
     it('should provide accurate statistics', async () => {
@@ -287,7 +287,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       const result = await pipeline.process();
 
       expect(result.normalized).toHaveLength(1);
-      expect(result.normalized[0].args).toEqual(complexJson);
+      expect(result.normalized[0].args).toStrictEqual(complexJson);
     });
 
     it('should handle special characters in arguments', async () => {
@@ -324,7 +324,7 @@ describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
       expect(result.normalized).toHaveLength(1);
       // Verify that all international characters are preserved exactly as input
       // This tests comprehensive UTF-8 encoding/decoding through the entire pipeline
-      expect(result.normalized[0].args).toEqual({
+      expect(result.normalized[0].args).toStrictEqual({
         message: internationalText,
         greeting: 'Bonjour le monde! 🌟',
       });

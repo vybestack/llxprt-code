@@ -223,7 +223,7 @@ describe('KeyringTokenStore Integration', () => {
 
     // List returns all 3 sorted
     const providers = await tokenStore.listProviders();
-    expect(providers).toEqual(['anthropic', 'codex', 'gemini']);
+    expect(providers).toStrictEqual(['anthropic', 'codex', 'gemini']);
 
     // Get each returns correct token
     const a = await tokenStore.getToken('anthropic');
@@ -238,7 +238,7 @@ describe('KeyringTokenStore Integration', () => {
 
     // List now returns 2
     const remaining = await tokenStore.listProviders();
-    expect(remaining).toEqual(['anthropic', 'codex']);
+    expect(remaining).toStrictEqual(['anthropic', 'codex']);
 
     // gemini getToken returns null
     expect(await tokenStore.getToken('gemini')).toBeNull();
@@ -260,7 +260,7 @@ describe('KeyringTokenStore Integration', () => {
 
     // List buckets
     const buckets = await tokenStore.listBuckets('gemini');
-    expect(buckets).toEqual(['default', 'work']);
+    expect(buckets).toStrictEqual(['default', 'work']);
 
     // Get each
     const d = await tokenStore.getToken('gemini');
@@ -456,7 +456,7 @@ describe('KeyringTokenStore Integration', () => {
     const failTokenStore = new KeyringTokenStore({ secureStore: failStore });
 
     const result = await failTokenStore.listProviders();
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
 
     await fs.rm(errorTempDir, { recursive: true, force: true });
   });
@@ -506,7 +506,7 @@ describe('KeyringTokenStore Integration', () => {
     await storeA.saveToken('codex', makeToken());
 
     const providers = await storeB.listProviders();
-    expect(providers).toEqual(['anthropic', 'codex', 'gemini']);
+    expect(providers).toStrictEqual(['anthropic', 'codex', 'gemini']);
 
     await fs.rm(sharedTempDir, { recursive: true, force: true });
   });
@@ -657,7 +657,7 @@ describe('KeyringTokenStore Integration', () => {
             await setup.tokenStore.saveToken(p, makeToken());
           }
           const listed = await setup.tokenStore.listProviders();
-          expect(listed).toEqual([...providers].sort());
+          expect(listed).toStrictEqual([...providers].sort());
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }
@@ -682,7 +682,7 @@ describe('KeyringTokenStore Integration', () => {
             await setup.tokenStore.saveToken('bucketprov', makeToken(), b);
           }
           const listed = await setup.tokenStore.listBuckets('bucketprov');
-          expect(listed).toEqual([...buckets].sort());
+          expect(listed).toStrictEqual([...buckets].sort());
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }

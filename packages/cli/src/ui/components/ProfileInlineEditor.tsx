@@ -229,7 +229,6 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
       }
       if (key.sequence === 'G') {
         setCursorLine(lines.length - 1);
-        return;
       }
     },
     { isActive: true },

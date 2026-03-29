@@ -235,7 +235,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
   describe('Concurrent Operations', () => {
     it('should handle concurrent token operations safely', async () => {
       const providers = ['concurrent1', 'concurrent2', 'concurrent3'];
-      const tokens = providers.map((provider, index) => ({
+      const tokens = providers.map((_provider, index) => ({
         ...validQwenToken,
         access_token: `concurrent-token-${index}`,
       }));

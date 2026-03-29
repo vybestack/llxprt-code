@@ -550,7 +550,7 @@ function extractWWWAuthenticateHeader(errorString: string): string | null {
   ];
 
   for (const pattern of patterns) {
-    const match = errorString.match(pattern);
+    const match = RegExp(pattern).exec(errorString);
     if (match != null) {
       return match[1].trim();
     }
@@ -1126,7 +1126,7 @@ export async function discoverTools(
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
   cliConfig: Config,
-  messageBus?: MessageBus,
+  _messageBus?: MessageBus,
   options?: { timeout?: number; signal?: AbortSignal },
 ): Promise<DiscoveredMCPTool[]> {
   const debug = new DebugLogger('llxprt:mcp:discovery');

@@ -144,7 +144,7 @@ describe('modifyWithEditor', () => {
       await expect(fsp.access(oldFilePath)).rejects.toThrow();
       await expect(fsp.access(newFilePath)).rejects.toThrow();
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         updatedParams: {
           ...mockParams,
           modifiedContent,

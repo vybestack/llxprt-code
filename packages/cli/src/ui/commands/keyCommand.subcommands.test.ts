@@ -644,7 +644,7 @@ describe('/key — Autocomplete (R19)', () => {
     mockStorage = new ProviderKeyStorage({ secureStore: failStore });
 
     const completions = await complete('/key load ');
-    expect(completions).toEqual([]);
+    expect(completions).toStrictEqual([]);
   });
 });
 

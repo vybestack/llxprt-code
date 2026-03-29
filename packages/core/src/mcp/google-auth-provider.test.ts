@@ -126,7 +126,7 @@ describe('GoogleCredentialProvider', () => {
     it('should return request headers with quota project ID', async () => {
       mockClient['quotaProjectId'] = 'test-project-id';
       const headers = await provider.getRequestHeaders();
-      expect(headers).toEqual({
+      expect(headers).toStrictEqual({
         'X-Goog-User-Project': 'test-project-id',
       });
     });
@@ -134,7 +134,7 @@ describe('GoogleCredentialProvider', () => {
     it('should return empty request headers if quota project ID is missing', async () => {
       mockClient['quotaProjectId'] = undefined;
       const headers = await provider.getRequestHeaders();
-      expect(headers).toEqual({});
+      expect(headers).toStrictEqual({});
     });
 
     it('should prioritize config headers over quota project ID', async () => {
@@ -149,7 +149,7 @@ describe('GoogleCredentialProvider', () => {
         configWithHeaders,
       );
       const headers = await providerWithHeaders.getRequestHeaders();
-      expect(headers).toEqual({
+      expect(headers).toStrictEqual({
         'X-Goog-User-Project': 'config-project-id',
       });
     });
@@ -165,7 +165,7 @@ describe('GoogleCredentialProvider', () => {
         configWithHeaders,
       );
       const headers = await providerWithHeaders.getRequestHeaders();
-      expect(headers).toEqual({
+      expect(headers).toStrictEqual({
         'x-goog-user-project': 'config-project-id',
       });
     });

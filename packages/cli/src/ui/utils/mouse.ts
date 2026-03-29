@@ -111,7 +111,7 @@ export function getMouseEventName(
 export function parseSGRMouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
-  const match = buffer.match(SGR_MOUSE_REGEX);
+  const match = RegExp(SGR_MOUSE_REGEX).exec(buffer);
 
   if (match != null) {
     const buttonCode = parseInt(match[1], 10);
@@ -150,7 +150,7 @@ export function parseSGRMouseEvent(
 export function parseX11MouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
-  const match = buffer.match(X11_MOUSE_REGEX);
+  const match = RegExp(X11_MOUSE_REGEX).exec(buffer);
   if (match == null) return null;
 
   // The 3 bytes are in match[1]

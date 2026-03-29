@@ -483,7 +483,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   private async *generateChatCompletionImpl(
     options: NormalizedGenerateChatOptions,
-    toolFormatter: ToolFormatter,
+    _toolFormatter: ToolFormatter,
     client: OpenAI,
     logger: DebugLogger,
   ): AsyncGenerator<IContent, void, unknown> {

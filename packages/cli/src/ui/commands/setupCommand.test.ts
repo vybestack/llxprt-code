@@ -45,7 +45,7 @@ describe('setupCommand', () => {
     });
 
     // Verify it returns a dialog action for 'welcome'
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'dialog',
       dialog: 'welcome',
     });

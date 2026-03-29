@@ -146,7 +146,6 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
             },
             Date.now(),
           );
-          continue;
         }
       }
     }

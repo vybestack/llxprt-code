@@ -74,7 +74,7 @@ describe('Config always allowed commands', () => {
 
   describe('getAlwaysAllowedCommands', () => {
     it('should return empty array when no commands are allowed', () => {
-      expect(config.getAlwaysAllowedCommands()).toEqual([]);
+      expect(config.getAlwaysAllowedCommands()).toStrictEqual([]);
     });
 
     it('should return all added commands', () => {
@@ -96,7 +96,7 @@ describe('Config always allowed commands', () => {
       commands1.push('cp'); // Modify the returned array
 
       const commands2 = config.getAlwaysAllowedCommands();
-      expect(commands2).toEqual(['mv']); // Original should be unchanged
+      expect(commands2).toStrictEqual(['mv']); // Original should be unchanged
     });
   });
 });

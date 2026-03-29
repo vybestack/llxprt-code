@@ -14,7 +14,7 @@ describe('toolNameUtils', () => {
         undefined,
         false,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: 'search_files',
         isFallback: false,
       });
@@ -22,7 +22,7 @@ describe('toolNameUtils', () => {
 
     it('should use new name when current is empty', () => {
       const result = enhanceToolNameExtraction('', 'write_file', false);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: 'write_file',
         isFallback: false,
       });
@@ -30,7 +30,7 @@ describe('toolNameUtils', () => {
 
     it('should return fallback when both are empty and stream is complete', () => {
       const result = enhanceToolNameExtraction('', undefined, true);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: 'missing_tool_name_check_stream_chunks',
         isFallback: true,
       });
@@ -38,7 +38,7 @@ describe('toolNameUtils', () => {
 
     it('should return empty when both are empty and streaming continues', () => {
       const result = enhanceToolNameExtraction('', undefined, false);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: '',
         isFallback: false,
       });
@@ -50,7 +50,7 @@ describe('toolNameUtils', () => {
 
     it('should validate exact match', () => {
       const result = validateToolName('read_file', availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         isValid: true,
         correctedName: 'read_file',
       });
@@ -58,7 +58,7 @@ describe('toolNameUtils', () => {
 
     it('should apply case-insensitive correction', () => {
       const result = validateToolName('READ_FILE', availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         isValid: true,
         correctedName: 'read_file',
         reason: 'Case-insensitive match applied',
@@ -67,7 +67,7 @@ describe('toolNameUtils', () => {
 
     it('should apply partial match for truncated names', () => {
       const result = validateToolName('read_f', availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         isValid: true,
         correctedName: 'read_file',
         reason: 'Partial match applied',
@@ -76,7 +76,7 @@ describe('toolNameUtils', () => {
 
     it('should reject invalid tool name', () => {
       const result = validateToolName('invalid_tool', availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         isValid: false,
         reason: `Tool name 'invalid_tool' not found in available tools: [read_file, write_file, search_files]`,
       });
@@ -84,7 +84,7 @@ describe('toolNameUtils', () => {
 
     it('should reject empty tool name', () => {
       const result = validateToolName('', availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         isValid: false,
         reason: 'Tool name is empty or missing',
       });
@@ -132,7 +132,7 @@ describe('toolNameUtils', () => {
       };
 
       const result = safeExtractToolName(delta, 0, availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: 'test_tool',
         hasName: true,
         isComplete: false,
@@ -146,7 +146,7 @@ describe('toolNameUtils', () => {
       };
 
       const result = safeExtractToolName(delta, 0, availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: 'test_tool',
         hasName: true,
         isComplete: false,
@@ -165,7 +165,7 @@ describe('toolNameUtils', () => {
       expect(result.name).toBe('');
       expect(result.hasName).toBe(false);
       expect(result.isComplete).toBe(false);
-      expect(result.warnings).toEqual([]);
+      expect(result.warnings).toStrictEqual([]);
     });
 
     it('should handle invalid tool name', () => {
@@ -177,7 +177,7 @@ describe('toolNameUtils', () => {
       };
 
       const result = safeExtractToolName(delta, 0, availableTools);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         name: 'tool_name_not_found_invalid_tool',
         hasName: true,
         isComplete: false,

@@ -427,7 +427,7 @@ export class AuthStatusService {
    * prior cleanup failures (G4/E pattern).
    */
   private flushKnownRuntimeScopes(
-    providerName: string,
+    _providerName: string,
     runtimeContext: { runtimeId?: string } | undefined,
   ): void {
     const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];

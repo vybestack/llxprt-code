@@ -385,7 +385,7 @@ describe('classifyGoogleError', () => {
     if (result instanceof RetryableQuotaError) {
       expect(result.retryDelayMs).toBe(5000);
       // The cause should be the parsed GoogleApiError
-      expect(result.cause).toEqual({
+      expect(result.cause).toStrictEqual({
         code: 429,
         message: 'Resource exhausted. Please retry in 5s',
         details: [],
