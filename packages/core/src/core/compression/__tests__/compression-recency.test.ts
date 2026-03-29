@@ -201,16 +201,19 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
     expect(chat.wasRecentlyCompressed()).toBe(false);
   });
 
-  it('returns true after enforceContextWindow triggers successful fallback truncation', async () => {
+  it('returns true when fallback succeeds after primary transient failure', async () => {
     const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
 
-    // Ensure hard-limit enforcement path executes compression and fallback.
-    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(150_000);
-    (
-      chat as unknown as {
-        compressionHandler: { lastPromptTokenCount: number };
-      }
-    ).compressionHandler.lastPromptTokenCount = 150_000;
+    const primaryCompress = vi.fn().mockRejectedValue(makeHttpError(500));
+    const fallbackCompress = vi.fn().mockResolvedValue({
+      newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+      metadata: {
+        originalMessageCount: 10,
+        compressedMessageCount: 2,
+        strategyUsed: 'top-down-truncation' as const,
+        llmCallMade: false,
+      },
+    });
 
     vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
       (name) => {
@@ -219,15 +222,7 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
             name: 'top-down-truncation' as const,
             requiresLLM: false,
             trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-            compress: vi.fn().mockResolvedValue({
-              newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
-              metadata: {
-                originalMessageCount: 10,
-                compressedMessageCount: 2,
-                strategyUsed: 'top-down-truncation' as const,
-                llmCallMade: false,
-              },
-            }),
+            compress: fallbackCompress,
           };
         }
 
@@ -235,27 +230,16 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
           name: 'middle-out' as const,
           requiresLLM: true,
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi.fn().mockResolvedValue({
-            // Primary compression is ineffective: no meaningful reduction.
-            newHistory: [
-              { role: 'user', parts: [{ text: 'hello' }] },
-              { role: 'model', parts: [{ text: 'hi' }] },
-            ],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 9,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          }),
+          compress: primaryCompress,
         };
       },
     );
 
-    await expect(
-      chat['enforceContextWindow'](50_000, 'test-prompt'),
-    ).rejects.toThrow();
+    const result = await chat.performCompression('test-prompt');
 
+    expect(result).toBe(PerformCompressionResult.COMPRESSED);
+    expect(primaryCompress).toHaveBeenCalled();
+    expect(fallbackCompress).toHaveBeenCalled();
     expect(chat.wasRecentlyCompressed()).toBe(true);
   });
 });
@@ -272,6 +256,44 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
       config: runtimeSetup.config,
     };
     providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
+  });
+
+  it('clears cached prompt token baseline after successful compression rewrite', async () => {
+    const chat = makeGeminiChat(runtimeSetup, providerRuntimeSnapshot);
+
+    (
+      chat as unknown as {
+        compressionHandler: { lastPromptTokenCount: number | null };
+      }
+    ).compressionHandler.lastPromptTokenCount = 95_000;
+
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      () => ({
+        name: 'middle-out' as const,
+        requiresLLM: true,
+        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+        compress: vi.fn().mockResolvedValue({
+          newHistory: [{ role: 'user', parts: [{ text: 'summary' }] }],
+          metadata: {
+            originalMessageCount: 10,
+            compressedMessageCount: 1,
+            strategyUsed: 'middle-out' as const,
+            llmCallMade: true,
+          },
+        }),
+      }),
+    );
+
+    const result = await chat.performCompression('test-prompt');
+
+    expect(result).toBe(PerformCompressionResult.COMPRESSED);
+    expect(
+      (
+        chat as unknown as {
+          compressionHandler: { lastPromptTokenCount: number | null };
+        }
+      ).compressionHandler.lastPromptTokenCount,
+    ).toBeNull();
   });
 
   afterEach(() => {

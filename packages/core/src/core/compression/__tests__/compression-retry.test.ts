@@ -990,6 +990,83 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
   });
 
   /**
+   * @requirement REQ-1791.6
+   * Hard-limit fallback rewrite clears stale API prompt baseline.
+   */
+  it('clears lastPromptTokenCount when forceTruncationIfIneffective rewrites history', async () => {
+    const chat = makeChatForEnforceContextWindow({
+      totalTokens: 150_000,
+      contextLimit: 200_000,
+      maxOutputTokens: 65_536,
+    });
+
+    (
+      chat as unknown as {
+        compressionHandler: { lastPromptTokenCount: number | null };
+      }
+    ).compressionHandler.lastPromptTokenCount = 95_000;
+
+    let fallbackApplied = false;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+      (name) => {
+        if (name === 'top-down-truncation') {
+          return {
+            name: 'top-down-truncation' as const,
+            requiresLLM: false,
+            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+            compress: vi.fn().mockImplementation(async () => {
+              fallbackApplied = true;
+              return {
+                newHistory: [{ role: 'user', parts: [{ text: 'truncated' }] }],
+                metadata: {
+                  originalMessageCount: 10,
+                  compressedMessageCount: 2,
+                  strategyUsed: 'top-down-truncation' as const,
+                  llmCallMade: false,
+                },
+              };
+            }),
+          };
+        }
+
+        return {
+          name: 'middle-out' as const,
+          requiresLLM: true,
+          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
+          compress: vi.fn().mockResolvedValue({
+            // Ineffective primary compression triggers forceTruncationIfIneffective.
+            newHistory: [
+              { role: 'user', parts: [{ text: 'hello' }] },
+              { role: 'model', parts: [{ text: 'hi' }] },
+            ],
+            metadata: {
+              originalMessageCount: 10,
+              compressedMessageCount: 9,
+              strategyUsed: 'middle-out' as const,
+              llmCallMade: true,
+            },
+          }),
+        };
+      },
+    );
+
+    vi.spyOn(chat['historyService'], 'getTotalTokens').mockReturnValue(150_000);
+
+    await expect(
+      chat['enforceContextWindow'](50_000, 'test-prompt'),
+    ).rejects.toThrow();
+
+    expect(fallbackApplied).toBe(true);
+    expect(
+      (
+        chat as unknown as {
+          compressionHandler: { lastPromptTokenCount: number | null };
+        }
+      ).compressionHandler.lastPromptTokenCount,
+    ).toBeNull();
+  });
+
+  /**
    * @requirement REQ-1791.5
    * Hard-limit gate uses API-observed prompt baseline when available.
    */

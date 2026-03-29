@@ -482,6 +482,7 @@ export class CompressionHandler {
           for (const content of newHistory) {
             this.historyService.add(content, this.runtimeContext.state.model);
           }
+          this.lastPromptTokenCount = null;
         },
       );
       await this.historyService.waitForTokenUpdates();
@@ -582,6 +583,7 @@ export class CompressionHandler {
           for (const content of newHistory) {
             this.historyService.add(content, this.runtimeContext.state.model);
           }
+          this.lastPromptTokenCount = null;
           compressionSummary = newHistory[0];
           compressionSucceeded = true;
         },
