@@ -12,7 +12,7 @@ import {
   vi,
   beforeEach,
   afterEach,
-  Mocked,
+  type Mocked,
 } from 'vitest';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import {
@@ -20,8 +20,8 @@ import {
   generateValidName,
   generateMcpToolName,
 } from './mcp-tool.js'; // Added getStringifiedResultForDisplay
-import { ToolResult, ToolConfirmationOutcome } from './tools.js'; // Added ToolConfirmationOutcome
-import { CallableTool, Part } from '@google/genai';
+import { type ToolResult, ToolConfirmationOutcome } from './tools.js'; // Added ToolConfirmationOutcome
+import type { CallableTool, Part } from '@google/genai';
 import { ToolErrorType } from './tool-error.js';
 
 // We only need to mock the parts of CallableTool that DiscoveredMCPTool uses.

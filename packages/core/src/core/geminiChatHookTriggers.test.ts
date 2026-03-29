@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   triggerBeforeModelHook,
   triggerAfterModelHook,
 } from './geminiChatHookTriggers.js';
-import { HookSystem } from '../hooks/HookSystem.js';
+import type { HookSystem } from '../hooks/HookSystem.js';
 import { BeforeModelHookOutput, AfterModelHookOutput } from '../hooks/types.js';
 import type { IContent } from '@vybestack/llxprt-code-providers';
 

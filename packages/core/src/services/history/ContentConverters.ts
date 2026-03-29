@@ -15,7 +15,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { type Content, type Part } from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import type { IContent, ContentBlock, ThinkingBlock } from './IContent.js';
 import { DebugLogger } from '../../debug/index.js';
 import {

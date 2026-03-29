@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type MutableRefObject } from 'react';
+import type { MutableRefObject } from 'react';
 import { render, renderHook } from '../test-utils/render.js';
 import { act } from 'react-dom/test-utils';
 import {
   SessionStatsProvider,
   useSessionStats,
-  SessionMetrics,
+  type SessionMetrics,
 } from './SessionContext.js';
 import { describe, it, expect, vi } from 'vitest';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core';

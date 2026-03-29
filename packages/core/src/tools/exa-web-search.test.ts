@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ExaWebSearchTool } from './exa-web-search.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import fetch from 'node-fetch';
 
 // Mock dependencies

@@ -16,7 +16,7 @@ import {
 import React, { act } from 'react';
 import { renderHook } from '../../test-utils/render.js';
 import { useEditorSettings } from './useEditorSettings.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import { MessageType, type HistoryItem } from '../types.js';
 import {
   type EditorType,
@@ -24,7 +24,7 @@ import {
   allowEditorTypeInSandbox,
 } from '@vybestack/llxprt-code-core';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
-import { type AppState, type AppAction } from '../reducers/appReducer.js';
+import type { AppState, AppAction } from '../reducers/appReducer.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
 

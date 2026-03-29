@@ -14,7 +14,7 @@
  * @requirement:REQ-THINK-UI-003 - Toggle via visible prop
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text } from 'ink';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { Colors } from '../../colors.js';

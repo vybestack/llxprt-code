@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type IContent,
-  type ToolCallBlock,
-  type ToolResponseBlock,
+import type {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
 } from '../../services/history/IContent.js';
 import { DebugLogger } from '../../debug/DebugLogger.js';
 

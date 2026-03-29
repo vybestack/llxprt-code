@@ -16,21 +16,21 @@ import {
   type ToolResult,
 } from './tools.js';
 
-import { type PartUnion } from '@google/genai';
+import type { PartUnion } from '@google/genai';
 import {
   processSingleFileContent,
   getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   getGitLineChanges,
-  GitLineChangeMarker,
+  type GitLineChangeMarker,
 } from '../utils/gitLineChanges.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 

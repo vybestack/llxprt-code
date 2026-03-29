@@ -57,20 +57,20 @@ import * as os from 'os';
 import {
   SubagentManager,
   ProfileManager,
-  Logger,
-  SessionMetrics,
+  type Logger,
+  type SessionMetrics,
 } from '@vybestack/llxprt-code-core';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
 import { FunctionCallingConfigMode } from '@google/genai';
-import {
+import type {
   CommandContext,
   MessageActionReturn,
   ConfirmActionReturn,
   SlashCommandActionReturn,
 } from '../types.js';
-import { LoadedSettings } from '../../../config/settings.js';
-import { SessionStatsState } from '../../contexts/SessionContext.js';
+import type { LoadedSettings } from '../../../config/settings.js';
+import type { SessionStatsState } from '../../contexts/SessionContext.js';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 

@@ -42,7 +42,7 @@ export interface AuthPrecedenceConfig {
   providerId?: string;
 }
 
-import { type OAuthToken } from './types.js';
+import type { OAuthToken } from './types.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 export interface OAuthTokenRequestMetadata {

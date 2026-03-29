@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setupUser, ProjectIdRequiredError } from './setup.js';
 import { CodeAssistServer } from '../code_assist/server.js';
-import { OAuth2Client } from 'google-auth-library';
-import { GeminiUserTier, UserTierId } from './types.js';
+import type { OAuth2Client } from 'google-auth-library';
+import { type GeminiUserTier, UserTierId } from './types.js';
 
 vi.mock('../code_assist/server.js');
 

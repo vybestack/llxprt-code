@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DeleteLineRangeTool } from '../delete_line_range.js';
-import { Config, ApprovalMode } from '../../config/config.js';
+import { type Config, ApprovalMode } from '../../config/config.js';
 import { createMockWorkspaceContext } from '../../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../../services/fileSystemService.js';
 import path from 'path';

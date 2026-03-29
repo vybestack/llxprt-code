@@ -8,7 +8,7 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatsDisplay } from './StatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
-import { SessionMetrics } from '../contexts/SessionContext.js';
+import type { SessionMetrics } from '../contexts/SessionContext.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
 
 // Mock the SessionContext to provide controlled data for testing

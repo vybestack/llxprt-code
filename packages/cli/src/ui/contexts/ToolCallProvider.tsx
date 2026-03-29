@@ -11,10 +11,13 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { ToolCallContextType, ToolCallContext } from './ToolCallContext.js';
+import {
+  type ToolCallContextType,
+  ToolCallContext,
+} from './ToolCallContext.js';
 import {
   ToolCallTrackerService,
-  TodoToolCall,
+  type TodoToolCall,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 

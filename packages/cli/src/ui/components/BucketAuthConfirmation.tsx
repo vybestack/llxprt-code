@@ -8,13 +8,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import {
   MessageBusType,
-  BucketAuthConfirmationRequest,
+  type BucketAuthConfirmationRequest,
   DebugLogger,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
 import {
   RadioButtonSelect,
-  RadioSelectItem,
+  type RadioSelectItem,
 } from './shared/RadioButtonSelect.js';
 
 import { Colors } from '../colors.js';

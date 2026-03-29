@@ -6,10 +6,14 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Config, ConfigParameters, ApprovalMode } from '../config/config.js';
+import {
+  Config,
+  type ConfigParameters,
+  ApprovalMode,
+} from '../config/config.js';
 import { ToolRegistry, DiscoveredTool } from './tool-registry.js';
 import { DiscoveredMCPTool, generateMcpToolName } from './mcp-tool.js';
-import { FunctionDeclaration, CallableTool } from '@google/genai';
+import type { FunctionDeclaration, CallableTool } from '@google/genai';
 import { spawn } from 'node:child_process';
 import { IdeClient } from '../ide/ide-client.js';
 import fs from 'node:fs';

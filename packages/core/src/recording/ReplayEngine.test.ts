@@ -37,11 +37,11 @@ import * as path from 'path';
 import * as os from 'os';
 import { replaySession, readSessionHeader } from './ReplayEngine.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import {
-  type SessionRecordingServiceConfig,
-  type SessionStartPayload,
+import type {
+  SessionRecordingServiceConfig,
+  SessionStartPayload,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Constants

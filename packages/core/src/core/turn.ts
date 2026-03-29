@@ -4,21 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type Part,
-  type PartListUnion,
+import type {
+  Part,
+  PartListUnion,
   GenerateContentResponse,
-  type FunctionCall,
-  type FunctionDeclaration,
+  FunctionCall,
+  FunctionDeclaration,
   FinishReason,
   GenerateContentResponseUsageMetadata,
 } from '@google/genai';
-import {
-  type ToolCallConfirmationDetails,
-  type ToolResult,
-  type ToolResultDisplay,
+import type {
+  ToolCallConfirmationDetails,
+  ToolResult,
+  ToolResultDisplay,
 } from '../tools/tools.js';
-import { ToolErrorType } from '../tools/tool-error.js';
+import type { ToolErrorType } from '../tools/tool-error.js';
 import {
   getResponseText,
   getFunctionCalls,
@@ -31,7 +31,7 @@ import {
 } from '../utils/errors.js';
 import { normalizeToolName } from '../tools/toolNameUtils.js';
 import {
-  GeminiChat,
+  type GeminiChat,
   InvalidStreamError,
   StreamEventType,
 } from './geminiChat.js';

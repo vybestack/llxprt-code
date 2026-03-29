@@ -5,10 +5,10 @@
  */
 
 import {
-  SlashCommand,
-  CommandContext,
-  OpenDialogActionReturn,
-  MessageActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type OpenDialogActionReturn,
+  type MessageActionReturn,
   CommandKind,
 } from './types.js';
 import {

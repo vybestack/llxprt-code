@@ -22,7 +22,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { ToolErrorType } from './tool-error.js';
 
-import { Config, ApprovalMode } from '../config/config.js';
+import { type Config, ApprovalMode } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,

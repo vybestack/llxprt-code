@@ -10,16 +10,19 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
-import { CommandContext } from '../commands/types.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { CommandContext } from '../commands/types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
-import { UseAtCompletionProps, useAtCompletion } from './useAtCompletion.js';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import {
-  UseSlashCompletionProps as _UseSlashCompletionProps,
+  type UseAtCompletionProps,
+  useAtCompletion,
+} from './useAtCompletion.js';
+import {
+  type UseSlashCompletionProps as _UseSlashCompletionProps,
   useSlashCompletion,
 } from './useSlashCompletion.js';
-import { useCompletion as _useCompletion } from './useCompletion.js';
+import type { useCompletion as _useCompletion } from './useCompletion.js';
 
 vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),

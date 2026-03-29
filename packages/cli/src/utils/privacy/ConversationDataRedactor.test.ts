@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { IContent, ITool } from '@vybestack/llxprt-code-core';
+import type { IContent, ITool } from '@vybestack/llxprt-code-core';
 import { ConversationDataRedactor } from './ConversationDataRedactor.js';
 
 // Note: Interface will be implemented in the next phase

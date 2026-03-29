@@ -27,12 +27,12 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { mkdirSync, existsSync, watch, type FSWatcher } from 'node:fs';
-import { type IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import {
-  type SessionRecordingServiceConfig,
-  type SessionEventType,
-  type SessionRecordLine,
+import type {
+  SessionRecordingServiceConfig,
+  SessionEventType,
+  SessionRecordLine,
 } from './types.js';
 
 /**

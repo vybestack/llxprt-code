@@ -6,7 +6,7 @@
 
 import {
   ConversationDataRedactor,
-  RedactionConfig,
+  type RedactionConfig,
 } from './ConversationDataRedactor.js';
 
 // Define interface for config dependency to avoid circular imports

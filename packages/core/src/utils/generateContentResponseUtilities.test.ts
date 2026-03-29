@@ -21,10 +21,10 @@ import {
   toParts,
 } from './generateContentResponseUtilities.js';
 import {
-  GenerateContentResponse,
-  Part,
+  type GenerateContentResponse,
+  type Part,
   FinishReason,
-  SafetyRating,
+  type SafetyRating,
 } from '@google/genai';
 
 const mockTextPart = (text: string): Part => ({ text });

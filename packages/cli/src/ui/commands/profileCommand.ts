@@ -5,17 +5,14 @@
  */
 
 import {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-  OpenDialogActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type MessageActionReturn,
+  type OpenDialogActionReturn,
   CommandKind,
 } from './types.js';
 import { SettingScope } from '../../config/settings.js';
-import {
-  type CommandArgumentSchema,
-  type CompleterFn,
-} from './schema/types.js';
+import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   DebugLogger,

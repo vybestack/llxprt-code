@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type ContentGenerator,
-  type ContentGeneratorConfig,
+import type {
+  ContentGenerator,
+  ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import {
-  type GenerateContentParameters,
+import type {
+  GenerateContentParameters,
   GenerateContentResponse,
-  type CountTokensParameters,
+  CountTokensParameters,
   CountTokensResponse,
-  type EmbedContentParameters,
+  EmbedContentParameters,
   EmbedContentResponse,
-  type Content,
-  type Part,
+  Content,
+  Part,
 } from '@google/genai';
 import type { IProviderManager as ProviderManager } from './IProviderManager.js';
 

@@ -16,12 +16,12 @@ import {
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
-import { type PartUnion } from '@google/genai';
+import type { PartUnion } from '@google/genai';
 import {
   processSingleFileContent,
   getSpecificMimeType,
 } from '../utils/fileUtils.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,
@@ -29,7 +29,7 @@ import {
 import { validatePathWithinWorkspace } from '../safety/index.js';
 import {
   getGitLineChanges,
-  GitLineChangeMarker,
+  type GitLineChangeMarker,
 } from '../utils/gitLineChanges.js';
 
 /**

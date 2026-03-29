@@ -25,11 +25,11 @@ import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.j
 // @requirement:REQ-SP4-002/REQ-SP4-003
 // Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
 import { DebugLogger } from '../../debug/index.js';
-import { type IModel } from '../IModel.js';
-import {
-  type IContent,
-  type TextBlock,
-  type MediaBlock,
+import type { IModel } from '../IModel.js';
+import type {
+  IContent,
+  TextBlock,
+  MediaBlock,
 } from '../../services/history/IContent.js';
 import {
   limitOutputTokens,
@@ -41,7 +41,7 @@ import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
 } from '../utils/mediaUtils.js';
-import { type IProviderConfig } from '../types/IProviderConfig.js';
+import type { IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
 

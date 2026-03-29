@@ -7,7 +7,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import open from 'open';
 import { docsCommand } from './docsCommand.js';
-import { type CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 

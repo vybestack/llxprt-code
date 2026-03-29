@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type ContentGenerator,
-  type ContentGeneratorConfig,
+import type {
+  ContentGenerator,
+  ContentGeneratorConfig,
 } from './contentGenerator.js';
 import {
   type GenerateContentParameters,
-  GenerateContentResponse,
+  type GenerateContentResponse,
   type CountTokensParameters,
-  CountTokensResponse,
+  type CountTokensResponse,
   type EmbedContentParameters,
-  EmbedContentResponse,
+  type EmbedContentResponse,
   GoogleGenAI,
-  Models,
+  type Models,
 } from '@google/genai';
 
 /**

@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
+import type {
   IProvider,
   IContent,
   ITool,
-  type Config,
+  Config,
 } from '@vybestack/llxprt-code-core';
 
 // These interfaces will be implemented in the next phase

@@ -6,7 +6,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { ModelsDialogData } from '../../../commands/types.js';
-import { SubagentView } from '../../../components/SubagentManagement/types.js';
+import type { SubagentView } from '../../../components/SubagentManagement/types.js';
 
 /**
  * @hook useDialogOrchestration

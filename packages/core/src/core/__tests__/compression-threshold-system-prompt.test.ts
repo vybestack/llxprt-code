@@ -27,7 +27,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import {
   createUserMessage,
-  IContent,
+  type IContent,
 } from '../../services/history/IContent.js';
 
 describe('Compression Threshold: System Prompt Token Inclusion', () => {

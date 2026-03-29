@@ -13,7 +13,7 @@
  * @pseudocode analysis/pseudocode/004-proxy-provider-key-storage.md
  */
 
-import { ProxySocketClient } from './proxy-socket-client.js';
+import type { ProxySocketClient } from './proxy-socket-client.js';
 
 export class ProxyProviderKeyStorage {
   private readonly client: ProxySocketClient;

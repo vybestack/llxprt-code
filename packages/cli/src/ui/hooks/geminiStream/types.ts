@@ -9,7 +9,7 @@
  * Only cross-module stable types belong here.
  */
 
-import { type PartListUnion } from '@google/genai';
+import type { PartListUnion } from '@google/genai';
 
 export enum StreamProcessingStatus {
   Completed,

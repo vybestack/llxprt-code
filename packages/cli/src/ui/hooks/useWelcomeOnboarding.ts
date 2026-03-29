@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { type LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import {
   isWelcomeCompleted,
   markWelcomeCompleted,

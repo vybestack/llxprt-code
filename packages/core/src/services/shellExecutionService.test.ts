@@ -14,8 +14,8 @@ import {
   type Mock,
 } from 'vitest';
 import EventEmitter from 'events';
-import { Readable } from 'stream';
-import { type ChildProcess } from 'child_process';
+import type { Readable } from 'stream';
+import type { ChildProcess } from 'child_process';
 import type {
   ShellOutputEvent,
   ShellExecutionConfig,

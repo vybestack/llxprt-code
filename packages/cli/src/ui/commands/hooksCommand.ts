@@ -10,7 +10,7 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType, type HistoryItemHooksList } from '../types.js';
-import { type HookRegistryEntry } from '@vybestack/llxprt-code-core';
+import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
 
 /**
  * List all registered hooks

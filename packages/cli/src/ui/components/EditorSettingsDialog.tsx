@@ -13,9 +13,9 @@ import {
   type EditorDisplay,
 } from '../editors/editorSettingsManager.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import {
-  EditorType,
+  type EditorType,
   isEditorAvailable,
   debugLogger,
 } from '@vybestack/llxprt-code-core';

@@ -10,9 +10,9 @@ import {
   type ToolInvocation,
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolResult,
+  type ToolResult,
   ApprovalMode,
-  Config,
+  type Config,
   Kind,
 } from '../index.js';
 import {

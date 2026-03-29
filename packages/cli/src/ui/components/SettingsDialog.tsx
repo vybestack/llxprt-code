@@ -45,7 +45,7 @@ import {
   getCachedStringWidth,
 } from '../utils/textUtils.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { SettingDefinition as _SettingDefinition } from '../../config/settingsSchema.js';
+import type { SettingDefinition as _SettingDefinition } from '../../config/settingsSchema.js';
 import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import { useUIState } from '../contexts/UIStateContext.js';

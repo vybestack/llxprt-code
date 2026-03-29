@@ -11,7 +11,7 @@ import * as fs from 'fs/promises';
 import {
   createTmpDir,
   cleanupTmpDir,
-  FileSystemStructure,
+  type FileSystemStructure,
 } from '@vybestack/llxprt-code-test-utils';
 import { extractPathToken, getPathSuggestions } from './shellPathCompletion.js';
 

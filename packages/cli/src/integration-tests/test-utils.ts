@@ -8,7 +8,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import * as http from 'http';
-import { Config, MessageBus, Profile } from '@vybestack/llxprt-code-core';
+import {
+  type Config,
+  MessageBus,
+  type Profile,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * Creates a temporary directory for tests

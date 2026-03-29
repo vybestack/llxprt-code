@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, Mock, afterEach } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  type Mock,
+  afterEach,
+} from 'vitest';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -18,7 +26,7 @@ import {
 } from './subagentTypes.js';
 import { buildPartsFromCompletedCalls } from './subagentToolProcessing.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config, ConfigParameters } from '../config/config.js';
+import { Config, type ConfigParameters } from '../config/config.js';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
 import {
   createContentGenerator,
@@ -41,16 +49,16 @@ import type { IProvider } from '../providers/IProvider.js';
 import { initializeTestConfig } from '../test-utils/config.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import {
-  Content,
-  FunctionCall,
-  FunctionDeclaration,
-  GenerateContentConfig,
+  type Content,
+  type FunctionCall,
+  type FunctionDeclaration,
+  type GenerateContentConfig,
   Type,
-  GenerateContentResponse,
-  Part,
+  type GenerateContentResponse,
+  type Part,
 } from '@google/genai';
 import { ToolErrorType } from '../tools/tool-error.js';
 import type { HistoryService } from '../services/history/HistoryService.js';

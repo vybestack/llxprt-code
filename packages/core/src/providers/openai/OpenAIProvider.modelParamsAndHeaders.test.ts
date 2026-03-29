@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { SettingsService } from '../../settings/SettingsService.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 

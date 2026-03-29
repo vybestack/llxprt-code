@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   AuthPrecedenceResolver,
-  AuthPrecedenceConfig,
-  OAuthManager,
+  type AuthPrecedenceConfig,
+  type OAuthManager,
   type OAuthTokenRequestMetadata,
 } from './precedence.js';
 import {

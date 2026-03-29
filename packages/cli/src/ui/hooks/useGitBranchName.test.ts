@@ -11,7 +11,7 @@ import {
   expect,
   it,
   vi,
-  MockedFunction,
+  type MockedFunction,
 } from 'vitest';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';

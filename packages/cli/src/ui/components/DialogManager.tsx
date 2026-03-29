@@ -54,7 +54,7 @@ import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // TODO: Not yet ported from upstream
 
 interface DialogManagerProps {

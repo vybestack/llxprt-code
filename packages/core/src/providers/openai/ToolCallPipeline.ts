@@ -202,4 +202,4 @@ export class ToolCallPipeline {
 }
 
 // Import type from ToolCallCollector
-import { type ToolCallFragment } from './ToolCallCollector.js';
+import type { ToolCallFragment } from './ToolCallCollector.js';

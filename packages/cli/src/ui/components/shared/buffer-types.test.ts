@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { type Direction, type TextBufferAction } from './buffer-types.js';
+import type { Direction, TextBufferAction } from './buffer-types.js';
 
 /**
  * Phase 2.1: Buffer Types Tests

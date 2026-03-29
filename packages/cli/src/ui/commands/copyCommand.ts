@@ -7,10 +7,10 @@
 import { copyToClipboard } from '../utils/commandUtils.js';
 import {
   CommandKind,
-  SlashCommand,
-  SlashCommandActionReturn,
+  type SlashCommand,
+  type SlashCommandActionReturn,
 } from './types.js';
-import { Part, Content } from '@google/genai';
+import type { Part, Content } from '@google/genai';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 
 export const copyCommand: SlashCommand = {

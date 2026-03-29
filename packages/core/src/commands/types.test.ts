@@ -6,12 +6,12 @@
 
 import { describe, it, expect } from 'vitest';
 // This import will fail until we create the types.ts file
-import {
-  type ToolActionReturn,
-  type MessageActionReturn,
-  type LoadHistoryActionReturn,
-  type SubmitPromptActionReturn,
-  type CommandActionReturn,
+import type {
+  ToolActionReturn,
+  MessageActionReturn,
+  LoadHistoryActionReturn,
+  SubmitPromptActionReturn,
+  CommandActionReturn,
 } from './types.js';
 
 describe('Command Action Return Types', () => {

@@ -14,7 +14,7 @@ import { useTextBuffer } from '../components/shared/text-buffer.js';
 import {
   createTmpDir,
   cleanupTmpDir,
-  FileSystemStructure,
+  type FileSystemStructure,
 } from '@vybestack/llxprt-code-test-utils';
 
 describe('useShellPathCompletion', () => {

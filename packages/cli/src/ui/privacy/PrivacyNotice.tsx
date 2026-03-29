@@ -5,7 +5,7 @@
  */
 
 import { Box } from 'ink';
-import { type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 

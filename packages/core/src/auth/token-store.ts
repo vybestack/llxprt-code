@@ -9,7 +9,7 @@
  * @requirement R13.2
  */
 
-import { type OAuthToken, type BucketStats } from './types.js';
+import type { OAuthToken, BucketStats } from './types.js';
 
 /**
  * Interface for multi-provider OAuth token storage

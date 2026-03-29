@@ -17,15 +17,15 @@ import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useGeminiStream } from './geminiStream/index.js';
 import {
-  Config,
-  GeminiClient,
+  type Config,
+  type GeminiClient,
   GeminiEventType,
-  ToolCallRequestInfo,
-  ToolRegistry,
+  type ToolCallRequestInfo,
+  type ToolRegistry,
   ApprovalMode,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   ToolCallStatus,

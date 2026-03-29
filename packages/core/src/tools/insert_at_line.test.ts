@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { InsertAtLineTool } from './insert_at_line.js';
-import { ToolEditConfirmationDetails } from './tools.js';
-import { ApprovalMode, Config } from '../config/config.js';
+import type { ToolEditConfirmationDetails } from './tools.js';
+import { ApprovalMode, type Config } from '../config/config.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';

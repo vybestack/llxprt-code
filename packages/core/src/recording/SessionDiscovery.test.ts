@@ -37,8 +37,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { type SessionRecordingServiceConfig } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import type { SessionRecordingServiceConfig } from './types.js';
+import type { IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

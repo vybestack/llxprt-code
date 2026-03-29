@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import type { IContent } from '../../services/history/IContent.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { DebugLogger } from '../../debug/index.js';
 import type { Config } from '../../config/config.js';
-import {
-  type ToolCallBlock,
-  type TextBlock,
-  type ToolResponseBlock,
-  type MediaBlock,
+import type {
+  ToolCallBlock,
+  TextBlock,
+  ToolResponseBlock,
+  MediaBlock,
 } from '../../services/history/IContent.js';
 import {
   getToolIdStrategy,

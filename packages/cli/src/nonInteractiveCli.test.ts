@@ -5,16 +5,16 @@
  */
 
 import {
-  Config,
+  type Config,
   executeToolCall,
-  ToolRegistry,
+  type ToolRegistry,
   ToolErrorType,
   shutdownTelemetry,
   GeminiEventType,
-  ServerGeminiStreamEvent,
+  type ServerGeminiStreamEvent,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { Part } from '@google/genai';
+import type { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';

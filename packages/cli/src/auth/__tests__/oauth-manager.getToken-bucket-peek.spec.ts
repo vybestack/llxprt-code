@@ -6,8 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from '../oauth-manager.js';
-import type { OAuthProvider } from '../types.js';
-import { TokenStore, OAuthToken } from '../types.js';
+import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 /**

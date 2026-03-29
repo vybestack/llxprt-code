@@ -15,12 +15,12 @@ import {
 } from 'vitest';
 import { WriteFileTool } from './write-file.js';
 import {
-  FileDiff,
+  type FileDiff,
   ToolConfirmationOutcome,
-  ToolEditConfirmationDetails,
+  type ToolEditConfirmationDetails,
 } from './tools.js';
-import { ApprovalMode, Config } from '../config/config.js';
-import { ToolRegistry } from './tool-registry.js';
+import { ApprovalMode, type Config } from '../config/config.js';
+import type { ToolRegistry } from './tool-registry.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';

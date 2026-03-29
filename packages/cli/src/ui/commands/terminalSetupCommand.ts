@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MessageActionReturn, SlashCommand, CommandKind } from './types.js';
+import {
+  type MessageActionReturn,
+  type SlashCommand,
+  CommandKind,
+} from './types.js';
 import { terminalSetup } from '../utils/terminalSetup.js';
 
 /**

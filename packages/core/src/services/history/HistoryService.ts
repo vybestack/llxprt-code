@@ -22,10 +22,10 @@ import {
   type MediaBlock,
 } from './IContent.js';
 import { EventEmitter } from 'events';
-import { type ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
+import type { ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
 import { OpenAITokenizer } from '../../providers/tokenizers/OpenAITokenizer.js';
 import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenizer.js';
-import { type TokensUpdatedEvent } from './HistoryEvents.js';
+import type { TokensUpdatedEvent } from './HistoryEvents.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
 import { canonicalizeToolCallId } from './canonicalToolIds.js';

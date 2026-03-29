@@ -10,9 +10,9 @@ import {
   EXTENSIONS_CONFIG_FILENAME,
   INSTALL_METADATA_FILENAME,
 } from '../config/extension.js';
-import {
-  type MCPServerConfig,
-  type ExtensionInstallMetadata,
+import type {
+  MCPServerConfig,
+  ExtensionInstallMetadata,
 } from '@vybestack/llxprt-code-core';
 
 export function createExtension({

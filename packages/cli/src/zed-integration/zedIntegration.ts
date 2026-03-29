@@ -5,15 +5,15 @@
  */
 
 import {
-  Config,
-  ContentGeneratorConfig,
-  GeminiChat,
+  type Config,
+  type ContentGeneratorConfig,
+  type GeminiChat,
   logToolCall,
-  ToolResult,
+  type ToolResult,
   convertToFunctionResponse,
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
-  ContextAwareTool,
+  type ContextAwareTool,
   clearCachedCredentialFile,
   isNodeError,
   getErrorMessage,
@@ -24,7 +24,7 @@ import {
   getFunctionCalls,
   getResponseTextFromParts,
   EmojiFilter,
-  FilterConfiguration,
+  type FilterConfiguration,
   StreamEventType,
   todoEvents,
   type TodoUpdateEvent,
@@ -39,8 +39,8 @@ import {
 import * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { Readable, Writable } from 'node:stream';
-import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
-import { LoadedSettings } from '../config/settings.js';
+import type { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
+import type { LoadedSettings } from '../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';

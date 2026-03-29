@@ -1,5 +1,5 @@
-import { type IContent } from '../../services/history/IContent.js';
-import { ConversationCache } from './ConversationCache.js';
+import type { IContent } from '../../services/history/IContent.js';
+import type { ConversationCache } from './ConversationCache.js';
 
 // Model context size configuration
 export const MODEL_CONTEXT_SIZE: Record<string, number> = {

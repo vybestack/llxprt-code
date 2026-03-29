@@ -34,11 +34,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import {
-  type SessionRecordingServiceConfig,
-  type SessionRecordLine,
+import type {
+  SessionRecordingServiceConfig,
+  SessionRecordLine,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

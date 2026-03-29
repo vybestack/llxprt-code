@@ -11,21 +11,21 @@
  * Extracted from subagent.ts as part of Issue #1581 (Phase 3).
  */
 
-import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config } from '../config/config.js';
-import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
+import type { DebugLogger } from '../debug/DebugLogger.js';
+import type { Config } from '../config/config.js';
+import type { ToolCallRequestInfo, ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
-import { type Part, type FunctionCall, type Content } from '@google/genai';
+import type { Part, FunctionCall, Content } from '@google/genai';
 import type {
   AgentRuntimeContext,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import { ToolErrorType } from '../tools/tool-error.js';
-import { type ToolResultDisplay } from '../tools/tools.js';
-import { type CompletedToolCall } from './coreToolScheduler.js';
+import type { ToolResultDisplay } from '../tools/tools.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
 import { TodoStore } from '../tools/todo-store.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { SubagentTerminateMode, type OutputObject } from './subagentTypes.js';

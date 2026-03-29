@@ -5,7 +5,7 @@
  */
 
 import { lerp } from '../../utils/math.js';
-import { type LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 
 const getMainAreaWidthInternal = (terminalWidth: number): number => {
   if (terminalWidth <= 80) {

@@ -13,8 +13,8 @@
  * @pseudocode analysis/pseudocode/003-proxy-token-store.md
  */
 
-import { type OAuthToken, type BucketStats } from '../types.js';
-import { type TokenStore } from '../token-store.js';
+import type { OAuthToken, BucketStats } from '../types.js';
+import type { TokenStore } from '../token-store.js';
 import { ProxySocketClient } from './proxy-socket-client.js';
 
 export class ProxyTokenStore implements TokenStore {

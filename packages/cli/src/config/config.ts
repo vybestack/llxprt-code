@@ -7,16 +7,16 @@
  */
 
 import process from 'node:process';
-import {
+import type {
   Config,
-  type GeminiCLIExtension,
+  GeminiCLIExtension,
   SettingsService,
 } from '@vybestack/llxprt-code-core';
 
-import { Settings } from './settings.js';
+import type { Settings } from './settings.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { resolveMcpServers } from './mcpServerConfig.js';
-import { type CliArgs } from './cliArgParser.js';
+import type { CliArgs } from './cliArgParser.js';
 import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04

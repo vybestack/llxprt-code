@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type IContent,
-  type TextBlock,
-  type ToolCallBlock,
-  type ThinkingBlock,
+import type {
+  IContent,
+  TextBlock,
+  ToolCallBlock,
+  ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
 import {
   type HistoryItem,

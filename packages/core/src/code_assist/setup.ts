@@ -12,7 +12,7 @@ import {
   UserTierId,
 } from './types.js';
 import { CodeAssistServer } from './server.js';
-import { OAuth2Client } from 'google-auth-library';
+import type { OAuth2Client } from 'google-auth-library';
 import { DebugLogger } from '../debug/index.js';
 
 export class ProjectIdRequiredError extends Error {

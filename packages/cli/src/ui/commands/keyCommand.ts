@@ -10,10 +10,10 @@
  */
 
 import {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-  SlashCommandActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type MessageActionReturn,
+  type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
 /**

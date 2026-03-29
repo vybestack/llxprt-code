@@ -23,10 +23,10 @@
  * - Respects ephemeral settings (retries, retrywait)
  */
 
-import {
-  type IProvider,
-  type GenerateChatOptions,
-  type ProviderToolset,
+import type {
+  IProvider,
+  GenerateChatOptions,
+  ProviderToolset,
 } from './IProvider.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '../services/history/IContent.js';

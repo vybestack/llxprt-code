@@ -14,11 +14,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import {
-  CommandContext,
-  SlashCommand,
+  type CommandContext,
+  type SlashCommand,
   CommandKind,
 } from '../commands/types.js';
-import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
+import { type Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
 describe('useSlashCompletion', () => {

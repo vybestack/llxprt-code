@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
-import { type CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 vi.mock('../contexts/RuntimeContext.js', () => ({

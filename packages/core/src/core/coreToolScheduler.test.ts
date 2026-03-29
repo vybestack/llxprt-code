@@ -13,27 +13,27 @@ import type {
 } from './coreToolScheduler.js';
 import {
   CoreToolScheduler,
-  ToolCall,
-  WaitingToolCall,
+  type ToolCall,
+  type WaitingToolCall,
 } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '../utils/generateContentResponseUtilities.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolConfirmationPayload,
-  ToolInvocation,
-  ToolResult,
-  Config,
+  type ToolConfirmationPayload,
+  type ToolInvocation,
+  type ToolResult,
+  type Config,
   Kind,
   ApprovalMode,
-  ToolRegistry,
+  type ToolRegistry,
 } from '../index.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
-import { Part, PartListUnion, type Content } from '@google/genai';
+import type { Part, PartListUnion, Content } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import {

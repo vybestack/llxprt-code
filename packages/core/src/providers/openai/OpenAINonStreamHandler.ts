@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
-import {
-  type IContent,
-  type TextBlock,
-  type ToolCallBlock,
+import type OpenAI from 'openai';
+import type {
+  IContent,
+  TextBlock,
+  ToolCallBlock,
 } from '../../services/history/IContent.js';
-import { type DebugLogger } from '../../debug/index.js';
-import { type ToolCallPipeline } from './ToolCallPipeline.js';
-import { type GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
+import type { DebugLogger } from '../../debug/index.js';
+import type { ToolCallPipeline } from './ToolCallPipeline.js';
+import type { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 import { normalizeToolName } from '../utils/toolNameNormalization.js';

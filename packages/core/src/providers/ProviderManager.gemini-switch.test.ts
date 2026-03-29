@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
-import { IProvider } from './IProvider.js';
+import type { IProvider } from './IProvider.js';
 import { ContentGeneratorRole } from './ContentGeneratorRole.js';
 import {
   createProviderRuntimeContext,

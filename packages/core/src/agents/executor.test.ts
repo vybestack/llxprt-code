@@ -25,11 +25,11 @@ import {
   StreamEventType,
   type StreamEvent,
 } from '../core/geminiChat.js';
-import {
-  type FunctionCall,
-  type Part,
-  type GenerateContentResponse,
-  type GenerateContentConfig,
+import type {
+  FunctionCall,
+  Part,
+  GenerateContentResponse,
+  GenerateContentConfig,
 } from '@google/genai';
 import type { Config } from '../config/config.js';
 import { MockTool } from '../test-utils/mock-tool.js';

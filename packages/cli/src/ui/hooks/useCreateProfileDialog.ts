@@ -7,7 +7,7 @@
 import { useCallback, useState } from 'react';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import { AppState } from '../reducers/appReducer.js';
+import type { AppState } from '../reducers/appReducer.js';
 
 interface UseCreateProfileDialogParams {
   appState: AppState;

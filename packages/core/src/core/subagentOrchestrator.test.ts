@@ -10,9 +10,9 @@ import type { ProfileManager } from '../config/profileManager.js';
 import type { SubagentConfig } from '../config/types.js';
 import type { Profile } from '../types/modelParams.js';
 import type { Config } from '../config/config.js';
-import {
+import type {
   SubAgentScope,
-  type SubAgentScope as SubAgentScopeInstance,
+  SubAgentScope as SubAgentScopeInstance,
 } from './subagent.js';
 import type { RunConfig } from './subagentTypes.js';
 import { SubagentOrchestrator } from './subagentOrchestrator.js';

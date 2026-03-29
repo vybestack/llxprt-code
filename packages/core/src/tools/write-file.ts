@@ -7,7 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as Diff from 'diff';
-import { Config, ApprovalMode } from '../config/config.js';
+import { type Config, ApprovalMode } from '../config/config.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -25,9 +25,9 @@ import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
-import {
-  type ModifiableDeclarativeTool,
-  type ModifyContext,
+import type {
+  ModifiableDeclarativeTool,
+  ModifyContext,
 } from './modifiable-tool.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
 import {

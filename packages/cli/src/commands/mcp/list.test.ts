@@ -11,8 +11,8 @@ import {
   expect,
   beforeEach,
   afterEach,
-  Mock,
-  MockInstance,
+  type Mock,
+  type MockInstance,
 } from 'vitest';
 import { DebugLogger, createTransport } from '@vybestack/llxprt-code-core';
 import { listMcpServers } from './list.js';

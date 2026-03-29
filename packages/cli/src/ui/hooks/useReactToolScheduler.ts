@@ -5,20 +5,20 @@
  */
 
 import {
-  Config,
-  ToolCallRequestInfo,
-  ExecutingToolCall,
-  ScheduledToolCall,
-  ValidatingToolCall,
-  WaitingToolCall,
-  CompletedToolCall,
-  CancelledToolCall,
-  CoreToolScheduler,
-  OutputUpdateHandler,
-  ToolCallsUpdateHandler,
-  ToolCall,
-  Status as CoreStatus,
-  EditorType,
+  type Config,
+  type ToolCallRequestInfo,
+  type ExecutingToolCall,
+  type ScheduledToolCall,
+  type ValidatingToolCall,
+  type WaitingToolCall,
+  type CompletedToolCall,
+  type CancelledToolCall,
+  type CoreToolScheduler,
+  type OutputUpdateHandler,
+  type ToolCallsUpdateHandler,
+  type ToolCall,
+  type Status as CoreStatus,
+  type EditorType,
   DEFAULT_AGENT_ID,
   DebugLogger,
   type AnsiOutput,
@@ -26,10 +26,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import {
-  HistoryItemToolGroup,
-  IndividualToolCallDisplay,
+  type HistoryItemToolGroup,
+  type IndividualToolCallDisplay,
   ToolCallStatus,
-  HistoryItemWithoutId,
+  type HistoryItemWithoutId,
 } from '../types.js';
 
 type ExternalSchedulerFactory = (args: {

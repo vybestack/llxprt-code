@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { SubagentManager } from '../subagentManager.js';
 import { ProfileManager } from '../profileManager.js';
-import { SubagentConfig } from '../config/types.js';
+import type { SubagentConfig } from '../config/types.js';
 
 /**
  * SubagentManager behavioral tests

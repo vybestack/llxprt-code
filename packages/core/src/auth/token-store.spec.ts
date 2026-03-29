@@ -14,7 +14,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { KeyringTokenStore } from './keyring-token-store.js';
 import { SecureStore } from '../storage/secure-store.js';
-import { OAuthToken } from './types.js';
+import type { OAuthToken } from './types.js';
 import type { KeyringAdapter } from '../storage/secure-store.js';
 
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {

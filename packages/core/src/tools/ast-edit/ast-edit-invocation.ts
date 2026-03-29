@@ -9,18 +9,18 @@
 import * as path from 'path';
 import * as Diff from 'diff';
 import {
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
   type ToolEditConfirmationDetails,
-  ToolInvocation,
-  ToolLocation,
+  type ToolInvocation,
+  type ToolLocation,
   type ToolResult,
   type FileDiff,
 } from '../tools.js';
 import { ToolErrorType } from '../tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
 import { isNodeError } from '../../utils/errors.js';
-import { Config, ApprovalMode } from '../../config/config.js';
+import { type Config, ApprovalMode } from '../../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../diffOptions.js';
 import { collectLspDiagnosticsBlock } from '../lsp-diagnostics-helper.js';
 import type { AnsiOutput } from '../../utils/terminalSerializer.js';
@@ -28,7 +28,7 @@ import { ensureParentDirectoriesExist } from '../ensure-dirs.js';
 
 import type { ASTEditToolParams } from './types.js';
 import { ASTConfig } from './ast-config.js';
-import { ASTContextCollector } from './context-collector.js';
+import type { ASTContextCollector } from './context-collector.js';
 import { applyReplacement } from './edit-helpers.js';
 import {
   calculateEdit,

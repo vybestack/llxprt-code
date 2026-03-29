@@ -23,7 +23,7 @@
  * no table formatting, no console output, no terminal colors.
  */
 
-import { type SessionSummary } from './types.js';
+import type { SessionSummary } from './types.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 

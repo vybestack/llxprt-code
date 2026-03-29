@@ -8,7 +8,7 @@ import React, { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 

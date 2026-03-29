@@ -6,9 +6,9 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useCompletion } from './useCompletion.js';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import {
-  TextBuffer,
+  type TextBuffer,
   logicalPosToOffset,
 } from '../components/shared/text-buffer.js';
 import {

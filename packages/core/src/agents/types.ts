@@ -10,7 +10,7 @@
 
 import type { Content, FunctionDeclaration } from '@google/genai';
 import type { AnyDeclarativeTool } from '../tools/tools.js';
-import { type z } from 'zod';
+import type { z } from 'zod';
 
 /**
  * Describes the possible termination modes for an agent.

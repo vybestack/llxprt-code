@@ -42,11 +42,11 @@ import {
   type ResumeRequest,
 } from './resumeSession.js';
 import { deleteSession } from './sessionManagement.js';
-import {
-  type SessionRecordingServiceConfig,
-  type SessionRecordLine,
+import type {
+  SessionRecordingServiceConfig,
+  SessionRecordLine,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Constants

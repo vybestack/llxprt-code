@@ -28,8 +28,12 @@ vi.mock('../schema/index.js', () => ({
 import { renderHook, waitFor } from '../../../test-utils/render.js';
 import { useSlashCompletion } from '../../hooks/useSlashCompletion.js';
 import { useTextBuffer } from '../../components/shared/text-buffer.js';
-import { CommandContext, CommandKind, SlashCommand } from '../types.js';
-import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
+import {
+  type CommandContext,
+  CommandKind,
+  type SlashCommand,
+} from '../types.js';
+import { type Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 
 const mockCommandContext = {} as CommandContext;
 

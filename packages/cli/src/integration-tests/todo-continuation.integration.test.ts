@@ -9,7 +9,7 @@ import {
   Config,
   GeminiClient,
   TodoStore,
-  Todo,
+  type Todo,
   ApprovalMode,
   todoEvents,
   createRuntimeStateFromConfig,

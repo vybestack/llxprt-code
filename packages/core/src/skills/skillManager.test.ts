@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { SkillManager } from './skillManager.js';
 import { Storage } from '../config/storage.js';
-import { type GeminiCLIExtension } from '../config/config.js';
+import type { GeminiCLIExtension } from '../config/config.js';
 import {
   loadSkillsFromDir,
   getBuiltinSkillsDir,

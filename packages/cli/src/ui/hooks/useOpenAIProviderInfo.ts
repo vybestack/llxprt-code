@@ -6,8 +6,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Config,
-  ProviderMessage as Message,
+  type Config,
+  type ProviderMessage as Message,
   getOpenAIProviderInfo,
 } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';

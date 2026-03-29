@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveCredentialPrecedence,
-  CredentialInputs,
+  type CredentialInputs,
 } from './credentialPrecedence.js';
 
 describe('resolveCredentialPrecedence', () => {

@@ -8,14 +8,14 @@ import {
   MCPServerConfig,
   BugCommandSettings,
   TelemetrySettings,
-  ChatCompressionSettings,
+  type ChatCompressionSettings,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-  HookDefinition,
-  HookEventName,
+  type HookDefinition,
+  type HookEventName,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
-import { type WittyPhraseStyle } from '../ui/constants/phrasesCollections.js';
+import type { WittyPhraseStyle } from '../ui/constants/phrasesCollections.js';
 import type { SessionRetentionSettings } from './settings.js';
 
 export type SettingsType =

@@ -12,8 +12,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthCommandExecutor } from './authCommand.js';
-import { OAuthManager } from '../../auth/oauth-manager.js';
-import { CommandContext } from './types.js';
+import type { OAuthManager } from '../../auth/oauth-manager.js';
+import type { CommandContext } from './types.js';
 
 describe('AuthCommand Codex OAuth Integration', () => {
   let mockOAuthManager: OAuthManager;

@@ -5,11 +5,11 @@
  */
 
 import { useCallback, useMemo, useEffect } from 'react';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
-import { CommandContext, SlashCommand } from '../commands/types.js';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { CommandContext, SlashCommand } from '../commands/types.js';
 import {
   logicalPosToOffset,
-  TextBuffer,
+  type TextBuffer,
 } from '../components/shared/text-buffer.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
@@ -17,10 +17,10 @@ import { useAtCompletion } from './useAtCompletion.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 import {
   usePromptCompletion,
-  PromptCompletion,
+  type PromptCompletion,
   PROMPT_COMPLETION_MIN_LENGTH,
 } from './usePromptCompletion.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { useCompletion } from './useCompletion.js';
 
 export enum CompletionMode {

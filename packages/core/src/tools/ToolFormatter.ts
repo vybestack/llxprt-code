@@ -20,14 +20,14 @@
  * limitations under the License.
  */
 
-import {
-  type IToolFormatter,
-  type ToolFormat,
-  type OpenAITool,
-  type ResponsesTool,
+import type {
+  IToolFormatter,
+  ToolFormat,
+  OpenAITool,
+  ResponsesTool,
 } from './IToolFormatter.js';
-import { type ITool } from '../providers/ITool.js';
-import { type ToolCallBlock } from '../services/history/IContent.js';
+import type { ITool } from '../providers/ITool.js';
+import type { ToolCallBlock } from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import {
   logDoubleEscapingInChunk,

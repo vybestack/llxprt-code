@@ -8,7 +8,7 @@
 
 import { promises as fsPromises, accessSync } from 'fs';
 import * as path from 'path';
-import { findInFiles, Lang } from '@ast-grep/napi';
+import { findInFiles, type Lang } from '@ast-grep/napi';
 import FastGlob from 'fast-glob';
 import { DebugLogger } from '../../debug/index.js';
 import { LANGUAGE_MAP } from '../../utils/ast-grep-utils.js';

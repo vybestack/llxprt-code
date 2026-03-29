@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
-import { IContent } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 
 // Interface for conversation log entries
 interface ConversationLogEntry {

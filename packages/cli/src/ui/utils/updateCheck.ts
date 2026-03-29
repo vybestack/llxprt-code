@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import updateNotifier, { UpdateInfo } from 'update-notifier';
+import updateNotifier, { type UpdateInfo } from 'update-notifier';
 import semver from 'semver';
 import { getPackageJson, debugLogger } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';

@@ -13,7 +13,7 @@ import {
   formatNonInteractiveError,
 } from './gemini.js';
 import {
-  LoadedSettings,
+  type LoadedSettings,
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';

@@ -6,10 +6,10 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
-  Config,
-  GeminiClient,
-  EditorType,
-  ThoughtSummary,
+  type Config,
+  type GeminiClient,
+  type EditorType,
+  type ThoughtSummary,
   EmojiFilter,
   type EmojiFilterMode,
   type ThinkingBlock,
@@ -18,26 +18,26 @@ import {
   type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { type PartListUnion } from '@google/genai';
-import { LoadedSettings } from '../../../config/settings.js';
+import type { PartListUnion } from '@google/genai';
+import type { LoadedSettings } from '../../../config/settings.js';
 import {
   StreamingState,
-  HistoryItem,
-  HistoryItemWithoutId,
+  type HistoryItem,
+  type HistoryItemWithoutId,
   MessageType,
-  SlashCommandProcessorResult,
+  type SlashCommandProcessorResult,
 } from '../../types.js';
 import { isSlashCommand } from '../../utils/commandUtils.js';
 import { useShellCommandProcessor } from '../shellCommandProcessor.js';
 import { useStateAndRef } from '../useStateAndRef.js';
-import { UseHistoryManagerReturn } from '../useHistoryManager.js';
+import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { useLogger } from '../useLogger.js';
 import {
   useReactToolScheduler,
   mapToDisplay as mapTrackedToolCallsToDisplay,
-  TrackedToolCall,
-  TrackedCompletedToolCall,
-  TrackedCancelledToolCall,
+  type TrackedToolCall,
+  type TrackedCompletedToolCall,
+  type TrackedCancelledToolCall,
 } from '../useReactToolScheduler.js';
 import { useSessionStats } from '../../contexts/SessionContext.js';
 import { useKeypress, type Key } from '../useKeypress.js';

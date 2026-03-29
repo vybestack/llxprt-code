@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { sanitizeTokenForProxy } from '../token-sanitization.js';
-import { type OAuthToken } from '../types.js';
+import type { OAuthToken } from '../types.js';
 
 describe('sanitizeTokenForProxy', () => {
   const fullToken: OAuthToken & Record<string, unknown> = {

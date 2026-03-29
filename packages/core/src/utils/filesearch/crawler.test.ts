@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as cache from './crawlCache.js';
 import { crawl } from './crawler.js';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
-import { Ignore, loadIgnoreRules } from './ignore.js';
+import { type Ignore, loadIgnoreRules } from './ignore.js';
 
 describe('crawler', () => {
   let tmpDir: string;

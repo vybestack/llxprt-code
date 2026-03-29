@@ -11,11 +11,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EditTool, EditToolParams } from './edit.js';
+import { EditTool, type EditToolParams } from './edit.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { ApprovalMode, Config } from '../config/config.js';
+import { ApprovalMode, type Config } from '../config/config.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 

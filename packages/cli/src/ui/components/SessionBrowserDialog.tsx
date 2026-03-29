@@ -8,7 +8,7 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
+import type React from 'react';
 
 import type { SessionSummary } from '@vybestack/llxprt-code-core';
 

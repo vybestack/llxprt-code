@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type CommandModule } from 'yargs';
+import type { CommandModule } from 'yargs';
 
 import { getExtensionAndConfig } from './utils.js';
 import {

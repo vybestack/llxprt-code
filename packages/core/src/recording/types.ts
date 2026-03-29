@@ -23,7 +23,7 @@
  * management.
  */
 
-import { type IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Event type discriminator

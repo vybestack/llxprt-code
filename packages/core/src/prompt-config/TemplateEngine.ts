@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { CORE_DEFAULTS } from './defaults/core-defaults.js';
-import {
-  type TemplateVariables,
-  type TemplateProcessingOptions,
-  type PromptContext,
+import type {
+  TemplateVariables,
+  TemplateProcessingOptions,
+  PromptContext,
 } from './types.js';
 import { debugLogger } from '../utils/debugLogger.js';
 

@@ -15,12 +15,12 @@
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import {
-  Config,
+  type Config,
   ApprovalMode,
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '../config/config.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import type { ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import {
   type Content,
   type FunctionDeclaration,
@@ -42,7 +42,7 @@ import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
-  ContextState,
+  type ContextState,
   templateString,
   type ToolConfig,
   type OutputConfig,

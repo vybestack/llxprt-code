@@ -6,7 +6,7 @@
 
 import { BaseDeclarativeTool, Kind, type ToolInvocation } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   GoogleWebSearchToolInvocation,
   type WebSearchToolParams,

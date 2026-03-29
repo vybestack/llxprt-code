@@ -13,25 +13,29 @@ import {
   Config as ServerConfig,
   MCPServerConfig,
   ApprovalMode,
-  ToolRegistry,
-  AccessibilitySettings,
-  SandboxConfig,
-  LLxprtClient,
+  type ToolRegistry,
+  type AccessibilitySettings,
+  type SandboxConfig,
+  type LLxprtClient,
   ideContext,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
+import {
+  LoadedSettings,
+  type SettingsFile,
+  type Settings,
+} from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/geminiStream/index.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import {
   StreamingState,
-  ConsoleMessageItem,
+  type ConsoleMessageItem,
   MessageType,
-  HistoryItem,
+  type HistoryItem,
 } from './types.js';
 import { Tips } from './components/Tips.js';
-import { checkForUpdates, UpdateObject } from './utils/updateCheck.js';
+import { checkForUpdates, type UpdateObject } from './utils/updateCheck.js';
 import { EventEmitter } from 'events';
 import { updateEventEmitter } from '../utils/updateEventEmitter.js';
 import * as useTerminalSize from './hooks/useTerminalSize.js';

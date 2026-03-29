@@ -15,11 +15,11 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 import EventEmitter from 'events';
-import { Readable } from 'stream';
-import { type ChildProcess } from 'child_process';
+import type { Readable } from 'stream';
+import type { ChildProcess } from 'child_process';
 import {
   ShellExecutionService,
-  ShellOutputEvent,
+  type ShellOutputEvent,
 } from './shellExecutionService.js';
 
 const mockIsBinary = vi.hoisted(() => vi.fn());

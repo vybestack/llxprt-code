@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
-  Config,
+  type Config,
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   getResponseText,
   debugLogger,

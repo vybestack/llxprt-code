@@ -12,9 +12,9 @@ import {
   ShellExecutionService,
 } from '@vybestack/llxprt-code-core';
 
-import { CommandContext } from '../../ui/commands/types.js';
+import type { CommandContext } from '../../ui/commands/types.js';
 import {
-  IPromptProcessor,
+  type IPromptProcessor,
   SHELL_INJECTION_TRIGGER,
   SHORTHAND_ARGS_PLACEHOLDER,
 } from './types.js';

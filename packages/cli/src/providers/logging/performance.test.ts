@@ -5,13 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
+import type {
   IProvider,
   IContent,
   GenerateChatOptions,
   ProviderToolset,
+  Config,
 } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
 interface LoggingProviderWrapper {

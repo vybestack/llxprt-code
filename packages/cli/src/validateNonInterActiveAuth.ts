@@ -5,13 +5,13 @@
  */
 
 import {
-  Config,
+  type Config,
   ExitCodes,
   JsonFormatter,
   OutputFormat,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from './config/settings.js';
+import type { LoadedSettings } from './config/settings.js';
 
 /**
  * Check if any authentication environment variables are set.

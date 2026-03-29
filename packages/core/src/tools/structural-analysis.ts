@@ -22,7 +22,7 @@ import { makeRelative } from '../utils/paths.js';
 import type { SgNode, NapiConfig } from '@ast-grep/napi';
 import {
   parse,
-  Lang,
+  type Lang,
   getAstLanguage,
   LANGUAGE_MAP,
 } from '../utils/ast-grep-utils.js';

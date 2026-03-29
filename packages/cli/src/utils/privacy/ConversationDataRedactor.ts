@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IContent, ITool, ContentBlock } from '@vybestack/llxprt-code-core';
+import type {
+  IContent,
+  ITool,
+  ContentBlock,
+} from '@vybestack/llxprt-code-core';
 
 export interface RedactionPattern {
   name: string;

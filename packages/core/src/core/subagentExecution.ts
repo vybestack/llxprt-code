@@ -16,10 +16,10 @@
  */
 
 import type { DebugLogger } from '../debug/DebugLogger.js';
-import {
+import type {
   Config,
-  type SchedulerCallbacks,
-  type SchedulerOptions,
+  SchedulerCallbacks,
+  SchedulerOptions,
 } from '../config/config.js';
 import type { Content, FunctionCall } from '@google/genai';
 import type { EmojiFilter } from '../filters/EmojiFilter.js';

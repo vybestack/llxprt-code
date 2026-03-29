@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type GroundingMetadata } from '@google/genai';
+import type { GroundingMetadata } from '@google/genai';
 import { BaseToolInvocation, type ToolResult } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from './tool-names.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { ToolErrorType } from './tool-error.js';

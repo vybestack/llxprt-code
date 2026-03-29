@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { type IContent } from '../services/history/IContent.js';
-import { type HistoryService } from '../services/history/HistoryService.js';
-import { type SessionRecordingService } from './SessionRecordingService.js';
+import type { IContent } from '../services/history/IContent.js';
+import type { HistoryService } from '../services/history/HistoryService.js';
+import type { SessionRecordingService } from './SessionRecordingService.js';
 
 /**
  * Bridges HistoryService events to SessionRecordingService.

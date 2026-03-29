@@ -11,10 +11,10 @@
 
 import {
   CommandKind,
-  SlashCommand,
-  CommandContext,
-  SlashCommandActionReturn,
-  MessageActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type SlashCommandActionReturn,
+  type MessageActionReturn,
 } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
@@ -23,10 +23,7 @@ import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
 import { CodexOAuthProvider } from '../../auth/codex-oauth-provider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import {
-  type CommandArgumentSchema,
-  type CompleterFn,
-} from './schema/types.js';
+import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
 

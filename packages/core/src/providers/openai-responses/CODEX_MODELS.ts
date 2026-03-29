@@ -21,7 +21,7 @@
  * @plan PLAN-20251214-ISSUE160.P06
  */
 
-import { type IModel } from '../IModel.js';
+import type { IModel } from '../IModel.js';
 
 export const CODEX_MODELS: IModel[] = [
   {

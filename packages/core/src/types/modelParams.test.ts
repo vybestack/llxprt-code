@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  Profile,
+  type Profile,
   isLoadBalancerProfile,
   isStandardProfile,
 } from './modelParams.js';

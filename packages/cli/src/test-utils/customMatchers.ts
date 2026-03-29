@@ -6,7 +6,7 @@
 
 /// <reference types="vitest/globals" />
 
-import { Assertion, expect } from 'vitest';
+import { type Assertion, expect } from 'vitest';
 import type { TextBuffer } from '../ui/components/shared/text-buffer.js';
 
 // RegExp to detect invalid characters: backspace, and ANSI escape codes

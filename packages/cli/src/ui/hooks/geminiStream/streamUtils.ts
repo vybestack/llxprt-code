@@ -16,7 +16,7 @@
  */
 
 import {
-  Config,
+  type Config,
   getCodeAssistServer,
   UserTierId,
   UnauthorizedError,
@@ -24,22 +24,22 @@ import {
   isNodeError,
   DEFAULT_GEMINI_FLASH_MODEL,
   parseAndFormatApiError,
-  ToolCallRequestInfo,
+  type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
-import { LoadedSettings } from '../../../config/settings.js';
+import type { LoadedSettings } from '../../../config/settings.js';
 import {
-  HistoryItemWithoutId,
-  HistoryItemGemini,
-  HistoryItemGeminiContent,
+  type HistoryItemWithoutId,
+  type HistoryItemGemini,
+  type HistoryItemGeminiContent,
   MessageType,
-  SlashCommandProcessorResult,
+  type SlashCommandProcessorResult,
 } from '../../types.js';
 import { findLastSafeSplitPoint } from '../../utils/markdownUtilities.js';
 import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
-import { UseHistoryManagerReturn } from '../useHistoryManager.js';
+import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
 
 // ─── Re-exported constant ────────────────────────────────────────────────────
 

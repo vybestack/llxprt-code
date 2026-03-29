@@ -26,7 +26,7 @@ import type {
   HookExecutionResult,
   McpContext,
 } from './types.js';
-import { HookEventName, NotificationType } from './types.js';
+import { HookEventName, type NotificationType } from './types.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {

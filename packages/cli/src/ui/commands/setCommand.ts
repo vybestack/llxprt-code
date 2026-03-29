@@ -5,9 +5,9 @@
  */
 
 import {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type MessageActionReturn,
   CommandKind,
 } from './types.js';
 import type {

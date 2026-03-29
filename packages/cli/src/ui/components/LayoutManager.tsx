@@ -11,9 +11,9 @@ import React, {
   useMemo,
   useEffect,
   useRef,
-  RefObject,
+  type RefObject,
 } from 'react';
-import { DOMElement, measureElement } from 'ink';
+import { type DOMElement, measureElement } from 'ink';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
 interface LayoutContextValue {

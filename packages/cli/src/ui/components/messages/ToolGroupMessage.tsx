@@ -6,13 +6,13 @@
 
 import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
+import { type IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
 import { theme } from '../../semantic-colors.js';
 import {
-  Config,
+  type Config,
   DEFAULT_AGENT_ID,
   formatTodoListForDisplay,
 } from '@vybestack/llxprt-code-core';

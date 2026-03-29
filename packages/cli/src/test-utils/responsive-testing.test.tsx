@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from 'ink-testing-library';
-import React from 'react';
+import type { render } from 'ink-testing-library';
+import type React from 'react';
 import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
 import { useResponsive } from '../ui/hooks/useResponsive.js';
 

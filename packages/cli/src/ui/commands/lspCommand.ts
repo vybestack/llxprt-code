@@ -10,10 +10,10 @@
  */
 
 import {
-  SlashCommand,
-  CommandContext,
+  type SlashCommand,
+  type CommandContext,
   CommandKind,
-  MessageActionReturn,
+  type MessageActionReturn,
 } from './types.js';
 type LspServerConfigLike = {
   id: string;

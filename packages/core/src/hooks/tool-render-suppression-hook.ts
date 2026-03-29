@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 

@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createProviderManager } from './providerManagerInstance.js';
-import { IProvider } from './index.js';
+import type { IProvider } from './index.js';
 import {
   createProviderRuntimeContext,
   SettingsService,

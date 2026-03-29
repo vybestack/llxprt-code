@@ -4,18 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OAuthToken, AuthStatus, TokenStore } from './types.js';
 import type {
+  OAuthToken,
+  AuthStatus,
+  TokenStore,
   OAuthProvider,
   OAuthManagerRuntimeMessageBusDeps,
   BucketFailoverOAuthManagerLike,
 } from './types.js';
-import { LoadedSettings } from '../config/settings.js';
+import type { LoadedSettings } from '../config/settings.js';
 import { ProviderRegistry } from './provider-registry.js';
-import {
+import type {
   MessageBus,
   Config,
-  type OAuthTokenRequestMetadata,
+  OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';

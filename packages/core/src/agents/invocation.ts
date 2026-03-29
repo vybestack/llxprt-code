@@ -14,7 +14,7 @@ import type {
   SubagentActivityEvent,
 } from './types.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import { type z } from 'zod';
+import type { z } from 'zod';
 
 const INPUT_PREVIEW_MAX_LENGTH = 50;
 const DESCRIPTION_MAX_LENGTH = 200;

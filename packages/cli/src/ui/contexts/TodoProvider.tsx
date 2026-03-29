@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TodoStore,
-  Todo,
+  type Todo,
   todoEvents,
   type TodoUpdateEvent,
   DEFAULT_AGENT_ID,

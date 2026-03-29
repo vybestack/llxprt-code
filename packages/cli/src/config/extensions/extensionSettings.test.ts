@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ExtensionSettingSchema,
   ExtensionSettingsArraySchema,
-  ExtensionSetting,
+  type ExtensionSetting,
 } from './extensionSettings.js';
 
 describe('ExtensionSettingSchema', () => {

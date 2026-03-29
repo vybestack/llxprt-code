@@ -16,7 +16,7 @@ import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import { type HydratedModel } from '@vybestack/llxprt-code-core';
+import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 export interface CapabilityFilters {
   vision: boolean;

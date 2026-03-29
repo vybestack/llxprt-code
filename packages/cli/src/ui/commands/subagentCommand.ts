@@ -9,9 +9,9 @@
 import React from 'react';
 import { Text } from 'ink';
 import {
-  SlashCommand,
-  CommandContext,
-  SlashCommandActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';

@@ -7,15 +7,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   BaseProvider,
-  BaseProviderConfig,
-  NormalizedGenerateChatOptions,
+  type BaseProviderConfig,
+  type NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
-import {
+import type {
   OAuthManager,
-  type OAuthTokenRequestMetadata,
+  OAuthTokenRequestMetadata,
 } from '../auth/precedence.js';
-import { IModel } from './IModel.js';
-import { IContent, TextBlock } from '../services/history/IContent.js';
+import type { IModel } from './IModel.js';
+import type { IContent, TextBlock } from '../services/history/IContent.js';
 import type { Config } from '../config/config.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { createRuntimeConfigStub } from '../test-utils/runtime.js';

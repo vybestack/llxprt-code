@@ -13,7 +13,7 @@ import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '../config/storage.js';
 import toml from '@iarna/toml';
 import { ShellToolInvocation } from '../tools/shell.js';
-import { type Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   ToolConfirmationOutcome,
   type PolicyUpdateOptions,

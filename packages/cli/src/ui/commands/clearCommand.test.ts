@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { clearCommand } from './clearCommand';
-import { type CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getCliRuntimeServices } from '../../runtime/runtimeSettings.js';
 // Mock the telemetry service
@@ -27,8 +27,8 @@ vi.mock('../../runtime/runtimeSettings.js', () => ({
 }));
 
 import {
-  Config,
-  GeminiClient,
+  type Config,
+  type GeminiClient,
   uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,

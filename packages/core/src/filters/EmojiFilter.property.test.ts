@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
+import { EmojiFilter, type FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter Property-Based Tests', () => {
   describe('Unicode Input Handling Properties', () => {

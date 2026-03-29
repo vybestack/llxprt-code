@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type FunctionCall,
-  type FunctionDeclaration,
-  type PartListUnion,
+import type {
+  FunctionCall,
+  FunctionDeclaration,
+  PartListUnion,
 } from '@google/genai';
-import { type ToolContext, type ContextAwareTool } from './tool-context.js';
+import type { ToolContext, ContextAwareTool } from './tool-context.js';
 import { ToolErrorType } from './tool-error.js';
-import { type DiffUpdateResult } from '../ide/ideContext.js';
+import type { DiffUpdateResult } from '../ide/ideContext.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {

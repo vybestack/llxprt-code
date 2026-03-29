@@ -17,7 +17,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   ToolCallNormalizer,
-  NormalizedToolCall,
+  type NormalizedToolCall,
 } from './ToolCallNormalizer.js';
 
 // Mock processToolParameters to simulate different return values

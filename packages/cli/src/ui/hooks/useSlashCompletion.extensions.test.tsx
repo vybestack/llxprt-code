@@ -18,11 +18,11 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 import {
-  CommandContext,
-  SlashCommand,
+  type CommandContext,
+  type SlashCommand,
   CommandKind,
 } from '../commands/types.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Credentials } from 'google-auth-library';
+import type { Credentials } from 'google-auth-library';
 import { KeychainTokenStorage } from '../mcp/token-storage/keychain-token-storage.js';
 import { OAUTH_FILE, Storage } from '../config/storage.js';
 import type {

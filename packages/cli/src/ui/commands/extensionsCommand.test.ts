@@ -8,9 +8,9 @@ import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { extensionsCommand } from './extensionsCommand.js';
-import { type CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { type ExtensionUpdateAction } from '../state/extensions.js';
+import type { ExtensionUpdateAction } from '../state/extensions.js';
 
 vi.mock('../../config/extensions/update.js', () => ({
   updateExtension: vi.fn(),

@@ -12,7 +12,7 @@ import {
   useState,
   useMemo,
 } from 'react';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 
 export type VimMode = 'NORMAL' | 'INSERT';
 

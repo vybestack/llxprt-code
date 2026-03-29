@@ -5,17 +5,14 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import {
-  type IProvider,
-  type IModel,
-  type ITool,
-  type GenerateChatOptions,
-  type ProviderToolset,
+import type {
+  IProvider,
+  IModel,
+  ITool,
+  GenerateChatOptions,
+  ProviderToolset,
 } from './IProvider.js';
-import {
-  type IContent,
-  type UsageStats,
-} from '../services/history/IContent.js';
+import type { IContent, UsageStats } from '../services/history/IContent.js';
 import { Config, type RedactionConfig } from '../config/config.js';
 import {
   logConversationRequest,

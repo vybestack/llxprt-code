@@ -7,7 +7,7 @@
 import { renderWithProviders, waitFor } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
-import React from 'react';
+import type React from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());

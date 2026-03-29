@@ -46,10 +46,10 @@ vi.mock('crypto');
 
 import { isCommandAllowed } from '../utils/shell-utils.js';
 import { ShellTool } from './shell.js';
-import { type Config } from '../config/config.js';
-import {
-  type ShellExecutionResult,
-  type ShellOutputEvent,
+import type { Config } from '../config/config.js';
+import type {
+  ShellExecutionResult,
+  ShellOutputEvent,
 } from '../services/shellExecutionService.js';
 import * as fs from 'fs';
 import * as os from 'os';

@@ -16,7 +16,7 @@
  * - Line 6: Union CommandArgumentSchema type
  */
 
-import { CommandContext } from '../types.js';
+import type { CommandContext } from '../types.js';
 
 // Line 1: LiteralArgument structure
 export interface LiteralArgument {

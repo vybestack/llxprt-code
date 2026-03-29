@@ -36,8 +36,8 @@ import * as os from 'node:os';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { listSessions, deleteSession } from './sessionManagement.js';
-import { type SessionRecordingServiceConfig } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import type { SessionRecordingServiceConfig } from './types.js';
+import type { IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

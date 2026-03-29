@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type FunctionDeclaration } from '@google/genai';
+import type { FunctionDeclaration } from '@google/genai';
 import {
   type AnyDeclarativeTool,
   Kind,
@@ -12,8 +12,8 @@ import {
   BaseTool,
   BaseToolInvocation,
 } from './tools.js';
-import { type ToolContext } from './tool-context.js';
-import { Config } from '../config/config.js';
+import type { ToolContext } from './tool-context.js';
+import type { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { DiscoveredMCPTool } from './mcp-tool.js';

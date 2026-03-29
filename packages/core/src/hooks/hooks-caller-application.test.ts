@@ -38,7 +38,7 @@ import {
   BaseToolInvocation,
   type ToolResult,
   Kind,
-  ToolRegistry,
+  type ToolRegistry,
   ApprovalMode,
   type Config,
 } from '../index.js';

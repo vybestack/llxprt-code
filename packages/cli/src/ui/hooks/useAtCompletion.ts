@@ -7,13 +7,13 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { AsyncFzf } from 'fzf';
 import {
-  Config,
-  FileSearch,
+  type Config,
+  type FileSearch,
   FileSearchFactory,
   escapePath,
 } from '@vybestack/llxprt-code-core';
 import {
-  Suggestion,
+  type Suggestion,
   MAX_SUGGESTIONS_TO_SHOW,
 } from '../components/SuggestionsDisplay.js';
 

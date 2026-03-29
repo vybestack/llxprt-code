@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationCache } from './ConversationCache.js';
-import { IMessage } from '../IMessage.js';
+import type { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 describe('ConversationCache.accumTokens', () => {

@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type PartListUnion,
-  type Part,
-  type GenerateContentResponse,
+import type {
+  PartListUnion,
+  Part,
+  GenerateContentResponse,
 } from '@google/genai';
 
 /**

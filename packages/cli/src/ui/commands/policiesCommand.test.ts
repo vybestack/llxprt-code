@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { policiesCommand } from './policiesCommand.js';
-import { type CommandContext, type MessageActionReturn } from './types.js';
+import type { CommandContext, MessageActionReturn } from './types.js';
 import {
   PolicyEngine,
   PolicyDecision,

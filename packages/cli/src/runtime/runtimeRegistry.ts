@@ -12,16 +12,16 @@
  */
 
 import {
-  Config,
+  type Config,
   DebugLogger,
-  SettingsService,
-  ProfileManager,
+  type SettingsService,
+  type ProfileManager,
   clearActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   type ProviderManager,
   type RuntimeAuthScopeFlushResult,
 } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '../auth/oauth-manager.js';
 import { resetProviderManager } from '../providers/providerManagerInstance.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import { formatMissingRuntimeMessage } from './messages.js';

@@ -7,13 +7,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
-import {
-  type ReadableSpan,
-  type SpanExporter,
-} from '@opentelemetry/sdk-trace-base';
-import {
-  type ReadableLogRecord,
-  type LogRecordExporter,
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
+import type {
+  ReadableLogRecord,
+  LogRecordExporter,
 } from '@opentelemetry/sdk-logs';
 import {
   type ResourceMetrics,

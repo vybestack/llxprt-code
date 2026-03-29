@@ -11,7 +11,7 @@ import {
   sanitizeTranscript,
   exportHistoryForBugReport,
 } from './historyExportUtils.js';
-import { Content } from '@google/genai';
+import type { Content } from '@google/genai';
 
 describe('historyExportUtils', () => {
   describe('sanitizeTranscript', () => {

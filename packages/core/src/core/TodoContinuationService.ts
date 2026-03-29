@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Part } from '@google/genai';
+import type { PartListUnion, Part } from '@google/genai';
 import { GeminiEventType } from './turn.js';
 import type { ServerGeminiStreamEvent, ToolCallResponseInfo } from './turn.js';
 import type { Config } from '../config/config.js';
 import { DEFAULT_AGENT_ID } from './turn.js';
 
 import type { ComplexityAnalysisResult } from '../services/complexity-analyzer.js';
-import { TodoReminderService } from '../services/todo-reminder-service.js';
+import type { TodoReminderService } from '../services/todo-reminder-service.js';
 import { TodoStore } from '../tools/todo-store.js';
 import type { Todo } from '../tools/todo-schemas.js';
 

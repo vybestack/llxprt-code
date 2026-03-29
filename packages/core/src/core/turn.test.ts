@@ -8,20 +8,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   Turn,
   GeminiEventType,
-  ServerGeminiToolCallRequestEvent,
-  ServerGeminiErrorEvent,
-  ServerGeminiStreamEvent,
+  type ServerGeminiToolCallRequestEvent,
+  type ServerGeminiErrorEvent,
+  type ServerGeminiStreamEvent,
   DEFAULT_AGENT_ID,
 } from './turn.js';
 import {
-  GenerateContentResponse,
-  Part,
+  type GenerateContentResponse,
+  type Part,
   Content,
-  FinishReason,
+  type FinishReason,
 } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
 import {
-  GeminiChat,
+  type GeminiChat,
   InvalidStreamError,
   StreamEventType,
 } from './geminiChat.js';

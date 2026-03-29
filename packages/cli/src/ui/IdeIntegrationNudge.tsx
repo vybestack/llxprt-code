@@ -8,7 +8,7 @@ import type { IdeInfo } from '@vybestack/llxprt-code-core';
 import { Box, Text } from 'ink';
 import {
   RadioButtonSelect,
-  RadioSelectItem,
+  type RadioSelectItem,
 } from './components/shared/RadioButtonSelect.js';
 import { useKeypress } from './hooks/useKeypress.js';
 import { Colors } from './colors.js';

@@ -9,7 +9,7 @@ import {
   DebugLogger,
   ProfileManager,
   type Config,
-  SettingsService,
+  type SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
 import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';

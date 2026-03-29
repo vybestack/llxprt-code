@@ -7,8 +7,8 @@
 import type { Key } from './hooks/useKeypress.js';
 import {
   Command,
-  KeyBinding,
-  KeyBindingConfig,
+  type KeyBinding,
+  type KeyBindingConfig,
   defaultKeyBindings,
 } from '../config/keyBindings.js';
 

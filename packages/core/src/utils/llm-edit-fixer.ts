@@ -6,7 +6,7 @@
 
 import { createHash } from 'node:crypto';
 import { type Content, Type } from '@google/genai';
-import { type GeminiClient } from '../core/client.js';
+import type { GeminiClient } from '../core/client.js';
 import { LruCache } from './LruCache.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 

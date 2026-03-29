@@ -33,15 +33,23 @@ interface EditFileParameterSchema {
   };
 }
 
-import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
-import { applyReplacement, EditTool, EditToolParams } from './edit.js';
-import { FileDiff, ToolConfirmationOutcome } from './tools.js';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'vitest';
+import { applyReplacement, EditTool, type EditToolParams } from './edit.js';
+import { type FileDiff, ToolConfirmationOutcome } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { ApprovalMode, Config } from '../config/config.js';
-import { Content, Part } from '@google/genai';
+import { ApprovalMode, type Config } from '../config/config.js';
+import type { Content, Part } from '@google/genai';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 

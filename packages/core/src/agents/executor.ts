@@ -9,7 +9,7 @@ import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat, StreamEventType } from '../core/geminiChat.js';
 import { Type } from '@google/genai';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
-import { type ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
+import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type {
@@ -43,7 +43,7 @@ import type {
 import { AgentTerminateMode } from './types.js';
 import { templateString } from './utils.js';
 import { parseThought } from '../utils/thoughtUtils.js';
-import { type z } from 'zod';
+import type { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { debugLogger } from '../utils/debugLogger.js';
 

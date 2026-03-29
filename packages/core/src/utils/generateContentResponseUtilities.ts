@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   GenerateContentResponse,
-  type Part,
-  type FunctionCall,
-  type PartListUnion,
+  Part,
+  FunctionCall,
+  PartListUnion,
 } from '@google/genai';
 import {
   limitOutputTokens,
   type ToolOutputSettingsProvider,
 } from './toolOutputLimiter.js';
-import {
-  type ToolCallRequestInfo,
-  type ToolCallResponseInfo,
+import type {
+  ToolCallRequestInfo,
+  ToolCallResponseInfo,
   ToolErrorType,
 } from '../index.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';

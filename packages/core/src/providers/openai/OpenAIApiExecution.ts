@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
-import { type DebugLogger } from '../../debug/index.js';
+import type OpenAI from 'openai';
+import type { DebugLogger } from '../../debug/index.js';
 import {
   shouldDumpSDKContext,
   dumpSDKContext,
 } from '../utils/dumpSDKContext.js';
-import { type DumpMode } from '../utils/dumpContext.js';
-import { type OpenAITool } from './schemaConverter.js';
+import type { DumpMode } from '../utils/dumpContext.js';
+import type { OpenAITool } from './schemaConverter.js';
 
 export interface ApiExecutionOptions {
   client: OpenAI;

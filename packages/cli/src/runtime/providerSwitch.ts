@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import { type Config, DebugLogger } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import {
   getCliOAuthManager,

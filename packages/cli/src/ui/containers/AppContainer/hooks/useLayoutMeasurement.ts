@@ -7,7 +7,7 @@
 import { type DOMElement, measureElement } from 'ink';
 import { useLayoutEffect, useRef } from 'react';
 import { useMouseSelection } from '../../../hooks/useMouseSelection.js';
-import { useKeypress, Key } from '../../../hooks/useKeypress.js';
+import { useKeypress, type Key } from '../../../hooks/useKeypress.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ConsoleMessageItem } from '../../../types.js';
 

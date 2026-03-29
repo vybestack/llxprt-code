@@ -26,7 +26,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type SessionSummary, type SessionStartPayload } from './types.js';
+import type { SessionSummary, SessionStartPayload } from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
 
 /**

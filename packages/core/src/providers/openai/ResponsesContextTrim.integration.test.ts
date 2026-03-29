@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
-import { IMessage } from '../IMessage.js';
+import type { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';

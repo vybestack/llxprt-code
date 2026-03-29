@@ -7,12 +7,12 @@
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
 // createHash import removed - no longer needed without client caching
 import { DebugLogger } from '../../debug/index.js';
-import { type IModel } from '../IModel.js';
-import {
-  type IContent,
-  type ToolCallBlock,
-  type ThinkingBlock,
-  type MediaBlock,
+import type { IModel } from '../IModel.js';
+import type {
+  IContent,
+  ToolCallBlock,
+  ThinkingBlock,
+  MediaBlock,
 } from '../../services/history/IContent.js';
 import { Config } from '../../config/config.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
@@ -30,7 +30,7 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { type OAuthManager } from '../../auth/precedence.js';
+import type { OAuthManager } from '../../auth/precedence.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {

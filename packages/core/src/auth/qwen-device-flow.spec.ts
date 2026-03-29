@@ -6,10 +6,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'http';
-import { AddressInfo } from 'net';
+import type { AddressInfo } from 'net';
 import { randomBytes, createHash } from 'crypto';
-import { QwenDeviceFlow, DeviceFlowConfig } from './qwen-device-flow.js';
-import { DeviceCodeResponse, OAuthToken } from './types.js';
+import { QwenDeviceFlow, type DeviceFlowConfig } from './qwen-device-flow.js';
+import type { DeviceCodeResponse, OAuthToken } from './types.js';
 
 // Skip Qwen tests in CI/E2E environments as they make real network requests and are brittle
 const skipInCI = process.env.CI === 'true' || process.env.E2E === 'true';

@@ -5,7 +5,7 @@
  */
 
 import {
-  MockInstance,
+  type MockInstance,
   vi,
   describe,
   it,
@@ -14,7 +14,7 @@ import {
   afterEach,
 } from 'vitest';
 import { ideCommand } from './ideCommand.js';
-import { type CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 

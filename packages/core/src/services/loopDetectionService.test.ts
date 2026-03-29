@@ -5,12 +5,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   GeminiEventType,
-  ServerGeminiContentEvent,
-  ServerGeminiStreamEvent,
-  ServerGeminiToolCallRequestEvent,
+  type ServerGeminiContentEvent,
+  type ServerGeminiStreamEvent,
+  type ServerGeminiToolCallRequestEvent,
 } from '../core/turn.js';
 import * as loggers from '../telemetry/loggers.js';
 import { LoopType } from '../telemetry/types.js';

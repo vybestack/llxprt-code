@@ -28,8 +28,8 @@ import {
 } from './nonInteractiveToolExecutor.js';
 import {
   ApprovalMode,
-  Config,
-  ToolRegistry,
+  type Config,
+  type ToolRegistry,
   DEFAULT_AGENT_ID,
   ToolErrorType,
 } from '../index.js';

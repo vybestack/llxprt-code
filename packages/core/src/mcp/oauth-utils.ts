@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type MCPOAuthConfig } from './oauth-provider.js';
+import type { MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 

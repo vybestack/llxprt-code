@@ -8,11 +8,11 @@ import { vi } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useFolderTrust } from './useFolderTrust.js';
-import { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import * as trustedFolders from '../../config/trustedFolders.js';
 
 const mockedCwd = vi.hoisted(() => vi.fn());

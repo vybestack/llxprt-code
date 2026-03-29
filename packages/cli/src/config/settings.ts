@@ -25,7 +25,7 @@ import {
   Settings,
   MemoryImportFormat,
   SETTINGS_SCHEMA,
-  SettingDefinition,
+  type SettingDefinition,
 } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import {

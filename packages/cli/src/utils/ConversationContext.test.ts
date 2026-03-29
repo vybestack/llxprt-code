@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   ConversationContext,
-  IConversationContext,
+  type IConversationContext,
 } from './ConversationContext.js';
 
 describe('ConversationContextManager', () => {

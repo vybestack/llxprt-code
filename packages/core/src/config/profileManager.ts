@@ -5,8 +5,8 @@
  */
 
 import {
-  Profile,
-  LoadBalancerProfile,
+  type Profile,
+  type LoadBalancerProfile,
   isLoadBalancerProfile,
 } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';

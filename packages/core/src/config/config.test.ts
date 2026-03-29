@@ -23,7 +23,7 @@ import {
   DEFAULT_OTLP_ENDPOINT,
 } from '../telemetry/index.js';
 import {
-  ContentGeneratorConfig,
+  type ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
 import { GeminiClient } from '../core/client.js';

@@ -7,12 +7,12 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import {
   Config,
-  Profile,
+  type Profile,
   ProfileManager,
-  ProviderManager,
-  IProvider,
+  type ProviderManager,
+  type IProvider,
   createProviderRuntimeContext,
-  SettingsService,
+  type SettingsService,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import {

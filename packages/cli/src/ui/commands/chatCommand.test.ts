@@ -11,16 +11,16 @@ import {
   expect,
   beforeEach,
   afterEach,
-  Mocked,
+  type Mocked,
 } from 'vitest';
 
 import type { CommandContext, SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { GeminiClient } from '@vybestack/llxprt-code-core';
+import type { GeminiClient } from '@vybestack/llxprt-code-core';
 
 import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';
-import { Stats } from 'fs';
+import type { Stats } from 'fs';
 import { createCompletionHandler } from './schema/index.js';
 
 vi.mock('fs/promises', () => ({

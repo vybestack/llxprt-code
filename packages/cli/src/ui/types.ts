@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   CompressionStatus,
   GeminiCLIExtension,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
-  type ThinkingBlock,
-  type SkillDefinition,
-  type SkillSource,
+  ThinkingBlock,
+  SkillDefinition,
+  SkillSource,
 } from '@vybestack/llxprt-code-core';
 
 export type { SkillDefinition, SkillSource };

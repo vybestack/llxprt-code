@@ -10,14 +10,14 @@
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
-import {
-  type Content,
-  type Part,
-  type FunctionCall,
-  type FunctionDeclaration,
+import type { ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import type {
+  Content,
+  Part,
+  FunctionCall,
+  FunctionDeclaration,
 } from '@google/genai';
 import { StreamEventType } from './geminiChat.js';
 import type {
@@ -26,8 +26,8 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
-import { type CompletedToolCall } from './coreToolScheduler.js';
-import { type EmojiFilter } from '../filters/EmojiFilter.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
+import type { EmojiFilter } from '../filters/EmojiFilter.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   validateToolsAgainstRuntime,
@@ -62,7 +62,7 @@ import {
 // --- Internal imports from subagentTypes.ts (used within this file) ---
 import {
   SubagentTerminateMode,
-  ContextState,
+  type ContextState,
   defaultEnvironmentContextLoader,
   type OutputObject,
   type PromptConfig,

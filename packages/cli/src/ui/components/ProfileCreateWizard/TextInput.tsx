@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
-import { useKeypress, Key } from '../../hooks/useKeypress.js';
+import { useKeypress, type Key } from '../../hooks/useKeypress.js';
 import { Colors } from '../../colors.js';
 
 export interface TextInputProps {

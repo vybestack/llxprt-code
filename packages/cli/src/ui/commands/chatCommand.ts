@@ -9,11 +9,11 @@ import React from 'react';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import {
-  CommandContext,
-  SlashCommand,
-  MessageActionReturn,
+  type CommandContext,
+  type SlashCommand,
+  type MessageActionReturn,
   CommandKind,
-  SlashCommandActionReturn,
+  type SlashCommandActionReturn,
 } from './types.js';
 import {
   decodeTagName,
@@ -28,8 +28,8 @@ import type {
   HistoryItemWithoutId,
 } from '../types.js';
 import { MessageType } from '../types.js';
-import { type CommandArgumentSchema } from './schema/types.js';
-import { type Part } from '@google/genai';
+import type { CommandArgumentSchema } from './schema/types.js';
+import type { Part } from '@google/genai';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const getSavedChatTags = async (

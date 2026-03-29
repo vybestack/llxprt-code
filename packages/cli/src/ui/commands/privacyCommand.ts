@@ -6,9 +6,9 @@
 
 import {
   CommandKind,
-  SlashCommand,
-  CommandContext,
-  OpenDialogActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type OpenDialogActionReturn,
 } from './types.js';
 
 /**

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from 'ink-testing-library';
 import { ThemeDialog } from './ThemeDialog.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import { UIStateProvider } from '../contexts/UIStateContext.js';
 import type { UIState } from '../contexts/UIStateContext.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';

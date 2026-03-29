@@ -17,11 +17,11 @@ import express, {
 } from 'express';
 import cors from 'cors';
 import { randomUUID } from 'node:crypto';
-import { type Server as HTTPServer } from 'node:http';
+import type { Server as HTTPServer } from 'node:http';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
-import { DiffManager } from './diff-manager.js';
+import type { DiffManager } from './diff-manager.js';
 import { OpenFilesManager } from './open-files-manager.js';
 
 class CORSError extends Error {

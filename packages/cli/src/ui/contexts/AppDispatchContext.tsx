@@ -5,7 +5,7 @@
  */
 
 import React, { createContext, useContext } from 'react';
-import { AppAction } from '../reducers/appReducer.js';
+import type { AppAction } from '../reducers/appReducer.js';
 
 const AppDispatchContext = createContext<React.Dispatch<AppAction> | undefined>(
   undefined,

@@ -24,19 +24,19 @@ import {
 import { useHistory } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import { TodoPausePreserver } from '../../../hooks/useTodoPausePreserver.js';
-import {
-  type Config,
-  type IContent,
-  type IdeInfo,
-  type MessageBus,
-  type RecordingIntegration,
-  type SessionRecordingService,
-  type LockHandle,
+import type {
+  Config,
+  IContent,
+  IdeInfo,
+  MessageBus,
+  RecordingIntegration,
+  SessionRecordingService,
+  LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
-import { UpdateObject } from '../../../utils/updateCheck.js';
+import type { UpdateObject } from '../../../utils/updateCheck.js';
 import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';

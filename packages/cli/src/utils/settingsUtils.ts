@@ -4,12 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Settings, SettingScope, LoadedSettings } from '../config/settings.js';
+import type {
+  Settings,
+  SettingScope,
+  LoadedSettings,
+} from '../config/settings.js';
 import { dynamicSettingsRegistry } from './dynamicSettings.js';
 import {
   SETTINGS_SCHEMA,
-  SettingDefinition,
-  SettingsSchema,
+  type SettingDefinition,
+  type SettingsSchema,
 } from '../config/settingsSchema.js';
 
 // The schema is now nested, but many parts of the UI and logic work better

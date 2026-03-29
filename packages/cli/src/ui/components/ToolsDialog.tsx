@@ -7,7 +7,7 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 

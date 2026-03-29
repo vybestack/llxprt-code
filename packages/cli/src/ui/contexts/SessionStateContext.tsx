@@ -8,13 +8,13 @@ import React, {
   createContext,
   useContext,
   useReducer,
-  ReactNode,
+  type ReactNode,
   useMemo,
 } from 'react';
 import {
   sessionReducer,
-  SessionState,
-  SessionAction,
+  type SessionState,
+  type SessionAction,
 } from '../reducers/sessionReducer.js';
 
 // Context type with strict typing for [state, dispatch]

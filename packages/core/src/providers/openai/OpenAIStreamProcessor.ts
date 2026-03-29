@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
-import {
-  type IContent,
-  type TextBlock,
-  type ToolCallBlock,
-  type ThinkingBlock,
+import type OpenAI from 'openai';
+import type {
+  IContent,
+  TextBlock,
+  ToolCallBlock,
+  ThinkingBlock,
 } from '../../services/history/IContent.js';
-import { type DebugLogger } from '../../debug/index.js';
-import { type ToolCallPipeline } from './ToolCallPipeline.js';
-import { type GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
+import type { DebugLogger } from '../../debug/index.js';
+import type { ToolCallPipeline } from './ToolCallPipeline.js';
+import type { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
@@ -40,7 +40,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import { type ToolFormat } from '../../tools/IToolFormatter.js';
+import type { ToolFormat } from '../../tools/IToolFormatter.js';
 
 export interface StreamProcessorDeps {
   toolCallPipeline: ToolCallPipeline;

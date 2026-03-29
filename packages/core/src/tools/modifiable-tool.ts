@@ -11,10 +11,10 @@ import fs from 'fs';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { isNodeError } from '../utils/errors.js';
-import {
-  type AnyDeclarativeTool,
+import type {
+  AnyDeclarativeTool,
   DeclarativeTool,
-  type ToolResult,
+  ToolResult,
 } from './tools.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 

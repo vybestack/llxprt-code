@@ -18,7 +18,7 @@ import {
   uiTelemetryService,
   SessionMetrics,
   ModelMetrics,
-  ToolCallStats,
+  type ToolCallStats,
 } from '@vybestack/llxprt-code-core';
 
 export enum ToolCallDecision {

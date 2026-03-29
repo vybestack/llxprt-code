@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { ITool } from '../ITool.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { ITool } from '../ITool.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import {
   createProviderWithRuntime,

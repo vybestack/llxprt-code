@@ -12,11 +12,11 @@ import React, {
   useRef,
   useReducer,
 } from 'react';
-import { HistoryItem, MessageType } from '../types.js';
+import { type HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
-  Config,
+  type Config,
   getErrorMessage,
   loadCoreMemoryContent,
   debugLogger,
@@ -27,13 +27,16 @@ import {
   SessionStateProvider,
   useSessionState,
 } from '../contexts/SessionStateContext.js';
-import { SessionState, SessionAction } from '../reducers/sessionReducer.js';
+import type {
+  SessionState,
+  SessionAction,
+} from '../reducers/sessionReducer.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import {
   appReducer,
   initialAppState,
-  AppAction,
-  AppState,
+  type AppAction,
+  type AppState,
 } from '../reducers/appReducer.js';
 
 // Context type

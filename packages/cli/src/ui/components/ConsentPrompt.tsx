@@ -5,7 +5,7 @@
  */
 
 import { Box } from 'ink';
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { theme } from '../semantic-colors.js';
 import { MarkdownDisplay } from '../utils/MarkdownDisplay.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';

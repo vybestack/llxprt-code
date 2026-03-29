@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { partToString } from './partUtils.js';
 import { getResponseText } from './generateContentResponseUtilities.js';
-import { GenerateContentResponse, Part } from '@google/genai';
+import type { GenerateContentResponse, Part } from '@google/genai';
 
 const mockResponse = (
   parts?: Array<{ text?: string; functionCall?: unknown }>,

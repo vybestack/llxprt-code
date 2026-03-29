@@ -6,9 +6,9 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Config,
-  GeminiClient,
-  Todo,
+  type Config,
+  type GeminiClient,
+  type Todo,
   ApprovalMode,
 } from '@vybestack/llxprt-code-core';
 import { useTodoContext } from '../contexts/TodoContext.js';

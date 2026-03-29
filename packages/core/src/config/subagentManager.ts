@@ -6,9 +6,9 @@
 
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
-import { type SubagentConfig } from '../config/types.js';
-import { ProfileManager } from './profileManager.js';
-import { type NodeJSError } from '../interfaces/nodejs-error.interface.js';
+import type { SubagentConfig } from '../config/types.js';
+import type { ProfileManager } from './profileManager.js';
+import type { NodeJSError } from '../interfaces/nodejs-error.interface.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 // Error message templates for consistency

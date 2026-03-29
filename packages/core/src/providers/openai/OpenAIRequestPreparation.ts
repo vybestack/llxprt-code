@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
-import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { type DebugLogger } from '../../debug/index.js';
+import type OpenAI from 'openai';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { DebugLogger } from '../../debug/index.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
@@ -24,7 +24,7 @@ import { resolveUserMemory } from '../utils/userMemory.js';
 import { detectToolFormat } from '../utils/toolFormatDetection.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
-import { type Config } from '../../config/config.js';
+import type { Config } from '../../config/config.js';
 
 export interface RequestContext {
   model: string;

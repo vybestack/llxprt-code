@@ -29,7 +29,7 @@ import {
   MessageBusType,
   type UpdatePolicy,
 } from '../confirmation-bus/types.js';
-import { type MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 

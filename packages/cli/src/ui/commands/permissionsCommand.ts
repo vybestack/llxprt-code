@@ -7,9 +7,9 @@
 import * as path from 'node:path';
 import {
   CommandKind,
-  OpenDialogActionReturn,
-  SlashCommand,
-  MessageActionReturn,
+  type OpenDialogActionReturn,
+  type SlashCommand,
+  type MessageActionReturn,
 } from './types.js';
 import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
 

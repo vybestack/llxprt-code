@@ -8,9 +8,9 @@ import {
 } from '../utils/toolResponsePayload.js';
 
 import { DebugLogger } from '../../debug/index.js';
-import { type IContent } from '../../services/history/IContent.js';
-import { type ITool } from '../ITool.js';
-import { type ResponsesTool } from '../../tools/IToolFormatter.js';
+import type { IContent } from '../../services/history/IContent.js';
+import type { ITool } from '../ITool.js';
+import type { ResponsesTool } from '../../tools/IToolFormatter.js';
 import {
   ensureJsonSafe,
   hasUnicodeReplacements,

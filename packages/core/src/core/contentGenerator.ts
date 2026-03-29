@@ -4,20 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   CountTokensResponse,
   GenerateContentResponse,
-  type GenerateContentParameters,
-  type CountTokensParameters,
+  GenerateContentParameters,
+  CountTokensParameters,
   EmbedContentResponse,
-  type EmbedContentParameters,
+  EmbedContentParameters,
 } from '@google/genai';
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
-import { UserTierId } from '../code_assist/types.js';
+import type { UserTierId } from '../code_assist/types.js';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 import { InstallationManager } from '../utils/installationManager.js';
 

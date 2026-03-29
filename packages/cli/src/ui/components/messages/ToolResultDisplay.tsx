@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { Colors } from '../../colors.js';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { AnsiOutputText } from '../AnsiOutput.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
-import { type AnsiOutput } from '@vybestack/llxprt-code-core';
+import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { STATUS_INDICATOR_WIDTH } from './ToolShared.js';
 

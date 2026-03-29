@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo, useEffect, useState } from 'react';
-import { type PartListUnion } from '@google/genai';
+import type { PartListUnion } from '@google/genai';
 import process from 'node:process';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -45,11 +45,11 @@ import type {
 } from '../types.js';
 import { MessageType } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import {
-  type CommandContext,
-  type SlashCommand,
-  type SubagentDialogData,
-  type ModelsDialogData,
+import type {
+  CommandContext,
+  SlashCommand,
+  SubagentDialogData,
+  ModelsDialogData,
 } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
@@ -60,7 +60,7 @@ import type {
   ExtensionUpdateState,
   ExtensionUpdateAction,
 } from '../state/extensions.js';
-import { SubagentView } from '../components/SubagentManagement/types.js';
+import type { SubagentView } from '../components/SubagentManagement/types.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 const confirmationLogger = new DebugLogger('llxprt:ui:selection');

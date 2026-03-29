@@ -11,7 +11,7 @@
  * Depends on runtimeAccessors.ts for runtime services access.
  */
 
-import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import { type Config, DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../providers/providerAliases.js';
 import { getCliRuntimeServices } from './runtimeAccessors.js';
 

@@ -35,26 +35,26 @@ import type {
 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
-import { type IContent } from '../../services/history/IContent.js';
-import { type IProviderConfig } from '../types/IProviderConfig.js';
+import type { IContent } from '../../services/history/IContent.js';
+import type { IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { type OAuthManager } from '../../auth/precedence.js';
+import type { OAuthManager } from '../../auth/precedence.js';
 import {
   convertToolsToOpenAIVercel,
   type OpenAIVercelTool,
 } from './schemaConverter.js';
-import {
-  type ToolCallBlock,
-  type TextBlock,
-  type ThinkingBlock,
+import type {
+  ToolCallBlock,
+  TextBlock,
+  ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
-import { type IModel } from '../IModel.js';
-import { type IProvider } from '../IProvider.js';
+import type { IModel } from '../IModel.js';
+import type { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';

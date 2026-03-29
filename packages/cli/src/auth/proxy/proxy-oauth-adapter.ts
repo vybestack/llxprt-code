@@ -5,9 +5,9 @@
  * @pseudocode analysis/pseudocode/009-proxy-oauth-adapter.md
  */
 
-import {
+import type {
   ProxySocketClient,
-  type OAuthToken,
+  OAuthToken,
 } from '@vybestack/llxprt-code-core';
 
 type FlowType = 'pkce_redirect' | 'device_code' | 'browser_redirect';

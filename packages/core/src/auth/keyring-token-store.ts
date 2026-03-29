@@ -23,7 +23,7 @@ import {
   type OAuthToken,
   type BucketStats,
 } from './types.js';
-import { type TokenStore } from './token-store.js';
+import type { TokenStore } from './token-store.js';
 import { SecureStore, SecureStoreError } from '../storage/secure-store.js';
 import { DebugLogger } from '../debug/index.js';
 

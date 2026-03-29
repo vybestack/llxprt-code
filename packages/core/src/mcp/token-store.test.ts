@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   BaseTokenStore,
-  MCPOAuthToken,
-  MCPOAuthCredentials,
+  type MCPOAuthToken,
+  type MCPOAuthCredentials,
 } from './token-store.js';
 
 // Test implementation of BaseTokenStore for testing protected methods

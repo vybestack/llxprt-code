@@ -5,7 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { type Todo } from './todo-schemas.js';
+import type { Todo } from './todo-schemas.js';
 
 export interface TodoUpdateEvent {
   sessionId: string;

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ToolRenderSuppressionHook } from '../hooks/tool-render-suppression-hook.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
-import { Config, ConfigParameters } from '../config/config.js';
+import { Config, type ConfigParameters } from '../config/config.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 // Mock Config class

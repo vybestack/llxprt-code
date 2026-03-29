@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ConfigurationManager } from './ConfigurationManager.js';
-import { DebugSettings } from './types.js';
+import type { DebugSettings } from './types.js';
 
 describe('ConfigurationManager', () => {
   beforeEach(() => {

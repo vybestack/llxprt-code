@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ApplyPatchTool, classifyPatchOperations } from '../apply-patch.js';
-import { ApprovalMode, Config } from '../../config/config.js';
+import { ApprovalMode, type Config } from '../../config/config.js';
 import { createMockWorkspaceContext } from '../../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../../services/fileSystemService.js';
 import * as Diff from 'diff';

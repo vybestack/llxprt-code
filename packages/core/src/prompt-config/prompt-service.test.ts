@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptService, type PromptServiceConfig } from './prompt-service.js';
 import type { PromptContext } from './types.js';
-import { PromptInstaller, type DefaultsMap } from './prompt-installer.js';
+import type { PromptInstaller, DefaultsMap } from './prompt-installer.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';

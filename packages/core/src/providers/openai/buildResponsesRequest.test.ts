@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildResponsesRequest,
-  ResponsesRequestParams,
-  ResponsesRequest,
+  type ResponsesRequestParams,
+  type ResponsesRequest,
 } from './buildResponsesRequest.js';
 
 describe('buildResponsesRequest', () => {

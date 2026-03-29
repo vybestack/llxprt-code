@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import EventEmitter from 'events';
 import {
   ShellExecutionService,
-  ShellOutputEvent,
+  type ShellOutputEvent,
 } from './shellExecutionService.js';
 
 // Hoisted Mocks

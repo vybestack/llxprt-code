@@ -7,24 +7,24 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Buffer } from 'buffer';
-import { PartListUnion, PartUnion } from '@google/genai';
+import type { PartListUnion, PartUnion } from '@google/genai';
 import {
-  AnyToolInvocation,
-  Config,
+  type AnyToolInvocation,
+  type Config,
   DEFAULT_AGENT_ID,
   getErrorMessage,
   isNodeError,
   unescapePath,
   debugLogger,
   validatePathWithinWorkspace,
+  DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
-import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import {
-  HistoryItem,
-  IndividualToolCallDisplay,
+  type HistoryItem,
+  type IndividualToolCallDisplay,
   ToolCallStatus,
 } from '../types.js';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 
 // Detect if running in PowerShell to handle @ symbol conflicts
 // PowerShell's IntelliSense treats @ as hashtable start and causes severe lag

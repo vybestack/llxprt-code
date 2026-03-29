@@ -10,8 +10,8 @@ import * as path from 'path';
 import { tmpdir } from 'os';
 import {
   Config,
-  ConfigParameters,
-  ContentGeneratorConfig,
+  type ConfigParameters,
+  type ContentGeneratorConfig,
   DEFAULT_FILE_FILTERING_OPTIONS,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';

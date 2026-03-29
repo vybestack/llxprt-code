@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProfileManager } from '../config/profileManager.js';
-import { SettingsService } from '../settings/SettingsService.js';
-import { Profile } from '../types/modelParams.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import type { Profile } from '../types/modelParams.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import fs from 'fs/promises';
 import os from 'os';

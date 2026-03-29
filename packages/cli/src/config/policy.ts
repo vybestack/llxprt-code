@@ -13,7 +13,7 @@ import {
   createPolicyEngineConfig as createCorePolicyEngineConfig,
   createPolicyUpdater as createCorePolicyUpdater,
 } from '@vybestack/llxprt-code-core';
-import { type Settings } from './settings.js';
+import type { Settings } from './settings.js';
 
 export async function createPolicyEngineConfig(
   settings: Settings,

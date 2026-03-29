@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TodoRead } from './todo-read.js';
 import { TodoStore } from './todo-store.js';
-import { Todo } from './todo-schemas.js';
+import type { Todo } from './todo-schemas.js';
 
 // Mock TodoStore
 vi.mock('./todo-store.js');

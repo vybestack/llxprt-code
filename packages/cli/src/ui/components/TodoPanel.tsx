@@ -9,7 +9,7 @@ import { Box, Text } from 'ink';
 import { useTodoContext } from '../contexts/TodoContext.js';
 import { useToolCallContext } from '../contexts/ToolCallContext.js';
 import { SemanticColors } from '../colors.js';
-import { Todo as CoreTodo, Subtask } from '@vybestack/llxprt-code-core';
+import type { Todo as CoreTodo, Subtask } from '@vybestack/llxprt-code-core';
 import { truncateEnd } from '../utils/responsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 

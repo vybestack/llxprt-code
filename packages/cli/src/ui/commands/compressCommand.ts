@@ -5,8 +5,8 @@
  */
 
 import { CompressionStatus } from '@vybestack/llxprt-code-core';
-import { HistoryItemCompression, MessageType } from '../types.js';
-import { CommandKind, SlashCommand } from './types.js';
+import { type HistoryItemCompression, MessageType } from '../types.js';
+import { CommandKind, type SlashCommand } from './types.js';
 
 export const compressCommand: SlashCommand = {
   name: 'compress',

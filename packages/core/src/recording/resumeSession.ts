@@ -24,8 +24,8 @@
  */
 
 import * as path from 'node:path';
-import { type IContent } from '../services/history/IContent.js';
-import { type SessionMetadata } from './types.js';
+import type { IContent } from '../services/history/IContent.js';
+import type { SessionMetadata } from './types.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';

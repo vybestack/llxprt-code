@@ -17,7 +17,7 @@ import { makeFakeConfig } from '../test-utils/config.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import { type z } from 'zod';
+import type { z } from 'zod';
 
 vi.mock('./executor.js');
 

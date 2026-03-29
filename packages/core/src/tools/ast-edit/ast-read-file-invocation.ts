@@ -7,21 +7,17 @@
  */
 
 import * as path from 'path';
-import {
-  type ToolInvocation,
-  type ToolLocation,
-  type ToolResult,
-} from '../tools.js';
+import type { ToolInvocation, ToolLocation, ToolResult } from '../tools.js';
 import { ToolErrorType } from '../tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
 import { isNodeError } from '../../utils/errors.js';
 import { countLines } from '../../utils/fileUtils.js';
-import { Config } from '../../config/config.js';
+import type { Config } from '../../config/config.js';
 import type { AnsiOutput } from '../../utils/terminalSerializer.js';
 
 import type { ASTReadFileToolParams } from './types.js';
 import { ASTConfig } from './ast-config.js';
-import { ASTContextCollector } from './context-collector.js';
+import type { ASTContextCollector } from './context-collector.js';
 
 export class ASTReadFileToolInvocation
   implements ToolInvocation<ASTReadFileToolParams, ToolResult>

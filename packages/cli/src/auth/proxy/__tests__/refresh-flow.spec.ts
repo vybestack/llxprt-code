@@ -17,10 +17,8 @@ import type {
   TokenStore,
   OAuthToken,
   BucketStats,
-} from '@vybestack/llxprt-code-core';
-import {
   ProxySocketClient,
-  ProviderKeyStorage,
+  type ProviderKeyStorage,
 } from '@vybestack/llxprt-code-core';
 import {
   CredentialProxyServer,

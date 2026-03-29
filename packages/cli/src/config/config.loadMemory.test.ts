@@ -15,7 +15,7 @@ import {
   type SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
-import { type CliArgs } from './cliArgParser.js';
+import type { CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {

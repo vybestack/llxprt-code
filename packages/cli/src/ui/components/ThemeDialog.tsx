@@ -15,7 +15,7 @@ import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
 import type { RenderItemContext } from './shared/BaseSelectionList.js';
 import { DiffRenderer } from './messages/DiffRenderer.js';
 import { colorizeCode } from '../utils/CodeColorizer.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import {
   getScopeItems,
   getScopeMessageForSetting,

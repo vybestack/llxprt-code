@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
-import { IMessage } from '../IMessage.js';
-import { ITool } from '../ITool.js';
+import type { IMessage } from '../IMessage.js';
+import type { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';

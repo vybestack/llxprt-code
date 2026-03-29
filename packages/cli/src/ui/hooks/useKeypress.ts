@@ -7,7 +7,7 @@
 import { useEffect } from 'react';
 import {
   useKeypressContext,
-  KeypressHandler,
+  type KeypressHandler,
   Key,
 } from '../contexts/KeypressContext.js';
 

@@ -20,16 +20,16 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
-  Theme,
-  ThemeType,
-  CustomTheme,
+  type Theme,
+  type ThemeType,
+  type CustomTheme,
   createCustomTheme,
   validateCustomTheme,
 } from './theme.js';
 import { ANSI } from './ansi.js';
 import { ANSILight } from './ansi-light.js';
 import { NoColorTheme } from './no-color.js';
-import { SemanticColors } from './semantic-tokens.js';
+import type { SemanticColors } from './semantic-tokens.js';
 import { resolveSemanticColors } from './semantic-resolver.js';
 import process from 'node:process';
 import { debugLogger } from '@vybestack/llxprt-code-core';

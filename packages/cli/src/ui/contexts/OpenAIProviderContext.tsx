@@ -12,7 +12,7 @@ import React, {
   useEffect,
   useMemo,
 } from 'react';
-import {
+import type {
   Config,
   ProviderMessage as Message,
   ConversationCache,

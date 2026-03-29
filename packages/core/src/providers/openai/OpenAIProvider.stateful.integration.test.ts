@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 // ConversationContext is not available in core package
 // import { ConversationContext } from '../../../utils/ConversationContext.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -18,7 +18,7 @@ import {
   createRuntimeConfigStub,
 } from '../../test-utils/runtime.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
-import { SettingsService } from '../../settings/SettingsService.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 
 // This test suite makes live API calls and requires an OpenAI API key.

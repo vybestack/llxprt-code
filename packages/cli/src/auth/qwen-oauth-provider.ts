@@ -11,12 +11,12 @@
 
 import type { OAuthProvider } from './types.js';
 import {
-  OAuthToken,
+  type OAuthToken,
   QwenDeviceFlow,
-  DeviceFlowConfig,
+  type DeviceFlowConfig,
   openBrowserSecurely,
   shouldLaunchBrowser,
-  TokenStore,
+  type TokenStore,
   OAuthError,
   OAuthErrorFactory,
   GracefulErrorHandler,
@@ -25,7 +25,7 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
-import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
+import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
 import { InitializationGuard, isTokenExpired } from './oauth-provider-base.js';
 

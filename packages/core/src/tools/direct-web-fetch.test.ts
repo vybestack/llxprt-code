@@ -7,10 +7,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   DirectWebFetchTool,
-  DirectWebFetchToolParams,
+  type DirectWebFetchToolParams,
 } from './direct-web-fetch.js';
-import { Config } from '../config/config.js';
-import { type ToolResult as _ToolResult } from './tools.js';
+import type { Config } from '../config/config.js';
+import type { ToolResult as _ToolResult } from './tools.js';
 import fetch from 'node-fetch';
 
 vi.mock('node-fetch');

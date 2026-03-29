@@ -10,9 +10,9 @@ import * as AstEditModule from './ast-edit.js';
 import {
   ASTEditTool,
   ASTReadFileTool,
-  EnhancedDeclaration,
+  type EnhancedDeclaration,
 } from './ast-edit.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 import { prioritizeSymbolsFromDeclarations } from './ast-edit/context-collector.js';
 

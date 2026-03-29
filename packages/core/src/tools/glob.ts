@@ -10,9 +10,9 @@ import { glob, escape } from 'glob';
 import type { ToolInvocation, ToolResult } from './tools.js';
 import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
 import { shortenPath, makeRelative } from '../utils/paths.js';
-import { type Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 

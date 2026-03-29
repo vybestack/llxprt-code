@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   OAuthUtils,
-  OAuthAuthorizationServerMetadata,
-  OAuthProtectedResourceMetadata,
+  type OAuthAuthorizationServerMetadata,
+  type OAuthProtectedResourceMetadata,
 } from './oauth-utils.js';
 
 // Mock fetch globally

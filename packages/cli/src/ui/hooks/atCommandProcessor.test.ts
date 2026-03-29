@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
 import {
-  Config,
+  type Config,
   FileDiscoveryService,
   GlobTool,
   type MessageBus,
@@ -20,7 +20,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as os from 'os';
 import { ToolCallStatus } from '../types.js';
-import { type UseHistoryManagerReturn as _UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { UseHistoryManagerReturn as _UseHistoryManagerReturn } from './useHistoryManager.js';
 import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
 

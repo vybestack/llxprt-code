@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { type Todo } from '@vybestack/llxprt-code-core';
+import type { Todo } from '@vybestack/llxprt-code-core';
 import { shouldClearTodos } from './useTodoPausePreserver.js';
 
 /**

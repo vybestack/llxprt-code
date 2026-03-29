@@ -13,7 +13,7 @@
  * @pseudocode analysis/pseudocode/002-token-sanitization-merge.md
  */
 
-import { type OAuthToken } from './types.js';
+import type { OAuthToken } from './types.js';
 
 export type SanitizedOAuthToken = Omit<OAuthToken, 'refresh_token'> &
   Record<string, unknown>;

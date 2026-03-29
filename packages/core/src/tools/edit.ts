@@ -25,12 +25,12 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
-import { Config, ApprovalMode } from '../config/config.js';
+import { type Config, ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
-import {
-  type ModifiableDeclarativeTool,
-  type ModifyContext,
+import type {
+  ModifiableDeclarativeTool,
+  ModifyContext,
 } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';

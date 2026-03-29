@@ -8,7 +8,7 @@ import {
   IdeDiffAcceptedNotificationSchema,
   IdeDiffClosedNotificationSchema,
 } from './ide-schemas.js';
-import { type JSONRPCNotification } from '@modelcontextprotocol/sdk/types.js';
+import type { JSONRPCNotification } from '@modelcontextprotocol/sdk/types.js';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { DIFF_SCHEME } from './extension.js';

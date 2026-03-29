@@ -19,30 +19,30 @@
  * @requirement REQ-INT-001.1
  */
 
-import OpenAI from 'openai';
-import { type IContent } from '../../services/history/IContent.js';
+import type OpenAI from 'openai';
+import type { IContent } from '../../services/history/IContent.js';
 
-import { type IProviderConfig } from '../types/IProviderConfig.js';
-import { type ToolFormat } from '../../tools/IToolFormatter.js';
+import type { IProviderConfig } from '../types/IProviderConfig.js';
+import type { ToolFormat } from '../../tools/IToolFormatter.js';
 
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { type OAuthManager } from '../../auth/precedence.js';
+import type { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
-import { type TextBlock } from '../../services/history/IContent.js';
-import { type IModel } from '../IModel.js';
-import { type IProvider } from '../IProvider.js';
+import type { TextBlock } from '../../services/history/IContent.js';
+import type { IModel } from '../IModel.js';
+import type { IProvider } from '../IProvider.js';
 import { isNetworkTransientError } from '../../utils/retry.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 
 import { ToolCallPipeline } from './ToolCallPipeline.js';
 
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
-import { type DumpMode } from '../utils/dumpContext.js';
+import type { DumpMode } from '../utils/dumpContext.js';
 
 import { detectToolFormat } from '../utils/toolFormatDetection.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';

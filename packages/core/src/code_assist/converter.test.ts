@@ -8,16 +8,16 @@ import { describe, it, expect } from 'vitest';
 import {
   toGenerateContentRequest,
   fromGenerateContentResponse,
-  CaGenerateContentResponse,
+  type CaGenerateContentResponse,
   toContents,
 } from './converter.js';
 import {
-  ContentListUnion,
-  GenerateContentParameters,
+  type ContentListUnion,
+  type GenerateContentParameters,
   GenerateContentResponse,
   FinishReason,
   BlockedReason,
-  Part,
+  type Part,
 } from '@google/genai';
 
 describe('converter', () => {

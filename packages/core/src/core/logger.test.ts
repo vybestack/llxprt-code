@@ -16,14 +16,14 @@ import {
 import {
   Logger,
   MessageSenderType,
-  LogEntry,
+  type LogEntry,
   encodeTagName,
   decodeTagName,
 } from './logger.js';
 import { Storage } from '../config/storage.js';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
-import { Content } from '@google/genai';
+import type { Content } from '@google/genai';
 import { debugLogger } from '../utils/debugLogger.js';
 
 import crypto from 'node:crypto';

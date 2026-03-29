@@ -17,12 +17,12 @@
 
 import { useRef, useCallback, useEffect } from 'react';
 import {
-  GeminiClient,
+  type GeminiClient,
   DEFAULT_AGENT_ID,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import type { Part, PartListUnion } from '@google/genai';
-import {
+import type {
   TrackedToolCall,
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,

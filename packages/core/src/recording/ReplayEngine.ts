@@ -28,18 +28,18 @@
 
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
-import {
-  type ReplayResult,
-  type SessionMetadata,
-  type SessionStartPayload,
-  type SessionEventPayload,
-  type ContentPayload,
-  type CompressedPayload,
-  type RewindPayload,
-  type ProviderSwitchPayload,
-  type DirectoriesChangedPayload,
+import type {
+  ReplayResult,
+  SessionMetadata,
+  SessionStartPayload,
+  SessionEventPayload,
+  ContentPayload,
+  CompressedPayload,
+  RewindPayload,
+  ProviderSwitchPayload,
+  DirectoriesChangedPayload,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 
 /**
  * Replay a session from a JSONL file, reconstructing conversation history

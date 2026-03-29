@@ -5,8 +5,8 @@
  */
 
 import { themeManager } from './themes/theme-manager.js';
-import { ColorsTheme } from './themes/theme.js';
-import { SemanticColors as SemanticColorsInterface } from './themes/semantic-tokens.js';
+import type { ColorsTheme } from './themes/theme.js';
+import type { SemanticColors as SemanticColorsInterface } from './themes/semantic-tokens.js';
 import chalk from 'chalk';
 
 export const Colors: ColorsTheme = {

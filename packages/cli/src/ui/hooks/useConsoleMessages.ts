@@ -11,7 +11,7 @@ import {
   useRef,
   useTransition,
 } from 'react';
-import { ConsoleMessageItem } from '../types.js';
+import type { ConsoleMessageItem } from '../types.js';
 
 // Maximum console messages to keep in memory to prevent unbounded growth
 const MAX_CONSOLE_MESSAGES = 1000;

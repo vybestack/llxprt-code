@@ -18,7 +18,7 @@ import { Config } from './config.js';
 import type { LspConfig } from '../lsp/types.js';
 import { initializeTestConfig } from '../test-utils/config.js';
 
-import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
+import type { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import * as lspServiceClientModule from '../lsp/lsp-service-client.js';
 import { debugLogger } from '../utils/debugLogger.js';
 

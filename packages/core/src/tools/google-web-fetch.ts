@@ -17,7 +17,7 @@ import { GOOGLE_WEB_FETCH_TOOL } from './tool-names.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { ApprovalMode, Config } from '../config/config.js';
+import { ApprovalMode, type Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';

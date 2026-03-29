@@ -27,7 +27,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   TodoStore,
-  Todo,
+  type Todo,
   buildContinuationDirective,
 } from '@vybestack/llxprt-code-core';
 

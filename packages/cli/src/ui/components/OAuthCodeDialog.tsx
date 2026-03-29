@@ -13,7 +13,7 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { useKeypress, Key } from '../hooks/useKeypress.js';
+import { useKeypress, type Key } from '../hooks/useKeypress.js';
 
 interface OAuthCodeDialogProps {
   provider: string;

@@ -5,14 +5,14 @@
  */
 
 import {
-  Config,
+  type Config,
   GeminiClient,
   createRuntimeStateFromConfig,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
   FunctionCallingConfigMode,
-  SendMessageParameters,
+  type SendMessageParameters,
 } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 

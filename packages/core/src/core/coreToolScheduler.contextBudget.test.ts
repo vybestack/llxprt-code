@@ -12,12 +12,12 @@ import {
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolInvocation,
-  ToolResult,
-  Config,
+  type ToolInvocation,
+  type ToolResult,
+  type Config,
   Kind,
   ApprovalMode,
-  ToolRegistry,
+  type ToolRegistry,
 } from '../index.js';
 import { PolicyDecision } from '../policy/types.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';

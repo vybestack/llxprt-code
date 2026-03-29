@@ -6,10 +6,10 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { type Content, type Part } from '@google/genai';
+import type { Content, Part } from '@google/genai';
 import { ensureLlxprtDirExists } from '../utils/paths.js';
-import { EmojiFilter } from '../filters/EmojiFilter.js';
-import { Storage } from '../config/storage.js';
+import type { EmojiFilter } from '../filters/EmojiFilter.js';
+import type { Storage } from '../config/storage.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const LOG_FILE_NAME = 'logs.json';

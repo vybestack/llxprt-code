@@ -14,7 +14,7 @@ import type {
   AnyDeclarativeTool,
   SettingsService,
 } from '@vybestack/llxprt-code-core';
-import { type CommandArgumentSchema } from './schema/types.js';
+import type { CommandArgumentSchema } from './schema/types.js';
 
 const toolsSchema: CommandArgumentSchema = [
   {

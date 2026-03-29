@@ -13,7 +13,7 @@ import {
   type ToolResult,
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import { type FunctionDeclaration } from '@google/genai';
+import type { FunctionDeclaration } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import process from 'node:process';
@@ -21,9 +21,9 @@ import { Storage } from '../config/storage.js';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { tildeifyPath } from '../utils/paths.js';
-import {
-  type ModifiableDeclarativeTool,
-  type ModifyContext,
+import type {
+  ModifiableDeclarativeTool,
+  ModifyContext,
 } from './modifiable-tool.js';
 import { ToolErrorType } from './tool-error.js';
 import { DebugLogger } from '../debug/DebugLogger.js';

@@ -5,14 +5,14 @@
  */
 
 import { EventEmitter } from 'events';
-import {
-  type ISettingsService,
-  type GlobalSettings,
-  type ProviderSettings,
-  type SettingsChangeEvent,
-  type EventListener,
-  type EventUnsubscribe,
-  type DiagnosticsInfo,
+import type {
+  ISettingsService,
+  GlobalSettings,
+  ProviderSettings,
+  SettingsChangeEvent,
+  EventListener,
+  EventUnsubscribe,
+  DiagnosticsInfo,
 } from './types.js';
 
 /**

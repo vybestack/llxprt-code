@@ -5,8 +5,8 @@
  */
 
 import {
-  Config,
-  ToolCallRequestInfo,
+  type Config,
+  type ToolCallRequestInfo,
   executeToolCall,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
@@ -27,7 +27,7 @@ import {
   type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { Part } from '@google/genai';
+import type { Part } from '@google/genai';
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
 import type { LoadedSettings } from './config/settings.js';

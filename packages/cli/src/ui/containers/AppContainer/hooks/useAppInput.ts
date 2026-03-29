@@ -17,10 +17,13 @@ import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
 import { useTodoPausePreserver } from '../../../hooks/useTodoPausePreserver.js';
 import { StreamingState, type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
-import { isEditorAvailable, EditorType } from '@vybestack/llxprt-code-core';
+import {
+  isEditorAvailable,
+  type EditorType,
+} from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
-import { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
+import type { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';

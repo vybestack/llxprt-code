@@ -39,13 +39,13 @@ vi.mock('./clientToolGovernance.js', () => ({
 }));
 
 import {
-  Chat,
+  type Chat,
   Content,
-  EmbedContentResponse,
-  GenerateContentResponse,
+  type EmbedContentResponse,
+  type GenerateContentResponse,
   GoogleGenAI,
-  Part,
-  PartListUnion,
+  type Part,
+  type PartListUnion,
 } from '@google/genai';
 import {
   findCompressSplitPoint,
@@ -53,17 +53,17 @@ import {
   isThinkingSupported,
 } from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
-import {
+import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from './contentGenerator.js';
 import type { Mock } from 'vitest';
 import type { ConfigParameters } from '../config/config.js';
-import { GeminiChat } from './geminiChat.js';
+import type { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { GeminiEventType, Turn } from './turn.js';
-import { getCoreSystemPrompt as _getCoreSystemPrompt } from './prompts.js';
+import type { getCoreSystemPrompt as _getCoreSystemPrompt } from './prompts.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';

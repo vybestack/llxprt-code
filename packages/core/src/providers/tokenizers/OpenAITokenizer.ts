@@ -16,7 +16,7 @@
 
 import { encoding_for_model, type TiktokenModel } from '@dqbd/tiktoken';
 import { DebugLogger } from '../../debug/DebugLogger.js';
-import { type ITokenizer } from './ITokenizer.js';
+import type { ITokenizer } from './ITokenizer.js';
 import { debugLogger } from '../../utils/debugLogger.js';
 
 export class OpenAITokenizer implements ITokenizer {

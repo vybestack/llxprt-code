@@ -49,11 +49,11 @@ import {
   useShellCommandProcessor,
   OUTPUT_UPDATE_INTERVAL_MS,
 } from './shellCommandProcessor.js';
-import {
-  type Config,
-  type GeminiClient,
-  type ShellExecutionResult,
-  type ShellOutputEvent,
+import type {
+  Config,
+  GeminiClient,
+  ShellExecutionResult,
+  ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 // import os from 'os'; // Not needed - mocked above

@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import {
   loadTrustedFolders,
   TrustLevel,
-  LoadedTrustedFolders,
+  type LoadedTrustedFolders,
 } from '../../config/trustedFolders.js';
 import { useSettings } from '../contexts/SettingsContext.js';
 import { getIdeTrust } from '@vybestack/llxprt-code-core';

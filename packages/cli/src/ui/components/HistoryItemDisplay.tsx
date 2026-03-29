@@ -28,7 +28,7 @@ import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import { LBStatsDisplay } from './LBStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import { Help } from './Help.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { SlashCommand } from '../commands/types.js';
 import { ChatList } from './views/ChatList.js';
 import { ExtensionsList } from './views/ExtensionsList.js';

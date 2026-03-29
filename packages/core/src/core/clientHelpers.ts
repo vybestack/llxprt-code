@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type PartListUnion, type Content } from '@google/genai';
+import type { PartListUnion, Content } from '@google/genai';
 
 export function isThinkingSupported(model: string) {
   return !model.startsWith('gemini-2.0');

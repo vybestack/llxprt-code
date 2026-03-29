@@ -11,7 +11,7 @@
  */
 
 import {
-  BucketFailoverHandler,
+  type BucketFailoverHandler,
   DebugLogger,
   type FailoverContext,
   type BucketFailureReason,

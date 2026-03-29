@@ -10,9 +10,9 @@ import {
   DEFAULT_AGENT_ID,
   type MessageBus,
 } from '../index.js';
-import { type Part } from '@google/genai';
-import { type Config } from '../config/config.js';
-import { type CompletedToolCall } from './coreToolScheduler.js';
+import type { Part } from '@google/genai';
+import type { Config } from '../config/config.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.

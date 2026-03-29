@@ -5,18 +5,18 @@
  */
 
 import {
-  Config,
+  type Config,
   getErrorMessage,
   getMCPServerPrompts,
 } from '@vybestack/llxprt-code-core';
 import {
-  CommandContext,
+  type CommandContext,
   CommandKind,
-  SlashCommand,
-  SlashCommandActionReturn,
+  type SlashCommand,
+  type SlashCommandActionReturn,
 } from '../ui/commands/types.js';
-import { ICommandLoader } from './types.js';
-import {
+import type { ICommandLoader } from './types.js';
+import type {
   PromptArgument,
   PromptMessage,
 } from '@modelcontextprotocol/sdk/types.js';

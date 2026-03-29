@@ -7,16 +7,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import { DebugLogger } from '../../debug/index.js';
-import { type IModel } from '../IModel.js';
+import type { IModel } from '../IModel.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { TOOL_PREFIX } from './schemaConverter.js';
-import { type IProviderConfig } from '../types/IProviderConfig.js';
+import type { IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { type OAuthManager } from '../../auth/precedence.js';
+import type { OAuthManager } from '../../auth/precedence.js';
 import type { IContent } from '../../services/history/IContent.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';

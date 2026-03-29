@@ -8,7 +8,7 @@ import type { CommandModule } from 'yargs';
 import { MessageBus, debugLogger } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
-import { type CliArgs } from '../../config/cliArgParser.js';
+import type { CliArgs } from '../../config/cliArgParser.js';
 import {
   loadExtensions,
   ExtensionEnablementManager,

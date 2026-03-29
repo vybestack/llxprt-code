@@ -9,7 +9,7 @@ import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
 import {
-  MCPServerConfig,
+  type MCPServerConfig,
   MCPServerStatus,
   createTransport,
   debugLogger,

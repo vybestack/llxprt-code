@@ -18,11 +18,14 @@ import * as http from 'node:http';
 import * as crypto from 'node:crypto';
 import {
   MCPOAuthProvider,
-  MCPOAuthConfig,
-  OAuthTokenResponse,
-  OAuthClientRegistrationResponse,
+  type MCPOAuthConfig,
+  type OAuthTokenResponse,
+  type OAuthClientRegistrationResponse,
 } from './oauth-provider.js';
-import { MCPOAuthTokenStorage, MCPOAuthToken } from './oauth-token-storage.js';
+import {
+  MCPOAuthTokenStorage,
+  type MCPOAuthToken,
+} from './oauth-token-storage.js';
 import {
   OAuthUtils,
   type OAuthAuthorizationServerMetadata,

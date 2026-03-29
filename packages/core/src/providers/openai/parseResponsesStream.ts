@@ -5,9 +5,9 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-import {
-  type ContentBlock,
-  type IContent,
+import type {
+  ContentBlock,
+  IContent,
 } from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
 import { DebugLogger } from '../../debug/index.js';

@@ -7,9 +7,9 @@
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { AppState } from '../reducers/appReducer.js';
-import { Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
+import type { AppState } from '../reducers/appReducer.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { LoadedSettings } from '../../config/settings.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseLoadProfileDialogParams {

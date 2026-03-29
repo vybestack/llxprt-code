@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { CommandService } from './CommandService.js';
-import { type ICommandLoader } from './types.js';
+import type { ICommandLoader } from './types.js';
 import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 

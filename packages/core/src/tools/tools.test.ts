@@ -9,8 +9,8 @@ import {
   DeclarativeTool,
   hasCycleInSchema,
   Kind,
-  ToolInvocation,
-  ToolResult,
+  type ToolInvocation,
+  type ToolResult,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';

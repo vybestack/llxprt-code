@@ -28,28 +28,28 @@
  * 3. The _handleStreamCompleted call is activated in useGeminiStream
  */
 
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import React, { act, Dispatch, SetStateAction } from 'react';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import React, { act, type Dispatch, type SetStateAction } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useGeminiStream } from './geminiStream/index.js';
 import {
   useReactToolScheduler,
-  TrackedToolCall,
+  type TrackedToolCall,
 } from './useReactToolScheduler.js';
 import {
-  Config,
-  EditorType,
+  type Config,
+  type EditorType,
   GeminiEventType as ServerGeminiEventType,
-  Todo,
+  type Todo,
   ApprovalMode,
 } from '@vybestack/llxprt-code-core';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
-  HistoryItem,
-  SlashCommandProcessorResult,
+  type HistoryItem,
+  type SlashCommandProcessorResult,
   StreamingState,
 } from '../types.js';
-import { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 
 // --- MOCKS ---

@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   CommandKind,
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-  OpenDialogActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type MessageActionReturn,
+  type OpenDialogActionReturn,
 } from './types.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';

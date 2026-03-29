@@ -16,7 +16,7 @@ import {
   readSettingsFile,
   writeSettingsFile,
 } from './test-utils.js';
-import { Config, Profile } from '@vybestack/llxprt-code-core';
+import { Config, type Profile } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../config/settings.js';
 
 describe('API Key Security Integration Tests', () => {

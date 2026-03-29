@@ -21,7 +21,7 @@ import {
   type HistoryItem,
   type HistoryItemWithoutId,
 } from '../../../types.js';
-import { type Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   useTodoContinuation,
   type TodoContinuationHook,

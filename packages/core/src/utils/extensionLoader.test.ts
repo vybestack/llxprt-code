@@ -7,7 +7,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { SimpleExtensionLoader } from './extensionLoader.js';
 import type { Config } from '../config/config.js';
-import { type McpClientManager } from '../tools/mcp-client-manager.js';
+import type { McpClientManager } from '../tools/mcp-client-manager.js';
 
 describe('SimpleExtensionLoader', () => {
   let mockConfig: Config;

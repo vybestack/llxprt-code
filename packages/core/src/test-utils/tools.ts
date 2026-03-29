@@ -16,9 +16,9 @@ import {
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision } from '../policy/types.js';
-import {
-  type ModifiableDeclarativeTool,
-  type ModifyContext,
+import type {
+  ModifiableDeclarativeTool,
+  ModifyContext,
 } from '../tools/modifiable-tool.js';
 
 type ToolSpy = ReturnType<(typeof vi)['fn']>;

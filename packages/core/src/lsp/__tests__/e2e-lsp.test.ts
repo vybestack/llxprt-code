@@ -17,7 +17,7 @@ import { Config } from '../../config/config.js';
 import type { LspConfig } from '../types.js';
 import { initializeTestConfig } from '../../test-utils/config.js';
 
-import { Diagnostic } from '../types.js';
+import type { Diagnostic } from '../types.js';
 import * as lspServiceClientModule from '../lsp-service-client.js';
 import { LspServiceClient } from '../lsp-service-client.js';
 

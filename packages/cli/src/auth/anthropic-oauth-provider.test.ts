@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
-import { TokenStore } from '@vybestack/llxprt-code-core';
+import type { TokenStore } from '@vybestack/llxprt-code-core';
 
 // Mock the ClipboardService class - do this before importing it
 vi.mock('../services/ClipboardService.js', () => ({

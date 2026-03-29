@@ -5,7 +5,7 @@
  */
 
 import { useCallback } from 'react';
-import { type Todo } from '@vybestack/llxprt-code-core';
+import type { Todo } from '@vybestack/llxprt-code-core';
 
 /**
  * @plan PLAN-20260129-TODOPERSIST.P03

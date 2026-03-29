@@ -5,12 +5,12 @@
  */
 
 import {
-  SlashCommand,
-  CommandContext,
-  OpenDialogActionReturn,
-  MessageActionReturn,
+  type SlashCommand,
+  type CommandContext,
+  type OpenDialogActionReturn,
+  type MessageActionReturn,
   CommandKind,
-  ModelsDialogData,
+  type ModelsDialogData,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 

@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PromptCache, CacheEntry } from './prompt-cache.js';
-import { PromptContext } from './types.js';
+import { PromptCache, type CacheEntry } from './prompt-cache.js';
+import type { PromptContext } from './types.js';
 
 describe('PromptCache', () => {
   let cache: PromptCache;

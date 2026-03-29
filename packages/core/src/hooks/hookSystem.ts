@@ -19,12 +19,12 @@ import { HookEventHandler } from './hookEventHandler.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import {
-  type DefaultHookOutput,
-  type SessionStartSource,
-  type SessionEndReason,
-  type PreCompressTrigger,
-  type McpContext,
+import type {
+  DefaultHookOutput,
+  SessionStartSource,
+  SessionEndReason,
+  PreCompressTrigger,
+  McpContext,
   NotificationType,
 } from './types.js';
 

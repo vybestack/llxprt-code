@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   Config,
-  Profile,
+  type Profile,
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-core';

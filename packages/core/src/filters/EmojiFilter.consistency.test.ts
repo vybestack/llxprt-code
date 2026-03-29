@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
+import { EmojiFilter, type FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   const commonEmojis = [

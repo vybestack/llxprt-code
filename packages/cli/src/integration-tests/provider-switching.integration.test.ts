@@ -7,9 +7,9 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Config,
-  IProvider,
-  ProviderManager,
-  SettingsService,
+  type IProvider,
+  type ProviderManager,
+  type SettingsService,
   createProviderRuntimeContext,
   MessageBus,
 } from '@vybestack/llxprt-code-core';

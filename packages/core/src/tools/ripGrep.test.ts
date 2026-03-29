@@ -5,13 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { RipGrepTool, RipGrepToolParams } from './ripGrep.js';
+import { RipGrepTool, type RipGrepToolParams } from './ripGrep.js';
 import path from 'path';
 import fs from 'fs/promises';
 import os, { EOL } from 'os';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 
 // Mock ripgrepPathResolver for testing
 vi.mock('../utils/ripgrepPathResolver.js', () => ({

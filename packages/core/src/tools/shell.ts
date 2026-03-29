@@ -9,7 +9,7 @@ import path from 'path';
 import os, { EOL } from 'os';
 import crypto from 'crypto';
 import { spawnSync } from 'child_process';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import type { AnyToolInvocation } from '../index.js';
 import { initializeParser } from '../utils/shell-parser.js';
 

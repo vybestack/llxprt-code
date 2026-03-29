@@ -11,7 +11,7 @@ import {
   type SettingCollectionDefinition,
   type SettingDefinition,
   SETTINGS_SCHEMA,
-  Settings,
+  type Settings,
   getEnableHooks,
   getEnableHooksUI,
 } from './settingsSchema.js';

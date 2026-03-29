@@ -11,7 +11,7 @@ import {
   type Config,
   type WorkspaceContext,
 } from '@vybestack/llxprt-code-core';
-import { CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';

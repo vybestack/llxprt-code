@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyCliSetArguments,
-  EphemeralSettingTarget,
+  type EphemeralSettingTarget,
 } from './cliEphemeralSettings.js';
 
 class TestTarget implements EphemeralSettingTarget {

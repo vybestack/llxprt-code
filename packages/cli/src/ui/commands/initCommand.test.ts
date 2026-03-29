@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { initCommand } from './initCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { type CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 
 // Mock the 'fs' module
 vi.mock('fs', async () => {

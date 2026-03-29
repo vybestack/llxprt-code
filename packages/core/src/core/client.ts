@@ -4,29 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type GenerateContentConfig,
-  type PartListUnion,
-  type Content,
-  type Tool,
+import type {
+  GenerateContentConfig,
+  PartListUnion,
+  Content,
+  Tool,
   GenerateContentResponse,
-  type SendMessageParameters,
+  SendMessageParameters,
 } from '@google/genai';
 import {
   getDirectoryContextString,
   getEnvironmentContext,
 } from '../utils/environmentContext.js';
-import { Turn, type ServerGeminiStreamEvent } from './turn.js';
+import type { Turn, ServerGeminiStreamEvent } from './turn.js';
 
-import { Config } from '../config/config.js';
-import { UserTierId } from '../code_assist/types.js';
+import type { Config } from '../config/config.js';
+import type { UserTierId } from '../code_assist/types.js';
 import {
   buildToolDeclarationsFromView,
   getEnabledToolNamesForPrompt,
 } from './clientToolGovernance.js';
-import { GeminiChat } from './geminiChat.js';
+import type { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
-import { HistoryService } from '../services/history/HistoryService.js';
+import type { HistoryService } from '../services/history/HistoryService.js';
 
 import {
   type ContentGenerator,
