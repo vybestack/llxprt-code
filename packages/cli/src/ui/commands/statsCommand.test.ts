@@ -899,11 +899,11 @@ describe('statsCommand', () => {
         return undefined;
       });
 
-      // Real-world scenario: alias config uses kebab-case 'base-url'
+      // Use non-detectable provider name to ensure URL-based detection is tested
       const mockProvider = {
         providerConfig: { 'base-url': 'https://api.z.ai/v1' },
       };
-      getActiveProviderNameMock.mockReturnValue('zai');
+      getActiveProviderNameMock.mockReturnValue('custom-zai-alias');
       getCliProviderManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
@@ -957,12 +957,12 @@ describe('statsCommand', () => {
         return undefined;
       });
 
-      // Real-world scenario: alias config uses kebab-case 'base-url' in baseProviderConfig
+      // Use non-detectable provider name to ensure URL-based detection is tested
       const mockProvider = {
         providerConfig: {},
         baseProviderConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
-      getActiveProviderNameMock.mockReturnValue('synthetic');
+      getActiveProviderNameMock.mockReturnValue('my-synthetic-provider');
       getCliProviderManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });

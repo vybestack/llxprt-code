@@ -128,9 +128,10 @@ async function fetchApiKeyProviderQuota(
         ).providerConfig;
         if (providerConfig) {
           const configBaseUrl =
-            providerConfig['base-url'] ??
-            providerConfig.baseUrl ??
-            providerConfig.baseURL;
+            (providerConfig['base-url']?.trim() ||
+              providerConfig.baseUrl?.trim() ||
+              providerConfig.baseURL?.trim()) ||
+            undefined;
           if (configBaseUrl) {
             provider = detectApiKeyProvider(configBaseUrl);
             baseUrlForFetch = configBaseUrl;
@@ -155,9 +156,10 @@ async function fetchApiKeyProviderQuota(
           ).baseProviderConfig;
           if (baseProviderConfig) {
             const baseConfigUrl =
-              baseProviderConfig['base-url'] ??
-              baseProviderConfig.baseURL ??
-              baseProviderConfig.baseUrl;
+              (baseProviderConfig['base-url']?.trim() ||
+                baseProviderConfig.baseURL?.trim() ||
+                baseProviderConfig.baseUrl?.trim()) ||
+              undefined;
             if (baseConfigUrl) {
               provider = detectApiKeyProvider(baseConfigUrl);
               baseUrlForFetch = baseConfigUrl;
