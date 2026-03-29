@@ -17,7 +17,7 @@ describe('settingsCommand', () => {
   });
 
   it('should return a dialog action to open the settings dialog', () => {
-    if (!settingsCommand.action) {
+    if (settingsCommand.action == null) {
       throw new Error('The settings command must have an action.');
     }
     const result = settingsCommand.action(mockContext, '');

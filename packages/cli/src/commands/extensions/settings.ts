@@ -84,7 +84,7 @@ export async function promptForSetting(
 async function handleSet(args: SetArgs): Promise<void> {
   const { extension, extensionConfig } = await getExtensionAndConfig(args.name);
 
-  if (!extension || !extensionConfig) {
+  if (extension == null || extensionConfig == null) {
     return;
   }
 
@@ -109,7 +109,7 @@ async function handleSet(args: SetArgs): Promise<void> {
 async function handleList(args: ListArgs): Promise<void> {
   const { extension, extensionConfig } = await getExtensionAndConfig(args.name);
 
-  if (!extension || !extensionConfig) {
+  if (extension == null || extensionConfig == null) {
     return;
   }
 

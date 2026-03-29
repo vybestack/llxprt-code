@@ -89,7 +89,7 @@ describe('BaseToolInvocation', () => {
     expect(capturedRequest?.serverName).toBe(serverName);
 
     // Simulate response to finish the promise cleanly
-    if (responseHandler && capturedRequest) {
+    if (responseHandler != null && capturedRequest != null) {
       responseHandler({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: capturedRequest.correlationId,
@@ -174,7 +174,7 @@ describe('BaseToolInvocation', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(capturedRequest).toBeDefined();
-    if (responseHandler && capturedRequest) {
+    if (responseHandler != null && capturedRequest != null) {
       responseHandler({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: capturedRequest.correlationId,

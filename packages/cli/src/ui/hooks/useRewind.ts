@@ -31,7 +31,7 @@ export function useRewind(conversation: ConversationRecord) {
   const selectMessage = useCallback(
     (messageId: string) => {
       const msg = conversation.messages.find((m) => m.id === messageId);
-      if (msg) {
+      if (msg != null) {
         setSelectedMessageId(messageId);
         setConfirmationStats(calculateRewindImpact(conversation, msg));
       }

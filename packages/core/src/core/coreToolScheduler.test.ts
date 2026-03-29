@@ -177,7 +177,7 @@ async function waitForStatus(
       | ToolCall[]
       | undefined;
     matchingCall = latestCalls?.find((call) => call.status === status);
-    if (!matchingCall) {
+    if (matchingCall == null) {
       throw new Error(
         `Waiting for status "${status}", latest statuses: ${
           latestCalls?.map((call) => call.status).join(', ') ?? 'none'
@@ -2776,7 +2776,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
               const originalHandler = pendingConfirmations.find(
                 (h) => h === waitingCall.confirmationDetails.onConfirm,
               );
-              if (!originalHandler) {
+              if (originalHandler == null) {
                 pendingConfirmations.push(
                   waitingCall.confirmationDetails.onConfirm,
                 );

@@ -74,7 +74,7 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
   // Set up subscription to tool call updates
   useEffect(() => {
     // Unsubscribe from previous subscription if it exists
-    if (unsubscribeRef.current) {
+    if (unsubscribeRef.current != null) {
       unsubscribeRef.current();
       unsubscribeRef.current = null;
     }
@@ -92,7 +92,7 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
 
     // Clean up subscription on unmount
     return () => {
-      if (unsubscribeRef.current) {
+      if (unsubscribeRef.current != null) {
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }

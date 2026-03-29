@@ -45,7 +45,8 @@ describe('extensionsCommand', () => {
       mockGetExtensions.mockReturnValue([
         { name: 'test-ext', version: '1.0.0' },
       ]);
-      if (!extensionsCommand.action) throw new Error('Action not defined');
+      if (extensionsCommand.action == null)
+        throw new Error('Action not defined');
       await extensionsCommand.action(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith({
@@ -56,7 +57,8 @@ describe('extensionsCommand', () => {
 
     it('should show a message if no extensions are installed', async () => {
       mockGetExtensions.mockReturnValue([]);
-      if (!extensionsCommand.action) throw new Error('Action not defined');
+      if (extensionsCommand.action == null)
+        throw new Error('Action not defined');
       await extensionsCommand.action(mockContext, '');
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -74,7 +76,7 @@ describe('extensionsCommand', () => {
       (cmd) => cmd.name === 'update',
     )?.action;
 
-    if (!updateAction) {
+    if (updateAction == null) {
       throw new Error('Update action not found');
     }
 
@@ -266,7 +268,7 @@ describe('extensionsCommand', () => {
         (cmd) => cmd.name === 'update',
       )?.completion;
 
-      if (!updateCompletion) {
+      if (updateCompletion == null) {
         throw new Error('Update completion not found');
       }
 

@@ -76,7 +76,7 @@ export class AgentHookManager {
     hasPendingToolCalls: boolean,
   ): Promise<AfterAgentHookOutput | undefined> {
     const hookState = this.hookStateMap.get(prompt_id);
-    if (!hookState) {
+    if (hookState == null) {
       return undefined;
     }
 

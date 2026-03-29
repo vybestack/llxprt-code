@@ -163,7 +163,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         sessionId,
         scopedAgentId,
       );
-      contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
+      contextTracker.setActiveTodo(
+        inProgressTodo != null ? inProgressTodo.id : null,
+      );
 
       const event: TodoUpdateEvent = {
         sessionId,

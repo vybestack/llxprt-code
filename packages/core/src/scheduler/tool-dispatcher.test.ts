@@ -140,7 +140,7 @@ function makeGovernance(
 function makeMockRegistry(tool?: MockTool | null) {
   return {
     getTool: vi.fn().mockReturnValue(tool ?? null),
-    getAllToolNames: vi.fn().mockReturnValue(tool ? [tool.name] : []),
+    getAllToolNames: vi.fn().mockReturnValue(tool != null ? [tool.name] : []),
   };
 }
 

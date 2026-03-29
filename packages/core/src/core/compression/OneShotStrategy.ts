@@ -116,7 +116,7 @@ export class OneShotStrategy implements CompressionStrategy {
     const summaryEntry: IContent = {
       speaker: 'human' as const,
       blocks: [{ type: 'text' as const, text: summary }],
-      ...(capturedUsage ? { metadata: { usage: capturedUsage } } : {}),
+      ...(capturedUsage != null ? { metadata: { usage: capturedUsage } } : {}),
     };
 
     const newHistory: IContent[] = [
@@ -141,7 +141,7 @@ export class OneShotStrategy implements CompressionStrategy {
       topPreserved: 0,
       bottomPreserved: toKeep.length,
       middleCompressed: toCompress.length,
-      ...(capturedUsage ? { usage: capturedUsage } : {}),
+      ...(capturedUsage != null ? { usage: capturedUsage } : {}),
     };
 
     return { newHistory, metadata };
@@ -223,7 +223,7 @@ export class OneShotStrategy implements CompressionStrategy {
           summary = result.text;
           lastBlockWasNonText = result.lastBlockWasNonText;
         }
-        if (chunk.metadata?.usage) {
+        if (chunk.metadata?.usage != null) {
           capturedUsage = chunk.metadata.usage;
         }
       }

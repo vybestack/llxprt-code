@@ -95,7 +95,7 @@ export async function applyProfileToRuntime(
 
   logger.debug(
     () =>
-      `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
+      `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile != null ? 'yes' : 'no'}`,
   );
 
   if (
@@ -155,7 +155,7 @@ export async function applyProfileToRuntime(
         `[bootstrap] Applied CLI auth -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,
     );
   } else if (
-    loadedProfile &&
+    loadedProfile != null &&
     (profileToLoad || bootstrapArgs.profileJson !== null) &&
     argv.provider === undefined
   ) {

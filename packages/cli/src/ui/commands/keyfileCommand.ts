@@ -111,7 +111,7 @@ export const keyfileCommand: SlashCommand = {
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: () => void;
       };
-      if (extendedContext.checkPaymentModeChange) {
+      if (extendedContext.checkPaymentModeChange != null) {
         setTimeout(extendedContext.checkPaymentModeChange, 100);
       }
 

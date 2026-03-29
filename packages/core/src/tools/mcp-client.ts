@@ -148,7 +148,7 @@ export class McpClient {
         if (this.status !== MCPServerStatus.CONNECTED) {
           return;
         }
-        if (originalOnError) originalOnError(error);
+        if (originalOnError != null) originalOnError(error);
         debugLogger.error(`MCP ERROR (${this.serverName}):`, error.toString());
         this.toolRegistry.removeMcpToolsByServer(this.serverName);
         this.promptRegistry.removePromptsByServer(this.serverName);
@@ -156,7 +156,7 @@ export class McpClient {
         const client = this.client;
         this.client = undefined;
         this.updateStatus(MCPServerStatus.DISCONNECTED);
-        if (client) {
+        if (client != null) {
           client.close().catch(() => {});
         }
       };
@@ -201,10 +201,10 @@ export class McpClient {
     this.updateStatus(MCPServerStatus.DISCONNECTING);
     const client = this.client;
     this.client = undefined;
-    if (this.transport) {
+    if (this.transport != null) {
       await this.transport.close();
     }
-    if (client) {
+    if (client != null) {
       await client.close();
     }
     this.updateStatus(MCPServerStatus.DISCONNECTED);
@@ -281,7 +281,7 @@ export class McpClient {
    * Returns empty string if no instructions are available.
    */
   getInstructions(): string {
-    if (!this.client) {
+    if (this.client == null) {
       return '';
     }
     return this.client.getInstructions() ?? '';
@@ -299,7 +299,7 @@ export class McpClient {
    * This includes handlers for tool list changes and resource list changes.
    */
   private registerNotificationHandlers(): void {
-    if (!this.client) {
+    if (this.client == null) {
       return;
     }
 
@@ -353,7 +353,8 @@ export class McpClient {
       do {
         this.pendingToolRefresh = false;
 
-        if (this.status !== MCPServerStatus.CONNECTED || !this.client) break;
+        if (this.status !== MCPServerStatus.CONNECTED || this.client == null)
+          break;
 
         const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
         const abortController = new AbortController();
@@ -379,7 +380,7 @@ export class McpClient {
         }
         this.toolRegistry.sortTools();
 
-        if (this.onToolsUpdated) {
+        if (this.onToolsUpdated != null) {
           await this.onToolsUpdated(abortController.signal);
         }
 
@@ -415,7 +416,8 @@ export class McpClient {
       do {
         this.pendingResourceRefresh = false;
 
-        if (this.status !== MCPServerStatus.CONNECTED || !this.client) break;
+        if (this.status !== MCPServerStatus.CONNECTED || this.client == null)
+          break;
 
         const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
         const timeoutId = setTimeout(() => {}, timeoutMs);
@@ -549,7 +551,7 @@ function extractWWWAuthenticateHeader(errorString: string): string | null {
 
   for (const pattern of patterns) {
     const match = errorString.match(pattern);
-    if (match) {
+    if (match != null) {
       return match[1].trim();
     }
   }
@@ -588,7 +590,7 @@ async function handleAutomaticOAuth(
       oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
     }
 
-    if (!oauthConfig) {
+    if (oauthConfig == null) {
       debugLogger.error(
         `❌ Could not configure OAuth for '${mcpServerName}' - please authenticate manually with /mcp auth ${mcpServerName}`,
       );
@@ -797,7 +799,7 @@ async function createTransportWithOAuth(
 async function getStoredOAuthToken(serverName: string): Promise<string | null> {
   const tokenStorage = new MCPOAuthTokenStorage();
   const credentials = await tokenStorage.getCredentials(serverName);
-  if (!credentials) return null;
+  if (credentials == null) return null;
   return MCPOAuthProvider.getValidToken(serverName, {
     clientId: credentials.clientId,
   });
@@ -1059,7 +1061,7 @@ export async function connectAndDiscover(
 
     mcpClient.onerror = (error) => {
       debugLogger.error(`MCP ERROR (${mcpServerName}):`, error.toString());
-      if (!mcpClient) return;
+      if (mcpClient == null) return;
       toolRegistry.removeMcpToolsByServer(mcpServerName);
       promptRegistry.removePromptsByServer(mcpServerName);
       updateMCPServerStatus(mcpServerName, MCPServerStatus.DISCONNECTED);
@@ -1096,7 +1098,7 @@ export async function connectAndDiscover(
     }
     toolRegistry.sortTools();
   } catch (error) {
-    if (mcpClient) {
+    if (mcpClient != null) {
       mcpClient.close().catch(() => {});
     }
     debugLogger.error(
@@ -1612,7 +1614,7 @@ export async function connectToMcpServer(
           // The token should already be available from the authentication process
           const tokenStorage = new MCPOAuthTokenStorage();
           const credentials = await tokenStorage.getCredentials(mcpServerName);
-          if (credentials) {
+          if (credentials != null) {
             const accessToken = await MCPOAuthProvider.getValidToken(
               mcpServerName,
               {
@@ -1628,7 +1630,7 @@ export async function connectToMcpServer(
                 mcpServerConfig,
                 accessToken,
               );
-              if (oauthTransport) {
+              if (oauthTransport != null) {
                 try {
                   await mcpClient.connect(oauthTransport, {
                     timeout:
@@ -1701,7 +1703,7 @@ export async function connectToMcpServer(
           try {
             // Try to discover OAuth configuration from the base URL
             const oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
-            if (oauthConfig) {
+            if (oauthConfig != null) {
               debugLogger.log(
                 `Discovered OAuth configuration from base URL for server '${mcpServerName}'`,
               );
@@ -1731,7 +1733,7 @@ export async function connectToMcpServer(
               const tokenStorage = new MCPOAuthTokenStorage();
               const credentials =
                 await tokenStorage.getCredentials(mcpServerName);
-              if (credentials) {
+              if (credentials != null) {
                 const accessToken = await MCPOAuthProvider.getValidToken(
                   mcpServerName,
                   {
@@ -1746,7 +1748,7 @@ export async function connectToMcpServer(
                     mcpServerConfig,
                     accessToken,
                   );
-                  if (oauthTransport) {
+                  if (oauthTransport != null) {
                     try {
                       await mcpClient.connect(oauthTransport, {
                         timeout:
@@ -1868,7 +1870,7 @@ export async function createTransport(
       let accessToken: string | null = null;
       let hasOAuthConfig = mcpServerConfig.oauth?.enabled;
 
-      if (hasOAuthConfig && mcpServerConfig.oauth) {
+      if (hasOAuthConfig && mcpServerConfig.oauth != null) {
         accessToken = await MCPOAuthProvider.getValidToken(
           mcpServerName,
           mcpServerConfig.oauth,
@@ -1884,7 +1886,7 @@ export async function createTransport(
         // Check if we have stored OAuth tokens for this server (from previous authentication)
         const tokenStorage = new MCPOAuthTokenStorage();
         const credentials = await tokenStorage.getCredentials(mcpServerName);
-        if (credentials) {
+        if (credentials != null) {
           accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
             // Pass client ID if available
             clientId: credentials.clientId,

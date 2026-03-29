@@ -92,7 +92,7 @@ async function* flushTextBuffer(
 
   // Extract <think> tags
   const tagBasedThinking = extractThinkTagsAsBlock(workingText);
-  if (tagBasedThinking) {
+  if (tagBasedThinking != null) {
     const cleanedThought = cleanThinkingContent(
       tagBasedThinking.thought,
       deps.logger,
@@ -290,7 +290,7 @@ export async function* processStreamingResponse(
       }
 
       // Extract usage information
-      if (chunk.usage) {
+      if (chunk.usage != null) {
         state.streamingUsage = chunk.usage;
       }
 
@@ -300,7 +300,7 @@ export async function* processStreamingResponse(
       // Parse reasoning_content
       const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
         parseStreamingReasoningDelta(choice.delta, deps.logger);
-      if (reasoningBlock) {
+      if (reasoningBlock != null) {
         state.accumulatedReasoningContent += reasoningBlock.thought;
       }
       if (reasoningToolCalls.length > 0) {
@@ -412,7 +412,7 @@ export async function* processStreamingResponse(
 
       // Handle tool calls using pipeline
       const deltaToolCalls = choice.delta?.tool_calls;
-      if (deltaToolCalls && deltaToolCalls.length > 0) {
+      if (deltaToolCalls != null && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
           if (deltaToolCall.index === undefined) continue;
 
@@ -432,7 +432,7 @@ export async function* processStreamingResponse(
         }
       ).message;
       const messageToolCalls = choiceMessage?.tool_calls;
-      if (messageToolCalls && messageToolCalls.length > 0) {
+      if (messageToolCalls != null && messageToolCalls.length > 0) {
         messageToolCalls.forEach(
           (
             toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
@@ -580,7 +580,7 @@ export async function* processStreamingResponse(
         blocks: combinedBlocks,
       };
 
-      if (state.streamingUsage) {
+      if (state.streamingUsage != null) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
         combinedContent.metadata = {
           usage: {
@@ -603,7 +603,7 @@ export async function* processStreamingResponse(
 
   // Emit metadata-only response if needed
   if (
-    state.streamingUsage &&
+    state.streamingUsage != null &&
     state.accumulatedReasoningContent.length === 0 &&
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {

@@ -96,7 +96,7 @@ export const initCommand: SlashCommand = {
     context: CommandContext,
     _args: string,
   ): Promise<SlashCommandActionReturn> => {
-    if (!context.services.config) {
+    if (context.services.config == null) {
       return {
         type: 'message',
         messageType: 'error',

@@ -232,7 +232,7 @@ export async function handleAtCommand({
   const readManyFilesTool = toolRegistry.getTool('read_many_files');
   const globTool = toolRegistry.getTool('glob');
 
-  if (!readManyFilesTool) {
+  if (readManyFilesTool == null) {
     addItem(
       { type: 'error', text: 'Error: read_many_files tool not found.' },
       userMessageTimestamp,
@@ -271,7 +271,7 @@ export async function handleAtCommand({
     }
 
     const resourceMatch = resourceRegistry.findResourceByUri(pathName);
-    if (resourceMatch) {
+    if (resourceMatch != null) {
       resourceAttachments.push(resourceMatch);
       atPathToResolvedSpecMap.set(originalAtPath, pathName);
       continue;
@@ -341,7 +341,7 @@ export async function handleAtCommand({
         resolvedSuccessfully = true;
       } catch (error) {
         if (isNodeError(error) && error.code === 'ENOENT') {
-          if (config.getEnableRecursiveFileSearch() && globTool) {
+          if (config.getEnableRecursiveFileSearch() && globTool != null) {
             onDebugMessage(
               `Path ${pathName} not found directly, attempting glob search.`,
             );
@@ -523,7 +523,7 @@ export async function handleAtCommand({
           }
         | undefined
     )?.getClient(resource.serverName);
-    if (!client) {
+    if (client == null) {
       const toolCallDisplay: IndividualToolCallDisplay = {
         callId: `mcp-resource-${resource.serverName}-${uri}`,
         name: `resources/read (${resource.serverName})`,
@@ -621,7 +621,7 @@ export async function handleAtCommand({
       for (const part of result.llmContent) {
         if (typeof part === 'string') {
           const match = fileContentRegex.exec(part);
-          if (match) {
+          if (match != null) {
             const filePathSpecInContent = match[1];
             const fileActualContent = match[2].trim();
 

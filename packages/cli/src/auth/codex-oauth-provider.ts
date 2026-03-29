@@ -85,7 +85,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   private async initializeToken(): Promise<void> {
     try {
       const savedToken = await this.tokenStore.getToken('codex');
-      if (savedToken) {
+      if (savedToken != null) {
         this.logger.debug(() => 'Loaded existing Codex token from storage');
       }
     } catch (error) {
@@ -103,7 +103,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       () =>
         `[FLOW] initiateAuth() called, authInProgress=${!!this.authInProgress}`,
     );
-    if (this.authInProgress) {
+    if (this.authInProgress != null) {
       this.logger.debug(() => '[FLOW] OAuth already in progress, waiting...');
       const token = await this.authInProgress;
       this.logger.debug(() => '[FLOW] Finished waiting for existing auth flow');
@@ -198,7 +198,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       text: `Please visit the following URL to authenticate with Codex:\n${authUrl}`,
       url: authUrl,
     };
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem(historyItem);
     } else {
       globalOAuthUI.callAddItem(historyItem);
@@ -348,7 +348,7 @@ export class CodexOAuthProvider implements OAuthProvider {
         type: 'info',
         text: 'Successfully authenticated with Codex!',
       };
-      if (addItem) {
+      if (addItem != null) {
         addItem(successMessage);
       } else {
         process.stdout.write('Successfully authenticated with Codex!\n');
@@ -385,7 +385,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       text: `Enter this code in your browser:\n\n    ${userCode}\n\n(Code expires in 15 minutes)`,
     };
 
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem(urlHistoryItem);
       this.addItem(deviceCodeItem);
       return this.addItem;
@@ -421,7 +421,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   ): Promise<void> {
     try {
       await ClipboardService.copyToClipboard(userCode);
-      if (addItem) {
+      if (addItem != null) {
         addItem(
           { type: 'info', text: 'Code copied to clipboard!' },
           Date.now(),
@@ -447,7 +447,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     this.logger.debug(() => '[FLOW] Reading token from tokenStore...');
     const token = await this.tokenStore.getToken('codex');
 
-    if (!token) {
+    if (token == null) {
       this.logger.debug(
         () => '[FLOW] No token found in tokenStore, returning null',
       );
@@ -531,7 +531,7 @@ export class CodexOAuthProvider implements OAuthProvider {
    */
   async logout(_token?: OAuthToken): Promise<void> {
     this.logger.debug(() => 'Logging out from Codex');
-    if (!_token) {
+    if (_token == null) {
       await this.tokenStore.removeToken('codex');
     }
   }

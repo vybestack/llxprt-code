@@ -67,7 +67,7 @@ export function extractImports(content: string, language: string): Import[] {
  */
 function extractImportModule(line: string): string {
   const match = line.match(REGEX.IMPORT_MODULE);
-  return match ? match[1] : 'unknown';
+  return match != null ? match[1] : 'unknown';
 }
 
 /**
@@ -77,7 +77,7 @@ function extractImportModule(line: string): string {
  */
 function extractImportItems(line: string): string[] {
   const match = line.match(REGEX.IMPORT_ITEMS);
-  if (match) {
+  if (match != null) {
     return match[1].split(',').map((item) => item.trim());
   }
   return [];
@@ -89,11 +89,11 @@ function extractImportItems(line: string): string[] {
  */
 function extractPythonImportModule(line: string): string {
   const fromMatch = line.match(/^from\s+([\w.]+)\s+import/);
-  if (fromMatch) {
+  if (fromMatch != null) {
     return fromMatch[1];
   }
   const importMatch = line.match(/^import\s+([\w.]+)/);
-  if (importMatch) {
+  if (importMatch != null) {
     return importMatch[1];
   }
   return 'unknown';
@@ -105,7 +105,7 @@ function extractPythonImportModule(line: string): string {
  */
 function extractPythonImportItems(line: string): string[] {
   const fromImportMatch = line.match(/^from\s+[\w.]+\s+import\s+(.+)/);
-  if (fromImportMatch) {
+  if (fromImportMatch != null) {
     return fromImportMatch[1]
       .split(',')
       .map((item) => item.trim().replace(/\s+as\s+\w+$/, ''))

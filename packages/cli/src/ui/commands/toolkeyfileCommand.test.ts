@@ -77,7 +77,7 @@ describe('toolkeyfileCommand', () => {
   describe('schema completion', () => {
     it('suggests tool names for first argument with descriptions', async () => {
       const schema = toolkeyfileCommand.schema;
-      if (!schema) {
+      if (schema == null) {
         throw new Error('toolkeyfile schema missing');
       }
 
@@ -101,7 +101,7 @@ describe('toolkeyfileCommand', () => {
 
     it('suggests none and shows filepath hint after selecting tool', async () => {
       const schema = toolkeyfileCommand.schema;
-      if (!schema) {
+      if (schema == null) {
         throw new Error('toolkeyfile schema missing');
       }
 

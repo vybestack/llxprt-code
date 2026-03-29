@@ -148,7 +148,7 @@ const getFullBufferText = (terminal: pkg.Terminal): string => {
   const lines: string[] = [];
   for (let i = 0; i < buffer.length; i++) {
     const line = buffer.getLine(i);
-    if (!line) {
+    if (line == null) {
       continue;
     }
     // If the NEXT line is wrapped, it means it's a continuation of THIS line.
@@ -213,11 +213,11 @@ function cleanupPtyEntryResources(entry: ActivePty): void {
   } catch (_) {
     /* ignore */
   }
-  if (entry.terminationTimeout) {
+  if (entry.terminationTimeout != null) {
     clearTimeout(entry.terminationTimeout);
     entry.terminationTimeout = undefined;
   }
-  if (entry.renderTimeout) {
+  if (entry.renderTimeout != null) {
     clearTimeout(entry.renderTimeout);
     entry.renderTimeout = undefined;
   }
@@ -256,7 +256,7 @@ export class ShellExecutionService {
   ): Promise<ShellExecutionHandle> {
     if (shouldUseNodePty) {
       const ptyInfo = await getPty();
-      if (ptyInfo) {
+      if (ptyInfo != null) {
         try {
           return this.executeWithPty(
             commandToExecute,
@@ -370,7 +370,7 @@ export class ShellExecutionService {
             return;
           }
 
-          if (inactivityTimeout) {
+          if (inactivityTimeout != null) {
             clearTimeout(inactivityTimeout);
           }
 
@@ -414,7 +414,7 @@ export class ShellExecutionService {
         const handleOutput = (data: Buffer, stream: 'stdout' | 'stderr') => {
           // Reset inactivity timer on each output
           resetInactivityTimer();
-          if (!stdoutDecoder || !stderrDecoder) {
+          if (stdoutDecoder == null || stderrDecoder == null) {
             const encoding = getCachedEncodingForBuffer(data);
             try {
               stdoutDecoder = new TextDecoder(encoding);
@@ -565,7 +565,7 @@ export class ShellExecutionService {
           exited = true;
           abortSignal.removeEventListener('abort', abortHandler);
 
-          if (inactivityTimeout) {
+          if (inactivityTimeout != null) {
             clearTimeout(inactivityTimeout);
             inactivityTimeout = null;
           }
@@ -579,13 +579,13 @@ export class ShellExecutionService {
             child.removeAllListeners('close');
           }
 
-          if (stdoutDecoder) {
+          if (stdoutDecoder != null) {
             const remaining = stdoutDecoder.decode();
             if (remaining) {
               stdout += stripAnsiIfPresent(remaining);
             }
           }
-          if (stderrDecoder) {
+          if (stderrDecoder != null) {
             const remaining = stderrDecoder.decode();
             if (remaining) {
               stderr += stripAnsiIfPresent(remaining);
@@ -625,7 +625,7 @@ export class ShellExecutionService {
     shellExecutionConfig: ShellExecutionConfig,
     ptyInfo: PtyImplementation | null,
   ): ShellExecutionHandle {
-    if (!ptyInfo) {
+    if (ptyInfo == null) {
       throw new Error('PTY implementation not found');
     }
     try {
@@ -692,14 +692,14 @@ export class ShellExecutionService {
 
         const cleanupActivePty = () => {
           const entry = ShellExecutionService.activePtys.get(ptyProcess.pid);
-          if (entry) {
+          if (entry != null) {
             cleanupPtyEntryResources(entry);
             ShellExecutionService.activePtys.delete(ptyProcess.pid);
           }
           if (ShellExecutionService.lastActivePtyId === ptyProcess.pid) {
             ShellExecutionService.lastActivePtyId = null;
           }
-          if (inactivityTimeout) {
+          if (inactivityTimeout != null) {
             clearTimeout(inactivityTimeout);
             inactivityTimeout = null;
           }
@@ -710,7 +710,7 @@ export class ShellExecutionService {
             return;
           }
           hasResolved = true;
-          if (abortFinalizeTimeout) {
+          if (abortFinalizeTimeout != null) {
             clearTimeout(abortFinalizeTimeout);
             abortFinalizeTimeout = null;
           }
@@ -827,7 +827,7 @@ export class ShellExecutionService {
 
         const render = (finalRender = false) => {
           if (finalRender) {
-            if (activePtyEntry.renderTimeout) {
+            if (activePtyEntry.renderTimeout != null) {
               clearTimeout(activePtyEntry.renderTimeout);
               activePtyEntry.renderTimeout = undefined;
             }
@@ -837,7 +837,7 @@ export class ShellExecutionService {
 
           // Coalesce rapid writes (e.g. initial shell prompt burst) but
           // keep latency low for interactive typing by using a short timer.
-          if (activePtyEntry.renderTimeout) {
+          if (activePtyEntry.renderTimeout != null) {
             return;
           }
 
@@ -858,7 +858,7 @@ export class ShellExecutionService {
             return;
           }
 
-          if (inactivityTimeout) {
+          if (inactivityTimeout != null) {
             clearTimeout(inactivityTimeout);
           }
 
@@ -906,7 +906,7 @@ export class ShellExecutionService {
           processingChain = processingChain.then(
             () =>
               new Promise<void>((resolve) => {
-                if (!decoder) {
+                if (decoder == null) {
                   const encoding = getCachedEncodingForBuffer(data);
                   try {
                     decoder = new TextDecoder(encoding);
@@ -976,7 +976,7 @@ export class ShellExecutionService {
             let raceAbortListener: (() => void) | null = null;
 
             const cleanupRaceListener = () => {
-              if (raceAbortListener) {
+              if (raceAbortListener != null) {
                 abortSignal.removeEventListener('abort', raceAbortListener);
                 raceAbortListener = null;
               }
@@ -1098,7 +1098,7 @@ export class ShellExecutionService {
    */
   static writeToPty(pid: number, input: string): void {
     const activePty = this.activePtys.get(pid);
-    if (activePty) {
+    if (activePty != null) {
       activePty.ptyProcess.write(input);
       return;
     }
@@ -1106,7 +1106,7 @@ export class ShellExecutionService {
     const fallbackPtyId = this.lastActivePtyId;
     if (fallbackPtyId && fallbackPtyId !== pid) {
       const fallbackPty = this.activePtys.get(fallbackPtyId);
-      if (fallbackPty) {
+      if (fallbackPty != null) {
         fallbackPty.ptyProcess.write(input);
       }
     }
@@ -1139,7 +1139,7 @@ export class ShellExecutionService {
     }
 
     const activePty = this.activePtys.get(pid);
-    if (activePty) {
+    if (activePty != null) {
       try {
         activePty.ptyProcess.resize(cols, rows);
         activePty.headlessTerminal.resize(cols, rows);
@@ -1162,7 +1162,7 @@ export class ShellExecutionService {
    */
   static terminatePty(pid: number): void {
     const activePty = this.activePtys.get(pid);
-    if (!activePty) {
+    if (activePty == null) {
       return;
     }
 
@@ -1204,13 +1204,14 @@ export class ShellExecutionService {
   static scrollPty(pid: number, lines: number): void {
     const activePty = this.activePtys.get(pid);
     const fallbackPtyId = this.lastActivePtyId;
-    const targetPty = activePty
-      ? { id: pid, pty: activePty }
-      : fallbackPtyId
-        ? { id: fallbackPtyId, pty: this.activePtys.get(fallbackPtyId) }
-        : null;
+    const targetPty =
+      activePty != null
+        ? { id: pid, pty: activePty }
+        : fallbackPtyId
+          ? { id: fallbackPtyId, pty: this.activePtys.get(fallbackPtyId) }
+          : null;
 
-    if (!targetPty?.pty) {
+    if (targetPty?.pty == null) {
       return;
     }
 
@@ -1301,7 +1302,7 @@ export class ShellExecutionService {
       'TRIGGERING_ACTOR',
     ]);
 
-    if (allowlist) {
+    if (allowlist != null) {
       for (const name of allowlist) {
         SAFE_VARS.add(name);
       }

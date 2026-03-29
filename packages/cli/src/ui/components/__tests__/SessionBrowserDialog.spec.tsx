@@ -115,7 +115,7 @@ const renderWithProviders = (
   props: Partial<SessionBrowserDialogProps> = {},
 ) => {
   // Cleanup previous render if any
-  if (activeRender) {
+  if (activeRender != null) {
     activeRender.unmount();
     activeRender = null;
   }
@@ -165,7 +165,7 @@ describe('SessionBrowserDialog', () => {
 
   afterEach(() => {
     // Cleanup render instance
-    if (activeRender) {
+    if (activeRender != null) {
       activeRender.unmount();
       activeRender = null;
     }

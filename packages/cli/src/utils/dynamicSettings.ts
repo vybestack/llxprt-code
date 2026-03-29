@@ -101,7 +101,7 @@ export const dynamicSettingsRegistry = new DynamicSettingsRegistry();
 export function generateDynamicToolSettings(
   config?: Config,
 ): Record<string, SettingDefinition> {
-  if (!config) {
+  if (config == null) {
     return {};
   }
 

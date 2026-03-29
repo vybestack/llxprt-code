@@ -84,7 +84,7 @@ export function useConsoleMessages(): UseConsoleMessagesReturn {
   const handleNewMessage = useCallback(
     (message: ConsoleMessageItem) => {
       messageQueueRef.current.push(message);
-      if (!timeoutRef.current) {
+      if (timeoutRef.current == null) {
         // Batch updates using a timeout. 16ms is a reasonable delay to batch
         // rapid-fire messages without noticeable lag.
         timeoutRef.current = setTimeout(processQueue, 16);
@@ -94,7 +94,7 @@ export function useConsoleMessages(): UseConsoleMessagesReturn {
   );
 
   const clearConsoleMessages = useCallback(() => {
-    if (timeoutRef.current) {
+    if (timeoutRef.current != null) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
@@ -107,7 +107,7 @@ export function useConsoleMessages(): UseConsoleMessagesReturn {
   // Cleanup on unmount
   useEffect(
     () => () => {
-      if (timeoutRef.current) {
+      if (timeoutRef.current != null) {
         clearTimeout(timeoutRef.current);
       }
     },

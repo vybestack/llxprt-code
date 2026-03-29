@@ -85,14 +85,14 @@ export class SubagentInvocation<
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     try {
-      if (updateOutput) {
+      if (updateOutput != null) {
         updateOutput('Subagent starting...\n');
       }
 
       // Create an activity callback to bridge the executor's events to the
       // tool's streaming output.
       const onActivity = (activity: SubagentActivityEvent): void => {
-        if (!updateOutput) return;
+        if (updateOutput == null) return;
 
         if (
           activity.type === 'THOUGHT_CHUNK' &&

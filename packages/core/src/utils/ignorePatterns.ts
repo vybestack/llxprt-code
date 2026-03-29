@@ -165,7 +165,7 @@ export class FileExclusions {
 
     // Add custom patterns from configuration
     // TODO: getCustomExcludes method needs to be implemented in Config interface
-    if (this.config) {
+    if (this.config != null) {
       const configCustomExcludes = this.config.getCustomExcludes?.() ?? [];
       patterns.push(...configCustomExcludes);
     }

@@ -201,7 +201,7 @@ export function registerIsolatedRuntimeBindings(
 export function createIsolatedRuntimeContext(
   options: IsolatedRuntimeContextOptions = {},
 ): IsolatedRuntimeContextHandle {
-  if (!activationBindings) {
+  if (activationBindings == null) {
     throw new Error(
       'Isolated runtime activation bindings must be registered before creating contexts.',
     );
@@ -306,7 +306,7 @@ export function createIsolatedRuntimeContext(
   const activate = async (
     activationOptions?: IsolatedRuntimeActivationOptions,
   ): Promise<void> => {
-    if (!activationBindings) {
+    if (activationBindings == null) {
       throw new Error(
         'Isolated runtime activation bindings must be registered before activation.',
       );
@@ -346,7 +346,7 @@ export function createIsolatedRuntimeContext(
         }),
       );
 
-      if (options.prepare) {
+      if (options.prepare != null) {
         await options.prepare({
           config,
           settingsService: resolvedSettingsService,
@@ -377,7 +377,7 @@ export function createIsolatedRuntimeContext(
    * Clear activation state and invoke onCleanup hooks in the reverse order detailed in Step 7.
    */
   const cleanup = async (): Promise<void> => {
-    if (!active && !options.onCleanup) {
+    if (!active && options.onCleanup == null) {
       return;
     }
 
@@ -388,7 +388,7 @@ export function createIsolatedRuntimeContext(
     const bindings = activationBindings;
 
     await runWithRuntimeScope(scope, async () => {
-      if (bindings) {
+      if (bindings != null) {
         await Promise.resolve(bindings.resetInfrastructure());
       }
       clearActiveProviderRuntimeContext();
@@ -396,7 +396,7 @@ export function createIsolatedRuntimeContext(
       const revocation: RuntimeAuthScopeFlushResult =
         flushRuntimeAuthScope(currentRuntimeId);
 
-      if (options.onCleanup) {
+      if (options.onCleanup != null) {
         await options.onCleanup({
           config,
           settingsService: resolvedSettingsService,
@@ -406,7 +406,7 @@ export function createIsolatedRuntimeContext(
         });
       }
 
-      if (bindings?.disposeRuntime) {
+      if (bindings?.disposeRuntime != null) {
         await Promise.resolve(
           bindings.disposeRuntime(currentRuntimeId, revocation),
         );

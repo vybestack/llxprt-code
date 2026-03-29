@@ -49,7 +49,7 @@ export class SessionLockManager {
     const dir = path.dirname(sessionFilePath);
     const basename = path.basename(sessionFilePath);
     const match = basename.match(/^session-(.+)\.jsonl$/);
-    if (!match) {
+    if (match == null) {
       throw new Error(
         'Cannot extract session ID from path: ' + sessionFilePath,
       );

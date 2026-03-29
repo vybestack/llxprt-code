@@ -33,7 +33,7 @@ export function extractDirectGeminiOverrides(config?: GenerateContentConfig):
       toolConfig?: GenerateContentConfig['toolConfig'];
     }
   | undefined {
-  if (!config || typeof config !== 'object') {
+  if (config == null || typeof config !== 'object') {
     return undefined;
   }
   const overrides: {
@@ -44,7 +44,7 @@ export function extractDirectGeminiOverrides(config?: GenerateContentConfig):
   if (Object.prototype.hasOwnProperty.call(rawConfig, 'serverTools')) {
     overrides.serverTools = rawConfig.serverTools;
   }
-  if (config.toolConfig) {
+  if (config.toolConfig != null) {
     overrides.toolConfig = config.toolConfig;
   }
 

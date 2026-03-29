@@ -272,9 +272,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const schema = continueCommand.schema;
       expect(schema).toBeDefined();
 
-      if (schema && schema.length > 0) {
+      if (schema != null && schema.length > 0) {
         const firstArg = schema[0];
-        if (firstArg.kind === 'value' && firstArg.completer) {
+        if (firstArg.kind === 'value' && firstArg.completer != null) {
           const completions = await firstArg.completer(
             ctx,
             '',
@@ -303,9 +303,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       expect(schema).toBeDefined();
 
       // The completer should be able to return session-related completions
-      if (schema && schema.length > 0) {
+      if (schema != null && schema.length > 0) {
         const firstArg = schema[0];
-        if (firstArg.kind === 'value' && firstArg.completer) {
+        if (firstArg.kind === 'value' && firstArg.completer != null) {
           const completions = await firstArg.completer(
             ctx,
             '',
@@ -328,9 +328,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       // When non-interactive, completion may return empty or limited results
       const schema = continueCommand.schema;
-      if (schema && schema.length > 0) {
+      if (schema != null && schema.length > 0) {
         const firstArg = schema[0];
-        if (firstArg.kind === 'value' && firstArg.completer) {
+        if (firstArg.kind === 'value' && firstArg.completer != null) {
           const completions = await firstArg.completer(
             ctx,
             '',

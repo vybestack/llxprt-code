@@ -69,7 +69,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should fetch real models from OpenAI API', async () => {
-    if (!provider) return; // Skip if no API key
+    if (provider == null) return; // Skip if no API key
     const models = await provider.getModels();
 
     // Verify we got models back
@@ -97,7 +97,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should generate real chat completion', async () => {
-    if (!provider) return; // Skip if no API key
+    if (provider == null) return; // Skip if no API key
     const messages: IContent[] = [
       {
         speaker: 'human',
@@ -141,7 +141,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should handle tool calls', { timeout: 10000 }, async () => {
-    if (!provider) return; // Skip if no API key
+    if (provider == null) return; // Skip if no API key
     const messages: IContent[] = [
       {
         speaker: 'human',

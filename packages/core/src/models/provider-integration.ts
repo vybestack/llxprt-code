@@ -95,7 +95,7 @@ export function hasModelInRegistry(
     for (const providerId of providerIds) {
       // Try full ID format (provider/model)
       const fullId = `${providerId}/${modelId}`;
-      if (registry.getById(fullId)) {
+      if (registry.getById(fullId) != null) {
         return true;
       }
     }
@@ -125,7 +125,7 @@ export function getExtendedModelInfo(
     for (const providerId of providerIds) {
       const fullId = `${providerId}/${modelId}`;
       const model = registry.getById(fullId);
-      if (model) {
+      if (model != null) {
         return model;
       }
     }

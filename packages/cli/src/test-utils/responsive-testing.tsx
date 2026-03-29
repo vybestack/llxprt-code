@@ -34,21 +34,21 @@ export function testResponsiveBehavior(
   assertions: ResponsiveAssertions,
 ): void {
   // Test narrow behavior if assertion is provided
-  if (assertions.narrow) {
+  if (assertions.narrow != null) {
     const narrowResult = renderAtWidth(component, 60);
     assertions.narrow(narrowResult);
     narrowResult.unmount();
   }
 
   // Test standard behavior if assertion is provided
-  if (assertions.standard) {
+  if (assertions.standard != null) {
     const standardResult = renderAtWidth(component, 100);
     assertions.standard(standardResult);
     standardResult.unmount();
   }
 
   // Test wide behavior if assertion is provided
-  if (assertions.wide) {
+  if (assertions.wide != null) {
     const wideResult = renderAtWidth(component, 180);
     assertions.wide(wideResult);
     wideResult.unmount();

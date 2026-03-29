@@ -63,7 +63,7 @@ export class AnthropicProvider extends BaseProvider {
       baseURL,
       envKeyNames: ['ANTHROPIC_API_KEY'],
       isOAuthEnabled: !!oauthManager,
-      oauthProvider: oauthManager ? 'anthropic' : undefined,
+      oauthProvider: oauthManager != null ? 'anthropic' : undefined,
       oauthManager,
     };
 
@@ -484,7 +484,7 @@ export class AnthropicProvider extends BaseProvider {
     toolName: string,
     isOAuth: boolean,
   ): unknown {
-    if (!tools) return undefined;
+    if (tools == null) return undefined;
 
     // For OAuth, tool names in the tools array are prefixed (e.g., llxprt_read_file)
     // but toolName from the response is unprefixed (e.g., read_file)
@@ -594,7 +594,7 @@ export class AnthropicProvider extends BaseProvider {
     });
 
     // Update rate limit state (already extracted and logged by executeAnthropicApiCall)
-    if (rateLimitInfo) {
+    if (rateLimitInfo != null) {
       this.lastRateLimitInfo = rateLimitInfo;
     }
 

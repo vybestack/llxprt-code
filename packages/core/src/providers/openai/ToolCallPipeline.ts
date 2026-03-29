@@ -119,7 +119,7 @@ export class ToolCallPipeline {
           };
 
           const normalized = this.normalizer.normalize(mockValidatedCall);
-          if (normalized) {
+          if (normalized != null) {
             normalizedCalls.push(normalized);
           } else {
             failedCalls.push({

@@ -74,7 +74,7 @@ export interface RuntimeInvocationContextInit {
 function cloneAndFreeze<T extends object>(
   value: T | undefined,
 ): Readonly<T> | undefined {
-  if (!value) {
+  if (value == null) {
     return undefined;
   }
   const clone = Object.assign({}, value);

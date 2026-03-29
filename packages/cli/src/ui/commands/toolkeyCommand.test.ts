@@ -71,7 +71,7 @@ describe('toolkeyCommand', () => {
   describe('schema completion', () => {
     it('suggests tool names for first argument with descriptions', async () => {
       const schema = toolkeyCommand.schema;
-      if (!schema) {
+      if (schema == null) {
         throw new Error('toolkey schema missing');
       }
 
@@ -95,7 +95,7 @@ describe('toolkeyCommand', () => {
 
     it('suggests none and shows key hint after selecting tool', async () => {
       const schema = toolkeyCommand.schema;
-      if (!schema) {
+      if (schema == null) {
         throw new Error('toolkey schema missing');
       }
 

@@ -39,7 +39,7 @@ let promptServiceInitPromise: Promise<void> | null = null;
  * Initialize the PromptService singleton
  */
 async function initializePromptService(): Promise<void> {
-  if (!promptServiceInitPromise) {
+  if (promptServiceInitPromise == null) {
     promptServiceInitPromise = (async () => {
       const baseDir =
         process.env.LLXPRT_PROMPTS_DIR ||

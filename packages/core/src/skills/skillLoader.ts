@@ -61,7 +61,7 @@ export async function loadSkillsFromDir(
 
     for (const skillFile of skillFiles) {
       const metadata = await loadSkillFromFile(skillFile, source);
-      if (metadata) {
+      if (metadata != null) {
         discoveredSkills.push(metadata);
       }
     }
@@ -95,7 +95,7 @@ export async function loadSkillFromFile(
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
+    if (match == null) {
       return null;
     }
 
@@ -129,7 +129,7 @@ function loadSkillFromFileSync(
   try {
     const content = fsSync.readFileSync(filePath, 'utf-8');
     const match = content.match(FRONTMATTER_REGEX);
-    if (!match) {
+    if (match == null) {
       return null;
     }
 
@@ -183,7 +183,7 @@ export function loadSkillsFromDirSync(
         continue;
       }
       const skill = loadSkillFromFileSync(skillFile, source);
-      if (skill) {
+      if (skill != null) {
         discoveredSkills.push(skill);
       }
     }

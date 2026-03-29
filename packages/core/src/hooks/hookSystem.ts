@@ -141,7 +141,7 @@ export class HookSystem {
    * @requirement:HOOK-005,HOOK-006
    */
   getEventHandler(): HookEventHandler {
-    if (!this.eventHandler) {
+    if (this.eventHandler == null) {
       throw new HookSystemNotInitializedError(
         'Cannot access HookEventHandler before HookSystem is initialized',
       );

@@ -38,7 +38,7 @@ class MockOAuthProvider implements OAuthProvider {
   async initiateAuth(): Promise<OAuthToken> {
     this.authInitiated = true;
     // Simulate successful auth flow
-    if (!this.token) {
+    if (this.token == null) {
       this.token = {
         access_token: `access_${this.name}_${Date.now()}`,
         refresh_token: `refresh_${this.name}_${Date.now()}`,

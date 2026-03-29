@@ -477,7 +477,7 @@ export class SubagentOrchestrator {
       'tools.allowed',
       'tools_allowed',
     ]);
-    if (allowed) {
+    if (allowed != null) {
       service.set('tools.allowed', allowed);
     }
 
@@ -488,7 +488,7 @@ export class SubagentOrchestrator {
       ]),
       allowed,
     );
-    if (disabled) {
+    if (disabled != null) {
       service.set('tools.disabled', disabled);
     }
 
@@ -660,7 +660,7 @@ export class SubagentOrchestrator {
       typeof this.options.foregroundConfig.getProviderManager === 'function'
         ? this.options.foregroundConfig.getProviderManager()
         : undefined;
-    if (providerManager) {
+    if (providerManager != null) {
       contentGeneratorConfig.providerManager = providerManager;
     }
 

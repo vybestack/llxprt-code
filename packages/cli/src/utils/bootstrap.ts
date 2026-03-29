@@ -89,7 +89,7 @@ export function parseDockerMemoryToMB(memoryStr: string): number | undefined {
   }
 
   const match = memoryStr.match(/^(\d+(?:\.\d+)?)\s*([bkmg])?$/i);
-  if (!match) {
+  if (match == null) {
     return undefined;
   }
 

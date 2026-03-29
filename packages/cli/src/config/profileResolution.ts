@@ -293,7 +293,7 @@ export async function loadAndPrepareProfile(input: {
       settings,
       profileWarnings,
     );
-    if (result) {
+    if (result != null) {
       ({
         profileMergedSettings,
         profileModel,

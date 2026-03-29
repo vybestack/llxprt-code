@@ -185,14 +185,14 @@ export const useSlashCommandProcessor = (
    * @requirement:REQ-010
    */
   const profileManager = useMemo(() => {
-    if (!config) return undefined;
+    if (config == null) return undefined;
     const llxprtDir = path.join(os.homedir(), '.llxprt');
     const profilesDir = path.join(llxprtDir, 'profiles');
     return new ProfileManager(profilesDir);
   }, [config]);
 
   const subagentManager = useMemo(() => {
-    if (!config || !profileManager) return undefined;
+    if (config == null || profileManager == null) return undefined;
     const llxprtDir = path.join(os.homedir(), '.llxprt');
     const subagentsDir = path.join(llxprtDir, 'subagents');
     return new SubagentManager(subagentsDir, profileManager);
@@ -369,7 +369,7 @@ export const useSlashCommandProcessor = (
   );
 
   useEffect(() => {
-    if (!config) {
+    if (config == null) {
       return;
     }
 
@@ -434,7 +434,7 @@ export const useSlashCommandProcessor = (
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed?: boolean,
     ): Promise<SlashCommandProcessorResult | false> => {
-      if (!commands) {
+      if (commands == null) {
         return false;
       }
       if (typeof rawQuery !== 'string') {
@@ -470,8 +470,8 @@ export const useSlashCommandProcessor = (
         canonicalPath.length > 1 ? canonicalPath.slice(1).join(' ') : undefined;
 
       try {
-        if (commandToExecute) {
-          if (commandToExecute.action) {
+        if (commandToExecute != null) {
+          if (commandToExecute.action != null) {
             const fullCommandContext: CommandContext = {
               ...commandContext,
               invocation: {
@@ -484,7 +484,10 @@ export const useSlashCommandProcessor = (
 
             // If a one-time list is provided for a "Proceed" action, temporarily
             // augment the session allowlist for this single execution.
-            if (oneTimeShellAllowlist && oneTimeShellAllowlist.size > 0) {
+            if (
+              oneTimeShellAllowlist != null &&
+              oneTimeShellAllowlist.size > 0
+            ) {
               fullCommandContext.session = {
                 ...fullCommandContext.session,
                 sessionShellAllowlist: new Set([
@@ -543,7 +546,7 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'logging':
                       if (
-                        result.dialogData &&
+                        result.dialogData != null &&
                         typeof result.dialogData === 'object' &&
                         'entries' in result.dialogData
                       ) {
@@ -574,7 +577,7 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'profileDetail':
                       if (
-                        result.dialogData &&
+                        result.dialogData != null &&
                         typeof result.dialogData === 'object' &&
                         'profileName' in result.dialogData &&
                         typeof (result.dialogData as { profileName: unknown })
@@ -592,7 +595,7 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'profileEditor':
                       if (
-                        result.dialogData &&
+                        result.dialogData != null &&
                         typeof result.dialogData === 'object' &&
                         'profileName' in result.dialogData &&
                         typeof (result.dialogData as { profileName: unknown })
@@ -723,7 +726,7 @@ export const useSlashCommandProcessor = (
 
                   if (
                     outcome === ToolConfirmationOutcome.Cancel ||
-                    !approvedCommands ||
+                    approvedCommands == null ||
                     approvedCommands.length === 0
                   ) {
                     return { type: 'handled' };
@@ -788,7 +791,7 @@ export const useSlashCommandProcessor = (
                    * @plan PLAN-20260214-SESSIONBROWSER.P23
                    * @requirement REQ-PR-001, REQ-PR-002
                    */
-                  if (!config) {
+                  if (config == null) {
                     addMessage({
                       type: MessageType.ERROR,
                       content:
@@ -798,7 +801,7 @@ export const useSlashCommandProcessor = (
                     return { type: 'handled' };
                   }
 
-                  if (!recordingSwapCallbacks) {
+                  if (recordingSwapCallbacks == null) {
                     addMessage({
                       type: MessageType.ERROR,
                       content:
@@ -881,7 +884,7 @@ export const useSlashCommandProcessor = (
             }
 
             return { type: 'handled' };
-          } else if (commandToExecute.subCommands) {
+          } else if (commandToExecute.subCommands != null) {
             const helpText = `Command '/${commandToExecute.name}' requires a subcommand. Available:\n${commandToExecute.subCommands
               .map((sc) => `  - ${sc.name}: ${sc.description || ''}`)
               .join('\n')}`;
@@ -903,7 +906,7 @@ export const useSlashCommandProcessor = (
         return { type: 'handled' };
       } catch (e: unknown) {
         hasError = true;
-        if (config && commandToExecute) {
+        if (config != null && commandToExecute != null) {
           const event = new SlashCommandEvent(
             commandToExecute.name,
             subcommand,
@@ -921,7 +924,7 @@ export const useSlashCommandProcessor = (
         recordingIntegration?.recordSessionEvent('error', errorText);
         return { type: 'handled' };
       } finally {
-        if (config && commandToExecute && !hasError) {
+        if (config != null && commandToExecute != null && !hasError) {
           const event = new SlashCommandEvent(
             commandToExecute.name,
             subcommand,

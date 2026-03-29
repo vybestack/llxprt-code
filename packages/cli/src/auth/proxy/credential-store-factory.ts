@@ -52,12 +52,12 @@ let directKeyStorage: ProviderKeyStorage | undefined;
 export function createTokenStore(): TokenStore {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
-    if (!proxyTokenStore) {
+    if (proxyTokenStore == null) {
       proxyTokenStore = new ProxyTokenStore(socketPath);
     }
     return proxyTokenStore;
   }
-  if (!directTokenStore) {
+  if (directTokenStore == null) {
     directTokenStore = new KeyringTokenStore();
   }
   return directTokenStore;
@@ -77,13 +77,13 @@ export function createTokenStore(): TokenStore {
 export function createProviderKeyStorage(): ProviderKeyStorage {
   const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
   if (socketPath) {
-    if (!proxyKeyStorage) {
+    if (proxyKeyStorage == null) {
       const client = new ProxySocketClient(socketPath);
       proxyKeyStorage = new ProxyProviderKeyStorage(client);
     }
     return proxyKeyStorage as unknown as ProviderKeyStorage;
   }
-  if (!directKeyStorage) {
+  if (directKeyStorage == null) {
     directKeyStorage = getProviderKeyStorage();
   }
   return directKeyStorage;

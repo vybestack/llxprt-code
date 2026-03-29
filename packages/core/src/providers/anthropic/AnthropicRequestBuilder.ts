@@ -315,15 +315,15 @@ export function buildAnthropicRequestBody(options: {
     requestBody.system = options.system;
   }
 
-  if (options.tools && options.tools.length > 0) {
+  if (options.tools != null && options.tools.length > 0) {
     requestBody.tools = options.tools;
   }
 
-  if (options.thinking) {
+  if (options.thinking != null) {
     requestBody.thinking = options.thinking;
   }
 
-  if (options.outputConfig) {
+  if (options.outputConfig != null) {
     requestBody.output_config = options.outputConfig;
   }
 

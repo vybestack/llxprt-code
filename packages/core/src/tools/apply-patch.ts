@@ -212,7 +212,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
         }
 
-        if (ideConfirmation) {
+        if (ideConfirmation != null) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
             // User modified content in IDE - we'd need to regenerate patch
@@ -313,7 +313,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       let gitStats = null;
       if (this.config.getConversationLoggingEnabled()) {
         const gitStatsService = getGitStatsService();
-        if (gitStatsService) {
+        if (gitStatsService != null) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,
@@ -399,7 +399,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       };
 
       // Include git stats in metadata if available
-      if (gitStats) {
+      if (gitStats != null) {
         result.metadata = {
           ...result.metadata,
           gitStats,

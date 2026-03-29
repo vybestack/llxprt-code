@@ -81,7 +81,7 @@ export function getOpenAIProviderInfo(
 
     // Narrow to expected provider type using feature detection for ancillary data
     let openaiProvider: OpenAIProviderLike | null = null;
-    if (manager && manager.hasActiveProvider()) {
+    if (manager != null && manager.hasActiveProvider()) {
       const activeProvider = manager.getActiveProvider();
       if (activeProvider?.name === 'openai') {
         openaiProvider = activeProvider as unknown as OpenAIProviderLike;
@@ -90,7 +90,7 @@ export function getOpenAIProviderInfo(
 
     result.provider = openaiProvider;
 
-    if (openaiProvider) {
+    if (openaiProvider != null) {
       if (typeof openaiProvider.getConversationCache === 'function') {
         result.conversationCache = openaiProvider.getConversationCache();
       } else if ('conversationCache' in openaiProvider) {
@@ -127,7 +127,7 @@ export function getOpenAIProviderInfo(
     if (configuredMode) {
       result.isResponsesAPI = configuredMode.toLowerCase() === 'responses';
     } else if (result.currentModel) {
-      if (openaiProvider?.shouldUseResponses) {
+      if (openaiProvider?.shouldUseResponses != null) {
         result.isResponsesAPI = openaiProvider.shouldUseResponses(
           result.currentModel,
         );

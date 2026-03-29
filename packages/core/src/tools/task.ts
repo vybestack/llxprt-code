@@ -170,7 +170,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     candidateTools: string[] | undefined,
     registry: ToolRegistry,
   ): string[] | undefined {
-    if (!candidateTools || candidateTools.length === 0) {
+    if (candidateTools == null || candidateTools.length === 0) {
       return undefined;
     }
 
@@ -251,8 +251,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       Array.isArray(this.params.tool_whitelist) ||
       Array.isArray(this.params.toolWhitelist);
 
-    if (registry) {
-      if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+    if (registry != null) {
+      if (effectiveWhitelist != null && effectiveWhitelist.length > 0) {
         effectiveWhitelist = this.buildGovernedToolWhitelist(
           effectiveWhitelist,
           registry,
@@ -261,7 +261,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
       if (
         !hasExplicitWhitelist &&
-        (!effectiveWhitelist || effectiveWhitelist.length === 0)
+        (effectiveWhitelist == null || effectiveWhitelist.length === 0)
       ) {
         effectiveWhitelist = this.buildGovernedToolWhitelist(
           registry.getEnabledTools().map((tool) => tool.name),
@@ -270,7 +270,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       }
     }
 
-    if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+    if (effectiveWhitelist != null && effectiveWhitelist.length > 0) {
       const whitelistSet = new Set(
         effectiveWhitelist.filter((name): name is string => Boolean(name)),
       );
@@ -281,14 +281,14 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     taskLogger.debug(() => {
       const summary =
-        launchRequest.toolConfig?.tools &&
+        launchRequest.toolConfig?.tools != null &&
         launchRequest.toolConfig.tools.length > 0
           ? `${launchRequest.toolConfig.tools.length} tools`
           : 'no tools provided';
       return `Prepared launch request for '${subagentName}': toolConfig=${summary}`;
     });
 
-    if (outputSpec && Object.keys(outputSpec).length > 0) {
+    if (outputSpec != null && Object.keys(outputSpec).length > 0) {
       launchRequest.outputConfig = {
         outputs: outputSpec,
       };
@@ -445,7 +445,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     let xmlOutputOpen = false;
     const emitClosingSubagentTag = () => {
-      if (!xmlOutputOpen || !updateOutput) {
+      if (!xmlOutputOpen || updateOutput == null) {
         return;
       }
       updateOutput(
@@ -454,7 +454,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       xmlOutputOpen = false;
     };
 
-    if (updateOutput) {
+    if (updateOutput != null) {
       // Send opening XML tag to identify the subagent
       updateOutput(`<subagent name="${launchRequest.name}" id="${agentId}">\n`);
       xmlOutputOpen = true;
@@ -487,9 +487,8 @@ class TaskToolInvocation extends BaseToolInvocation<
 
       if (shouldRunInteractive && typeof scope.runInteractive === 'function') {
         const schedulerFactory = this.deps.getSchedulerFactory?.();
-        const interactiveOptions = schedulerFactory
-          ? { schedulerFactory }
-          : undefined;
+        const interactiveOptions =
+          schedulerFactory != null ? { schedulerFactory } : undefined;
         await scope.runInteractive(contextState, interactiveOptions);
       } else {
         await scope.runNonInteractive(contextState);
@@ -908,11 +907,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       }
 
       // Clean up any created resources
-      if (timeoutId) {
+      if (timeoutId != null) {
         clearTimeout(timeoutId);
       }
 
-      if (dispose) {
+      if (dispose != null) {
         void dispose();
       }
 
@@ -925,7 +924,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     // Set up message streaming (same as sync)
     let asyncXmlOutputOpen = false;
     const emitAsyncClosingSubagentTag = () => {
-      if (!asyncXmlOutputOpen || !updateOutput) {
+      if (!asyncXmlOutputOpen || updateOutput == null) {
         return;
       }
       updateOutput(
@@ -934,7 +933,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       asyncXmlOutputOpen = false;
     };
 
-    if (updateOutput) {
+    if (updateOutput != null) {
       // Send opening XML tag to identify the subagent
       // Use normalized.subagentName since launchRequest is scoped to inner try block
       updateOutput(
@@ -1018,9 +1017,8 @@ class TaskToolInvocation extends BaseToolInvocation<
           typeof scope.runInteractive === 'function'
         ) {
           const schedulerFactory = this.deps.getSchedulerFactory?.();
-          const interactiveOptions = schedulerFactory
-            ? { schedulerFactory }
-            : undefined;
+          const interactiveOptions =
+            schedulerFactory != null ? { schedulerFactory } : undefined;
           await scope.runInteractive(contextState, interactiveOptions);
         } else {
           await scope.runNonInteractive(contextState);
@@ -1228,7 +1226,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   }
 
   private ensureOrchestrator(): SubagentOrchestrator {
-    if (this.dependencies.orchestratorFactory) {
+    if (this.dependencies.orchestratorFactory != null) {
       return this.dependencies.orchestratorFactory();
     }
 
@@ -1244,7 +1242,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       this.dependencies.subagentManager ??
       configWithManagers.getSubagentManager?.();
 
-    if (!profileManager || !subagentManager) {
+    if (profileManager == null || subagentManager == null) {
       throw new Error(
         'Task tool requires profile and subagent managers to be configured.',
       );

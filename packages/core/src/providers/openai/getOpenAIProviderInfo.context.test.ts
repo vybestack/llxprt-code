@@ -29,7 +29,7 @@ describe('getOpenAIProviderInfo runtime integration', () => {
   });
 
   afterEach(() => {
-    if (originalContext) {
+    if (originalContext != null) {
       setActiveProviderRuntimeContext(originalContext);
     }
   });

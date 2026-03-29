@@ -144,7 +144,7 @@ function nonKeyboardEventFilter(
 ): KeypressHandler {
   return (key: Key) => {
     if (
-      !parseMouseEvent(key.sequence) &&
+      parseMouseEvent(key.sequence) == null &&
       key.sequence !== FOCUS_IN &&
       key.sequence !== FOCUS_OUT
     ) {
@@ -360,7 +360,7 @@ function* emitKeys(
         // Check for OSC 52 (Clipboard) response
         // Format: 52;c;<base64> or 52;p;<base64>
         const match = /^52;[cp];(.*)$/.exec(buffer);
-        if (match) {
+        if (match != null) {
           try {
             const base64Data = match[1];
             const decoded = Buffer.from(base64Data, 'base64').toString('utf-8');
@@ -643,7 +643,7 @@ const KeypressContext = createContext<KeypressContextValue | undefined>(
 
 export function useKeypressContext() {
   const context = useContext(KeypressContext);
-  if (!context) {
+  if (context == null) {
     throw new Error(
       'useKeypressContext must be used within a KeypressProvider',
     );
@@ -685,7 +685,7 @@ export function KeypressProvider({
     let draggingTimer: NodeJS.Timeout | null = null;
 
     const clearDraggingTimer = () => {
-      if (draggingTimer) {
+      if (draggingTimer != null) {
         clearTimeout(draggingTimer);
         draggingTimer = null;
       }

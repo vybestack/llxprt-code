@@ -30,9 +30,9 @@ export async function migrateInMemoryTokens(
     try {
       // Check for in-memory token
       const token = await provider.getToken();
-      if (token) {
+      if (token != null) {
         const stored = await tokenStore.getToken(name);
-        if (!stored) {
+        if (stored == null) {
           // Migrate to storage
           await tokenStore.saveToken(name, token);
           debugLogger.log(`Migrated ${name} token to persistent storage`);

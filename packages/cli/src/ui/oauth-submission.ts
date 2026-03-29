@@ -41,7 +41,7 @@ export function submitOAuthCode(
   }
 
   const oauthManager = deps.getOAuthManager();
-  if (!oauthManager) {
+  if (oauthManager == null) {
     return false;
   }
 

@@ -28,7 +28,7 @@ export function useConfirmationSelection({
 }: UseConfirmationSelectionParams): (value: boolean) => void {
   return useCallback(
     (value: boolean) => {
-      if (!confirmationRequest) {
+      if (confirmationRequest == null) {
         return;
       }
 

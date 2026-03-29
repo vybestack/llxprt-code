@@ -41,7 +41,7 @@ export async function triggerBeforeModelHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -67,7 +67,7 @@ export async function triggerBeforeModelHook(
     debugLogger.debug('BeforeModel hook executed');
 
     // Return BeforeModelHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new BeforeModelHookOutput(result.finalOutput);
     }
 
@@ -99,7 +99,7 @@ export async function triggerAfterModelHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -126,7 +126,7 @@ export async function triggerAfterModelHook(
     debugLogger.debug('AfterModel hook executed');
 
     // Return AfterModelHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new AfterModelHookOutput(result.finalOutput);
     }
 
@@ -158,7 +158,7 @@ export async function triggerBeforeToolSelectionHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -172,7 +172,7 @@ export async function triggerBeforeToolSelectionHook(
     debugLogger.debug('BeforeToolSelection hook executed');
 
     // Return BeforeToolSelectionHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new BeforeToolSelectionHookOutput(result.finalOutput);
     }
 

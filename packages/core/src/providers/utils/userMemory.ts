@@ -32,7 +32,7 @@ export async function resolveUserMemory(
     if (typeof profile === 'string') {
       return profile;
     }
-    if (profile && typeof profile === 'object') {
+    if (profile != null && typeof profile === 'object') {
       try {
         return JSON.stringify(profile);
       } catch {

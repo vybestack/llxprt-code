@@ -38,7 +38,7 @@ export function asNumber(value: unknown): number | undefined {
 export function extractCompletionBudgetFromParams(
   params: Record<string, unknown> | undefined,
 ): number | undefined {
-  if (!params) {
+  if (params == null) {
     return undefined;
   }
 

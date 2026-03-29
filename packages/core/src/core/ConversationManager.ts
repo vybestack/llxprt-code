@@ -187,7 +187,7 @@ export class ConversationManager {
     newHistoryEntries: IContent[],
   ): void {
     if (
-      automaticFunctionCallingHistory &&
+      automaticFunctionCallingHistory != null &&
       automaticFunctionCallingHistory.length > 0
     ) {
       // AFC branch: extract curated history
@@ -355,7 +355,7 @@ export class ConversationManager {
       }
 
       // Add usage metadata if available
-      if (usageMetadata) {
+      if (usageMetadata != null) {
         iContent.metadata = {
           ...iContent.metadata,
           usage: usageMetadata,
@@ -373,7 +373,7 @@ export class ConversationManager {
         blocks: thoughtBlocks,
         metadata: { turnId: turnKey },
       };
-      if (usageMetadata) {
+      if (usageMetadata != null) {
         iContent.metadata = {
           ...iContent.metadata,
           usage: usageMetadata,

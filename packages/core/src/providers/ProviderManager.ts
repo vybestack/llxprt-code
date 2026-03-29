@@ -153,13 +153,13 @@ export class ProviderManager implements IProviderManager {
   } {
     let fallback: ProviderRuntimeContext | null = null;
     const ensureFallback = (): ProviderRuntimeContext => {
-      if (!fallback) {
+      if (fallback == null) {
         fallback = getActiveProviderRuntimeContext();
       }
       return fallback;
     };
 
-    if (!init) {
+    if (init == null) {
       const resolved = ensureFallback();
       return {
         settingsService: resolved.settingsService,
@@ -189,7 +189,7 @@ export class ProviderManager implements IProviderManager {
     let config: Config | undefined =
       initObj.config ?? runtime?.config ?? undefined;
 
-    if (!settingsService || !config) {
+    if (settingsService == null || config == null) {
       const resolved = ensureFallback();
       settingsService = settingsService ?? resolved.settingsService;
       config = config ?? resolved.config;
@@ -214,9 +214,10 @@ export class ProviderManager implements IProviderManager {
     const newLoggingEnabled = config.getConversationLoggingEnabled();
 
     this.config = config;
-    this.runtime = this.runtime
-      ? { ...this.runtime, config }
-      : { settingsService: this.settingsService, config };
+    this.runtime =
+      this.runtime != null
+        ? { ...this.runtime, config }
+        : { settingsService: this.settingsService, config };
 
     // Always ensure providers are wrapped once config becomes available
     if (!hadConfig || oldLoggingEnabled !== newLoggingEnabled) {
@@ -263,7 +264,7 @@ export class ProviderManager implements IProviderManager {
       finalProvider = new RetryOrchestrator(finalProvider);
 
       // Then wrap with LoggingProviderWrapper if config is available
-      if (this.config) {
+      if (this.config != null) {
         finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
       }
 
@@ -271,7 +272,10 @@ export class ProviderManager implements IProviderManager {
       this.providers.set(name, finalProvider);
 
       // Update server tools provider reference if needed
-      if (this.serverToolsProvider && this.serverToolsProvider.name === name) {
+      if (
+        this.serverToolsProvider != null &&
+        this.serverToolsProvider.name === name
+      ) {
         this.serverToolsProvider = finalProvider;
       }
     }
@@ -300,11 +304,11 @@ export class ProviderManager implements IProviderManager {
       ) => void;
     };
     runtimeAware.setRuntimeSettingsService?.(this.settingsService);
-    if (this.config && runtimeAware.setConfig) {
+    if (this.config != null && runtimeAware.setConfig != null) {
       runtimeAware.setConfig(this.config);
     }
     if (
-      runtimeAware.setRuntimeContextResolver &&
+      runtimeAware.setRuntimeContextResolver != null &&
       typeof runtimeAware.setRuntimeContextResolver === 'function'
     ) {
       runtimeAware.setRuntimeContextResolver(() =>
@@ -312,7 +316,7 @@ export class ProviderManager implements IProviderManager {
       );
     }
     if (
-      runtimeAware.setOptionsNormalizer &&
+      runtimeAware.setOptionsNormalizer != null &&
       typeof runtimeAware.setOptionsNormalizer === 'function'
     ) {
       runtimeAware.setOptionsNormalizer((options, providerName) =>
@@ -334,9 +338,9 @@ export class ProviderManager implements IProviderManager {
       metadata: { source: 'ProviderManager', requirement: 'REQ-SP4-001' },
     };
 
-    if (!this.runtime) {
+    if (this.runtime == null) {
       this.runtime = baseRuntime;
-    } else if (!this.runtime.config && baseRuntime.config) {
+    } else if (this.runtime.config == null && baseRuntime.config != null) {
       this.runtime = { ...this.runtime, config: baseRuntime.config };
     }
 
@@ -354,7 +358,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     const config = baseRuntime.config ?? this.config;
-    if (!config) {
+    if (config == null) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
         missingFields: ['config'],
@@ -412,7 +416,7 @@ export class ProviderManager implements IProviderManager {
       rawOptions.settings ?? rawOptions.runtime?.settingsService;
     const config = rawOptions.config ?? rawOptions.runtime?.config;
 
-    if (!settingsService) {
+    if (settingsService == null) {
       throw new ProviderRuntimeNormalizationError({
         providerKey: 'ProviderManager',
         message:
@@ -426,7 +430,7 @@ export class ProviderManager implements IProviderManager {
       });
     }
 
-    if (!config) {
+    if (config == null) {
       throw new ProviderRuntimeNormalizationError({
         providerKey: 'ProviderManager',
         message:
@@ -594,7 +598,7 @@ export class ProviderManager implements IProviderManager {
 
       // Traverse the full wrapper chain to find the actual provider
       let actualProvider: IProvider | undefined = providerInstance;
-      while (actualProvider && 'wrappedProvider' in actualProvider) {
+      while (actualProvider != null && 'wrappedProvider' in actualProvider) {
         actualProvider = (actualProvider as ProviderWithWrapper)
           .wrappedProvider;
       }
@@ -720,7 +724,7 @@ export class ProviderManager implements IProviderManager {
     });
 
     // Then wrap with LoggingProviderWrapper for token tracking
-    if (this.config) {
+    if (this.config != null) {
       finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
     }
 
@@ -750,7 +754,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // If registering Gemini and we don't have a serverToolsProvider, use it
-    if (provider.name === 'gemini' && !this.serverToolsProvider) {
+    if (provider.name === 'gemini' && this.serverToolsProvider == null) {
       this.serverToolsProvider = provider;
     }
 
@@ -779,7 +783,7 @@ export class ProviderManager implements IProviderManager {
     if (previousProviderName && previousProviderName !== name) {
       const previousProvider = this.providers.get(previousProviderName);
       if (
-        previousProvider &&
+        previousProvider != null &&
         previousProvider !== this.serverToolsProvider &&
         'clearState' in previousProvider
       ) {
@@ -813,7 +817,7 @@ export class ProviderManager implements IProviderManager {
     if (name === 'gemini') {
       // Only replace serverToolsProvider if it's not already Gemini or if it's null
       if (
-        !this.serverToolsProvider ||
+        this.serverToolsProvider == null ||
         this.serverToolsProvider.name !== 'gemini'
       ) {
         this.serverToolsProvider = this.providers.get(name) || null;
@@ -821,7 +825,7 @@ export class ProviderManager implements IProviderManager {
     }
     // If switching away from Gemini but serverToolsProvider is not set,
     // configure a Gemini provider for serverTools if available
-    else if (!this.serverToolsProvider && this.providers.has('gemini')) {
+    else if (this.serverToolsProvider == null && this.providers.has('gemini')) {
       this.serverToolsProvider = this.providers.get('gemini') || null;
     }
   }
@@ -863,7 +867,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     const provider = this.providers.get(resolvedName);
-    if (!provider) {
+    if (provider == null) {
       throw new Error('Active provider not found');
     }
     return provider;
@@ -874,7 +878,7 @@ export class ProviderManager implements IProviderManager {
 
     if (providerName) {
       provider = this.providers.get(providerName);
-      if (!provider) {
+      if (provider == null) {
         throw new Error(`Provider '${providerName}' not found`);
       }
     } else {
@@ -983,13 +987,13 @@ export class ProviderManager implements IProviderManager {
 
   getServerToolsProvider(): IProvider | null {
     // If we have a configured serverToolsProvider, return it
-    if (this.serverToolsProvider) {
+    if (this.serverToolsProvider != null) {
       return this.serverToolsProvider;
     }
 
     // Otherwise, try to get Gemini if available
     const geminiProvider = this.providers.get('gemini');
-    if (geminiProvider) {
+    if (geminiProvider != null) {
       this.serverToolsProvider = geminiProvider;
       return geminiProvider;
     }
@@ -1014,7 +1018,7 @@ export class ProviderManager implements IProviderManager {
     const fromCapabilities = this.providerCapabilities.get(fromProvider);
     const toCapabilities = this.providerCapabilities.get(toProvider);
 
-    if (!fromCapabilities || !toCapabilities) {
+    if (fromCapabilities == null || toCapabilities == null) {
       return false; // Can't analyze without capabilities
     }
 
@@ -1038,7 +1042,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     if (
-      this.config &&
+      this.config != null &&
       typeof this.config.getProvider === 'function' &&
       this.config.getProvider() === provider.name
     ) {
@@ -1330,7 +1334,7 @@ export class ProviderManager implements IProviderManager {
     if (!name) return null;
 
     const provider = this.providers.get(name);
-    if (!provider) return null;
+    if (provider == null) return null;
 
     // Check if provider has getPerformanceMetrics method (LoggingProviderWrapper)
     if (
@@ -1369,7 +1373,7 @@ export class ProviderManager implements IProviderManager {
     const stage = 'ProviderManager.prepareStatelessProviderInvocation';
     const runtimeContext = context ?? this.runtime;
 
-    if (!runtimeContext) {
+    if (runtimeContext == null) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
         missingFields: ['runtime'],
@@ -1395,7 +1399,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     const resolvedConfig = runtimeContext.config ?? this.config;
-    if (!resolvedConfig) {
+    if (resolvedConfig == null) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
         missingFields: ['config'],
@@ -1446,7 +1450,7 @@ export class ProviderManager implements IProviderManager {
 
     statelessAware.attachStatelessRuntimeMetadata?.(metadata);
 
-    if (statelessAware.wrappedProvider) {
+    if (statelessAware.wrappedProvider != null) {
       this.attachStatelessRuntimeMetadata(
         statelessAware.wrappedProvider,
         metadata,
@@ -1458,7 +1462,7 @@ export class ProviderManager implements IProviderManager {
     const cap1 = this.providerCapabilities.get(provider1);
     const cap2 = this.providerCapabilities.get(provider2);
 
-    if (!cap1 || !cap2) {
+    if (cap1 == null || cap2 == null) {
       throw new Error('Cannot compare providers: capabilities not available');
     }
 
@@ -1503,7 +1507,7 @@ export class ProviderManager implements IProviderManager {
   private getBaseUrlFromProvider(
     provider: IProvider | undefined,
   ): string | undefined {
-    if (!provider) {
+    if (provider == null) {
       return undefined;
     }
 
@@ -1521,7 +1525,7 @@ export class ProviderManager implements IProviderManager {
           baseProviderConfig?: { baseURL?: string; baseUrl?: string };
         }
       ).baseProviderConfig;
-      if (baseConfig) {
+      if (baseConfig != null) {
         const candidate =
           typeof baseConfig.baseURL === 'string' &&
           baseConfig.baseURL.trim() !== ''
@@ -1540,7 +1544,7 @@ export class ProviderManager implements IProviderManager {
           providerConfig?: { baseURL?: string; baseUrl?: string };
         }
       ).providerConfig;
-      if (providerConfig) {
+      if (providerConfig != null) {
         const candidate =
           typeof providerConfig.baseURL === 'string' &&
           providerConfig.baseURL.trim() !== ''
@@ -1571,7 +1575,7 @@ export class ProviderManager implements IProviderManager {
       const maybeWrapped = current as unknown as {
         wrappedProvider?: IProvider;
       };
-      if (maybeWrapped.wrappedProvider) {
+      if (maybeWrapped.wrappedProvider != null) {
         current = maybeWrapped.wrappedProvider;
         continue;
       }

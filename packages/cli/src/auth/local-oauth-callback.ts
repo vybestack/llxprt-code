@@ -699,15 +699,15 @@ const createCallbackServer = async (
   let rejectHandler: ((error: Error) => void) | null = null;
 
   const settle = (result: { code: string; state: string } | Error) => {
-    if (settled) {
+    if (settled != null) {
       return;
     }
     settled = result;
     if (result instanceof Error) {
-      if (rejectHandler) {
+      if (rejectHandler != null) {
         rejectHandler(result);
       }
-    } else if (resolveHandler) {
+    } else if (resolveHandler != null) {
       resolveHandler(result);
     }
     resolveHandler = null;
@@ -719,7 +719,7 @@ const createCallbackServer = async (
       return;
     }
     closed = true;
-    if (timeout) {
+    if (timeout != null) {
       clearTimeout(timeout);
       timeout = null;
     }
@@ -770,7 +770,7 @@ const createCallbackServer = async (
       if (settled instanceof Error) {
         return Promise.reject(settled);
       }
-      if (settled && !(settled instanceof Error)) {
+      if (settled != null && !(settled instanceof Error)) {
         return Promise.resolve(settled);
       }
       return new Promise<{ code: string; state: string }>((resolve, reject) => {

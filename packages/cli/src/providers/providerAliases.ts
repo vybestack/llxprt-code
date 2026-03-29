@@ -250,7 +250,7 @@ export function loadProviderAliasEntries(): ProviderAliasEntry[] {
 
       const fullPath = path.join(directory.path, file);
       const entry = readAliasFile(fullPath, directory.source);
-      if (entry) {
+      if (entry != null) {
         aliases.push(entry);
       }
     }

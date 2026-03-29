@@ -134,7 +134,7 @@ async function downloadFiles({
           );
         }
         const body = response.body;
-        if (!body) {
+        if (body == null) {
           throw new Error(
             `Empty body while downloading ${endpoint}: ${response.status} - ${response.statusText}`,
           );

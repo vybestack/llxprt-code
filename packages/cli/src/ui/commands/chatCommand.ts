@@ -209,7 +209,7 @@ const resumeCommand: SlashCommand = {
     let conversation = checkpoint.history;
 
     // Apply emoji filtering if needed
-    if (emojiFilter) {
+    if (emojiFilter != null) {
       conversation = conversation.map((item) => {
         const filteredItem = { ...item };
         if (Array.isArray(filteredItem.parts)) {
@@ -517,7 +517,7 @@ const debugCommand: SlashCommand = {
     debugInfo.push(`Chat initialized: ${chatInitialized}`);
 
     // History information
-    if (chatInitialized && client) {
+    if (chatInitialized && client != null) {
       try {
         const chat = client.getChat();
         const history = chat.getHistory();
@@ -530,7 +530,7 @@ const debugCommand: SlashCommand = {
     }
 
     // Model information
-    if (config) {
+    if (config != null) {
       try {
         const model = config.getModel();
         debugInfo.push(`Current model: ${model}`);

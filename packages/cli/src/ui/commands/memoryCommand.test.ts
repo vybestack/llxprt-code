@@ -60,7 +60,7 @@ describe('memoryCommand', () => {
     const subCommand = memoryCommand.subCommands?.find(
       (cmd) => cmd.name === name,
     );
-    if (!subCommand) {
+    if (subCommand == null) {
       throw new Error(`/memory ${name} command not found.`);
     }
     return subCommand;
@@ -88,7 +88,7 @@ describe('memoryCommand', () => {
     });
 
     it('should display a message if memory is empty', async () => {
-      if (!showCommand.action) throw new Error('Command has no action');
+      if (showCommand.action == null) throw new Error('Command has no action');
 
       mockGetUserMemory.mockReturnValue('');
       mockGetLlxprtMdFileCount.mockReturnValue(0);
@@ -105,7 +105,7 @@ describe('memoryCommand', () => {
     });
 
     it('should display the memory content and file count if it exists', async () => {
-      if (!showCommand.action) throw new Error('Command has no action');
+      if (showCommand.action == null) throw new Error('Command has no action');
 
       const memoryContent = 'This is a test memory.';
 
@@ -133,7 +133,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if no arguments are provided', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, '  ');
       expect(result).toEqual({
@@ -147,7 +147,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if only scope is provided without text', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, 'global');
       expect(result).toEqual({
@@ -161,7 +161,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return an error message if only "project" is provided without text', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, 'project');
       expect(result).toEqual({
@@ -175,7 +175,7 @@ describe('memoryCommand', () => {
     });
 
     it('should default to global scope when no scope keyword is provided', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const fact = 'remember this';
       const result = addCommand.action(mockContext, `  ${fact}  `);
@@ -196,7 +196,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return a tool action with scope "global" when "global" is specified', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const fact = 'remember this globally';
       const result = addCommand.action(mockContext, `global ${fact}`);
@@ -217,7 +217,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return a tool action with scope "project" when "project" is specified', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const fact = 'remember this for the project';
       const result = addCommand.action(mockContext, `project ${fact}`);
@@ -238,7 +238,7 @@ describe('memoryCommand', () => {
     });
 
     it('should handle uppercase scope keywords', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const fact = 'test fact';
       const result = addCommand.action(mockContext, `PROJECT ${fact}`);
@@ -259,7 +259,7 @@ describe('memoryCommand', () => {
     });
 
     it('should handle mixed case scope keywords', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const fact = 'test fact';
       const result = addCommand.action(mockContext, `Global ${fact}`);
@@ -280,7 +280,7 @@ describe('memoryCommand', () => {
     });
 
     it('should treat non-scope first words as part of the fact', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const fact = 'globally important fact';
       const result = addCommand.action(mockContext, fact);
@@ -301,7 +301,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return error when core.project is provided without content', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, 'core.project');
 
@@ -313,7 +313,7 @@ describe('memoryCommand', () => {
     });
 
     it('should return error when core.global is provided without content', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, 'core.global');
 
@@ -325,7 +325,7 @@ describe('memoryCommand', () => {
     });
 
     it('should handle core.project scope and write directly (async)', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       mockContext = createMockCommandContext({
         services: {
@@ -345,7 +345,7 @@ describe('memoryCommand', () => {
     });
 
     it('should handle core.global scope and write directly (async)', () => {
-      if (!addCommand.action) throw new Error('Command has no action');
+      if (addCommand.action == null) throw new Error('Command has no action');
 
       mockContext = createMockCommandContext({
         services: {
@@ -421,7 +421,8 @@ describe('memoryCommand', () => {
     });
 
     it('should display success message when memory is refreshed with content', async () => {
-      if (!refreshCommand.action) throw new Error('Command has no action');
+      if (refreshCommand.action == null)
+        throw new Error('Command has no action');
 
       const refreshResult: LoadServerHierarchicalMemoryResponse = {
         memoryContent: 'new memory content',
@@ -464,7 +465,8 @@ describe('memoryCommand', () => {
     });
 
     it('should display success message when memory is refreshed with no content', async () => {
-      if (!refreshCommand.action) throw new Error('Command has no action');
+      if (refreshCommand.action == null)
+        throw new Error('Command has no action');
 
       const refreshResult = { memoryContent: '', fileCount: 0, filePaths: [] };
       mockLoadHierarchicalLlxprtMemory.mockResolvedValue(refreshResult);
@@ -486,7 +488,8 @@ describe('memoryCommand', () => {
     });
 
     it('should display an error message if refreshing fails', async () => {
-      if (!refreshCommand.action) throw new Error('Command has no action');
+      if (refreshCommand.action == null)
+        throw new Error('Command has no action');
 
       const error = new Error('Failed to read memory files.');
       mockLoadHierarchicalLlxprtMemory.mockRejectedValue(error);
@@ -510,7 +513,8 @@ describe('memoryCommand', () => {
     });
 
     it('should not throw if config service is unavailable', async () => {
-      if (!refreshCommand.action) throw new Error('Command has no action');
+      if (refreshCommand.action == null)
+        throw new Error('Command has no action');
 
       const nullConfigContext = createMockCommandContext({
         services: { config: null },
@@ -532,7 +536,8 @@ describe('memoryCommand', () => {
     });
 
     it('should use ContextManager.refresh() when JIT context is enabled', async () => {
-      if (!refreshCommand.action) throw new Error('Command has no action');
+      if (refreshCommand.action == null)
+        throw new Error('Command has no action');
 
       const mockRefresh = vi.fn().mockResolvedValue(undefined);
       const jitConfig = {
@@ -591,7 +596,7 @@ describe('memoryCommand', () => {
     });
 
     it('should display a message if no LLXPRT.md files are found', async () => {
-      if (!listCommand.action) throw new Error('Command has no action');
+      if (listCommand.action == null) throw new Error('Command has no action');
 
       mockGetLlxprtMdFilePaths.mockReturnValue([]);
 
@@ -607,7 +612,7 @@ describe('memoryCommand', () => {
     });
 
     it('should display the file count and paths if they exist', async () => {
-      if (!listCommand.action) throw new Error('Command has no action');
+      if (listCommand.action == null) throw new Error('Command has no action');
 
       const filePaths = ['/path/one/LLXPRT.md', '/path/two/LLXPRT.md'];
       mockGetLlxprtMdFilePaths.mockReturnValue(filePaths);

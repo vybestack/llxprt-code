@@ -196,7 +196,7 @@ class TestDeviceCodeFlow implements OAuthFlowInterface {
       this.pollResults[Math.min(this.pollIndex, this.pollResults.length - 1)];
     this.pollIndex++;
 
-    if (result.token) {
+    if (result.token != null) {
       return result.token;
     }
 

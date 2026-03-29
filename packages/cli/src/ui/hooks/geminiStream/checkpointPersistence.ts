@@ -171,7 +171,7 @@ async function saveRestorableToolCalls(
   }
 
   for (const toolCall of restorableToolCalls) {
-    if (!gitService) {
+    if (gitService == null) {
       const filePath = toolCall.request.args['file_path'] as string;
       onDebugMessage(
         `Checkpointing is enabled but Git service is not available. Failed to create snapshot for ${filePath ?? toolCall.request.name}. Ensure Git is installed and working properly.`,

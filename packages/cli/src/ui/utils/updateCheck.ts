@@ -29,8 +29,8 @@ function getBestAvailableUpdate(
   nightly?: UpdateInfo,
   stable?: UpdateInfo,
 ): UpdateInfo | null {
-  if (!nightly) return stable || null;
-  if (!stable) return nightly || null;
+  if (nightly == null) return stable || null;
+  if (stable == null) return nightly || null;
 
   const nightlyVer = nightly.latest;
   const stableVer = stable.latest;
@@ -56,7 +56,7 @@ export async function checkForUpdates(
       return null;
     }
     const packageJson = await getPackageJson(__dirname);
-    if (!packageJson || !packageJson.name || !packageJson.version) {
+    if (packageJson == null || !packageJson.name || !packageJson.version) {
       return null;
     }
 
@@ -96,7 +96,7 @@ export async function checkForUpdates(
         latestUpdateInfo || undefined,
       );
 
-      if (bestUpdate && semver.gt(bestUpdate.latest, currentVersion)) {
+      if (bestUpdate != null && semver.gt(bestUpdate.latest, currentVersion)) {
         const message = `LLxprt Code update available! ${currentVersion} → ${bestUpdate.latest}`;
         return {
           message,
@@ -106,7 +106,7 @@ export async function checkForUpdates(
     } else {
       const updateInfo = await fetchWithTimeout(createNotifier('latest'));
 
-      if (updateInfo && semver.gt(updateInfo.latest, currentVersion)) {
+      if (updateInfo != null && semver.gt(updateInfo.latest, currentVersion)) {
         const message = `LLxprt Code update available! ${currentVersion} → ${updateInfo.latest}`;
         return {
           message,

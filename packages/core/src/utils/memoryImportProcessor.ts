@@ -162,7 +162,7 @@ function findCodeRegions(content: string): Array<[number, number]> {
       regions.push([baseOffset, baseOffset + token.raw.length]);
     }
 
-    if ('tokens' in token && token.tokens) {
+    if ('tokens' in token && token.tokens != null) {
       let childOffset = 0;
       for (const child of token.tokens) {
         const childIndexInParent = token.raw.indexOf(child.raw, childOffset);

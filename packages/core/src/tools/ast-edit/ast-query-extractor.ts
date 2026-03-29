@@ -42,9 +42,9 @@ export class ASTQueryExtractor {
             const nameNode = n.field('name');
             const paramsNode = n.field('parameters');
             const returnTypeNode = n.field('return_type'); // Typical TS naming
-            if (nameNode) {
-              let signature = paramsNode ? paramsNode.text() : '()';
-              if (returnTypeNode) {
+            if (nameNode != null) {
+              let signature = paramsNode != null ? paramsNode.text() : '()';
+              if (returnTypeNode != null) {
                 signature += returnTypeNode.text();
               }
               declarations.push(
@@ -63,9 +63,9 @@ export class ASTQueryExtractor {
           const nameNode = n.field('name');
           const paramsNode = n.field('parameters');
           const returnTypeNode = n.field('return_type');
-          if (nameNode) {
-            let signature = paramsNode ? paramsNode.text() : '()';
-            if (returnTypeNode) {
+          if (nameNode != null) {
+            let signature = paramsNode != null ? paramsNode.text() : '()';
+            if (returnTypeNode != null) {
               signature += returnTypeNode.text();
             }
             declarations.push(
@@ -77,7 +77,7 @@ export class ASTQueryExtractor {
         // Classes
         sgRoot.findAll({ rule: { kind: 'class_declaration' } }).forEach((n) => {
           const nameNode = n.field('name');
-          if (nameNode) {
+          if (nameNode != null) {
             declarations.push(
               this.nodeToDeclaration(n, nameNode.text(), 'class'),
             );
@@ -89,7 +89,7 @@ export class ASTQueryExtractor {
           .findAll({ rule: { kind: 'variable_declarator' } })
           .forEach((n) => {
             const nameNode = n.field('name');
-            if (nameNode) {
+            if (nameNode != null) {
               declarations.push(
                 this.nodeToDeclaration(n, nameNode.text(), 'variable'),
               );
@@ -102,7 +102,7 @@ export class ASTQueryExtractor {
           declarations.push(
             this.nodeToDeclaration(
               n,
-              sourceNode ? sourceNode.text() : 'import',
+              sourceNode != null ? sourceNode.text() : 'import',
               'import',
             ),
           );
@@ -115,9 +115,9 @@ export class ASTQueryExtractor {
             const nameNode = n.field('name');
             const paramsNode = n.field('parameters');
             const returnTypeNode = n.field('return_type');
-            if (nameNode) {
-              let signature = paramsNode ? paramsNode.text() : '()';
-              if (returnTypeNode) {
+            if (nameNode != null) {
+              let signature = paramsNode != null ? paramsNode.text() : '()';
+              if (returnTypeNode != null) {
                 signature += ` -> ${returnTypeNode.text()}`;
               }
               declarations.push(
@@ -133,7 +133,7 @@ export class ASTQueryExtractor {
 
         sgRoot.findAll({ rule: { kind: 'class_definition' } }).forEach((n) => {
           const nameNode = n.field('name');
-          if (nameNode) {
+          if (nameNode != null) {
             declarations.push(
               this.nodeToDeclaration(n, nameNode.text(), 'class'),
             );
@@ -216,13 +216,13 @@ export class ASTQueryExtractor {
 
   private extractNameBasic(line: string): string {
     const match = line.match(/(?:function|def|class)\s+(\w+)/);
-    return match ? match[1] : 'unknown';
+    return match != null ? match[1] : 'unknown';
   }
 
   private extractSignatureBasic(line: string): string {
     // Try to capture parameters: ( ... )
     const match = line.match(/\(([^)]*)\)/);
-    if (match) {
+    if (match != null) {
       return `(${match[1]})`;
     }
     return '';

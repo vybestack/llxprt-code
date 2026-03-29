@@ -258,7 +258,7 @@ export function UIStateProvider({
 
 export function useUIState(): UIState {
   const context = useContext(UIStateContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useUIState must be used within a UIStateProvider');
   }
   return context;

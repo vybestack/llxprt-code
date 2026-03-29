@@ -70,7 +70,7 @@ function formatTask(task: AsyncTaskInfo): string {
  */
 function getRunningTaskIds(context: CommandContext): string[] {
   const asyncTaskManager = context.services.config?.getAsyncTaskManager?.();
-  if (!asyncTaskManager) {
+  if (asyncTaskManager == null) {
     return [];
   }
 
@@ -102,7 +102,7 @@ export const taskCommand: SlashCommand = {
       action: (context: CommandContext) => {
         const asyncTaskManager =
           context.services.config?.getAsyncTaskManager?.();
-        if (!asyncTaskManager) {
+        if (asyncTaskManager == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -174,7 +174,7 @@ export const taskCommand: SlashCommand = {
 
         const asyncTaskManager =
           context.services.config?.getAsyncTaskManager?.();
-        if (!asyncTaskManager) {
+        if (asyncTaskManager == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -188,13 +188,16 @@ export const taskCommand: SlashCommand = {
         // Try exact match first
         let task = asyncTaskManager.getTask(taskId);
 
-        if (!task) {
+        if (task == null) {
           // Try prefix match
           const result = asyncTaskManager.getTaskByPrefix(taskId);
 
-          if (result.task) {
+          if (result.task != null) {
             task = result.task;
-          } else if (result.candidates && result.candidates.length > 0) {
+          } else if (
+            result.candidates != null &&
+            result.candidates.length > 0
+          ) {
             // Ambiguous - show full task IDs
             const candidateList = result.candidates
               .map((c) => `  ${c.id}`)

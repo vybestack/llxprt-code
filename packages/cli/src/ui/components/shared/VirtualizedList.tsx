@@ -153,7 +153,7 @@ function VirtualizedList<T>(
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
-    if (containerRef.current) {
+    if (containerRef.current != null) {
       const height = Math.round(measureElement(containerRef.current).height);
       if (containerHeight !== height) {
         setContainerHeight(height);
@@ -163,24 +163,25 @@ function VirtualizedList<T>(
     let newHeights: number[] | null = null;
     for (let i = startIndex; i <= endIndex; i++) {
       const itemRef = itemRefs.current[i];
-      if (itemRef) {
+      if (itemRef != null) {
         const height = Math.round(measureElement(itemRef).height);
         if (height !== heights[i]) {
-          if (!newHeights) {
+          if (newHeights == null) {
             newHeights = [...heights];
           }
           newHeights[i] = height;
         }
       }
     }
-    if (newHeights) {
+    if (newHeights != null) {
       setHeights(newHeights);
     }
   });
 
-  const scrollableContainerHeight = containerRef.current
-    ? Math.round(measureElement(containerRef.current).height)
-    : containerHeight;
+  const scrollableContainerHeight =
+    containerRef.current != null
+      ? Math.round(measureElement(containerRef.current).height)
+      : containerHeight;
 
   const getAnchorForScrollTop = useCallback(
     (

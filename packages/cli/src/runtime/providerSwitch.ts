@@ -376,7 +376,7 @@ async function handleAnthropicOAuth(
   }
 
   const oauthManager = getCliOAuthManager();
-  if (!oauthManager) {
+  if (oauthManager == null) {
     return;
   }
 
@@ -487,7 +487,7 @@ function applyAnthropicOAuthDefaults(context: ProviderSwitchContext): void {
 function applyAliasEphemeralSettings(context: ProviderSwitchContext): void {
   const aliasEphemeralSettings = context.aliasConfig?.ephemeralSettings;
   if (
-    !aliasEphemeralSettings ||
+    aliasEphemeralSettings == null ||
     typeof aliasEphemeralSettings !== 'object' ||
     Array.isArray(aliasEphemeralSettings)
   ) {
@@ -561,7 +561,7 @@ function applyModelDefaults(context: ProviderSwitchContext): void {
   if (
     context.skipModelDefaults ||
     !context.modelToApply ||
-    !context.aliasConfig?.modelDefaults
+    context.aliasConfig?.modelDefaults == null
   ) {
     return;
   }

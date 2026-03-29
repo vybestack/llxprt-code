@@ -48,7 +48,7 @@ export async function triggerSessionStartHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -62,7 +62,7 @@ export async function triggerSessionStartHook(
     debugLogger.debug('SessionStart hook executed', { source });
 
     // Return SessionStartHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new SessionStartHookOutput(result.finalOutput);
     }
 
@@ -92,7 +92,7 @@ export async function triggerSessionEndHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -106,7 +106,7 @@ export async function triggerSessionEndHook(
     debugLogger.debug('SessionEnd hook executed', { reason });
 
     // Return SessionEndHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new SessionEndHookOutput(result.finalOutput);
     }
 
@@ -136,7 +136,7 @@ export async function triggerBeforeAgentHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -150,7 +150,7 @@ export async function triggerBeforeAgentHook(
     debugLogger.debug('BeforeAgent hook executed');
 
     // Return BeforeAgentHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new BeforeAgentHookOutput(result.finalOutput);
     }
 
@@ -184,7 +184,7 @@ export async function triggerAfterAgentHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -202,7 +202,7 @@ export async function triggerAfterAgentHook(
     debugLogger.debug('AfterAgent hook executed');
 
     // Return AfterAgentHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return new AfterAgentHookOutput(result.finalOutput);
     }
 
@@ -235,7 +235,7 @@ export async function triggerPreCompressHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -249,7 +249,7 @@ export async function triggerPreCompressHook(
     debugLogger.debug('PreCompress hook executed', { trigger });
 
     // Return PreCompressOutput from aggregated result
-    if (result.finalOutput) {
+    if (result.finalOutput != null) {
       return result.finalOutput as PreCompressOutput;
     }
 

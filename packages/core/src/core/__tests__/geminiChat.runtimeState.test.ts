@@ -95,13 +95,14 @@ function createTestRuntimeContext(
     state: runtimeState,
     settings,
     provider: createProviderAdapterFromManager(config?.getProviderManager?.()),
-    telemetry: config
-      ? createTelemetryAdapterFromConfig(config)
-      : {
-          logApiRequest: () => {},
-          logApiResponse: () => {},
-          logApiError: () => {},
-        },
+    telemetry:
+      config != null
+        ? createTelemetryAdapterFromConfig(config)
+        : {
+            logApiRequest: () => {},
+            logApiResponse: () => {},
+            logApiError: () => {},
+          },
     tools: createToolRegistryViewFromRegistry(config?.getToolRegistry?.()),
     history: historyService,
     providerRuntime: { ...providerRuntime },

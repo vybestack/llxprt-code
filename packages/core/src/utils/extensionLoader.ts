@@ -39,7 +39,7 @@ export abstract class ExtensionLoader {
   async start(config: Config): Promise<void> {
     this.isStarting = true;
     try {
-      if (!this.config) {
+      if (this.config == null) {
         this.config = config;
       } else {
         throw new Error('Already started, you may only call `start` once.');
@@ -64,7 +64,7 @@ export abstract class ExtensionLoader {
    * extension reloading is enabled and the `config` object is initialized.
    */
   protected async startExtension(extension: GeminiCLIExtension) {
-    if (!this.config) {
+    if (this.config == null) {
       throw new Error('Cannot call `startExtension` prior to calling `start`.');
     }
     this.startingCount++;
@@ -78,7 +78,7 @@ export abstract class ExtensionLoader {
       // Register extension subagents
       if (extension.subagents?.length) {
         const subagentMgr = this.config.getSubagentManager();
-        if (subagentMgr) {
+        if (subagentMgr != null) {
           subagentMgr.registerExtensionSubagents(
             extension.name,
             extension.subagents,
@@ -125,7 +125,7 @@ export abstract class ExtensionLoader {
   private async maybeRefreshGeminiTools(
     extension: GeminiCLIExtension,
   ): Promise<void> {
-    if (extension.excludeTools && extension.excludeTools.length > 0) {
+    if (extension.excludeTools != null && extension.excludeTools.length > 0) {
       const geminiClient = this.config?.getGeminiClient();
       if (geminiClient?.isInitialized()) {
         await geminiClient.setTools();
@@ -137,7 +137,7 @@ export abstract class ExtensionLoader {
    * Refreshes memory only after all extensions are done loading/unloading.
    */
   private async maybeRefreshMemory(): Promise<void> {
-    if (!this.config) {
+    if (this.config == null) {
       throw new Error('Cannot refresh memory prior to calling `start`.');
     }
     if (
@@ -163,7 +163,7 @@ export abstract class ExtensionLoader {
    * initialized.
    */
   protected async stopExtension(extension: GeminiCLIExtension) {
-    if (!this.config) {
+    if (this.config == null) {
       throw new Error('Cannot call `stopExtension` prior to calling `start`.');
     }
     this.stoppingCount++;
@@ -177,7 +177,7 @@ export abstract class ExtensionLoader {
       await this.maybeRefreshGeminiTools(extension);
       // Remove extension subagents
       const subagentMgr = this.config.getSubagentManager();
-      if (subagentMgr) {
+      if (subagentMgr != null) {
         subagentMgr.removeExtensionSubagents(extension.name);
       }
       // Note: Context files are loaded only once all extensions are done
@@ -218,7 +218,7 @@ export abstract class ExtensionLoader {
    * This is a public method available for runtime extension management.
    */
   async restartExtension(extension: GeminiCLIExtension): Promise<void> {
-    if (!this.config) {
+    if (this.config == null) {
       throw new Error('Cannot restart extension prior to calling `start`.');
     }
     if (!this.config.getEnableExtensionReloading()) {

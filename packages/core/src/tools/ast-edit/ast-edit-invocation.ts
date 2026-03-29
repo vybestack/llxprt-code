@@ -69,7 +69,7 @@ export class ASTEditToolInvocation
 
     // Confirmation logic for execution mode
     const editData = await this.calculateEdit(this.params, abortSignal);
-    if (editData.error) {
+    if (editData.error != null) {
       return false;
     }
 
@@ -224,13 +224,13 @@ export class ASTEditToolInvocation
         `- Classes: ${enhancedContext.languageContext.classes.length}`,
         `- AST validation: ${astValidation.valid ? 'PASSED' : 'FAILED'}`,
         `- Relevant snippets: ${enhancedContext.relevantSnippets.length} found`,
-        enhancedContext.repositoryContext
+        enhancedContext.repositoryContext != null
           ? `- Repository: ${enhancedContext.repositoryContext.gitUrl}`
           : '',
-        enhancedContext.relatedFiles
+        enhancedContext.relatedFiles != null
           ? `- Related files: ${enhancedContext.relatedFiles.length}`
           : '',
-        enhancedContext.connectedFiles &&
+        enhancedContext.connectedFiles != null &&
         enhancedContext.connectedFiles.length > 0
           ? [
               '',
@@ -260,7 +260,7 @@ export class ASTEditToolInvocation
         ...enhancedContext.declarations.map(
           (decl) => `- ${decl.type}: ${decl.name} (line ${decl.line})`,
         ),
-        enhancedContext.relatedSymbols &&
+        enhancedContext.relatedSymbols != null &&
         enhancedContext.relatedSymbols.length > 0
           ? [
               '',
@@ -324,7 +324,7 @@ export class ASTEditToolInvocation
       };
     }
 
-    if (editData.error) {
+    if (editData.error != null) {
       return {
         llmContent: editData.error.raw,
         returnDisplay: `Error: ${editData.error.display}`,

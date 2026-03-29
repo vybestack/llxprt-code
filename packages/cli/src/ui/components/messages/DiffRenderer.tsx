@@ -28,7 +28,7 @@ function parseDiffWithLineNumbers(diffContent: string): DiffLine[] {
 
   for (const line of lines) {
     const hunkMatch = line.match(hunkHeaderRegex);
-    if (hunkMatch) {
+    if (hunkMatch != null) {
       currentOldLine = parseInt(hunkMatch[1], 10);
       currentNewLine = parseInt(hunkMatch[2], 10);
       inHunk = true;

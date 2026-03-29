@@ -39,7 +39,7 @@ async function listAction(
   }
 
   const skillManager = context.services.config?.getSkillManager();
-  if (!skillManager) {
+  if (skillManager == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -101,7 +101,7 @@ async function disableAction(
   }
 
   const skill = skillManager?.getSkill(skillName);
-  if (!skill) {
+  if (skill == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -186,7 +186,7 @@ async function reloadAction(
   context: CommandContext,
 ): Promise<void | SlashCommandActionReturn> {
   const config = context.services.config;
-  if (!config) {
+  if (config == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -282,7 +282,7 @@ async function disableCompletion(
   partialArg: string,
 ): Promise<string[]> {
   const skillManager = context.services.config?.getSkillManager();
-  if (!skillManager) {
+  if (skillManager == null) {
     return [];
   }
   return skillManager
@@ -296,7 +296,7 @@ async function enableCompletion(
   partialArg: string,
 ): Promise<string[]> {
   const skillManager = context.services.config?.getSkillManager();
-  if (!skillManager) {
+  if (skillManager == null) {
     return [];
   }
   return skillManager

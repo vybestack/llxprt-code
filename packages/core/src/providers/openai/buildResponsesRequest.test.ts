@@ -274,13 +274,13 @@ describe('buildResponsesRequest', () => {
       const msg0 = result.input?.[0];
       const msg1 = result.input?.[1];
       const msg2 = result.input?.[2];
-      expect(msg0 && 'content' in msg0 ? msg0.content : undefined).toBe(
+      expect(msg0 != null && 'content' in msg0 ? msg0.content : undefined).toBe(
         'Second message',
       );
-      expect(msg1 && 'content' in msg1 ? msg1.content : undefined).toBe(
+      expect(msg1 != null && 'content' in msg1 ? msg1.content : undefined).toBe(
         'Second response',
       );
-      expect(msg2 && 'content' in msg2 ? msg2.content : undefined).toBe(
+      expect(msg2 != null && 'content' in msg2 ? msg2.content : undefined).toBe(
         'Third message',
       );
     });

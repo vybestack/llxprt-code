@@ -211,7 +211,7 @@ export async function openDiff(
   onEditorClose?: () => void,
 ): Promise<void> {
   const diffCommand = getDiffCommand(oldPath, newPath, editor);
-  if (!diffCommand) {
+  if (diffCommand == null) {
     debugLogger.error('No diff tool available. Install a supported editor.');
     return;
   }
@@ -221,7 +221,7 @@ export async function openDiff(
       const result = spawnSync(diffCommand.command, diffCommand.args, {
         stdio: 'inherit',
       });
-      if (result.error) {
+      if (result.error != null) {
         throw result.error;
       }
       if (result.status !== 0) {

@@ -66,7 +66,7 @@ export class SchemaValidator {
 
     // Handle our custom requireOne validation first
     const extSchema = schema as ExtendedSchema;
-    if (extSchema.requireOne) {
+    if (extSchema.requireOne != null) {
       for (const oneOfGroup of extSchema.requireOne) {
         const hasOne = oneOfGroup.some(
           (prop) =>

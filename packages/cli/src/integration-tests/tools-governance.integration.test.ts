@@ -105,7 +105,7 @@ describe('tools governance integration', () => {
       ui: { addItem: uiAddItem },
     });
 
-    if (!toolsCommand.action) {
+    if (toolsCommand.action == null) {
       throw new Error('toolsCommand action not defined');
     }
 

@@ -679,7 +679,7 @@ export function pickDefaultThemeName(
   const preferredFallback = availableThemes.find(
     (t) => t.name === fallbackForType && t.type === terminalThemeType,
   );
-  if (preferredFallback) {
+  if (preferredFallback != null) {
     return preferredFallback.name;
   }
 
@@ -687,7 +687,7 @@ export function pickDefaultThemeName(
   const matchingTheme = availableThemes.find(
     (t) => t.type === terminalThemeType,
   );
-  if (matchingTheme) {
+  if (matchingTheme != null) {
     return matchingTheme.name;
   }
 

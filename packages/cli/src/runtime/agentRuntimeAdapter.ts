@@ -100,9 +100,10 @@ export class AgentRuntimeAdapter {
       model: snapshot.model,
       baseUrl: snapshot.baseUrl,
       proxyUrl: snapshot.proxyUrl,
-      modelParams: snapshot.modelParams
-        ? Object.freeze({ ...snapshot.modelParams })
-        : undefined,
+      modelParams:
+        snapshot.modelParams != null
+          ? Object.freeze({ ...snapshot.modelParams })
+          : undefined,
       sessionId: snapshot.sessionId,
       updatedAt: snapshot.updatedAt,
     }) as AgentRuntimeState;
@@ -214,7 +215,7 @@ export class AgentRuntimeAdapter {
 
     // Validate provider exists
     const providerManager = this.legacyConfig.getProviderManager();
-    if (!providerManager) {
+    if (providerManager == null) {
       throw new Error('Provider manager not initialized');
     }
 
@@ -225,7 +226,7 @@ export class AgentRuntimeAdapter {
         ) => { getDefaultModel: () => string } | undefined;
       }
     ).getProviderByName(providerName);
-    if (!provider) {
+    if (provider == null) {
       const available = providerManager.listProviders().join(', ');
       throw new Error(
         `Provider '${providerName}' not found. Available providers: ${available}`,
@@ -304,7 +305,7 @@ export class AgentRuntimeAdapter {
 
     // Validate provider
     const providerManager = this.legacyConfig.getProviderManager();
-    if (!providerManager) {
+    if (providerManager == null) {
       throw new Error('Provider manager not initialized');
     }
 
@@ -315,7 +316,7 @@ export class AgentRuntimeAdapter {
         ) => { getDefaultModel: () => string } | undefined;
       }
     ).getProviderByName(providerName);
-    if (!provider) {
+    if (provider == null) {
       const available = providerManager.listProviders().join(', ');
       throw new Error(
         `Provider '${providerName}' not found. Available providers: ${available}`,
@@ -372,7 +373,7 @@ export class AgentRuntimeAdapter {
     // Note: Config doesn't have setProxy, proxy is read-only
 
     // Mirror model params as ephemeral settings
-    if (state.modelParams) {
+    if (state.modelParams != null) {
       for (const [key, value] of Object.entries(state.modelParams)) {
         this.legacyConfig.setEphemeralSetting(key, value);
       }
@@ -398,7 +399,7 @@ export class AgentRuntimeAdapter {
     // @pseudocode cli-runtime-adapter.md lines 597-609
 
     // Unsubscribe from runtime state events
-    if (this.unsubscribe) {
+    if (this.unsubscribe != null) {
       this.unsubscribe();
       this.unsubscribe = null;
     }
@@ -441,7 +442,7 @@ export function setRuntimeAdapter(adapter: AgentRuntimeAdapter): void {
 export function getRuntimeAdapter(): AgentRuntimeAdapter {
   // @plan PLAN-20251027-STATELESS5.P08
   // @pseudocode cli-runtime-adapter.md lines 369-375
-  if (!globalRuntimeAdapter) {
+  if (globalRuntimeAdapter == null) {
     throw new Error(
       'Runtime adapter not initialized. Call setRuntimeAdapter() during bootstrap.',
     );
@@ -512,7 +513,7 @@ export function resolveRuntimeStateFromFlags(
     params.model = flags.model;
   }
 
-  if (flags.set) {
+  if (flags.set != null) {
     // Process --set flags (e.g., --set base-url=...)
     for (const [key, value] of flags.set) {
       if (key === 'base-url') {

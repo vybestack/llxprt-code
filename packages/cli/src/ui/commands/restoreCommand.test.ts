@@ -229,7 +229,7 @@ describe('restoreCommand', () => {
       fullLine: string = `/restore ${partialArg}`,
     ): Promise<string[]> => {
       const command = restoreCommand(mockConfig);
-      if (!command?.schema) {
+      if (command?.schema == null) {
         throw new Error('restore command schema missing');
       }
 

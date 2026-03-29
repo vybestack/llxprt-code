@@ -12,9 +12,10 @@ import type { GenerateContentResponse, Part } from '@google/genai';
 const mockResponse = (
   parts?: Array<{ text?: string; functionCall?: unknown }>,
 ): GenerateContentResponse => ({
-  candidates: parts
-    ? [{ content: { parts: parts as Part[], role: 'model' }, index: 0 }]
-    : [],
+  candidates:
+    parts != null
+      ? [{ content: { parts: parts as Part[], role: 'model' }, index: 0 }]
+      : [],
   promptFeedback: { safetyRatings: [] },
   text: undefined,
   data: undefined,

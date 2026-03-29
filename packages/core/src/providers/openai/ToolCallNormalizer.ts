@@ -105,7 +105,7 @@ export class ToolCallNormalizer {
     const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
       normalized,
     );
-    if (kimiPrefixMatch) {
+    if (kimiPrefixMatch != null) {
       normalized = kimiPrefixMatch[1];
       logger.debug(
         `Stripped Kimi-style prefix from tool name: "${name}" -> "${normalized}"`,

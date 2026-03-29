@@ -134,7 +134,7 @@ async function readFullStructure(
         }
         const fileName = entry.name;
         const filePath = path.join(currentPath, fileName);
-        if (options.fileService) {
+        if (options.fileService != null) {
           const shouldIgnore =
             (options.fileFilteringOptions.respectGitIgnore &&
               options.fileService.shouldGitIgnoreFile(filePath)) ||
@@ -145,7 +145,7 @@ async function readFullStructure(
           }
         }
         if (
-          !options.fileIncludePattern ||
+          options.fileIncludePattern == null ||
           options.fileIncludePattern.test(fileName)
         ) {
           filesInCurrentDir.push(fileName);
@@ -174,7 +174,7 @@ async function readFullStructure(
         const subFolderPath = path.join(currentPath, subFolderName);
 
         let isIgnored = false;
-        if (options.fileService) {
+        if (options.fileService != null) {
           isIgnored =
             (options.fileFilteringOptions.respectGitIgnore &&
               options.fileService.shouldGitIgnoreFile(subFolderPath)) ||
@@ -318,7 +318,7 @@ export async function getFolderStructure(
     // 1. Read the structure using BFS, respecting maxItems
     const structureRoot = await readFullStructure(resolvedPath, mergedOptions);
 
-    if (!structureRoot) {
+    if (structureRoot == null) {
       return `Error: Could not read directory "${resolvedPath}". Check path and permissions.`;
     }
 

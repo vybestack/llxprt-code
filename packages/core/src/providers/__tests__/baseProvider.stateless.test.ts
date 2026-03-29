@@ -105,7 +105,7 @@ const createCallContext = (config: CallContextConfig): CallContext => {
     captureAuth: config.captureAuth === true,
   };
 
-  if (config.metadata) {
+  if (config.metadata != null) {
     Object.assign(metadata, config.metadata);
   }
 

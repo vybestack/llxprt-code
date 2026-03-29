@@ -61,7 +61,7 @@ describe('lspCommand (P34)', () => {
       vi.clearAllMocks();
       context = createMockCommandContext();
       const command = lspCommand.subCommands?.find((c) => c.name === 'status');
-      if (!command) {
+      if (command == null) {
         throw new Error('status command not found');
       }
       statusCommand = command;

@@ -15,7 +15,7 @@ export class LruCache<K, V> {
 
   get(key: K): V | undefined {
     const value = this.cache.get(key);
-    if (value) {
+    if (value != null) {
       // Move to end to mark as recently used
       this.cache.delete(key);
       this.cache.set(key, value);

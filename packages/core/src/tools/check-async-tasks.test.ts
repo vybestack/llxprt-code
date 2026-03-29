@@ -219,7 +219,7 @@ describe('CheckAsyncTasksTool', () => {
 
       // Simulate 15 seconds passing
       const task = manager.getTask('task-seconds');
-      if (task) {
+      if (task != null) {
         task.launchedAt = launchedAt - 15000;
         task.completedAt = launchedAt;
         task.status = 'completed';
@@ -245,7 +245,7 @@ describe('CheckAsyncTasksTool', () => {
 
       // Simulate 2 minutes 30 seconds
       const task = manager.getTask('task-minutes');
-      if (task) {
+      if (task != null) {
         task.launchedAt = launchedAt - 150000; // 2m 30s
         task.completedAt = launchedAt;
         task.status = 'completed';
@@ -271,7 +271,7 @@ describe('CheckAsyncTasksTool', () => {
 
       // Simulate 1 hour 15 minutes
       const task = manager.getTask('task-hours');
-      if (task) {
+      if (task != null) {
         task.launchedAt = launchedAt - 4500000; // 1h 15m
         task.completedAt = launchedAt;
         task.status = 'completed';

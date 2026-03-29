@@ -92,7 +92,7 @@ const buildMockScheduler = (
       const requests = Array.isArray(request) ? request : [request];
       scheduler.toolCalls = requests.map((req) => {
         const tool = scheduler.toolRegistry.getTool(req.name);
-        if (tool) {
+        if (tool != null) {
           const invocation = tool.build(req.args);
           return {
             status: 'scheduled',
@@ -314,7 +314,7 @@ const mockConfig = {
   getOrCreateScheduler: vi.fn(
     (sessionId: string, callbacks: SchedulerCallbacks) => {
       const existing = createdSchedulers.get(sessionId);
-      if (existing) {
+      if (existing != null) {
         existing.setCallbacks({
           ...callbacks,
           config: mockConfig,
@@ -468,7 +468,7 @@ describe('useReactToolScheduler', () => {
       // This is a common pattern in these tests.
       if (
         (pendingItem as HistoryItemToolGroup)?.tools?.[0]?.confirmationDetails
-          ?.onConfirm
+          ?.onConfirm != null
       ) {
         capturedOnConfirmForTest = (pendingItem as HistoryItemToolGroup)
           .tools[0].confirmationDetails?.onConfirm;
@@ -624,7 +624,7 @@ describe('useReactToolScheduler', () => {
     const failedCall = completionArgs[0];
     expect(failedCall.status).toBe('error');
     expect(failedCall.request.agentId).toBe('primary');
-    if (!failedCall.response.error) {
+    if (failedCall.response.error == null) {
       throw new Error('Expected tool response error');
     }
     const errorMessage = failedCall.response.error.message ?? '';

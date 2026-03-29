@@ -67,7 +67,7 @@ export function handleDeleteWordForward(
 
   for (let i = 0; i < count; i++) {
     const nextWord = findNextWordAcrossLines(lines, endRow, endCol, true);
-    if (nextWord) {
+    if (nextWord != null) {
       endRow = nextWord.row;
       endCol = nextWord.col;
     } else {
@@ -105,7 +105,7 @@ export function handleDeleteWordBackward(
 
   for (let i = 0; i < count; i++) {
     const prevWord = findPrevWordAcrossLines(lines, startRow, startCol);
-    if (!prevWord) break;
+    if (prevWord == null) break;
     startRow = prevWord.row;
     startCol = prevWord.col;
   }
@@ -148,7 +148,7 @@ function advanceWordEnd(
   let remaining = count;
   while (remaining > 0) {
     const wordEnd = nextWordEndPos(lines, r, c);
-    if (!wordEnd) {
+    if (wordEnd == null) {
       remaining = 0;
     } else {
       r = wordEnd.row;
@@ -551,7 +551,7 @@ export function handleMoveWordForward(
 
   for (let i = 0; i < count; i++) {
     const nextWord = findNextWordAcrossLines(lines, row, col, true);
-    if (!nextWord) break;
+    if (nextWord == null) break;
     row = nextWord.row;
     col = nextWord.col;
   }
@@ -569,7 +569,7 @@ export function handleMoveWordBackward(
 
   for (let i = 0; i < count; i++) {
     const prevWord = findPrevWordAcrossLines(lines, row, col);
-    if (!prevWord) break;
+    if (prevWord == null) break;
     row = prevWord.row;
     col = prevWord.col;
   }
@@ -616,7 +616,7 @@ export function handleMoveWordEnd(
 
   for (let i = 0; i < count; i++) {
     const wordEnd = stepWordEnd(lines, row, col, i === 0);
-    if (!wordEnd) break;
+    if (wordEnd == null) break;
     row = wordEnd.row;
     col = wordEnd.col;
   }

@@ -120,7 +120,7 @@ export async function performResume(
       targetSession = session;
       break;
     }
-    if (!targetSession) {
+    if (targetSession == null) {
       return {
         ok: false,
         error: 'No resumable sessions found (all locked, empty, or current).',
@@ -169,7 +169,7 @@ export async function performResume(
 
   // Dispose in order: integration -> recording -> lock.
   // Failures are warnings so newly acquired infrastructure can still be installed.
-  if (oldIntegration) {
+  if (oldIntegration != null) {
     try {
       oldIntegration.dispose();
     } catch (e) {
@@ -178,7 +178,7 @@ export async function performResume(
       );
     }
   }
-  if (oldRecording) {
+  if (oldRecording != null) {
     try {
       await oldRecording.dispose();
     } catch (e) {
@@ -187,7 +187,7 @@ export async function performResume(
       );
     }
   }
-  if (oldLock) {
+  if (oldLock != null) {
     try {
       await oldLock.release();
     } catch (e) {

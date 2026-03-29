@@ -102,7 +102,7 @@ function extractConfiguredProviderBaseUrl(
       providerConfig?: { baseUrl?: string; baseURL?: string };
     }
   ).providerConfig;
-  if (!configCandidate) {
+  if (configCandidate == null) {
     return undefined;
   }
   return normalizeProviderBaseUrl(
@@ -118,7 +118,7 @@ function extractBaseProviderConfigUrl(
       baseProviderConfig?: { baseURL?: string; baseUrl?: string };
     }
   ).baseProviderConfig;
-  if (!baseProviderConfig) {
+  if (baseProviderConfig == null) {
     return undefined;
   }
   return normalizeProviderBaseUrl(
@@ -438,7 +438,7 @@ export async function setActiveModel(
   }
 
   // Stateless recomputation of model defaults.
-  if (aliasConfig?.modelDefaults) {
+  if (aliasConfig?.modelDefaults != null) {
     recomputeAndApplyModelDefaultsDiff(
       config,
       previousModel,

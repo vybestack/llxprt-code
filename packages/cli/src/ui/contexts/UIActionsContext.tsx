@@ -214,7 +214,7 @@ export function UIActionsProvider({
 
 export function useUIActions(): UIActions {
   const context = useContext(UIActionsContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useUIActions must be used within a UIActionsProvider');
   }
   return context;

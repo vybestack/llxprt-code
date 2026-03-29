@@ -42,7 +42,7 @@ afterEach(async () => {
   resetCliProviderInfrastructure();
   while (runtimeFixtures.length > 0) {
     const runtime = runtimeFixtures.pop();
-    if (runtime) {
+    if (runtime != null) {
       // Ensure isolated runtimes release resources even when assertions fail (Step 7, multi-runtime-baseline.md line 8).
       await runtime.handle.cleanup();
       await cleanupTempDirectory(runtime.tempDir);

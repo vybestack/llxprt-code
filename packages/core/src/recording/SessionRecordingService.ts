@@ -239,7 +239,7 @@ export class SessionRecordingService {
     if (!this.active) return;
     if (this.queue.length === 0 && !this.draining) return;
 
-    if (this.drainPromise) {
+    if (this.drainPromise != null) {
       await this.drainPromise;
     }
 
@@ -312,7 +312,7 @@ export class SessionRecordingService {
     this.active = false;
     this.queue = [];
     this.preContentBuffer = [];
-    if (this.chatsDirWatcher) {
+    if (this.chatsDirWatcher != null) {
       this.chatsDirWatcher.close();
       this.chatsDirWatcher = null;
     }
@@ -345,7 +345,7 @@ export class SessionRecordingService {
    * exact timestamp so it can be correlated with the shell command log.
    */
   private startChatsDirWatcher(): void {
-    if (this.chatsDirWatcher) return;
+    if (this.chatsDirWatcher != null) return;
     try {
       this.chatsDirWatcher = watch(
         this.chatsDir,

@@ -119,7 +119,7 @@ export class HookRunner {
       results.push(result);
 
       // If the hook succeeded and has output, use it to modify the input for the next hook
-      if (result.success && result.output) {
+      if (result.success && result.output != null) {
         currentInput = this.applyHookOutputToInput(
           currentInput,
           result.output,
@@ -143,7 +143,7 @@ export class HookRunner {
     const modifiedInput = { ...originalInput };
 
     // Apply modifications based on hook output and event type
-    if (hookOutput.hookSpecificOutput) {
+    if (hookOutput.hookSpecificOutput != null) {
       switch (eventName) {
         case HookEventName.BeforeAgent:
           if ('additionalContext' in hookOutput.hookSpecificOutput) {
@@ -165,7 +165,7 @@ export class HookRunner {
             // For BeforeModel, we update the LLM request
             const hookBeforeModelOutput = hookOutput as BeforeModelOutput;
             if (
-              hookBeforeModelOutput.hookSpecificOutput?.llm_request &&
+              hookBeforeModelOutput.hookSpecificOutput?.llm_request != null &&
               'llm_request' in modifiedInput
             ) {
               // Merge the partial request with the existing request

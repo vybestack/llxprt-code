@@ -38,7 +38,7 @@ export const copyCommand: SlashCommand = {
       ? history.filter((item: Content) => item.role === 'model').pop()
       : undefined;
 
-    if (!lastAiMessage) {
+    if (lastAiMessage == null) {
       return {
         type: 'message',
         messageType: 'info',

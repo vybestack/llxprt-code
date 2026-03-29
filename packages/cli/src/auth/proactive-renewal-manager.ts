@@ -58,7 +58,7 @@ export class ProactiveRenewalManager {
 
   clearProactiveRenewal(key: string): void {
     const entry = this.proactiveRenewals.get(key);
-    if (entry) {
+    if (entry != null) {
       clearTimeout(entry.timer);
       this.proactiveRenewals.delete(key);
     }
@@ -75,7 +75,7 @@ export class ProactiveRenewalManager {
   ): void {
     const key = this.getProactiveRenewalKey(providerName, bucket);
     const existing = this.proactiveRenewals.get(key);
-    if (existing) {
+    if (existing != null) {
       clearTimeout(existing.timer);
     }
 
@@ -182,7 +182,7 @@ export class ProactiveRenewalManager {
     const delayMs = Math.floor(Math.max(0, (refreshAtSec - nowSec) * 1000));
 
     const existing = this.proactiveRenewals.get(key);
-    if (existing && existing.expiry === token.expiry) {
+    if (existing != null && existing.expiry === token.expiry) {
       return;
     }
 
@@ -223,7 +223,7 @@ export class ProactiveRenewalManager {
       }
 
       const provider = this.getProvider(providerName);
-      if (!provider) {
+      if (provider == null) {
         // Provider might not be registered in this runtime; keep the timer but back off.
         this.scheduleProactiveRetry(providerName, normalizedBucket);
         return;
@@ -311,7 +311,7 @@ export class ProactiveRenewalManager {
     }
 
     const refreshedToken = await provider.refreshToken(currentToken);
-    if (!refreshedToken) {
+    if (refreshedToken == null) {
       // @plan PLAN-20260223-ISSUE1598.P14
       // @requirement REQ-1598-PR04, REQ-1598-PR05
       this.scheduleProactiveRetry(providerName, normalizedBucket);
@@ -342,7 +342,7 @@ export class ProactiveRenewalManager {
     currentToken: OAuthToken,
   ): boolean {
     const scheduled = this.proactiveRenewalTokens.get(key);
-    if (scheduled) {
+    if (scheduled != null) {
       return (
         currentToken.access_token !== scheduled.accessToken ||
         (currentToken.refresh_token ?? '') !== scheduled.refreshToken
@@ -358,7 +358,7 @@ export class ProactiveRenewalManager {
     const targets: Array<{ providerName: string; bucket: string }> = [];
 
     const direct = getOAuthBucketsFromProfile(profile);
-    if (direct) {
+    if (direct != null) {
       for (const bucket of direct.buckets) {
         targets.push({ providerName: direct.providerName, bucket });
       }
@@ -386,7 +386,7 @@ export class ProactiveRenewalManager {
 
       const bucket = this.normalizeBucket(target.bucket);
       const token = await this.tokenStore.getToken(target.providerName, bucket);
-      if (!token) {
+      if (token == null) {
         continue;
       }
       this.scheduleProactiveRenewal(target.providerName, bucket, token);
@@ -422,7 +422,7 @@ export class ProactiveRenewalManager {
         return;
       }
       const oauth = getOAuthBucketsFromProfile(loaded);
-      if (oauth) {
+      if (oauth != null) {
         for (const bucket of oauth.buckets) {
           targets.push({ providerName: oauth.providerName, bucket });
         }

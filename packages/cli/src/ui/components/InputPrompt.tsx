@@ -194,7 +194,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   ]);
 
   const resetEscapeState = useCallback(() => {
-    if (escapeTimerRef.current) {
+    if (escapeTimerRef.current != null) {
       clearTimeout(escapeTimerRef.current);
       escapeTimerRef.current = null;
     }
@@ -204,7 +204,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   // Notify parent component about escape prompt state changes
   useEffect(() => {
-    if (onEscapePromptChange) {
+    if (onEscapePromptChange != null) {
       onEscapePromptChange(showEscapePrompt);
     }
   }, [showEscapePrompt, onEscapePromptChange]);
@@ -212,7 +212,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   // Clear escape prompt timer on unmount
   useEffect(
     () => () => {
-      if (escapeTimerRef.current) {
+      if (escapeTimerRef.current != null) {
         clearTimeout(escapeTimerRef.current);
       }
     },
@@ -498,7 +498,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           }
           escPressCount.current = 1;
           setShowEscapePrompt(true);
-          if (escapeTimerRef.current) {
+          if (escapeTimerRef.current != null) {
             clearTimeout(escapeTimerRef.current);
           }
           escapeTimerRef.current = setTimeout(() => {
@@ -624,7 +624,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                     completion.getCommandFromSuggestion(targetIndex);
                   if (
                     isAutoExecutableCommand(command) &&
-                    !command?.completion
+                    command?.completion == null
                   ) {
                     const completedText =
                       completion.handleAutocomplete(targetIndex);

@@ -28,7 +28,7 @@ export function getResponseText(
   response: GenerateContentResponse,
 ): string | undefined {
   const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) {
+  if (parts == null) {
     return undefined;
   }
   // Filter out thought parts - thinking content should only go through Thought events,
@@ -65,7 +65,7 @@ export function getFunctionCalls(
   response: GenerateContentResponse,
 ): FunctionCall[] | undefined {
   const parts = response.candidates?.[0]?.content?.parts;
-  if (!parts) {
+  if (parts == null) {
     return undefined;
   }
   const functionCallParts = parts
@@ -90,7 +90,7 @@ export function getFunctionCallsAsJson(
   response: GenerateContentResponse,
 ): string | undefined {
   const functionCalls = getFunctionCalls(response);
-  if (!functionCalls) {
+  if (functionCalls == null) {
     return undefined;
   }
   return JSON.stringify(functionCalls, null, 2);
@@ -100,7 +100,7 @@ export function getFunctionCallsFromPartsAsJson(
   parts: Part[],
 ): string | undefined {
   const functionCalls = getFunctionCallsFromParts(parts);
-  if (!functionCalls) {
+  if (functionCalls == null) {
     return undefined;
   }
   return JSON.stringify(functionCalls, null, 2);
@@ -169,7 +169,7 @@ export function limitStringOutput(
   toolName: string,
   config?: ToolOutputSettingsProvider,
 ): string {
-  if (!config || typeof config.getEphemeralSettings !== 'function') {
+  if (config == null || typeof config.getEphemeralSettings !== 'function') {
     return text;
   }
   const limited = limitOutputTokens(text, config, toolName);
@@ -187,11 +187,11 @@ export function limitFunctionResponsePart(
   toolName: string,
   config?: ToolOutputSettingsProvider,
 ): Part {
-  if (!config || !part.functionResponse) {
+  if (config == null || part.functionResponse == null) {
     return part;
   }
   const response = part.functionResponse.response;
-  if (!response || typeof response !== 'object') {
+  if (response == null || typeof response !== 'object') {
     return part;
   }
   const existingOutput = response['output'];
@@ -248,11 +248,11 @@ export function convertToFunctionResponse(
   for (const part of parts) {
     if (part.text !== undefined) {
       textParts.push(part.text);
-    } else if (part.inlineData) {
+    } else if (part.inlineData != null) {
       inlineDataParts.push(part);
-    } else if (part.fileData) {
+    } else if (part.fileData != null) {
       fileDataParts.push(part);
-    } else if (part.functionResponse) {
+    } else if (part.functionResponse != null) {
       // Passthrough case - preserve existing response
       if (parts.length > 1) {
         toolSchedulerLogger.warn(
@@ -309,7 +309,7 @@ export function convertToFunctionResponse(
 export function extractAgentIdFromMetadata(
   metadata: Record<string, unknown> | undefined,
 ): string | undefined {
-  if (!metadata) {
+  if (metadata == null) {
     return undefined;
   }
   const candidate = metadata['agentId'];

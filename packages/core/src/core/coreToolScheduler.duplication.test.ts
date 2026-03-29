@@ -62,7 +62,7 @@ function createMockMessageBus() {
       ),
     publish: vi.fn().mockImplementation((event: { type: string }) => {
       const typeCallbacks = callbacks.get(event.type);
-      if (typeCallbacks) {
+      if (typeCallbacks != null) {
         for (const cb of typeCallbacks) {
           cb(event);
         }
@@ -189,7 +189,7 @@ async function waitForStatus(
     if (calls.length > 0) {
       const latestCalls = calls[calls.length - 1][0] as ToolCall[];
       const found = latestCalls.find((call) => call.status === targetStatus);
-      if (found) return found;
+      if (found != null) return found;
     }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

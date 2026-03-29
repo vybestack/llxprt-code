@@ -94,7 +94,7 @@ export class ToolCallCollector {
     for (const [index, fragments] of this.fragments.entries()) {
       if (this.isComplete(fragments)) {
         const assembledCall = this.assembleCall(index, fragments);
-        if (assembledCall) {
+        if (assembledCall != null) {
           completeCalls.push(assembledCall);
         }
       }

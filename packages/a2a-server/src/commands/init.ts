@@ -135,7 +135,7 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
   ): Promise<CommandExecutionResponse> {
     fs.writeFileSync(llxprtMdPath, '', 'utf8');
 
-    if (!context.agentExecutor) {
+    if (context.agentExecutor == null) {
       throw new Error('Agent executor not found in context.');
     }
     const agentExecutor = context.agentExecutor as CoderAgentExecutor;
@@ -185,7 +185,7 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
     context: CommandContext,
     _args: string[] = [],
   ): Promise<CommandExecutionResponse> {
-    if (!context.eventBus) {
+    if (context.eventBus == null) {
       return {
         name: this.name,
         data: 'Use executeStream to get streaming results.',

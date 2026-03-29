@@ -165,16 +165,17 @@ export class StreamProcessor {
       'StreamProcessor.generateRequest',
       { historyLength: requestContents.length },
     );
-    const runtimeContext = params.config
-      ? {
-          ...baseRuntimeContext,
-          config: { ...baseRuntimeContext.config, ...params.config },
-        }
-      : baseRuntimeContext;
+    const runtimeContext =
+      params.config != null
+        ? {
+            ...baseRuntimeContext,
+            config: { ...baseRuntimeContext.config, ...params.config },
+          }
+        : baseRuntimeContext;
 
     // Trigger BeforeModel hook for streaming path
     const configForHooks = this.runtimeContext.providerRuntime.config;
-    if (configForHooks) {
+    if (configForHooks != null) {
       const requestForHook = {
         contents: requestContents,
         tools: tools as ProviderToolset | undefined,
@@ -197,9 +198,9 @@ export class StreamProcessor {
       if (beforeModelResult?.isBlockingDecision()) {
         let syntheticResponse = beforeModelResult.getSyntheticResponse();
         // Ensure synthetic response has finishReason to avoid invalid-stream handling
-        if (syntheticResponse) {
+        if (syntheticResponse != null) {
           const candidate = syntheticResponse.candidates?.[0];
-          if (candidate && !candidate.finishReason) {
+          if (candidate != null && !candidate.finishReason) {
             syntheticResponse = {
               ...syntheticResponse,
               candidates: [
@@ -219,7 +220,7 @@ export class StreamProcessor {
       }
 
       // Apply request modifications from BeforeModel hook
-      if (beforeModelResult) {
+      if (beforeModelResult != null) {
         const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
           model: this.runtimeContext.state.model || '',
           contents: requestContents as unknown as Content[],
@@ -322,7 +323,7 @@ export class StreamProcessor {
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
-      if (hookConfig) {
+      if (hookConfig != null) {
         const afterModelResult = await triggerAfterModelHook(
           hookConfig,
           iContent,
@@ -351,7 +352,7 @@ export class StreamProcessor {
 
         // Apply modified response if available
         const modifiedResponse = afterModelResult?.getModifiedResponse();
-        if (modifiedResponse) {
+        if (modifiedResponse != null) {
           yield modifiedResponse;
           continue;
         }
@@ -429,12 +430,12 @@ export class StreamProcessor {
       const candidateWithReason = chunk?.candidates?.find(
         (c) => c.finishReason,
       );
-      if (candidateWithReason)
+      if (candidateWithReason != null)
         finishReason = candidateWithReason.finishReason as FinishReason;
 
       if (isValidResponse(chunk)) {
         const parts = chunk.candidates?.[0]?.content?.parts;
-        if (parts) {
+        if (parts != null) {
           if (parts.some((p) => p.functionCall)) hasToolCall = true;
           if (
             parts.some(
@@ -578,7 +579,7 @@ export class StreamProcessor {
       .slice()
       .reverse()
       .find((chunk) => chunk.usageMetadata);
-    if (lastChunkWithMetadata?.usageMetadata) {
+    if (lastChunkWithMetadata?.usageMetadata != null) {
       streamingUsageMetadata = {
         promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount || 0,
         completionTokens:
@@ -648,7 +649,7 @@ export class StreamProcessor {
       // Check each tool's metadata for cyclic schemas
       for (const toolName of toolNames) {
         const metadata = this.runtimeContext.tools.getToolMetadata(toolName);
-        if (metadata?.parameterSchema) {
+        if (metadata?.parameterSchema != null) {
           if (hasCycleInSchema(metadata.parameterSchema)) {
             cyclicSchemaTools.push(toolName);
           }

@@ -29,7 +29,7 @@ function flattenSchema(
     const newKey = prefix ? `${prefix}.${key}` : key;
     const definition = schema[key];
     result[newKey] = { ...definition, key: newKey };
-    if (definition.properties) {
+    if (definition.properties != null) {
       result = { ...result, ...flattenSchema(definition.properties, newKey) };
     }
   }
@@ -73,7 +73,7 @@ export function getSettingDefinition(
 
   // Then check dynamic settings
   const dynamicDef = dynamicSettingsRegistry.get(key);
-  if (dynamicDef) {
+  if (dynamicDef != null) {
     return { ...dynamicDef, key };
   }
 
@@ -153,7 +153,7 @@ export function getEffectiveValue(
   mergedSettings: Settings,
 ): SettingDefinition['default'] {
   const definition = getSettingDefinition(key);
-  if (!definition) {
+  if (definition == null) {
     return undefined;
   }
 
@@ -290,7 +290,7 @@ export function getSettingValue(
   mergedSettings: Settings,
 ): boolean {
   const definition = getSettingDefinition(key);
-  if (!definition) {
+  if (definition == null) {
     return false; // Default fallback for invalid settings
   }
 
@@ -454,7 +454,7 @@ export function getDisplayValue(
 ): string {
   // Prioritize pending changes if user has modified this setting
   let value: boolean;
-  if (pendingSettings && settingExistsInScope(key, pendingSettings)) {
+  if (pendingSettings != null && settingExistsInScope(key, pendingSettings)) {
     // Show the value from the pending (unsaved) edits when it exists
     value = getSettingValue(key, pendingSettings, {});
   } else if (settingExistsInScope(key, settings)) {

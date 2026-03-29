@@ -49,7 +49,7 @@ describe('statsCommand', () => {
   });
 
   it('should display general session stats when run with no subcommand', async () => {
-    if (!statsCommand.action) throw new Error('Command has no action');
+    if (statsCommand.action == null) throw new Error('Command has no action');
 
     await statsCommand.action(mockContext, '');
 
@@ -67,7 +67,8 @@ describe('statsCommand', () => {
     const modelSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'model',
     );
-    if (!modelSubCommand?.action) throw new Error('Subcommand has no action');
+    if (modelSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     modelSubCommand.action(mockContext, '');
@@ -84,7 +85,8 @@ describe('statsCommand', () => {
     const toolsSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'tools',
     );
-    if (!toolsSubCommand?.action) throw new Error('Subcommand has no action');
+    if (toolsSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     toolsSubCommand.action(mockContext, '');
@@ -101,7 +103,8 @@ describe('statsCommand', () => {
     const cacheSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'cache',
     );
-    if (!cacheSubCommand?.action) throw new Error('Subcommand has no action');
+    if (cacheSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     cacheSubCommand.action(mockContext, '');
@@ -142,7 +145,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -206,7 +210,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -264,7 +269,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -289,7 +295,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -361,7 +368,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -400,7 +408,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -453,7 +462,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -489,7 +499,8 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('Subcommand has no action');
+    if (quotaSubCommand?.action == null)
+      throw new Error('Subcommand has no action');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -545,7 +556,7 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (cmd) => cmd.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+    if (quotaSubCommand?.action == null) throw new Error('No quota subcommand');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -583,7 +594,7 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (cmd) => cmd.name === 'quota',
     );
-    if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+    if (quotaSubCommand?.action == null) throw new Error('No quota subcommand');
 
     await quotaSubCommand.action(mockContext, '');
 
@@ -645,7 +656,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+      if (quotaSubCommand?.action == null)
+        throw new Error('No quota subcommand');
 
       await quotaSubCommand.action(mockContext, '');
 
@@ -691,7 +703,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+      if (quotaSubCommand?.action == null)
+        throw new Error('No quota subcommand');
 
       await quotaSubCommand.action(mockContext, '');
 
@@ -737,7 +750,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+      if (quotaSubCommand?.action == null)
+        throw new Error('No quota subcommand');
 
       await quotaSubCommand.action(mockContext, '');
 
@@ -783,7 +797,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+      if (quotaSubCommand?.action == null)
+        throw new Error('No quota subcommand');
 
       await quotaSubCommand.action(mockContext, '');
 
@@ -828,7 +843,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+      if (quotaSubCommand?.action == null)
+        throw new Error('No quota subcommand');
 
       await quotaSubCommand.action(mockContext, '');
 
@@ -874,7 +890,8 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
-      if (!quotaSubCommand?.action) throw new Error('No quota subcommand');
+      if (quotaSubCommand?.action == null)
+        throw new Error('No quota subcommand');
 
       await quotaSubCommand.action(mockContext, '');
 

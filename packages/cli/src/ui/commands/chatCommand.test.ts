@@ -58,7 +58,7 @@ describe('chatCommand', () => {
     const subCommand = chatCommand.subCommands?.find(
       (cmd) => cmd.name === name,
     );
-    if (!subCommand) {
+    if (subCommand == null) {
       throw new Error(`/chat ${name} command not found.`);
     }
     return subCommand;

@@ -371,7 +371,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
       }) => {
-        if (props.toolCalls) {
+        if (props.toolCalls != null) {
           setToolCalls(props.toolCalls);
         }
         return useGeminiStream(

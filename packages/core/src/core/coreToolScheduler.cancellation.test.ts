@@ -69,7 +69,7 @@ describe('CoreToolScheduler cancellation edge cases', () => {
   let scheduler: CoreToolScheduler | undefined;
 
   afterEach(() => {
-    if (scheduler) {
+    if (scheduler != null) {
       scheduler.dispose();
       scheduler = undefined;
     }

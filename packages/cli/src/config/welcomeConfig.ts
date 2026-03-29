@@ -31,7 +31,7 @@ export function resetWelcomeConfigForTesting(): void {
 }
 
 export function loadWelcomeConfig(): WelcomeConfig {
-  if (cachedConfig) {
+  if (cachedConfig != null) {
     return cachedConfig;
   }
 

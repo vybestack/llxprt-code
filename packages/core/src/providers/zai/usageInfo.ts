@@ -211,7 +211,7 @@ export function formatZaiUsage(usage: ZaiUsageInfo): string[] {
       );
 
       // Show tool breakdown if usage details are present
-      if (limit.usageDetails) {
+      if (limit.usageDetails != null) {
         for (const detail of limit.usageDetails) {
           if (detail.usage > 0) {
             lines.push(`    ${detail.modelCode}: ${detail.usage}`);

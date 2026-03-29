@@ -292,7 +292,7 @@ export class LoopDetectionService {
 
     const existingIndices = this.contentStats.get(hash);
 
-    if (!existingIndices) {
+    if (existingIndices == null) {
       this.contentStats.set(hash, [this.lastContentIndex]);
       return false;
     }

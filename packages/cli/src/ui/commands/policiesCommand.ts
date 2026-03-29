@@ -49,7 +49,7 @@ function handlePoliciesCommand(
 ): MessageActionReturn {
   const config = context.services.config;
 
-  if (!config) {
+  if (config == null) {
     return {
       type: 'message',
       messageType: 'error',
@@ -97,7 +97,7 @@ function handlePoliciesCommand(
 
   for (const tier of tierOrder) {
     const tierRules = tierBands.get(tier);
-    if (!tierRules || tierRules.length === 0) {
+    if (tierRules == null || tierRules.length === 0) {
       continue;
     }
 
@@ -107,9 +107,10 @@ function handlePoliciesCommand(
       const toolName = rule.toolName ?? '*';
       const decision = formatDecision(rule.decision);
       const priority = rule.priority ?? 0;
-      const argsPattern = rule.argsPattern
-        ? ` (pattern: ${rule.argsPattern.source})`
-        : '';
+      const argsPattern =
+        rule.argsPattern != null
+          ? ` (pattern: ${rule.argsPattern.source})`
+          : '';
 
       lines.push(
         `  Priority ${priority.toFixed(3)}: ${toolName} → ${decision}${argsPattern}`,

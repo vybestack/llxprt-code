@@ -56,7 +56,7 @@ const {
       ) => {
         if (
           typeof providerOrChanges === 'string' &&
-          maybeChanges &&
+          maybeChanges != null &&
           typeof maybeChanges === 'object'
         ) {
           for (const [key, value] of Object.entries(maybeChanges)) {
@@ -203,7 +203,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       return context;
     },
     getActiveProviderRuntimeContext: () => {
-      if (!activeContext) {
+      if (activeContext == null) {
         throw new Error(
           'MissingProviderRuntimeError(provider-runtime): runtime registration missing',
         );

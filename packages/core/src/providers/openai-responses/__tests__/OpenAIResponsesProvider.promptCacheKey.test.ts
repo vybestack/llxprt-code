@@ -33,7 +33,7 @@ function buildCodexCallOptions(
   const { contents = [], codexToken, invocation, ...rest } = overrides;
 
   const invocationWithToken =
-    invocation && codexToken
+    invocation != null && codexToken != null
       ? {
           ...invocation,
           metadata: {

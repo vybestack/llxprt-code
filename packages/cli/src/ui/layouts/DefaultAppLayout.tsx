@@ -354,7 +354,7 @@ export const DefaultAppLayout = ({
     ],
   );
 
-  if (quittingMessages) {
+  if (quittingMessages != null) {
     return (
       <Box flexDirection="column" marginBottom={1}>
         {quittingMessages.map((item) => (

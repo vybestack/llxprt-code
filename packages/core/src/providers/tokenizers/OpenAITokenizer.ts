@@ -31,7 +31,7 @@ export class OpenAITokenizer implements ITokenizer {
     try {
       // Get or create encoder for the model
       let encoder = this.encoderCache.get(model);
-      if (!encoder) {
+      if (encoder == null) {
         // Try to get encoder for the specific model
         try {
           encoder = encoding_for_model(model as TiktokenModel);

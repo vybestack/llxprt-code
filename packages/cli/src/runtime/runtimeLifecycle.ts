@@ -90,7 +90,7 @@ export function registerCliProviderInfrastructure(
   registerProviderManagerSingleton(manager, oauthManager);
 
   const config = entry.config ?? null;
-  if (config) {
+  if (config != null) {
     config.setProviderManager(manager);
     manager.setConfig(config);
 
@@ -152,7 +152,7 @@ export function setCliRuntimeContext(
   });
   logger.debug(() => {
     const providerLabel =
-      config && typeof config.getProvider === 'function'
+      config != null && typeof config.getProvider === 'function'
         ? ` (provider=${config.getProvider() ?? 'unset'})`
         : '';
     return `[cli-runtime] Registering runtime context ${runtimeId}${providerLabel}`;

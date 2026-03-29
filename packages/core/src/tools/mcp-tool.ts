@@ -139,7 +139,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       isError?: boolean | string;
     }
 
-    if (response) {
+    if (response != null) {
       // Check for top-level isError (MCP Spec compliant)
       const isErrorTop = (response as { isError?: boolean | string }).isError;
       if (isErrorTop === true || isErrorTop === 'true') {
@@ -150,7 +150,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       const error = (response as { error?: McpError })?.error;
       const isError = error?.isError;
 
-      if (error && (isError === true || isError === 'true')) {
+      if (error != null && (isError === true || isError === 'true')) {
         return true;
       }
     }

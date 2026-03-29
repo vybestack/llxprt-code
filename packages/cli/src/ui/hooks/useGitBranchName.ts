@@ -19,7 +19,7 @@ export function useGitBranchName(cwd: string): string | undefined {
         'git rev-parse --abbrev-ref HEAD',
         { cwd },
         (error, stdout, _stderr) => {
-          if (error) {
+          if (error != null) {
             setBranchName(undefined);
             return;
           }
@@ -31,7 +31,7 @@ export function useGitBranchName(cwd: string): string | undefined {
               'git rev-parse --short HEAD',
               { cwd },
               (error, stdout, _stderr) => {
-                if (error) {
+                if (error != null) {
                   setBranchName(undefined);
                   return;
                 }

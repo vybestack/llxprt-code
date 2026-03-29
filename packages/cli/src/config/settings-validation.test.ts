@@ -121,7 +121,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues[0]?.path).toEqual(['disableAutoUpdate']);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
@@ -132,7 +132,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues[0]?.path).toEqual(['mcpServerCommand']);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
@@ -152,7 +152,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues[0]?.path).toContain('args');
         expect(result.error.issues[0]?.path).toContain(1);
       }
@@ -172,7 +172,7 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: 'invalid' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues[0]?.path).toEqual(['ui']);
       }
     });
@@ -181,7 +181,7 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: { theme: 123 } };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues[0]?.path).toEqual(['ui', 'theme']);
       }
     });
@@ -192,7 +192,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues[0]?.path).toEqual([
           'ui',
           'footer',
@@ -212,7 +212,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         const issue = result.error.issues.find((i) =>
           i.path.includes('command'),
         );
@@ -248,7 +248,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         expect(result.error.issues.length).toBeGreaterThan(1);
       }
     });
@@ -321,7 +321,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         const issue = result.error.issues.find(
           (i) => i.code === 'invalid_type' && i.message.includes('Required'),
         );
@@ -341,7 +341,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error) {
+      if (result.error != null) {
         const issue = result.error.issues.find((i) => i.path.includes('env'));
         expect(issue).toBeDefined();
       }
@@ -501,7 +501,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(
           result.error,
           '/path/to/settings.json',
@@ -522,7 +522,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('ui.theme');
       }
@@ -537,7 +537,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('args');
         expect(formatted).toContain('[1]');
@@ -553,7 +553,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('mcpServers');
         expect(formatted).toContain('command');
@@ -565,7 +565,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('Expected: boolean');
         expect(formatted).toContain('but received: string');
@@ -580,7 +580,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('disableAutoUpdate');
         expect(formatted).toContain('ptyScrollbackLimit');
@@ -596,7 +596,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('args');
         expect(formatted).toContain('[0]');
@@ -612,7 +612,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('https://');
         expect(formatted).toContain('configuration');
@@ -625,7 +625,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('Error in: ui');
       }
@@ -636,7 +636,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error) {
+      if (result.error != null) {
         const formatted = formatValidationError(
           result.error,
           '~/.llxprt/settings.json',

@@ -1218,7 +1218,7 @@ export function normalizeSetting(key: string, value: unknown): unknown {
   const resolvedKey = resolveAlias(key);
   const spec = SETTINGS_REGISTRY.find((s) => s.key === resolvedKey);
 
-  if (spec?.normalize) {
+  if (spec?.normalize != null) {
     return spec.normalize(value);
   }
 
@@ -1307,7 +1307,7 @@ export function separateSettings(
 
     const spec = getSettingSpec(resolvedKey);
 
-    if (!spec) {
+    if (spec == null) {
       // Unknown settings default to model-param (pass-through to API).
       // This allows /set modelparam <anything> <value> to work for
       // provider-specific parameters not yet in the registry.
@@ -1315,7 +1315,11 @@ export function separateSettings(
       continue;
     }
 
-    if (spec.category === 'model-param' && spec.providers && providerName) {
+    if (
+      spec.category === 'model-param' &&
+      spec.providers != null &&
+      providerName
+    ) {
       if (!spec.providers.includes(providerName)) {
         continue;
       }
@@ -1350,17 +1354,17 @@ export function validateSetting(key: string, value: unknown): ValidationResult {
   const resolved = resolveAlias(key);
   const spec = getSettingSpec(resolved);
 
-  if (!spec) {
+  if (spec == null) {
     // Unknown settings are allowed — they pass through as model-params
     return { success: true, value };
   }
 
-  if (spec.validate) {
+  if (spec.validate != null) {
     return spec.validate(value);
   }
 
   // Auto-validate enum types if no custom validator
-  if (spec.type === 'enum' && spec.enumValues) {
+  if (spec.type === 'enum' && spec.enumValues != null) {
     const strValue = typeof value === 'string' ? value.toLowerCase() : value;
     if (typeof strValue !== 'string' || !spec.enumValues.includes(strValue)) {
       return {
@@ -1401,7 +1405,7 @@ export function parseSetting(key: string, raw: string): unknown {
   const spec = getSettingSpec(resolved);
 
   // If spec has a custom parser, use it
-  if (spec?.parse) {
+  if (spec?.parse != null) {
     return spec.parse(raw);
   }
 
@@ -1462,7 +1466,7 @@ export function getAllSettingKeys(): string[] {
 export function getValidationHelp(key: string): string | undefined {
   const resolved = resolveAlias(key);
   const spec = getSettingSpec(resolved);
-  if (!spec) {
+  if (spec == null) {
     return undefined;
   }
 
@@ -1472,7 +1476,7 @@ export function getValidationHelp(key: string): string | undefined {
     help += ` (${spec.hint})`;
   }
 
-  if (spec.enumValues) {
+  if (spec.enumValues != null) {
     help += ` Valid values: ${spec.enumValues.join(', ')}`;
   }
 
@@ -1484,15 +1488,15 @@ export function getAutocompleteSuggestions(
 ): ReadonlyArray<{ value: string; description?: string }> | undefined {
   const resolved = resolveAlias(key);
   const spec = getSettingSpec(resolved);
-  if (!spec) {
+  if (spec == null) {
     return undefined;
   }
 
-  if (spec.completionOptions) {
+  if (spec.completionOptions != null) {
     return spec.completionOptions;
   }
 
-  if (spec.enumValues) {
+  if (spec.enumValues != null) {
     return spec.enumValues.map((v) => ({ value: v }));
   }
 
@@ -1504,7 +1508,7 @@ function collectProviderConfigKeys(): string[] {
   for (const spec of SETTINGS_REGISTRY) {
     if (spec.category === 'provider-config') {
       keys.push(spec.key);
-      if (spec.aliases) {
+      if (spec.aliases != null) {
         keys.push(...spec.aliases);
       }
     }
@@ -1542,7 +1546,7 @@ function deriveHintFromSpec(spec: SettingSpec): string {
     return 'number';
   }
 
-  if (spec.type === 'enum' && spec.enumValues) {
+  if (spec.type === 'enum' && spec.enumValues != null) {
     return spec.enumValues.join(', ');
   }
 

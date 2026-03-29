@@ -250,7 +250,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         throw new Error('grep_pattern cannot be empty');
       }
     }
-    if (this.params.grep_flags) {
+    if (this.params.grep_flags != null) {
       validateGrepFlags(this.params.grep_flags);
     }
 
@@ -331,7 +331,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         commandToExecute,
         cwd,
         (event: ShellOutputEvent) => {
-          if (!updateOutput) {
+          if (updateOutput == null) {
             return;
           }
 
@@ -384,7 +384,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       const pid = executionResult.pid;
       if (
         pid &&
-        setPidCallback &&
+        setPidCallback != null &&
         this.config.getShouldUseNodePtyShell() &&
         ShellExecutionService.isActivePty(pid)
       ) {
@@ -474,9 +474,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
           }
         }
       } else {
-        const finalError = result.error
-          ? result.error.message.replace(commandToExecute, this.params.command)
-          : '(none)';
+        const finalError =
+          result.error != null
+            ? result.error.message.replace(
+                commandToExecute,
+                this.params.command,
+              )
+            : '(none)';
 
         llmContent = [
           `Command: ${this.params.command}`,
@@ -498,7 +502,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           returnDisplayMessage = filteredOutput;
         } else if (result.signal) {
           returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
-        } else if (result.error) {
+        } else if (result.error != null) {
           returnDisplayMessage = `Command failed: ${getErrorMessage(result.error)}`;
         } else if (result.exitCode !== null && result.exitCode !== 0) {
           returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
@@ -513,39 +517,46 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       // Check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
-      const executionError = result?.error
-        ? {
-            error: {
-              message: result.error.message,
-              type: ToolErrorType.SHELL_EXECUTE_ERROR,
-            },
-          }
-        : result?.aborted && timeoutController.signal.aborted && !signal.aborted
+      const executionError =
+        result?.error != null
           ? {
               error: {
-                message: llmContent,
-                type: ToolErrorType.TIMEOUT,
+                message: result.error.message,
+                type: ToolErrorType.SHELL_EXECUTE_ERROR,
               },
             }
-          : result?.aborted
+          : result?.aborted &&
+              timeoutController.signal.aborted &&
+              !signal.aborted
             ? {
                 error: {
                   message: llmContent,
-                  type: ToolErrorType.EXECUTION_FAILED,
+                  type: ToolErrorType.TIMEOUT,
                 },
               }
-            : {};
+            : result?.aborted
+              ? {
+                  error: {
+                    message: llmContent,
+                    type: ToolErrorType.EXECUTION_FAILED,
+                  },
+                }
+              : {};
 
       let llmPayload = llmContent;
-      if (summarizeConfig?.[ShellTool.Name] && result && !result.aborted) {
+      if (
+        summarizeConfig?.[ShellTool.Name] != null &&
+        result &&
+        !result.aborted
+      ) {
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
-        if (contentGenConfig?.providerManager) {
+        if (contentGenConfig?.providerManager != null) {
           const serverToolsProvider =
             contentGenConfig.providerManager.getServerToolsProvider();
 
           // If we have a ServerToolsProvider that can handle summarization
-          if (serverToolsProvider) {
+          if (serverToolsProvider != null) {
             // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
             // For now, check if it's a Gemini provider and use the existing function
             if (serverToolsProvider.name === 'gemini') {

@@ -233,7 +233,7 @@ export const getUrlOpenCommand = (): string => {
 export function isAutoExecutableCommand(
   command: SlashCommand | undefined | null,
 ): boolean {
-  if (!command) {
+  if (command == null) {
     return false;
   }
 

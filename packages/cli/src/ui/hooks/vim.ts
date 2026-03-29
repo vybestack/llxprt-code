@@ -283,7 +283,7 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
         !normalizedKey.ctrl &&
         !normalizedKey.meta
       ) {
-        if (buffer.text.trim() && onSubmit) {
+        if (buffer.text.trim() && onSubmit != null) {
           // Handle command submission directly
           const submittedValue = buffer.text;
           buffer.setText('');
@@ -689,7 +689,7 @@ export function useVim(buffer: TextBuffer, onSubmit?: (value: string) => void) {
 
           case '.': {
             // Repeat last command
-            if (state.lastCommand) {
+            if (state.lastCommand != null) {
               const cmdData = state.lastCommand;
 
               // All repeatable commands are now handled by executeCommand

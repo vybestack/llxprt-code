@@ -130,7 +130,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       ...this.settings.global,
     };
 
-    if (this.settings.tools) {
+    if (this.settings.tools != null) {
       const tools = this.settings.tools;
       snapshot.tools = { ...tools };
 
@@ -239,7 +239,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     providerOrChanges?: string | Partial<GlobalSettings>,
     changes?: Partial<ProviderSettings>,
   ): Promise<void> {
-    if (typeof providerOrChanges === 'string' && changes) {
+    if (typeof providerOrChanges === 'string' && changes != null) {
       // Provider-specific update
       for (const [key, value] of Object.entries(changes)) {
         this.setProviderSetting(providerOrChanges, key, value);
@@ -311,7 +311,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       }
 
       // Import provider settings
-      if (data.providers) {
+      if (data.providers != null) {
         for (const [provider, settings] of Object.entries(data.providers)) {
           if (settings && typeof settings === 'object') {
             for (const [key, value] of Object.entries(settings)) {

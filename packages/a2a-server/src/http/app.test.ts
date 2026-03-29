@@ -808,7 +808,7 @@ describe('E2E Tests', () => {
         name: 'context-check-command',
         description: 'checks context',
         execute: vi.fn(async (context: CommandContext) => {
-          if (!context.agentExecutor) {
+          if (context.agentExecutor == null) {
             throw new Error('agentExecutor missing');
           }
           return { name: 'context-check-command', data: 'success' };

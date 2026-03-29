@@ -81,7 +81,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
+    if (runtimeContext.config == null) {
       runtimeContext.config = createRuntimeConfigStub(settingsService);
     }
 

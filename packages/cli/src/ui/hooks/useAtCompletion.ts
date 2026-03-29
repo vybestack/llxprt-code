@@ -143,7 +143,7 @@ async function buildSubagentCandidates(
   config?: Config,
 ): Promise<SubagentSuggestionCandidate[]> {
   const subagentManager = config?.getSubagentManager?.();
-  if (!subagentManager) {
+  if (subagentManager == null) {
     return [];
   }
 
@@ -309,11 +309,11 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
     };
 
     const search = async () => {
-      if (!fileSearch.current || state.pattern === null) {
+      if (fileSearch.current == null || state.pattern === null) {
         return;
       }
 
-      if (slowSearchTimer.current) {
+      if (slowSearchTimer.current != null) {
         clearTimeout(slowSearchTimer.current);
       }
 
@@ -378,7 +378,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
 
     return () => {
       searchAbortController.current?.abort();
-      if (slowSearchTimer.current) {
+      if (slowSearchTimer.current != null) {
         clearTimeout(slowSearchTimer.current);
       }
     };

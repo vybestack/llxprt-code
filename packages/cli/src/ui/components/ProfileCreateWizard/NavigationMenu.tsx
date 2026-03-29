@@ -34,9 +34,9 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
 
   const handleSelect = useCallback(
     (value: string) => {
-      if (value === 'continue' && onContinue && !continueDisabled) {
+      if (value === 'continue' && onContinue != null && !continueDisabled) {
         onContinue();
-      } else if (value === 'back' && onBack) {
+      } else if (value === 'back' && onBack != null) {
         onBack();
       } else if (value === 'cancel') {
         setShowCancelConfirm(true);
@@ -75,7 +75,7 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
 
   const items: Array<RadioSelectItem<string>> = [];
 
-  if (onContinue) {
+  if (onContinue != null) {
     items.push({
       label: continueDisabled ? `${continueLabel} (disabled)` : continueLabel,
       value: 'continue',
@@ -83,7 +83,7 @@ export const NavigationMenu: React.FC<NavigationMenuProps> = ({
     });
   }
 
-  if (onBack && showBack) {
+  if (onBack != null && showBack) {
     items.push({ label: 'Back', value: 'back', key: 'back' });
   }
 

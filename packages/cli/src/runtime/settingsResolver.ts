@@ -58,7 +58,11 @@ export async function applyCliArgumentOverrides(
 
   // Apply --set arguments
   const setArgsToUse = bootstrapArgs?.setOverrides ?? argv.set;
-  if (setArgsToUse && Array.isArray(setArgsToUse) && setArgsToUse.length > 0) {
+  if (
+    setArgsToUse != null &&
+    Array.isArray(setArgsToUse) &&
+    setArgsToUse.length > 0
+  ) {
     applyCliSetArguments(config, setArgsToUse);
   }
 

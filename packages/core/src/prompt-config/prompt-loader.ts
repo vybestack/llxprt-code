@@ -188,8 +188,8 @@ export class PromptLoader {
       // Remove excessive whitespace
       // For list items, preserve leading spaces (indentation)
       if (
-        compressedLine.match(/^\s*[-*+]\s/) ||
-        compressedLine.match(/^\s*\d+\.\s/)
+        compressedLine.match(/^\s*[-*+]\s/) != null ||
+        compressedLine.match(/^\s*\d+\.\s/) != null
       ) {
         const leadingSpaces = compressedLine.match(/^\s*/)?.[0] || '';
         compressedLine =

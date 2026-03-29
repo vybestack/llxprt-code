@@ -69,7 +69,7 @@ export class PromptCache {
    */
   generateKey(context: PromptContext | null | undefined): string {
     // Validate context
-    if (!context) {
+    if (context == null) {
       return '';
     }
 
@@ -177,7 +177,7 @@ export class PromptCache {
     ) {
       const lruKey = this.accessOrder.pop()!;
       const entry = this.cache.get(lruKey);
-      if (entry) {
+      if (entry != null) {
         this.cache.delete(lruKey);
         this.totalSize -= entry.size;
       }
@@ -218,7 +218,7 @@ export class PromptCache {
 
     // Look up entry
     const entry = this.cache.get(key);
-    if (entry) {
+    if (entry != null) {
       // Update access tracking
       entry.lastAccessedAt = Date.now();
       entry.accessCount++;
@@ -282,7 +282,7 @@ export class PromptCache {
 
     // Check existence
     const entry = this.cache.get(key);
-    if (!entry) {
+    if (entry == null) {
       return false;
     }
 
@@ -347,7 +347,7 @@ export class PromptCache {
    */
   preload(contexts: PromptContext[] | null | undefined): number {
     // Validate input
-    if (!contexts || contexts.length === 0) {
+    if (contexts == null || contexts.length === 0) {
       return 0;
     }
 

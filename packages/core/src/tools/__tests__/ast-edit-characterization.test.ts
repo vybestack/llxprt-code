@@ -583,7 +583,7 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      if (result) {
+      if (result != null) {
         expect(result).toHaveProperty('metadata');
         expect(result.metadata).toHaveProperty('astValidation');
         expect(result.metadata).toHaveProperty('fileFreshness');

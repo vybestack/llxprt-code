@@ -208,7 +208,7 @@ export class PromptInstaller {
       manifest = await this.loadManifest(expandedBaseDir);
     }
     // Initialize manifest if it doesn't exist
-    if (!manifest && !options?.dryRun) {
+    if (manifest == null && !options?.dryRun) {
       manifest = { version: MANIFEST_VERSION, files: {} };
     }
 
@@ -308,7 +308,7 @@ export class PromptInstaller {
             await fs.rename(tempPath, fullPath);
             installed.push(relativePath);
             // Update manifest with new hash
-            if (manifest) {
+            if (manifest != null) {
               this.updateManifestEntry(
                 manifest,
                 relativePath,
@@ -391,7 +391,7 @@ export class PromptInstaller {
     }
 
     // Save manifest (if not dry run and we have a manifest)
-    if (!options?.dryRun && manifest && installed.length > 0) {
+    if (!options?.dryRun && manifest != null && installed.length > 0) {
       try {
         await this.saveManifest(expandedBaseDir, manifest);
       } catch (error) {
@@ -520,7 +520,7 @@ export class PromptInstaller {
   }
 
   private getDefaultSourceDirectories(): string[] {
-    if (this.defaultSourceDirs) {
+    if (this.defaultSourceDirs != null) {
       return this.defaultSourceDirs;
     }
 
@@ -576,7 +576,7 @@ export class PromptInstaller {
   }
 
   private getReviewTimestamp(defaultStats: Stats | null): string {
-    if (defaultStats) {
+    if (defaultStats != null) {
       return this.formatTimestamp(defaultStats.mtime);
     }
     return this.formatTimestamp(new Date(0));
@@ -1122,7 +1122,7 @@ export class PromptInstaller {
       } else if (entry.isFile()) {
         await fs.copyFile(sourcePath, destPath);
         await fs.chmod(destPath, 0o644);
-        if (onFile) {
+        if (onFile != null) {
           await onFile(sourcePath);
         }
       }
@@ -1277,7 +1277,7 @@ export class PromptInstaller {
     manifest: InstalledManifest | null,
     relativePath: string,
   ): string | null {
-    if (!manifest?.files[relativePath]) {
+    if (manifest?.files[relativePath] == null) {
       return null;
     }
     return manifest.files[relativePath].hash;

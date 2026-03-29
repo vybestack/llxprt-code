@@ -236,10 +236,10 @@ export class LoggingProviderWrapper implements IProvider {
 
     // Handle legacy constructor signature for backward compatibility
     // New usage should NOT pass config here - config comes per-call
-    if (configOrRedactor && 'redactMessage' in configOrRedactor) {
+    if (configOrRedactor != null && 'redactMessage' in configOrRedactor) {
       this.redactor = configOrRedactor;
     } else if (
-      configOrRedactor &&
+      configOrRedactor != null &&
       'getConversationLoggingEnabled' in configOrRedactor
     ) {
       // Legacy usage - create redactor from config
@@ -247,7 +247,7 @@ export class LoggingProviderWrapper implements IProvider {
       this.redactor = new ConfigBasedRedactor(config.getRedactionConfig());
     }
 
-    if (legacyRedactor) {
+    if (legacyRedactor != null) {
       this.redactor = legacyRedactor;
     }
 
@@ -360,7 +360,7 @@ export class LoggingProviderWrapper implements IProvider {
     const injectedRuntime = this.runtimeContextResolver?.();
     const providedRuntime = normalizedOptions.runtime;
 
-    if (injectedRuntime) {
+    if (injectedRuntime != null) {
       const mergedMetadata: Record<string, unknown> = {
         ...(this.statelessRuntimeMetadata ?? {}),
         ...(injectedRuntime.metadata ?? {}),
@@ -384,14 +384,14 @@ export class LoggingProviderWrapper implements IProvider {
       normalizedOptions.metadata = mergedMetadata;
     }
 
-    if (!injectedRuntime && this.statelessRuntimeMetadata) {
+    if (injectedRuntime == null && this.statelessRuntimeMetadata != null) {
       normalizedOptions.metadata = {
         ...(this.statelessRuntimeMetadata ?? {}),
         ...(normalizedOptions.metadata ?? {}),
       };
     }
 
-    if (this.optionsNormalizer) {
+    if (this.optionsNormalizer != null) {
       normalizedOptions = this.optionsNormalizer(
         normalizedOptions,
         this.wrapped.name,
@@ -409,7 +409,7 @@ export class LoggingProviderWrapper implements IProvider {
         `Contents length at entry: ${normalizedOptions.contents?.length ?? 'undefined'}`,
     );
 
-    if (!normalizedOptions.runtime?.settingsService) {
+    if (normalizedOptions.runtime?.settingsService == null) {
       this.debug.error(
         () =>
           `Missing settingsService in runtime context for runtimeId=${runtimeId}`,
@@ -426,7 +426,7 @@ export class LoggingProviderWrapper implements IProvider {
       });
     }
 
-    if (!normalizedOptions.runtime?.config) {
+    if (normalizedOptions.runtime?.config == null) {
       this.debug.error(
         () => `Missing config in runtime context for runtimeId=${runtimeId}`,
       );
@@ -506,11 +506,11 @@ export class LoggingProviderWrapper implements IProvider {
     const invocation = normalizedOptions.invocation;
 
     // Prefer per-call redaction config from invocation context when available
-    if (invocation?.redaction) {
+    if (invocation?.redaction != null) {
       this.redactor = new ConfigBasedRedactor({
         ...invocation.redaction,
       });
-    } else if (!this.redactor && activeConfig) {
+    } else if (this.redactor == null && activeConfig) {
       // REQ-SP4-004: Create per-call redactor if not already set
       this.redactor = new ConfigBasedRedactor(
         activeConfig.getRedactionConfig(),
@@ -644,11 +644,12 @@ export class LoggingProviderWrapper implements IProvider {
   ): Promise<void> {
     try {
       // Apply redaction to content and tools (use redactor if available)
-      const redactedContent = this.redactor
-        ? content.map((item) =>
-            this.redactor!.redactMessage(item, this.wrapped.name),
-          )
-        : content;
+      const redactedContent =
+        this.redactor != null
+          ? content.map((item) =>
+              this.redactor!.redactMessage(item, this.wrapped.name),
+            )
+          : content;
       // Note: tools format is different now, keeping minimal logging for now
       const redactedTools = tools;
 
@@ -701,7 +702,7 @@ export class LoggingProviderWrapper implements IProvider {
         // Extract token usage and finishReason from IContent metadata
         if (chunk && typeof chunk === 'object') {
           const content = chunk;
-          if (content.metadata?.usage) {
+          if (content.metadata?.usage != null) {
             latestTokenUsage = content.metadata.usage;
           }
           const metaFinishReason = (
@@ -712,7 +713,7 @@ export class LoggingProviderWrapper implements IProvider {
           }
 
           // Accumulate text content for token estimation fallback (only when no real usage yet)
-          if (!latestTokenUsage && content.blocks) {
+          if (latestTokenUsage == null && content.blocks) {
             for (const block of content.blocks) {
               if (block.type === 'text') {
                 streamedText += block.text;
@@ -726,21 +727,22 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Process metrics if we have token usage
       const duration = performance.now() - startTime;
-      const tokenCounts = latestTokenUsage
-        ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
-        : {
-            input_token_count: 0,
-            output_token_count:
-              streamedText.length > 0 ? estimateTokens(streamedText) : 0,
-            cached_content_token_count: 0,
-            thoughts_token_count: 0,
-            tool_token_count: 0,
-            cache_read_input_tokens: 0,
-            cache_creation_input_tokens: null,
-          };
+      const tokenCounts =
+        latestTokenUsage != null
+          ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
+          : {
+              input_token_count: 0,
+              output_token_count:
+                streamedText.length > 0 ? estimateTokens(streamedText) : 0,
+              cached_content_token_count: 0,
+              thoughts_token_count: 0,
+              tool_token_count: 0,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: null,
+            };
 
       // Issue #684: Log API response telemetry for /stats model tracking
-      if (config) {
+      if (config != null) {
         const finishReasons = lastFinishReason ? [lastFinishReason] : [];
         // Create event and set token counts directly since constructor doesn't support raw counts
         const event = new ApiResponseEvent(
@@ -763,7 +765,7 @@ export class LoggingProviderWrapper implements IProvider {
         logApiResponse(config, event);
       }
 
-      if (latestTokenUsage) {
+      if (latestTokenUsage != null) {
         // Accumulate token usage for session tracking (requires actual usage data)
         this.accumulateTokenUsage(tokenCounts, config);
       }
@@ -777,7 +779,7 @@ export class LoggingProviderWrapper implements IProvider {
       this.performanceTracker.recordError(duration, String(error));
 
       // Issue #684: Log API error telemetry
-      if (config) {
+      if (config != null) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         logApiError(
@@ -819,7 +821,7 @@ export class LoggingProviderWrapper implements IProvider {
         // Extract token usage and finishReason from IContent metadata
         if (chunk && typeof chunk === 'object') {
           const content = chunk;
-          if (content.metadata?.usage) {
+          if (content.metadata?.usage != null) {
             latestTokenUsage = content.metadata.usage;
           }
           const metaFinishReason = (
@@ -899,14 +901,16 @@ export class LoggingProviderWrapper implements IProvider {
     finishReasons?: string[],
   ): Promise<void> {
     try {
-      const redactedContent = this.redactor
-        ? this.redactor.redactResponseContent(content, this.wrapped.name)
-        : content;
+      const redactedContent =
+        this.redactor != null
+          ? this.redactor.redactResponseContent(content, this.wrapped.name)
+          : content;
 
       // Extract token counts from the response or use provided tokenUsage
-      const tokenCounts = tokenUsage
-        ? this.extractTokenCountsFromTokenUsage(tokenUsage)
-        : this.extractTokenCountsFromResponse(content);
+      const tokenCounts =
+        tokenUsage != null
+          ? this.extractTokenCountsFromTokenUsage(tokenUsage)
+          : this.extractTokenCountsFromResponse(content);
 
       // Accumulate token usage for session tracking
       this.accumulateTokenUsage(tokenCounts, config);
@@ -1194,7 +1198,7 @@ export class LoggingProviderWrapper implements IProvider {
 
     // Call accumulateSessionTokens if providerManager is available
     const providerManager = config?.getProviderManager();
-    if (providerManager) {
+    if (providerManager != null) {
       try {
         this.debug.debug(
           () =>
@@ -1234,7 +1238,7 @@ export class LoggingProviderWrapper implements IProvider {
     success: boolean,
     error?: unknown,
   ): Promise<void> {
-    if (!config) {
+    if (config == null) {
       return;
     }
     try {
@@ -1252,12 +1256,13 @@ export class LoggingProviderWrapper implements IProvider {
       }
 
       // Redact tool parameters if redactor available
-      const redactedParams = this.redactor
-        ? this.redactor.redactToolCall({
-            type: 'function',
-            function: { name: toolName, parameters: params as object },
-          }).function.parameters
-        : (params as object);
+      const redactedParams =
+        this.redactor != null
+          ? this.redactor.redactToolCall({
+              type: 'function',
+              function: { name: toolName, parameters: params as object },
+            }).function.parameters
+          : (params as object);
 
       // Write to disk
       const fileWriter = getConversationFileWriter(

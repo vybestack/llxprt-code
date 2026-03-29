@@ -337,7 +337,7 @@ export class LoadBalancingProvider implements IProvider {
     );
 
     // Phase 3 Step 3: Throw descriptive error if provider not found
-    if (!delegateProvider) {
+    if (delegateProvider == null) {
       const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
       this.logger.error(() => errorMsg);
       throw new Error(errorMsg);
@@ -619,7 +619,7 @@ export class LoadBalancingProvider implements IProvider {
 
     const status = getErrorStatus(error);
     if (status !== undefined) {
-      if (settings.failoverStatusCodes) {
+      if (settings.failoverStatusCodes != null) {
         return settings.failoverStatusCodes.includes(status);
       }
       return status === 429 || (status >= 500 && status < 600);
@@ -688,7 +688,7 @@ export class LoadBalancingProvider implements IProvider {
     if (!settings.circuitBreakerEnabled) return true;
 
     const state = this.circuitBreakerStates.get(profileName);
-    if (!state || state.state === 'closed') return true;
+    if (state == null || state.state === 'closed') return true;
 
     if (state.state === 'open') {
       const now = Date.now();
@@ -714,7 +714,7 @@ export class LoadBalancingProvider implements IProvider {
    */
   private recordBackendSuccess(profileName: string): void {
     const state = this.circuitBreakerStates.get(profileName);
-    if (state && state.state === 'half-open') {
+    if (state != null && state.state === 'half-open') {
       state.state = 'closed';
       state.failures = [];
       this.logger.debug(() => `[circuit-breaker] ${profileName}: Recovered`);
@@ -730,7 +730,7 @@ export class LoadBalancingProvider implements IProvider {
     if (!settings.circuitBreakerEnabled) return;
 
     let state = this.circuitBreakerStates.get(profileName);
-    if (!state) {
+    if (state == null) {
       state = this.initCircuitBreakerState(profileName);
       this.circuitBreakerStates.set(profileName, state);
     }
@@ -786,7 +786,7 @@ export class LoadBalancingProvider implements IProvider {
       const firstResult = await Promise.race([iteratorResult, timeoutPromise]);
 
       // Got first chunk, clear timeout
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (timeoutHandle != null) clearTimeout(timeoutHandle);
 
       if (!firstResult.done) {
         yield firstResult.value;
@@ -797,7 +797,7 @@ export class LoadBalancingProvider implements IProvider {
         yield chunk;
       }
     } catch (error) {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (timeoutHandle != null) clearTimeout(timeoutHandle);
       this.logger.debug(
         () =>
           `[LB:timeout] ${profileName}: Request timed out after ${timeoutMs}ms`,
@@ -823,7 +823,7 @@ export class LoadBalancingProvider implements IProvider {
     const minute = Math.floor(now / 60000);
 
     let bucket = this.tpmBuckets.get(minute);
-    if (!bucket) {
+    if (bucket == null) {
       bucket = new Map();
       this.tpmBuckets.set(minute, bucket);
     }
@@ -855,7 +855,7 @@ export class LoadBalancingProvider implements IProvider {
     for (let i = 0; i < 5; i++) {
       const minute = currentMinute - i;
       const bucket = this.tpmBuckets.get(minute);
-      if (bucket) {
+      if (bucket != null) {
         const tokens = bucket.get(profileName) || 0;
         if (tokens > 0) {
           totalTokens += tokens;
@@ -980,7 +980,7 @@ export class LoadBalancingProvider implements IProvider {
    */
   private recordRequestStart(profileName: string): number {
     let metrics = this.backendMetrics.get(profileName);
-    if (!metrics) {
+    if (metrics == null) {
       metrics = this.initBackendMetrics(profileName);
       this.backendMetrics.set(profileName, metrics);
     }
@@ -998,7 +998,7 @@ export class LoadBalancingProvider implements IProvider {
     tokensUsed: number,
   ): void {
     const metrics = this.backendMetrics.get(profileName);
-    if (!metrics) return;
+    if (metrics == null) return;
 
     const latency = Date.now() - startTime;
     metrics.successes++;
@@ -1017,7 +1017,7 @@ export class LoadBalancingProvider implements IProvider {
     error: Error,
   ): void {
     const metrics = this.backendMetrics.get(profileName);
-    if (!metrics) return;
+    if (metrics == null) return;
 
     const latency = Date.now() - startTime;
     metrics.failures++;
@@ -1105,7 +1105,7 @@ export class LoadBalancingProvider implements IProvider {
           const delegateProvider = this.providerManager.getProviderByName(
             subProfile.providerName,
           );
-          if (!delegateProvider) {
+          if (delegateProvider == null) {
             throw new Error(`Provider "${subProfile.providerName}" not found`);
           }
 

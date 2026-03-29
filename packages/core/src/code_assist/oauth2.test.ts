@@ -108,7 +108,7 @@ describe('OAuth2', () => {
 
   async function triggerOAuthCallback(query: string): Promise<void> {
     const handler = httpServerState.handler;
-    if (!handler) {
+    if (handler == null) {
       throw new Error('OAuth callback handler not registered');
     }
 

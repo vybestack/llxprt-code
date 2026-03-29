@@ -553,7 +553,7 @@ describe('TopDownTruncationStrategy', () => {
           const responseBlock = msg.blocks.find(
             (b) => b.type === 'tool_response',
           );
-          if (responseBlock && 'callId' in responseBlock) {
+          if (responseBlock != null && 'callId' in responseBlock) {
             const callId = responseBlock.callId;
             const hasCall = result.newHistory.some(
               (m) =>

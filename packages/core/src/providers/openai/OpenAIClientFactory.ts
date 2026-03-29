@@ -166,7 +166,7 @@ export function instantiateClient(
     maxRetries: 0,
   };
 
-  if (headers && Object.keys(headers).length > 0) {
+  if (headers != null && Object.keys(headers).length > 0) {
     // Ensure headers like User-Agent are applied even if the SDK call-site
     // headers option is not forwarded by the OpenAI client implementation.
     clientOptions.defaultHeaders = headers;
@@ -176,7 +176,7 @@ export function instantiateClient(
     clientOptions.baseURL = baseURL;
   }
 
-  if (agents) {
+  if (agents != null) {
     clientOptions.httpAgent = agents.httpAgent;
     clientOptions.httpsAgent = agents.httpsAgent;
   }
@@ -207,7 +207,7 @@ export function mergeInvocationHeaders(
 
   const invocationUserAgent = options.invocation.getEphemeral('user-agent');
 
-  return baseHeaders || invocationHeaders || invocationUserAgent
+  return baseHeaders != null || invocationHeaders != null || invocationUserAgent
     ? {
         ...(baseHeaders ?? {}),
         ...(invocationHeaders ?? {}),

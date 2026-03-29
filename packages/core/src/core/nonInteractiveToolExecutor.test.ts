@@ -786,7 +786,7 @@ function getFullResponseText(response: ToolCallResponseInfo): string {
     const payload = part.functionResponse?.response as
       | { output?: unknown; error?: unknown }
       | undefined;
-    if (payload) {
+    if (payload != null) {
       if (typeof payload.output === 'string') chunks.push(payload.output);
       if (typeof payload.error === 'string') chunks.push(payload.error);
     }

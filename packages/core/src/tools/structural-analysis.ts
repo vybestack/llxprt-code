@@ -297,7 +297,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     if (kind === 'arrow_function') {
       // Walk up to variable_declarator → get its identifier
       const parent = node.parent();
-      if (parent && String(parent.kind()) === 'variable_declarator') {
+      if (parent != null && String(parent.kind()) === 'variable_declarator') {
         const nameNode = parent
           .children()
           .find((c: SgNode) => String(c.kind()) === 'identifier');
@@ -365,7 +365,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     for (const file of files) {
       if (signal.aborted) break;
       const parsed = await this.parseFile(file, lang);
-      if (!parsed) continue;
+      if (parsed == null) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
 
@@ -471,7 +471,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     for (const file of files) {
       if (signal.aborted) break;
       const parsed = await this.parseFile(file, lang);
-      if (!parsed) continue;
+      if (parsed == null) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
 
@@ -482,7 +482,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         );
         for (const m of extendsMatches) {
           const parent = m.getMatch('PARENT');
-          if (parent) extendsParent.push(parent.text());
+          if (parent != null) extendsParent.push(parent.text());
         }
       } catch {
         /* skip */
@@ -494,7 +494,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         );
         for (const m of implMatches) {
           const iface = m.getMatch('IFACE');
-          if (iface) implementsInterfaces.push(iface.text());
+          if (iface != null) implementsInterfaces.push(iface.text());
         }
       } catch {
         /* skip */
@@ -507,7 +507,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         );
         for (const m of childMatches) {
           const name = m.getMatch('NAME');
-          if (name) {
+          if (name != null) {
             extendedBy.push({
               name: name.text(),
               file: relPath,
@@ -525,7 +525,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         );
         for (const m of implByMatches) {
           const name = m.getMatch('NAME');
-          if (name) {
+          if (name != null) {
             implementedBy.push({
               name: name.text(),
               file: relPath,
@@ -589,7 +589,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       for (const file of files) {
         if (signal.aborted || nodesVisited >= maxNodes) break;
         const parsed = await this.parseFile(file, lang);
-        if (!parsed) continue;
+        if (parsed == null) continue;
 
         const relPath = makeRelative(file, workspaceRoot);
 
@@ -614,14 +614,14 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
             // Walk up to the nearest function-like container
             let container: SgNode | null = callNode.parent();
             while (
-              container &&
+              container != null &&
               !StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(
                 String(container.kind()),
               )
             ) {
               container = container.parent();
             }
-            if (!container) continue;
+            if (container == null) continue;
 
             const methodName = this.getContainerName(container);
             if (!methodName || methodName === sym) continue;
@@ -635,7 +635,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
             let viaText = '';
             let node: SgNode = callNode;
             let parentNode = node.parent();
-            while (parentNode) {
+            while (parentNode != null) {
               const parentKind = String(parentNode.kind());
               if (
                 parentKind.includes('statement') ||
@@ -675,14 +675,14 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
             // Walk up to the nearest function-like container
             let ancestor: SgNode | null = callNode.parent();
             while (
-              ancestor &&
+              ancestor != null &&
               !StructuralAnalysisInvocation.FUNCTION_CONTAINER_KINDS.has(
                 String(ancestor.kind()),
               )
             ) {
               ancestor = ancestor.parent();
             }
-            if (!ancestor) continue;
+            if (ancestor == null) continue;
 
             const methodName = this.getContainerName(ancestor);
             if (!methodName || methodName === sym) continue;
@@ -754,7 +754,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       for (const file of files) {
         if (signal.aborted) break;
         const parsed = await this.parseFile(file, lang);
-        if (!parsed) continue;
+        if (parsed == null) continue;
 
         const relPath = makeRelative(file, workspaceRoot);
 
@@ -881,7 +881,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     for (const file of files) {
       if (signal.aborted) break;
       const parsed = await this.parseFile(file, lang);
-      if (!parsed) continue;
+      if (parsed == null) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
 
@@ -1063,7 +1063,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     for (const file of files) {
       if (signal.aborted) break;
       const parsed = await this.parseFile(file, lang);
-      if (!parsed) continue;
+      if (parsed == null) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
 
@@ -1072,7 +1072,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         const named = parsed.root.findAll(`import { $$$NAMES } from $SOURCE`);
         for (const m of named) {
           const src = m.getMatch('SOURCE');
-          if (src) {
+          if (src != null) {
             imports.push({
               file: relPath,
               line: m.range().start.line + 1,
@@ -1090,7 +1090,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         const defaults = parsed.root.findAll(`import $DEFAULT from $SOURCE`);
         for (const m of defaults) {
           const src = m.getMatch('SOURCE');
-          if (src) {
+          if (src != null) {
             imports.push({
               file: relPath,
               line: m.range().start.line + 1,
@@ -1154,7 +1154,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       for (const file of allFiles) {
         if (signal.aborted) break;
         const parsed = await this.parseFile(file, lang);
-        if (!parsed) continue;
+        if (parsed == null) continue;
         const relPath = makeRelative(file, workspaceRoot);
         if (relPath === targetRel) continue;
 
@@ -1213,7 +1213,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     for (const file of files) {
       if (signal.aborted) break;
       const parsed = await this.parseFile(file, lang);
-      if (!parsed) continue;
+      if (parsed == null) continue;
 
       const relPath = makeRelative(file, workspaceRoot);
 

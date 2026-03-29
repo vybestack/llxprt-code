@@ -528,7 +528,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const providerConfigRef = provider as unknown as {
       baseProviderConfig?: { baseURL?: string };
     };
-    if (providerConfigRef.baseProviderConfig) {
+    if (providerConfigRef.baseProviderConfig != null) {
       providerConfigRef.baseProviderConfig.baseURL =
         'https://provider-config.example.com';
     }

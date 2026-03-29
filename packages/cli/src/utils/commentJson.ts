@@ -64,7 +64,7 @@ function preserveCommentsOnPropertyDeletion(
   const beforeComments = target[beforeSym] as unknown[] | undefined;
   const afterComments = target[afterSym] as unknown[] | undefined;
 
-  if (!beforeComments && !afterComments) return;
+  if (beforeComments == null && afterComments == null) return;
 
   const keys = Object.getOwnPropertyNames(container);
   const idx = keys.indexOf(propName);
@@ -79,7 +79,7 @@ function preserveCommentsOnPropertyDeletion(
       : comments;
   }
 
-  if (beforeComments && beforeComments.length > 0) {
+  if (beforeComments != null && beforeComments.length > 0) {
     if (nextKey) {
       appendToSymbol(Symbol.for(`before:${nextKey}`), beforeComments);
     } else if (prevKey) {
@@ -90,7 +90,7 @@ function preserveCommentsOnPropertyDeletion(
     delete target[beforeSym];
   }
 
-  if (afterComments && afterComments.length > 0) {
+  if (afterComments != null && afterComments.length > 0) {
     if (nextKey) {
       appendToSymbol(Symbol.for(`before:${nextKey}`), afterComments);
     } else if (prevKey) {

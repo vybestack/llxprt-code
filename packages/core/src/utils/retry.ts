@@ -150,7 +150,7 @@ export function createStreamInterruptionError(
   const error = new Error(message);
   error.name = 'StreamInterruptionError';
   (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
-  if (details) {
+  if (details != null) {
     (error as { details?: Record<string, unknown> }).details = details;
   }
   if (cause && !(error as { cause?: unknown }).cause) {
@@ -295,9 +295,12 @@ export async function retryWithBackoff<T>(
     throw new Error('maxAttempts must be a positive number.');
   }
 
-  const cleanOptions = options
-    ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
-    : {};
+  const cleanOptions =
+    options != null
+      ? Object.fromEntries(
+          Object.entries(options).filter(([_, v]) => v != null),
+        )
+      : {};
 
   const {
     maxAttempts,
@@ -398,7 +401,7 @@ export async function retryWithBackoff<T>(
 
       // Attempt bucket failover after threshold consecutive 429 errors
       // @plan PLAN-20251213issue490 Bucket failover integration
-      if (shouldAttemptFailover && options?.onPersistent429) {
+      if (shouldAttemptFailover && options?.onPersistent429 != null) {
         const failoverReason = is429
           ? `${consecutive429s} consecutive 429 errors`
           : `status ${errorStatus}`;
@@ -486,7 +489,7 @@ export async function retryWithBackoff<T>(
             `Attempt ${attempt} failed: ${classifiedError.message}. Retrying after ${classifiedError.retryDelayMs}ms...`,
         );
         await delay(classifiedError.retryDelayMs, signal);
-        if (options?.trackThrottleWaitTime) {
+        if (options?.trackThrottleWaitTime != null) {
           options.trackThrottleWaitTime(classifiedError.retryDelayMs);
         }
         currentDelay = initialDelayMs;
@@ -504,7 +507,7 @@ export async function retryWithBackoff<T>(
         );
         await delay(delayDurationMs, signal);
         // Track throttling wait time when explicitly delaying
-        if (options?.trackThrottleWaitTime) {
+        if (options?.trackThrottleWaitTime != null) {
           logger.debug(
             () =>
               `Tracking throttle wait time from Retry-After header: ${delayDurationMs}ms`,
@@ -521,7 +524,7 @@ export async function retryWithBackoff<T>(
         const delayWithJitter = Math.max(0, currentDelay + jitter);
         await delay(delayWithJitter, signal);
         // Track throttling wait time for exponential backoff
-        if (options?.trackThrottleWaitTime) {
+        if (options?.trackThrottleWaitTime != null) {
           logger.debug(
             () =>
               `Tracking throttle wait time from exponential backoff: ${delayWithJitter}ms`,
@@ -675,7 +678,7 @@ function logRetryAttempt(
         () =>
           `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff... Error: ${error}`,
       );
-    } else if (error.message.match(/5\d{2}/)) {
+    } else if (error.message.match(/5\d{2}/) != null) {
       logger.error(
         () =>
           `Attempt ${attempt} failed with 5xx error. Retrying with backoff... Error: ${error}`,

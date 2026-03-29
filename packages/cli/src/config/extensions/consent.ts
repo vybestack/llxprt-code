@@ -122,7 +122,7 @@ export async function requestHookConsent(
 
   const consentPrompt = buildHookConsentPrompt(extensionName, hookNames);
 
-  if (requestConsent) {
+  if (requestConsent != null) {
     return requestConsent(consentPrompt);
   }
 
@@ -266,7 +266,7 @@ async function extensionConsentString(
       const isLocal = !!mcpServer.command;
       const source =
         mcpServer.httpUrl ??
-        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
+        `${mcpServer.command || ''}${mcpServer.args != null ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
@@ -275,7 +275,7 @@ async function extensionConsentString(
       `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
   }
-  if (sanitizedConfig.excludeTools) {
+  if (sanitizedConfig.excludeTools != null) {
     output.push(
       `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
     );
@@ -329,7 +329,7 @@ export async function maybeRequestConsentOrFail(
     hasHooks,
     skills,
   );
-  if (previousExtensionConfig) {
+  if (previousExtensionConfig != null) {
     const previousExtensionConsent = await extensionConsentString(
       previousExtensionConfig,
       previousHasHooks ?? false,

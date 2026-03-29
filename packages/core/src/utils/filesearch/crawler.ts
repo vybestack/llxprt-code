@@ -36,7 +36,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     );
     const cachedResults = cache.read(cacheKey);
 
-    if (cachedResults) {
+    if (cachedResults != null) {
       return cachedResults;
     }
   }

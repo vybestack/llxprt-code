@@ -73,7 +73,7 @@ export function getCliRuntimeContext() {
   const identity = resolveActiveRuntimeIdentity();
   const entry = runtimeRegistry.get(identity.runtimeId);
 
-  if (!entry?.config) {
+  if (entry?.config == null) {
     const registeredIds = Array.from(runtimeRegistry.keys());
     const scope = getCurrentRuntimeScope();
     const activeCtx = peekActiveProviderRuntimeContext();
@@ -83,12 +83,12 @@ export function getCliRuntimeContext() {
     );
   }
 
-  if (entry?.config) {
+  if (entry?.config != null) {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-004 - Remove singleton fallbacks when stateless hardening is enabled
     const settingsService = entry.settingsService;
 
-    if (isStatelessProviderIntegrationEnabled() && !settingsService) {
+    if (isStatelessProviderIntegrationEnabled() && settingsService == null) {
       throw new Error(
         formatMissingRuntimeMessage({
           runtimeId: identity.runtimeId,
@@ -138,7 +138,7 @@ export function getCliRuntimeServices(): CliRuntimeServices {
   const entry = requireRuntimeEntry(runtimeId);
   const context = getCliRuntimeContext();
   const config = entry.config ?? context.config;
-  if (!config) {
+  if (config == null) {
     throw new Error(
       formatNormalizationFailureMessage({
         runtimeId,
@@ -158,7 +158,7 @@ export function getCliRuntimeServices(): CliRuntimeServices {
     );
   }
   const providerManager = entry.providerManager;
-  if (!providerManager) {
+  if (providerManager == null) {
     throw new Error(
       formatMissingRuntimeMessage({
         runtimeId,
@@ -186,7 +186,7 @@ export function getCliProviderManager(
   const entry = requireRuntimeEntry(runtimeId);
   const oauthManager = entry.oauthManager;
 
-  if (options.addItem && oauthManager) {
+  if (options.addItem != null && oauthManager != null) {
     const providersMap = (
       oauthManager as unknown as {
         providers?: Map<string, unknown>;
@@ -203,7 +203,7 @@ export function getCliProviderManager(
             ) => number,
           ) => void;
         };
-        if (p.name && p.setAddItem) {
+        if (p.name && p.setAddItem != null) {
           p.setAddItem(options.addItem);
         }
       }
@@ -218,7 +218,7 @@ export function isCliRuntimeStatelessReady(): boolean {
   }
   const { runtimeId } = resolveActiveRuntimeIdentity();
   const entry = runtimeRegistry.get(runtimeId);
-  if (!entry) {
+  if (entry == null) {
     return false;
   }
   return Boolean(
@@ -253,13 +253,13 @@ export function ensureStatelessProviderReady(): void {
   const providerManager = entry.providerManager;
 
   const missingFields: string[] = [];
-  if (!settingsService) {
+  if (settingsService == null) {
     missingFields.push('SettingsService');
   }
-  if (!config) {
+  if (config == null) {
     missingFields.push('Config');
   }
-  if (!providerManager) {
+  if (providerManager == null) {
     missingFields.push('ProviderManager');
   }
 

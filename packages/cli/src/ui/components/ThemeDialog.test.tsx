@@ -144,7 +144,7 @@ describe('ThemeDialog', () => {
   ): LoadedSettings => {
     const mockSettingsFile = {
       settings: {
-        ui: customThemes ? { customThemes } : {},
+        ui: customThemes != null ? { customThemes } : {},
       },
       path: '/mock/user/settings.json',
       exists: true,
@@ -172,7 +172,7 @@ describe('ThemeDialog', () => {
       merged: {
         ui: {
           theme: 'Green Screen',
-          ...(customThemes ? { customThemes } : {}),
+          ...(customThemes != null ? { customThemes } : {}),
         },
       },
       user: mockSettingsFile,

@@ -58,7 +58,7 @@ class Cell {
     this.cursorX = cursorX;
     this.cursorY = cursorY;
 
-    if (!cell) {
+    if (cell == null) {
       return;
     }
 
@@ -147,7 +147,7 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
   for (let y = 0; y < terminal.rows; y++) {
     const line = buffer.getLine(buffer.viewportY + y);
     const currentLine: AnsiLine = [];
-    if (!line) {
+    if (line == null) {
       result.push(currentLine);
       continue;
     }

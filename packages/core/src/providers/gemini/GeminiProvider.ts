@@ -146,7 +146,7 @@ export class GeminiProvider extends BaseProvider {
       baseURL,
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
       isOAuthEnabled: !!oauthManager,
-      oauthProvider: oauthManager ? 'gemini' : undefined,
+      oauthProvider: oauthManager != null ? 'gemini' : undefined,
       oauthManager,
     };
 
@@ -290,12 +290,12 @@ export class GeminiProvider extends BaseProvider {
    * Updates OAuth configuration based on current OAuth manager state
    */
   private updateOAuthState(): void {
-    if (this.geminiOAuthManager) {
+    if (this.geminiOAuthManager != null) {
       const manager = this.geminiOAuthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
       if (
-        manager.isOAuthEnabled &&
+        manager.isOAuthEnabled != null &&
         typeof manager.isOAuthEnabled === 'function'
       ) {
         const isEnabled = manager.isOAuthEnabled('gemini');
@@ -370,7 +370,7 @@ export class GeminiProvider extends BaseProvider {
     };
 
     if (
-      manager?.isOAuthEnabled &&
+      manager?.isOAuthEnabled != null &&
       typeof manager.isOAuthEnabled === 'function'
     ) {
       return manager.isOAuthEnabled('gemini');
@@ -522,7 +522,7 @@ export class GeminiProvider extends BaseProvider {
               }>;
             };
 
-            if (data.models && data.models.length > 0) {
+            if (data.models != null && data.models.length > 0) {
               return data.models.map((model) => ({
                 id: model.name.replace('models/', ''), // Remove 'models/' prefix
                 name: model.displayName || model.name,
@@ -703,7 +703,7 @@ export class GeminiProvider extends BaseProvider {
       );
       logger.debug(
         () =>
-          `invokeServerTool: globalConfig is ${this.globalConfig ? 'set' : 'null/undefined'}`,
+          `invokeServerTool: globalConfig is ${this.globalConfig != null ? 'set' : 'null/undefined'}`,
       );
 
       // Check for abort before auth determination
@@ -818,7 +818,7 @@ export class GeminiProvider extends BaseProvider {
             // If globalConfig is not set (e.g., when using non-Gemini provider),
             // create a minimal config for OAuth
             let configForOAuth = this.globalConfig;
-            if (!configForOAuth) {
+            if (configForOAuth == null) {
               logger.debug(
                 () =>
                   `invokeServerTool: globalConfig is null, creating minimal config for OAuth`,
@@ -1100,7 +1100,7 @@ export class GeminiProvider extends BaseProvider {
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         );
-        if (!toolResponseBlock) {
+        if (toolResponseBlock == null) {
           throw new Error('Tool content must have a tool_response block');
         }
 
@@ -1226,31 +1226,32 @@ export class GeminiProvider extends BaseProvider {
     );
 
     // Ensure tools have proper type: 'object' for Gemini
-    const geminiTools = tools
-      ? tools.map((toolGroup) => ({
-          functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
-            let parameters = decl.parametersJsonSchema;
-            // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
-            // This ensures compatibility and prevents API errors when using tools.
-            // Ref: https://ai.google.dev/api/caching#Schema
-            parameters = this.cleanGeminiSchema(parameters);
-            if (
-              parameters &&
-              typeof parameters === 'object' &&
-              !('type' in (parameters as Record<string, unknown>))
-            ) {
-              parameters = { type: Type.OBJECT, ...parameters };
-            } else if (!parameters) {
-              parameters = { type: Type.OBJECT, properties: {} };
-            }
-            return {
-              name: decl.name,
-              description: decl.description,
-              parameters: parameters as Schema,
-            };
-          }),
-        }))
-      : undefined;
+    const geminiTools =
+      tools != null
+        ? tools.map((toolGroup) => ({
+            functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
+              let parameters = decl.parametersJsonSchema;
+              // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
+              // This ensures compatibility and prevents API errors when using tools.
+              // Ref: https://ai.google.dev/api/caching#Schema
+              parameters = this.cleanGeminiSchema(parameters);
+              if (
+                parameters &&
+                typeof parameters === 'object' &&
+                !('type' in (parameters as Record<string, unknown>))
+              ) {
+                parameters = { type: Type.OBJECT, ...parameters };
+              } else if (!parameters) {
+                parameters = { type: Type.OBJECT, properties: {} };
+              }
+              return {
+                name: decl.name,
+                description: decl.description,
+                parameters: parameters as Schema,
+              };
+            }),
+          }))
+        : undefined;
 
     const toolNamesForPrompt =
       tools === undefined
@@ -1274,9 +1275,9 @@ export class GeminiProvider extends BaseProvider {
         : undefined;
 
     const serverToolsOverride =
-      directOverrides && 'serverTools' in directOverrides
+      directOverrides != null && 'serverTools' in directOverrides
         ? directOverrides.serverTools
-        : options.config &&
+        : options.config != null &&
             typeof (options.config as { serverTools?: unknown }).serverTools !==
               'undefined'
           ? (options.config as { serverTools?: unknown }).serverTools
@@ -1286,7 +1287,7 @@ export class GeminiProvider extends BaseProvider {
       : ['web_search', 'web_fetch'];
 
     const toolConfigOverride =
-      directOverrides && 'toolConfig' in directOverrides
+      directOverrides != null && 'toolConfig' in directOverrides
         ? directOverrides.toolConfig
         : undefined;
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
@@ -1312,7 +1313,7 @@ export class GeminiProvider extends BaseProvider {
       requestConfig['maxOutputTokens'] = genericMaxOutput;
     }
     requestConfig.serverTools = serverTools;
-    if (geminiTools) {
+    if (geminiTools != null) {
       requestConfig.tools = geminiTools;
     }
     if (toolConfigOverride) {
@@ -1407,10 +1408,11 @@ export class GeminiProvider extends BaseProvider {
         (part: Part) =>
           (part as Part & { thoughtSignature?: string }).thoughtSignature,
       );
-      const thoughtSignature = firstPartWithSig
-        ? (firstPartWithSig as Part & { thoughtSignature?: string })
-            .thoughtSignature
-        : undefined;
+      const thoughtSignature =
+        firstPartWithSig != null
+          ? (firstPartWithSig as Part & { thoughtSignature?: string })
+              .thoughtSignature
+          : undefined;
 
       const text = nonThoughtTextParts
         .map((part: Part) => (part as { text: string }).text)
@@ -1464,7 +1466,7 @@ export class GeminiProvider extends BaseProvider {
           blocks: [{ type: 'text', text }],
         };
 
-        if (usageMetadata) {
+        if (usageMetadata != null) {
           textContent.metadata = {
             usage: {
               promptTokens: usageMetadata.promptTokenCount || 0,
@@ -1497,7 +1499,7 @@ export class GeminiProvider extends BaseProvider {
           blocks,
         };
 
-        if (usageMetadata) {
+        if (usageMetadata != null) {
           toolCallContent.metadata = {
             usage: {
               promptTokens: usageMetadata.promptTokenCount || 0,
@@ -1513,7 +1515,7 @@ export class GeminiProvider extends BaseProvider {
         chunks.push(toolCallContent);
       }
 
-      if (usageMetadata && !text && functionCalls.length === 0) {
+      if (usageMetadata != null && !text && functionCalls.length === 0) {
         chunks.push({
           speaker: 'ai',
           blocks: [],
@@ -1530,7 +1532,7 @@ export class GeminiProvider extends BaseProvider {
         } as IContent);
       }
 
-      if (!usageMetadata && !text && functionCalls.length === 0) {
+      if (usageMetadata == null && !text && functionCalls.length === 0) {
         chunks.push({
           speaker: 'ai',
           blocks: [],
@@ -1624,7 +1626,7 @@ export class GeminiProvider extends BaseProvider {
         ) => Promise<GenerateContentResponse>;
       };
 
-      if (!streamingEnabled && generatorWithStream.generateContent) {
+      if (!streamingEnabled && generatorWithStream.generateContent != null) {
         try {
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
           const response = await generatorWithStream.generateContent(

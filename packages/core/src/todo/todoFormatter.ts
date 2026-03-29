@@ -147,7 +147,7 @@ const mergeToolCalls = (
   getLiveToolCalls?: (todoId: string) => TodoToolCall[],
 ): TodoToolCall[] => {
   const baseCalls = todo.toolCalls ?? [];
-  if (!getLiveToolCalls) {
+  if (getLiveToolCalls == null) {
     return baseCalls;
   }
 
@@ -191,10 +191,10 @@ export const formatTodoListForDisplay = (
   for (const todo of orderedTodos) {
     lines.push(formatTodoEntry(todo));
 
-    if (todo.subtasks) {
+    if (todo.subtasks != null) {
       for (const subtask of todo.subtasks) {
         lines.push(`  • ${subtask.content}`);
-        if (subtask.toolCalls && subtask.toolCalls.length > 0) {
+        if (subtask.toolCalls != null && subtask.toolCalls.length > 0) {
           pushToolCalls(lines, subtask.toolCalls, '    ', maxToolCalls);
         }
       }

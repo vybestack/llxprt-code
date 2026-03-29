@@ -11,7 +11,7 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 
 describe('editorCommand', () => {
   it('should return a dialog action to open the editor dialog', () => {
-    if (!editorCommand.action) {
+    if (editorCommand.action == null) {
       throw new Error('The editor command must have an action.');
     }
     const mockContext = createMockCommandContext();

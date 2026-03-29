@@ -90,7 +90,7 @@ export async function prepareRequest(
   }
 
   // Debug log the conversion result
-  if (logger.enabled && formattedTools) {
+  if (logger.enabled && formattedTools != null) {
     logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
       detectedFormat,
       inputHadTools: !!tools,
@@ -154,14 +154,14 @@ export async function prepareRequest(
     stream: streamingEnabled,
   };
 
-  if (formattedTools && formattedTools.length > 0) {
+  if (formattedTools != null && formattedTools.length > 0) {
     requestBody.tools = formattedTools;
     requestBody.tool_choice = 'auto';
   }
 
   // Apply request overrides
   const requestOverrides = extractModelParamsFromOptions(options);
-  if (requestOverrides) {
+  if (requestOverrides != null) {
     if (logger.enabled) {
       logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
         overrideKeys: Object.keys(requestOverrides),

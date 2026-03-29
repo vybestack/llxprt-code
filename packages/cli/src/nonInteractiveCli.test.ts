@@ -49,7 +49,7 @@ function createCompletedToolCallResponse(params: {
   agentId?: string;
 }) {
   return {
-    status: params.error ? ('error' as const) : ('success' as const),
+    status: params.error != null ? ('error' as const) : ('success' as const),
     request: {
       callId: params.callId,
       name: 'mock_tool',

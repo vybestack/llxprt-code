@@ -88,7 +88,7 @@ export async function loadProfileBuckets(
 
   if (
     'auth' in profile &&
-    profile.auth &&
+    profile.auth != null &&
     typeof profile.auth === 'object' &&
     'type' in profile.auth &&
     profile.auth.type === 'oauth' &&

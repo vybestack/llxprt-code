@@ -83,7 +83,7 @@ function getProviderInfo(providerName: string): ProviderInfo | null {
 
 function formatProviderName(providerName: string): string {
   const info = getProviderInfo(providerName);
-  if (info) {
+  if (info != null) {
     return info.displayName;
   }
   // Capitalize first letter for unknown providers
@@ -151,7 +151,7 @@ export const MultiProviderPrivacyNotice = ({
             </Text>
           ))}
         </Box>
-      ) : providerInfo ? (
+      ) : providerInfo != null ? (
         <Box flexDirection="column">
           <Text color={Colors.Foreground}>
             <Text color={Colors.AccentBlue}>[Terms]</Text> {providerInfo.tosUrl}

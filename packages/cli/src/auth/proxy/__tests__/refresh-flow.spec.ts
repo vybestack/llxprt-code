@@ -172,11 +172,11 @@ class TestOAuthProvider implements OAuthFlowInterface {
       await new Promise((resolve) => setTimeout(resolve, this.refreshDelayMs));
     }
 
-    if (this.shouldThrow && this.throwError) {
+    if (this.shouldThrow && this.throwError != null) {
       throw this.throwError;
     }
 
-    if (!this.refreshResult) {
+    if (this.refreshResult == null) {
       throw new Error('TestOAuthProvider: refreshResult not configured');
     }
 

@@ -244,7 +244,7 @@ export async function createMockApiServer(): Promise<MockApiServer> {
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((err) => {
-          if (err) {
+          if (err != null) {
             reject(err);
           } else {
             resolve();

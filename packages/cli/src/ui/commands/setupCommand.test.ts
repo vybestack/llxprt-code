@@ -33,7 +33,7 @@ describe('setupCommand', () => {
   });
 
   it('should reset welcome config and return dialog action', async () => {
-    if (!setupCommand.action) {
+    if (setupCommand.action == null) {
       throw new Error('setupCommand must have an action.');
     }
 

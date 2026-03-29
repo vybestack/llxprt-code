@@ -161,7 +161,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           }
         }
 
-        if (warningTimerRef.current) {
+        if (warningTimerRef.current != null) {
           clearTimeout(warningTimerRef.current);
         }
 
@@ -281,7 +281,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
             }
           }
 
-          if (warningTimerRef.current) {
+          if (warningTimerRef.current != null) {
             clearTimeout(warningTimerRef.current);
           }
 
@@ -298,7 +298,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
 
     return () => {
       clearInterval(interval);
-      if (warningTimerRef.current) {
+      if (warningTimerRef.current != null) {
         clearTimeout(warningTimerRef.current);
       }
     };
@@ -314,7 +314,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
 
   // Handle ADD_ITEM actions
   useEffect(() => {
-    if (appState.lastAddItemAction) {
+    if (appState.lastAddItemAction != null) {
       const { itemData, baseTimestamp } = appState.lastAddItemAction;
       addItem(itemData, baseTimestamp);
     }

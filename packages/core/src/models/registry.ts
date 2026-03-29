@@ -72,7 +72,7 @@ export class ModelRegistry {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
+    if (this.initPromise != null) return this.initPromise;
 
     this.initPromise = (async () => {
       await this.loadModels();
@@ -88,7 +88,7 @@ export class ModelRegistry {
   private async loadModels(): Promise<void> {
     // Try cache first
     const cached = await this.loadFromCache();
-    if (cached) {
+    if (cached != null) {
       this.populateModels(cached);
       return;
     }
@@ -209,7 +209,7 @@ export class ModelRegistry {
    * Start background refresh timer
    */
   private startBackgroundRefresh(): void {
-    if (this.refreshTimer) return;
+    if (this.refreshTimer != null) return;
 
     this.refreshTimer = setInterval(() => {
       this.refresh().catch(() => {
@@ -225,7 +225,7 @@ export class ModelRegistry {
    * Stop background refresh and cleanup
    */
   dispose(): void {
-    if (this.refreshTimer) {
+    if (this.refreshTimer != null) {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
@@ -314,7 +314,7 @@ export class ModelRegistry {
    * Get cache metadata
    */
   getCacheMetadata(): ModelCacheMetadata | null {
-    if (!this.lastRefresh) return null;
+    if (this.lastRefresh == null) return null;
 
     return {
       fetchedAt: this.lastRefresh.toISOString(),
@@ -362,7 +362,7 @@ export class ModelRegistry {
    */
   off(event: ModelRegistryEvent, callback: EventCallback): void {
     const callbacks = this.listeners.get(event);
-    if (callbacks) {
+    if (callbacks != null) {
       const index = callbacks.indexOf(callback);
       if (index !== -1) {
         callbacks.splice(index, 1);
@@ -386,7 +386,7 @@ let registryInstance: ModelRegistry | null = null;
  * Get the global ModelRegistry instance
  */
 export function getModelRegistry(): ModelRegistry {
-  if (!registryInstance) {
+  if (registryInstance == null) {
     registryInstance = new ModelRegistry();
   }
   return registryInstance;

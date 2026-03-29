@@ -264,7 +264,7 @@ export class Logger {
 
     try {
       const writtenEntry = await this._updateLogFile(newEntryObject);
-      if (writtenEntry) {
+      if (writtenEntry != null) {
         // If an entry was actually written (not a duplicate skip),
         // then this instance can increment its idea of the next messageId for this session.
         this.messageId = writtenEntry.messageId + 1;
@@ -361,7 +361,7 @@ export class Logger {
       }
 
       // Apply emoji filtering if provided
-      if (emojiFilter) {
+      if (emojiFilter != null) {
         const filteredHistory = parsedContent.history.map((item: Content) => {
           const filteredItem = { ...item };
           if (Array.isArray(filteredItem.parts)) {

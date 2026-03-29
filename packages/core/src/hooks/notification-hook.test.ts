@@ -52,7 +52,7 @@ function createTestConfigWithNotificationHook(command: string): Config {
     getModel: () => 'test-model',
     getSessionRecordingService: () => undefined,
     getHookSystem: () => {
-      if (!hookSystem) {
+      if (hookSystem == null) {
         hookSystem = new HookSystem(config);
       }
       return hookSystem;

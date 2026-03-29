@@ -17,7 +17,7 @@ export function useIdeTrustListener(config: Config) {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       const ideClient = config.getIdeClient();
-      if (!ideClient) {
+      if (ideClient == null) {
         return () => {}; // Return empty cleanup function if no IDE client
       }
       ideClient.addTrustChangeListener(onStoreChange);

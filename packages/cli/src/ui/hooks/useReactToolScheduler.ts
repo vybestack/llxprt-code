@@ -158,7 +158,7 @@ export function useReactToolScheduler(
           return prev;
         }
         const next = new Map(prev);
-        if (!updatedCalls || updatedCalls.length === 0) {
+        if (updatedCalls == null || updatedCalls.length === 0) {
           next.delete(schedulerId);
         } else {
           next.set(schedulerId, updatedCalls);
@@ -445,7 +445,7 @@ export function useReactToolScheduler(
         ? request.map(ensureAgentId)
         : ensureAgentId(request);
 
-      if (!scheduler) {
+      if (scheduler == null) {
         pendingScheduleRequests.current.push({
           request: normalizedRequest,
           signal,

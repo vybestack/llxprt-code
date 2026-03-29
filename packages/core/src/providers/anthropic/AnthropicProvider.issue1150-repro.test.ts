@@ -79,7 +79,7 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
+    if (runtimeContext.config == null) {
       runtimeContext.config = createRuntimeConfigStub(settingsService);
     }
 

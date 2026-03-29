@@ -107,14 +107,16 @@ export function iContentToHistoryItems(contents: IContent[]): HistoryItem[] {
             callId: tc.id,
             name: tc.name,
             description: tc.description ?? tc.name,
-            resultDisplay: response
-              ? safeToolResultToString(response.result)
-              : undefined,
-            status: response
-              ? response.error
-                ? ToolCallStatus.Error
-                : ToolCallStatus.Success
-              : ToolCallStatus.Pending,
+            resultDisplay:
+              response != null
+                ? safeToolResultToString(response.result)
+                : undefined,
+            status:
+              response != null
+                ? response.error
+                  ? ToolCallStatus.Error
+                  : ToolCallStatus.Success
+                : ToolCallStatus.Pending,
             confirmationDetails: undefined,
           };
         });

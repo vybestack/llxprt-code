@@ -15,7 +15,7 @@ export function isBinary(
   data: Buffer | null | undefined,
   sampleSize = 512,
 ): boolean {
-  if (!data) {
+  if (data == null) {
     return false;
   }
 

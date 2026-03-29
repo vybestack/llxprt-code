@@ -61,7 +61,7 @@ function buildRuntimeContext(
   });
 
   const settingsService = new SettingsService();
-  if (settingsServiceOverrides) {
+  if (settingsServiceOverrides != null) {
     for (const [key, value] of Object.entries(settingsServiceOverrides)) {
       settingsService.set(key, value);
     }

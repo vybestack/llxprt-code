@@ -29,7 +29,7 @@ describe('skillUtils', () => {
 
     // Ensure the file exists
     const exists = await fs.stat(skillPath).catch(() => null);
-    if (!exists) {
+    if (exists == null) {
       // If we can't find it in CI or other environments, we skip or use a mock.
       // For now, since it exists in the user's environment, this test will pass there.
       return;

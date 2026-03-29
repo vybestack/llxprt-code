@@ -37,7 +37,7 @@ function getOAuthManager(): OAuthManager {
   const runtime = getRuntimeApi();
   let oauthManager = runtime.getCliOAuthManager();
 
-  if (!oauthManager) {
+  if (oauthManager == null) {
     const tokenStore = createTokenStore();
     oauthManager = new OAuthManager(tokenStore);
     oauthManager.registerProvider(new GeminiOAuthProvider());
@@ -276,7 +276,7 @@ export class AuthCommandExecutor {
           );
         }
 
-        if (token && typeof token.expiry === 'number') {
+        if (token != null && typeof token.expiry === 'number') {
           // Lines 72-76: Calculate time until expiry
           const expiryDate = new Date(token.expiry * 1000);
           const timeUntilExpiry = Math.max(0, token.expiry - Date.now() / 1000);
@@ -384,7 +384,7 @@ export class AuthCommandExecutor {
 
       // Get the provider instance
       const providerInstance = providerManager.getProviderByName(provider);
-      if (!providerInstance) return;
+      if (providerInstance == null) return;
 
       // If it's an OpenAI provider (which Qwen uses), clear its cache
       if (
@@ -658,11 +658,11 @@ export const authCommand: SlashCommand = {
 
     // If for some reason it doesn't exist yet, create it
     // @plan:PLAN-20250214-CREDPROXY.P33
-    if (!oauthManager) {
+    if (oauthManager == null) {
       // This should rarely happen, but handle it as a fallback
       const tokenStore = createTokenStore();
       const config = context.services.config;
-      if (!config) {
+      if (config == null) {
         throw new Error('Auth command requires an initialized Config service.');
       }
       const runtimeMessageBus = new MessageBus(

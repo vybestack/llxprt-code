@@ -274,7 +274,7 @@ export async function* parseResponsesStream(
                 // Function call arguments chunk
                 if (event.item_id && event.delta) {
                   const call = functionCalls.get(event.item_id);
-                  if (call) {
+                  if (call != null) {
                     call.arguments += event.delta;
                   }
                 }
@@ -292,7 +292,7 @@ export async function* parseResponsesStream(
                       .filter(Boolean)
                       .join(' ') || '';
 
-                  if (!thoughtText && event.item.content) {
+                  if (!thoughtText && event.item.content != null) {
                     thoughtText = event.item.content
                       .map((c: { text?: string }) => c.text)
                       .filter(Boolean)
@@ -374,7 +374,7 @@ export async function* parseResponsesStream(
                   const itemId = event.item?.id || event.item_id;
                   if (itemId) {
                     const call = functionCalls.get(itemId);
-                    if (call) {
+                    if (call != null) {
                       // Use final arguments from event if available, otherwise use accumulated
                       const finalArguments = event.arguments || call.arguments;
 
@@ -466,7 +466,7 @@ export async function* parseResponsesStream(
                 reasoningSummaryText = '';
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
-                if (event.response?.usage) {
+                if (event.response?.usage != null) {
                   yield {
                     speaker: 'ai',
                     blocks: [],

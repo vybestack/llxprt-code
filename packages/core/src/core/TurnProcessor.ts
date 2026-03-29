@@ -191,7 +191,7 @@ export class TurnProcessor {
               systemMessage: error.systemMessage,
             };
             // If there's a synthetic response, yield it as a chunk
-            if (error.syntheticResponse) {
+            if (error.syntheticResponse != null) {
               yield {
                 type: StreamEventType.CHUNK,
                 value: error.syntheticResponse,
@@ -435,7 +435,7 @@ export class TurnProcessor {
       lastResponse = iContent;
     }
 
-    if (!lastResponse) throw new Error('No response from provider');
+    if (lastResponse == null) throw new Error('No response from provider');
     return convertIContentToResponse(lastResponse);
   }
 
@@ -484,7 +484,7 @@ export class TurnProcessor {
     const currentModel = this.runtimeContext.state.model;
     const afcHistory = response.automaticFunctionCallingHistory;
 
-    if (afcHistory && afcHistory.length > 0) {
+    if (afcHistory != null && afcHistory.length > 0) {
       this._recordAfcHistory(afcHistory, currentModel);
     } else {
       this._recordUserContent(userContent, currentModel);
@@ -535,7 +535,7 @@ export class TurnProcessor {
     afcHistory: Content[] | undefined,
   ): void {
     const outputContent = response.candidates?.[0]?.content;
-    if (outputContent) {
+    if (outputContent != null) {
       const includeThoughts =
         this.runtimeContext.ephemerals.reasoning.includeInContext();
       const contentForHistory = includeThoughts
@@ -560,7 +560,7 @@ export class TurnProcessor {
       }
     } else if (
       response.candidates?.length &&
-      (!afcHistory || afcHistory.length === 0)
+      (afcHistory == null || afcHistory.length === 0)
     ) {
       const turnKey = this.historyService.generateTurnKey();
       const idGen = this.historyService.getIdGeneratorCallback(turnKey);
@@ -612,7 +612,7 @@ export class TurnProcessor {
       isSchemaDepthError(error.message)
     ) {
       const tools = this.generationConfig.tools;
-      if (!tools || !Array.isArray(tools)) {
+      if (tools == null || !Array.isArray(tools)) {
         return;
       }
 

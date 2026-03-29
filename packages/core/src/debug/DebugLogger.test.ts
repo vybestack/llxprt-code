@@ -643,7 +643,7 @@ describe('DebugLogger', () => {
           logger.enabled = false;
 
           // Force garbage collection before measurement (if available)
-          if (global.gc) {
+          if (global.gc != null) {
             global.gc();
           }
 

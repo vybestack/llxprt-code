@@ -98,7 +98,7 @@ export class GCSTaskStore implements TaskStore {
       task.metadata as PersistedTaskMetadata,
     );
 
-    if (!persistedState) {
+    if (persistedState == null) {
       throw new Error(`Task ${taskId} is missing persisted state in metadata.`);
     }
     const workDir = process.cwd();
@@ -249,7 +249,7 @@ export class GCSTaskStore implements TaskStore {
       logger.info(`Task ${taskId} metadata loaded from GCS.`);
 
       const persistedState = getPersistedState(loadedMetadata);
-      if (!persistedState) {
+      if (persistedState == null) {
         throw new Error(
           `Loaded metadata for task ${taskId} is missing internal persisted state.`,
         );

@@ -22,7 +22,7 @@ export const AppDispatchProvider: React.FC<{
 
 export const useAppDispatch = (): React.Dispatch<AppAction> => {
   const dispatch = useContext(AppDispatchContext);
-  if (!dispatch) {
+  if (dispatch == null) {
     throw new Error('useAppDispatch must be used within AppDispatchProvider');
   }
   return dispatch;

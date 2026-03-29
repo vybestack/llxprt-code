@@ -155,7 +155,7 @@ export class ListSubagentsTool extends BaseDeclarativeTool<
         ? this.config.getSubagentManager()
         : undefined);
 
-    if (!manager) {
+    if (manager == null) {
       throw new Error(
         'SubagentManager service is unavailable. Please configure subagents before invoking this tool.',
       );

@@ -162,7 +162,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   private async getCodexAccountId(): Promise<string> {
     // Get OAuth manager from base config
     const oauthManager = this.baseProviderConfig.oauthManager;
-    if (!oauthManager) {
+    if (oauthManager == null) {
       throw new Error(
         'Codex mode requires OAuth authentication with account_id - no OAuth manager available',
       );
@@ -171,7 +171,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Get the full token from the OAuth manager
     // getOAuthToken returns the full token object (with account_id preserved via passthrough)
     const token = await oauthManager.getOAuthToken?.('codex');
-    if (!token) {
+    if (token == null) {
       throw new Error(
         'Codex mode requires OAuth authentication - no token available. Run /auth codex enable',
       );
@@ -918,7 +918,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       request.instructions = systemPrompt;
     }
 
-    if (responsesTools && responsesTools.length > 0) {
+    if (responsesTools != null && responsesTools.length > 0) {
       request.tools = responsesTools;
       // Per codex-rs: set tool_choice when tools are present, respecting user-specified values
       // Only default to 'auto' if not already set (e.g., 'required' or a specific function name)
@@ -1151,7 +1151,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
           throw parseErrorResponse(response.status, errorBody, this.name);
         }
 
-        if (!response.body) {
+        if (response.body == null) {
           this.logger.debug(() => 'Response body missing, returning early');
           return;
         }

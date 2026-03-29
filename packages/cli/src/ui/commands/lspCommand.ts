@@ -83,7 +83,7 @@ async function statusAction(
 ): Promise<MessageActionReturn> {
   const config = context.services.config as unknown as LspConfigAccessor | null;
 
-  if (!config) {
+  if (config == null) {
     return {
       type: 'message',
       messageType: 'error',
@@ -92,7 +92,7 @@ async function statusAction(
   }
 
   const lspConfig = config.getLspConfig?.();
-  if (!lspConfig) {
+  if (lspConfig == null) {
     return {
       type: 'message',
       messageType: 'info',

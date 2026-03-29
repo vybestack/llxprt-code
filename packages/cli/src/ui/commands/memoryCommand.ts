@@ -217,13 +217,13 @@ export const memoryCommand: SlashCommand = {
         try {
           const config = context.services.config;
           const settings = context.services.settings;
-          if (config) {
+          if (config != null) {
             let memoryContent = '';
             let fileCount = 0;
 
             if (config.isJitContextEnabled()) {
               const contextManager = config.getContextManager();
-              if (contextManager) {
+              if (contextManager != null) {
                 await contextManager.refresh();
               }
               memoryContent = config.getUserMemory();

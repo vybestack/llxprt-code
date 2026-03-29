@@ -85,7 +85,7 @@ export interface GenerateContentOptions {
 function extractJsonFromMarkdown(text: string): string {
   // Try to match ```json ... ``` or ``` ... ```
   const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (markdownMatch && markdownMatch[1]) {
+  if (markdownMatch != null && markdownMatch[1]) {
     return markdownMatch[1].trim();
   }
 
@@ -108,7 +108,7 @@ function extractJsonFromMarkdown(text: string): string {
  */
 export class BaseLLMClient {
   constructor(private readonly contentGenerator: ContentGenerator | null) {
-    if (!contentGenerator) {
+    if (contentGenerator == null) {
       throw new Error('ContentGenerator is required');
     }
   }
@@ -147,7 +147,7 @@ export class BaseLLMClient {
       config.systemInstruction = { text: systemInstruction };
     }
 
-    if (schema) {
+    if (schema != null) {
       config.responseJsonSchema = schema;
       config.responseMimeType = 'application/json';
     }
@@ -225,7 +225,7 @@ export class BaseLLMClient {
         });
 
       if (
-        !embedContentResponse.embeddings ||
+        embedContentResponse.embeddings == null ||
         embedContentResponse.embeddings.length === 0
       ) {
         throw new Error('No embeddings found in API response.');
@@ -240,7 +240,7 @@ export class BaseLLMClient {
       const embeddings = embedContentResponse.embeddings.map(
         (embedding, index) => {
           const values = embedding.values;
-          if (!values || values.length === 0) {
+          if (values == null || values.length === 0) {
             throw new Error(
               `API returned an empty embedding for input text at index ${index}: "${texts[index]}"`,
             );
@@ -272,7 +272,7 @@ export class BaseLLMClient {
     try {
       let requestContents: Content[];
 
-      if (contents) {
+      if (contents != null) {
         requestContents = contents;
       } else if (text) {
         requestContents = [

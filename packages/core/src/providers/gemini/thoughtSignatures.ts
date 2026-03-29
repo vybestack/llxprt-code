@@ -76,7 +76,7 @@ export function ensureActiveLoopHasThoughtSignatures(
     const content = requestContents[i];
     if (content.role === 'model' && content.parts) {
       for (const part of content.parts) {
-        if ('functionCall' in part && part.functionCall) {
+        if ('functionCall' in part && part.functionCall != null) {
           const partWithSig = part as PartWithThoughtSignature;
           if (!partWithSig.thoughtSignature) {
             needsModification = true;
@@ -106,7 +106,7 @@ export function ensureActiveLoopHasThoughtSignatures(
 
       for (let j = 0; j < newParts.length; j++) {
         const part = newParts[j];
-        if ('functionCall' in part && part.functionCall) {
+        if ('functionCall' in part && part.functionCall != null) {
           const partWithSig = part as PartWithThoughtSignature;
           if (!partWithSig.thoughtSignature) {
             // Create new part with signature

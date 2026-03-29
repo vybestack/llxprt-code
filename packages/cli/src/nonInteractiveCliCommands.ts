@@ -49,8 +49,8 @@ export const handleSlashCommand = async (
 
   const { commandToExecute, args } = parseSlashCommand(trimmed, commands);
 
-  if (commandToExecute) {
-    if (commandToExecute.action) {
+  if (commandToExecute != null) {
+    if (commandToExecute.action != null) {
       // Not used by custom commands but may be in the future.
       const sessionStats: SessionStatsState = {
         sessionId: config?.getSessionId() || 'unknown',

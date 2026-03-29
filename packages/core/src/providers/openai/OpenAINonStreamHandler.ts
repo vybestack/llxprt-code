@@ -107,7 +107,10 @@ export async function* handleNonStreamingResponse(
   }
 
   // Handle tool calls
-  if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
+  if (
+    choice.message?.tool_calls != null &&
+    choice.message.tool_calls.length > 0
+  ) {
     for (const toolCall of choice.message.tool_calls) {
       if (toolCall.type === 'function') {
         const normalizedName = deps.toolCallPipeline.normalizeToolName(
@@ -191,7 +194,7 @@ export async function* handleNonStreamingResponse(
       blocks,
     };
 
-    if (completion.usage) {
+    if (completion.usage != null) {
       const cacheMetrics = extractCacheMetrics(completion.usage);
       responseContent.metadata = {
         usage: {
@@ -209,7 +212,7 @@ export async function* handleNonStreamingResponse(
     }
 
     yield responseContent;
-  } else if (completion.usage) {
+  } else if (completion.usage != null) {
     // Emit metadata-only response
     const cacheMetrics = extractCacheMetrics(completion.usage);
     yield {

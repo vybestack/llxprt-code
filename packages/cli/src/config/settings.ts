@@ -174,7 +174,7 @@ function getSchemaDefaults(): Partial<Settings> {
       if (
         schemaEntry.type === 'object' &&
         'properties' in schemaEntry &&
-        schemaEntry.properties
+        schemaEntry.properties != null
       ) {
         // Initialize nested object if it doesn't exist
         if (!target[key]) {
@@ -321,7 +321,7 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
   }
 
   const tools = settings.tools;
-  if (!tools || typeof tools !== 'object') {
+  if (tools == null || typeof tools !== 'object') {
     return;
   }
 
@@ -594,7 +594,7 @@ function validateSettingsOrThrow(
   filePath: string,
 ): void {
   const validationResult = validateSettings(settingsObject);
-  if (!validationResult.success && validationResult.error) {
+  if (!validationResult.success && validationResult.error != null) {
     const errorMessage = formatValidationError(
       validationResult.error,
       filePath,

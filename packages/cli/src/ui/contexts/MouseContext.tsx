@@ -36,7 +36,7 @@ const MouseContext = createContext<MouseContextValue | undefined>(undefined);
 
 export function useMouseContext() {
   const context = useContext(MouseContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useMouseContext must be used within a MouseProvider');
   }
   return context;
@@ -103,7 +103,7 @@ export function MouseProvider({
       while (mouseBuffer.length > 0) {
         const parsed = parseMouseEvent(mouseBuffer);
 
-        if (parsed) {
+        if (parsed != null) {
           broadcast(parsed.event);
           mouseBuffer = mouseBuffer.slice(parsed.length);
           continue;

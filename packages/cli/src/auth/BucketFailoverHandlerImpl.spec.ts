@@ -499,7 +499,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail (token was revoked server-side)
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
-      if (provider) {
+      if (provider != null) {
         provider.refreshToken = vi.fn(async () => null);
       }
 
@@ -543,7 +543,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
-      if (provider) {
+      if (provider != null) {
         provider.refreshToken = vi.fn(async () => null);
       }
 
@@ -588,7 +588,7 @@ describe('BucketFailoverHandlerImpl', () => {
       const refreshedToken = makeToken('refreshed-token');
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
-      if (provider) {
+      if (provider != null) {
         provider.refreshToken = vi.fn(async () => refreshedToken);
       }
 
@@ -806,7 +806,7 @@ describe('BucketFailoverHandlerImpl', () => {
       const refreshedToken = makeToken('refreshed-b');
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
-      if (provider) {
+      if (provider != null) {
         provider.refreshToken = vi.fn(async () => refreshedToken);
       }
 
@@ -849,7 +849,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
-      if (provider) {
+      if (provider != null) {
         provider.refreshToken = vi.fn(async () => null);
       }
 
@@ -1074,7 +1074,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail for all
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
-      if (provider) {
+      if (provider != null) {
         provider.refreshToken = vi.fn(async () => null);
       }
 

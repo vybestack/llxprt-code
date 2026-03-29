@@ -206,7 +206,7 @@ export function initializeTestProviderRuntime(
 
 function requireVi() {
   const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
-  if (viGlobal) {
+  if (viGlobal != null) {
     return viGlobal;
   }
 

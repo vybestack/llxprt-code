@@ -245,14 +245,14 @@ export function convertToolsToAnthropic(
   }>,
   isOAuth?: boolean,
 ): AnthropicTool[] | undefined {
-  if (!geminiTools || geminiTools.length === 0) {
+  if (geminiTools == null || geminiTools.length === 0) {
     return undefined;
   }
 
   const anthropicTools: AnthropicTool[] = [];
 
   for (const toolGroup of geminiTools) {
-    if (!toolGroup.functionDeclarations) {
+    if (toolGroup.functionDeclarations == null) {
       continue;
     }
 

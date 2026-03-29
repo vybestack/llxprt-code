@@ -197,9 +197,10 @@ function toContent(content: ContentUnion): Content {
     // it's a Content - process parts to handle thought filtering
     return {
       ...content,
-      parts: content.parts
-        ? toParts(content.parts.filter((p) => p != null))
-        : [],
+      parts:
+        content.parts != null
+          ? toParts(content.parts.filter((p) => p != null))
+          : [],
     };
   }
   // it's a Part
@@ -259,7 +260,7 @@ function toPart(part: PartUnion): Part {
 function toVertexGenerationConfig(
   config?: GenerateContentConfig,
 ): VertexGenerationConfig | undefined {
-  if (!config) {
+  if (config == null) {
     return undefined;
   }
   return {

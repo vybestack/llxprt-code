@@ -54,7 +54,7 @@ export const usePhraseCycler = (
   useEffect(() => {
     if (showShellFocusHint) {
       setCurrentLoadingPhrase(INTERACTIVE_SHELL_WAITING_PHRASE);
-      if (phraseIntervalRef.current) {
+      if (phraseIntervalRef.current != null) {
         clearInterval(phraseIntervalRef.current);
         phraseIntervalRef.current = null;
       }
@@ -63,12 +63,12 @@ export const usePhraseCycler = (
 
     if (isWaiting) {
       setCurrentLoadingPhrase('Waiting for user confirmation...');
-      if (phraseIntervalRef.current) {
+      if (phraseIntervalRef.current != null) {
         clearInterval(phraseIntervalRef.current);
         phraseIntervalRef.current = null;
       }
     } else if (isActive) {
-      if (phraseIntervalRef.current) {
+      if (phraseIntervalRef.current != null) {
         clearInterval(phraseIntervalRef.current);
       }
       // Select an initial random phrase
@@ -85,7 +85,7 @@ export const usePhraseCycler = (
     } else {
       // Idle or other states, clear the phrase interval
       // and reset to the first phrase for next active state.
-      if (phraseIntervalRef.current) {
+      if (phraseIntervalRef.current != null) {
         clearInterval(phraseIntervalRef.current);
         phraseIntervalRef.current = null;
       }
@@ -93,7 +93,7 @@ export const usePhraseCycler = (
     }
 
     return () => {
-      if (phraseIntervalRef.current) {
+      if (phraseIntervalRef.current != null) {
         clearInterval(phraseIntervalRef.current);
         phraseIntervalRef.current = null;
       }

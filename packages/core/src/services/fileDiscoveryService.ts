@@ -76,7 +76,7 @@ export class FileDiscoveryService {
       if (
         respectGitIgnore &&
         respectLlxprtIgnore &&
-        this.combinedIgnoreFilter
+        this.combinedIgnoreFilter != null
       ) {
         return !this.combinedIgnoreFilter.isIgnored(filePath);
       }
@@ -116,7 +116,7 @@ export class FileDiscoveryService {
    * Checks if a single file should be git-ignored
    */
   shouldGitIgnoreFile(filePath: string): boolean {
-    if (!this.gitIgnoreFilter) {
+    if (this.gitIgnoreFilter == null) {
       return false;
     }
 
@@ -128,7 +128,7 @@ export class FileDiscoveryService {
    * Checks if a single file should be llxprt-ignored
    */
   shouldLlxprtIgnoreFile(filePath: string): boolean {
-    if (!this.llxprtIgnoreFilter) {
+    if (this.llxprtIgnoreFilter == null) {
       return false;
     }
 

@@ -283,7 +283,7 @@ async function identifySessionsToDelete(
     let shouldDelete = false;
 
     // Age-based retention check
-    if (cutoffDate && new Date(session.lastUpdated) < cutoffDate) {
+    if (cutoffDate != null && new Date(session.lastUpdated) < cutoffDate) {
       shouldDelete = true;
     }
 
@@ -306,7 +306,7 @@ async function identifySessionsToDelete(
  */
 function parseRetentionPeriod(period: string): number {
   const match = period.match(/^(\d+)([dhwm])$/);
-  if (!match) {
+  if (match == null) {
     throw new Error(
       `Invalid retention period format: ${period}. Expected format: <number><unit> where unit is h, d, w, or m`,
     );

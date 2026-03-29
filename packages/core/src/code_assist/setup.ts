@@ -67,7 +67,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
       `setupUser: loadCodeAssist completed, currentTier=${!!loadRes.currentTier}, cloudaicompanionProject=${loadRes.cloudaicompanionProject}`,
   );
 
-  if (loadRes.currentTier) {
+  if (loadRes.currentTier != null) {
     logger.debug(
       () => `setupUser: user has current tier: ${loadRes.currentTier!.id}`,
     );

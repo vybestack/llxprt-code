@@ -86,12 +86,12 @@ export function useShellPathCompletion(
   }, [shellModeActive, reverseSearchActive, resetCompletionState]);
 
   useEffect(() => {
-    if (debounceTimerRef.current) {
+    if (debounceTimerRef.current != null) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
 
-    if (!pathToken) {
+    if (pathToken == null) {
       resetCompletionState();
       return;
     }
@@ -122,7 +122,7 @@ export function useShellPathCompletion(
     }, DEBOUNCE_MS);
 
     return () => {
-      if (debounceTimerRef.current) {
+      if (debounceTimerRef.current != null) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
@@ -143,7 +143,7 @@ export function useShellPathCompletion(
       if (index < 0 || index >= suggestions.length) return;
 
       const suggestion = suggestions[index];
-      if (!pathToken) return;
+      if (pathToken == null) return;
 
       const { tokenStart, tokenEnd } = pathToken;
       const isDir = suggestion.value.endsWith('/');

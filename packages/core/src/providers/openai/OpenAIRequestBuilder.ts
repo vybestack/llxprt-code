@@ -326,14 +326,14 @@ export function buildMessagesWithReasoning(
       : null;
 
   const resolveToolCallId = (tc: ToolCallBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper != null) {
       return toolIdMapper.resolveToolCallId(tc);
     }
     return normalizeToOpenAIToolId(tc.id);
   };
 
   const resolveToolResponseId = (tr: ToolResponseBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper != null) {
       return toolIdMapper.resolveToolResponseId(tr);
     }
     return normalizeToOpenAIToolId(tr.callId);
@@ -368,7 +368,7 @@ export function buildMessagesWithReasoning(
 
     if (content.speaker === 'human') {
       const userMessage = processUserMessage(content);
-      if (userMessage) {
+      if (userMessage != null) {
         messages.push(userMessage);
       }
     } else if (content.speaker === 'ai') {
@@ -379,7 +379,7 @@ export function buildMessagesWithReasoning(
         resolveToolCallId,
         normalizeToolCallArguments,
       );
-      if (assistantMessage) {
+      if (assistantMessage != null) {
         messages.push(assistantMessage);
       }
     } else if (content.speaker === 'tool') {
@@ -417,7 +417,7 @@ export function validateToolMessageSequence(
   const validatedMessages = [...messages];
   let removedCount = 0;
 
-  if (logger) {
+  if (logger != null) {
     logger.debug(
       () =>
         `[validateToolMessageSequence] analyzing ${messages.length} messages`,
@@ -475,7 +475,7 @@ export function validateToolMessageSequence(
         const removalReason =
           'tool_call_id not found in last assistant tool_calls';
 
-        if (logger) {
+        if (logger != null) {
           logger.warn(
             `[validateToolMessageSequence] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,
             {
@@ -496,7 +496,7 @@ export function validateToolMessageSequence(
     }
   }
 
-  if (removedCount > 0 && logger) {
+  if (removedCount > 0 && logger != null) {
     logger.debug(
       `[validateToolMessageSequence] completed - removed ${removedCount} orphaned tool messages`,
       {

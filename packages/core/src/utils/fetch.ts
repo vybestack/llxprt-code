@@ -52,7 +52,7 @@ export async function fetchWithTimeout(
   };
 
   // If an external signal is provided, listen to it
-  if (signal) {
+  if (signal != null) {
     if (signal.aborted) {
       clearTimeout(timeoutId);
       controller.abort();
@@ -77,7 +77,7 @@ export async function fetchWithTimeout(
     throw new FetchError(getErrorMessage(error));
   } finally {
     clearTimeout(timeoutId);
-    if (signal) {
+    if (signal != null) {
       signal.removeEventListener('abort', onAbort);
     }
   }

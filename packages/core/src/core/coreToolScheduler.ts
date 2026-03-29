@@ -503,7 +503,7 @@ export class CoreToolScheduler {
         signal,
         onLiveOutput: scheduledCall.tool.canUpdateOutput
           ? (id: string, chunk: string | AnsiOutput) => {
-              if (this.outputUpdateHandler) {
+              if (this.outputUpdateHandler != null) {
                 this.outputUpdateHandler(id, chunk);
               }
               this.toolCalls = this.toolCalls.map((tc) =>
@@ -563,7 +563,7 @@ export class CoreToolScheduler {
           (tc) => tc.request.callId === callId,
         );
         if (
-          toolCall &&
+          toolCall != null &&
           toolCall.status !== 'success' &&
           toolCall.status !== 'error' &&
           toolCall.status !== 'cancelled'
@@ -655,7 +655,7 @@ export class CoreToolScheduler {
         logToolCall(this.config, new ToolCallEvent(call));
       }
 
-      if (this.onAllToolCallsComplete) {
+      if (this.onAllToolCallsComplete != null) {
         this.isFinalizingToolCalls = true;
         try {
           await this.onAllToolCallsComplete(completedCalls);
@@ -669,7 +669,7 @@ export class CoreToolScheduler {
   }
 
   private notifyToolCallsUpdate(): void {
-    if (this.onToolCallsUpdate) {
+    if (this.onToolCallsUpdate != null) {
       this.onToolCallsUpdate([...this.toolCalls]);
     }
   }
@@ -694,7 +694,7 @@ export class CoreToolScheduler {
     // 1. Cancel all queued requests
     while (this.requestQueue.length > 0) {
       const item = this.requestQueue.shift();
-      if (item) {
+      if (item != null) {
         item.reject(new Error('Tool call cancelled by user.'));
       }
     }

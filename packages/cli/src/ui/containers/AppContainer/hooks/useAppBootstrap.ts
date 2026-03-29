@@ -223,7 +223,7 @@ function useBootstrapEvents(
   const currentIDE = config.getIdeClient()?.getCurrentIde();
   useEffect(() => {
     const ideClient = config.getIdeClient();
-    if (ideClient) {
+    if (ideClient != null) {
       registerCleanup(() => ideClient.disconnect());
     }
   }, [config]);

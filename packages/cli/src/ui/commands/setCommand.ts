@@ -195,7 +195,7 @@ const setSchema: CommandArgumentSchema = [
                 const headers = getRuntimeApi().getEphemeralSettings()[
                   'custom-headers'
                 ] as Record<string, string> | undefined;
-                if (headers) {
+                if (headers != null) {
                   const headerNames = Object.keys(headers);
                   const filtered = filterStrings(headerNames, partial, {
                     enableFuzzy,
@@ -327,7 +327,7 @@ const setSchema: CommandArgumentSchema = [
           const registryOptions =
             directSettingSpecByValue.get(resolvedSetting)?.options;
 
-          if (registryOptions && registryOptions.length > 0) {
+          if (registryOptions != null && registryOptions.length > 0) {
             return filterCompletions(registryOptions, partial, { enableFuzzy });
           }
 
@@ -336,7 +336,7 @@ const setSchema: CommandArgumentSchema = [
             const headers = getRuntimeApi().getEphemeralSettings()[
               'custom-headers'
             ] as Record<string, string> | undefined;
-            if (headers) {
+            if (headers != null) {
               const headerNames = Object.keys(headers);
               const filtered = filterStrings(headerNames, partial, {
                 enableFuzzy,
@@ -474,7 +474,7 @@ export const setCommand: SlashCommand = {
         const currentHeaders = runtime.getEphemeralSettings()[
           'custom-headers'
         ] as Record<string, unknown> | undefined;
-        if (currentHeaders && subKey in currentHeaders) {
+        if (currentHeaders != null && subKey in currentHeaders) {
           const nextHeaders = { ...currentHeaders };
           delete nextHeaders[subKey];
           runtime.setEphemeralSetting(
@@ -538,7 +538,7 @@ export const setCommand: SlashCommand = {
 
     // Get the config to apply settings
     const config = context.services.config;
-    if (!config) {
+    if (config == null) {
       return {
         type: 'message',
         messageType: 'error',

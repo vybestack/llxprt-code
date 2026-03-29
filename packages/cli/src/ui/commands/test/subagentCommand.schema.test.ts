@@ -71,7 +71,7 @@ const invoke = async (
     (cmd) => cmd.name === 'save',
   );
 
-  if (!saveCommand?.schema) {
+  if (saveCommand?.schema == null) {
     throw new Error('saveCommand schema is not configured');
   }
 

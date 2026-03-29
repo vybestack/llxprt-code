@@ -29,9 +29,10 @@ const toolNameOptions = getSupportedToolNames().map((toolName) => {
   const entry = getToolKeyEntry(toolName);
   return {
     value: toolName,
-    description: entry
-      ? `${entry.displayName}: ${entry.description}`
-      : `Tool ${toolName}`,
+    description:
+      entry != null
+        ? `${entry.displayName}: ${entry.description}`
+        : `Tool ${toolName}`,
   };
 });
 

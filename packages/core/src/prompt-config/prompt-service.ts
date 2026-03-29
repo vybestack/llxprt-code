@@ -209,7 +209,7 @@ export class PromptService {
 
     // Check cache - we'll add core memory and user memory after cache retrieval
     const cached = this.cache.get(context);
-    if (cached) {
+    if (cached != null) {
       if (this.config.debugMode) {
         const cacheKey = this.cache.generateKey(context);
         this.logger.debug(() => `Cache hit: ${cacheKey}`);
@@ -237,7 +237,7 @@ export class PromptService {
 
     // Process core file
     const coreFile = resolvedFiles.find((f) => f.type === 'core');
-    if (coreFile) {
+    if (coreFile != null) {
       const content = await this.loadAndProcess(coreFile.path, context, null);
       if (content) {
         processedParts.push(content);

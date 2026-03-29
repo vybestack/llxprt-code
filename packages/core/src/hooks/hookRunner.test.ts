@@ -246,7 +246,7 @@ describe('HookRunner', () => {
         mockSpawn.kill = vi.fn().mockImplementation((_signal: string) => {
           killWasCalled = true;
           // Simulate that killing the process triggers the close event
-          if (closeCallback) {
+          if (closeCallback != null) {
             setTimeout(() => {
               closeCallback!(128); // Exit code 128 indicates process was killed by signal
             }, 5);

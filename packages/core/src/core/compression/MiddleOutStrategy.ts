@@ -155,7 +155,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       topPreserved: toKeepTop.length,
       bottomPreserved: toKeepBottom.length,
       middleCompressed: toCompress.length,
-      ...(capturedUsage ? { usage: capturedUsage } : {}),
+      ...(capturedUsage != null ? { usage: capturedUsage } : {}),
     };
 
     return { newHistory, metadata };
@@ -247,7 +247,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
           summary = result.text;
           lastBlockWasNonText = result.lastBlockWasNonText;
         }
-        if (chunk.metadata?.usage) {
+        if (chunk.metadata?.usage != null) {
           capturedUsage = chunk.metadata.usage;
         }
       }
@@ -374,7 +374,7 @@ ${messageText}`,
     const summaryEntry: IContent = {
       speaker: 'human' as const,
       blocks: [{ type: 'text' as const, text: summary }],
-      ...(usage ? { metadata: { usage } } : {}),
+      ...(usage != null ? { metadata: { usage } } : {}),
     };
 
     return [

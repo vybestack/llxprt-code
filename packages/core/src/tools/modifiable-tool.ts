@@ -201,7 +201,7 @@ export async function modifyWithEditor<ToolParams>(
   );
 
   try {
-    if (onEditorOpen) {
+    if (onEditorOpen != null) {
       try {
         onEditorOpen();
       } catch (error) {

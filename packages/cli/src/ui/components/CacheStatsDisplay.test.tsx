@@ -22,11 +22,12 @@ vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {
 const useRuntimeApiMock = vi.mocked(RuntimeContext.useRuntimeApi);
 
 const renderWithMockedCacheStats = (cacheStats: CacheStatistics | null) => {
-  const mockProviderManager = cacheStats
-    ? {
-        getCacheStatistics: vi.fn().mockReturnValue(cacheStats),
-      }
-    : null;
+  const mockProviderManager =
+    cacheStats != null
+      ? {
+          getCacheStatistics: vi.fn().mockReturnValue(cacheStats),
+        }
+      : null;
 
   useRuntimeApiMock.mockReturnValue({
     getCliProviderManager: vi.fn().mockReturnValue(mockProviderManager),

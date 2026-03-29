@@ -77,7 +77,7 @@ class ThemeManager {
     // Invalidate semantic colors cache when custom themes change
     this.semanticColorsCache = null;
 
-    if (!customThemesSettings) {
+    if (customThemesSettings == null) {
       return;
     }
 
@@ -123,7 +123,7 @@ class ThemeManager {
    */
   setActiveTheme(themeName: string | undefined): boolean {
     const theme = this.findThemeByName(themeName);
-    if (!theme) {
+    if (theme == null) {
       return false;
     }
     this.activeTheme = theme;
@@ -329,7 +329,7 @@ class ThemeManager {
     const builtInTheme = this.availableThemes.find(
       (theme) => theme.name === themeName,
     );
-    if (builtInTheme) {
+    if (builtInTheme != null) {
       return builtInTheme;
     }
 

@@ -131,8 +131,8 @@ export function initializeTelemetry(config: Config): void {
 }
 
 export async function flushTelemetry(): Promise<void> {
-  if (!sdk) return;
-  if (flushInProgress) return flushInProgress;
+  if (sdk == null) return;
+  if (flushInProgress != null) return flushInProgress;
 
   flushInProgress = (async () => {
     try {
@@ -157,7 +157,7 @@ export async function flushTelemetry(): Promise<void> {
 
 export async function shutdownTelemetry(config: Config): Promise<void> {
   // TELEMETRY: Shutdown only affects local file writing
-  if (!telemetryInitialized || !sdk) {
+  if (!telemetryInitialized || sdk == null) {
     return;
   }
   try {

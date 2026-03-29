@@ -69,13 +69,13 @@ function useHistoryTokenListener(
         if (historyService !== lastHistoryServiceRef.current) {
           // Clean up listener from the old service regardless of whether the
           // new service is truthy — a reset may have cleared the service.
-          if (historyTokenCleanupRef.current) {
+          if (historyTokenCleanupRef.current != null) {
             historyTokenCleanupRef.current();
             historyTokenCleanupRef.current = null;
           }
           lastHistoryServiceRef.current = historyService ?? null;
 
-          if (historyService) {
+          if (historyService != null) {
             tokenLogger.debug(
               () => 'Found new history service, setting up listener',
             );
@@ -111,7 +111,7 @@ function useHistoryTokenListener(
     return () => {
       clearInterval(checkInterval);
       intervalCleared = true;
-      if (historyTokenCleanupRef.current) {
+      if (historyTokenCleanupRef.current != null) {
         historyTokenCleanupRef.current();
         historyTokenCleanupRef.current = null;
       }
@@ -143,7 +143,7 @@ function useRecordingSubscription(
     // recording integrations. The polling interval below handles this: each tick checks
     // recordingIntegrationRef.current?.onHistoryServiceReplaced, so a recording
     // integration that arrives after mount is automatically picked up on the next tick.
-    if (!recordingIntegrationRef.current) return;
+    if (recordingIntegrationRef.current == null) return;
 
     let intervalCleared = false;
     const checkInterval = setInterval(() => {
@@ -153,7 +153,7 @@ function useRecordingSubscription(
       if (geminiClient?.hasChatInitialized?.()) {
         const historyService = geminiClient.getHistoryService?.();
         if (
-          historyService &&
+          historyService != null &&
           historyService !== recordingSubscribedServiceRef.current
         ) {
           recordingSubscribedServiceRef.current = historyService;

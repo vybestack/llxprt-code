@@ -98,7 +98,7 @@ export class AsyncTaskReminderService {
    * @pseudocode lines 077-110
    */
   formatCompletionNotification(task: AsyncTaskInfo): string {
-    if (task.status === 'completed' && task.output) {
+    if (task.status === 'completed' && task.output != null) {
       // Match sync task format exactly
       const payload: Record<string, unknown> = {
         agent_id: task.id,

@@ -186,7 +186,7 @@ export class DirectMessageProcessor {
     const { effectiveToolsFromConfig, contentsForApi, syntheticResponse } =
       await this._applyPreSendHooks(params, userIContents);
 
-    if (syntheticResponse) {
+    if (syntheticResponse != null) {
       return syntheticResponse;
     }
 
@@ -208,7 +208,9 @@ export class DirectMessageProcessor {
       'DirectMessageProcessor.generateDirectMessage',
       {
         toolCount: effectiveToolsFromConfig?.length ?? 0,
-        ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
+        ...(directOverrides != null
+          ? { geminiDirectOverrides: directOverrides }
+          : {}),
       },
     );
 
@@ -247,7 +249,7 @@ export class DirectMessageProcessor {
       lastBlockWasNonText = result.lastBlockWasNonText;
     }
 
-    if (!lastResponse) {
+    if (lastResponse == null) {
       throw new Error('No response from provider');
     }
 
@@ -271,31 +273,31 @@ export class DirectMessageProcessor {
     syntheticResponse: GenerateContentResponse | undefined;
   }> {
     const toolsFromConfig =
-      params.config?.tools && Array.isArray(params.config.tools)
+      params.config?.tools != null && Array.isArray(params.config.tools)
         ? (params.config.tools as ToolGroupArray)
         : undefined;
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     let contentsForApi: IContent[] = userIContents;
     const effectiveToolsFromConfig =
-      configForHooks && toolsFromConfig
+      configForHooks != null && toolsFromConfig != null
         ? await this._applyToolSelectionHook(configForHooks, toolsFromConfig)
         : toolsFromConfig;
 
-    if (configForHooks) {
+    if (configForHooks != null) {
       const hookResult = await this._handleBeforeModelHook(
         configForHooks,
         userIContents,
         effectiveToolsFromConfig,
       );
-      if (hookResult.syntheticResponse) {
+      if (hookResult.syntheticResponse != null) {
         return {
           effectiveToolsFromConfig: effectiveToolsFromConfig || [],
           contentsForApi,
           syntheticResponse: hookResult.syntheticResponse,
         };
       }
-      if (hookResult.modifiedContents) {
+      if (hookResult.modifiedContents != null) {
         contentsForApi = hookResult.modifiedContents;
       }
     }
@@ -319,7 +321,7 @@ export class DirectMessageProcessor {
       tools: toolsFromConfig,
     });
     if (
-      modifiedConfig?.toolConfig &&
+      modifiedConfig?.toolConfig != null &&
       'allowedFunctionNames' in modifiedConfig.toolConfig
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
@@ -359,7 +361,7 @@ export class DirectMessageProcessor {
     const requestForHook = {
       contents: userIContents,
       tools:
-        effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+        effectiveToolsFromConfig != null && effectiveToolsFromConfig.length > 0
           ? (effectiveToolsFromConfig as ProviderToolset)
           : undefined,
     };
@@ -394,11 +396,11 @@ export class DirectMessageProcessor {
     }
 
     const syntheticResponse = beforeModelResult?.getSyntheticResponse();
-    if (syntheticResponse) {
+    if (syntheticResponse != null) {
       return { syntheticResponse };
     }
 
-    if (beforeModelResult) {
+    if (beforeModelResult != null) {
       const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
         model: this.runtimeContext.state.model || '',
         contents: ContentConverters.toGeminiContents(userIContents),
@@ -427,15 +429,15 @@ export class DirectMessageProcessor {
     let directResponse = convertIContentToResponse(lastResponse);
 
     // Trigger AfterModel hook
-    if (config) {
+    if (config != null) {
       const afterModelResult = await triggerAfterModelHook(
         config,
         lastResponse,
       );
 
-      if (afterModelResult) {
+      if (afterModelResult != null) {
         const modifiedResponse = afterModelResult.getModifiedResponse();
-        if (modifiedResponse) {
+        if (modifiedResponse != null) {
           directResponse = modifiedResponse;
         }
       }
@@ -444,7 +446,7 @@ export class DirectMessageProcessor {
     // Ensure text content is included
     if (aggregatedText.trim()) {
       const candidate = directResponse.candidates?.[0];
-      if (candidate) {
+      if (candidate != null) {
         const parts = candidate.content?.parts ?? [];
         const hasText = parts.some(
           (part) => 'text' in part && part.text?.trim(),
@@ -480,7 +482,7 @@ export class DirectMessageProcessor {
         toolConfig?: unknown;
       }
     | undefined {
-    if (!config) {
+    if (config == null) {
       return undefined;
     }
 

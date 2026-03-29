@@ -124,7 +124,7 @@ function parseUnifiedZeroDiff(diffText: string): {
 
   for (const line of lines) {
     const m = hunkHeaderRe.exec(line);
-    if (!m) continue;
+    if (m == null) continue;
 
     const oldCount = m[2] ? Number(m[2]) : 1;
     const newStart = Number(m[3]);

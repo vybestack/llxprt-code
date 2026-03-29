@@ -182,7 +182,7 @@ async function getIdeProcessInfoForWindows(): Promise<{
   const myPid = process.pid;
   const myProc = processMap.get(myPid);
 
-  if (!myProc) {
+  if (myProc == null) {
     // Fallback: try to get info for current process directly if snapshot fails
     const { command } = await getProcessInfo(myPid);
     return { pid: myPid, command };
@@ -193,7 +193,7 @@ async function getIdeProcessInfoForWindows(): Promise<{
   const ancestors: ProcessInfo[] = [];
   let curr: ProcessInfo | undefined = myProc;
 
-  for (let i = 0; i < MAX_TRAVERSAL_DEPTH && curr; i++) {
+  for (let i = 0; i < MAX_TRAVERSAL_DEPTH && curr != null; i++) {
     ancestors.push(curr);
     if (curr.parentPid === 0 || !processMap.has(curr.parentPid)) {
       break; // Reached root

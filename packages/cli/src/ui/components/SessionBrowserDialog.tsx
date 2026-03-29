@@ -389,7 +389,7 @@ export function SessionBrowserDialog(
 
   // Render selection detail (wide mode only)
   const renderSelectionDetail = (): React.ReactNode => {
-    if (isNarrow || !state.selectedSession) return null;
+    if (isNarrow || state.selectedSession == null) return null;
 
     const session = state.selectedSession;
     const relTime = formatRelativeTime(session.lastModified, { mode: 'long' });

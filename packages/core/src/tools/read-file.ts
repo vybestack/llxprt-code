@@ -214,7 +214,11 @@ class ReadFileToolInvocation extends BaseToolInvocation<
       const startLine = this.params.offset ? this.params.offset + 1 : start;
 
       let formattedContent = result.llmContent;
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges &&
+        markersByLine != null &&
+        deletionAfterLines != null
+      ) {
         formattedContent = formatWithGitChanges(
           result.llmContent,
           startLine,
@@ -248,7 +252,11 @@ ${formattedContent}`;
     } else {
       const startLine = this.params.offset ? this.params.offset + 1 : 1;
 
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges &&
+        markersByLine != null &&
+        deletionAfterLines != null
+      ) {
         llmContent = formatWithGitChanges(
           result.llmContent,
           startLine,

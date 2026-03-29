@@ -168,7 +168,7 @@ export function logToolCall(
   };
 
   // Handle metadata separately to ensure proper typing
-  if (metadata) {
+  if (metadata != null) {
     for (const [key, value] of Object.entries(metadata)) {
       attributes[`metadata.${key}`] =
         typeof value === 'object' ? safeJsonStringify(value) : String(value);

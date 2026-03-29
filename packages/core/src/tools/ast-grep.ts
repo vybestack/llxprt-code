@@ -71,7 +71,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
   getDescription(): string {
     const { pattern, rule } = this.params;
     if (pattern) return `AST pattern: '${pattern}'`;
-    if (rule) return `AST rule query`;
+    if (rule != null) return `AST rule query`;
     return 'AST search';
   }
 
@@ -84,7 +84,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     const limit = maxResults ?? DEFAULT_MAX_RESULTS;
 
     // REQ-ASTGREP-004: exactly one of pattern or rule
-    if ((pattern && rule) || (!pattern && !rule)) {
+    if ((pattern && rule != null) || (!pattern && rule == null)) {
       return this.makeError(
         'Error: Provide exactly one of `pattern` or `rule`, not both and not neither.',
       );
@@ -172,7 +172,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         );
 
         // Apply glob filters
-        if (globs && globs.length > 0) {
+        if (globs != null && globs.length > 0) {
           const includePatterns = globs.filter((g) => !g.startsWith('!'));
           const excludePatterns = globs
             .filter((g) => g.startsWith('!'))
@@ -274,7 +274,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
     let nodes: SgNode[];
     if (pattern) {
       nodes = sgRoot.findAll(pattern);
-    } else if (rule) {
+    } else if (rule != null) {
       nodes = sgRoot.findAll({ rule } as NapiConfig);
     } else {
       return [];
@@ -291,7 +291,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         for (const raw of metaVarNames) {
           const name = raw.slice(1); // remove $
           const match = node.getMatch(name);
-          if (match) {
+          if (match != null) {
             metaVariables[name] = match.text();
           }
         }

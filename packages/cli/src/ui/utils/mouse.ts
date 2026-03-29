@@ -113,7 +113,7 @@ export function parseSGRMouseEvent(
 ): { event: MouseEvent; length: number } | null {
   const match = buffer.match(SGR_MOUSE_REGEX);
 
-  if (match) {
+  if (match != null) {
     const buttonCode = parseInt(match[1], 10);
     const col = parseInt(match[2], 10);
     const row = parseInt(match[3], 10);
@@ -151,7 +151,7 @@ export function parseX11MouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
   const match = buffer.match(X11_MOUSE_REGEX);
-  if (!match) return null;
+  if (match == null) return null;
 
   // The 3 bytes are in match[1]
   const b = match[1].charCodeAt(0) - 32;
@@ -231,7 +231,7 @@ export function isIncompleteMouseSequence(buffer: string): boolean {
   if (!inputCouldBeMouseSequence(buffer)) return false;
 
   // If it matches a complete sequence, it's not incomplete.
-  if (parseMouseEvent(buffer)) return false;
+  if (parseMouseEvent(buffer) != null) return false;
 
   if (buffer.startsWith(X11_EVENT_PREFIX)) {
     // X11 needs exactly 3 bytes after prefix.

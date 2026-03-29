@@ -50,11 +50,11 @@ export async function handleUpdate(args: UpdateArgs) {
       const extension = extensions.find(
         (extension) => extension.name === args.name,
       );
-      if (!extension) {
+      if (extension == null) {
         console.log(`Extension "${args.name}" not found.`);
         return;
       }
-      if (!extension.installMetadata) {
+      if (extension.installMetadata == null) {
         console.log(
           `Unable to install extension "${args.name}" due to missing install metadata`,
         );

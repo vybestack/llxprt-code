@@ -213,7 +213,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
   });
 
   afterEach(async () => {
-    if (cleanupHandle) {
+    if (cleanupHandle != null) {
       await Promise.resolve(cleanupHandle()).catch(() => {});
       cleanupHandle = null;
     }
@@ -482,7 +482,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     });
 
     afterEach(async () => {
-      if (cleanupHandle) {
+      if (cleanupHandle != null) {
         await Promise.resolve(cleanupHandle()).catch(() => {});
         cleanupHandle = null;
       }

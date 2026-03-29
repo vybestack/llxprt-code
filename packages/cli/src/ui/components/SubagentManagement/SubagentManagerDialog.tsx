@@ -53,7 +53,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
   // Load subagents and profiles
   const loadData = useCallback(async () => {
-    if (!subagentManager) {
+    if (subagentManager == null) {
       setState((prev) => ({
         ...prev,
         isLoading: false,
@@ -81,10 +81,10 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       setState((prev) => {
         let selectedSubagent = prev.selectedSubagent;
 
-        if (initialSubagentName && !selectedSubagent) {
+        if (initialSubagentName && selectedSubagent == null) {
           selectedSubagent =
             subagents.find((s) => s.name === initialSubagentName) ?? null;
-        } else if (selectedSubagent) {
+        } else if (selectedSubagent != null) {
           selectedSubagent =
             subagents.find((s) => s.name === selectedSubagent?.name) ?? null;
         }
@@ -95,7 +95,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
           profiles: profileNames,
           selectedSubagent,
           currentView:
-            selectedSubagent || prev.currentView !== initialView
+            selectedSubagent != null || prev.currentView !== initialView
               ? prev.currentView
               : initialView,
           isLoading: false,
@@ -160,7 +160,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   const handleEdit = useCallback(
     (subagent?: SubagentInfo) => {
       const target = subagent ?? state.selectedSubagent;
-      if (target) {
+      if (target != null) {
         navigateTo(SubagentView.EDIT, target);
       }
     },
@@ -177,7 +177,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
   // Handle select profile from edit form (uses current selected subagent)
   const handleSelectProfileFromEdit = useCallback(() => {
-    if (state.selectedSubagent) {
+    if (state.selectedSubagent != null) {
       navigateTo(SubagentView.ATTACH_PROFILE, state.selectedSubagent);
     }
   }, [navigateTo, state.selectedSubagent]);
@@ -199,7 +199,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   // Handle save (edit)
   const handleSave = useCallback(
     async (systemPrompt: string, profile: string) => {
-      if (!subagentManager || !state.selectedSubagent) return;
+      if (subagentManager == null || state.selectedSubagent == null) return;
 
       try {
         await subagentManager.saveSubagent(
@@ -229,7 +229,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       profile: string,
       mode: 'auto' | 'manual' = 'auto',
     ) => {
-      if (!subagentManager) {
+      if (subagentManager == null) {
         throw new Error('SubagentManager not available');
       }
 
@@ -237,7 +237,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
       if (mode === 'auto') {
         const config = commandContext?.services?.config;
-        if (!config) {
+        if (config == null) {
           throw new Error(
             'Configuration service unavailable. Set up the CLI before using auto mode.',
           );
@@ -258,7 +258,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   // Handle profile attachment - check if we came from EDIT view
   const handleProfileAttach = useCallback(
     async (profileName: string) => {
-      if (!state.selectedSubagent) return;
+      if (state.selectedSubagent == null) return;
 
       // Check if previous view was EDIT - if so, just set pending profile and go back
       const prevView =
@@ -274,7 +274,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       }
 
       // Direct profile attachment from list - save immediately
-      if (!subagentManager) return;
+      if (subagentManager == null) return;
 
       try {
         await subagentManager.saveSubagent(
@@ -303,7 +303,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
   // Handle delete confirmation
   const handleDeleteConfirm = useCallback(async () => {
-    if (!subagentManager || !state.selectedSubagent) return;
+    if (subagentManager == null || state.selectedSubagent == null) return;
 
     try {
       await subagentManager.deleteSubagent(state.selectedSubagent.name);
@@ -351,7 +351,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         );
 
       case SubagentView.SHOW:
-        if (!state.selectedSubagent) {
+        if (state.selectedSubagent == null) {
           return <Text color={Colors.Gray}>No subagent selected</Text>;
         }
         return (
@@ -364,7 +364,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         );
 
       case SubagentView.EDIT:
-        if (!state.selectedSubagent) {
+        if (state.selectedSubagent == null) {
           return <Text color={Colors.Gray}>No subagent selected</Text>;
         }
         return (
@@ -391,7 +391,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         );
 
       case SubagentView.ATTACH_PROFILE:
-        if (!state.selectedSubagent) {
+        if (state.selectedSubagent == null) {
           return <Text color={Colors.Gray}>No subagent selected</Text>;
         }
         return (
@@ -405,7 +405,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
         );
 
       case SubagentView.DELETE:
-        if (!state.selectedSubagent) {
+        if (state.selectedSubagent == null) {
           return <Text color={Colors.Gray}>No subagent selected</Text>;
         }
         return (

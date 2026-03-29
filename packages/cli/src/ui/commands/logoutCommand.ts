@@ -35,7 +35,7 @@ export const logoutCommand: SlashCommand = {
 
     try {
       const oauthManager = getRuntimeApi().getCliOAuthManager();
-      if (!oauthManager) {
+      if (oauthManager == null) {
         return {
           type: 'message',
           messageType: 'error',

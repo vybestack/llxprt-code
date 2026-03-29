@@ -107,7 +107,7 @@ export const useToolsDialog = ({
   const handleSelect = useCallback(
     (toolName: string) => {
       const selectedTool = availableTools.find((t) => t.name === toolName);
-      if (!selectedTool) return;
+      if (selectedTool == null) return;
 
       // Update disabled tools list
       let updatedDisabledTools: string[];

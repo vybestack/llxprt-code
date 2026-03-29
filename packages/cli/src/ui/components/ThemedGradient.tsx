@@ -29,7 +29,7 @@ export const ThemedGradient: React.FC<ThemedGradientProps> = ({
 }) => {
   const gradient = colors ?? theme.ui.gradient;
 
-  if (gradient && gradient.length >= 2) {
+  if (gradient != null && gradient.length >= 2) {
     return (
       <Gradient colors={gradient}>
         <Text color={theme.text.primary}>{children}</Text>
@@ -37,7 +37,7 @@ export const ThemedGradient: React.FC<ThemedGradientProps> = ({
     );
   }
 
-  if (gradient && gradient.length === 1) {
+  if (gradient != null && gradient.length === 1) {
     return <Text color={gradient[0]}>{children}</Text>;
   }
 

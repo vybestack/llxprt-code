@@ -57,7 +57,7 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
 
   // Line 53: ELSE IF position matches /^(\d+)\.(\d+|last)$/
   const subtaskMatch = pos.match(/^(\d+)\.(\d+|last)$/);
-  if (subtaskMatch) {
+  if (subtaskMatch != null) {
     // Line 54: PARSE parent_pos, subtask_pos
     const parentIndex = parseInt(subtaskMatch[1], 10) - 1;
 
@@ -155,7 +155,7 @@ export const todoCommand: SlashCommand = {
        * @requirement REQ-003
        */
       action: (context) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -186,7 +186,7 @@ export const todoCommand: SlashCommand = {
        * @requirement REQ-004
        */
       action: (context) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -225,7 +225,7 @@ export const todoCommand: SlashCommand = {
           lines.push(`${pos}. ${statusIcon} ${todo.content}`.trim());
 
           // Display subtasks if present
-          if (todo.subtasks && todo.subtasks.length > 0) {
+          if (todo.subtasks != null && todo.subtasks.length > 0) {
             todo.subtasks.forEach((subtask, subIdx) => {
               const subPos = `${pos}.${subIdx + 1}`;
               lines.push(`   ${subPos}. ${subtask.content}`);
@@ -254,7 +254,7 @@ export const todoCommand: SlashCommand = {
        * @requirement REQ-008
        */
       action: (context, args) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -350,7 +350,7 @@ Examples:
        * @requirement REQ-008
        */
       action: (context, args) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -449,7 +449,7 @@ Examples:
        * @pseudocode lines 42-74
        */
       action: (context, args) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -509,7 +509,8 @@ Examples:
             const newTodos = [...todos];
             // Clone the parent object and its subtasks to avoid mutation
             const parent = { ...newTodos[parsed.parentIndex] };
-            parent.subtasks = parent.subtasks ? [...parent.subtasks] : [];
+            parent.subtasks =
+              parent.subtasks != null ? [...parent.subtasks] : [];
 
             const newSubtask = {
               id: `${newId}-${parsed.subtaskIndex}`,
@@ -575,7 +576,7 @@ Examples:
        * @pseudocode Extended with range and "all" support
        */
       action: (context, args) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -627,7 +628,7 @@ Examples:
 
           // Check for range pattern (e.g., "2-4")
           const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
-          if (rangeMatch) {
+          if (rangeMatch != null) {
             const start = parseInt(rangeMatch[1], 10);
             const end = parseInt(rangeMatch[2], 10);
 
@@ -682,7 +683,7 @@ Examples:
             const parent = newTodos[parsed.parentIndex];
 
             if (
-              !parent.subtasks ||
+              parent.subtasks == null ||
               parsed.subtaskIndex >= parent.subtasks.length
             ) {
               context.ui.addItem(
@@ -817,7 +818,7 @@ Examples:
 
           // Check for range pattern (e.g., "1-3")
           const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
-          if (rangeMatch) {
+          if (rangeMatch != null) {
             const start = parseInt(rangeMatch[1], 10);
             const end = parseInt(rangeMatch[2], 10);
 
@@ -918,7 +919,7 @@ Examples:
        * @requirement REQ-011
        */
       action: (context, args) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -976,7 +977,7 @@ Examples:
 
           // Check for range pattern (e.g., "1-3")
           const rangeMatch = posStr.match(/^(\d+)-(\d+)$/);
-          if (rangeMatch) {
+          if (rangeMatch != null) {
             const start = parseInt(rangeMatch[1], 10);
             const end = parseInt(rangeMatch[2], 10);
 
@@ -1180,7 +1181,7 @@ Examples:
        * @requirement REQ-009
        */
       action: async (context, args) => {
-        if (!context.todoContext) {
+        if (context.todoContext == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,

@@ -29,7 +29,7 @@ export class PersistentState {
   }
 
   private load(): PersistentStateData {
-    if (this.cache) {
+    if (this.cache != null) {
       return this.cache;
     }
     try {
@@ -52,7 +52,7 @@ export class PersistentState {
   }
 
   private save() {
-    if (!this.cache) return;
+    if (this.cache == null) return;
     try {
       const filePath = this.getPath();
       const dir = path.dirname(filePath);

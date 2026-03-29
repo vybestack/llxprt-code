@@ -169,7 +169,7 @@ export class SessionDiscovery {
     sessions: SessionSummary[],
   ): SessionResolution | SessionResolutionError {
     const exactMatch = sessions.find((s) => s.sessionId === ref);
-    if (exactMatch) return { session: exactMatch };
+    if (exactMatch != null) return { session: exactMatch };
 
     if (/^\d+$/.test(ref)) {
       const indexNum = parseInt(ref, 10);
@@ -324,12 +324,12 @@ export class SessionDiscovery {
           if (event.type !== 'content') continue;
 
           const payload = event.payload as Record<string, unknown> | undefined;
-          if (!payload || typeof payload !== 'object') continue;
+          if (payload == null || typeof payload !== 'object') continue;
 
           const contentObj = payload.content as
             | Record<string, unknown>
             | undefined;
-          if (!contentObj || typeof contentObj !== 'object') continue;
+          if (contentObj == null || typeof contentObj !== 'object') continue;
 
           // Check if this is a human/user message
           if (contentObj.speaker !== 'human') continue;

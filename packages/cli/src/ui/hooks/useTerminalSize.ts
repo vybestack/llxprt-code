@@ -22,7 +22,7 @@ export function useTerminalSize(): { columns: number; rows: number } {
 
     function updateSize() {
       // Clear previous timeout
-      if (resizeTimeout) {
+      if (resizeTimeout != null) {
         clearTimeout(resizeTimeout);
       }
 
@@ -45,7 +45,7 @@ export function useTerminalSize(): { columns: number; rows: number } {
 
     return () => {
       process.stdout.off('resize', updateSize);
-      if (resizeTimeout) {
+      if (resizeTimeout != null) {
         clearTimeout(resizeTimeout);
       }
     };

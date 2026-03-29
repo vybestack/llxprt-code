@@ -82,7 +82,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         match.fullMatch,
       );
 
-      if (!parsedArgs) {
+      if (parsedArgs == null) {
         continue;
       }
 
@@ -129,7 +129,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
       const segment = content.slice(afterStart, endMarkerIndex);
       const toolNameMatch = segment.match(/^\s*([^\s{]+)\s+/);
-      if (!toolNameMatch) {
+      if (toolNameMatch == null) {
         searchIndex = endMarkerIndex + endMarker.length;
         continue;
       }
@@ -148,7 +148,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         '{',
         '}',
       );
-      if (!jsonSegment || jsonSegment.endIndex > endMarkerIndex) {
+      if (jsonSegment == null || jsonSegment.endIndex > endMarkerIndex) {
         searchIndex = endMarkerIndex + endMarker.length;
         continue;
       }
@@ -199,7 +199,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         '{',
         '}',
       );
-      if (!jsonSegment) {
+      if (jsonSegment == null) {
         searchIndex = candidateIndex + marker.length;
         continue;
       }
@@ -254,7 +254,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         fullEnd,
         content.slice(start, fullEnd),
       );
-      if (match) {
+      if (match != null) {
         matches.push(match);
       }
 
@@ -331,7 +331,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         // Only parse parameters when there is a valid tool name
         for (let i = 1; i < lines.length; i++) {
           const argMatch = lines[i].match(/<(\w+)>([^<]*)<\/\1>/);
-          if (argMatch) {
+          if (argMatch != null) {
             const [, key, value] = argMatch;
             result.args[key] = this.parseValue(value.trim());
           }
@@ -404,7 +404,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       const nameMatch = inner.match(/<name>([^<]+)<\/name>/i);
       const argsMatch = inner.match(/<arguments>([\s\S]*?)<\/arguments>/i);
 
-      if (!nameMatch || !argsMatch) {
+      if (nameMatch == null || argsMatch == null) {
         searchIndex = end + endTag.length;
         continue;
       }
@@ -614,7 +614,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
 
       const simpleJsonMatch = args.match(/^{[^{]*}$/);
-      if (simpleJsonMatch) {
+      if (simpleJsonMatch != null) {
         try {
           return JSON.parse(simpleJsonMatch[0]);
         } catch {

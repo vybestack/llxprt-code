@@ -37,7 +37,7 @@ export const ProfileSuccessSummary: React.FC<ProfileSuccessSummaryProps> = ({
     (value: string) => {
       if (value === 'load') {
         // Load the profile using the provided handler
-        if (onLoadProfile && state.profileName) {
+        if (onLoadProfile != null && state.profileName) {
           onLoadProfile(state.profileName);
         }
         onClose();

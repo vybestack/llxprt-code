@@ -68,7 +68,7 @@ describe('CLI model parameter command integration', () => {
   let context: ReturnType<typeof createMockCommandContext>;
 
   const runSetCommand = async (args: string) => {
-    if (!setCommand.action) {
+    if (setCommand.action == null) {
       throw new Error('setCommand.action is not defined');
     }
     return setCommand.action(context, args);

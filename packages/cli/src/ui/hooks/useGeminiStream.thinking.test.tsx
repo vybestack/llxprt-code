@@ -345,7 +345,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
       }) => {
-        if (props.toolCalls) {
+        if (props.toolCalls != null) {
           setToolCalls(props.toolCalls);
         }
         return useGeminiStream(

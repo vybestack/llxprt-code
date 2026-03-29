@@ -55,7 +55,7 @@ const {
       providerOrChanges?: string | Record<string, unknown>,
       changes?: Record<string, unknown>,
     ): Promise<void> {
-      if (typeof providerOrChanges === 'string' && changes) {
+      if (typeof providerOrChanges === 'string' && changes != null) {
         for (const [key, value] of Object.entries(changes)) {
           this.setProviderSetting(providerOrChanges, key, value);
         }
@@ -206,7 +206,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       return context;
     },
     getActiveProviderRuntimeContext: () => {
-      if (!activeContext) {
+      if (activeContext == null) {
         throw new Error(
           'MissingProviderRuntimeError(provider-runtime): runtime registration missing',
         );

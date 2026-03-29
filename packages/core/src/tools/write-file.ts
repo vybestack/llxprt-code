@@ -234,7 +234,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       abortSignal,
     );
 
-    if (correctedContentResult.error) {
+    if (correctedContentResult.error != null) {
       // If file exists but couldn't be read, we can't show a diff for confirmation.
       return false;
     }
@@ -256,7 +256,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
       this.config.getIdeMode() &&
-      ideClient &&
+      ideClient != null &&
       ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
         ? ideClient.openDiff(filePath, correctedContent)
         : undefined;
@@ -278,7 +278,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
           await this.publishPolicyUpdate(outcome);
         }
 
-        if (ideConfirmation) {
+        if (ideConfirmation != null) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
             this.params.content = result.content;
@@ -330,7 +330,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       abortSignal,
     );
 
-    if (correctedContentResult.error) {
+    if (correctedContentResult.error != null) {
       const errDetails = correctedContentResult.error;
       const errorMsg = errDetails.code
         ? `Error checking existing file '${filePath}': ${errDetails.message} (${errDetails.code})`
@@ -371,7 +371,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       let gitStats = null;
       if (this.config.getConversationLoggingEnabled()) {
         const gitStatsService = getGitStatsService();
-        if (gitStatsService) {
+        if (gitStatsService != null) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,
@@ -578,7 +578,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       };
 
       // Include git stats in metadata if available
-      if (gitStats) {
+      if (gitStats != null) {
         result.metadata = {
           ...result.metadata,
           gitStats,

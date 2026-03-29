@@ -16,7 +16,7 @@ export const compressCommand: SlashCommand = {
   autoExecute: true,
   action: async (context) => {
     const { ui } = context;
-    if (ui.pendingItem) {
+    if (ui.pendingItem != null) {
       ui.addItem(
         {
           type: MessageType.ERROR,

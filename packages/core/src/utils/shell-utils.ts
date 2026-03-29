@@ -139,7 +139,7 @@ export function splitCommands(
   // Try tree-sitter first for accurate parsing
   if (isParserAvailable()) {
     const tree = parseShellCommand(command);
-    if (tree) {
+    if (tree != null) {
       const result = splitCommandsWithTree(tree, { splitOnPipes });
       if (result.length > 0) {
         return result;
@@ -247,7 +247,7 @@ export function getCommandRoot(command: string): string | undefined {
   // while respecting quotes. It looks for a sequence of non-whitespace
   // characters that are not inside quotes.
   const match = trimmedCommand.match(/^"([^"]+)"|^'([^']+)'|^(\S+)/);
-  if (match) {
+  if (match != null) {
     // The first element in the match array is the full match.
     // The subsequent elements are the capture groups.
     // We prefer a captured group because it will be unquoted.
@@ -269,7 +269,7 @@ export function getCommandRoots(command: string): string[] {
   // Try tree-sitter first for accurate parsing
   if (isParserAvailable()) {
     const tree = parseShellCommand(command);
-    if (tree) {
+    if (tree != null) {
       const result = extractCommandNames(tree);
       if (result.length > 0) {
         return result;
@@ -287,7 +287,7 @@ export function stripShellWrapper(command: string): string {
   const pattern =
     /^\s*(?:(?:sh|bash|zsh)\s+-c|cmd\.exe\s+\/c|powershell(?:\.exe)?\s+(?:-NoProfile\s+)?-Command|pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command)\s+/i;
   const match = command.match(pattern);
-  if (match) {
+  if (match != null) {
     let newCommand = command.substring(match[0].length).trim();
     if (
       (newCommand.startsWith('"') && newCommand.endsWith('"')) ||
@@ -313,7 +313,7 @@ export function detectCommandSubstitution(command: string): boolean {
   // Try tree-sitter first for accurate parsing
   if (isParserAvailable()) {
     const tree = parseShellCommand(command);
-    if (tree) {
+    if (tree != null) {
       return treeSitterHasCommandSubstitution(tree);
     }
   }
@@ -463,7 +463,7 @@ export function checkCommandPermissions(
     // Try to use tree-sitter for deep command extraction
     const parseResult = parseCommandDetails(command);
     if (
-      parseResult &&
+      parseResult != null &&
       !parseResult.hasError &&
       parseResult.details.length > 0
     ) {
@@ -535,7 +535,7 @@ export function checkCommandPermissions(
 
   const disallowedCommands: string[] = [];
 
-  if (sessionAllowlist) {
+  if (sessionAllowlist != null) {
     // "DEFAULT DENY" MODE: A session allowlist is provided.
     // All commands must be in either the session or global allowlist.
     const normalizedSessionAllowlist = new Set(

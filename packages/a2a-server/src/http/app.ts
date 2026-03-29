@@ -184,7 +184,7 @@ export async function createApp() {
           }
         }
 
-        if (!commandToExecute) {
+        if (commandToExecute == null) {
           return res
             .status(404)
             .json({ error: `Command not found: ${command}` });
@@ -305,13 +305,13 @@ export async function createApp() {
     expressApp.get('/tasks/:taskId/metadata', async (req, res) => {
       const taskId = req.params.taskId;
       let wrapper = agentExecutor.getTask(taskId);
-      if (!wrapper) {
+      if (wrapper == null) {
         const sdkTask = await taskStoreForExecutor.load(taskId);
-        if (sdkTask) {
+        if (sdkTask != null) {
           wrapper = await agentExecutor.reconstruct(sdkTask);
         }
       }
-      if (!wrapper) {
+      if (wrapper == null) {
         res.status(404).send({ error: 'Task not found' });
         return;
       }

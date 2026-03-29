@@ -68,7 +68,7 @@ describe('BaseProvider auth precedence adapter', () => {
   });
 
   afterEach(() => {
-    if (originalContext) {
+    if (originalContext != null) {
       setActiveProviderRuntimeContext(originalContext);
     }
   });

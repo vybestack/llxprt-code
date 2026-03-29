@@ -32,9 +32,8 @@ export const ChatList: React.FC<ChatListProps> = ({ chats }) => {
         const match = isoString.match(
           /(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/,
         );
-        const formattedDate = match
-          ? `${match[1]} ${match[2]}`
-          : 'Invalid Date';
+        const formattedDate =
+          match != null ? `${match[1]} ${match[2]}` : 'Invalid Date';
         return (
           <Box key={chat.name} flexDirection="row">
             <Text color={Colors.Foreground}>

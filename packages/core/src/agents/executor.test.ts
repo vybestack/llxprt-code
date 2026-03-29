@@ -76,7 +76,9 @@ const createMockResponseChunk = (
 ): GenerateContentResponse =>
   ({
     candidates: [{ index: 0, content: { role: 'model', parts } }],
-    ...(functionCalls && functionCalls.length > 0 ? { functionCalls } : {}),
+    ...(functionCalls != null && functionCalls.length > 0
+      ? { functionCalls }
+      : {}),
   }) as unknown as GenerateContentResponse;
 
 /**
@@ -117,7 +119,7 @@ function createCompletedToolCallResponse(params: {
   errorType?: ToolErrorType;
 }) {
   return {
-    status: params.error ? ('error' as const) : ('success' as const),
+    status: params.error != null ? ('error' as const) : ('success' as const),
     request: {
       callId: params.callId,
       name: params.name,
@@ -334,7 +336,10 @@ describe('AgentExecutor', () => {
       const firstToolGroup = turn1Params.config?.tools?.[0];
       expect(firstToolGroup).toBeDefined();
 
-      if (!firstToolGroup || !('functionDeclarations' in firstToolGroup)) {
+      if (
+        firstToolGroup == null ||
+        !('functionDeclarations' in firstToolGroup)
+      ) {
         throw new Error(
           'Test expectation failed: Config does not contain functionDeclarations.',
         );
@@ -426,7 +431,10 @@ describe('AgentExecutor', () => {
       const firstToolGroup = turn1Params.config?.tools?.[0];
 
       expect(firstToolGroup).toBeDefined();
-      if (!firstToolGroup || !('functionDeclarations' in firstToolGroup)) {
+      if (
+        firstToolGroup == null ||
+        !('functionDeclarations' in firstToolGroup)
+      ) {
         throw new Error(
           'Test expectation failed: Config does not contain functionDeclarations.',
         );

@@ -279,7 +279,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     // In strict OpenAI-compatible mode we must preserve OpenAI-style IDs in
     // continuation replay (e.g. call_123), not rewritten history IDs.
     const continuationToolCallId =
-      assistantMsg?.tool_calls?.[0] &&
+      assistantMsg?.tool_calls?.[0] != null &&
       typeof assistantMsg.tool_calls[0].id === 'string'
         ? assistantMsg.tool_calls[0].id
         : undefined;

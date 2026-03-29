@@ -112,7 +112,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
+    if (runtimeContext.config == null) {
       runtimeContext.config = createRuntimeConfigStub(settingsService);
     }
 
@@ -839,7 +839,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       for (const msg of request.messages) {
         if (msg.role === 'user' && Array.isArray(msg.content)) {
           toolResult = msg.content.find((b) => b.type === 'tool_result');
-          if (toolResult) break;
+          if (toolResult != null) break;
         }
       }
 
@@ -928,7 +928,7 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       for (const msg of request.messages) {
         if (msg.role === 'user' && Array.isArray(msg.content)) {
           toolResult = msg.content.find((b) => b.type === 'tool_result');
-          if (toolResult) break;
+          if (toolResult != null) break;
         }
       }
 

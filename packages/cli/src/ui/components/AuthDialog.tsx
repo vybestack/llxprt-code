@@ -102,7 +102,7 @@ export function AuthDialog({
       // This will call the same code as /auth gemini enable/disable
       const oauthManager = runtime.getCliOAuthManager();
 
-      if (oauthManager) {
+      if (oauthManager != null) {
         try {
           const newState = await oauthManager.toggleOAuthEnabled(providerName);
 

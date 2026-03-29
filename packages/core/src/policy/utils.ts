@@ -63,7 +63,7 @@ export function buildArgsPatterns(
     patterns.push(new RegExp(`"command":"(?:${commandRegex})`));
   }
 
-  if (argsPattern) {
+  if (argsPattern != null) {
     validatePolicyRegex(argsPattern.source);
     // Rebuild regex with .* replaced by [^"]* to prevent polynomial
     // backtracking when matching JSON-serialized tool arguments.

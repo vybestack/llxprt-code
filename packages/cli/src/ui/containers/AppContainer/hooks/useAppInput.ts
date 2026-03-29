@@ -220,7 +220,7 @@ function useInputCoreProcessors(p: AppInputParams) {
     ((messages: HistoryItem[]) => void) | null
   >(null);
   const quitHandler = useCallback((messages: HistoryItem[]) => {
-    if (setQuittingMessagesRef.current)
+    if (setQuittingMessagesRef.current != null)
       setQuittingMessagesRef.current(messages);
   }, []);
   const slashResult = useSlashCommandSetup(p, quitHandler, toggleVimEnabled);

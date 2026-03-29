@@ -330,7 +330,7 @@ const statusCommand: SlashCommand = {
   description: 'show current logging status',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext) => {
-    if (!context.services.config) {
+    if (context.services.config == null) {
       context.ui.addItem(
         {
           type: 'error',
@@ -361,7 +361,7 @@ const enableCommand: SlashCommand = {
   description: 'enable conversation logging',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args: string) => {
-    if (!context.services.config) {
+    if (context.services.config == null) {
       context.ui.addItem(
         {
           type: 'error',
@@ -393,7 +393,7 @@ const disableCommand: SlashCommand = {
   description: 'disable conversation logging',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext) => {
-    if (!context.services.config) {
+    if (context.services.config == null) {
       context.ui.addItem(
         {
           type: 'error',
@@ -424,7 +424,7 @@ const redactionCommand: SlashCommand = {
   description: 'configure data redaction settings',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args: string) => {
-    if (!context.services.config) {
+    if (context.services.config == null) {
       context.ui.addItem(
         {
           type: 'error',
@@ -456,7 +456,7 @@ const showCommand: SlashCommand = {
   description: 'show last N lines from conversation log (default 50)',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args: string) => {
-    if (!context.services.config) {
+    if (context.services.config == null) {
       context.ui.addItem(
         {
           type: 'error',
@@ -500,7 +500,7 @@ const showCommand: SlashCommand = {
             const typeIcon = entry.type === 'request' ? '→' : '←';
             let content = '';
 
-            if (entry.type === 'request' && entry.messages) {
+            if (entry.type === 'request' && entry.messages != null) {
               const lastMessage = entry.messages[entry.messages.length - 1];
               if (lastMessage && lastMessage.content) {
                 content = lastMessage.content.substring(0, 100);

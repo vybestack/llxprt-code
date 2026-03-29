@@ -539,7 +539,7 @@ export class ToolRegistry {
       const jsonSchema = newSchema.parametersJsonSchema as
         | { properties?: Record<string, unknown> }
         | undefined;
-      if (jsonSchema?.properties) {
+      if (jsonSchema?.properties != null) {
         delete jsonSchema.properties.async;
       }
       return newSchema;
@@ -580,7 +580,7 @@ export class ToolRegistry {
     const declarations: FunctionDeclaration[] = [];
     for (const name of toolNames) {
       const tool = this.tools.get(name);
-      if (tool && this.isToolActive(tool.name, governance)) {
+      if (tool != null && this.isToolActive(tool.name, governance)) {
         declarations.push(this.applySchemaTransforms(tool.schema, transforms));
       }
     }
@@ -637,14 +637,14 @@ export class ToolRegistry {
     let tool = this.tools.get(name);
 
     // If not found, try normalized name for fuzzy matching
-    if (!tool) {
+    if (tool == null) {
       const normalizedName = normalizeToolName(name);
       if (normalizedName && normalizedName !== name) {
         tool = this.tools.get(normalizedName);
       }
     }
 
-    if (!tool) {
+    if (tool == null) {
       const missingTool: AnyDeclarativeTool | undefined = void 0;
       return missingTool;
     }
@@ -655,7 +655,7 @@ export class ToolRegistry {
       return inactiveTool;
     }
 
-    if (context) {
+    if (context != null) {
       // Inject context into tool instance
       if ('context' in tool) {
         (tool as unknown as { context: ToolContext }).context = context;
@@ -693,7 +693,7 @@ export class ToolRegistry {
   }
 
   private async withDiscoveryLock<T>(task: () => Promise<T>): Promise<T> {
-    while (this.discoveryLock) {
+    while (this.discoveryLock != null) {
       await this.discoveryLock;
     }
 

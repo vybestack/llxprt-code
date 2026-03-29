@@ -114,7 +114,7 @@ describe('providerCommand /provider save', () => {
       },
     });
 
-    if (!providerCommand.action) {
+    if (providerCommand.action == null) {
       throw new Error('providerCommand must have an action');
     }
 
@@ -167,7 +167,7 @@ describe('providerCommand /provider switch', () => {
 
     const context = createMockCommandContext();
 
-    if (!providerCommand.action) {
+    if (providerCommand.action == null) {
       throw new Error('providerCommand must have an action');
     }
 
@@ -202,7 +202,7 @@ describe('providerCommand /provider switch', () => {
 
     const context = createMockCommandContext();
 
-    if (!providerCommand.action) {
+    if (providerCommand.action == null) {
       throw new Error('providerCommand must have an action');
     }
 

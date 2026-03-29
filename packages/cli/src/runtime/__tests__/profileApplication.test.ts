@@ -483,7 +483,7 @@ describe('Profile application basics', () => {
         providerName: string,
         options?: { preserveEphemerals?: string[]; autoOAuth?: boolean },
       ) => {
-        if (options && 'autoOAuth' in options) {
+        if (options != null && 'autoOAuth' in options) {
           switchWasCalledWithAutoOAuth = options.autoOAuth === true;
         }
         providerManagerStub.activeProviderName = providerName;

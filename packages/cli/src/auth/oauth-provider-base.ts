@@ -68,7 +68,7 @@ export class InitializationGuard {
     }
 
     // Wait for completion — handles concurrent callers sharing the same promise
-    if (this.promise) {
+    if (this.promise != null) {
       try {
         await this.promise;
         this.state = InitializationState.Completed;
@@ -120,7 +120,7 @@ export class AuthCodeDialog {
 
   /** Resolve the pending auth-code promise with the given code. */
   submitAuthCode(code: string): void {
-    if (this.resolver) {
+    if (this.resolver != null) {
       this.resolver(code);
       this.resolver = undefined;
       this.rejecter = undefined;
@@ -134,7 +134,7 @@ export class AuthCodeDialog {
   rejectWithError(error: Error): void {
     (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
       false;
-    if (this.rejecter) {
+    if (this.rejecter != null) {
       this.rejecter(error);
       this.resolver = undefined;
       this.rejecter = undefined;

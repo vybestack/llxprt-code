@@ -40,7 +40,7 @@ export function shouldUpdateTokenMetrics(
   metrics: ProviderMetricsLike | null | undefined,
   usage: SessionTokenUsage | null | undefined,
 ): boolean {
-  if (!previous) {
+  if (previous == null) {
     return true;
   }
   const next = toTokenMetricsSnapshot(metrics, usage);

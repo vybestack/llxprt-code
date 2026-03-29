@@ -84,15 +84,16 @@ export function transformModel(
     // Extended data
     capabilities,
 
-    pricing: model.cost
-      ? {
-          input: model.cost.input,
-          output: model.cost.output,
-          reasoning: model.cost.reasoning,
-          cacheRead: model.cost.cache_read,
-          cacheWrite: model.cost.cache_write,
-        }
-      : undefined,
+    pricing:
+      model.cost != null
+        ? {
+            input: model.cost.input,
+            output: model.cost.output,
+            reasoning: model.cost.reasoning,
+            cacheRead: model.cost.cache_read,
+            cacheWrite: model.cost.cache_write,
+          }
+        : undefined,
 
     limits: {
       contextWindow: model.limit.context,

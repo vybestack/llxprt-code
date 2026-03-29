@@ -95,7 +95,7 @@ export function buildProfileJSON(state: WizardState): Record<string, unknown> {
   }
 
   // Add parameters if configured
-  if (state.config.params) {
+  if (state.config.params != null) {
     if (state.config.params.temperature !== undefined) {
       (profile.modelParams as Record<string, unknown>).temperature =
         state.config.params.temperature;
@@ -189,7 +189,7 @@ export function formatConfigSummary(state: WizardState): string {
   lines.push(`Auth: ${authDisplay}`);
 
   // Parameters (if configured)
-  if (state.config.params) {
+  if (state.config.params != null) {
     if (state.config.params.temperature !== undefined) {
       lines.push(`Temperature: ${state.config.params.temperature}`);
     }

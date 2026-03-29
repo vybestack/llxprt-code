@@ -41,7 +41,7 @@ function getContainerPath(hostPath: string): string {
 
   const withForwardSlashes = hostPath.replace(/\\/g, '/');
   const match = withForwardSlashes.match(/^([A-Z]):\/(.*)/i);
-  if (match) {
+  if (match != null) {
     return `/${match[1].toLowerCase()}/${match[2]}`;
   }
   return hostPath;
@@ -420,7 +420,7 @@ export function getPodmanMachineConnection(): {
 
   // Find the default connection, or fall back to the sole connection
   let conn = connections.find((c) => c.Default);
-  if (!conn) {
+  if (conn == null) {
     if (connections.length === 1) {
       conn = connections[0];
     } else {
@@ -433,7 +433,7 @@ export function getPodmanMachineConnection(): {
 
   // Parse the URI: ssh://user@host:port/path
   const uriMatch = conn.URI.match(/^ssh:\/\/([^@]+)@([^:]+):(\d+)(\/.*)?$/);
-  if (!uriMatch) {
+  if (uriMatch == null) {
     throw new FatalSandboxError(
       `Unable to parse Podman connection URI '${conn.URI}'. ` +
         'Run `podman system connection list` to verify your machine setup.',
@@ -968,8 +968,8 @@ async function shouldUseCurrentUserInSandbox(): Promise<boolean> {
       if (
         osReleaseContent.includes('ID=debian') ||
         osReleaseContent.includes('ID=ubuntu') ||
-        osReleaseContent.match(/^ID_LIKE=.*debian.*/m) || // Covers derivatives
-        osReleaseContent.match(/^ID_LIKE=.*ubuntu.*/m) // Covers derivatives
+        osReleaseContent.match(/^ID_LIKE=.*debian.*/m) != null || // Covers derivatives
+        osReleaseContent.match(/^ID_LIKE=.*ubuntu.*/m) != null // Covers derivatives
       ) {
         // note here and below we use debugLogger.error for informational messages on stderr
         debugLogger.error(
@@ -1193,7 +1193,7 @@ export async function start_sandbox(
       const targetDir = fs.realpathSync(cliConfig?.getTargetDir() || '');
       const includedDirs: string[] = [];
 
-      if (cliConfig) {
+      if (cliConfig != null) {
         const workspaceContext = cliConfig.getWorkspaceContext();
         const directories = workspaceContext.getDirectories();
 
@@ -1593,7 +1593,7 @@ export async function start_sandbox(
         );
         // Register process-level signal handlers immediately to prevent
         // orphaned tunnels if a signal arrives before sandboxProcess spawns.
-        if (portForwardingResult.cleanup) {
+        if (portForwardingResult.cleanup != null) {
           process.on('exit', portForwardingResult.cleanup);
           process.on('SIGINT', portForwardingResult.cleanup);
           process.on('SIGTERM', portForwardingResult.cleanup);
@@ -1886,7 +1886,7 @@ export async function start_sandbox(
             );
           }
 
-          if (credentialProxyBridgeResult) {
+          if (credentialProxyBridgeResult != null) {
             credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
             if (credentialProxyBridgeResult.entrypointPrefix) {
               entrypointPrefixes.push(
@@ -2031,7 +2031,7 @@ export async function start_sandbox(
     });
 
     // Wire SSH tunnel cleanup into sandbox lifecycle (R7.9, R7.10)
-    if (sshResult.cleanup) {
+    if (sshResult.cleanup != null) {
       const stopTunnel = sshResult.cleanup;
       process.on('exit', stopTunnel);
       process.on('SIGINT', stopTunnel);
@@ -2042,12 +2042,12 @@ export async function start_sandbox(
     // Wire port forwarding tunnel cleanup into sandbox close.
     // Process-level signal handlers (exit/SIGINT/SIGTERM) are registered
     // immediately after tunnel creation to prevent orphaned tunnels.
-    if (portForwardingResult?.cleanup) {
+    if (portForwardingResult?.cleanup != null) {
       sandboxProcess.on('close', portForwardingResult.cleanup);
     }
 
     // Wire credential proxy bridge tunnel cleanup into sandbox lifecycle.
-    if (credentialProxyBridgeResult?.cleanup) {
+    if (credentialProxyBridgeResult?.cleanup != null) {
       const stopCredentialBridgeTunnel = credentialProxyBridgeResult.cleanup;
       process.on('exit', stopCredentialBridgeTunnel);
       process.on('SIGINT', stopCredentialBridgeTunnel);

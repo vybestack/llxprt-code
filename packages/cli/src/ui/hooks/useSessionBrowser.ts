@@ -365,7 +365,7 @@ export function useSessionBrowser(
         const enriched: EnrichedSessionSummary = {
           ...session,
           isLocked: locked,
-          previewState: cached ? cached.state : 'loading',
+          previewState: cached != null ? cached.state : 'loading',
           firstUserMessage: cached?.text ?? undefined,
         };
         filtered.push(enriched);

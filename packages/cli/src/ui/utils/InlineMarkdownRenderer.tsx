@@ -100,7 +100,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.length > INLINE_CODE_MARKER_LENGTH
       ) {
         const codeMatch = fullMatch.match(/^(`+)(.+?)\1$/s);
-        if (codeMatch && codeMatch[2]) {
+        if (codeMatch != null && codeMatch[2]) {
           renderedNode = (
             <Text key={key} color={theme.text.accent}>
               {codeMatch[2]}
@@ -113,7 +113,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
         fullMatch.endsWith(')')
       ) {
         const linkMatch = fullMatch.match(/\[(.*?)\]\((.*?)\)/);
-        if (linkMatch) {
+        if (linkMatch != null) {
           const linkText = linkMatch[1];
           const url = linkMatch[2];
           renderedNode = (
@@ -137,7 +137,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({
             )}
           </Text>
         );
-      } else if (fullMatch.match(/^https?:\/\//)) {
+      } else if (fullMatch.match(/^https?:\/\//) != null) {
         renderedNode = (
           <Text key={key} color={theme.text.link}>
             {fullMatch}

@@ -38,7 +38,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -57,7 +57,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -76,7 +76,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -98,7 +98,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -121,7 +121,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -147,7 +147,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -173,7 +173,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: mockSetEphemeralSetting,
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 
@@ -200,7 +200,7 @@ describe('dumpcontextCommand', () => {
         setEphemeralSetting: vi.fn(),
       } as never);
 
-      if (!dumpcontextCommand.action) {
+      if (dumpcontextCommand.action == null) {
         throw new Error('dumpcontextCommand must have an action');
       }
 

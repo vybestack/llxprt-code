@@ -120,7 +120,7 @@ function checkForTempDirectories(): string[] {
     // Cross-platform regex for node_modules path
     const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
 
-    if (!nodeModulesMatch) {
+    if (nodeModulesMatch == null) {
       return [];
     }
 
@@ -139,7 +139,7 @@ export function handleAutoUpdate(
   projectRoot: string,
   spawnFn: typeof spawn = spawnWrapper,
 ) {
-  if (!info) {
+  if (info == null) {
     return;
   }
 
@@ -183,9 +183,10 @@ export function handleAutoUpdate(
     const realPath = fs.realpathSync(cliPath);
     // Cross-platform regex for node_modules path
     const nodeModulesMatch = realPath.match(/(.*[\\/]node_modules)[\\/]/);
-    const cleanupPath = nodeModulesMatch
-      ? path.dirname(nodeModulesMatch[1])
-      : 'the parent directory of node_modules';
+    const cleanupPath =
+      nodeModulesMatch != null
+        ? path.dirname(nodeModulesMatch[1])
+        : 'the parent directory of node_modules';
 
     // Platform-appropriate cleanup command
     const isWindows = process.platform === 'win32';

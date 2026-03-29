@@ -122,16 +122,17 @@ export async function calculateEdit(
     }
   }
 
-  const newContent = !error
-    ? applyReplacement(
-        currentContent,
-        normalizedOldString,
-        normalizedNewString,
-        isNewFile,
-      )
-    : (currentContent ?? '');
+  const newContent =
+    error == null
+      ? applyReplacement(
+          currentContent,
+          normalizedOldString,
+          normalizedNewString,
+          isNewFile,
+        )
+      : (currentContent ?? '');
 
-  if (!error && fileExists && currentContent === newContent) {
+  if (error == null && fileExists && currentContent === newContent) {
     error = {
       display:
         'No changes to apply. The new content is identical to the current content.',
@@ -141,7 +142,7 @@ export async function calculateEdit(
   }
 
   let astValidation: { valid: boolean; errors: string[] } | undefined;
-  if (!error) {
+  if (error == null) {
     astValidation = validateASTSyntax(params.file_path, newContent);
   }
 
@@ -202,7 +203,7 @@ export function validateASTSyntax(
 
     // Check for explicit ERROR nodes (garbled/unparseable tokens)
     const errorNode = root.find({ rule: { kind: 'ERROR' } });
-    if (errorNode) {
+    if (errorNode != null) {
       const pos = errorNode.range().start;
       return {
         valid: false,
@@ -218,7 +219,7 @@ export function validateASTSyntax(
     // nodes in non-empty content reliably indicate recovered syntax errors.
     if (content.length > 0) {
       const missingNode = findZeroWidthNode(root);
-      if (missingNode) {
+      if (missingNode != null) {
         return {
           valid: false,
           errors: [
@@ -251,7 +252,7 @@ function findZeroWidthNode(
       return { line: range.start.line, column: range.start.column };
     }
     const found = findZeroWidthNode(child);
-    if (found) return found;
+    if (found != null) return found;
   }
   return null;
 }

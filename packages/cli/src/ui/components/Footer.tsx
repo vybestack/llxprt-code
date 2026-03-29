@@ -431,7 +431,7 @@ export const Footer = React.memo<FooterProps>(
                       const lbProvider =
                         providerManager.getProviderByName('load-balancer');
                       if (
-                        lbProvider &&
+                        lbProvider != null &&
                         'getStats' in lbProvider &&
                         typeof (lbProvider as { getStats?: () => unknown })
                           .getStats === 'function'

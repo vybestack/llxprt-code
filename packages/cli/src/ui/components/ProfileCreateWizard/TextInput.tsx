@@ -46,7 +46,7 @@ export const TextInput: React.FC<TextInputProps> = ({
       if (!isFocused) return false;
 
       // Enter - submit
-      if (key.name === 'return' && onSubmit) {
+      if (key.name === 'return' && onSubmit != null) {
         onSubmit();
         return true;
       }

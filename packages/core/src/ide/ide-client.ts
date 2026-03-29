@@ -121,7 +121,7 @@ export class IdeClient {
   }
 
   async connect(): Promise<void> {
-    if (!this.currentIde) {
+    if (this.currentIde == null) {
       this.setState(
         IDEConnectionStatus.Disconnected,
         `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
@@ -228,7 +228,7 @@ export class IdeClient {
         },
       });
 
-      if (result) {
+      if (result != null) {
         const parsed = CloseDiffResponseSchema.parse(result);
         return parsed.content;
       }
@@ -248,7 +248,7 @@ export class IdeClient {
       suppressNotification: true,
     });
 
-    if (resolver) {
+    if (resolver != null) {
       if (outcome === 'accepted') {
         resolver({ status: 'accepted', content });
       } else {
@@ -373,7 +373,7 @@ export class IdeClient {
     | (ConnectionConfig & { workspacePath?: string; ideInfo?: IdeInfo })
     | undefined
   > {
-    if (!this.ideProcessInfo) {
+    if (this.ideProcessInfo == null) {
       return {};
     }
 
@@ -455,7 +455,7 @@ export class IdeClient {
   }
 
   private registerClientHandlers() {
-    if (!this.client) {
+    if (this.client == null) {
       return;
     }
 
@@ -490,7 +490,7 @@ export class IdeClient {
       (notification) => {
         const { filePath, content } = notification.params;
         const resolver = this.diffResponses.get(filePath);
-        if (resolver) {
+        if (resolver != null) {
           resolver({ status: 'accepted', content });
           this.diffResponses.delete(filePath);
         } else {
@@ -504,7 +504,7 @@ export class IdeClient {
       (notification) => {
         const { filePath } = notification.params;
         const resolver = this.diffResponses.get(filePath);
-        if (resolver) {
+        if (resolver != null) {
           resolver({ status: 'rejected', content: undefined });
           this.diffResponses.delete(filePath);
         } else {
@@ -520,7 +520,7 @@ export class IdeClient {
       (notification) => {
         const { filePath } = notification.params;
         const resolver = this.diffResponses.get(filePath);
-        if (resolver) {
+        if (resolver != null) {
           resolver({ status: 'rejected', content: undefined });
           this.diffResponses.delete(filePath);
         } else {
@@ -554,7 +554,7 @@ export class IdeClient {
       this.setState(IDEConnectionStatus.Connected);
       return true;
     } catch (_error) {
-      if (transport) {
+      if (transport != null) {
         try {
           await transport.close();
         } catch (closeError) {

@@ -114,7 +114,7 @@ describe('EditTool', () => {
         // The problematic_snippet is the last part of the user's content
         const userContent = contents.find((c: Content) => c.role === 'user');
         let promptText = '';
-        if (userContent?.parts) {
+        if (userContent?.parts != null) {
           promptText = userContent.parts
             .filter((p: Part) => typeof (p as any).text === 'string')
             .map((p: Part) => (p as any).text)
@@ -124,7 +124,7 @@ describe('EditTool', () => {
           /Problematic target snippet:\n```\n([\s\S]*?)\n```/,
         );
         const problematicSnippet =
-          snippetMatch && snippetMatch[1] ? snippetMatch[1] : '';
+          snippetMatch != null && snippetMatch[1] ? snippetMatch[1] : '';
 
         if ((schema as any).properties?.corrected_target_snippet) {
           return Promise.resolve({
@@ -138,7 +138,7 @@ describe('EditTool', () => {
             /original_new_string \(what was intended to replace original_old_string\):\n```\n([\s\S]*?)\n```/,
           );
           const originalNewString =
-            originalNewStringMatch && originalNewStringMatch[1]
+            originalNewStringMatch != null && originalNewStringMatch[1]
               ? originalNewStringMatch[1]
               : '';
           return Promise.resolve({ corrected_new_string: originalNewString });
@@ -1078,12 +1078,12 @@ describe('EditTool', () => {
           result.returnDisplay &&
           typeof result.returnDisplay === 'object' &&
           'diffStat' in result.returnDisplay &&
-          result.returnDisplay.diffStat
+          result.returnDisplay.diffStat != null
         ) {
           actualLinesRemoved.push(
             result.returnDisplay.diffStat?.ai_removed_lines,
           );
-        } else if (result.error) {
+        } else if (result.error != null) {
           console.error(`Edit failed for ${file.path}:`, result.error);
         }
       }

@@ -85,7 +85,7 @@ export function extensionUpdatesReducer(
     }
     case 'SET_NOTIFIED': {
       const existing = state.extensionStatuses.get(action.payload.name);
-      if (!existing || existing.notified === action.payload.notified) {
+      if (existing == null || existing.notified === action.payload.notified) {
         return state;
       }
       const newStatuses = new Map(state.extensionStatuses);

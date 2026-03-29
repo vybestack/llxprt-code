@@ -194,7 +194,11 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       const total = result.originalLineCount!;
 
       let formattedContent = result.llmContent;
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges &&
+        markersByLine != null &&
+        deletionAfterLines != null
+      ) {
         formattedContent = formatWithGitChanges(
           result.llmContent,
           this.params.start_line,
@@ -219,7 +223,11 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
 
       llmContent = `\nIMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${formattedContent}`;
     } else {
-      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+      if (
+        this.params.showGitChanges &&
+        markersByLine != null &&
+        deletionAfterLines != null
+      ) {
         llmContent = formatWithGitChanges(
           result.llmContent,
           this.params.start_line,

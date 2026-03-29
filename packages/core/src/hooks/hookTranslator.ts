@@ -127,7 +127,7 @@ function extractGenerationConfig(request: GenerateContentParameters):
   | undefined {
   // Access the config field which contains generation settings
   // Use type assertion after checking the field exists
-  if (request.config && typeof request.config === 'object') {
+  if (request.config != null && typeof request.config === 'object') {
     const config = request.config as {
       temperature?: number;
       maxOutputTokens?: number;
@@ -246,10 +246,9 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     };
 
     // Add generation config if it exists in the hook request
-    if (hookRequest.config) {
-      const baseConfig = baseRequest
-        ? extractGenerationConfig(baseRequest)
-        : undefined;
+    if (hookRequest.config != null) {
+      const baseConfig =
+        baseRequest != null ? extractGenerationConfig(baseRequest) : undefined;
 
       result.config = {
         ...baseConfig,
@@ -290,14 +289,15 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
           })),
         };
       }),
-      usageMetadata: sdkResponse.usageMetadata
-        ? {
-            promptTokenCount: sdkResponse.usageMetadata.promptTokenCount,
-            candidatesTokenCount:
-              sdkResponse.usageMetadata.candidatesTokenCount,
-            totalTokenCount: sdkResponse.usageMetadata.totalTokenCount,
-          }
-        : undefined,
+      usageMetadata:
+        sdkResponse.usageMetadata != null
+          ? {
+              promptTokenCount: sdkResponse.usageMetadata.promptTokenCount,
+              candidatesTokenCount:
+                sdkResponse.usageMetadata.candidatesTokenCount,
+              totalTokenCount: sdkResponse.usageMetadata.totalTokenCount,
+            }
+          : undefined,
     };
   }
 
@@ -341,7 +341,7 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
    */
   fromHookToolConfig(hookToolConfig: HookToolConfig): ToolConfig {
     const functionCallingConfig: FunctionCallingConfig | undefined =
-      hookToolConfig.mode || hookToolConfig.allowedFunctionNames
+      hookToolConfig.mode || hookToolConfig.allowedFunctionNames != null
         ? ({
             mode: hookToolConfig.mode,
             allowedFunctionNames: hookToolConfig.allowedFunctionNames,

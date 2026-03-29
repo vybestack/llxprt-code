@@ -112,7 +112,7 @@ export function filterTextWithEmoji(
   text: string,
   ctx: Pick<ExecutionLoopContext, 'emojiFilter' | 'onMessage'>,
 ): FilterResult {
-  if (!ctx.emojiFilter) {
+  if (ctx.emojiFilter == null) {
     return { text, blocked: false };
   }
   const result = ctx.emojiFilter.filterText(text);
@@ -123,7 +123,7 @@ export function filterTextWithEmoji(
       error: result.error ?? 'Content blocked by emoji filter',
     };
   }
-  if (result.systemFeedback && ctx.onMessage) {
+  if (result.systemFeedback && ctx.onMessage != null) {
     ctx.onMessage(result.systemFeedback);
   }
   const filtered = typeof result.filtered === 'string' ? result.filtered : '';
@@ -156,7 +156,10 @@ export async function checkGoalCompletion(
     return [{ role: 'user', parts: [{ text: todoReminder }] }];
   }
 
-  if (!ctx.outputConfig || Object.keys(ctx.outputConfig.outputs).length === 0) {
+  if (
+    ctx.outputConfig == null ||
+    Object.keys(ctx.outputConfig.outputs).length === 0
+  ) {
     ctx.output.terminate_reason = SubagentTerminateMode.GOAL;
     return null;
   }
@@ -225,7 +228,7 @@ export function processNonInteractiveTextResponse(
     ctx.output.terminate_reason = SubagentTerminateMode.ERROR;
     throw new Error(callbackFilter.error ?? 'Content blocked by emoji filter');
   }
-  if (ctx.onMessage && callbackFilter.text) {
+  if (ctx.onMessage != null && callbackFilter.text) {
     ctx.onMessage(callbackFilter.text);
   }
 
@@ -384,7 +387,7 @@ export function createCompletionChannel(
   let completionResolver: ((calls: CompletedToolCall[]) => void) | null = null;
 
   const awaitCompletedCalls = () => {
-    if (pendingCompletedCalls) {
+    if (pendingCompletedCalls != null) {
       const calls = pendingCompletedCalls;
       pendingCompletedCalls = null;
       return Promise.resolve(calls);
@@ -395,7 +398,7 @@ export function createCompletionChannel(
   };
 
   const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
-    if (output && ctx.onMessage) {
+    if (output && ctx.onMessage != null) {
       const textOutput =
         typeof output === 'string'
           ? output
@@ -407,7 +410,7 @@ export function createCompletionChannel(
   };
 
   const handleCompletion = async (calls: CompletedToolCall[]) => {
-    if (completionResolver) {
+    if (completionResolver != null) {
       completionResolver(calls);
       completionResolver = null;
     } else {
@@ -425,39 +428,40 @@ export async function initInteractiveScheduler(
 ) {
   const channel = createCompletionChannel(ctx);
 
-  const schedulerPromise = options?.schedulerFactory
-    ? Promise.resolve(
-        options.schedulerFactory({
-          schedulerConfig: ctx.schedulerConfig,
-          onAllToolCallsComplete: channel.handleCompletion,
-          outputUpdateHandler: channel.outputUpdateHandler,
-          onToolCallsUpdate: undefined,
-        }),
-      )
-    : (async () => {
-        const sessionId = ctx.schedulerConfig.getSessionId();
-        return (
-          ctx.schedulerConfig as Config & {
-            getOrCreateScheduler(
-              sessionId: string,
-              callbacks: SchedulerCallbacks,
-              options?: SchedulerOptions,
-              dependencies?: { messageBus?: MessageBus },
-            ): ReturnType<Config['getOrCreateScheduler']>;
-          }
-        ).getOrCreateScheduler(
-          sessionId,
-          {
-            outputUpdateHandler: channel.outputUpdateHandler,
+  const schedulerPromise =
+    options?.schedulerFactory != null
+      ? Promise.resolve(
+          options.schedulerFactory({
+            schedulerConfig: ctx.schedulerConfig,
             onAllToolCallsComplete: channel.handleCompletion,
+            outputUpdateHandler: channel.outputUpdateHandler,
             onToolCallsUpdate: undefined,
-            getPreferredEditor: () => undefined,
-            onEditorClose: () => {},
-          },
-          undefined,
-          { messageBus: ctx.messageBus },
-        );
-      })();
+          }),
+        )
+      : (async () => {
+          const sessionId = ctx.schedulerConfig.getSessionId();
+          return (
+            ctx.schedulerConfig as Config & {
+              getOrCreateScheduler(
+                sessionId: string,
+                callbacks: SchedulerCallbacks,
+                options?: SchedulerOptions,
+                dependencies?: { messageBus?: MessageBus },
+              ): ReturnType<Config['getOrCreateScheduler']>;
+            }
+          ).getOrCreateScheduler(
+            sessionId,
+            {
+              outputUpdateHandler: channel.outputUpdateHandler,
+              onAllToolCallsComplete: channel.handleCompletion,
+              onToolCallsUpdate: undefined,
+              getPreferredEditor: () => undefined,
+              onEditorClose: () => {},
+            },
+            undefined,
+            { messageBus: ctx.messageBus },
+          );
+        })();
 
   let scheduler: Awaited<typeof schedulerPromise>;
   try {
@@ -472,14 +476,15 @@ export async function initInteractiveScheduler(
     throw error;
   }
 
-  const schedulerDispose = options?.schedulerFactory
-    ? typeof scheduler.dispose === 'function'
-      ? async () => scheduler.dispose?.()
-      : async () => {}
-    : async () =>
-        ctx.schedulerConfig.disposeScheduler(
-          ctx.schedulerConfig.getSessionId(),
-        );
+  const schedulerDispose =
+    options?.schedulerFactory != null
+      ? typeof scheduler.dispose === 'function'
+        ? async () => scheduler.dispose?.()
+        : async () => {}
+      : async () =>
+          ctx.schedulerConfig.disposeScheduler(
+            ctx.schedulerConfig.getSessionId(),
+          );
 
   return {
     scheduler: {

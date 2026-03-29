@@ -137,7 +137,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     // Try exact match first
     const task = this.taskManager.getTask(taskId);
 
-    if (task) {
+    if (task != null) {
       return this.formatTaskDetails(task);
     }
 
@@ -145,11 +145,11 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     const { task: prefixTask, candidates } =
       this.taskManager.getTaskByPrefix(taskId);
 
-    if (prefixTask) {
+    if (prefixTask != null) {
       return this.formatTaskDetails(prefixTask);
     }
 
-    if (candidates && candidates.length > 0) {
+    if (candidates != null && candidates.length > 0) {
       // Ambiguous prefix - show full task IDs since they're now the unique agentId
       const candidateList = candidates.map((c) => `- ${c.id}`).join('\n');
 
@@ -189,7 +189,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
       details.completedAt = new Date(task.completedAt).toISOString();
     }
 
-    if (task.output) {
+    if (task.output != null) {
       details.output = task.output;
     }
 
@@ -248,7 +248,7 @@ class CheckAsyncTasksInvocation extends BaseToolInvocation<
     );
 
     if (
-      task.output?.emitted_vars &&
+      task.output?.emitted_vars != null &&
       Object.keys(task.output.emitted_vars).length > 0
     ) {
       lines.push('Emitted variables:');
@@ -306,7 +306,7 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
   ): CheckAsyncTasksInvocation {
     const manager = this.dependencies.getAsyncTaskManager?.();
 
-    if (!manager) {
+    if (manager == null) {
       throw new Error(
         'AsyncTaskManager service is unavailable. Please configure async tasks before invoking this tool.',
       );

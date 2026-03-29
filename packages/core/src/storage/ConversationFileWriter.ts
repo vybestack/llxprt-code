@@ -88,7 +88,7 @@ let fileWriter: ConversationFileWriter | null = null;
 export function getConversationFileWriter(
   logPath?: string,
 ): ConversationFileWriter {
-  if (!fileWriter) {
+  if (fileWriter == null) {
     fileWriter = new ConversationFileWriter(logPath);
   }
   return fileWriter;

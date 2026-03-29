@@ -23,7 +23,7 @@ export function getFileDiffFromResultDisplay(
     resultDisplay.diffStat !== null
   ) {
     const diffStat = resultDisplay.diffStat as FileDiff['diffStat'];
-    if (diffStat) {
+    if (diffStat != null) {
       return resultDisplay as FileDiff;
     }
   }
@@ -36,7 +36,7 @@ export function computeAddedAndRemovedLines(
   addedLines: number;
   removedLines: number;
 } {
-  if (!stats) {
+  if (stats == null) {
     return {
       addedLines: 0,
       removedLines: 0,

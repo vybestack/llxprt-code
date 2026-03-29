@@ -106,7 +106,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
+    if (runtimeContext.config == null) {
       runtimeContext.config = createRuntimeConfigStub(settingsService);
     }
 

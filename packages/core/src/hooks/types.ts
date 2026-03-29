@@ -202,7 +202,7 @@ export class DefaultHookOutput implements HookOutput {
    */
   getAdditionalContext(): string | undefined {
     if (
-      this.hookSpecificOutput &&
+      this.hookSpecificOutput != null &&
       'additionalContext' in this.hookSpecificOutput
     ) {
       const context = this.hookSpecificOutput['additionalContext'];
@@ -234,7 +234,7 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
    */
   override getEffectiveReason(): string {
     // Check for compatibility fields first
-    if (this.hookSpecificOutput) {
+    if (this.hookSpecificOutput != null) {
       if ('permissionDecisionReason' in this.hookSpecificOutput) {
         const compatReason =
           this.hookSpecificOutput['permissionDecisionReason'];
@@ -253,7 +253,7 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
   override isBlockingDecision(): boolean {
     // Check compatibility field first
     if (
-      this.hookSpecificOutput &&
+      this.hookSpecificOutput != null &&
       'permissionDecision' in this.hookSpecificOutput
     ) {
       const compatDecision = this.hookSpecificOutput['permissionDecision'];
@@ -270,7 +270,10 @@ export class BeforeToolHookOutput extends DefaultHookOutput {
    * @requirement:HOOK-019 - Tool input modification
    */
   getModifiedToolInput(): Record<string, unknown> | undefined {
-    if (this.hookSpecificOutput && 'tool_input' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput != null &&
+      'tool_input' in this.hookSpecificOutput
+    ) {
       const modifiedInput = this.hookSpecificOutput['tool_input'];
       if (
         modifiedInput &&
@@ -292,7 +295,10 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
    * Get synthetic LLM response if provided by hook
    */
   getSyntheticResponse(): GenerateContentResponse | undefined {
-    if (this.hookSpecificOutput && 'llm_response' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput != null &&
+      'llm_response' in this.hookSpecificOutput
+    ) {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as LLMResponse;
@@ -310,7 +316,10 @@ export class BeforeModelHookOutput extends DefaultHookOutput {
   override applyLLMRequestModifications(
     target: GenerateContentParameters,
   ): GenerateContentParameters {
-    if (this.hookSpecificOutput && 'llm_request' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput != null &&
+      'llm_request' in this.hookSpecificOutput
+    ) {
       const hookRequest = this.hookSpecificOutput[
         'llm_request'
       ] as Partial<LLMRequest>;
@@ -347,7 +356,10 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
     toolConfig?: GenAIToolConfig & { allowedFunctionNames?: string[] };
     tools?: ToolListUnion;
   } {
-    if (this.hookSpecificOutput && 'toolConfig' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput != null &&
+      'toolConfig' in this.hookSpecificOutput
+    ) {
       const hookToolConfig = this.hookSpecificOutput[
         'toolConfig'
       ] as HookToolConfig;
@@ -378,11 +390,14 @@ export class AfterModelHookOutput extends DefaultHookOutput {
    * Get modified LLM response if provided by hook
    */
   getModifiedResponse(): GenerateContentResponse | undefined {
-    if (this.hookSpecificOutput && 'llm_response' in this.hookSpecificOutput) {
+    if (
+      this.hookSpecificOutput != null &&
+      'llm_response' in this.hookSpecificOutput
+    ) {
       const hookResponse = this.hookSpecificOutput[
         'llm_response'
       ] as Partial<LLMResponse>;
-      if (hookResponse?.candidates?.[0]?.content) {
+      if (hookResponse?.candidates?.[0]?.content != null) {
         // Convert hook format to SDK format
         return defaultHookTranslator.fromHookLLMResponse(
           hookResponse as LLMResponse,

@@ -105,7 +105,7 @@ class MockConversationStorage implements ConversationStorage {
     // Archive current log
     const currentFile = this.getCurrentLogPath();
     const fileInfo = this.logFiles.get(currentFile);
-    if (fileInfo) {
+    if (fileInfo != null) {
       this.logFiles.set(newLogFile, { ...fileInfo });
     }
 

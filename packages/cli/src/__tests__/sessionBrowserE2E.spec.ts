@@ -109,7 +109,7 @@ async function createTestSession(
   const svc = new SessionRecordingService(config);
 
   // If contents are provided, use those directly
-  if (opts.contents) {
+  if (opts.contents != null) {
     for (const content of opts.contents) {
       svc.recordContent(content);
     }
@@ -367,7 +367,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         });
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
 
@@ -402,7 +402,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         });
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
 
@@ -432,7 +432,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         });
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
 
@@ -556,7 +556,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         recordingsToDispose.push(newRecording!);
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
 
@@ -640,7 +640,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         expect(fileContent).toContain('new event after resume');
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
 
@@ -680,7 +680,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         }
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
   });
@@ -757,7 +757,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         });
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
   });
@@ -909,7 +909,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         });
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
   });
@@ -963,7 +963,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
                 const newLock =
                   context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+                if (newLock != null) await newLock.release();
               }
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1012,7 +1012,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
                 const newLock =
                   context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+                if (newLock != null) await newLock.release();
               }
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1074,7 +1074,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
               // Cleanup
               const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              if (newLock) await newLock.release();
+              if (newLock != null) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1264,7 +1264,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         expect(result.metadata.sessionId).toBe(contentSessionId);
 
         const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+        if (newLock != null) lockHandles.push(newLock);
       }
     });
 

@@ -17,7 +17,7 @@ import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
  */
 async function listHooks(context: CommandContext): Promise<void> {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -29,7 +29,7 @@ async function listHooks(context: CommandContext): Promise<void> {
   }
 
   const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     context.ui.addItem(
       {
         type: MessageType.INFO,
@@ -60,7 +60,7 @@ async function enableHook(
   hookName: string,
 ): Promise<void> {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -72,7 +72,7 @@ async function enableHook(
   }
 
   const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -92,7 +92,7 @@ async function enableHook(
     (entry) => hookRegistry.getHookName(entry) === hookName,
   );
 
-  if (!matchingHook) {
+  if (matchingHook == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -130,7 +130,7 @@ async function disableHook(
   hookName: string,
 ): Promise<void> {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -142,7 +142,7 @@ async function disableHook(
   }
 
   const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -162,7 +162,7 @@ async function disableHook(
     (entry: HookRegistryEntry) => hookRegistry.getHookName(entry) === hookName,
   );
 
-  if (!matchingHook) {
+  if (matchingHook == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -197,7 +197,7 @@ async function disableHook(
  */
 async function enableAllHooks(context: CommandContext): Promise<void> {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -209,7 +209,7 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
   }
 
   const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -265,7 +265,7 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
  */
 async function disableAllHooks(context: CommandContext): Promise<void> {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -277,7 +277,7 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
   }
 
   const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -335,12 +335,12 @@ async function completeHookNames(
   partialArg: string,
 ): Promise<string[]> {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     return [];
   }
 
   const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return [];
   }
 
@@ -455,7 +455,7 @@ export const hooksCommand: SlashCommand = {
         disableAllCommand,
       ].find((cmd) => cmd.name === subCommandName);
 
-      if (subCommand?.action) {
+      if (subCommand?.action != null) {
         await subCommand.action(context, subArgs);
       } else {
         await listHooks(context);

@@ -49,7 +49,7 @@ export class PolicyEngine {
     // Find the highest priority matching rule
     const matchingRule = this.findMatchingRule(toolName, args);
 
-    if (matchingRule) {
+    if (matchingRule != null) {
       const decision = matchingRule.decision;
 
       // Special handling for shell commands: validate sub-commands if ALLOW rule

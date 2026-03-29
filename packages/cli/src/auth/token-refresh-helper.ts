@@ -43,7 +43,7 @@ export async function handleRefreshLockMiss(
       `[FLOW] Failed to acquire refresh lock for ${providerName}, checking disk...`,
   );
   const reloadedToken = await tokenStore.getToken(providerName, bucketToUse);
-  if (reloadedToken && reloadedToken.expiry > thirtySecondsFromNow) {
+  if (reloadedToken != null && reloadedToken.expiry > thirtySecondsFromNow) {
     logger.debug(
       () => `[FLOW] Token was refreshed by another process for ${providerName}`,
     );
@@ -77,7 +77,7 @@ export async function executeTokenRefresh(
 ): Promise<OAuthToken | null> {
   try {
     const recheckToken = await tokenStore.getToken(providerName, bucketToUse);
-    if (recheckToken && recheckToken.expiry > thirtySecondsFromNow) {
+    if (recheckToken != null && recheckToken.expiry > thirtySecondsFromNow) {
       logger.debug(
         () =>
           `[FLOW] Token was refreshed by another process while waiting for lock for ${providerName}`,
@@ -94,7 +94,7 @@ export async function executeTokenRefresh(
     // another process already consumed the single-use refresh token. Skip refresh
     // to avoid replaying a consumed token (which can trigger revocation).
     if (
-      recheckToken &&
+      recheckToken != null &&
       token.refresh_token &&
       recheckToken.refresh_token !== token.refresh_token
     ) {
@@ -116,10 +116,10 @@ export async function executeTokenRefresh(
     }
 
     const provider = providerRegistry.getProvider(providerName);
-    if (!provider) return null;
+    if (provider == null) return null;
 
     const refreshedToken = await provider.refreshToken(recheckToken || token);
-    if (!refreshedToken) {
+    if (refreshedToken == null) {
       logger.debug(
         () => `[FLOW] Token refresh returned null for ${providerName}`,
       );
@@ -165,10 +165,10 @@ export async function tryRefreshDiskToken(
   providerRegistry: ProviderRegistry,
 ): Promise<string | undefined> {
   const provider = providerRegistry.getProvider(providerName);
-  if (!provider) return undefined;
+  if (provider == null) return undefined;
   try {
     const refreshedToken = await provider.refreshToken(diskToken);
-    if (refreshedToken) {
+    if (refreshedToken != null) {
       const mergedToken = mergeRefreshedToken(
         diskToken as OAuthTokenWithExtras,
         refreshedToken as OAuthTokenWithExtras,
@@ -203,7 +203,7 @@ export async function performDiskCheckUnderLock(
   const diskToken = await tokenStore.getToken(providerName, bucketToCheck);
   const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
 
-  if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+  if (diskToken != null && diskToken.expiry > thirtySecondsFromNow) {
     logger.debug(
       () =>
         `[issue1262/1195] Found valid token on disk for ${providerName}, skipping OAuth`,
@@ -213,7 +213,7 @@ export async function performDiskCheckUnderLock(
 
   // @fix issue1317: expired disk token with refresh_token — try refresh
   if (
-    diskToken &&
+    diskToken != null &&
     typeof diskToken.refresh_token === 'string' &&
     diskToken.refresh_token !== ''
   ) {

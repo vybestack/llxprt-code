@@ -85,7 +85,7 @@ function parseMemoryLimit(memory: string): string {
     throw new FatalSandboxError('Sandbox memory value cannot be empty');
   }
   const match = trimmed.match(/^(\d+)([kKmMgG])?$/);
-  if (!match) {
+  if (match == null) {
     throw new FatalSandboxError(
       `Invalid sandbox memory value '${memory}'. Expected values like 512m or 2g.`,
     );
@@ -136,7 +136,7 @@ function resolveMountPath(input: string): string {
 function normalizeEnvEntries(
   env: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
-  if (!env) {
+  if (env == null) {
     return undefined;
   }
   const entries: Record<string, string> = {};
@@ -162,7 +162,7 @@ function normalizeEnvEntries(
 function normalizeMounts(
   mounts: SandboxProfileMount[] | undefined,
 ): SandboxProfileMount[] | undefined {
-  if (!mounts) {
+  if (mounts == null) {
     return undefined;
   }
   return mounts.map((mount) => {
@@ -215,7 +215,7 @@ function normalizeSandboxProfile(profile: SandboxProfile): SandboxProfile {
       normalizedSsh as (typeof VALID_SSH_AGENT_CHOICES)[number];
   }
 
-  if (profile.resources) {
+  if (profile.resources != null) {
     normalized.resources = {
       ...profile.resources,
       cpus:
@@ -351,7 +351,7 @@ function applyProfileEnvironment(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
-  if (profile.env) {
+  if (profile.env != null) {
     for (const [key, value] of Object.entries(profile.env)) {
       env[key] = value;
     }
@@ -377,7 +377,7 @@ function applyProfileEnvironment(
     env.LLXPRT_SANDBOX_PIDS = String(profile.resources.pids);
   }
 
-  if (profile.mounts && profile.mounts.length > 0) {
+  if (profile.mounts != null && profile.mounts.length > 0) {
     const mountsValue = profile.mounts
       .map((mount) => {
         const target = mount.to ?? mount.from;
@@ -393,7 +393,7 @@ function applyProfileEnvironment(
 }
 
 function applySandboxProfileEnv(profile: SandboxProfile | undefined): void {
-  if (!profile) {
+  if (profile == null) {
     return;
   }
   const env = applyProfileEnvironment(profile);
@@ -489,7 +489,7 @@ export async function loadSandboxConfig(
   }
 
   // Loading a sandbox profile implies sandboxing intent, even if --sandbox isn't set.
-  if (!baseCommand && sandboxProfile) {
+  if (!baseCommand && sandboxProfile != null) {
     baseCommand = commandExists.sync('docker')
       ? 'docker'
       : commandExists.sync('podman')

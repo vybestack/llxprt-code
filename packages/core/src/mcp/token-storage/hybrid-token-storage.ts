@@ -52,7 +52,7 @@ export class HybridTokenStorage extends BaseTokenStorage {
     }
 
     // Use a single initialization promise to avoid race conditions
-    if (!this.storageInitPromise) {
+    if (this.storageInitPromise == null) {
       this.storageInitPromise = this.initializeStorage();
     }
 

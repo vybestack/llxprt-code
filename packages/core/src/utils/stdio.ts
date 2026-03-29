@@ -67,7 +67,7 @@ export function patchStdio(): () => void {
       typeof encodingOrCb === 'string' ? encodingOrCb : undefined;
     coreEvents.emitOutput({ chunk, encoding, isStderr: false });
     const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
-    if (callback) {
+    if (callback != null) {
       callback();
     }
     return true;
@@ -84,7 +84,7 @@ export function patchStdio(): () => void {
       typeof encodingOrCb === 'string' ? encodingOrCb : undefined;
     coreEvents.emitOutput({ chunk, encoding, isStderr: true });
     const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
-    if (callback) {
+    if (callback != null) {
       callback();
     }
     return true;

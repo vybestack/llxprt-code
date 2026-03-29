@@ -35,7 +35,7 @@ export class ConversationCache {
 
   private getOrCreateScope(): CacheScopeState {
     let scope = ConversationCache.scopes.get(this.scopeKey);
-    if (!scope) {
+    if (scope == null) {
       scope = { cache: new Map(), accessOrder: [] };
       ConversationCache.scopes.set(this.scopeKey, scope);
     }
@@ -95,14 +95,14 @@ export class ConversationCache {
 
   get(conversationId: string, parentId: string): IContent[] | null {
     const scope = this.peekScope();
-    if (!scope) {
+    if (scope == null) {
       return null;
     }
 
     const key = this.generateKey(conversationId, parentId);
     const entry = scope.cache.get(key);
 
-    if (!entry) {
+    if (entry == null) {
       return null;
     }
 
@@ -124,14 +124,14 @@ export class ConversationCache {
 
   has(conversationId: string, parentId: string): boolean {
     const scope = this.peekScope();
-    if (!scope) {
+    if (scope == null) {
       return false;
     }
 
     const key = this.generateKey(conversationId, parentId);
     const entry = scope.cache.get(key);
 
-    if (!entry) {
+    if (entry == null) {
       return false;
     }
 
@@ -152,7 +152,7 @@ export class ConversationCache {
 
   clear(): void {
     const scope = this.peekScope();
-    if (!scope) {
+    if (scope == null) {
       return;
     }
     scope.cache.clear();
@@ -162,20 +162,20 @@ export class ConversationCache {
 
   size(): number {
     const scope = this.peekScope();
-    return scope ? scope.cache.size : 0;
+    return scope != null ? scope.cache.size : 0;
   }
 
   getAccumulatedTokens(conversationId: string, parentId: string): number {
     const scope = this.peekScope();
-    if (!scope) {
+    if (scope == null) {
       return 0;
     }
 
     const key = this.generateKey(conversationId, parentId);
     const entry = scope.cache.get(key);
 
-    if (!entry || this.isExpired(entry)) {
-      if (entry) {
+    if (entry == null || this.isExpired(entry)) {
+      if (entry != null) {
         scope.cache.delete(key);
         const index = scope.accessOrder.indexOf(key);
         if (index > -1) {
@@ -197,14 +197,14 @@ export class ConversationCache {
     additionalTokens: number,
   ): void {
     const scope = this.peekScope();
-    if (!scope) {
+    if (scope == null) {
       return;
     }
 
     const key = this.generateKey(conversationId, parentId);
     const entry = scope.cache.get(key);
 
-    if (entry && !this.isExpired(entry)) {
+    if (entry != null && !this.isExpired(entry)) {
       entry.promptTokensAccum += additionalTokens;
       this.updateAccessOrder(scope, key);
     }
@@ -212,7 +212,7 @@ export class ConversationCache {
 
   invalidate(conversationId: string, parentId: string): void {
     const scope = this.peekScope();
-    if (!scope) {
+    if (scope == null) {
       return;
     }
 

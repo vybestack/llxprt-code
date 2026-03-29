@@ -254,7 +254,7 @@ function createRuntimeOverrides(
     environmentContextLoader: environmentLoader,
   };
 
-  if (options.toolRegistry) {
+  if (options.toolRegistry != null) {
     overrides.toolRegistry = options.toolRegistry;
   }
 

@@ -135,7 +135,7 @@ export class ConfirmationCoordinator {
 
   /** Unsubscribe from MessageBus and reset all state. */
   dispose(): void {
-    if (this.messageBusUnsubscribe) {
+    if (this.messageBusUnsubscribe != null) {
       this.messageBusUnsubscribe();
       this.messageBusUnsubscribe = undefined;
     }
@@ -289,7 +289,7 @@ export class ConfirmationCoordinator {
 
     if (
       confirmationDetails.type === 'edit' &&
-      confirmationDetails.ideConfirmation
+      confirmationDetails.ideConfirmation != null
     ) {
       void confirmationDetails.ideConfirmation.then((resolution) => {
         const outcome =
@@ -368,7 +368,7 @@ export class ConfirmationCoordinator {
           call.request.callId === callId && call.status === 'awaiting_approval',
       ) as WaitingToolCall | undefined;
 
-    if (!waitingToolCall) {
+    if (waitingToolCall == null) {
       if (logger.enabled) {
         logger.debug(
           () =>
@@ -382,7 +382,7 @@ export class ConfirmationCoordinator {
     const derivedOutcome = this.deriveOutcome(response);
     const signal = this.callIdToSignal.get(callId);
 
-    if (!signal) {
+    if (signal == null) {
       if (logger.enabled) {
         logger.debug(
           () =>
@@ -459,7 +459,7 @@ export class ConfirmationCoordinator {
       await this.handleCancellation(callId);
     } else if (
       outcome === ToolConfirmationOutcome.ModifyWithEditor &&
-      waitingToolCall
+      waitingToolCall != null
     ) {
       await this.handleModifyWithEditor(callId, waitingToolCall, signal);
     } else {
@@ -493,9 +493,12 @@ export class ConfirmationCoordinator {
     payload: ToolConfirmationPayload | undefined,
     signal: AbortSignal,
   ): Promise<void> {
-    if (outcome === ToolConfirmationOutcome.SuggestEdit && waitingToolCall) {
+    if (
+      outcome === ToolConfirmationOutcome.SuggestEdit &&
+      waitingToolCall != null
+    ) {
       this.handleSuggestEdit(callId, waitingToolCall, payload);
-    } else if (payload?.newContent && waitingToolCall) {
+    } else if (payload?.newContent && waitingToolCall != null) {
       await this.handleInlineModify(callId, waitingToolCall, payload, signal);
       return; // setScheduled is called inside handleInlineModify
     }
@@ -749,7 +752,7 @@ export class ConfirmationCoordinator {
       .find(
         (c) => c.request.callId === callId && c.status === 'awaiting_approval',
       );
-    if (toolCall && toolCall.status === 'awaiting_approval') {
+    if (toolCall != null && toolCall.status === 'awaiting_approval') {
       return toolCall;
     }
     return undefined;

@@ -267,7 +267,7 @@ export function createUserMessage(
     speaker: 'human',
     blocks: [{ type: 'text', text }],
   };
-  if (metadata) {
+  if (metadata != null) {
     content.metadata = metadata;
   }
   return content;

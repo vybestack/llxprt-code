@@ -186,7 +186,7 @@ function collectAndReorderToolResults(
       pendingRemovals,
     );
 
-    if (foundResult) {
+    if (foundResult != null) {
       collectedResults.push(foundResult);
     } else {
       collectedResults.push({
@@ -344,7 +344,7 @@ function mergeConsecutiveMessages(
   const merged: AnthropicMessage[] = [];
   for (const msg of messages) {
     const prev = merged.length > 0 ? merged[merged.length - 1] : undefined;
-    if (prev && prev.role === msg.role) {
+    if (prev != null && prev.role === msg.role) {
       const prevBlocks = toBlocks(prev.content);
       const curBlocks = toBlocks(msg.content);
 

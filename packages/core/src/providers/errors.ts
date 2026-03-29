@@ -227,7 +227,7 @@ export abstract class ProviderError extends Error {
     this.name = this.constructor.name;
     this.status = options?.status;
     this.retryAfter = options?.retryAfter;
-    if (options?.cause) {
+    if (options?.cause != null) {
       this.cause = options.cause;
     }
   }
@@ -323,11 +323,12 @@ export class AllBucketsExhaustedError extends Error {
     lastError: Error,
     bucketFailureReasons?: Record<string, BucketFailureReason>,
   ) {
-    const reasons = bucketFailureReasons ? { ...bucketFailureReasons } : {};
+    const reasons =
+      bucketFailureReasons != null ? { ...bucketFailureReasons } : {};
 
     // Build enhanced message with per-bucket reasons only when provided
     let bucketDetails = '';
-    if (bucketFailureReasons) {
+    if (bucketFailureReasons != null) {
       bucketDetails = attemptedBuckets
         .map((b) => {
           const reason = reasons[b];

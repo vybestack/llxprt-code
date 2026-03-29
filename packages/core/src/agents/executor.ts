@@ -97,13 +97,13 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const agentToolRegistry = new ToolRegistry(runtimeContext, messageBus);
     const parentToolRegistry = runtimeContext.getToolRegistry();
 
-    if (definition.toolConfig) {
+    if (definition.toolConfig != null) {
       for (const toolRef of definition.toolConfig.tools) {
         if (typeof toolRef === 'string') {
           // If the tool is referenced by name, retrieve it from the parent
           // registry and register it with the agent's isolated registry.
           const toolFromParent = parentToolRegistry.getTool(toolRef);
-          if (toolFromParent) {
+          if (toolFromParent != null) {
             agentToolRegistry.registerTool(toolFromParent);
           }
         } else if (
@@ -289,7 +289,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         }
 
         // Collect any function calls requested by the model.
-        if (chunk.functionCalls) {
+        if (chunk.functionCalls != null) {
           functionCalls.push(...chunk.functionCalls);
         }
 
@@ -313,7 +313,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
   private async createChatObject(inputs: AgentInputs): Promise<GeminiChat> {
     const { promptConfig, modelConfig } = this.definition;
 
-    if (!promptConfig.systemPrompt && !promptConfig.initialMessages) {
+    if (!promptConfig.systemPrompt && promptConfig.initialMessages == null) {
       throw new Error(
         'PromptConfig must define either `systemPrompt` or `initialMessages`.',
       );
@@ -489,7 +489,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         const { outputConfig } = this.definition;
         taskCompleted = true; // Signal completion regardless of output presence
 
-        if (outputConfig) {
+        if (outputConfig != null) {
           const outputName = outputConfig.outputName;
           if (args[outputName] !== undefined) {
             const outputValue = args[outputName];
@@ -514,7 +514,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
             }
 
             const validatedOutput = validationResult.data;
-            if (this.definition.processOutput) {
+            if (this.definition.processOutput != null) {
               submittedOutput = this.definition.processOutput(validatedOutput);
             } else {
               submittedOutput =
@@ -612,7 +612,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         );
         const toolResponse = completed.response;
 
-        if (toolResponse.error) {
+        if (toolResponse.error != null) {
           this.emitActivity('ERROR', {
             context: 'tool_call',
             name: functionCall.name,
@@ -667,7 +667,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     const toolsList: FunctionDeclaration[] = [];
     const { toolConfig, outputConfig } = this.definition;
 
-    if (toolConfig) {
+    if (toolConfig != null) {
       const toolNamesToLoad: string[] = [];
       for (const toolRef of toolConfig.tools) {
         if (typeof toolRef === 'string') {
@@ -690,9 +690,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     // Configure its schema based on whether output is expected.
     const completeTool: FunctionDeclaration = {
       name: TASK_COMPLETE_TOOL_NAME,
-      description: outputConfig
-        ? 'Call this tool to submit your final answer and complete the task. This is the ONLY way to finish.'
-        : 'Call this tool to signal that you have completed your task. This is the ONLY way to finish.',
+      description:
+        outputConfig != null
+          ? 'Call this tool to submit your final answer and complete the task. This is the ONLY way to finish.'
+          : 'Call this tool to signal that you have completed your task. This is the ONLY way to finish.',
       parameters: {
         type: Type.OBJECT,
         properties: {},
@@ -700,7 +701,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       },
     };
 
-    if (outputConfig) {
+    if (outputConfig != null) {
       const jsonSchema = zodToJsonSchema(outputConfig.schema);
       const {
         $schema: _$schema,
@@ -829,7 +830,7 @@ Important Rules:
     type: SubagentActivityEvent['type'],
     data: Record<string, unknown>,
   ): void {
-    if (this.onActivity) {
+    if (this.onActivity != null) {
       const event: SubagentActivityEvent = {
         isSubagentActivityEvent: true,
         agentName: this.definition.name,

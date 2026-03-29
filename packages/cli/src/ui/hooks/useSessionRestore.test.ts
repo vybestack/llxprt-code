@@ -50,7 +50,7 @@ describe('Session Restore Chat Initialization', () => {
       expect(mockGeminiClient.resetChat).not.toHaveBeenCalled();
 
       const geminiClient = mockConfig.getGeminiClient();
-      if (geminiClient) {
+      if (geminiClient != null) {
         await geminiClient.resetChat();
       }
 
@@ -66,7 +66,7 @@ describe('Session Restore Chat Initialization', () => {
       const geminiClient = mockConfig.getGeminiClient();
 
       expect(async () => {
-        if (geminiClient) {
+        if (geminiClient != null) {
           await geminiClient.resetChat().catch(() => {});
         }
       }).not.toThrow();
@@ -82,7 +82,7 @@ describe('Session Restore Chat Initialization', () => {
       const geminiClient = mockConfig.getGeminiClient();
 
       expect(() => {
-        if (geminiClient) {
+        if (geminiClient != null) {
           geminiClient.resetChat();
         }
       }).not.toThrow();
@@ -102,10 +102,10 @@ describe('Session Restore Chat Initialization', () => {
 
       const geminiClient = mockConfig.getGeminiClient();
 
-      if (geminiClient) {
+      if (geminiClient != null) {
         await geminiClient.resetChat();
         const historyService = geminiClient.getHistoryService();
-        if (historyService) {
+        if (historyService != null) {
           historyService.addAll(restoredSessionHistory);
         }
       }
@@ -133,10 +133,10 @@ describe('Session Restore Chat Initialization', () => {
 
       const geminiClient = mockConfig.getGeminiClient();
 
-      if (geminiClient) {
+      if (geminiClient != null) {
         await geminiClient.resetChat().catch(() => {});
         const historyService = geminiClient.getHistoryService();
-        if (historyService) {
+        if (historyService != null) {
           historyService.addAll(restoredSessionHistory);
         }
       }

@@ -100,7 +100,7 @@ describe('directoryCommand', () => {
 
   describe('show', () => {
     it('should display the list of directories', () => {
-      if (!showCommand?.action) throw new Error('No action');
+      if (showCommand?.action == null) throw new Error('No action');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       showCommand.action(mockContext, '');
       expect(mockWorkspaceContext.getDirectories).toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('directoryCommand', () => {
 
   describe('add', () => {
     it('should show an error if no path is provided', () => {
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       addCommand.action(mockContext, '');
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -132,7 +132,7 @@ describe('directoryCommand', () => {
 
     it('should call addDirectory and show a success message for a single path', async () => {
       const newPath = path.normalize('/home/user/new-project');
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, newPath);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath);
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -147,7 +147,7 @@ describe('directoryCommand', () => {
     it('should call addDirectory for each path and show a success message for multiple paths', async () => {
       const newPath1 = path.normalize('/home/user/new-project1');
       const newPath2 = path.normalize('/home/user/new-project2');
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, `${newPath1},${newPath2}`);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath1);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath2);
@@ -166,7 +166,7 @@ describe('directoryCommand', () => {
         throw error;
       });
       const newPath = path.normalize('/home/user/invalid-project');
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, newPath);
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -189,7 +189,7 @@ describe('directoryCommand', () => {
         },
       );
 
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, `${validPath},${invalidPath}`);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -240,7 +240,7 @@ describe('directoryCommand', () => {
         },
       };
 
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, untrustedPath);
 
       // Should NOT have called addDirectory
@@ -283,7 +283,7 @@ describe('directoryCommand', () => {
         },
       };
 
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, trustedPath);
 
       // Should have called addDirectory
@@ -322,7 +322,7 @@ describe('directoryCommand', () => {
         },
       };
 
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, `${trustedPath},${untrustedPath}`);
 
       // Should have called addDirectory only for trusted path
@@ -380,7 +380,7 @@ describe('directoryCommand', () => {
         },
       };
 
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       const result = await addCommand.action(mockContext, trustedPath);
 
       // Should return early with restrictive sandbox message
@@ -422,7 +422,7 @@ describe('directoryCommand', () => {
         },
       };
 
-      if (!addCommand?.action) throw new Error('No action');
+      if (addCommand?.action == null) throw new Error('No action');
       await addCommand.action(mockContext, `${trustedPath},${rejectedRawPath}`);
 
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledTimes(1);

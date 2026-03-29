@@ -60,7 +60,7 @@ export class TerminalCapabilityManager {
   private constructor() {}
 
   static getInstance(): TerminalCapabilityManager {
-    if (!this.instance) {
+    if (this.instance == null) {
       this.instance = new TerminalCapabilityManager();
     }
     return this.instance;
@@ -124,7 +124,10 @@ export class TerminalCapabilityManager {
         // Auto-enable supported modes
         this.enableSupportedModes();
         // Register synchronous exit handler for robust kitty cleanup
-        if (this.kittyEnabled && !this.disableKittyProtocolOnExitHandler) {
+        if (
+          this.kittyEnabled &&
+          this.disableKittyProtocolOnExitHandler == null
+        ) {
           this.disableKittyProtocolOnExitHandler = () =>
             this.disableKittyProtocolOnExit();
           process.once('exit', this.disableKittyProtocolOnExitHandler);
@@ -147,7 +150,7 @@ export class TerminalCapabilityManager {
         // Check OSC 11
         if (!bgReceived) {
           const match = buffer.match(TerminalCapabilityManager.OSC_11_REGEX);
-          if (match) {
+          if (match != null) {
             bgReceived = true;
             this.terminalBackgroundColor = this.parseColor(
               match[1],
@@ -170,7 +173,7 @@ export class TerminalCapabilityManager {
           const match = buffer.match(
             TerminalCapabilityManager.MODIFY_OTHER_KEYS_REGEX,
           );
-          if (match) {
+          if (match != null) {
             modifyOtherKeysReceived = true;
             const level = parseInt(match[1], 10);
             this.modifyOtherKeysSupported = level >= 2;
@@ -185,7 +188,7 @@ export class TerminalCapabilityManager {
           const match = buffer.match(
             TerminalCapabilityManager.TERMINAL_NAME_REGEX,
           );
-          if (match) {
+          if (match != null) {
             terminalNameReceived = true;
             this.terminalName = match[1];
           }
@@ -198,7 +201,7 @@ export class TerminalCapabilityManager {
           const match = buffer.match(
             TerminalCapabilityManager.DEVICE_ATTRIBUTES_REGEX,
           );
-          if (match) {
+          if (match != null) {
             deviceAttributesReceived = true;
             this.deviceAttributesSupported = true;
             cleanup();
@@ -321,14 +324,14 @@ export class TerminalCapabilityManager {
   }
 
   private removeProcessListeners(): void {
-    if (this.cleanupOnExitHandler) {
+    if (this.cleanupOnExitHandler != null) {
       process.removeListener('exit', this.cleanupOnExitHandler);
       process.removeListener('SIGTERM', this.cleanupOnExitHandler);
       process.removeListener('SIGINT', this.cleanupOnExitHandler);
       this.cleanupOnExitHandler = undefined;
     }
 
-    if (this.disableKittyProtocolOnExitHandler) {
+    if (this.disableKittyProtocolOnExitHandler != null) {
       process.removeListener('exit', this.disableKittyProtocolOnExitHandler);
       this.disableKittyProtocolOnExitHandler = undefined;
     }

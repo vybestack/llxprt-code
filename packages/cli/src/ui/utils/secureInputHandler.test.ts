@@ -300,7 +300,7 @@ describe('SecureInputHandler', () => {
       const match = afterPaste.match(/^\/key\s+([\s\S]*)/);
       const debug3 = {
         matched: !!match,
-        groups: match ? match.map((g) => JSON.stringify(g)) : null,
+        groups: match != null ? match.map((g) => JSON.stringify(g)) : null,
       };
 
       // Also test with actual line ending characters

@@ -225,7 +225,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
     // Try policy/message bus first when available.
-    if (this.messageBus) {
+    if (this.messageBus != null) {
       const decision = await this.getMessageBusDecision(abortSignal);
       if (decision === 'ALLOW') {
         return false;
@@ -295,7 +295,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     // Get provider manager
     const providerManager =
       this.config.getContentGeneratorConfig()?.providerManager;
-    if (!providerManager) {
+    if (providerManager == null) {
       return {
         llmContent:
           'Web fetch requires a provider. Please use --provider gemini with authentication.',
@@ -309,7 +309,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
 
     // Get server tools provider (should be Gemini)
     const serverToolsProvider = providerManager.getServerToolsProvider();
-    if (!serverToolsProvider) {
+    if (serverToolsProvider == null) {
       return {
         llmContent:
           'Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.',
@@ -365,7 +365,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       let processingError = false;
 
       if (
-        urlContextMeta?.urlMetadata &&
+        urlContextMeta?.urlMetadata != null &&
         urlContextMeta.urlMetadata.length > 0
       ) {
         const allStatuses = urlContextMeta.urlMetadata.map(
@@ -382,7 +382,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       if (
         !processingError &&
         !responseText.trim() &&
-        (!sources || sources.length === 0)
+        (sources == null || sources.length === 0)
       ) {
         // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
         processingError = true;
@@ -400,17 +400,20 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       }
 
       const sourceListFormatted: string[] = [];
-      if (sources && sources.length > 0) {
+      if (sources != null && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
           const title = source.web?.title || 'Untitled';
           const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });
 
-        if (groundingSupports && groundingSupports.length > 0) {
+        if (groundingSupports != null && groundingSupports.length > 0) {
           const insertions: Array<{ index: number; marker: string }> = [];
           groundingSupports.forEach((support: GroundingSupportItem) => {
-            if (support.segment && support.groundingChunkIndices) {
+            if (
+              support.segment != null &&
+              support.groundingChunkIndices != null
+            ) {
               const citationMarker = support.groundingChunkIndices
                 .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
                 .join('');

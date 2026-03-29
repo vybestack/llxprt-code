@@ -32,7 +32,7 @@ const LayoutContext = createContext<LayoutContextValue | undefined>(undefined);
 
 export const useLayout = () => {
   const context = useContext(LayoutContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useLayout must be used within LayoutManager');
   }
   return context;
@@ -56,7 +56,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ children }) => {
 
   // Measure footer element when it changes
   useEffect(() => {
-    if (footerRef.current) {
+    if (footerRef.current != null) {
       const measurement = measureElement(footerRef.current);
       setFooterHeight(measurement.height);
     }

@@ -183,7 +183,7 @@ export function extractFunctions(
       const match = trimmed.match(
         /function\s+(\w+)\s*\(([^)]*)\)(?::\s*(\w+))?/,
       );
-      if (match) {
+      if (match != null) {
         functions.push({
           name: match[1],
           parameters: match[2]
@@ -198,7 +198,7 @@ export function extractFunctions(
       const match = trimmed.match(
         /def\s+(\w+)\s*\(([^)]*)\)\s*(?:->\s*(\w+))?/,
       );
-      if (match) {
+      if (match != null) {
         functions.push({
           name: match[1],
           parameters: match[2]
@@ -232,7 +232,7 @@ export function extractClasses(
     const trimmed = line.trim();
     if (trimmed.includes(KEYWORDS.CLASS)) {
       const match = trimmed.match(/class\s+(\w+)/);
-      if (match) {
+      if (match != null) {
         classes.push({
           name: match[1],
           methods: [], // Simplified implementation
@@ -263,7 +263,7 @@ export function extractVariables(
     const trimmed = line.trim();
     if (_language === 'typescript' || _language === 'javascript') {
       const match = trimmed.match(/(?:const|let|var)\s+(\w+)\s*:\s*(\w+)/);
-      if (match) {
+      if (match != null) {
         variables.push({
           name: match[1],
           type: match[2],

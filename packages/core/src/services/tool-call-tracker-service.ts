@@ -118,16 +118,16 @@ export class ToolCallTrackerService {
     }
 
     const sessionCalls = toolCallsInMemory.get(sessionId);
-    if (!sessionCalls) return;
+    if (sessionCalls == null) return;
 
     const agentCalls = sessionCalls.get(scopedAgentId);
-    if (!agentCalls) return;
+    if (agentCalls == null) return;
 
     const todoCalls = agentCalls.get(activeTodoId);
-    if (!todoCalls) return;
+    if (todoCalls == null) return;
 
     const toolCall = todoCalls.executing.get(toolCallId);
-    if (!toolCall) return;
+    if (toolCall == null) return;
 
     // Move from executing to completed
     todoCalls.executing.delete(toolCallId);
@@ -158,13 +158,13 @@ export class ToolCallTrackerService {
     }
 
     const sessionCalls = toolCallsInMemory.get(sessionId);
-    if (!sessionCalls) return;
+    if (sessionCalls == null) return;
 
     const agentCalls = sessionCalls.get(scopedAgentId);
-    if (!agentCalls) return;
+    if (agentCalls == null) return;
 
     const todoCalls = agentCalls.get(activeTodoId);
-    if (!todoCalls) return;
+    if (todoCalls == null) return;
 
     // Simply remove from executing without moving to completed
     todoCalls.executing.delete(toolCallId);
@@ -184,17 +184,17 @@ export class ToolCallTrackerService {
     const scopedAgentId = this.getScopedAgentId(agentId);
 
     const sessionCalls = toolCallsInMemory.get(sessionId);
-    if (!sessionCalls) {
+    if (sessionCalls == null) {
       return [];
     }
 
     const agentCalls = sessionCalls.get(scopedAgentId);
-    if (!agentCalls) {
+    if (agentCalls == null) {
       return [];
     }
 
     const todoCalls = agentCalls.get(todoId);
-    if (!todoCalls) {
+    if (todoCalls == null) {
       return [];
     }
 
@@ -248,13 +248,13 @@ export class ToolCallTrackerService {
     agentId?: string,
   ): Map<string, TodoToolCalls> {
     const sessionCalls = toolCallsInMemory.get(sessionId);
-    if (!sessionCalls) {
+    if (sessionCalls == null) {
       return new Map();
     }
 
     const scopedAgentId = this.getScopedAgentId(agentId);
     const agentCalls = sessionCalls.get(scopedAgentId);
-    if (!agentCalls) {
+    if (agentCalls == null) {
       return new Map();
     }
 
@@ -273,7 +273,7 @@ export class ToolCallTrackerService {
 
     const scopedAgentId = this.getScopedAgentId(agentId);
     const sessionCalls = toolCallsInMemory.get(sessionId);
-    if (sessionCalls) {
+    if (sessionCalls != null) {
       sessionCalls.delete(scopedAgentId);
       if (sessionCalls.size === 0) {
         toolCallsInMemory.delete(sessionId);
@@ -281,7 +281,7 @@ export class ToolCallTrackerService {
     }
 
     const sessionCallbacks = updateCallbacks.get(sessionId);
-    if (sessionCallbacks) {
+    if (sessionCallbacks != null) {
       sessionCallbacks.delete(scopedAgentId);
       if (sessionCallbacks.size === 0) {
         updateCallbacks.delete(sessionId);
@@ -304,12 +304,12 @@ export class ToolCallTrackerService {
    */
   private static notifySubscribers(sessionId: string, agentId: string): void {
     const sessionCallbacks = updateCallbacks.get(sessionId);
-    if (!sessionCallbacks) {
+    if (sessionCallbacks == null) {
       return;
     }
 
     const callbacks = sessionCallbacks.get(agentId);
-    if (callbacks) {
+    if (callbacks != null) {
       callbacks.forEach((callback) => callback());
     }
   }

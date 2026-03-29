@@ -29,7 +29,7 @@ export function useFlickerDetector(
   constrainHeight: boolean,
 ): void {
   useEffect(() => {
-    if (rootUiRef.current) {
+    if (rootUiRef.current != null) {
       const measurement = measureElement(rootUiRef.current);
       if (measurement.height > terminalHeight && constrainHeight) {
         appEvents.emit(AppEvent.Flicker, {

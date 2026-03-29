@@ -31,7 +31,7 @@ describe('docsCommand', () => {
   });
 
   it("should add an info message and call 'open' in a non-sandbox environment", async () => {
-    if (!docsCommand.action) {
+    if (docsCommand.action == null) {
       throw new Error('docsCommand must have an action.');
     }
 
@@ -52,7 +52,7 @@ describe('docsCommand', () => {
   });
 
   it('should only add an info message in a sandbox environment', async () => {
-    if (!docsCommand.action) {
+    if (docsCommand.action == null) {
       throw new Error('docsCommand must have an action.');
     }
 
@@ -76,7 +76,7 @@ describe('docsCommand', () => {
   });
 
   it("should not open browser for 'sandbox-exec'", async () => {
-    if (!docsCommand.action) {
+    if (docsCommand.action == null) {
       throw new Error('docsCommand must have an action.');
     }
 

@@ -499,7 +499,7 @@ export class ConversationDataRedactor {
     for (const pattern of patterns) {
       if (pattern.enabled) {
         const matches = content.match(pattern.pattern);
-        if (matches) {
+        if (matches != null) {
           stats.totalRedactions += matches.length;
           stats.redactionsByType[pattern.name] = matches.length;
         }

@@ -194,7 +194,7 @@ function buildZodSchemaFromDefinition(
     }
 
     case 'array':
-      if (definition.items) {
+      if (definition.items != null) {
         const itemSchema = buildZodSchemaFromCollection(definition.items);
         baseSchema = z.array(itemSchema);
       } else {
@@ -203,17 +203,17 @@ function buildZodSchemaFromDefinition(
       break;
 
     case 'object':
-      if (definition.properties) {
+      if (definition.properties != null) {
         const shape = buildObjectShapeFromProperties(definition.properties);
         baseSchema = z.object(shape).passthrough();
 
-        if (definition.additionalProperties) {
+        if (definition.additionalProperties != null) {
           const additionalSchema = buildZodSchemaFromCollection(
             definition.additionalProperties,
           );
           baseSchema = z.object(shape).catchall(additionalSchema);
         }
-      } else if (definition.additionalProperties) {
+      } else if (definition.additionalProperties != null) {
         const valueSchema = buildZodSchemaFromCollection(
           definition.additionalProperties,
         );
@@ -252,14 +252,14 @@ function buildZodSchemaFromCollection(
     }
 
     case 'array':
-      if (collection.properties) {
+      if (collection.properties != null) {
         const shape = buildObjectShapeFromProperties(collection.properties);
         return z.array(z.object(shape));
       }
       return z.array(z.unknown());
 
     case 'object':
-      if (collection.properties) {
+      if (collection.properties != null) {
         const shape = buildObjectShapeFromProperties(collection.properties);
         return z.object(shape).passthrough();
       }

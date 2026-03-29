@@ -122,7 +122,7 @@ export abstract class BaseProvider implements IProvider {
     this.defaultConfig = globalConfig;
 
     let fallbackSettingsService: SettingsService;
-    if (settingsService) {
+    if (settingsService != null) {
       fallbackSettingsService = settingsService;
     } else {
       try {
@@ -160,7 +160,7 @@ export abstract class BaseProvider implements IProvider {
   setRuntimeSettingsService(
     settingsService: SettingsService | null | undefined,
   ): void {
-    if (!settingsService) {
+    if (settingsService == null) {
       return;
     }
     this.defaultSettingsService = settingsService;
@@ -176,7 +176,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected resolveSettingsService(): SettingsService {
     const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions?.settings) {
+    if (activeOptions?.settings != null) {
       return activeOptions.settings;
     }
 
@@ -218,7 +218,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected getBaseURL(): string | undefined {
     const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions) {
+    if (activeOptions != null) {
       return activeOptions.resolved.baseURL;
     }
     const settingsService = this.resolveSettingsService();
@@ -237,7 +237,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected getModel(): string {
     const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions) {
+    if (activeOptions != null) {
       return activeOptions.resolved.model;
     }
     const settingsService = this.resolveSettingsService();
@@ -321,7 +321,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected async getAuthToken(): Promise<string> {
     const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions) {
+    if (activeOptions != null) {
       const runtimeToken = await resolveRuntimeAuthToken(
         activeOptions.resolved.authToken,
       );
@@ -348,7 +348,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected async getAuthTokenForPrompt(): Promise<string> {
     const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions) {
+    if (activeOptions != null) {
       const runtimeToken = await resolveRuntimeAuthToken(
         activeOptions.resolved.authToken,
       );
@@ -373,13 +373,13 @@ export abstract class BaseProvider implements IProvider {
    */
   protected isOAuthEnabled(): boolean {
     // OAuth is enabled if we have a manager AND it's enabled for this provider
-    if (this.baseProviderConfig.oauthManager) {
+    if (this.baseProviderConfig.oauthManager != null) {
       // First check the manager's state (which reads from settings)
       const manager = this.baseProviderConfig.oauthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
       if (
-        manager.isOAuthEnabled &&
+        manager.isOAuthEnabled != null &&
         typeof manager.isOAuthEnabled === 'function'
       ) {
         const oauthProvider =
@@ -462,7 +462,7 @@ export abstract class BaseProvider implements IProvider {
       oauthProvider: provider,
     });
 
-    if (manager) {
+    if (manager != null) {
       this.authResolver.updateOAuthManager(manager);
     }
 
@@ -506,7 +506,7 @@ export abstract class BaseProvider implements IProvider {
       // If no non-OAuth auth found, check if OAuth token exists without triggering flow
       if (
         this.baseProviderConfig.isOAuthEnabled &&
-        this.baseProviderConfig.oauthManager &&
+        this.baseProviderConfig.oauthManager != null &&
         this.baseProviderConfig.oauthProvider
       ) {
         return await this.baseProviderConfig.oauthManager.isAuthenticated(
@@ -555,7 +555,7 @@ export abstract class BaseProvider implements IProvider {
     let underlyingIterator: AsyncIterableIterator<IContent> | undefined;
 
     const prepareIterator = async (): Promise<void> => {
-      if (!preparedIteratorPromise) {
+      if (preparedIteratorPromise == null) {
         preparedIteratorPromise = (async () => {
           normalizedOptions = await normalizedPromise;
           underlyingIterator = this.invokeWithNormalizedOptions(
@@ -568,7 +568,7 @@ export abstract class BaseProvider implements IProvider {
     };
 
     const withContext = <T>(operation: () => Promise<T>): Promise<T> => {
-      if (!normalizedOptions) {
+      if (normalizedOptions == null) {
         throw new Error('Normalized options are not prepared');
       }
       return this.activeCallContext.run(normalizedOptions, operation);
@@ -578,7 +578,7 @@ export abstract class BaseProvider implements IProvider {
       next: async (...args) => {
         await prepareIterator();
         const iterator = underlyingIterator;
-        if (!iterator) {
+        if (iterator == null) {
           throw new Error('Provider iterator not initialised');
         }
         return withContext(() => iterator.next(...args));
@@ -586,10 +586,10 @@ export abstract class BaseProvider implements IProvider {
       return: async (value?: unknown) => {
         await prepareIterator();
         const iterator = underlyingIterator;
-        if (!iterator) {
+        if (iterator == null) {
           throw new Error('Provider iterator not initialised');
         }
-        if (iterator.return) {
+        if (iterator.return != null) {
           return withContext(() => iterator.return!(value));
         }
         return { done: true, value: undefined } as IteratorResult<IContent>;
@@ -597,10 +597,10 @@ export abstract class BaseProvider implements IProvider {
       throw: async (error?: unknown) => {
         await prepareIterator();
         const iterator = underlyingIterator;
-        if (!iterator) {
+        if (iterator == null) {
           throw new Error('Provider iterator not initialised');
         }
-        if (iterator.throw) {
+        if (iterator.throw != null) {
           return withContext(() => iterator.throw!(error));
         }
         throw error;
@@ -636,34 +636,36 @@ export abstract class BaseProvider implements IProvider {
       previousContext.settingsService !== normalized.settings ||
       (normalized.config && previousContext.config !== normalized.config);
 
-    const mergedMetadata: Record<string, unknown> = normalized.runtime
-      ? {
-          ...(normalized.runtime.metadata ?? {}),
-          ...normalized.metadata,
-        }
-      : {
-          ...(previousContext?.metadata ?? {}),
-          ...normalized.metadata,
-        };
+    const mergedMetadata: Record<string, unknown> =
+      normalized.runtime != null
+        ? {
+            ...(normalized.runtime.metadata ?? {}),
+            ...normalized.metadata,
+          }
+        : {
+            ...(previousContext?.metadata ?? {}),
+            ...normalized.metadata,
+          };
 
     if (!('source' in mergedMetadata)) {
       mergedMetadata.source = 'BaseProvider.generateChatCompletion';
     }
 
-    const runtimeContext: ProviderRuntimeContext = normalized.runtime
-      ? {
-          ...normalized.runtime,
-          settingsService: normalized.settings,
-          config: normalized.config ?? normalized.runtime.config,
-          metadata: mergedMetadata,
-        }
-      : {
-          settingsService: normalized.settings,
-          config: normalized.config ?? previousContext?.config,
-          runtimeId:
-            previousContext?.runtimeId ?? 'base-provider.normalized-call',
-          metadata: mergedMetadata,
-        };
+    const runtimeContext: ProviderRuntimeContext =
+      normalized.runtime != null
+        ? {
+            ...normalized.runtime,
+            settingsService: normalized.settings,
+            config: normalized.config ?? normalized.runtime.config,
+            metadata: mergedMetadata,
+          }
+        : {
+            settingsService: normalized.settings,
+            config: normalized.config ?? previousContext?.config,
+            runtimeId:
+              previousContext?.runtimeId ?? 'base-provider.normalized-call',
+            metadata: mergedMetadata,
+          };
 
     return async function* (
       this: BaseProvider,
@@ -843,14 +845,14 @@ export abstract class BaseProvider implements IProvider {
     metadata: Record<string, unknown>;
   } {
     const missing: string[] = [];
-    if (!input.settings) {
+    if (input.settings == null) {
       missing.push('settings');
     }
-    if (!input.config) {
+    if (input.config == null) {
       missing.push('config');
     }
     const resolvedMissing: string[] = [];
-    if (!input.resolved) {
+    if (input.resolved == null) {
       resolvedMissing.push('resolved');
     } else {
       if (
@@ -900,21 +902,22 @@ export abstract class BaseProvider implements IProvider {
         ? runtimeMetadata.runtimeId
         : undefined;
 
-    const runtime: ProviderRuntimeContext = input.runtime
-      ? {
-          ...input.runtime,
-          settingsService: input.settings!,
-          config: input.runtime.config ?? input.config ?? undefined,
-          metadata,
-        }
-      : {
-          settingsService: input.settings!,
-          config: input.config ?? undefined,
-          runtimeId: currentRuntimeId?.trim()
-            ? currentRuntimeId
-            : `${input.providerKey}:${input.stage}`,
-          metadata,
-        };
+    const runtime: ProviderRuntimeContext =
+      input.runtime != null
+        ? {
+            ...input.runtime,
+            settingsService: input.settings!,
+            config: input.runtime.config ?? input.config ?? undefined,
+            metadata,
+          }
+        : {
+            settingsService: input.settings!,
+            config: input.config ?? undefined,
+            runtimeId: currentRuntimeId?.trim()
+              ? currentRuntimeId
+              : `${input.providerKey}:${input.stage}`,
+            metadata,
+          };
 
     return { runtime, metadata };
   }
@@ -1161,21 +1164,21 @@ export abstract class BaseProvider implements IProvider {
     options?: NormalizedGenerateChatOptions,
   ): Record<string, string> | undefined {
     const baseHeaders =
-      this.providerConfig?.customHeaders &&
+      this.providerConfig?.customHeaders != null &&
       typeof this.providerConfig.customHeaders === 'object'
         ? { ...this.providerConfig.customHeaders }
         : undefined;
 
     const ephemeralSettings = this.providerConfig?.getEphemeralSettings?.();
     const ephemeralValue =
-      ephemeralSettings && typeof ephemeralSettings === 'object'
+      ephemeralSettings != null && typeof ephemeralSettings === 'object'
         ? (ephemeralSettings['custom-headers'] as
             | Record<string, string>
             | undefined)
         : undefined;
 
     const userAgent =
-      ephemeralSettings && typeof ephemeralSettings === 'object'
+      ephemeralSettings != null && typeof ephemeralSettings === 'object'
         ? (ephemeralSettings['user-agent'] as string | undefined)
         : undefined;
 
@@ -1188,7 +1191,7 @@ export abstract class BaseProvider implements IProvider {
       combined['User-Agent'] = userAgent.trim();
     }
 
-    if (options?.invocation?.customHeaders) {
+    if (options?.invocation?.customHeaders != null) {
       Object.assign(combined, options.invocation.customHeaders);
     }
 

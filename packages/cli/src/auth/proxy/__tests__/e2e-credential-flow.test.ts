@@ -324,7 +324,7 @@ describe('E2E Credential Flow (Phase 37)', () => {
             refreshCalled = true;
             // Simulate refresh by updating token
             const current = await tokenStore.getToken(provider, bucket);
-            if (current) {
+            if (current != null) {
               await tokenStore.saveToken(
                 provider,
                 {

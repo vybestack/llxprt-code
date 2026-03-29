@@ -181,7 +181,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         reason = 'no-token';
       }
 
-      if (storedToken && reason === null) {
+      if (storedToken != null && reason === null) {
         const nowSec = Math.floor(Date.now() / 1000);
         const remainingSec = storedToken.expiry - nowSec;
 
@@ -192,7 +192,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
               this.provider,
               currentBucket,
             );
-            if (refreshedToken && refreshedToken.expiry > nowSec) {
+            if (refreshedToken != null && refreshedToken.expiry > nowSec) {
               // Refresh succeeded for triggering bucket — no failover needed (REQ-1598-CL07)
               logger.debug(
                 'Refresh succeeded for triggering bucket — no failover needed',
@@ -280,7 +280,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
             this.provider,
             bucket,
           );
-          if (refreshedToken && refreshedToken.expiry > nowSec) {
+          if (refreshedToken != null && refreshedToken.expiry > nowSec) {
             // Refresh succeeded — switch bucket
             const bucketIndex = this.buckets.indexOf(bucket);
             if (bucketIndex >= 0) {
@@ -389,13 +389,13 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     if (candidateBucket !== undefined) {
       const existingForegroundReauth =
         this.foregroundReauthInFlightByBucket.get(candidateBucket);
-      if (existingForegroundReauth) {
+      if (existingForegroundReauth != null) {
         return existingForegroundReauth;
       }
 
       const pass3Promise = (async (): Promise<boolean> => {
         const eagerAuthInFlight = this.ensureBucketsAuthInFlight;
-        if (eagerAuthInFlight) {
+        if (eagerAuthInFlight != null) {
           logger.debug(
             `Foreground reauth waiting for in-flight eager auth (provider=${this.provider}, bucket=${candidateBucket})`,
           );
@@ -450,7 +450,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
         }
 
         const lateEagerAuthInFlight = this.ensureBucketsAuthInFlight;
-        if (lateEagerAuthInFlight) {
+        if (lateEagerAuthInFlight != null) {
           logger.debug(
             `Foreground reauth detected late in-flight eager auth (provider=${this.provider}, bucket=${candidateBucket})`,
           );
@@ -604,7 +604,7 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       return;
     }
 
-    if (this.ensureBucketsAuthInFlight) {
+    if (this.ensureBucketsAuthInFlight != null) {
       await this.ensureBucketsAuthInFlight;
       return;
     }

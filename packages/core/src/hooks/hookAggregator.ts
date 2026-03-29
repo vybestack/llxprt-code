@@ -60,20 +60,21 @@ export class HookAggregator {
         hasFailure = true;
       }
 
-      if (result.error) {
+      if (result.error != null) {
         errors.push(result.error);
       }
 
-      if (result.output) {
+      if (result.output != null) {
         allOutputs.push(result.output);
       }
     }
 
     // Merge outputs using event-specific strategy
     const mergedOutput = this.mergeOutputs(allOutputs, eventName);
-    const finalOutput = mergedOutput
-      ? this.createSpecificHookOutput(mergedOutput, eventName)
-      : undefined;
+    const finalOutput =
+      mergedOutput != null
+        ? this.createSpecificHookOutput(mergedOutput, eventName)
+        : undefined;
 
     return {
       success: !hasFailure && errors.length === 0,
@@ -171,7 +172,7 @@ export class HookAggregator {
 
       // Merge hookSpecificOutput - later outputs override earlier ones
       // This preserves fields like tool_input, additionalContext, etc.
-      if (output.hookSpecificOutput) {
+      if (output.hookSpecificOutput != null) {
         merged.hookSpecificOutput = {
           ...(merged.hookSpecificOutput || {}),
           ...output.hookSpecificOutput,
@@ -256,7 +257,7 @@ export class HookAggregator {
 
     for (const output of outputs) {
       const toolConfig = output.hookSpecificOutput?.toolConfig;
-      if (!toolConfig) {
+      if (toolConfig == null) {
         continue;
       }
 
@@ -268,7 +269,7 @@ export class HookAggregator {
       }
 
       // Collect function names (union of all hooks)
-      if (toolConfig.allowedFunctionNames) {
+      if (toolConfig.allowedFunctionNames != null) {
         for (const name of toolConfig.allowedFunctionNames) {
           allFunctionNames.add(name);
         }
@@ -350,7 +351,7 @@ export class HookAggregator {
     contexts: string[],
   ): void {
     const specific = output.hookSpecificOutput;
-    if (!specific) {
+    if (specific == null) {
       return;
     }
 

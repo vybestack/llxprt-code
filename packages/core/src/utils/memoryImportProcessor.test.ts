@@ -52,7 +52,7 @@ const findMarkdownComments = (content: string): string[] => {
       if (t.type === 'html' && t.raw.includes('<!--')) {
         comments.push(t.raw.trim());
       }
-      if (t.tokens) {
+      if (t.tokens != null) {
         walkTokens(t.tokens);
       }
     }
@@ -82,7 +82,7 @@ const findCodeBlocks = (
           content: t.text,
         });
       }
-      if (t.tokens) {
+      if (t.tokens != null) {
         walkTokens(t.tokens);
       }
     }
@@ -589,19 +589,19 @@ describe('memoryImportProcessor', () => {
           const t = token as { type: string; raw: string; tokens?: unknown[] };
           if (t.type === 'paragraph' && t.raw.includes('--- File:')) {
             const match = t.raw.match(/--- File: (.+?) ---/);
-            if (match) {
+            if (match != null) {
               // Normalize the path before adding to fileMarkers
               fileMarkers.push(path.normalize(match[1]));
             }
           }
           if (t.type === 'paragraph' && t.raw.includes('--- End of File:')) {
             const match = t.raw.match(/--- End of File: (.+?) ---/);
-            if (match) {
+            if (match != null) {
               // Normalize the path before adding to endMarkers
               endMarkers.push(path.normalize(match[1]));
             }
           }
-          if (t.tokens) {
+          if (t.tokens != null) {
             walkTokens(t.tokens);
           }
         }

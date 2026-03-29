@@ -175,7 +175,10 @@ export class Task {
       this.toolCompletionNotifier = { resolve, reject };
     });
     // If there are no pending calls when reset, resolve immediately.
-    if (this.pendingToolCalls.size === 0 && this.toolCompletionNotifier) {
+    if (
+      this.pendingToolCalls.size === 0 &&
+      this.toolCompletionNotifier != null
+    ) {
       this.toolCompletionNotifier.resolve();
     }
   }
@@ -197,7 +200,10 @@ export class Task {
       logger.info(
         `[Task] Resolved tool call: ${toolCallId}. Pending: ${this.pendingToolCalls.size}`,
       );
-      if (this.pendingToolCalls.size === 0 && this.toolCompletionNotifier) {
+      if (
+        this.pendingToolCalls.size === 0 &&
+        this.toolCompletionNotifier != null
+      ) {
         this.toolCompletionNotifier.resolve();
       }
     }
@@ -219,7 +225,7 @@ export class Task {
         `[Task] Cancelling all ${this.pendingToolCalls.size} pending tool calls. Reason: ${reason}`,
       );
     }
-    if (this.toolCompletionNotifier) {
+    if (this.toolCompletionNotifier != null) {
       this.toolCompletionNotifier.reject(new Error(reason));
     }
     this.pendingToolCalls.clear();
@@ -298,7 +304,7 @@ export class Task {
 
     if (messageText) {
       message = this._createTextMessage(messageText);
-    } else if (messageParts) {
+    } else if (messageParts != null) {
       message = {
         kind: 'message',
         role: 'agent',
@@ -535,7 +541,7 @@ export class Task {
       'response',
     );
 
-    if (tc.tool) {
+    if (tc.tool != null) {
       serializableToolCall.tool = this._pickFields(
         tc.tool,
         'name',
@@ -698,7 +704,7 @@ export class Task {
                   const request = updatedRequests.find(
                     (req) => req.callId === callId,
                   );
-                  if (request) {
+                  if (request != null) {
                     request.checkpoint = checkpointPath;
                     logger.info(
                       `[Task] Checkpoint created for callId ${callId}: ${checkpointPath}`,
@@ -720,7 +726,7 @@ export class Task {
       }
     }
 
-    if (!this.scheduler) {
+    if (this.scheduler == null) {
       throw new Error('Scheduler not initialized');
     }
     await this.scheduler.schedule(updatedRequests, abortSignal);
@@ -861,7 +867,7 @@ export class Task {
 
     const confirmationDetails = this.pendingToolConfirmationDetails.get(callId);
 
-    if (!confirmationDetails) {
+    if (confirmationDetails == null) {
       logger.warn(
         `[Task] Received tool confirmation for unknown or already processed callId: ${callId}`,
       );

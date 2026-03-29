@@ -15,7 +15,7 @@ const findAvailablePort = async (): Promise<number> =>
       if (address && typeof address === 'object') {
         const port = address.port;
         server.close((closeError) => {
-          if (closeError) {
+          if (closeError != null) {
             reject(closeError);
             return;
           }

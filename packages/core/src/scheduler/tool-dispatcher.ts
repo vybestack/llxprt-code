@@ -57,7 +57,7 @@ export class ToolDispatcher {
       }
 
       const toolInstance = this.toolRegistry.getTool(reqInfo.name);
-      if (!toolInstance) {
+      if (toolInstance == null) {
         const suggestion = this.getToolSuggestion(reqInfo.name);
         const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
         return {

@@ -147,7 +147,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       // Simulate processStreamResponse logic
       const modelResponseParts: Part[] = [];
       for (const chunk of streamChunks) {
-        if (chunk.parts) {
+        if (chunk.parts != null) {
           if (includeThoughtsInHistory) {
             modelResponseParts.push(...chunk.parts);
           } else {
@@ -202,14 +202,14 @@ describe('Issue #1150: Thinking blocks in history', () => {
       const modelResponseParts: Part[] = [];
 
       // Process thinking chunk
-      if (thinkingChunk.parts) {
+      if (thinkingChunk.parts != null) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...thinkingChunk.parts);
         }
       }
 
       // Process tool call chunk
-      if (toolCallChunk.parts) {
+      if (toolCallChunk.parts != null) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...toolCallChunk.parts);
         }
@@ -415,7 +415,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
         blocks: nonThoughtParts.map((part) => {
           if (part.text) {
             return { type: 'text' as const, text: part.text };
-          } else if (part.functionCall) {
+          } else if (part.functionCall != null) {
             return {
               type: 'tool_call' as const,
               id: part.functionCall.id ?? '',

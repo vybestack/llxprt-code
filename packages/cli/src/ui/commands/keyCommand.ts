@@ -97,7 +97,7 @@ async function handleSave(
     if (exists) {
       const config = context.services.config;
       const isInteractive =
-        config && 'isInteractive' in config
+        config != null && 'isInteractive' in config
           ? (config as { isInteractive: () => boolean }).isInteractive()
           : true;
 
@@ -189,7 +189,7 @@ async function handleLoad(
     // not the raw key value. Clear auth-key/auth-keyfile to prevent
     // buildRuntimeProfileSnapshot from persisting the resolved secret.
     const config = context.services.config;
-    if (config) {
+    if (config != null) {
       config.setEphemeralSetting('auth-key-name', name);
       config.setEphemeralSetting('auth-key', undefined);
       config.setEphemeralSetting('auth-keyfile', undefined);
@@ -198,7 +198,7 @@ async function handleLoad(
     const extendedContext = context as CommandContext & {
       checkPaymentModeChange?: () => void;
     };
-    if (extendedContext.checkPaymentModeChange) {
+    if (extendedContext.checkPaymentModeChange != null) {
       setTimeout(extendedContext.checkPaymentModeChange, 100);
     }
 
@@ -340,7 +340,7 @@ async function handleDelete(
   // Non-interactive check (R17.2)
   const config = context.services.config;
   const isInteractive =
-    config && 'isInteractive' in config
+    config != null && 'isInteractive' in config
       ? (config as { isInteractive: () => boolean }).isInteractive()
       : true;
 
@@ -542,7 +542,7 @@ async function handleLegacyKeyAction(
     const extendedContext = context as CommandContext & {
       checkPaymentModeChange?: () => void;
     };
-    if (extendedContext.checkPaymentModeChange) {
+    if (extendedContext.checkPaymentModeChange != null) {
       setTimeout(extendedContext.checkPaymentModeChange, 100);
     }
 

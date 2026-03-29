@@ -23,7 +23,7 @@ export function applyCliSetArguments(
 ): CliSetResult {
   const cliModelParams: Record<string, unknown> = {};
 
-  if (!setArgs || setArgs.length === 0) {
+  if (setArgs == null || setArgs.length === 0) {
     return { modelParams: cliModelParams };
   }
 

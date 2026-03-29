@@ -31,7 +31,7 @@ import type {
 export function createProviderAdapterFromManager(
   manager?: ProviderManager | IProviderManager,
 ): AgentRuntimeProviderAdapter {
-  if (!manager) {
+  if (manager == null) {
     return {
       getActiveProvider: () => {
         throw new Error(
@@ -113,7 +113,7 @@ export function createTelemetryAdapterFromConfig(
 export function createToolRegistryViewFromRegistry(
   registry?: ToolRegistry,
 ): ToolRegistryView {
-  if (!registry) {
+  if (registry == null) {
     return {
       listToolNames: () => [],
       getToolMetadata: () => undefined,
@@ -124,7 +124,7 @@ export function createToolRegistryViewFromRegistry(
     listToolNames: () => registry.getAllToolNames(),
     getToolMetadata: (name) => {
       const tool = registry.getTool(name);
-      if (!tool) {
+      if (tool == null) {
         return undefined;
       }
       const schema = (tool as unknown as { schema?: Record<string, unknown> })

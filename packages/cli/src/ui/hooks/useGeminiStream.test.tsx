@@ -580,7 +580,7 @@ describe('useGeminiStream', () => {
 
     // Trigger the onComplete callback with completed tools
     await act(async () => {
-      if (capturedOnComplete) {
+      if (capturedOnComplete != null) {
         await capturedOnComplete(completedToolCalls);
       }
     });
@@ -675,7 +675,7 @@ describe('useGeminiStream', () => {
     );
 
     await act(async () => {
-      if (capturedOnComplete) {
+      if (capturedOnComplete != null) {
         await capturedOnComplete(completedToolCalls);
       }
     });
@@ -764,7 +764,7 @@ describe('useGeminiStream', () => {
 
     // Trigger the onComplete callback with cancelled tools
     await act(async () => {
-      if (capturedOnComplete) {
+      if (capturedOnComplete != null) {
         await capturedOnComplete(cancelledToolCalls);
       }
     });
@@ -875,7 +875,7 @@ describe('useGeminiStream', () => {
 
     // Trigger the onComplete callback with multiple cancelled tools
     await act(async () => {
-      if (capturedOnComplete) {
+      if (capturedOnComplete != null) {
         await capturedOnComplete(allCancelledTools);
       }
     });
@@ -1011,7 +1011,7 @@ describe('useGeminiStream', () => {
 
     // 4. Trigger the onComplete callback to simulate tool completion
     await act(async () => {
-      if (capturedOnComplete) {
+      if (capturedOnComplete != null) {
         await capturedOnComplete(completedToolCalls);
       }
     });
@@ -1570,7 +1570,7 @@ describe('useGeminiStream', () => {
 
       // Trigger the onComplete callback with the completed save_memory tool
       await act(async () => {
-        if (capturedOnComplete) {
+        if (capturedOnComplete != null) {
           await capturedOnComplete([completedToolCall]);
         }
       });

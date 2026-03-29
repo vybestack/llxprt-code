@@ -45,7 +45,7 @@ export function parseSlashCommand(
       cmd.altNames?.some((alt) => alt.toLowerCase() === commandName),
   );
 
-  if (!commandToExecute) {
+  if (commandToExecute == null) {
     return { commandToExecute: undefined, args, canonicalPath: [] };
   }
 
@@ -53,7 +53,7 @@ export function parseSlashCommand(
   const canonicalPath: string[] = [commandToExecute.name];
 
   // Check if there are subcommands and if args starts with a potential subcommand
-  if (commandToExecute.subCommands && args) {
+  if (commandToExecute.subCommands != null && args) {
     const nextSpaceIndex = args.indexOf(' ');
     const potentialSubcommandName =
       nextSpaceIndex === -1
@@ -69,7 +69,7 @@ export function parseSlashCommand(
         ),
     );
 
-    if (subCommand) {
+    if (subCommand != null) {
       // We found a subcommand, so update the command to execute and adjust args
       canonicalPath.push(subCommand.name);
       return {

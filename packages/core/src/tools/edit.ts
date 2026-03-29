@@ -104,7 +104,7 @@ export function applyReplacement(
     expectedReplacements > 1,
   );
 
-  if (fuzzyResult) {
+  if (fuzzyResult != null) {
     // Verify the number of replacements matches expectations
     if (fuzzyResult.occurrences === expectedReplacements) {
       const result = fuzzyResult.result;
@@ -367,7 +367,7 @@ class EditToolInvocation extends BaseToolInvocation<
             expectedReplacements > 1,
           );
 
-          if (fuzzyResult) {
+          if (fuzzyResult != null) {
             occurrences = fuzzyResult.occurrences;
           } else {
             // Fall back to strict counting
@@ -462,7 +462,7 @@ class EditToolInvocation extends BaseToolInvocation<
     }
 
     let newContent: string;
-    if (!error) {
+    if (error == null) {
       const replaceLine = filteredParams.replaceBeginLineNumber;
       if (
         fileExists &&
@@ -510,7 +510,7 @@ class EditToolInvocation extends BaseToolInvocation<
       newContent = currentContent ?? '';
     }
 
-    if (!error && fileExists && currentContent === newContent) {
+    if (error == null && fileExists && currentContent === newContent) {
       const filePath = params.absolute_path || params.file_path || '';
       error = {
         display:
@@ -568,7 +568,7 @@ class EditToolInvocation extends BaseToolInvocation<
       return false;
     }
 
-    if (editData.error) {
+    if (editData.error != null) {
       return false;
     }
 
@@ -621,7 +621,7 @@ class EditToolInvocation extends BaseToolInvocation<
           await this.publishPolicyUpdate(outcome);
         }
 
-        if (ideConfirmation) {
+        if (ideConfirmation != null) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
             // TODO(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
@@ -687,7 +687,7 @@ class EditToolInvocation extends BaseToolInvocation<
       };
     }
 
-    if (editData.error) {
+    if (editData.error != null) {
       return {
         llmContent: editData.error.raw,
         returnDisplay: `Error: ${editData.error.display}`,
@@ -709,7 +709,7 @@ class EditToolInvocation extends BaseToolInvocation<
       let gitStats = null;
       if (this.config.getConversationLoggingEnabled()) {
         const gitStatsService = getGitStatsService();
-        if (gitStatsService) {
+        if (gitStatsService != null) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,
@@ -793,7 +793,7 @@ class EditToolInvocation extends BaseToolInvocation<
       };
 
       // Include git stats in metadata if available
-      if (gitStats) {
+      if (gitStats != null) {
         result.metadata = {
           ...result.metadata,
           gitStats,

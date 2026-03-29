@@ -87,7 +87,7 @@ export const useExtensionUpdates = (
       const currentStatus = extensionsUpdateState.extensionStatuses.get(
         extension.name,
       );
-      if (!currentStatus) return true;
+      if (currentStatus == null) return true;
       const currentState = currentStatus.status;
       return !currentState || currentState === ExtensionUpdateState.UNKNOWN;
     });
@@ -109,14 +109,14 @@ export const useExtensionUpdates = (
       return;
     }
     const scheduledUpdate = extensionsUpdateState.scheduledUpdate;
-    if (scheduledUpdate) {
+    if (scheduledUpdate != null) {
       dispatchExtensionStateUpdate({
         type: 'CLEAR_SCHEDULED_UPDATE',
       });
     }
 
     function shouldDoUpdate(extension: GeminiCLIExtension): boolean {
-      if (scheduledUpdate) {
+      if (scheduledUpdate != null) {
         if (scheduledUpdate.all) {
           return true;
         }
@@ -132,7 +132,7 @@ export const useExtensionUpdates = (
         extension.name,
       );
       if (
-        !currentState ||
+        currentState == null ||
         currentState.status !== ExtensionUpdateState.UPDATE_AVAILABLE
       ) {
         continue;
@@ -162,7 +162,7 @@ export const useExtensionUpdates = (
         updatePromises.push(updatePromise);
         updatePromise
           .then((result) => {
-            if (!result) return;
+            if (result == null) return;
             addItem(
               {
                 type: MessageType.INFO,
@@ -192,7 +192,7 @@ export const useExtensionUpdates = (
         Date.now(),
       );
     }
-    if (scheduledUpdate) {
+    if (scheduledUpdate != null) {
       void Promise.allSettled(updatePromises).then((results) => {
         const nonNullResults = results
           .filter(

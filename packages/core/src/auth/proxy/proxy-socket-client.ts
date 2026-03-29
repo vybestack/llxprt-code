@@ -58,7 +58,7 @@ export class ProxySocketClient {
       this.resetIdleTimer();
       return;
     }
-    if (this.connectingPromise) {
+    if (this.connectingPromise != null) {
       await this.connectingPromise;
       return;
     }
@@ -119,7 +119,7 @@ export class ProxySocketClient {
       pending.reject(new Error('Connection closing'));
     }
     this.pendingRequests.clear();
-    if (this.handshakeResolver) {
+    if (this.handshakeResolver != null) {
       const resolver = this.handshakeResolver;
       this.handshakeResolver = null;
       resolver.reject(new Error('Connection closing'));
@@ -196,7 +196,7 @@ export class ProxySocketClient {
     try {
       const frames = this.decoder.feed(chunk);
       for (const frame of frames) {
-        if (this.handshakeResolver) {
+        if (this.handshakeResolver != null) {
           const resolver = this.handshakeResolver;
           this.handshakeResolver = null;
           resolver.resolve(frame);
@@ -206,7 +206,7 @@ export class ProxySocketClient {
         const id = frame.id as string | undefined;
         if (id) {
           const pending = this.pendingRequests.get(id);
-          if (pending) {
+          if (pending != null) {
             clearTimeout(pending.timer);
             this.pendingRequests.delete(id);
             pending.resolve(frame as unknown as ProxyResponse);
@@ -223,7 +223,7 @@ export class ProxySocketClient {
   }
 
   private onClose(): void {
-    if (this.handshakeComplete || this.handshakeResolver) {
+    if (this.handshakeComplete || this.handshakeResolver != null) {
       this.destroy('Credential proxy connection lost. Restart the session.');
     }
   }
@@ -251,7 +251,7 @@ export class ProxySocketClient {
     }
     this.decoder.reset();
 
-    if (this.handshakeResolver) {
+    if (this.handshakeResolver != null) {
       const resolver = this.handshakeResolver;
       this.handshakeResolver = null;
       resolver.reject(new Error(message));

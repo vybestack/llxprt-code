@@ -56,7 +56,7 @@ export const diagnosticsCommand: SlashCommand = {
       const settings = context.services.settings;
       const logger = new DebugLogger('llxprt:ui:diagnostics');
 
-      if (!config) {
+      if (config == null) {
         return {
           type: 'message',
           messageType: 'error',
@@ -79,14 +79,14 @@ export const diagnosticsCommand: SlashCommand = {
 
       // Show current OAuth bucket
       const oauthMgr = context.services.oauthManager;
-      if (oauthMgr && snapshot.providerName) {
+      if (oauthMgr != null && snapshot.providerName) {
         const sessionBucket = oauthMgr.getSessionBucket(snapshot.providerName);
         diagnostics.push(`- OAuth Bucket: ${sessionBucket ?? 'default'}`);
       }
 
       // Show bucket failover status
       const failoverHandler = config.getBucketFailoverHandler?.();
-      if (failoverHandler) {
+      if (failoverHandler != null) {
         const buckets = failoverHandler.getBuckets?.() ?? [];
         const currentBucket = failoverHandler.getCurrentBucket?.();
         const isEnabled = failoverHandler.isEnabled?.() ?? false;
@@ -108,7 +108,7 @@ export const diagnosticsCommand: SlashCommand = {
             diagnostics.push(`- Next Failover Bucket: ${nextBucket}`);
           }
         }
-      } else if (oauthMgr && snapshot.providerName) {
+      } else if (oauthMgr != null && snapshot.providerName) {
         // No handler but OAuth is configured - indicate failover not active
         diagnostics.push(`- Bucket Failover: Not configured`);
       }
@@ -278,11 +278,13 @@ export const diagnosticsCommand: SlashCommand = {
         `- IDE Mode: ${config.getIdeMode() ? 'Enabled' : 'Disabled'}`,
       );
       const ideClient = config.getIdeClient();
-      diagnostics.push(`- IDE Client: ${ideClient ? 'Connected' : 'Offline'}`);
+      diagnostics.push(
+        `- IDE Client: ${ideClient != null ? 'Connected' : 'Offline'}`,
+      );
 
       diagnostics.push('\n## MCP (Model Context Protocol)');
       const mcpServers = config.getMcpServers();
-      if (mcpServers && Object.keys(mcpServers).length > 0) {
+      if (mcpServers != null && Object.keys(mcpServers).length > 0) {
         diagnostics.push(
           `- MCP Servers: ${Object.keys(mcpServers).join(', ')}`,
         );
@@ -333,7 +335,7 @@ export const diagnosticsCommand: SlashCommand = {
         const runtimeApi = getRuntimeApi();
         const oauthManager = runtimeApi.getCliOAuthManager();
 
-        if (!oauthManager) {
+        if (oauthManager == null) {
           diagnostics.push('- No OAuth tokens configured');
         } else {
           const supportedProviders = oauthManager.getSupportedProviders();
@@ -371,7 +373,7 @@ export const diagnosticsCommand: SlashCommand = {
               for (const bucket of buckets) {
                 const token = await tokenStore.getToken(provider, bucket);
 
-                if (token && typeof token.expiry === 'number') {
+                if (token != null && typeof token.expiry === 'number') {
                   const expiryDate = new Date(token.expiry * 1000);
                   const timeUntilExpiry = Math.max(
                     0,

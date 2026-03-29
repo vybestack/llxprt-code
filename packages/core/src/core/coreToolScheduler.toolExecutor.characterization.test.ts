@@ -108,7 +108,7 @@ async function _waitForStatus(
       | ToolCall[]
       | undefined;
     matchingCall = latestCalls?.find((call) => call.status === status);
-    if (!matchingCall) {
+    if (matchingCall == null) {
       throw new Error(
         `Waiting for status "${status}", latest statuses: ${
           latestCalls?.map((call) => call.status).join(', ') ?? 'none'

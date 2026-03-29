@@ -397,7 +397,7 @@ async function applyModelAndParams(
 
   const provider = providerManager.getActiveProvider();
 
-  if (!provider) {
+  if (provider == null) {
     throw new Error(
       `[oauth-manager] Active provider "${targetProviderName}" is not registered.`,
     );
@@ -431,7 +431,8 @@ export async function applyProfileWithGuards(
 
     // Get ProfileManager from runtime services (allows for dependency injection in tests)
     const profileManagerInstance =
-      'profileManager' in runtimeServices && runtimeServices.profileManager
+      'profileManager' in runtimeServices &&
+      runtimeServices.profileManager != null
         ? runtimeServices.profileManager
         : new ProfileManager();
 
@@ -659,7 +660,7 @@ export async function applyProfileWithGuards(
       `[profile] target provider '${targetProviderName}' (requested='${requestedProvider ?? 'none'}')`,
   );
   const providerRecord = providerManager.getProviderByName(targetProviderName);
-  if (!providerRecord) {
+  if (providerRecord == null) {
     warnings.push(
       `Provider '${targetProviderName}' not registered; skipping provider-specific updates.`,
     );

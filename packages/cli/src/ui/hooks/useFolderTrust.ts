@@ -54,7 +54,7 @@ export const useFolderTrust = (
       debug.log(
         'Folder is untrusted - displaying permissions command hint on startup',
       );
-      if (addItem) {
+      if (addItem != null) {
         addItem(
           {
             type: MessageType.INFO,
@@ -92,7 +92,7 @@ export const useFolderTrust = (
       try {
         trustedFolders.setValue(cwd, trustLevel);
       } catch (_e) {
-        if (addItem) {
+        if (addItem != null) {
           addItem(
             {
               type: MessageType.ERROR,

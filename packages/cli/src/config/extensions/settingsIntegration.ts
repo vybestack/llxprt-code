@@ -385,7 +385,7 @@ export async function updateSetting(
       s.envVar.toLowerCase() === settingKey.toLowerCase(),
   );
 
-  if (!setting) {
+  if (setting == null) {
     debugLogger.error(
       `Setting "${settingKey}" not found in extension "${extensionName}".`,
     );

@@ -107,7 +107,7 @@ export class Config extends ConfigBase {
       throw Error('Config was already initialized');
     }
     const initializationMessageBus = dependencies?.messageBus;
-    if (!initializationMessageBus) {
+    if (initializationMessageBus == null) {
       throw new Error(
         'Config.initialize requires an explicit session/runtime MessageBus dependency.',
       );
@@ -153,7 +153,7 @@ export class Config extends ConfigBase {
 
     // Register extension-contributed subagents (after skill discovery, before GeminiClient creation)
     const subagentMgr = this.getSubagentManager();
-    if (subagentMgr) {
+    if (subagentMgr != null) {
       subagentMgr.clearExtensionSubagents();
       for (const extension of this.getExtensions()) {
         if (extension.isActive && extension.subagents?.length) {
@@ -166,7 +166,7 @@ export class Config extends ConfigBase {
     }
 
     // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
-    if (subagentMgr) {
+    if (subagentMgr != null) {
       const allSettings = this.settingsService.getAllGlobalSettings();
       const subagentsSettings = allSettings?.['subagents'] as
         | Record<string, unknown>
@@ -174,7 +174,7 @@ export class Config extends ConfigBase {
       const definitions = subagentsSettings?.['definitions'] as
         | Record<string, { profile: string; systemPrompt: string }>
         | undefined;
-      if (definitions && typeof definitions === 'object') {
+      if (definitions != null && typeof definitions === 'object') {
         subagentMgr.clearSettingsSubagents();
         subagentMgr.registerSettingsSubagents(definitions);
       }
@@ -216,7 +216,7 @@ export class Config extends ConfigBase {
     const newContentGeneratorConfig = createContentGeneratorConfig(this);
 
     // Add provider manager to the config if available (llxprt multi-provider support)
-    if (this.providerManager) {
+    if (this.providerManager != null) {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
 
@@ -234,7 +234,7 @@ export class Config extends ConfigBase {
 
     // CRITICAL: Store both the history AND the HistoryService instance
     // This preserves both the API conversation context and the UI's conversation display
-    if (existingHistoryService) {
+    if (existingHistoryService != null) {
       logger.debug('Storing existing HistoryService for reuse', {
         historyLength: existingHistory.length,
       });
@@ -258,7 +258,7 @@ export class Config extends ConfigBase {
       const historyToStore = fromGenaiToVertex
         ? existingHistory.map((content) => {
             const newContent = { ...content };
-            if (newContent.parts) {
+            if (newContent.parts != null) {
               newContent.parts = newContent.parts.map((part) => {
                 if (
                   part &&
@@ -370,9 +370,9 @@ export class Config extends ConfigBase {
   }
 
   async reloadSkills(): Promise<void> {
-    if (this._onReload) {
+    if (this._onReload != null) {
       const result = await this._onReload();
-      if (result.disabledSkills) {
+      if (result.disabledSkills != null) {
         this.disabledSkills = result.disabledSkills;
       }
       if (result.adminSkillsEnabled !== undefined) {
@@ -404,7 +404,7 @@ export class Config extends ConfigBase {
   }
 
   getUserMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return [
         this.contextManager.getGlobalMemory(),
         this.contextManager.getEnvironmentMemory(),
@@ -494,7 +494,7 @@ export class Config extends ConfigBase {
     };
 
     // If we have a provider manager, update its config to trigger re-wrapping
-    if (this.providerManager) {
+    if (this.providerManager != null) {
       this.providerManager.setConfig(this);
     }
   }
@@ -616,7 +616,7 @@ export class Config extends ConfigBase {
    * @plan PLAN-20260130-ASYNCTASK.P09
    */
   getAsyncTaskManager(): AsyncTaskManager | undefined {
-    if (!this.asyncTaskManager) {
+    if (this.asyncTaskManager == null) {
       // Initialize lazily using the 'task-max-async' setting (default 5)
       const settingsService = this.getSettingsService();
       const maxAsyncTasks =
@@ -631,9 +631,9 @@ export class Config extends ConfigBase {
    * @plan PLAN-20260130-ASYNCTASK.P22
    */
   getAsyncTaskReminderService(): AsyncTaskReminderService | undefined {
-    if (!this.asyncTaskReminderService) {
+    if (this.asyncTaskReminderService == null) {
       const asyncTaskManager = this.getAsyncTaskManager();
-      if (asyncTaskManager) {
+      if (asyncTaskManager != null) {
         this.asyncTaskReminderService = new AsyncTaskReminderService(
           asyncTaskManager,
         );
@@ -656,12 +656,12 @@ export class Config extends ConfigBase {
     const asyncTaskManager = this.getAsyncTaskManager();
     const reminderService = this.getAsyncTaskReminderService();
 
-    if (!asyncTaskManager || !reminderService) {
+    if (asyncTaskManager == null || reminderService == null) {
       // Return a no-op cleanup function if components aren't available
       return () => {};
     }
 
-    if (!this.asyncTaskAutoTrigger) {
+    if (this.asyncTaskAutoTrigger == null) {
       this.asyncTaskAutoTrigger = new AsyncTaskAutoTrigger(
         asyncTaskManager,
         reminderService,
@@ -681,7 +681,7 @@ export class Config extends ConfigBase {
     fileCount: number;
     filePaths: string[];
   }> {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       await this.contextManager.refresh();
       const memoryContent = this.getUserMemory();
       const fileCount = this.getLlxprtMdFileCount();
@@ -735,7 +735,7 @@ export class Config extends ConfigBase {
     },
   ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
     const schedulerMessageBus = dependencies?.messageBus;
-    if (!schedulerMessageBus) {
+    if (schedulerMessageBus == null) {
       throw new Error(
         'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
       );
@@ -754,7 +754,7 @@ export class Config extends ConfigBase {
       const persisted = this.settingsService.get('hooks.disabled') as
         | string[]
         | undefined;
-      if (persisted && persisted.length > 0) {
+      if (persisted != null && persisted.length > 0) {
         this.disabledHooks = persisted;
       }
     }
@@ -777,7 +777,7 @@ export class Config extends ConfigBase {
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access
-    if (!this.hookSystem) {
+    if (this.hookSystem == null) {
       this.hookSystem = new HookSystem(this);
     }
 
@@ -786,7 +786,7 @@ export class Config extends ConfigBase {
 
   async dispose(): Promise<void> {
     this.geminiClient?.dispose();
-    if (this.mcpClientManager) {
+    if (this.mcpClientManager != null) {
       await this.mcpClientManager.stop();
     }
   }

@@ -146,7 +146,7 @@ export class FileCommandLoader implements ICommandLoader {
     dirs.push({ path: storage.getProjectCommandsDir() });
 
     // 3. Extension commands (processed last to detect all conflicts)
-    if (this.config) {
+    if (this.config != null) {
       const activeExtensions = this.config
         .getExtensions()
         .filter((ext) => ext.isActive)
@@ -257,7 +257,7 @@ export class FileCommandLoader implements ICommandLoader {
         context: CommandContext,
         _args: string,
       ): Promise<SlashCommandActionReturn> => {
-        if (!context.invocation) {
+        if (context.invocation == null) {
           debugLogger.error(
             `[FileCommandLoader] Critical error: Command '${baseCommandName}' was executed without invocation context.`,
           );

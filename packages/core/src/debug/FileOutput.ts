@@ -47,7 +47,7 @@ export class FileOutput {
   }
 
   static getInstance(): FileOutput {
-    if (!FileOutput.instance) {
+    if (FileOutput.instance == null) {
       FileOutput.instance = new FileOutput();
     }
     return FileOutput.instance;
@@ -58,7 +58,7 @@ export class FileOutput {
       return;
     }
 
-    if (!this.flushTimeout) {
+    if (this.flushTimeout == null) {
       this.startFlushTimer();
     }
 
@@ -82,7 +82,7 @@ export class FileOutput {
   async dispose(): Promise<void> {
     this.disposed = true;
 
-    if (this.flushTimeout) {
+    if (this.flushTimeout != null) {
       clearTimeout(this.flushTimeout);
       this.flushTimeout = null;
     }
@@ -97,7 +97,7 @@ export class FileOutput {
   static async resetForTesting(): Promise<void> {
     const instance = FileOutput.instance;
     FileOutput.instance = undefined;
-    if (instance) {
+    if (instance != null) {
       await instance.dispose();
     }
   }
@@ -107,7 +107,7 @@ export class FileOutput {
       return;
     }
 
-    if (this.flushTimeout) {
+    if (this.flushTimeout != null) {
       return;
     }
 

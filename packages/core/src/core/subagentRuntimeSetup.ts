@@ -67,7 +67,8 @@ export function convertMetadataToFunctionDeclaration(
   metadata: ToolMetadata,
 ): FunctionDeclaration {
   const rawSchema =
-    metadata.parameterSchema && typeof metadata.parameterSchema === 'object'
+    metadata.parameterSchema != null &&
+    typeof metadata.parameterSchema === 'object'
       ? { ...metadata.parameterSchema }
       : {};
   const properties =
@@ -126,7 +127,7 @@ export function buildEphemeralSettings(
 ): Record<string, unknown> {
   const ephemerals: Record<string, unknown> = {};
 
-  if (!snapshot) {
+  if (snapshot == null) {
     ephemerals.emojifilter = 'auto';
     return ephemerals;
   }
@@ -137,10 +138,10 @@ export function buildEphemeralSettings(
     ephemerals.emojifilter = 'auto';
   }
 
-  if (snapshot.tools?.allowed) {
+  if (snapshot.tools?.allowed != null) {
     ephemerals['tools.allowed'] = [...snapshot.tools.allowed];
   }
-  if (snapshot.tools?.disabled) {
+  if (snapshot.tools?.disabled != null) {
     ephemerals['tools.disabled'] = [...snapshot.tools.disabled];
   }
 
@@ -167,7 +168,7 @@ export function createToolExecutionConfig(
 ): ToolExecutionConfig {
   const ephemerals = buildEphemeralSettings(settingsSnapshot);
 
-  if (toolConfig && Array.isArray(toolConfig.tools)) {
+  if (toolConfig != null && Array.isArray(toolConfig.tools)) {
     applyToolWhitelistToEphemerals(ephemerals, toolConfig);
   }
 
@@ -243,7 +244,7 @@ export function buildRuntimeFunctionDeclarations(
   toolsView: ToolRegistryView,
   toolConfig: ToolConfig | undefined,
 ): FunctionDeclaration[] {
-  if (!toolConfig || toolConfig.tools.length === 0) {
+  if (toolConfig == null || toolConfig.tools.length === 0) {
     const noFunctionDeclarations: FunctionDeclaration[] = [];
     return noFunctionDeclarations;
   }
@@ -272,7 +273,7 @@ export function buildRuntimeFunctionDeclarations(
     }
 
     const metadata = toolsView.getToolMetadata(entry);
-    if (!metadata) {
+    if (metadata == null) {
       debugLogger.warn(
         `Tool "${entry}" is not available in the runtime view and is skipped.`,
       );
@@ -287,7 +288,7 @@ export function buildRuntimeFunctionDeclarations(
 export function getScopeLocalFuncDefs(
   outputConfig?: OutputConfig,
 ): FunctionDeclaration[] {
-  if (!outputConfig?.outputs) {
+  if (outputConfig?.outputs == null) {
     return [];
   }
 
@@ -329,7 +330,7 @@ export function buildChatSystemPrompt(
 
   let finalPrompt = templateString(promptConfig.systemPrompt, context);
 
-  if (outputConfig?.outputs) {
+  if (outputConfig?.outputs != null) {
     let outputInstructions =
       '\n\nAfter you have achieved all other goals, you MUST emit the required output variables. For each expected output, make one final call to the `self_emitvalue` tool.';
 
@@ -469,12 +470,12 @@ export async function createChatObject(
   const { foregroundConfig: config, context } = params;
   const logger = new DebugLogger('llxprt:subagent');
 
-  if (!promptConfig.systemPrompt && !promptConfig.initialMessages) {
+  if (!promptConfig.systemPrompt && promptConfig.initialMessages == null) {
     throw new Error(
       'PromptConfig must have either `systemPrompt` or `initialMessages` defined.',
     );
   }
-  if (promptConfig.systemPrompt && promptConfig.initialMessages) {
+  if (promptConfig.systemPrompt && promptConfig.initialMessages != null) {
     throw new Error(
       'PromptConfig cannot have both `systemPrompt` and `initialMessages` defined.',
     );

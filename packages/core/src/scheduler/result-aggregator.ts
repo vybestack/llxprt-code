@@ -203,7 +203,7 @@ export class ResultAggregator {
 
         while (this.nextPublishIndex < this.currentBatchSize) {
           const nextBuffered = this.findByExecutionIndex(this.nextPublishIndex);
-          if (!nextBuffered) {
+          if (nextBuffered == null) {
             break; // Gap — wait for the missing result to arrive
           }
 

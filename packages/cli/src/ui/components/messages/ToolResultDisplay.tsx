@@ -111,7 +111,7 @@ export const ToolResultDisplay: React.FC<ToolResultDisplayProps> = ({
                 ).metadata?.astValidation as
                   | { valid: boolean; errors: string[] }
                   | undefined;
-                if (!astValidation) return null;
+                if (astValidation == null) return null;
 
                 return (
                   <Box marginBottom={1}>

@@ -112,7 +112,7 @@ export class MessageStreamOrchestrator {
     if (request instanceof Turn) return request;
 
     const earlyTurn = yield* this._checkSessionLimits(initialRequest, ctx);
-    if (earlyTurn) return earlyTurn;
+    if (earlyTurn != null) return earlyTurn;
 
     await this._injectIdeContext();
     return yield* this._runRetryLoop(request, signal, ctx);
@@ -124,7 +124,7 @@ export class MessageStreamOrchestrator {
     if (hasChat()) return;
 
     const previousHistory = getPreviousHistory();
-    if (previousHistory && previousHistory.length > 0) {
+    if (previousHistory != null && previousHistory.length > 0) {
       logger.debug('Restoring previous history during prompt generation', {
         historyLength: previousHistory.length,
       });
@@ -419,7 +419,7 @@ export class MessageStreamOrchestrator {
         deferredEvents,
         { hadToolCallsThisTurn, todoPauseSeen, hadThinking, hadContent },
       );
-      if (terminalResult) return terminalResult;
+      if (terminalResult != null) return terminalResult;
     }
 
     return {

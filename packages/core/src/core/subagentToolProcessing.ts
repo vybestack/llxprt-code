@@ -63,7 +63,7 @@ export function extractToolDetail(
     return resultDisplay;
   }
   if (
-    resultDisplay &&
+    resultDisplay != null &&
     typeof resultDisplay === 'object' &&
     'message' in resultDisplay &&
     typeof (resultDisplay as { message?: unknown }).message === 'string'
@@ -121,7 +121,7 @@ export function resolveToolName(
     if (!candidate) {
       continue;
     }
-    if (toolsView.getToolMetadata(candidate)) {
+    if (toolsView.getToolMetadata(candidate) != null) {
       return candidate;
     }
   }
@@ -207,7 +207,7 @@ export function handleEmitValueCall(
   if (variableName && variableValue) {
     ctx.output.emitted_vars[variableName] = variableValue;
     const message = `Emitted variable ${variableName} successfully`;
-    if (ctx.onMessage) {
+    if (ctx.onMessage != null) {
       ctx.onMessage(`[${ctx.subagentId}] ${message}`);
     }
     return [
@@ -298,7 +298,7 @@ export function buildPartsFromCompletedCalls(
     const display = call.response?.resultDisplay;
     if (
       typeof display === 'string' &&
-      ctx.onMessage &&
+      ctx.onMessage != null &&
       display.trim() &&
       !toolCanUpdateOutput
     ) {
@@ -443,7 +443,7 @@ function logToolResult(
   toolResponse: ToolCallResponseInfo,
   ctx: ProcessFunctionCallsContext,
 ): void {
-  if (toolResponse.error) {
+  if (toolResponse.error != null) {
     debugLogger.error(
       `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
     );

@@ -64,7 +64,7 @@ function normalizeStatelessPreference(
 function readStatelessPreferenceFromMetadata(
   metadata: Record<string, unknown> | undefined,
 ): StatelessHardeningPreference | null {
-  if (!metadata) {
+  if (metadata == null) {
     return null;
   }
   for (const key of STATELESS_METADATA_KEYS) {

@@ -335,7 +335,7 @@ export function SettingsDialog({
     if (
       subSettingsMode.isActive &&
       subSettingsMode.parentKey === 'coreToolSettings' &&
-      config
+      config != null
     ) {
       return generateDynamicToolSettings(config);
     }
@@ -978,11 +978,14 @@ export function SettingsDialog({
           // Check if this item has sub-settings (special case for coreToolSettings)
           let hasSubSettings = false;
           if (
-            currentDefinition?.subSettings &&
+            currentDefinition?.subSettings != null &&
             Object.keys(currentDefinition.subSettings).length > 0
           ) {
             hasSubSettings = true;
-          } else if (currentItem?.value === 'coreToolSettings' && config) {
+          } else if (
+            currentItem?.value === 'coreToolSettings' &&
+            config != null
+          ) {
             // Special case: coreToolSettings always has sub-settings
             // Avoid unnecessary computation by directly setting to true
             hasSubSettings = true;
@@ -1015,7 +1018,7 @@ export function SettingsDialog({
           // For enum types, handle cycle through options
           else if (
             currentDefinition?.type === 'enum' &&
-            currentDefinition.options
+            currentDefinition.options != null
           ) {
             const options = currentDefinition.options;
             const path = (currentItem?.value || '').split('.');
@@ -1241,7 +1244,7 @@ export function SettingsDialog({
 
         setShowRestartPrompt(false);
         setRestartRequiredSettings(new Set()); // Clear restart-required settings
-        if (onRestartRequest) onRestartRequest();
+        if (onRestartRequest != null) onRestartRequest();
       }
       if (keyMatchers[Command.ESCAPE](key)) {
         if (editingKey) {
@@ -1287,7 +1290,7 @@ export function SettingsDialog({
     let max = 0;
     for (const key of allKeys) {
       const def = getSettingDefinition(key);
-      if (!def) continue;
+      if (def == null) continue;
 
       const scopeMessage = getScopeMessageForSetting(
         key,
@@ -1461,7 +1464,7 @@ export function SettingsDialog({
                 let excludeTools =
                   (pendingSettings.excludeTools as string[]) || [];
                 // If not in pending, fall back to merged settings (handled by getToolCurrentState but we want pending awareness)
-                if (!pendingSettings.excludeTools) {
+                if (pendingSettings.excludeTools == null) {
                   excludeTools =
                     (settings.merged.excludeTools as string[]) || [];
                 }

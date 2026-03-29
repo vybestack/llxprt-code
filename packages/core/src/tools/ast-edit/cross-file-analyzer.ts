@@ -143,7 +143,7 @@ export class CrossFileRelationshipAnalyzer {
                 matcher: { rule: { pattern: symbolName } },
               },
               (err, matches) => {
-                if (err || !matches) {
+                if (err != null || !matches) {
                   resolve();
                   return;
                 }
@@ -207,7 +207,7 @@ export class CrossFileRelationshipAnalyzer {
                   matcher: { rule: { pattern: symbolName } },
                 },
                 (err, matches) => {
-                  if (err || !matches) {
+                  if (err != null || !matches) {
                     resolve();
                     return;
                   }

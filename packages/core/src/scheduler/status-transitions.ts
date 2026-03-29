@@ -241,7 +241,7 @@ export function applyTransition(
   }
 
   const ctx = getTransitionContext(currentCall);
-  if (!ctx) return currentCall;
+  if (ctx == null) return currentCall;
 
   switch (newStatus) {
     case 'success':

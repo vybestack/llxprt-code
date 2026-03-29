@@ -43,7 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
       flexShrink={0}
       flexDirection="column"
     >
-      {Colors.GradientColors ? (
+      {Colors.GradientColors != null ? (
         <ThemedGradient colors={Colors.GradientColors}>
           <Text color={Colors.Foreground}>{displayTitle}</Text>
         </ThemedGradient>

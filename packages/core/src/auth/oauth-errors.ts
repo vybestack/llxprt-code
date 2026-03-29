@@ -286,13 +286,14 @@ export class OAuthError extends Error {
       actionRequired: this.actionRequired,
       technicalDetails: this.technicalDetails,
       stack: this.stack,
-      originalError: this.originalError
-        ? {
-            name: this.originalError.name,
-            message: this.originalError.message,
-            stack: this.originalError.stack,
-          }
-        : null,
+      originalError:
+        this.originalError != null
+          ? {
+              name: this.originalError.name,
+              message: this.originalError.message,
+              stack: this.originalError.stack,
+            }
+          : null,
     };
   }
 }

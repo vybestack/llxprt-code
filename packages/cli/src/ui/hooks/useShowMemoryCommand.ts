@@ -14,7 +14,7 @@ export function createShowMemoryAction(
   addMessage: (message: Message) => void,
 ) {
   return async () => {
-    if (!config) {
+    if (config == null) {
       addMessage({
         type: MessageType.ERROR,
         content: 'Configuration not available. Cannot show memory.',

@@ -36,7 +36,7 @@ export async function getAnthropicUsageInfo(
   const bucketToUse = bucket ?? 'default';
   const token = await tokenStore.getToken('anthropic', bucketToUse);
 
-  if (!token) {
+  if (token == null) {
     return null;
   }
 
@@ -71,7 +71,7 @@ export async function getAllAnthropicUsageInfo(
 
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('anthropic', bucket);
-    if (!token) {
+    if (token == null) {
       continue;
     }
 
@@ -86,7 +86,7 @@ export async function getAllAnthropicUsageInfo(
 
     try {
       const usageInfo = await fetchAnthropicUsage(token.access_token);
-      if (usageInfo) {
+      if (usageInfo != null) {
         result.set(bucket, usageInfo);
       }
     } catch (error) {
@@ -121,7 +121,7 @@ export async function getAllCodexUsageInfo(
 
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('codex', bucket);
-    if (!token) {
+    if (token == null) {
       continue;
     }
 
@@ -154,7 +154,7 @@ export async function getAllCodexUsageInfo(
         accountId,
         codexBaseUrl,
       );
-      if (usageInfo) {
+      if (usageInfo != null) {
         result.set(bucket, usageInfo);
       }
     } catch (error) {
@@ -187,7 +187,7 @@ export async function getAllGeminiUsageInfo(
 
   for (const bucket of bucketsToCheck) {
     const token = await tokenStore.getToken('gemini', bucket);
-    if (!token) {
+    if (token == null) {
       continue;
     }
 
@@ -198,7 +198,7 @@ export async function getAllGeminiUsageInfo(
 
     try {
       const quotaInfo = await fetchGeminiQuota(token.access_token);
-      if (quotaInfo) {
+      if (quotaInfo != null) {
         result.set(bucket, quotaInfo as unknown as Record<string, unknown>);
       }
     } catch (error) {
@@ -221,7 +221,7 @@ export async function getHigherPriorityAuth(
   providerName: string,
   settings: LoadedSettings | undefined,
 ): Promise<string | null> {
-  if (!settings) {
+  if (settings == null) {
     return null;
   }
 

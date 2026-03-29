@@ -187,7 +187,7 @@ export const DialogManager = ({
       const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
 
       // Guard: recording infrastructure required
-      if (!recordingSwapCallbacks) {
+      if (recordingSwapCallbacks == null) {
         dialogManagerLogger.warn(
           'Cannot resume session: recording infrastructure not available.',
         );
@@ -291,7 +291,7 @@ export const DialogManager = ({
       />
     );
   }
-  if (uiState.shellConfirmationRequest) {
+  if (uiState.shellConfirmationRequest != null) {
     return (
       <ShellConfirmationDialog request={uiState.shellConfirmationRequest} />
     );
@@ -304,7 +304,7 @@ export const DialogManager = ({
   //     />
   //   );
   // }
-  if (uiState.confirmationRequest) {
+  if (uiState.confirmationRequest != null) {
     return (
       <ConsentPrompt
         prompt={uiState.confirmationRequest.prompt}

@@ -488,7 +488,7 @@ export abstract class ConfigBaseCore {
     return this.bugCommand;
   }
   getFileService(): FileDiscoveryService {
-    if (!this.fileDiscoveryService) {
+    if (this.fileDiscoveryService == null) {
       this.fileDiscoveryService = new FileDiscoveryService(this.targetDir);
     }
     return this.fileDiscoveryService;
@@ -522,7 +522,7 @@ export abstract class ConfigBaseCore {
       .getExtensions()
       .find((ext) => ext.name === extensionName);
     // If extension not found, default to true to avoid filtering
-    return extension ? extension.isActive : true;
+    return extension != null ? extension.isActive : true;
   }
   getEnableExtensionReloading(): boolean {
     return this.enableExtensionReloading;

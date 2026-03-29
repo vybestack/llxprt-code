@@ -62,7 +62,7 @@ function useQuitEffect(
   config: Config,
 ): void {
   useEffect(() => {
-    if (quittingMessages) {
+    if (quittingMessages != null) {
       // Allow UI to render the quit message briefly before exiting
       const timer = setTimeout(() => {
         // Fire SessionEnd hook before exiting
@@ -109,7 +109,7 @@ export function useExitHandling({
       timerRef: React.MutableRefObject<NodeJS.Timeout | null>,
     ) => {
       if (pressedOnce) {
-        if (timerRef.current) {
+        if (timerRef.current != null) {
           clearTimeout(timerRef.current);
         }
         // Directly invoke the central command handler.
@@ -150,10 +150,10 @@ export function useExitHandling({
     () => () => {
       const ctrlCTimer = ctrlCTimerRef.current;
       const ctrlDTimer = ctrlDTimerRef.current;
-      if (ctrlCTimer) {
+      if (ctrlCTimer != null) {
         clearTimeout(ctrlCTimer);
       }
-      if (ctrlDTimer) {
+      if (ctrlDTimer != null) {
         clearTimeout(ctrlDTimer);
       }
     },

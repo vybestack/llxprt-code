@@ -29,7 +29,7 @@ export function normalizeToolName(name: string): string {
   const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
     normalized,
   );
-  if (kimiPrefixMatch) {
+  if (kimiPrefixMatch != null) {
     normalized = kimiPrefixMatch[1];
   }
 

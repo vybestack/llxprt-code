@@ -103,7 +103,7 @@ function createDeveloperRoleToSystemFetch(
   innerFetch: typeof fetch,
 ): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (!init || typeof init.body !== 'string') {
+    if (init == null || typeof init.body !== 'string') {
       return innerFetch(input, init);
     }
 
@@ -180,7 +180,7 @@ function createReasoningCaptureFetch(
 
     // Only intercept streaming responses
     const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.includes('text/event-stream') || !response.body) {
+    if (!contentType.includes('text/event-stream') || response.body == null) {
       return response;
     }
 
@@ -470,7 +470,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private buildVercelTools(
     formattedTools?: OpenAIVercelTool[] | undefined,
   ): VercelTools | undefined {
-    if (!formattedTools || formattedTools.length === 0) {
+    if (formattedTools == null || formattedTools.length === 0) {
       return undefined;
     }
 
@@ -490,13 +490,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       if (!fn?.name) continue;
       if (toolsRecord[fn.name]) continue;
 
-      const inputSchema = fn.parameters
-        ? jsonSchemaFn(fn.parameters as JSONSchema7)
-        : jsonSchemaFn({
-            type: 'object',
-            properties: {},
-            additionalProperties: false,
-          } satisfies JSONSchema7);
+      const inputSchema =
+        fn.parameters != null
+          ? jsonSchemaFn(fn.parameters as JSONSchema7)
+          : jsonSchemaFn({
+              type: 'object',
+              properties: {},
+              additionalProperties: false,
+            } satisfies JSONSchema7);
 
       toolsRecord[fn.name] = toolFn({
         description: fn.description,
@@ -522,7 +523,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         cacheMissTokens?: number;
       }
     | undefined {
-    if (!usage) return undefined;
+    if (usage == null) return undefined;
     const promptTokens =
       usage.inputTokens ??
       (usage as { promptTokens?: number }).promptTokens ??
@@ -684,7 +685,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     // Convert Gemini tools to OpenAI-style definitions using provider-specific converter
     const formattedTools = convertToolsToOpenAIVercel(tools);
 
-    if (logger.enabled && formattedTools) {
+    if (logger.enabled && formattedTools != null) {
       logger.debug(() => `[OpenAIVercelProvider] Tool conversion summary`, {
         hasTools: !!formattedTools,
         toolCount: formattedTools.length,
@@ -747,7 +748,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       (modelId: string): unknown;
     };
     const baseModel = (
-      providerWithChat.chat
+      providerWithChat.chat != null
         ? providerWithChat.chat(modelId)
         : providerWithChat(modelId)
     ) as LanguageModel;
@@ -781,7 +782,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         baseURL: resolved.baseURL ?? this.getBaseURL(),
         streamingEnabled,
         hasTools: !!aiTools,
-        toolCount: aiTools ? Object.keys(aiTools).length : 0,
+        toolCount: aiTools != null ? Object.keys(aiTools).length : 0,
         maxOutputTokens,
       });
     }
@@ -867,7 +868,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
         // Extract thinking tags and accumulate
         const thinkBlock = extractThinkTags(buffer);
-        if (thinkBlock) {
+        if (thinkBlock != null) {
           if (accumulatedThinkingContent.length > 0) {
             accumulatedThinkingContent += ' ';
           }
@@ -1164,7 +1165,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         };
 
         try {
-          if (legacyStream.textStream) {
+          if (legacyStream.textStream != null) {
             for await (const textChunk of legacyStream.textStream) {
               if (!textChunk) {
                 continue;
@@ -1199,7 +1200,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         }
 
         const legacyToolCalls =
-          (legacyStream.toolCalls
+          (legacyStream.toolCalls != null
             ? await legacyStream.toolCalls.catch(() => [])
             : []) ?? [];
         for (const call of legacyToolCalls) {
@@ -1210,12 +1211,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           });
         }
 
-        totalUsage = legacyStream.usage
-          ? await legacyStream.usage.catch(() => undefined)
-          : undefined;
-        finishReason = legacyStream.finishReason
-          ? await legacyStream.finishReason.catch(() => undefined)
-          : undefined;
+        totalUsage =
+          legacyStream.usage != null
+            ? await legacyStream.usage.catch(() => undefined)
+            : undefined;
+        finishReason =
+          legacyStream.finishReason != null
+            ? await legacyStream.finishReason.catch(() => undefined)
+            : undefined;
       }
 
       // Emit accumulated tool calls as a single IContent, with usage metadata if available
@@ -1251,9 +1254,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           captureBuffer.headers,
         );
         const metadata =
-          usageMeta || finishReason
+          usageMeta != null || finishReason
             ? {
-                ...(usageMeta ? { usage: usageMeta } : {}),
+                ...(usageMeta != null ? { usage: usageMeta } : {}),
                 ...(finishReason ? { finishReason } : {}),
               }
             : undefined;
@@ -1261,7 +1264,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         const toolContent: IContent = {
           speaker: 'ai',
           blocks,
-          ...(metadata ? { metadata } : {}),
+          ...(metadata != null ? { metadata } : {}),
         };
 
         yield toolContent;
@@ -1272,14 +1275,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           captureBuffer.headers,
         );
         const metadata =
-          usageMeta || finishReason
+          usageMeta != null || finishReason
             ? {
-                ...(usageMeta ? { usage: usageMeta } : {}),
+                ...(usageMeta != null ? { usage: usageMeta } : {}),
                 ...(finishReason ? { finishReason } : {}),
               }
             : undefined;
 
-        if (metadata) {
+        if (metadata != null) {
           yield {
             speaker: 'ai',
             blocks: [],
@@ -1293,7 +1296,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       try {
         const aiToolFn = this.getAiTool();
         const toolsForGenerate =
-          (!aiToolFn && formattedTools ? formattedTools : aiTools) ?? undefined;
+          (aiToolFn == null && formattedTools != null
+            ? formattedTools
+            : aiTools) ?? undefined;
         const generateOptions: Record<string, unknown> = {
           model,
           system: systemPrompt,
@@ -1333,7 +1338,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       // 1. Extract from <think> tags in text (if enabled)
       if (rsEnabled && rsIncludeInResponse && result.text) {
         const thinkBlock = extractThinkTagsAsBlock(result.text, logger);
-        if (thinkBlock) {
+        if (thinkBlock != null) {
           thinkingContent = thinkBlock.thought;
           logger.debug(
             () =>
@@ -1444,7 +1449,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         const content: IContent = {
           speaker: 'ai',
           blocks,
-          ...(usageMeta
+          ...(usageMeta != null
             ? {
                 metadata: {
                   usage: usageMeta,

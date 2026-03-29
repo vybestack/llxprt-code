@@ -51,17 +51,17 @@ function applySettingsOverrides(
   settings: SettingsService,
   overrides?: SettingsOverrides,
 ): void {
-  if (!overrides) {
+  if (overrides == null) {
     return;
   }
 
-  if (overrides.global) {
+  if (overrides.global != null) {
     for (const [key, value] of Object.entries(overrides.global)) {
       settings.set(key, value);
     }
   }
 
-  if (overrides.provider) {
+  if (overrides.provider != null) {
     for (const [key, value] of Object.entries(overrides.provider)) {
       settings.setProviderSetting(providerName, key, value);
     }
@@ -82,7 +82,7 @@ function buildEphemeralsSnapshot(
       snapshot[key] = value;
     }
   }
-  if (overrides) {
+  if (overrides != null) {
     Object.assign(snapshot, overrides);
   }
 
@@ -99,7 +99,7 @@ function ensureConfig(
   explicitConfig?: Config,
   overrides?: Partial<Record<string, unknown>>,
 ): Config {
-  if (explicitConfig) {
+  if (explicitConfig != null) {
     return explicitConfig;
   }
 
@@ -144,7 +144,7 @@ function ensureRuntime(
     ...(init.runtimeMetadata ?? {}),
   };
 
-  if (init.runtime) {
+  if (init.runtime != null) {
     return {
       ...init.runtime,
       settingsService: settings,
@@ -169,7 +169,7 @@ function ensureInvocation(
   init: ProviderCallOptionsInit,
   metadata: Record<string, unknown>,
 ): RuntimeInvocationContext {
-  if (init.invocation) {
+  if (init.invocation != null) {
     return init.invocation;
   }
 
@@ -183,7 +183,7 @@ function ensureInvocation(
     typeof init.userMemory === 'string' ? init.userMemory : undefined;
 
   const telemetry =
-    init.resolved && 'telemetry' in init.resolved
+    init.resolved != null && 'telemetry' in init.resolved
       ? init.resolved.telemetry
       : undefined;
 

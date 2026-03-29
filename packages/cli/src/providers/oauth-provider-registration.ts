@@ -42,7 +42,7 @@ export function ensureOAuthProviderRegistered(
   }
 
   let registered = registeredProviders.get(oauthManager);
-  if (!registered) {
+  if (registered == null) {
     registered = new Set<string>();
     registeredProviders.set(oauthManager, registered);
   }
@@ -79,7 +79,7 @@ export function ensureOAuthProviderRegistered(
   }
 
   // Note: setAddItem is still called as a fallback for providers that don't accept it in constructor
-  if (oauthProvider && addItem) {
+  if (oauthProvider && addItem != null) {
     oauthProvider.setAddItem?.(addItem);
   }
 

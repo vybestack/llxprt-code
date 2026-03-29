@@ -121,7 +121,7 @@ export class HookRegistry {
 
     // Collect all hook configs from project settings
     const allProjectHooks: HookConfig[] = [];
-    if (projectHooks) {
+    if (projectHooks != null) {
       for (const [key, eventDefinitions] of Object.entries(projectHooks)) {
         // Skip the 'disabled' key
         if (key === 'disabled') continue;
@@ -179,14 +179,14 @@ export class HookRegistry {
     // Skip project hooks if folder is not trusted
     if (!this.config.isTrustedFolder()) {
       debugLogger.log('Skipping project hooks - folder not trusted');
-    } else if (configHooks) {
+    } else if (configHooks != null) {
       this.processHooksConfiguration(configHooks, ConfigSource.Project);
     }
 
     // Get hooks from extensions (always allowed)
     const extensions = this.config.getExtensions() || [];
     for (const extension of extensions) {
-      if (extension.isActive && extension.hooks) {
+      if (extension.isActive && extension.hooks != null) {
         this.processHooksConfiguration(
           extension.hooks,
           ConfigSource.Extensions,

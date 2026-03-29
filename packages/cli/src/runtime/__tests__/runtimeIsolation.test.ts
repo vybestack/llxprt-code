@@ -47,7 +47,7 @@ afterEach(async () => {
   resetCliProviderInfrastructure();
   while (runtimeFixtures.length > 0) {
     const fixture = runtimeFixtures.pop();
-    if (!fixture) {
+    if (fixture == null) {
       continue;
     }
     try {

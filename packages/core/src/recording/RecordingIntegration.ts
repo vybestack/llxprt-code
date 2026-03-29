@@ -85,7 +85,7 @@ export class RecordingIntegration {
    * @pseudocode recording-integration.md lines 73-78
    */
   unsubscribeFromHistory(): void {
-    if (!this.historySubscription) {
+    if (this.historySubscription == null) {
       return;
     }
 

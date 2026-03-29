@@ -80,7 +80,7 @@ export function useLayoutMeasurement({
   );
 
   useLayoutEffect(() => {
-    if (mainControlsRef.current) {
+    if (mainControlsRef.current != null) {
       const fullFooterMeasurement = measureElement(mainControlsRef.current);
       setFooterHeight(fullFooterMeasurement.height);
     }

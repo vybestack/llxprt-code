@@ -480,7 +480,7 @@ function convertContentToMessages(
       }
 
       const message = processHumanContent(c, c.blocks);
-      if (message) {
+      if (message != null) {
         messages.push(message);
       }
     } else if (c.speaker === 'ai') {
@@ -672,7 +672,7 @@ function buildAIMessageContent(
         shouldRedactThinkingBase,
         options,
       );
-      if (converted) {
+      if (converted != null) {
         contentArray.push(converted);
       }
       continue;

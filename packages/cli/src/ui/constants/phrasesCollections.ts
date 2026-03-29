@@ -232,13 +232,13 @@ export function getPhraseCollection(
     case 'whimsical':
       return COMMUNITY_PHRASES;
     case 'custom':
-      return customPhrases && customPhrases.length > 0
+      return customPhrases != null && customPhrases.length > 0
         ? customPhrases
         : LLXPRT_PHRASES; // Fallback to built-in if custom is empty
     case 'default':
     default:
       // Default: LLxprt + custom override (current behavior)
-      return customPhrases && customPhrases.length > 0
+      return customPhrases != null && customPhrases.length > 0
         ? customPhrases
         : LLXPRT_PHRASES;
   }

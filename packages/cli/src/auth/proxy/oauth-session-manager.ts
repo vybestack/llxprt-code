@@ -47,7 +47,7 @@ export class PKCESessionStore {
   }
 
   startGC(): void {
-    if (this.gcInterval) {
+    if (this.gcInterval != null) {
       clearInterval(this.gcInterval);
     }
     this.gcInterval = setInterval(() => this.sweepExpired(), 60_000);
@@ -86,7 +86,7 @@ export class PKCESessionStore {
 
   getSession(sessionId: string, peerIdentity: unknown): OAuthSession {
     const session = this.sessions.get(sessionId);
-    if (!session) {
+    if (session == null) {
       throw new Error('SESSION_NOT_FOUND');
     }
 
@@ -113,14 +113,14 @@ export class PKCESessionStore {
 
   markUsed(sessionId: string): void {
     const session = this.sessions.get(sessionId);
-    if (session) {
+    if (session != null) {
       session.used = true;
     }
   }
 
   removeSession(sessionId: string): void {
     const session = this.sessions.get(sessionId);
-    if (session?.abortController) {
+    if (session?.abortController != null) {
       session.abortController.abort();
     }
     this.sessions.delete(sessionId);
@@ -131,7 +131,7 @@ export class PKCESessionStore {
       session.abortController?.abort();
     }
     this.sessions.clear();
-    if (this.gcInterval) {
+    if (this.gcInterval != null) {
       clearInterval(this.gcInterval);
       this.gcInterval = null;
     }

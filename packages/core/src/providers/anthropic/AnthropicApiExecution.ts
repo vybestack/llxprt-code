@@ -204,7 +204,7 @@ export async function executeAnthropicApiCall(
       );
     }
 
-    if (result.response) {
+    if (result.response != null) {
       responseHeaders = result.response.headers;
 
       // Extract and process rate limit headers

@@ -246,7 +246,7 @@ describe('AnthropicProvider', () => {
     provider = result.provider;
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    if (!runtimeContext.config) {
+    if (runtimeContext.config == null) {
       runtimeContext.config = createRuntimeConfigStub(settingsService);
     }
     runtimeContext.config.getEphemeralSettings = () => ({
@@ -1677,7 +1677,7 @@ describe('AnthropicProvider', () => {
         }),
       });
 
-      if (runtimeContext.config) {
+      if (runtimeContext.config != null) {
         runtimeContext.config.getEphemeralSettings = () => ({
           ...settingsService.getAllGlobalSettings(),
           ...settingsService.getProviderSettings(provider.name),

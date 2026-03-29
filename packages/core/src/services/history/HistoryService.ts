@@ -858,7 +858,7 @@ export class HistoryService
    */
   pop(): IContent | undefined {
     const removed = this.history.pop();
-    if (removed) {
+    if (removed != null) {
       // Recalculate tokens since we removed content
       // This is less efficient but ensures accuracy
       void this.recalculateTokens();
@@ -928,7 +928,7 @@ export class HistoryService
   ): void {
     this.add(userInput);
     this.add(aiResponse);
-    if (toolInteractions) {
+    if (toolInteractions != null) {
       this.addAll(toolInteractions);
     }
   }
@@ -1373,12 +1373,12 @@ export class HistoryService
         }
 
         const existing = keptResponseByCallId.get(callId);
-        if (existing) {
+        if (existing != null) {
           const existingScore = scoreResponse(existing.response);
           const newScore = scoreResponse(toolResponse);
           if (newScore > existingScore) {
             const list = responsesByToolCallIndex.get(existing.toolCallIndex);
-            if (list) {
+            if (list != null) {
               list[existing.responseIndex] = toolResponse;
               keptResponseByCallId.set(callId, {
                 toolCallIndex: existing.toolCallIndex,
@@ -1435,12 +1435,12 @@ export class HistoryService
 
     for (let i = 0; i < strippedContents.length; i++) {
       const content = strippedContents[i];
-      if (content) {
+      if (content != null) {
         result.push(content);
       }
 
       const responses = responsesByToolCallIndex.get(i);
-      if (responses && responses.length > 0) {
+      if (responses != null && responses.length > 0) {
         const mediaForThisIndex = mediaBlocksByToolCallIndex.get(i) ?? [];
         result.push({
           speaker: 'tool',
@@ -1494,7 +1494,7 @@ export class HistoryService
             return { ...block };
           }
         }),
-        metadata: content.metadata ? { ...content.metadata } : {},
+        metadata: content.metadata != null ? { ...content.metadata } : {},
       };
       return cloned;
     });
@@ -1647,7 +1647,7 @@ export class HistoryService
       count: operations.length,
     });
 
-    if (summary && itemsCompressed !== undefined) {
+    if (summary != null && itemsCompressed !== undefined) {
       this.emit('compressionEnded', summary, itemsCompressed);
     }
   }
@@ -1694,7 +1694,7 @@ export class HistoryService
         }
       }
 
-      if (content.metadata?.usage) {
+      if (content.metadata?.usage != null) {
         totalTokens += content.metadata.usage.totalTokens;
         hasTokens = true;
       }

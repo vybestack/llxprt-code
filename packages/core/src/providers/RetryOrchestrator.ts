@@ -185,16 +185,17 @@ export class RetryOrchestrator implements IProvider {
       options = {
         contents: optionsOrContents,
         tools,
-        invocation: signal
-          ? ({ signal } as unknown as GenerateChatOptions['invocation'])
-          : undefined,
+        invocation:
+          signal != null
+            ? ({ signal } as unknown as GenerateChatOptions['invocation'])
+            : undefined,
       } as GenerateChatOptions;
     } else {
       // Modern signature: (options)
       options = optionsOrContents;
 
       // Ensure invocation.signal is propagated to options
-      if (!options.invocation && signal) {
+      if (options.invocation == null && signal != null) {
         options = {
           ...options,
           invocation: {

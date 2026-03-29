@@ -161,7 +161,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
   // Handle cases where the actual error object is stringified inside the message
   // by drilling down until we find an error that doesn't have a stringified message.
   while (
-    currentError &&
+    currentError != null &&
     typeof currentError.message === 'string' &&
     depth < maxDepth
   ) {
@@ -182,7 +182,7 @@ export function parseGoogleApiError(error: unknown): GoogleApiError | null {
     }
   }
 
-  if (!currentError) {
+  if (currentError == null) {
     return null;
   }
 
@@ -258,9 +258,9 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
     }
   }
 
-  if (!outerError) {
+  if (outerError == null) {
     // If the gaxios structure isn't there, check for a top-level `error` property.
-    if (gaxiosError.error) {
+    if (gaxiosError.error != null) {
       outerError = gaxiosError.error;
     } else {
       return undefined;

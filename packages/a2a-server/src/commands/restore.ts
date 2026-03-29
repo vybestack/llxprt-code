@@ -112,7 +112,7 @@ export class RestoreCommand implements Command {
 
       // Restore from snapshot if commitHash exists
       if (validatedData.commitHash) {
-        if (!context.git) {
+        if (context.git == null) {
           return {
             name: this.name,
             data: {

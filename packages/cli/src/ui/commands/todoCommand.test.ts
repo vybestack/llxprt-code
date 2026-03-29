@@ -629,7 +629,7 @@ describe('todoCommand', () => {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             removeSubcommand!.action!(ctx, `${start}-${end}`);
 
-            if (ctx.todoContext?.updateTodos) {
+            if (ctx.todoContext?.updateTodos != null) {
               const calls = (
                 ctx.todoContext.updateTodos as ReturnType<typeof vi.fn>
               ).mock.calls;

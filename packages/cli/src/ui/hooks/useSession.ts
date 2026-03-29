@@ -16,7 +16,7 @@ import {
  */
 export const useSession = (): SessionContextType => {
   const context = useContext(SessionContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useSession must be used within SessionController');
   }
   return context;

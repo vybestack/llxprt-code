@@ -40,19 +40,19 @@ export const useTimer = (isActive: boolean, resetKey: unknown) => {
     if (isActive) {
       // Clear previous interval unconditionally before starting a new one
       // This handles resetKey changes while active, ensuring a fresh interval start.
-      if (timerRef.current) {
+      if (timerRef.current != null) {
         clearInterval(timerRef.current);
       }
       timerRef.current = setInterval(() => {
         setElapsedTime((prev) => prev + 1);
       }, 1000);
-    } else if (timerRef.current) {
+    } else if (timerRef.current != null) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
 
     return () => {
-      if (timerRef.current) {
+      if (timerRef.current != null) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }

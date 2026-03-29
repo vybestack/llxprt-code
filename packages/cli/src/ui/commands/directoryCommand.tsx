@@ -46,7 +46,7 @@ export const directoryCommand: SlashCommand = {
         } = context;
         const [...rest] = args.split(' ');
 
-        if (!config) {
+        if (config == null) {
           addItem(
             {
               type: MessageType.ERROR,
@@ -94,7 +94,7 @@ export const directoryCommand: SlashCommand = {
           const expandedPath = expandHomeDir(pathToAdd.trim());
 
           // Check if path is trusted (only if folder trust is enabled)
-          if (trustedFolders) {
+          if (trustedFolders != null) {
             const isTrusted = trustedFolders.isPathTrusted(expandedPath);
             if (isTrusted === false) {
               errors.push(
@@ -178,7 +178,7 @@ export const directoryCommand: SlashCommand = {
           ui: { addItem },
           services: { config },
         } = context;
-        if (!config) {
+        if (config == null) {
           addItem(
             {
               type: MessageType.ERROR,

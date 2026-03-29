@@ -79,7 +79,7 @@ export class ProviderRegistry {
     }
 
     const provider = this.providers.get(providerName);
-    if (!provider) {
+    if (provider == null) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
@@ -106,7 +106,7 @@ export class ProviderRegistry {
       return this.inMemoryOAuthState.get(providerName) ?? false;
     }
 
-    if (this.settings) {
+    if (this.settings != null) {
       // Check settings if available
       const oauthEnabledProviders =
         this.settings.merged.oauthEnabledProviders || {};
@@ -127,7 +127,7 @@ export class ProviderRegistry {
     // Always update in-memory state for precedence
     this.inMemoryOAuthState.set(providerName, enabled);
 
-    if (this.settings) {
+    if (this.settings != null) {
       const oauthEnabledProviders = {
         ...(this.settings.merged.oauthEnabledProviders || {}),
       };

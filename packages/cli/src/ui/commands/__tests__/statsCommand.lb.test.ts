@@ -25,7 +25,8 @@ describe('statsCommand - load balancer stats', () => {
       const lbSubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'lb',
       );
-      if (!lbSubCommand?.action) throw new Error('lb subcommand has no action');
+      if (lbSubCommand?.action == null)
+        throw new Error('lb subcommand has no action');
 
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       lbSubCommand.action(mockContext, '');
@@ -88,7 +89,7 @@ describe('statsCommand - load balancer stats', () => {
         (sc) => sc.name === 'lb',
       );
 
-      if (!lbSubCommand?.action) {
+      if (lbSubCommand?.action == null) {
         throw new Error('lb subcommand has no action');
       }
 

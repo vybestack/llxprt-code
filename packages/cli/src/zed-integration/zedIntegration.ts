@@ -178,9 +178,8 @@ export class GeminiAgent {
   ): Promise<acp.InitializeResponse> {
     this.clientCapabilities = args.clientCapabilities;
     const profileManager = this.config.getProfileManager();
-    const profileNames = profileManager
-      ? await profileManager.listProfiles()
-      : [];
+    const profileNames =
+      profileManager != null ? await profileManager.listProfiles() : [];
     const authMethods = profileNames.map((name) => ({
       id: name,
       name,
@@ -203,9 +202,8 @@ export class GeminiAgent {
 
   async authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
     const profileManager = this.config.getProfileManager();
-    const availableProfiles = profileManager
-      ? await profileManager.listProfiles()
-      : [];
+    const availableProfiles =
+      profileManager != null ? await profileManager.listProfiles() : [];
     const profileName = parseZedAuthMethodId(methodId, availableProfiles);
 
     // Only clear credential cache if switching to a different profile
@@ -233,7 +231,7 @@ export class GeminiAgent {
 
       this.logger.debug(() => `newSession - creating session ${sessionId}`);
 
-      if (this.clientCapabilities?.fs) {
+      if (this.clientCapabilities?.fs != null) {
         const acpFileSystemService = new AcpFileSystemService(
           this.connection,
           sessionId,
@@ -262,7 +260,7 @@ export class GeminiAgent {
         let providerManager = sessionConfig.getProviderManager();
 
         // Debug provider state
-        if (providerManager) {
+        if (providerManager != null) {
           this.logger.debug(
             () =>
               `ProviderManager exists: ${providerManager?.hasActiveProvider?.() ? 'has active provider' : 'no active provider'}`,
@@ -321,13 +319,13 @@ export class GeminiAgent {
           }
 
           const activeProvider = providerManager?.getActiveProvider();
-          if (activeProvider) {
+          if (activeProvider != null) {
             const configWithProfile = sessionConfig as Config & {
               _profileModelParams?: Record<string, unknown>;
               _cliModelParams?: Record<string, unknown>;
             };
             if (
-              configWithProfile._profileModelParams &&
+              configWithProfile._profileModelParams != null &&
               Object.keys(configWithProfile._profileModelParams).length > 0
             ) {
               this.logger.debug(() => 'Setting model params from profile');
@@ -379,7 +377,7 @@ export class GeminiAgent {
 
           // Ensure provider manager is set on config before refreshAuth
           // This is crucial for createContentGeneratorConfig to include the provider manager
-          if (!sessionConfig.getProviderManager()) {
+          if (sessionConfig.getProviderManager() == null) {
             this.logger.debug(() => 'Setting provider manager on config');
             (
               sessionConfig as unknown as Record<string, unknown>
@@ -390,7 +388,7 @@ export class GeminiAgent {
             const serverToolsProvider =
               providerManager.getServerToolsProvider();
             if (
-              serverToolsProvider &&
+              serverToolsProvider != null &&
               serverToolsProvider.name === 'gemini' &&
               'setConfig' in serverToolsProvider &&
               typeof serverToolsProvider.setConfig === 'function'
@@ -407,7 +405,10 @@ export class GeminiAgent {
 
           // After refreshAuth, verify ContentGeneratorConfig was created with provider manager
           const contentGenConfig = sessionConfig.getContentGeneratorConfig();
-          if (contentGenConfig && !contentGenConfig.providerManager) {
+          if (
+            contentGenConfig != null &&
+            contentGenConfig.providerManager == null
+          ) {
             this.logger.debug(
               () => 'Adding provider manager to ContentGeneratorConfig',
             );
@@ -436,7 +437,7 @@ export class GeminiAgent {
         this.logger.debug(
           () => `ContentGeneratorConfig exists: ${!!contentGenConfig}`,
         );
-        if (contentGenConfig) {
+        if (contentGenConfig != null) {
           this.logger.debug(
             () =>
               `ContentGeneratorConfig has providerManager: ${!!(contentGenConfig as Record<string, unknown>).providerManager}`,
@@ -451,7 +452,7 @@ export class GeminiAgent {
         );
       }
 
-      if (!contentGenConfig) {
+      if (contentGenConfig == null) {
         throw new Error(
           'Content generator config not created after authentication.',
         );
@@ -510,7 +511,7 @@ export class GeminiAgent {
     params: acp.SetSessionModeRequest,
   ): Promise<acp.SetSessionModeResponse> {
     const session = this.sessions.get(params.sessionId);
-    if (!session) {
+    if (session == null) {
       throw new Error(`Session not found: ${params.sessionId}`);
     }
     return session.setMode(params.modeId);
@@ -518,7 +519,7 @@ export class GeminiAgent {
 
   async cancel(params: acp.CancelNotification): Promise<void> {
     const session = this.sessions.get(params.sessionId);
-    if (!session) {
+    if (session == null) {
       throw new Error(`Session not found: ${params.sessionId}`);
     }
     await session.cancelPendingPrompt();
@@ -526,7 +527,7 @@ export class GeminiAgent {
 
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     const session = this.sessions.get(params.sessionId);
-    if (!session) {
+    if (session == null) {
       throw new Error(`Session not found: ${params.sessionId}`);
     }
     return session.prompt(params);
@@ -570,7 +571,7 @@ export class Session {
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
     const availableModes = buildAvailableModes();
     const mode = availableModes.find((m) => m.id === modeId);
-    if (!mode) {
+    if (mode == null) {
       throw new Error(`Invalid or unavailable mode: ${modeId}`);
     }
     this.config.setApprovalMode(mode.id as ApprovalMode);
@@ -578,7 +579,7 @@ export class Session {
   }
 
   async cancelPendingPrompt(): Promise<void> {
-    if (!this.pendingPrompt) {
+    if (this.pendingPrompt == null) {
       return;
     }
 
@@ -661,7 +662,7 @@ export class Session {
 
           if (
             resp.type === StreamEventType.CHUNK &&
-            resp.value.candidates &&
+            resp.value.candidates != null &&
             resp.value.candidates.length > 0
           ) {
             const candidate = resp.value.candidates[0];
@@ -709,7 +710,7 @@ export class Session {
           // Extract function calls from the response, checking for chunk type
           if (resp.type === StreamEventType.CHUNK) {
             const respFunctionCalls = getFunctionCalls(resp.value);
-            if (respFunctionCalls && respFunctionCalls.length > 0) {
+            if (respFunctionCalls != null && respFunctionCalls.length > 0) {
               functionCalls.push(...respFunctionCalls);
             }
           }
@@ -797,7 +798,9 @@ export class Session {
     this.logger.debug(
       () =>
         `sendUpdate: ${update.sessionUpdate} ${
-          'content' in update && update.content && 'text' in update.content
+          'content' in update &&
+          update.content != null &&
+          'text' in update.content
             ? `(${(update.content as { text: string }).text.length} chars)`
             : ''
         }`,
@@ -870,7 +873,7 @@ export class Session {
     const toolRegistry = this.config.getToolRegistry();
     const tool = toolRegistry.getTool(fc.name);
 
-    if (!tool) {
+    if (tool == null) {
       return errorResponse(
         new Error(`Tool "${fc.name}" not found in registry.`),
       );
@@ -978,7 +981,7 @@ export class Session {
         sessionUpdate: 'tool_call_update',
         toolCallId: callId,
         status: 'completed',
-        content: content ? [content] : [],
+        content: content != null ? [content] : [],
       });
 
       const durationMs = Date.now() - startTime;
@@ -1247,7 +1250,7 @@ export class Session {
         }
       } catch (error) {
         if (isNodeError(error) && error.code === 'ENOENT') {
-          if (this.config.getEnableRecursiveFileSearch() && globTool) {
+          if (this.config.getEnableRecursiveFileSearch() && globTool != null) {
             this.debug(
               `Path ${pathName} not found directly, attempting glob search.`,
             );
@@ -1412,7 +1415,7 @@ export class Session {
           for (const part of result.llmContent) {
             if (typeof part === 'string') {
               const match = fileContentRegex.exec(part);
-              if (match) {
+              if (match != null) {
                 const filePathSpecInContent = match[1]; // This is a resolved pathSpec
                 const fileActualContent = match[2].trim();
                 processedQueryParts.push({

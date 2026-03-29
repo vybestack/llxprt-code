@@ -116,14 +116,14 @@ export function buildResponsesRequest(
   } = params;
 
   // Validate prompt/messages ambiguity
-  if (prompt && messages && messages.length > 0) {
+  if (prompt && messages != null && messages.length > 0) {
     throw new Error(
       'Cannot specify both "prompt" and "messages". Use either prompt (for simple queries) or messages (for conversation history).',
     );
   }
 
   // Validate required fields
-  if (!prompt && (!messages || messages.length === 0)) {
+  if (!prompt && (messages == null || messages.length === 0)) {
     throw new Error('Either "prompt" or "messages" must be provided.');
   }
 
@@ -132,14 +132,14 @@ export function buildResponsesRequest(
   }
 
   // Validate tools limit
-  if (tools && tools.length > MAX_TOOLS) {
+  if (tools != null && tools.length > MAX_TOOLS) {
     throw new Error(
       `Too many tools provided. Maximum allowed is ${MAX_TOOLS}, but ${tools.length} were provided.`,
     );
   }
 
   // Validate JSON size for tools
-  if (tools) {
+  if (tools != null) {
     const toolsJson = JSON.stringify(tools);
     const sizeKb = new TextEncoder().encode(toolsJson).length / 1024;
     if (sizeKb > MAX_JSON_SIZE_KB) {
@@ -151,7 +151,7 @@ export function buildResponsesRequest(
 
   // Handle message trimming for stateful mode
   let processedMessages = messages;
-  if (messages && conversationId) {
+  if (messages != null && conversationId) {
     // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
     if (messages.length > 2) {
       // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
@@ -208,7 +208,7 @@ export function buildResponsesRequest(
   const functionCallOutputs: FunctionCallOutput[] = [];
   const functionCalls: FunctionCall[] = [];
 
-  if (processedMessages) {
+  if (processedMessages != null) {
     // First, extract function calls from assistant messages and function call outputs from tool messages
     processedMessages
       .filter((msg): msg is IContent => msg !== undefined && msg !== null)
@@ -316,7 +316,7 @@ export function buildResponsesRequest(
         }
 
         // Preserve usage data if present in metadata
-        if (msg.metadata?.usage) {
+        if (msg.metadata?.usage != null) {
           result.usage = msg.metadata.usage;
         }
 
@@ -336,14 +336,14 @@ export function buildResponsesRequest(
 
   // Add input array if we have messages, function calls, or function call outputs
   if (
-    transformedMessages ||
+    transformedMessages != null ||
     functionCalls.length > 0 ||
     functionCallOutputs.length > 0
   ) {
     const inputItems: ResponsesMessage[] = [];
 
     // Add regular messages
-    if (transformedMessages) {
+    if (transformedMessages != null) {
       inputItems.push(...transformedMessages);
     }
 
@@ -372,7 +372,7 @@ export function buildResponsesRequest(
   }
 
   // Add tools if provided
-  if (tools && tools.length > 0) {
+  if (tools != null && tools.length > 0) {
     request.tools = tools as ResponsesTool[];
     if (tool_choice) {
       request.tool_choice = tool_choice;

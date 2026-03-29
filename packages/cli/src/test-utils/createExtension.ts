@@ -39,7 +39,7 @@ export function createExtension({
     fs.writeFileSync(path.join(extDir, contextFileName), 'context');
   }
 
-  if (installMetadata) {
+  if (installMetadata != null) {
     fs.writeFileSync(
       path.join(extDir, INSTALL_METADATA_FILENAME),
       JSON.stringify(installMetadata),

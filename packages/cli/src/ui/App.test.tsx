@@ -429,7 +429,7 @@ describe('App UI', () => {
   });
 
   afterEach(() => {
-    if (currentUnmount) {
+    if (currentUnmount != null) {
       currentUnmount();
       currentUnmount = undefined;
     }

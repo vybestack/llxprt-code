@@ -71,7 +71,7 @@ export function Table<T>({ data, columns }: TableProps<T>) {
               flexBasis={col.flexBasis ?? (col.width ? undefined : 0)}
               paddingRight={1}
             >
-              {col.renderCell ? (
+              {col.renderCell != null ? (
                 col.renderCell(item)
               ) : (
                 <Text color={theme.text.primary}>

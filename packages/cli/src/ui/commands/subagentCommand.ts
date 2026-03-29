@@ -40,7 +40,7 @@ function parseSaveArgs(args: string): {
     /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/,
   );
 
-  if (!match) {
+  if (match == null) {
     return null;
   }
 
@@ -81,7 +81,7 @@ async function saveSubagent(
   existed: boolean,
 ): Promise<SlashCommandActionReturn> {
   const manager = context.services.subagentManager;
-  if (!manager) {
+  if (manager == null) {
     return {
       type: 'message',
       messageType: 'error',
@@ -125,7 +125,7 @@ const subagentSchema = [
     description: 'Enter subagent name',
     completer: withFuzzyFilter(async (ctx: CommandContext) => {
       const manager = ctx.services.subagentManager;
-      if (!manager) {
+      if (manager == null) {
         return [];
       }
 
@@ -156,7 +156,7 @@ const subagentSchema = [
     completer: withFuzzyFilter(async (ctx: CommandContext) => {
       const profileManager = ctx.services.profileManager;
       if (
-        !profileManager ||
+        profileManager == null ||
         typeof profileManager.listProfiles !== 'function'
       ) {
         return [];
@@ -227,7 +227,7 @@ const saveCommand: SlashCommand = {
     // Parse arguments: <name> <profile> <mode> "<text>"
     const parsedArgs = parseSaveArgs(args);
 
-    if (!parsedArgs) {
+    if (parsedArgs == null) {
       return {
         type: 'message',
         messageType: 'error',
@@ -238,7 +238,7 @@ const saveCommand: SlashCommand = {
     const { name, profile, mode, input } = parsedArgs;
     const { services, overwriteConfirmed, invocation } = context;
     const subagentManager = services.subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
-    if (!subagentManager) {
+    if (subagentManager == null) {
       return {
         type: 'message',
         messageType: 'error',
@@ -288,7 +288,7 @@ const saveCommand: SlashCommand = {
     }
     // Auto mode: generate using LLM
     const configService = services.config; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
-    if (!configService) {
+    if (configService == null) {
       return {
         type: 'message',
         messageType: 'error',
@@ -324,7 +324,7 @@ const listCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, _args: string): Promise<void> => {
     const manager = context.services.subagentManager;
-    if (!manager) {
+    if (manager == null) {
       context.ui.addItem(
         {
           type: MessageType.ERROR,
@@ -407,7 +407,7 @@ const showCommand: SlashCommand = {
     // Validate subagent exists
     const { services } = context;
     const subagentManager = services.subagentManager;
-    if (!subagentManager) {
+    if (subagentManager == null) {
       return {
         type: 'message',
         messageType: 'error',
@@ -458,7 +458,7 @@ const deleteCommand: SlashCommand = {
 
     const { services } = context;
     const subagentManager = services.subagentManager;
-    if (!subagentManager) {
+    if (subagentManager == null) {
       return {
         type: 'message',
         messageType: 'error',
@@ -541,7 +541,7 @@ const editCommand: SlashCommand = {
 
     const { services } = context;
     const subagentManager = services.subagentManager;
-    if (!subagentManager) {
+    if (subagentManager == null) {
       return {
         type: 'message',
         messageType: 'error',

@@ -399,7 +399,7 @@ export class MemoryTool
 
   protected createInvocation(params: SaveMemoryParams, messageBus: MessageBus) {
     const invocation = new MemoryToolInvocation(params, messageBus);
-    if (this.config) {
+    if (this.config != null) {
       invocation.setWorkingDir(this.config.getWorkingDir());
     }
     return invocation;
@@ -454,7 +454,7 @@ export class MemoryTool
         case 'core.global':
           return getGlobalCoreMemoryFilePath();
         case 'project':
-          if (this.config) {
+          if (this.config != null) {
             return getProjectMemoryFilePath(this.config.getWorkingDir());
           }
           return getGlobalMemoryFilePath();

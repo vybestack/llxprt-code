@@ -59,7 +59,7 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
     logger.debug('BucketAuthConfirmation useEffect running', {
       hasMessageBus: !!messageBus,
     });
-    if (!messageBus) {
+    if (messageBus == null) {
       logger.debug('No message bus available, skipping subscription');
       return;
     }
@@ -92,7 +92,7 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
 
   const handleConfirm = useCallback(
     (confirmed: boolean) => {
-      if (!pendingRequest || !messageBus) {
+      if (pendingRequest == null || messageBus == null) {
         return;
       }
 
@@ -108,7 +108,7 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
 
   useKeypress(
     (key) => {
-      if (!pendingRequest || !isFocused) return;
+      if (pendingRequest == null || !isFocused) return;
       if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
         handleConfirm(false);
       }
@@ -123,7 +123,7 @@ export const BucketAuthConfirmation: React.FC<BucketAuthConfirmationProps> = ({
     [handleConfirm],
   );
 
-  if (!pendingRequest) {
+  if (pendingRequest == null) {
     return null;
   }
 

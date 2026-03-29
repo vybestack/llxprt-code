@@ -146,7 +146,10 @@ export class CompressionHandler {
       const strategy = getCompressionStrategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
-      if (!strategy.optimize || strategy.trigger?.mode !== 'continuous') {
+      if (
+        strategy.optimize == null ||
+        strategy.trigger?.mode !== 'continuous'
+      ) {
         return;
       }
 
@@ -272,7 +275,7 @@ export class CompressionHandler {
     pendingTokens: number,
     source: 'send' | 'stream',
   ): Promise<void> {
-    if (this.compressionPromise) {
+    if (this.compressionPromise != null) {
       this.logger.debug('Waiting for ongoing compression to complete');
       try {
         await this.compressionPromise;
@@ -581,7 +584,7 @@ export class CompressionHandler {
     const promptBaseDir = path.join(os.homedir(), '.llxprt', 'prompts');
 
     let activeTodos: string | undefined;
-    if (this.activeTodosProvider) {
+    if (this.activeTodosProvider != null) {
       try {
         activeTodos = await this.activeTodosProvider();
       } catch (error) {

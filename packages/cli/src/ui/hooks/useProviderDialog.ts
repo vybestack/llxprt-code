@@ -69,7 +69,7 @@ export const useProviderDialog = ({
         const result = await runtime.switchActiveProvider(providerName);
 
         // Clear UI history to prevent tool call ID mismatches
-        if (onClear) {
+        if (onClear != null) {
           onClear();
         }
 

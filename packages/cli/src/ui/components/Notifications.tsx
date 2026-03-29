@@ -83,7 +83,7 @@ export const Notifications = ({
   if (
     !showStartupWarnings &&
     !showInitError &&
-    !updateInfo &&
+    updateInfo == null &&
     !showScreenReaderNudge
   ) {
     return null;

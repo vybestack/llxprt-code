@@ -106,7 +106,7 @@ describe('aboutCommand', () => {
 
   it('should call addItem with all version info', async () => {
     process.env.SANDBOX = '';
-    if (!aboutCommand.action) {
+    if (aboutCommand.action == null) {
       throw new Error('The about command must have an action.');
     }
 
@@ -129,7 +129,7 @@ describe('aboutCommand', () => {
 
   it('should show the correct sandbox environment variable', async () => {
     process.env.SANDBOX = 'gemini-sandbox';
-    if (!aboutCommand.action) {
+    if (aboutCommand.action == null) {
       throw new Error('The about command must have an action.');
     }
 
@@ -145,7 +145,7 @@ describe('aboutCommand', () => {
   it('should show sandbox-exec profile when applicable', async () => {
     process.env.SANDBOX = 'sandbox-exec';
     process.env.SEATBELT_PROFILE = 'test-profile';
-    if (!aboutCommand.action) {
+    if (aboutCommand.action == null) {
       throw new Error('The about command must have an action.');
     }
 
@@ -164,7 +164,7 @@ describe('aboutCommand', () => {
     } as Partial<IdeClient> as IdeClient);
 
     process.env.SANDBOX = '';
-    if (!aboutCommand.action) {
+    if (aboutCommand.action == null) {
       throw new Error('The about command must have an action.');
     }
 

@@ -225,7 +225,7 @@ export class GeminiClient {
 
   dispose(): void {
     coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
-    if (this._unsubscribe) {
+    if (this._unsubscribe != null) {
       this._unsubscribe();
       this._unsubscribe = undefined;
     }
@@ -254,7 +254,7 @@ export class GeminiClient {
     // Use pending config if available (from initialize() call), otherwise fall back to current config
     const contentGenConfig =
       this._pendingConfig || this.config.getContentGeneratorConfig();
-    if (!contentGenConfig) {
+    if (contentGenConfig == null) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
       );
@@ -274,7 +274,7 @@ export class GeminiClient {
   }
 
   getContentGenerator(): ContentGenerator {
-    if (!this.contentGenerator) {
+    if (this.contentGenerator == null) {
       throw new Error('Content generator not initialized');
     }
     return this.contentGenerator;
@@ -289,7 +289,7 @@ export class GeminiClient {
    * This is lazily initialized to avoid creating it when not needed.
    */
   private getBaseLlmClient(): BaseLLMClient {
-    if (!this._baseLlmClient) {
+    if (this._baseLlmClient == null) {
       this._baseLlmClient = new BaseLLMClient(this.getContentGenerator());
     }
     return this._baseLlmClient;
@@ -321,7 +321,7 @@ export class GeminiClient {
     this.getChat().setSystemInstruction(systemInstruction);
 
     const historyService = this.getHistoryService();
-    if (historyService) {
+    if (historyService != null) {
       try {
         const systemPromptTokens = await historyService.estimateTokensForText(
           systemInstruction,
@@ -337,7 +337,7 @@ export class GeminiClient {
   }
 
   getChat(): GeminiChat {
-    if (!this.chat) {
+    if (this.chat == null) {
       throw new Error('Chat not initialized');
     }
     return this.chat;
@@ -367,7 +367,7 @@ export class GeminiClient {
 
   async getHistory(): Promise<Content[]> {
     // If we have stored history but no chat, return the stored history
-    if (!this.hasChatInitialized() && this._previousHistory) {
+    if (!this.hasChatInitialized() && this._previousHistory != null) {
       return this._previousHistory;
     }
 
@@ -394,7 +394,7 @@ export class GeminiClient {
     const historyToSet = stripThoughts
       ? history.map((content) => {
           const newContent = { ...content };
-          if (newContent.parts) {
+          if (newContent.parts != null) {
             newContent.parts = newContent.parts.map((part) => {
               if (
                 part &&
@@ -459,9 +459,10 @@ export class GeminiClient {
       typeof this.chat?.getToolsView === 'function'
         ? this.chat.getToolsView()
         : undefined;
-    const toolDeclarations = toolsView
-      ? buildToolDeclarationsFromView(toolRegistry, toolsView)
-      : toolRegistry.getFunctionDeclarations();
+    const toolDeclarations =
+      toolsView != null
+        ? buildToolDeclarationsFromView(toolRegistry, toolsView)
+        : toolRegistry.getFunctionDeclarations();
     this.todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
       toolDeclarations,
     );
@@ -491,7 +492,7 @@ export class GeminiClient {
 
   clearTools(): void {
     delete this.generateContentConfig.tools;
-    if (this.chat && typeof this.chat.clearTools === 'function') {
+    if (this.chat != null && typeof this.chat.clearTools === 'function') {
       this.chat.clearTools();
     }
   }
@@ -501,7 +502,7 @@ export class GeminiClient {
    * This decouples GeminiChat from directly knowing about uiTelemetryService.
    */
   private updateTelemetryTokenCount(): void {
-    if (this.chat) {
+    if (this.chat != null) {
       uiTelemetryService.setLastPromptTokenCount(
         this.chat.getLastPromptTokenCount(),
       );
@@ -510,7 +511,7 @@ export class GeminiClient {
 
   async resetChat(): Promise<void> {
     // If chat exists, clear its history service
-    if (this.chat) {
+    if (this.chat != null) {
       const historyService = this.chat.getHistoryService();
       if (historyService) {
         // Clear the history service directly
@@ -559,7 +560,7 @@ export class GeminiClient {
 
     // P0 Fix Part 1: Ensure content generator is initialized
     // This will fail fast if auth/config isn't ready
-    if (!this.contentGenerator) {
+    if (this.contentGenerator == null) {
       try {
         await this.lazyInitialize();
       } catch (err) {
@@ -585,7 +586,7 @@ export class GeminiClient {
 
     // P0 Fix Part 3: Get history service and restore items
     const historyService = this.getHistoryService();
-    if (!historyService) {
+    if (historyService == null) {
       throw new Error(
         'Cannot restore history: History service unavailable after chat initialization',
       );
@@ -613,7 +614,7 @@ export class GeminiClient {
   }
 
   async addDirectoryContext(): Promise<void> {
-    if (!this.chat) {
+    if (this.chat == null) {
       return;
     }
 
@@ -628,7 +629,7 @@ export class GeminiClient {
     promptId: string,
   ): Promise<GenerateContentResponse> {
     await this.lazyInitialize();
-    if (!this.chat) {
+    if (this.chat == null) {
       this.chat = await this.startChat([]);
     }
     return this.getChat().generateDirectMessage(params, promptId);

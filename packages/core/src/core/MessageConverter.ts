@@ -300,7 +300,7 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
     if (
       typeof part === 'object' &&
       'functionResponse' in part &&
-      part.functionResponse
+      part.functionResponse != null
     ) {
       blocks.push({
         type: 'tool_response',
@@ -341,7 +341,7 @@ function classifyMixedParts(parts: Part[]): {
       hasAIContent = true;
     } else if ('text' in part && part.text !== undefined) {
       blocks.push({ type: 'text', text: part.text });
-    } else if ('functionCall' in part && part.functionCall) {
+    } else if ('functionCall' in part && part.functionCall != null) {
       hasAIContent = true;
       blocks.push({
         type: 'tool_call',
@@ -349,7 +349,7 @@ function classifyMixedParts(parts: Part[]): {
         name: part.functionCall.name || '',
         parameters: (part.functionCall.args as Record<string, unknown>) || {},
       } as ToolCallBlock);
-    } else if ('functionResponse' in part && part.functionResponse) {
+    } else if ('functionResponse' in part && part.functionResponse != null) {
       hasToolContent = true;
       blocks.push({
         type: 'tool_response',
@@ -475,7 +475,7 @@ export function applyResponseMetadata(
   });
 
   // Add usage metadata if present
-  if (input.metadata?.usage) {
+  if (input.metadata?.usage != null) {
     const usageMetadata: UsageMetadataWithCache = {
       promptTokenCount: input.metadata.usage.promptTokens || 0,
       candidatesTokenCount: input.metadata.usage.completionTokens || 0,
@@ -489,7 +489,7 @@ export function applyResponseMetadata(
   }
 
   // Map stopReason to finishReason
-  if (input.metadata?.stopReason && response.candidates?.[0]) {
+  if (input.metadata?.stopReason && response.candidates?.[0] != null) {
     const finishReasonByStopReason: Record<string, FinishReason> = {
       end_turn: FinishReason.STOP,
       max_tokens: FinishReason.MAX_TOKENS,

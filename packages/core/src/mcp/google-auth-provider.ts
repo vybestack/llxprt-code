@@ -34,7 +34,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
 
   constructor(private readonly config?: MCPServerConfig) {
     const scopes = this.config?.oauth?.scopes;
-    if (!scopes || scopes.length === 0) {
+    if (scopes == null || scopes.length === 0) {
       throw new Error(
         'Scopes must be provided in the oauth config for Google Credentials provider',
       );
@@ -55,7 +55,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
   async tokens(): Promise<OAuthTokens | undefined> {
     // check for a valid, non-expired cached token.
     if (
-      this.cachedToken &&
+      this.cachedToken != null &&
       this.tokenExpiryTime &&
       Date.now() < this.tokenExpiryTime - FIVE_MIN_BUFFER_MS
     ) {

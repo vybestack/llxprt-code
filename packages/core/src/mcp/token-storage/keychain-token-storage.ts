@@ -110,7 +110,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
     }
 
     const keytar = await this.getKeytar();
-    if (!keytar) {
+    if (keytar == null) {
       throw new Error('Keytar module not available');
     }
 
@@ -140,7 +140,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
     }
 
     const keytar = await this.getKeytar();
-    if (!keytar) {
+    if (keytar == null) {
       throw new Error('Keytar module not available');
     }
 
@@ -162,7 +162,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
     }
 
     const keytar = await this.getKeytar();
-    if (!keytar) {
+    if (keytar == null) {
       throw new Error('Keytar module not available');
     }
 
@@ -183,7 +183,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
     }
 
     const keytar = await this.getKeytar();
-    if (!keytar) {
+    if (keytar == null) {
       throw new Error('Keytar module not available');
     }
 
@@ -208,7 +208,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
     }
 
     const keytar = await this.getKeytar();
-    if (!keytar) {
+    if (keytar == null) {
       throw new Error('Keytar module not available');
     }
 
@@ -247,16 +247,17 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       throw new Error('Keychain is not available');
     }
 
-    const servers = this.keytarModule
-      ? await this.keytarModule
-          .findCredentials(this.serviceName)
-          .then((creds) => creds.map((c) => c.account))
-          .catch((error: Error) => {
-            throw new Error(
-              `Failed to list servers for clearing: ${error.message}`,
-            );
-          })
-      : [];
+    const servers =
+      this.keytarModule != null
+        ? await this.keytarModule
+            .findCredentials(this.serviceName)
+            .then((creds) => creds.map((c) => c.account))
+            .catch((error: Error) => {
+              throw new Error(
+                `Failed to list servers for clearing: ${error.message}`,
+              );
+            })
+        : [];
     const errors: Error[] = [];
 
     for (const server of servers) {
@@ -283,7 +284,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
 
     try {
       const keytar = await this.getKeytar();
-      if (!keytar) {
+      if (keytar == null) {
         this.keychainAvailable = false;
         return false;
       }

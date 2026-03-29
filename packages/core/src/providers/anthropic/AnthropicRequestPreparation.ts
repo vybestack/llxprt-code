@@ -478,7 +478,9 @@ function buildThinkingAndRequestBody(params: {
     messages: anthropicMessages,
     system: systemField,
     tools:
-      anthropicTools && anthropicTools.length > 0 ? anthropicTools : undefined,
+      anthropicTools != null && anthropicTools.length > 0
+        ? anthropicTools
+        : undefined,
     maxTokens: getMaxTokensForModel(currentModel),
     streamingEnabled,
     modelParams: requestOverrides,
@@ -529,12 +531,12 @@ function convertMessagesAndTools(params: {
   // Convert tools to Anthropic format and stabilize ordering
   let anthropicTools = convertToolsToAnthropic(tools, isOAuth);
 
-  if (anthropicTools && anthropicTools.length > 0) {
+  if (anthropicTools != null && anthropicTools.length > 0) {
     anthropicTools = [...anthropicTools]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((tool) => {
         const schema = tool.input_schema;
-        if (schema.properties) {
+        if (schema.properties != null) {
           return {
             ...tool,
             input_schema: {
@@ -612,7 +614,7 @@ function logRequestDebugInfo(params: {
   } = params;
 
   // Debug log the tools being sent to Anthropic
-  if (anthropicTools && anthropicTools.length > 0) {
+  if (anthropicTools != null && anthropicTools.length > 0) {
     toolsLogger.debug(() => `[AnthropicProvider] Sending tools to API:`, {
       toolCount: anthropicTools.length,
       toolNames: anthropicTools.map((t) => t.name),

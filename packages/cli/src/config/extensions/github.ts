@@ -214,7 +214,7 @@ export async function checkForExtensionUpdate(
         extensionDir: installMetadata.source,
         workspaceDir: cwd,
       });
-      if (!newExtension) {
+      if (newExtension == null) {
         debugLogger.warn(
           `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
         );
@@ -236,7 +236,7 @@ export async function checkForExtensionUpdate(
     }
   }
   if (
-    !installMetadata ||
+    installMetadata == null ||
     (installMetadata.type !== 'git' &&
       installMetadata.type !== 'github-release')
   ) {
@@ -341,7 +341,7 @@ export async function downloadFromGitHubRelease(
     let isZip = false;
     let fileName: string | undefined;
 
-    if (asset) {
+    if (asset != null) {
       archiveUrl = asset.url;
       fileName = asset.name;
     } else if (releaseData.tarball_url) {
@@ -372,7 +372,7 @@ export async function downloadFromGitHubRelease(
     //    a 302 Redirect to the actual download location (codeload.github.com).
     //    Sending 'application/octet-stream' for tarballs results in a 415 Unsupported Media Type error.
     const headers = {
-      ...(asset
+      ...(asset != null
         ? { Accept: 'application/octet-stream' }
         : { Accept: 'application/vnd.github+json' }),
     };
@@ -391,7 +391,7 @@ export async function downloadFromGitHubRelease(
     if (entries.length === 2) {
       const lonelyDir = entries.find((entry) => entry.isDirectory());
       if (
-        lonelyDir &&
+        lonelyDir != null &&
         (fs.existsSync(
           path.join(destination, lonelyDir.name, EXTENSIONS_CONFIG_FILENAME),
         ) ||
@@ -450,7 +450,7 @@ export function findReleaseAsset(assets: Asset[]): Asset | undefined {
   const platformArchAsset = assets.find((asset) =>
     asset.name.toLowerCase().startsWith(platformArchPrefix),
   );
-  if (platformArchAsset) {
+  if (platformArchAsset != null) {
     return platformArchAsset;
   }
 
@@ -458,7 +458,7 @@ export function findReleaseAsset(assets: Asset[]): Asset | undefined {
   const platformAsset = assets.find((asset) =>
     asset.name.toLowerCase().startsWith(platformPrefix),
   );
-  if (platformAsset) {
+  if (platformAsset != null) {
     return platformAsset;
   }
 
@@ -527,7 +527,7 @@ export async function downloadFile(
     const cleanupAndReject = (error: Error) => {
       // Try to clean up the partial file, but don't mask the original error
       fs.unlink(dest, (unlinkErr) => {
-        if (unlinkErr && unlinkErr.code !== 'ENOENT') {
+        if (unlinkErr != null && unlinkErr.code !== 'ENOENT') {
           // Log cleanup failure but still reject with original error
           debugLogger.error(
             `Failed to clean up partial file ${dest}:`,

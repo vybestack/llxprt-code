@@ -34,9 +34,10 @@ function showMessageIfNoExtensions(
 }
 
 async function listAction(context: CommandContext) {
-  const extensions = context.services.config
-    ? listExtensions(context.services.config)
-    : [];
+  const extensions =
+    context.services.config != null
+      ? listExtensions(context.services.config)
+      : [];
 
   // Check if extensions are disabled by admin
   if (extensions.length === 0) {
@@ -88,9 +89,10 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
     (resolve) => (resolveUpdateComplete = resolve),
   );
 
-  const extensions = context.services.config
-    ? listExtensions(context.services.config)
-    : [];
+  const extensions =
+    context.services.config != null
+      ? listExtensions(context.services.config)
+      : [];
 
   if (showMessageIfNoExtensions(context, extensions)) {
     return Promise.resolve();
@@ -136,7 +138,7 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
         const extension = extensions.find(
           (extension) => extension.name === name,
         );
-        if (!extension) {
+        if (extension == null) {
           context.ui.addItem(
             {
               type: MessageType.ERROR,
@@ -175,9 +177,10 @@ const updateExtensionsCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: updateAction,
   completion: async (context, partialArg) => {
-    const extensions = context.services.config
-      ? listExtensions(context.services.config)
-      : [];
+    const extensions =
+      context.services.config != null
+        ? listExtensions(context.services.config)
+        : [];
     const extensionNames = extensions.map((ext) => ext.name);
     const suggestions = extensionNames.filter((name) =>
       name.startsWith(partialArg),
@@ -196,7 +199,7 @@ async function restartAction(
   args: string,
 ): Promise<void> {
   const extensionLoader = context.services.config?.getExtensionLoader();
-  if (!extensionLoader) {
+  if (extensionLoader == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -229,7 +232,7 @@ async function restartAction(
   let extensionsToRestart = extensionLoader
     .getExtensions()
     .filter((extension: GeminiCLIExtension) => extension.isActive);
-  if (names) {
+  if (names != null) {
     extensionsToRestart = extensionsToRestart.filter(
       (extension: GeminiCLIExtension) => names.includes(extension.name),
     );
@@ -310,9 +313,10 @@ async function completeExtensions(
   context: CommandContext,
   partialArg: string,
 ): Promise<string[]> {
-  let extensions = context.services.config
-    ? listExtensions(context.services.config)
-    : [];
+  let extensions =
+    context.services.config != null
+      ? listExtensions(context.services.config)
+      : [];
 
   // Filter by active state based on the command
   if (context.invocation?.name === 'restart') {
@@ -338,7 +342,7 @@ async function installAction(
   const extensionLoader = context.services.config?.getExtensionLoader();
 
   // Check if extension reloading is enabled
-  if (!extensionLoader) {
+  if (extensionLoader == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -427,7 +431,7 @@ async function uninstallAction(
 ): Promise<void> {
   const extensionLoader = context.services.config?.getExtensionLoader();
 
-  if (!extensionLoader) {
+  if (extensionLoader == null) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,

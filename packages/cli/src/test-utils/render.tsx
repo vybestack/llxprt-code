@@ -149,7 +149,7 @@ const MockRuntimeContextProvider: React.FC<React.PropsWithChildren> = ({
 // Export mock hooks that tests can use
 export const useMockRuntimeApi = (): MockRuntimeApi => {
   const context = useContext(MockRuntimeContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('MockRuntimeContext not found');
   }
   return context.api;

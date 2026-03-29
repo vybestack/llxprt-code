@@ -129,7 +129,7 @@ function createFilteredToolRegistryView(
   registry: ToolRegistry | undefined,
   governance: ToolGovernance,
 ): ToolRegistryView {
-  if (!registry) {
+  if (registry == null) {
     return {
       listToolNames: () => [],
       getToolMetadata: () => undefined,
@@ -149,7 +149,7 @@ function createFilteredToolRegistryView(
         return undefined;
       }
       const tool = getTools().find((candidate) => candidate.name === name);
-      if (!tool) {
+      if (tool == null) {
         return undefined;
       }
       const schema = (tool as unknown as { schema?: Record<string, unknown> })
@@ -219,11 +219,11 @@ export async function loadAgentRuntime(
   });
 
   let contentGenerator: ContentGenerator;
-  if (overrides.contentGenerator) {
+  if (overrides.contentGenerator != null) {
     contentGenerator = overrides.contentGenerator;
   } else {
     const contentConfig = profile.contentGeneratorConfig;
-    if (!contentConfig) {
+    if (contentConfig == null) {
       throw new Error(
         'AgentRuntimeLoader requires contentGeneratorConfig when no contentGenerator override is supplied.',
       );

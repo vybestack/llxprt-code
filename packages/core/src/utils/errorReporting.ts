@@ -51,7 +51,7 @@ export async function reportError(
 
   const reportContent: ErrorReportData = { error: errorToReport };
 
-  if (context) {
+  if (context != null) {
     reportContent.context = context;
   }
 
@@ -65,7 +65,7 @@ export async function reportError(
       stringifyError,
     );
     console.error('Original error that triggered report generation:', error);
-    if (context) {
+    if (context != null) {
       console.error(
         'Original context could not be stringified or included in report.',
       );
@@ -98,7 +98,7 @@ export async function reportError(
     );
     // Log the original error as a fallback if report writing fails
     console.error('Original error that triggered report generation:', error);
-    if (context) {
+    if (context != null) {
       // Context was stringifiable, but writing the file failed.
       // We already have stringifiedReportContent, but it might be too large for console.
       // So, we try to log the original context object, and if that fails, its stringified version (truncated).

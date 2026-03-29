@@ -23,7 +23,7 @@ export async function readStdin(): Promise<string> {
     const onReadable = () => {
       let chunk;
       while ((chunk = process.stdin.read()) !== null) {
-        if (pipedInputTimerId) {
+        if (pipedInputTimerId != null) {
           clearTimeout(pipedInputTimerId);
           pipedInputTimerId = null;
         }
@@ -53,7 +53,7 @@ export async function readStdin(): Promise<string> {
     };
 
     const cleanup = () => {
-      if (pipedInputTimerId) {
+      if (pipedInputTimerId != null) {
         clearTimeout(pipedInputTimerId);
         pipedInputTimerId = null;
       }

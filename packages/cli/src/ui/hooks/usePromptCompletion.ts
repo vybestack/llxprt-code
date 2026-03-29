@@ -76,13 +76,13 @@ export function usePromptCompletion({
       return;
     }
 
-    if (abortControllerRef.current) {
+    if (abortControllerRef.current != null) {
       abortControllerRef.current.abort();
     }
 
     if (
       trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH ||
-      !geminiClient ||
+      geminiClient == null ||
       isSlashCommand(trimmedText) ||
       trimmedText.includes('@') ||
       !isPromptCompletionEnabled

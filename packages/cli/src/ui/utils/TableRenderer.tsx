@@ -165,7 +165,7 @@ const adjustBreakIndex = (content: string, index: number): number => {
 const wrapCellContent = (content: string, maxWidth: number): string[] => {
   const cacheKey = `${maxWidth}::${content}`;
   const cached = wrapCache.get(cacheKey);
-  if (cached) {
+  if (cached != null) {
     return cached;
   }
 

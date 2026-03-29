@@ -38,7 +38,7 @@ const extractCountFromText = (text?: string): number | undefined => {
     return undefined;
   }
   const match = text.match(/(\d+)\s+(tasks?|items?)/i);
-  if (!match) {
+  if (match == null) {
     return undefined;
   }
   return Number(match[1]);
@@ -228,7 +228,11 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
               availableTerminalHeight={availableTerminalHeightPerToolMessage}
               terminalWidth={innerWidth}
               emphasis={
-                isConfirming ? 'high' : toolAwaitingApproval ? 'low' : 'medium'
+                isConfirming
+                  ? 'high'
+                  : toolAwaitingApproval != null
+                    ? 'low'
+                    : 'medium'
               }
               renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
               activeShellPtyId={activeShellPtyId}

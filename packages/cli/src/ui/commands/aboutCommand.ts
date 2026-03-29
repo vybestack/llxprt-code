@@ -36,7 +36,7 @@ export const aboutCommand: SlashCommand = {
       runtimeApi = null;
     }
 
-    if (runtimeApi) {
+    if (runtimeApi != null) {
       try {
         const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
         if (snapshot.modelName) {

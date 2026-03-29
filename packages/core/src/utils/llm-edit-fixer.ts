@@ -119,7 +119,7 @@ export async function FixLLMEditWithInstruction(
     )
     .digest('hex');
   const cachedResult = editCorrectionWithInstructionCache.get(cacheKey);
-  if (cachedResult) {
+  if (cachedResult != null) {
     return cachedResult;
   }
   const userPrompt = EDIT_USER_PROMPT.replace('{instruction}', instruction)

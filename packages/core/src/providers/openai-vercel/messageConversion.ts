@@ -96,7 +96,7 @@ export function convertToVercelMessages(
 
   // Helper to resolve tool call IDs based on format
   const resolveToolCallId = (block: ToolCallBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper != null) {
       return toolIdMapper.resolveToolCallId(block);
     }
     return normalizeToOpenAIToolId(block.id);
@@ -104,7 +104,7 @@ export function convertToVercelMessages(
 
   // Helper to resolve tool response IDs based on format
   const resolveToolResponseId = (block: ToolResponseBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper != null) {
       return toolIdMapper.resolveToolResponseId(block);
     }
     return normalizeToOpenAIToolId(block.callId || '');
@@ -441,7 +441,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
         }>;
       };
       if (
-        extendedMessage.toolInvocations &&
+        extendedMessage.toolInvocations != null &&
         extendedMessage.toolInvocations.length > 0
       ) {
         for (const invocation of extendedMessage.toolInvocations) {

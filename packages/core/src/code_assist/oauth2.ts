@@ -162,7 +162,7 @@ async function initOauthClient(config: Config): Promise<OAuth2Client> {
       | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
       | undefined;
 
-    if (addItem) {
+    if (addItem != null) {
       addItem(
         {
           type: 'oauth_url',
@@ -245,7 +245,7 @@ export async function performLogin(config: Config): Promise<boolean> {
 }
 
 export async function getOauthClient(config: Config): Promise<OAuth2Client> {
-  if (!oauthClientPromise) {
+  if (oauthClientPromise == null) {
     oauthClientPromise = initOauthClient(config);
   }
   return oauthClientPromise;
@@ -279,7 +279,7 @@ async function authWithUserCode(
    * @requirement REQ-004.1
    * @pseudocode lines 11-13
    */
-  if (addItem) {
+  if (addItem != null) {
     addItem(
       {
         type: 'oauth_url',
@@ -624,7 +624,9 @@ export async function authWithCode(
     const { tokens } = await client.getToken({
       code,
       redirect_uri: redirectUri,
-      ...(codeVerifier ? { codeVerifier: codeVerifier.codeVerifier } : {}),
+      ...(codeVerifier != null
+        ? { codeVerifier: codeVerifier.codeVerifier }
+        : {}),
     });
     client.setCredentials(tokens);
 

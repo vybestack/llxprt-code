@@ -52,7 +52,7 @@ export const ProfileAttachmentWizard: React.FC<
   // Load profile info when selection changes
   React.useEffect(() => {
     let cancelled = false;
-    if (getProfileInfo && selectedProfile) {
+    if (getProfileInfo != null && selectedProfile) {
       getProfileInfo(selectedProfile)
         .then((info) => {
           if (!cancelled) setPreviewInfo(info);
@@ -188,7 +188,7 @@ export const ProfileAttachmentWizard: React.FC<
         <Text color={Colors.Gray}>
           ──────────────────────────────────────────────────────
         </Text>
-        {previewInfo ? (
+        {previewInfo != null ? (
           <>
             {previewInfo.provider && (
               <Box>

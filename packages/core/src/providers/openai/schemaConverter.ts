@@ -248,14 +248,14 @@ export function convertToolsToOpenAI(
     functionDeclarations?: GeminiToolDeclaration[];
   }>,
 ): OpenAITool[] | undefined {
-  if (!geminiTools || geminiTools.length === 0) {
+  if (geminiTools == null || geminiTools.length === 0) {
     return undefined;
   }
 
   const openAITools: OpenAITool[] = [];
 
   for (const toolGroup of geminiTools) {
-    if (!toolGroup.functionDeclarations) {
+    if (toolGroup.functionDeclarations == null) {
       continue;
     }
 

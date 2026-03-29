@@ -33,7 +33,7 @@ export async function getPackageJson(
   cwd: string,
 ): Promise<PackageJson | undefined> {
   const result = await readPackageUp({ cwd });
-  if (!result) {
+  if (result == null) {
     return undefined;
   }
 

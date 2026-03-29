@@ -94,7 +94,7 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
       }
 
       // On error / missing profile screens, only Esc should do anything.
-      if (error || !profile) {
+      if (error || profile == null) {
         return;
       }
 
@@ -158,7 +158,7 @@ export const ProfileDetailDialog: React.FC<ProfileDetailDialogProps> = ({
     );
   }
 
-  if (!profile) {
+  if (profile == null) {
     return (
       <Box
         borderStyle="round"

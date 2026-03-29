@@ -80,15 +80,15 @@ export function resolveMcpServers(
   );
   const blockedMcpServers: Array<{ name: string; extensionName: string }> = [];
 
-  if (!allowedMcpServerNames) {
-    if (profileMergedSettings.allowMCPServers) {
+  if (allowedMcpServerNames == null) {
+    if (profileMergedSettings.allowMCPServers != null) {
       mcpServers = allowedMcpServers(
         mcpServers,
         profileMergedSettings.allowMCPServers,
         blockedMcpServers,
       );
     }
-    if (profileMergedSettings.excludeMCPServers) {
+    if (profileMergedSettings.excludeMCPServers != null) {
       const excludedNames = new Set(
         profileMergedSettings.excludeMCPServers.filter(Boolean),
       );
@@ -107,7 +107,7 @@ export function resolveMcpServers(
       }
     }
   }
-  if (allowedMcpServerNames) {
+  if (allowedMcpServerNames != null) {
     mcpServers = allowedMcpServers(
       mcpServers,
       allowedMcpServerNames,

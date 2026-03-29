@@ -32,7 +32,7 @@ export async function getExtensionAndConfig(name: string): Promise<{
 }> {
   const extension = loadExtensionByName(name, process.cwd());
 
-  if (!extension) {
+  if (extension == null) {
     debugLogger.error(`Extension "${name}" not found.`);
     return { extension: null, extensionConfig: null };
   }
@@ -51,7 +51,7 @@ export async function getExtensionAndConfig(name: string): Promise<{
     return { extension: null, extensionConfig: null };
   }
 
-  if (!extensionConfig) {
+  if (extensionConfig == null) {
     debugLogger.error(`Could not load configuration for extension "${name}".`);
     return { extension: null, extensionConfig: null };
   }

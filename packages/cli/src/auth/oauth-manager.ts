@@ -389,7 +389,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     bucket?: string,
   ): Promise<Record<string, unknown> | null> {
     const provider = this.providerRegistry.getProvider('anthropic');
-    if (!provider) {
+    if (provider == null) {
       return null;
     }
 

@@ -27,7 +27,7 @@ let profileManagerCtorPromise: Promise<ProfileManagerCtor> | undefined;
  * Caches the promise to avoid repeated imports.
  */
 async function getProfileManagerCtor(): Promise<ProfileManagerCtor> {
-  if (!profileManagerCtorPromise) {
+  if (profileManagerCtorPromise == null) {
     profileManagerCtorPromise = import('@vybestack/llxprt-code-core')
       .then((mod) => mod.ProfileManager)
       .catch((error) => {

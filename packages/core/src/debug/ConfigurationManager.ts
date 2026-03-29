@@ -24,7 +24,7 @@ export class ConfigurationManager {
 
   // Line 21-26: Singleton getInstance()
   static getInstance(): ConfigurationManager {
-    if (!ConfigurationManager.instance) {
+    if (ConfigurationManager.instance == null) {
       ConfigurationManager.instance = new ConfigurationManager();
     }
     return ConfigurationManager.instance;
@@ -194,7 +194,7 @@ export class ConfigurationManager {
 
   // Line 123-150: Persist ephemeral to user config
   persistEphemeralConfig(): void {
-    if (!this.ephemeralConfig) {
+    if (this.ephemeralConfig == null) {
       return;
     }
 

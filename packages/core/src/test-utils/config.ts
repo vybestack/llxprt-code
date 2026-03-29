@@ -23,7 +23,7 @@ const testBusCache = new WeakMap<Config, MessageBusType>();
  */
 export function getTestRuntimeMessageBus(config: Config): MessageBusType {
   let bus = testBusCache.get(config);
-  if (!bus) {
+  if (bus == null) {
     bus = new MessageBus(config.getPolicyEngine(), config.getDebugMode());
     testBusCache.set(config, bus);
   }

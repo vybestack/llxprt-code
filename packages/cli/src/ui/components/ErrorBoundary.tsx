@@ -87,7 +87,7 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Error count in window:', this.errorTimestamps.length);
 
     // Call custom error handler if provided
-    if (this.props.onError) {
+    if (this.props.onError != null) {
       this.props.onError(error, errorInfo);
     }
 
@@ -114,9 +114,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   override render() {
-    if (this.state.hasError && this.state.error) {
+    if (this.state.hasError && this.state.error != null) {
       // Use custom fallback if provided
-      if (this.props.fallback && this.state.errorInfo) {
+      if (this.props.fallback != null && this.state.errorInfo != null) {
         return this.props.fallback(this.state.error, this.state.errorInfo);
       }
 

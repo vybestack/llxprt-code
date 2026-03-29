@@ -295,7 +295,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that triggers lazy authentication
-      if (mockQwenProvider.makeApiCall) {
+      if (mockQwenProvider.makeApiCall != null) {
         vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
           const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
           if (!token) {
@@ -338,7 +338,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that checks authentication
-      if (mockQwenProvider.makeApiCall) {
+      if (mockQwenProvider.makeApiCall != null) {
         vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
           const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
           if (!token) {
@@ -484,7 +484,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(
         'oauth-token-from-lazy-trigger',
       );
-      if (mockQwenProvider.makeApiCall) {
+      if (mockQwenProvider.makeApiCall != null) {
         vi.mocked(mockQwenProvider.makeApiCall).mockResolvedValue(
           'api-success',
         );

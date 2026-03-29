@@ -49,10 +49,10 @@ export function couldBeMouseSequence(buffer: string): boolean {
  */
 export function getMouseSequenceLength(buffer: string): number {
   const sgrMatch = buffer.match(SGR_MOUSE_REGEX);
-  if (sgrMatch) return sgrMatch[0].length;
+  if (sgrMatch != null) return sgrMatch[0].length;
 
   const x11Match = buffer.match(X11_MOUSE_REGEX);
-  if (x11Match) return x11Match[0].length;
+  if (x11Match != null) return x11Match[0].length;
 
   return 0;
 }

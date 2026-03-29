@@ -25,7 +25,7 @@ vi.mock('../../utils/autoPromptGenerator.js', async (importOriginal) => {
   return {
     ...actual,
     generateAutoPrompt: (...args: unknown[]) => {
-      if (generateAutoPromptOverride) {
+      if (generateAutoPromptOverride != null) {
         return generateAutoPromptOverride(...args);
       }
       return actual.generateAutoPrompt(

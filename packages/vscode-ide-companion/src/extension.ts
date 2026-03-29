@@ -38,7 +38,7 @@ let log: (message: string) => void = () => {};
 function updateWorkspacePath(context: vscode.ExtensionContext) {
   // console.error('updateWorkspace called with ', context);
   const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (workspaceFolders && workspaceFolders.length > 0) {
+  if (workspaceFolders != null && workspaceFolders.length > 0) {
     const workspacePaths = workspaceFolders
       .map((folder) => folder.uri.fsPath)
       .join(path.delimiter);
@@ -155,7 +155,7 @@ export async function activate(context: vscode.ExtensionContext) {
       'llxprt.diff.accept',
       (uri?: vscode.Uri) => {
         const docUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-        if (docUri && docUri.scheme === DIFF_SCHEME) {
+        if (docUri != null && docUri.scheme === DIFF_SCHEME) {
           void diffManager.acceptDiff(docUri);
         }
       },
@@ -164,7 +164,7 @@ export async function activate(context: vscode.ExtensionContext) {
       'llxprt.diff.cancel',
       (uri?: vscode.Uri) => {
         const docUri = uri ?? vscode.window.activeTextEditor?.document.uri;
-        if (docUri && docUri.scheme === DIFF_SCHEME) {
+        if (docUri != null && docUri.scheme === DIFF_SCHEME) {
           void diffManager.cancelDiff(docUri);
         }
       },
@@ -199,7 +199,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('llxprt-code.runLLxprtCode', async () => {
       const workspaceFolders = vscode.workspace.workspaceFolders;
-      if (!workspaceFolders || workspaceFolders.length === 0) {
+      if (workspaceFolders == null || workspaceFolders.length === 0) {
         vscode.window.showInformationMessage(
           'No folder open. Please open a folder to run LLxprt Code.',
         );
@@ -215,7 +215,7 @@ export async function activate(context: vscode.ExtensionContext) {
         });
       }
 
-      if (selectedFolder) {
+      if (selectedFolder != null) {
         const llxprtCmd = 'llxprt';
         const terminal = vscode.window.createTerminal({
           name: `LLxprt Code (${selectedFolder.name})`,

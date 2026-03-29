@@ -66,7 +66,7 @@ export async function executeToolCall(
 
   const internalAbortController = new AbortController();
   let parentAbortHandler: (() => void) | null = null;
-  if (abortSignal) {
+  if (abortSignal != null) {
     if (abortSignal.aborted) {
       internalAbortController.abort();
     } else {
@@ -135,7 +135,7 @@ export async function executeToolCall(
       Date.now() - startTime,
     );
   } finally {
-    if (abortSignal && parentAbortHandler) {
+    if (abortSignal != null && parentAbortHandler != null) {
       abortSignal.removeEventListener('abort', parentAbortHandler);
     }
     if (internalAbortController.signal.aborted) {

@@ -36,7 +36,7 @@ function createMockTokenStore(providers: Record<string, OAuthToken | null>): {
   return {
     listBuckets: vi.fn(async (provider: string) => {
       const token = providers[provider];
-      return token ? ['default'] : [];
+      return token != null ? ['default'] : [];
     }),
     getToken: vi.fn(async (provider: string) => providers[provider] || null),
     saveToken: vi.fn(),

@@ -451,7 +451,7 @@ export class HookEventHandler {
     // @requirement:HOOK-145
     // @plan PLAN-20250218-HOOKSYSTEM.P12
     // @requirement DELTA-HFAIL-004
-    if (!plan || plan.hookConfigs.length === 0) {
+    if (plan == null || plan.hookConfigs.length === 0) {
       this.debugLogger.debug(
         `No hooks for event ${eventName}, returning empty success`,
       );

@@ -83,7 +83,7 @@ export class SkillManager {
 
     // 2. Extension skills
     for (const extension of extensions) {
-      if (extension.isActive && extension.skills) {
+      if (extension.isActive && extension.skills != null) {
         // Mark extension skills with source if not already set
         const extensionSkills = extension.skills.map((skill) => ({
           ...skill,
@@ -149,7 +149,7 @@ export class SkillManager {
                 fullPath,
                 entry.name,
               );
-              if (skill) {
+              if (skill != null) {
                 skills.push(skill);
               }
             } catch (error) {
@@ -221,7 +221,7 @@ export class SkillManager {
           // Extract body after frontmatter if present
           const frontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)/;
           const match = content.match(frontmatterRegex);
-          return match ? match[1].trim() : content.trim();
+          return match != null ? match[1].trim() : content.trim();
         }
       } catch {
         // Continue to next file

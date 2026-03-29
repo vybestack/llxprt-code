@@ -111,9 +111,10 @@ export function checkRateLimits(
   ) {
     const percentage = (info.requestsRemaining / info.requestsLimit) * 100;
     if (percentage < 10) {
-      const resetTime = info.requestsReset
-        ? ` (resets at ${info.requestsReset.toISOString()})`
-        : '';
+      const resetTime =
+        info.requestsReset != null
+          ? ` (resets at ${info.requestsReset.toISOString()})`
+          : '';
       logger.debug(
         () =>
           `WARNING: Approaching requests rate limit - ${info.requestsRemaining}/${info.requestsLimit} remaining (${percentage.toFixed(1)}%)${resetTime}`,
@@ -125,9 +126,10 @@ export function checkRateLimits(
   if (info.tokensLimit !== undefined && info.tokensRemaining !== undefined) {
     const percentage = (info.tokensRemaining / info.tokensLimit) * 100;
     if (percentage < 10) {
-      const resetTime = info.tokensReset
-        ? ` (resets at ${info.tokensReset.toISOString()})`
-        : '';
+      const resetTime =
+        info.tokensReset != null
+          ? ` (resets at ${info.tokensReset.toISOString()})`
+          : '';
       logger.debug(
         () =>
           `WARNING: Approaching tokens rate limit - ${info.tokensRemaining}/${info.tokensLimit} remaining (${percentage.toFixed(1)}%)${resetTime}`,
@@ -172,7 +174,7 @@ function checkBucketThreshold(
     return undefined;
   }
 
-  if (!resetDate) {
+  if (resetDate == null) {
     return {
       shouldWait: false,
       waitMs: 0,
@@ -251,13 +253,13 @@ export function calculateWaitTime(
 
   // Prefer any bucket that requires waiting over warning-only decisions
   const waitDecision = decisions.find((d) => d !== undefined && d.shouldWait);
-  if (waitDecision) {
+  if (waitDecision != null) {
     return waitDecision;
   }
 
   // Fall back to first warning-only decision if no bucket requires waiting
   const warningDecision = decisions.find((d) => d !== undefined);
-  if (warningDecision) {
+  if (warningDecision != null) {
     return warningDecision;
   }
 

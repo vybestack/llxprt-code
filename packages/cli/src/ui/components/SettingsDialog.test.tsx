@@ -1288,7 +1288,7 @@ describe('SettingsDialog', () => {
 
         const { lastFrame, stdin } = renderDialog(settings, onSelect);
 
-        if (stdinActions) {
+        if (stdinActions != null) {
           stdinActions(stdin);
         }
 

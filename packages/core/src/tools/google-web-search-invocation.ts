@@ -97,7 +97,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
       const contentGenConfig = this.config.getContentGeneratorConfig();
 
       // Get the serverToolsProvider from the provider manager
-      if (!contentGenConfig?.providerManager) {
+      if (contentGenConfig?.providerManager == null) {
         return {
           llmContent: `Web search requires a provider. Please use --provider gemini with authentication.`,
           returnDisplay: 'Web search requires a provider.',
@@ -107,7 +107,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
       // Use serverToolsProvider for web search
       const serverToolsProvider =
         contentGenConfig.providerManager.getServerToolsProvider();
-      if (!serverToolsProvider) {
+      if (serverToolsProvider == null) {
         return {
           llmContent: `Web search requires Gemini provider to be configured. Please ensure Gemini is available with authentication.`,
           returnDisplay: 'Web search requires Gemini provider.',
@@ -162,20 +162,23 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
       let modifiedResponseText = responseText;
       const sourceListFormatted: string[] = [];
 
-      if (sources && sources.length > 0) {
+      if (sources != null && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
           const title = source.web?.title || 'Untitled';
           const uri = source.web?.uri || 'No URI';
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });
 
-        if (groundingSupports && groundingSupports.length > 0) {
+        if (groundingSupports != null && groundingSupports.length > 0) {
           // Convert byte indices to character indices
           const textBuffer = Buffer.from(modifiedResponseText, 'utf-8');
           const insertions: Array<{ index: number; marker: string }> = [];
 
           groundingSupports.forEach((support: GroundingSupportItem) => {
-            if (support.segment && support.groundingChunkIndices) {
+            if (
+              support.segment != null &&
+              support.groundingChunkIndices != null
+            ) {
               const citationMarker = support.groundingChunkIndices
                 .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
                 .join('');

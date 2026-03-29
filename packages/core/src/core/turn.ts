@@ -306,7 +306,7 @@ export class Turn {
       };
 
       const settingsService = config?.getSettingsService();
-      if (settingsService) {
+      if (settingsService != null) {
         const enabled = settingsService.get('ui.showCitations');
         if (enabled !== undefined) {
           return enabled as boolean;
@@ -425,7 +425,7 @@ export class Turn {
           const citationEvent = this.emitCitation(
             'Response may contain information from external sources. Please verify important details independently.',
           );
-          if (citationEvent) {
+          if (citationEvent != null) {
             yield citationEvent;
           }
         }
@@ -434,7 +434,7 @@ export class Turn {
         const functionCalls = getFunctionCalls(resp) ?? [];
         for (const fnCall of functionCalls) {
           const event = this.handlePendingFunctionCall(fnCall);
-          if (event) {
+          if (event != null) {
             yield event;
           }
         }

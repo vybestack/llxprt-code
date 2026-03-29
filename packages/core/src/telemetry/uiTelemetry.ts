@@ -273,7 +273,7 @@ export class UiTelemetryService extends EventEmitter {
     }
 
     // Aggregate line count data from metadata
-    if (event.metadata) {
+    if (event.metadata != null) {
       if (
         event.metadata['ai_added_lines'] !== undefined &&
         typeof event.metadata['ai_added_lines'] === 'number'

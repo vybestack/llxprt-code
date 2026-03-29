@@ -136,7 +136,7 @@ function handleInsertAction(
   if (options.singleLine) {
     payload = payload.replace(/[\r\n]/g, '');
   }
-  if (options.inputFilter) {
+  if (options.inputFilter != null) {
     payload = options.inputFilter(payload);
   }
   if (payload.length === 0) return state;

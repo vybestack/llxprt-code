@@ -129,7 +129,7 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
       this.config.getIdeMode() &&
-      ideClient &&
+      ideClient != null &&
       ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
         ? ideClient.openDiff(this.params.absolute_path, newContent)
         : undefined;

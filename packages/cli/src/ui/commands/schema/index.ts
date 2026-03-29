@@ -68,7 +68,7 @@ function mergeSchemas(
   primary: CommandArgumentSchema | undefined,
   secondary: CommandArgumentSchema,
 ): CommandArgumentSchema {
-  if (!primary || primary.length === 0) {
+  if (primary == null || primary.length === 0) {
     return secondary;
   }
   if (secondary.length === 0) {
@@ -204,7 +204,7 @@ function resolveActiveStep(
       const candidate = remainingArgs[0];
       const matched = literals.find((literal) => literal.value === candidate);
 
-      if (matched) {
+      if (matched != null) {
         remainingArgs.shift();
         consumedCount += 1;
         consumedLiterals += 1;
@@ -255,7 +255,7 @@ async function suggestForValue(
   tokenInfo: TokenInfo,
 ): Promise<readonly Option[]> {
   try {
-    if (node.completer) {
+    if (node.completer != null) {
       const results = await node.completer(ctx, partialArg, tokenInfo);
       if (!Array.isArray(results)) {
         return [];
@@ -301,9 +301,9 @@ function flattenSchemaPaths(
 
     // If this node has a 'next' that contains value arguments with options,
     // we can create deep paths
-    if (node.next && node.next.length > 0) {
+    if (node.next != null && node.next.length > 0) {
       for (const nextNode of node.next) {
-        if (nextNode.kind === 'value' && nextNode.options) {
+        if (nextNode.kind === 'value' && nextNode.options != null) {
           // For each option in the value node, create a flattened path
           for (const option of nextNode.options) {
             flattened.push({

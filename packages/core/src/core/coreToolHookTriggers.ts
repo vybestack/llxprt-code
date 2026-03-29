@@ -48,7 +48,7 @@ export async function triggerBeforeToolHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -66,7 +66,7 @@ export async function triggerBeforeToolHook(
     debugLogger.debug(`BeforeTool hook executed for tool: ${toolName}`);
 
     // Wrap result in BeforeToolHookOutput
-    if (result) {
+    if (result != null) {
       return new BeforeToolHookOutput(result);
     }
 
@@ -106,7 +106,7 @@ export async function triggerAfterToolHook(
 
   // Get the HookSystem singleton
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 
@@ -131,7 +131,7 @@ export async function triggerAfterToolHook(
     debugLogger.debug(`AfterTool hook executed for tool: ${toolName}`);
 
     // Wrap result in AfterToolHookOutput
-    if (result) {
+    if (result != null) {
       return new AfterToolHookOutput(result);
     }
 
@@ -266,7 +266,7 @@ export async function triggerToolNotificationHook(
   }
 
   const hookSystem = config.getHookSystem?.();
-  if (!hookSystem) {
+  if (hookSystem == null) {
     return undefined;
   }
 

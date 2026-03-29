@@ -211,7 +211,7 @@ export function formatCodexRateLimitWindow(
   window: CodexRateLimitWindow,
   label: string,
 ): string | null {
-  if (!window || typeof window.used_percent !== 'number') {
+  if (window == null || typeof window.used_percent !== 'number') {
     return null;
   }
 
@@ -243,8 +243,8 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
   const lines: string[] = [];
 
   // Format rate limit windows
-  if (usage.rate_limit) {
-    if (usage.rate_limit.primary_window) {
+  if (usage.rate_limit != null) {
+    if (usage.rate_limit.primary_window != null) {
       const formatted = formatCodexRateLimitWindow(
         usage.rate_limit.primary_window,
         '5-hour limit',
@@ -252,7 +252,7 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
       if (formatted) lines.push(formatted);
     }
 
-    if (usage.rate_limit.secondary_window) {
+    if (usage.rate_limit.secondary_window != null) {
       const formatted = formatCodexRateLimitWindow(
         usage.rate_limit.secondary_window,
         'Weekly limit',
@@ -262,7 +262,7 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
   }
 
   // Format credits
-  if (usage.credits) {
+  if (usage.credits != null) {
     if (usage.credits.unlimited) {
       lines.push('  Credits: Unlimited');
     } else if (usage.credits.has_credits && usage.credits.balance) {

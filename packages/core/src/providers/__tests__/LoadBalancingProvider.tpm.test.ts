@@ -29,7 +29,7 @@ function createMockProviderWithUsage(
   return {
     name,
     async *generateChatCompletion(): AsyncGenerator<IContent> {
-      if (callCounter) {
+      if (callCounter != null) {
         callCounter.count++;
       }
       yield {

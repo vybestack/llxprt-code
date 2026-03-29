@@ -82,7 +82,7 @@ export function isLocalEndpoint(url: string | undefined): boolean {
  */
 function isIPv4LoopbackRange(ip: string): boolean {
   const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4Match) {
+  if (ipv4Match == null) {
     return false;
   }
 
@@ -107,7 +107,7 @@ function isIPv4LoopbackRange(ip: string): boolean {
 function isPrivateIPv4(ip: string): boolean {
   // Match IPv4 pattern
   const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4Match) {
+  if (ipv4Match == null) {
     return false;
   }
 

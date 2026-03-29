@@ -40,7 +40,7 @@ export class IdeContextTracker {
     newIdeContext: IdeContext | undefined;
   } {
     const shouldSendFull = forceFullContext || this.forceFullIdeContext;
-    if (shouldSendFull || !this.lastSentIdeContext) {
+    if (shouldSendFull || this.lastSentIdeContext == null) {
       return this.buildFullContext();
     }
     return this.buildIncrementalDelta();
@@ -54,7 +54,7 @@ export class IdeContextTracker {
     newIdeContext: IdeContext | undefined;
   } {
     const currentIdeContext = ideContext.getIdeContext();
-    if (!currentIdeContext) {
+    if (currentIdeContext == null) {
       return { contextParts: [], newIdeContext: undefined };
     }
 
@@ -66,15 +66,16 @@ export class IdeContextTracker {
 
     const contextData: Record<string, unknown> = {};
 
-    if (activeFile) {
+    if (activeFile != null) {
       contextData.activeFile = {
         path: activeFile.path,
-        cursor: activeFile.cursor
-          ? {
-              line: activeFile.cursor.line,
-              character: activeFile.cursor.character,
-            }
-          : undefined,
+        cursor:
+          activeFile.cursor != null
+            ? {
+                line: activeFile.cursor.line,
+                character: activeFile.cursor.character,
+              }
+            : undefined,
         selectedText: activeFile.selectedText || undefined,
       };
     }
@@ -112,7 +113,7 @@ export class IdeContextTracker {
     newIdeContext: IdeContext | undefined;
   } {
     const currentIdeContext = ideContext.getIdeContext();
-    if (!currentIdeContext || !this.lastSentIdeContext) {
+    if (currentIdeContext == null || this.lastSentIdeContext == null) {
       return { contextParts: [], newIdeContext: currentIdeContext };
     }
 
@@ -194,16 +195,20 @@ export class IdeContextTracker {
       currentIdeContext.workspaceState?.openFiles || []
     ).find((f: File) => f.isActive);
 
-    if (currentActiveFile) {
-      if (!lastActiveFile || lastActiveFile.path !== currentActiveFile.path) {
+    if (currentActiveFile != null) {
+      if (
+        lastActiveFile == null ||
+        lastActiveFile.path !== currentActiveFile.path
+      ) {
         changes.activeFileChanged = {
           path: currentActiveFile.path,
-          cursor: currentActiveFile.cursor
-            ? {
-                line: currentActiveFile.cursor.line,
-                character: currentActiveFile.cursor.character,
-              }
-            : undefined,
+          cursor:
+            currentActiveFile.cursor != null
+              ? {
+                  line: currentActiveFile.cursor.line,
+                  character: currentActiveFile.cursor.character,
+                }
+              : undefined,
           selectedText: currentActiveFile.selectedText || undefined,
         };
       } else {
@@ -213,7 +218,7 @@ export class IdeContextTracker {
           changes,
         );
       }
-    } else if (lastActiveFile) {
+    } else if (lastActiveFile != null) {
       changes.activeFileChanged = {
         path: null,
         previousPath: lastActiveFile.path,
@@ -232,8 +237,8 @@ export class IdeContextTracker {
     const lastCursor = lastActiveFile.cursor;
     const currentCursor = currentActiveFile.cursor;
     if (
-      currentCursor &&
-      (!lastCursor ||
+      currentCursor != null &&
+      (lastCursor == null ||
         lastCursor.line !== currentCursor.line ||
         lastCursor.character !== currentCursor.character)
     ) {
@@ -244,7 +249,7 @@ export class IdeContextTracker {
           character: currentCursor.character,
         },
       };
-    } else if (!currentCursor && lastCursor) {
+    } else if (currentCursor == null && lastCursor != null) {
       changes.cursorMoved = {
         path: currentActiveFile.path,
         cursor: null,

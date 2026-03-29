@@ -22,7 +22,7 @@ import { getCliRuntimeServices } from '../../runtime/runtimeSettings.js';
 function resolveForegroundGeminiClient(
   context: CommandContext,
 ): GeminiClient | null {
-  if (context.services.config) {
+  if (context.services.config != null) {
     return context.services.config.getGeminiClient();
   }
 
@@ -41,11 +41,11 @@ export const clearCommand: SlashCommand = {
   action: async (context, _args) => {
     const geminiClient = resolveForegroundGeminiClient(context);
 
-    if (geminiClient) {
+    if (geminiClient != null) {
       context.ui.setDebugMessage('Clearing terminal and resetting chat.');
 
       // Trigger SessionEnd hook before clearing (fail-open)
-      if (context.services.config) {
+      if (context.services.config != null) {
         try {
           await triggerSessionEndHook(
             context.services.config,
@@ -59,7 +59,7 @@ export const clearCommand: SlashCommand = {
       await geminiClient.resetChat();
 
       // Trigger SessionStart hook after clearing (fail-open)
-      if (context.services.config) {
+      if (context.services.config != null) {
         try {
           const sessionStartOutput = await triggerSessionStartHook(
             context.services.config,

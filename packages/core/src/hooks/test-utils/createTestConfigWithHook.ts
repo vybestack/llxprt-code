@@ -94,7 +94,7 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
     getSessionRecordingService: () => undefined,
     getHookSystem: () => {
       // Lazy initialization of HookSystem singleton
-      if (!hookSystem) {
+      if (hookSystem == null) {
         hookSystem = new HookSystem(config);
       }
       return hookSystem;

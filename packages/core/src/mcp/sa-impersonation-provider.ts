@@ -74,7 +74,7 @@ export class ServiceAccountImpersonationProvider implements McpAuthProvider {
   async tokens(): Promise<OAuthTokens | undefined> {
     // 1. Check if we have a valid, non-expired cached token.
     if (
-      this.cachedToken &&
+      this.cachedToken != null &&
       this.tokenExpiryTime &&
       Date.now() < this.tokenExpiryTime - FIVE_MIN_BUFFER_MS
     ) {

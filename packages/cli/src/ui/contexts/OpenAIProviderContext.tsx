@@ -71,7 +71,7 @@ export const OpenAIProviderContextProvider: React.FC<{
 
   // Reset stats when provider changes
   useEffect(() => {
-    if (!providerInfo.provider) {
+    if (providerInfo.provider == null) {
       setRemoteTokenStats({
         promptTokenCount: 0,
         candidatesTokenCount: 0,

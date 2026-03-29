@@ -46,7 +46,7 @@ export class GitService {
   verifyGitAvailability(): Promise<boolean> {
     return new Promise((resolve) => {
       exec('git --version', (error) => {
-        if (error) {
+        if (error != null) {
           resolve(false);
         } else {
           resolve(true);

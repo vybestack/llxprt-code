@@ -191,15 +191,16 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
         const entry = new kr.AsyncEntry(service, account);
         return entry.deleteCredential();
       },
-      findCredentials: findCredentialsFn
-        ? async (service: string) => {
-            try {
-              return await findCredentialsFn(service);
-            } catch {
-              return [];
+      findCredentials:
+        findCredentialsFn != null
+          ? async (service: string) => {
+              try {
+                return await findCredentialsFn(service);
+              } catch {
+                return [];
+              }
             }
-          }
-        : undefined,
+          : undefined,
     };
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
@@ -225,7 +226,7 @@ function scryptAsync(
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     crypto.scrypt(password, salt, keyLen, options, (err, key) => {
-      if (err) reject(err);
+      if (err != null) reject(err);
       else resolve(key);
     });
   });

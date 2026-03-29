@@ -23,7 +23,7 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
 
   // Extract provider name from text if available
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
-  const provider = providerMatch ? providerMatch[1] : 'the service';
+  const provider = providerMatch != null ? providerMatch[1] : 'the service';
 
   const osc8Link = createOsc8Link(
     `Click here to authorize with ${provider}`,

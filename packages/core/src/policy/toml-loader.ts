@@ -291,7 +291,7 @@ export async function loadPoliciesFromToml(
         const parsedRules: PolicyRule[] = validationResult.data.rule
           .filter((rule) => {
             // Filter by mode
-            if (!rule.modes || rule.modes.length === 0) {
+            if (rule.modes == null || rule.modes.length === 0) {
               return true;
             }
             return rule.modes.includes(approvalMode);

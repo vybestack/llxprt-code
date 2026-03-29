@@ -133,7 +133,7 @@ describe('SettingsSchema', () => {
         const defWithProps = definition as typeof definition & {
           properties?: Record<string, unknown>;
         };
-        if (defWithProps.properties) {
+        if (defWithProps.properties != null) {
           Object.values(defWithProps.properties).forEach(
             (nestedDef: unknown) => {
               const nestedDefTyped = nestedDef as { category?: string };
@@ -169,7 +169,7 @@ describe('SettingsSchema', () => {
               def.type !== 'boolean' ||
                 ['boolean', 'undefined'].includes(typeof def.default),
             ).toBe(true);
-            if (def.properties) {
+            if (def.properties != null) {
               checkBooleanDefaults(def.properties);
             }
           },
@@ -288,13 +288,13 @@ describe('SettingsSchema', () => {
             missing.push(definition.ref);
           }
         }
-        if (definition.properties) {
+        if (definition.properties != null) {
           Object.values(definition.properties).forEach(visitDefinition);
         }
-        if (definition.items) {
+        if (definition.items != null) {
           visitCollection(definition.items);
         }
-        if (definition.additionalProperties) {
+        if (definition.additionalProperties != null) {
           visitCollection(definition.additionalProperties);
         }
       };
@@ -307,10 +307,10 @@ describe('SettingsSchema', () => {
           }
           return;
         }
-        if (collection.properties) {
+        if (collection.properties != null) {
           Object.values(collection.properties).forEach(visitDefinition);
         }
-        if (collection.type === 'array' && collection.properties) {
+        if (collection.type === 'array' && collection.properties != null) {
           Object.values(collection.properties).forEach(visitDefinition);
         }
       };

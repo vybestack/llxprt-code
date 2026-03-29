@@ -202,7 +202,7 @@ function createConfigWithHook(options: {
       blockedEnvironmentVariables: [],
     }),
     getHookSystem() {
-      if (!hookSystem) {
+      if (hookSystem == null) {
         hookSystem = new HookSystem(config);
       }
       return hookSystem;

@@ -87,13 +87,15 @@ export async function createToolRegistry(
 
   const baseCoreTools = host.getCoreTools();
   const effectiveCoreTools =
-    baseCoreTools && baseCoreTools.length > 0 ? [...baseCoreTools] : undefined;
+    baseCoreTools != null && baseCoreTools.length > 0
+      ? [...baseCoreTools]
+      : undefined;
 
   const matchesToolIdentifier = (value: string, target: string): boolean =>
     value === target || value.startsWith(`${target}(`);
 
   const ensureCoreToolIncluded = (identifier: string) => {
-    if (!effectiveCoreTools) {
+    if (effectiveCoreTools == null) {
       return;
     }
     if (
@@ -120,7 +122,7 @@ export async function createToolRegistry(
     let isEnabled = true;
     let reason: string | undefined;
 
-    if (coreTools) {
+    if (coreTools != null) {
       isEnabled = coreTools.some(
         (tool) =>
           tool === className ||
@@ -194,14 +196,14 @@ export async function createToolRegistry(
   registerCoreTool(DirectWebFetchTool, config);
 
   let profileManager = host.getProfileManager();
-  if (!profileManager) {
+  if (profileManager == null) {
     const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
     profileManager = new ProfileManager(profilesDir);
     host.setProfileManager(profileManager);
   }
 
   let subagentManager = host.getSubagentManager();
-  if (!subagentManager && profileManager) {
+  if (subagentManager == null && profileManager) {
     const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
     subagentManager = new SubagentManager(subagentsDir, profileManager);
     host.setSubagentManager(subagentManager);
@@ -215,7 +217,7 @@ export async function createToolRegistry(
     getAsyncTaskManager: () => host.getAsyncTaskManager(),
   };
 
-  if (profileManager && subagentManager) {
+  if (profileManager && subagentManager != null) {
     registerCoreTool(TaskTool, config, taskToolArgs);
   } else {
     const taskToolRecord: ToolRecord = {
@@ -224,7 +226,7 @@ export async function createToolRegistry(
       displayName: TaskTool.Name || 'TaskTool',
       isRegistered: false,
       reason:
-        !profileManager && !subagentManager
+        !profileManager && subagentManager == null
           ? 'requires profile manager and subagent manager'
           : !profileManager
             ? 'requires profile manager'
@@ -238,7 +240,7 @@ export async function createToolRegistry(
     getSubagentManager: () => host.getSubagentManager(),
   };
 
-  if (subagentManager) {
+  if (subagentManager != null) {
     registerCoreTool(ListSubagentsTool, config, listSubagentsArgs);
   } else {
     const listSubagentsRecord: ToolRecord = {

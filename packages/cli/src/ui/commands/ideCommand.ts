@@ -61,7 +61,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
         const context = ideContext.getIdeContext();
         const openFiles = context?.workspaceState?.openFiles;
 
-        if (openFiles && openFiles.length > 0) {
+        if (openFiles != null && openFiles.length > 0) {
           content += formatFileList(openFiles);
         }
       } catch (_e) {
@@ -91,15 +91,15 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
 }
 
 export const ideCommand = (config: Config | null): SlashCommand | null => {
-  if (!config) {
+  if (config == null) {
     return null;
   }
   const ideClient = config.getIdeClient();
-  if (!ideClient) {
+  if (ideClient == null) {
     return null;
   }
   const currentIDE = ideClient.getCurrentIde();
-  if (!currentIDE) {
+  if (currentIDE == null) {
     return {
       name: 'ide',
       description: 'manage IDE integration',
@@ -147,7 +147,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     autoExecute: true,
     action: async (context) => {
       const installer = getIdeInstaller(currentIDE);
-      if (!installer) {
+      if (installer == null) {
         context.ui.addItem(
           {
             type: 'error',

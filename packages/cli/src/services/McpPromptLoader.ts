@@ -37,7 +37,7 @@ export class McpPromptLoader implements ICommandLoader {
    */
   loadCommands(_signal: AbortSignal): Promise<SlashCommand[]> {
     const promptCommands: SlashCommand[] = [];
-    if (!this.config) {
+    if (this.config == null) {
       return Promise.resolve([]);
     }
     const mcpServers = this.config.getMcpServers() || {};
@@ -57,7 +57,7 @@ export class McpPromptLoader implements ICommandLoader {
               description: 'Show help for this prompt',
               kind: CommandKind.MCP_PROMPT,
               action: async (): Promise<SlashCommandActionReturn> => {
-                if (!prompt.arguments || prompt.arguments.length === 0) {
+                if (prompt.arguments == null || prompt.arguments.length === 0) {
                   return {
                     type: 'message',
                     messageType: 'info',
@@ -91,7 +91,7 @@ export class McpPromptLoader implements ICommandLoader {
             context: CommandContext,
             args: string,
           ): Promise<SlashCommandActionReturn> => {
-            if (!this.config) {
+            if (this.config == null) {
               return {
                 type: 'message',
                 messageType: 'error',
@@ -202,7 +202,7 @@ export class McpPromptLoader implements ICommandLoader {
     messages?: PromptMessage[],
   ): string | null {
     const firstContent = messages?.[0]?.content;
-    if (firstContent && firstContent.type === 'text') {
+    if (firstContent != null && firstContent.type === 'text') {
       return firstContent.text;
     }
     return null;
@@ -256,7 +256,7 @@ export class McpPromptLoader implements ICommandLoader {
       positionalArgs.push((match[1] ?? match[2]).replace(/\\(.)/g, '$1'));
     }
 
-    if (!promptArgs) {
+    if (promptArgs == null) {
       return promptInputs;
     }
     for (const arg of promptArgs) {

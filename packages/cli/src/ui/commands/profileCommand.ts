@@ -284,7 +284,7 @@ const saveCommand: SlashCommand = {
         .slice(1)
         .join(' ')
         .match(/^"([^"]+)"(?:\s+(.+))?$/);
-      if (profileNameMatch) {
+      if (profileNameMatch != null) {
         profileName = profileNameMatch[1];
         if (profileNameMatch[2]) {
           bucketArgs = profileNameMatch[2]
@@ -519,7 +519,8 @@ const loadCommand: SlashCommand = {
 
     // Extract profile name - handle quoted names
     const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+    const profileName =
+      profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
     if (!profileName) {
       return {
@@ -564,9 +565,9 @@ const loadCommand: SlashCommand = {
         .join('');
 
       const configService = context.services.config;
-      if (configService) {
+      if (configService != null) {
         const providerManager = configService.getProviderManager?.();
-        if (providerManager && result.providerName) {
+        if (providerManager != null && result.providerName) {
           logger.debug(
             () =>
               `[profile] forcing config provider manager switch to '${result.providerName}'`,
@@ -634,7 +635,7 @@ const loadCommand: SlashCommand = {
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
       };
-      if (extendedContext.checkPaymentModeChange) {
+      if (extendedContext.checkPaymentModeChange != null) {
         setTimeout(
           () =>
             extendedContext.checkPaymentModeChange?.(
@@ -726,7 +727,8 @@ const deleteCommand: SlashCommand = {
 
     // Extract profile name - handle quoted names
     const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+    const profileName =
+      profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
     if (!profileName) {
       return {
@@ -805,7 +807,8 @@ const setDefaultCommand: SlashCommand = {
 
     // Extract profile name - handle quoted names
     const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+    const profileName =
+      profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
     if (!profileName) {
       return {
@@ -946,7 +949,8 @@ const showCommand: SlashCommand = {
 
     // Extract profile name - handle quoted names
     const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+    const profileName =
+      profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
     if (!profileName) {
       return {
@@ -1012,7 +1016,8 @@ const editCommand: SlashCommand = {
 
     // Extract profile name - handle quoted names
     const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+    const profileName =
+      profileNameMatch != null ? profileNameMatch[1] : trimmedArgs;
 
     if (!profileName) {
       return {

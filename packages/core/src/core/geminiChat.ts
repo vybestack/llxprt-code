@@ -159,7 +159,7 @@ export class GeminiChat {
       providerResolver,
       async (_context: CompressionContext) => {
         const config = view.providerRuntime?.config;
-        if (config) {
+        if (config != null) {
           await triggerPreCompressHook(config, PreCompressTrigger.Manual);
         }
       },
@@ -241,9 +241,9 @@ export class GeminiChat {
           typeof adapter.getProviderByName === 'function'
             ? adapter.getProviderByName(desiredProviderName)
             : undefined;
-        if (candidate) {
+        if (candidate != null) {
           const active = this.getActiveProvider();
-          if (active && active.name !== desiredProviderName) {
+          if (active != null && active.name !== desiredProviderName) {
             this.logger.debug(
               () =>
                 `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
@@ -260,7 +260,7 @@ export class GeminiChat {
     }
 
     let provider = this.getActiveProvider();
-    if (!provider) {
+    if (provider == null) {
       throw new Error('No active provider configured');
     }
 
@@ -288,7 +288,7 @@ export class GeminiChat {
   }
 
   providerSupportsIContent(provider: IProvider | undefined): boolean {
-    if (!provider) return false;
+    if (provider == null) return false;
     return (
       typeof (provider as { generateChatCompletion?: unknown })
         .generateChatCompletion === 'function'

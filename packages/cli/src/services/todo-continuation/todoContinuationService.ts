@@ -205,7 +205,7 @@ export class TodoContinuationService {
 
     // Find the active todo to continue
     const activeTodo = this.findBestActiveTodo(context.todos);
-    if (!activeTodo) {
+    if (activeTodo == null) {
       return {
         shouldContinue: false,
         reason: 'No suitable active todo found',
@@ -283,7 +283,7 @@ export class TodoContinuationService {
     }
 
     // Check time constraints
-    if (state.lastPromptTime) {
+    if (state.lastPromptTime != null) {
       const timeSinceLastPrompt = Date.now() - state.lastPromptTime.getTime();
       if (
         timeSinceLastPrompt <
@@ -555,7 +555,7 @@ export class TodoContinuationService {
    * @returns Whether time constraints are satisfied
    */
   private checkTimeConstraints(lastPromptTime?: Date): boolean {
-    if (!lastPromptTime) {
+    if (lastPromptTime == null) {
       return true; // No previous attempt, allowed
     }
 

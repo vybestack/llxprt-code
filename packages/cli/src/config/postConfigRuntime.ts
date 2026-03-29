@@ -108,7 +108,7 @@ async function setupRuntimeContext(
   const hooks = input.profileSettingsWithTools.hooks as
     | { disabled?: unknown }
     | undefined;
-  if (hooks && 'disabled' in hooks) {
+  if (hooks != null && 'disabled' in hooks) {
     const disabledHooks = hooks.disabled;
     if (Array.isArray(disabledHooks)) {
       config.setDisabledHooks(disabledHooks as string[]);
@@ -126,7 +126,7 @@ async function setupRuntimeContext(
   const { registerCliProviderInfrastructure } = await import(
     '../runtime/runtimeSettings.js'
   );
-  if (runtimeState.oauthManager) {
+  if (runtimeState.oauthManager != null) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
       runtimeState.oauthManager,
@@ -246,7 +246,8 @@ async function reapplyCliOverrides(
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
       bootstrapArgs.baseurlOverride ||
-      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
+      (bootstrapArgs.setOverrides != null &&
+        bootstrapArgs.setOverrides.length > 0))
   ) {
     const { applyCliArgumentOverrides } = await import(
       '../runtime/runtimeSettings.js'
@@ -271,7 +272,7 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
     input;
 
   const explicitAllowedTools = buildNormalizedToolSet(
-    argv.allowedTools && argv.allowedTools.length > 0
+    argv.allowedTools != null && argv.allowedTools.length > 0
       ? argv.allowedTools
       : (profileSettingsWithTools.allowedTools ?? []),
   );
@@ -341,7 +342,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   } = input;
 
   const settingsService = getSettingsService(input);
-  if (!runtimeOverrides.settingsService) {
+  if (runtimeOverrides.settingsService == null) {
     logger.warn(
       '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
     );
@@ -431,7 +432,7 @@ function finalizeMetadata(input: PostConfigInput): void {
   const { config, profileLoadResult, defaultDisabledTools } = input;
 
   // Store profile model params on config
-  if (profileLoadResult.profileModelParams) {
+  if (profileLoadResult.profileModelParams != null) {
     (
       config as Config & { _profileModelParams?: Record<string, unknown> }
     )._profileModelParams = profileLoadResult.profileModelParams;

@@ -79,7 +79,7 @@ export function getCodeAssistServer(
 export function emitCitationEvent(config: Config, citationText: string): void {
   // Get provider manager to emit citation through the event system
   const providerManager = config.getProviderManager();
-  if (providerManager) {
+  if (providerManager != null) {
     // Use the provider manager's event system to emit citation events
     // This ensures the event flows through the proper channels to reach the CLI
     try {

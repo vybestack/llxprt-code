@@ -50,7 +50,7 @@ import { setCommand } from '../setCommand.js';
 
 const commandSchema = setCommand.schema;
 
-if (!commandSchema) {
+if (commandSchema == null) {
   throw new Error('setCommand schema is not configured');
 }
 

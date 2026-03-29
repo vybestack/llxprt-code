@@ -74,7 +74,7 @@ export function peekActiveProviderRuntimeContext(): ProviderRuntimeContext | nul
 }
 
 export function getActiveProviderRuntimeContext(): ProviderRuntimeContext {
-  if (activeContext) {
+  if (activeContext != null) {
     return activeContext;
   }
 

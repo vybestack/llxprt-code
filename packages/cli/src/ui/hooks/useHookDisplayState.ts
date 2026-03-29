@@ -23,7 +23,7 @@ export function useHookDisplayState(messageBus?: MessageBus): ActiveHook[] {
   const [activeHooks, setActiveHooks] = useState<ActiveHook[]>([]);
 
   useEffect(() => {
-    if (!messageBus) {
+    if (messageBus == null) {
       return;
     }
 

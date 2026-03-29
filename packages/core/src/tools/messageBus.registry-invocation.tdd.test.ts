@@ -176,9 +176,10 @@ describe('ToolRegistry MessageBus integration TDD', () => {
       ?.build({
         payload: 'registry-direct',
       });
-    const confirmation = invocation
-      ? await invocation.shouldConfirmExecute(new AbortController().signal)
-      : false;
+    const confirmation =
+      invocation != null
+        ? await invocation.shouldConfirmExecute(new AbortController().signal)
+        : false;
 
     expect(observedInjectedRequests).toHaveLength(1);
     expect(observedInjectedRequests[0].toolCall.name).toBe(

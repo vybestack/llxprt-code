@@ -112,7 +112,7 @@ export class FileTokenStorage extends BaseTokenStorage {
     const tokens = await this.loadTokens();
     const credentials = tokens.get(serverName);
 
-    if (!credentials) {
+    if (credentials == null) {
       return null;
     }
 

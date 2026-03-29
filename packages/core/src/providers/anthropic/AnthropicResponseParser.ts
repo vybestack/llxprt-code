@@ -107,7 +107,7 @@ function extractUsageMetadata(
     | undefined,
   cacheLogger: { debug: (fn: () => string) => void },
 ): IContent['metadata'] {
-  if (!usage) {
+  if (usage == null) {
     return undefined;
   }
 
@@ -167,7 +167,7 @@ export function parseAnthropicResponse(
     options.cacheLogger,
   );
 
-  if (metadata) {
+  if (metadata != null) {
     result.metadata = metadata;
   }
 

@@ -85,11 +85,11 @@ export class CredentialProxyServer {
         tokenStore: options.tokenStore,
         refreshFn: async (provider, currentToken) => {
           const flowFactory = options.flowFactories?.get(provider);
-          if (!flowFactory) {
+          if (flowFactory == null) {
             throw new Error(`No OAuth provider configured for: ${provider}`);
           }
           const flowInstance = flowFactory();
-          if (!flowInstance.refreshToken) {
+          if (flowInstance.refreshToken == null) {
             throw new Error(
               `Provider ${provider} does not support token refresh`,
             );
@@ -219,7 +219,7 @@ export class CredentialProxyServer {
     const v = frame.v as number | undefined;
     if (v === PROTOCOL_VERSION) return true;
     const payload = frame.payload as Record<string, unknown> | undefined;
-    if (!payload) return false;
+    if (payload == null) return false;
     const min = payload.minVersion as number | undefined;
     const max = payload.maxVersion as number | undefined;
     if (min !== undefined && max !== undefined) {
@@ -363,7 +363,7 @@ export class CredentialProxyServer {
     const provider = payload.provider as string | undefined;
     const tokenData = payload.token as Record<string, unknown> | undefined;
     const bucket = payload.bucket as string | undefined;
-    if (!provider || !tokenData) {
+    if (!provider || tokenData == null) {
       this.sendError(
         socket,
         id,
@@ -546,7 +546,7 @@ export class CredentialProxyServer {
 
     // Get flow factory for this provider
     const flowFactory = this.options.flowFactories?.get(provider);
-    if (!flowFactory) {
+    if (flowFactory == null) {
       this.sendError(
         socket,
         id,
@@ -700,7 +700,7 @@ export class CredentialProxyServer {
 
     // Retrieve session
     const session = this.oauthSessions.get(sessionId);
-    if (!session) {
+    if (session == null) {
       this.sendError(
         socket,
         id,
@@ -802,7 +802,7 @@ export class CredentialProxyServer {
 
     // Retrieve session
     const session = this.oauthSessions.get(sessionId);
-    if (!session) {
+    if (session == null) {
       this.sendError(
         socket,
         id,
@@ -988,7 +988,7 @@ export class CredentialProxyServer {
 
     // Check if provider is configured in flowFactories (before checking token)
     const flowFactory = this.options.flowFactories?.get(provider);
-    if (!flowFactory) {
+    if (flowFactory == null) {
       this.sendError(
         socket,
         id,
@@ -1003,7 +1003,7 @@ export class CredentialProxyServer {
       provider,
       bucket,
     );
-    if (!existingToken) {
+    if (existingToken == null) {
       this.sendError(
         socket,
         id,

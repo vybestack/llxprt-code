@@ -235,9 +235,10 @@ export function createAgentRuntimeContext(
 
   const providerRuntime = Object.freeze({
     ...options.providerRuntime,
-    metadata: options.providerRuntime.metadata
-      ? Object.freeze({ ...options.providerRuntime.metadata })
-      : undefined,
+    metadata:
+      options.providerRuntime.metadata != null
+        ? Object.freeze({ ...options.providerRuntime.metadata })
+        : undefined,
   }) as ProviderRuntimeContext;
 
   const context: AgentRuntimeContext = {

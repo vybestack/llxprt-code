@@ -127,7 +127,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Process thinking chunk
       const content1 = thinkingChunk.candidates?.[0]?.content;
-      if (content1?.parts) {
+      if (content1?.parts != null) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...content1.parts);
         } else {
@@ -141,7 +141,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Process tool call chunk
       const content2 = toolCallChunk.candidates?.[0]?.content;
-      if (content2?.parts) {
+      if (content2?.parts != null) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...content2.parts);
         }
@@ -199,7 +199,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       // Process with thoughts filtered
       [thinkingChunk, textChunk].forEach((chunk) => {
         const content = chunk.candidates?.[0]?.content;
-        if (content?.parts) {
+        if (content?.parts != null) {
           if (includeThoughtsInHistory) {
             modelResponseParts.push(...content.parts);
           } else {

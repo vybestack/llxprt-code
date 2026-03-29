@@ -64,7 +64,7 @@ async function runSessionStartHook(
     return;
   }
 
-  if (sessionStartOutput) {
+  if (sessionStartOutput != null) {
     if (sessionStartOutput.systemMessage) {
       addItem(
         {
@@ -109,7 +109,7 @@ export function useSessionInitialization({
   // This effect is idempotent: resumedHistory is a static prop from mount,
   // loadHistory replaces (not appends), and StrictMode double-mount is harmless.
   useEffect(() => {
-    if (!resumedHistory || resumedHistory.length === 0) {
+    if (resumedHistory == null || resumedHistory.length === 0) {
       return;
     }
     const uiItems = iContentToHistoryItems(resumedHistory);
@@ -133,7 +133,7 @@ export function useSessionInitialization({
     });
 
     return () => {
-      if (abortControllerRef.current) {
+      if (abortControllerRef.current != null) {
         abortControllerRef.current.abort();
       }
     };

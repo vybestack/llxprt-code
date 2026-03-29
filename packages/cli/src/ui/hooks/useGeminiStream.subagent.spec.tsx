@@ -309,7 +309,7 @@ describe('useGeminiStream subagent isolation', () => {
     };
 
     await act(async () => {
-      if (capturedOnComplete) {
+      if (capturedOnComplete != null) {
         await capturedOnComplete(Symbol('scheduler'), [subagentToolCall], {
           isPrimary: true,
         });

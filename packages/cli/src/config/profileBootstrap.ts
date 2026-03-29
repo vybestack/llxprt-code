@@ -286,7 +286,7 @@ ${baseProfile.error}`);
         }
 
         if (setValues.length > 0) {
-          if (!bootstrapArgs.setOverrides) {
+          if (bootstrapArgs.setOverrides == null) {
             bootstrapArgs.setOverrides = [];
           }
           bootstrapArgs.setOverrides.push(...setValues);
@@ -376,7 +376,7 @@ export async function prepareRuntimeForProfile(
   } as ProviderRuntimeContext;
   const runtimeMessageBus =
     runtimeInit.messageBus ??
-    (runtimeConfig
+    (runtimeConfig != null
       ? new MessageBus(
           runtimeConfig.getPolicyEngine(),
           runtimeConfig.getDebugMode(),
@@ -667,7 +667,7 @@ ${baseProfile.error}`);
     // Handle profileName (from --profile-load)
     if (bootstrapArgs.profileName !== null) {
       const settingsService = runtimeMetadata.settingsService;
-      if (settingsService) {
+      if (settingsService != null) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const profile = (settingsService as any).getProfile(
           bootstrapArgs.profileName,

@@ -353,7 +353,7 @@ export function formatKimiCodeUsage(usage: KimiCodeUsageInfo): string[] {
   }
 
   // Show weekly usage from usage field
-  if (usage.usage) {
+  if (usage.usage != null) {
     const limit = parseInt(usage.usage.limit, 10);
     const remaining = parseInt(usage.usage.remaining, 10);
     const used = limit - remaining;
@@ -366,14 +366,14 @@ export function formatKimiCodeUsage(usage: KimiCodeUsageInfo): string[] {
   }
 
   // Show rolling window limits
-  if (usage.limits) {
+  if (usage.limits != null) {
     for (const entry of usage.limits) {
       const limit = parseInt(entry.detail.limit, 10);
       const remaining = parseInt(entry.detail.remaining, 10);
       const used = limit - remaining;
 
       let windowLabel = 'Window';
-      if (entry.window) {
+      if (entry.window != null) {
         windowLabel = `${formatWindowLabel(entry.window.duration)} limit`;
       }
 

@@ -61,7 +61,7 @@ export function useInputHistoryStore(): UseInputHistoryStoreReturn {
    */
   const initializeFromLogger = useCallback(
     async (logger: Logger | null) => {
-      if (isInitialized || !logger) return;
+      if (isInitialized || logger == null) return;
 
       try {
         const pastMessages = (await logger.getPreviousUserMessages()) || [];

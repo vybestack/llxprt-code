@@ -65,7 +65,7 @@ describe('consent', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    if (originalReaddir.current) {
+    if (originalReaddir.current != null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mockReaddir.mockImplementation(originalReaddir.current as any);
     }

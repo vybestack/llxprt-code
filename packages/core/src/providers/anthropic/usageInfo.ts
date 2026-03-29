@@ -129,7 +129,7 @@ export function formatUsagePeriod(
   period: UsagePeriod,
   label: string,
 ): string | null {
-  if (!period || typeof period.utilization !== 'number') {
+  if (period == null || typeof period.utilization !== 'number') {
     return null;
   }
 
@@ -137,7 +137,7 @@ export function formatUsagePeriod(
   const resetDate = period.resets_at ? new Date(period.resets_at) : null;
 
   let timeUntilReset: string;
-  if (resetDate) {
+  if (resetDate != null) {
     const now = new Date();
     const diffMs = resetDate.getTime() - now.getTime();
     const diffMins = Math.floor(diffMs / 60000);

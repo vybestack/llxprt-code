@@ -80,7 +80,7 @@ export class HookPlanner {
     entry: HookRegistryEntry,
     context?: HookEventContext,
   ): boolean {
-    if (!entry.matcher || !context) {
+    if (!entry.matcher || context == null) {
       return true; // No matcher means match all
     }
 

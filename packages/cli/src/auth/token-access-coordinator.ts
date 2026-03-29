@@ -88,7 +88,7 @@ export class TokenAccessCoordinator {
   }
 
   private requireAuthenticator(): AuthenticatorInterface {
-    if (!this.authenticator) {
+    if (this.authenticator == null) {
       throw new Error(
         'TokenAccessCoordinator: authenticator not wired — call setAuthenticator() first',
       );
@@ -155,7 +155,7 @@ export class TokenAccessCoordinator {
       throw new Error('Provider name must be a non-empty string');
     }
 
-    if (!this.providerRegistry.getProvider(providerName)) {
+    if (this.providerRegistry.getProvider(providerName) == null) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
@@ -187,7 +187,7 @@ export class TokenAccessCoordinator {
       throw new Error('Provider name must be a non-empty string');
     }
 
-    if (!this.providerRegistry.getProvider(providerName)) {
+    if (this.providerRegistry.getProvider(providerName) == null) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
@@ -230,7 +230,7 @@ export class TokenAccessCoordinator {
       () => `[FLOW] Reading token from tokenStore for ${providerName}...`,
     );
     const token = await this.tokenStore.getToken(providerName, bucketToUse);
-    if (!token) {
+    if (token == null) {
       logger.debug(() => `[FLOW] No token in tokenStore for ${providerName}`);
       return null;
     }
@@ -403,7 +403,7 @@ export class TokenAccessCoordinator {
       () => `[FLOW] getToken() called for provider: ${providerName}`,
     );
 
-    if (!this.providerRegistry.getProvider(providerName)) {
+    if (this.providerRegistry.getProvider(providerName) == null) {
       logger.debug(
         () => `[FLOW] Unknown provider for getToken(): ${providerName}`,
       );
@@ -433,7 +433,7 @@ export class TokenAccessCoordinator {
 
     const token = await this.getOAuthToken(providerName, bucket);
 
-    if (token) {
+    if (token != null) {
       logger.debug(
         () =>
           `[FLOW] Returning existing token for ${providerName} (expiry=${token.expiry})`,
@@ -485,7 +485,10 @@ export class TokenAccessCoordinator {
     hasExplicitInMemoryOAuthState: boolean,
   ): boolean {
     // Respect explicit user settings when available.
-    if (this.settings && !this.providerRegistry.isOAuthEnabled(providerName)) {
+    if (
+      this.settings != null &&
+      !this.providerRegistry.isOAuthEnabled(providerName)
+    ) {
       logger.debug(
         () =>
           `[FLOW] OAuth is disabled by settings for ${providerName}, returning null`,
@@ -495,7 +498,7 @@ export class TokenAccessCoordinator {
 
     // In runtimes without LoadedSettings, only block when explicit in-memory state says disabled.
     if (
-      !this.settings &&
+      this.settings == null &&
       hasExplicitInMemoryOAuthState &&
       !this.providerRegistry.isOAuthEnabled(providerName)
     ) {
@@ -591,7 +594,7 @@ export class TokenAccessCoordinator {
           providerName,
           peekBucket,
         );
-        if (peekToken && peekToken.expiry > thirtySecondsFromNow) {
+        if (peekToken != null && peekToken.expiry > thirtySecondsFromNow) {
           logger.debug(
             () =>
               `[issue1616] Found valid token in bucket '${peekBucket}' for ${providerName}, switching session`,
@@ -663,7 +666,7 @@ export class TokenAccessCoordinator {
       return undefined;
     }
     const thirtySecondsFromNow = Math.floor(Date.now() / 1000) + 30;
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+    if (diskToken != null && diskToken.expiry > thirtySecondsFromNow) {
       logger.debug(
         () =>
           `[issue1262/1195] Found valid token on disk after lock timeout for ${providerName}`,
@@ -738,7 +741,7 @@ export class TokenAccessCoordinator {
       providerName,
       explicitBucket ? bucketToCheck : requestMetadata,
     );
-    return newToken ? newToken.access_token : null;
+    return newToken != null ? newToken.access_token : null;
   }
 
   // --------------------------------------------------------------------------
@@ -784,7 +787,7 @@ export class TokenAccessCoordinator {
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string[]> {
-    if (this._getProfileBucketsDelegate) {
+    if (this._getProfileBucketsDelegate != null) {
       return this._getProfileBucketsDelegate(providerName, metadata);
     }
     return this.doGetProfileBuckets(providerName, metadata);

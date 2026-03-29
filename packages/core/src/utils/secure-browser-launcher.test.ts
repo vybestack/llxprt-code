@@ -29,7 +29,7 @@ describe('secure-browser-launcher', () => {
   });
 
   afterEach(() => {
-    if (originalPlatform) {
+    if (originalPlatform != null) {
       Object.defineProperty(process, 'platform', originalPlatform);
     }
   });

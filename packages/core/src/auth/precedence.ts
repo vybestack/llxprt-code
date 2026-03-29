@@ -187,7 +187,7 @@ function toPublicEntry(
     preview: maskToken(entry.token),
     stale: entry.stale,
   };
-  return overrides ? { ...summary, ...overrides } : summary;
+  return overrides != null ? { ...summary, ...overrides } : summary;
 }
 
 function updateMetadataEntry(
@@ -212,7 +212,7 @@ function ensureRuntimeState(
 ): RuntimeScopedState {
   const runtimeId = context.runtimeId ?? 'legacy-singleton';
   let state = runtimeScopedStates.get(runtimeId);
-  if (!state) {
+  if (state == null) {
     const metadata: RuntimeAuthScopeMetadataRecord = {
       runtimeAuthScopeId: runtimeId,
       cacheEntries: [],
@@ -233,7 +233,7 @@ function ensureRuntimeState(
     runtimeScopedStates.set(runtimeId, state);
   }
 
-  if (!context.metadata) {
+  if (context.metadata == null) {
     context.metadata = {};
   }
   context.metadata.runtimeAuthScope = state.metadata;
@@ -273,7 +273,7 @@ function getValidCachedEntry(
     profileId,
   );
   const entry = state.entries.get(cacheKey);
-  if (!entry) {
+  if (entry == null) {
     return null;
   }
   if (entry.stale) {
@@ -381,7 +381,7 @@ function storeRuntimeScopedToken(
   const now = Date.now();
 
   let entry = state.entries.get(cacheKey);
-  if (!entry) {
+  if (entry == null) {
     entry = {
       key: cacheKey,
       providerId,
@@ -401,7 +401,7 @@ function storeRuntimeScopedToken(
     entry.stale = false;
   }
 
-  if (entry.cancellationHook) {
+  if (entry.cancellationHook != null) {
     state.metadata.cancellationHooks = state.metadata.cancellationHooks.filter(
       (hook) => hook !== entry.cancellationHook,
     );
@@ -422,7 +422,7 @@ function invalidateEntry(
   reason: string,
 ): RuntimeAuthScopeCacheEntrySummary {
   const entry = state.entries.get(cacheKey);
-  if (!entry) {
+  if (entry == null) {
     const summary: RuntimeAuthScopeCacheEntrySummary = {
       key: cacheKey,
       providerId: 'unknown',
@@ -446,7 +446,7 @@ function invalidateEntry(
   state.entries.delete(cacheKey);
   updateMetadataEntry(state, entry, summary);
 
-  if (entry.cancellationHook) {
+  if (entry.cancellationHook != null) {
     state.metadata.cancellationHooks = state.metadata.cancellationHooks.filter(
       (hook) => hook !== entry.cancellationHook,
     );
@@ -477,7 +477,7 @@ export function flushRuntimeAuthScope(
   runtimeId: string,
 ): RuntimeAuthScopeFlushResult {
   const state = runtimeScopedStates.get(runtimeId);
-  if (!state) {
+  if (state == null) {
     return { runtimeId, revokedTokens: [] };
   }
 
@@ -557,7 +557,7 @@ export class AuthPrecedenceResolver {
   setSettingsService(
     settingsService: SettingsService | null | undefined,
   ): void {
-    if (!settingsService) {
+    if (settingsService == null) {
       this.settingsService = undefined;
       return;
     }
@@ -572,10 +572,10 @@ export class AuthPrecedenceResolver {
   private resolveSettingsService(
     override?: SettingsService | null,
   ): SettingsService {
-    if (override) {
+    if (override != null) {
       return override;
     }
-    if (this.settingsService) {
+    if (this.settingsService != null) {
       return this.settingsService;
     }
     const context = getActiveProviderRuntimeContext();
@@ -660,7 +660,10 @@ export class AuthPrecedenceResolver {
         }
       }
 
-      if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+      if (
+        this.config.envKeyNames != null &&
+        this.config.envKeyNames.length > 0
+      ) {
         for (const envVarName of this.config.envKeyNames) {
           const envValue = this.normalizeAuthValue(process.env[envVarName]);
           if (envValue) {
@@ -674,7 +677,7 @@ export class AuthPrecedenceResolver {
       includeOAuth &&
       this.config.isOAuthEnabled &&
       this.config.supportsOAuth &&
-      this.oauthManager &&
+      this.oauthManager != null &&
       this.config.oauthProvider
     ) {
       const providerId = this.resolveProviderIdentifier(providerKey);
@@ -702,7 +705,7 @@ export class AuthPrecedenceResolver {
         ): boolean | Promise<boolean | undefined>;
       };
       if (
-        managerWithCheck.isOAuthEnabled &&
+        managerWithCheck.isOAuthEnabled != null &&
         typeof managerWithCheck.isOAuthEnabled === 'function'
       ) {
         let isEnabledByManager: boolean | undefined;
@@ -725,7 +728,7 @@ export class AuthPrecedenceResolver {
         }
 
         if (isEnabledByManager === false) {
-          if (runtimeState) {
+          if (runtimeState != null) {
             const cacheKey = buildCacheKey(
               runtimeState.runtimeAuthScopeId,
               providerId,
@@ -739,13 +742,13 @@ export class AuthPrecedenceResolver {
         }
       }
 
-      if (runtimeState) {
+      if (runtimeState != null) {
         const cachedEntry = getValidCachedEntry(
           runtimeState,
           providerId,
           profileId,
         );
-        if (cachedEntry) {
+        if (cachedEntry != null) {
           recordCacheHit(runtimeState);
           return cachedEntry.token;
         }
@@ -759,12 +762,12 @@ export class AuthPrecedenceResolver {
           providerId,
           profileId,
           cliScope:
-            runtimeContext?.metadata &&
+            runtimeContext?.metadata != null &&
             typeof runtimeContext.metadata === 'object'
               ? runtimeContext.metadata
               : undefined,
           runtimeMetadata:
-            runtimeContext?.metadata &&
+            runtimeContext?.metadata != null &&
             typeof runtimeContext.metadata === 'object'
               ? runtimeContext.metadata
               : undefined,
@@ -792,7 +795,7 @@ export class AuthPrecedenceResolver {
               oauthToken = null;
             }
           }
-          if (runtimeState) {
+          if (runtimeState != null) {
             storeRuntimeScopedToken(
               runtimeState,
               providerId,
@@ -893,7 +896,7 @@ export class AuthPrecedenceResolver {
       return 'constructor-apikey';
     }
 
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+    if (this.config.envKeyNames != null && this.config.envKeyNames.length > 0) {
       for (const envVarName of this.config.envKeyNames) {
         const envValue = process.env[envVarName];
         if (envValue && envValue.trim() !== '') {
@@ -905,7 +908,7 @@ export class AuthPrecedenceResolver {
     if (
       this.config.isOAuthEnabled &&
       this.config.supportsOAuth &&
-      this.oauthManager &&
+      this.oauthManager != null &&
       this.config.oauthProvider
     ) {
       try {
@@ -950,7 +953,7 @@ export class AuthPrecedenceResolver {
     if (oauthProvider) {
       return oauthProvider;
     }
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+    if (this.config.envKeyNames != null && this.config.envKeyNames.length > 0) {
       return this.config.envKeyNames[0] ?? 'unknown-provider';
     }
     return 'unknown-provider';

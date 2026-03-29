@@ -46,7 +46,7 @@ async function validateExtension(args: ValidateArgs) {
     extensionDir: absoluteInputPath,
     workspaceDir,
   });
-  if (!extensionConfig) {
+  if (extensionConfig == null) {
     throw new Error(
       `Invalid extension at ${absoluteInputPath}. Please make sure it has a valid llxprt-extension.json or gemini-extension.json file.`,
     );

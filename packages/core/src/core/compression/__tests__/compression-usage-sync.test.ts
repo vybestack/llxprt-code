@@ -350,7 +350,7 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
 
     const usage = result.metadata.usage;
     expect(usage).toBeDefined();
-    if (usage) {
+    if (usage != null) {
       // Verify all required UsageStats fields are numbers
       expect(typeof usage.promptTokens).toBe('number');
       expect(typeof usage.completionTokens).toBe('number');

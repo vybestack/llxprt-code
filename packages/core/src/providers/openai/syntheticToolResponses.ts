@@ -243,9 +243,10 @@ export class SyntheticToolResponseHandler {
         // For other block types, use structured cloning
         return JSON.parse(JSON.stringify(block));
       }),
-      metadata: msg.metadata
-        ? JSON.parse(JSON.stringify(msg.metadata))
-        : undefined,
+      metadata:
+        msg.metadata != null
+          ? JSON.parse(JSON.stringify(msg.metadata))
+          : undefined,
     }));
 
     if (missingToolIds.length === 0) {

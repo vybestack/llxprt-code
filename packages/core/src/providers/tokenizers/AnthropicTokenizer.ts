@@ -23,14 +23,14 @@ export class AnthropicTokenizer implements ITokenizer {
     // Adjust for code content (more tokens due to special characters)
     const codeIndicators = /[{}[\]()<>:;=,\n\t]/g;
     const codeMatches = text.match(codeIndicators);
-    if (codeMatches && codeMatches.length > text.length * 0.1) {
+    if (codeMatches != null && codeMatches.length > text.length * 0.1) {
       // If more than 10% special characters, it's likely code
       baseEstimate = text.length / 3.5;
     }
 
     // Adjust for whitespace (multiple spaces/newlines count as fewer tokens)
     const whitespaceRuns = text.match(/\s{2,}/g);
-    if (whitespaceRuns) {
+    if (whitespaceRuns != null) {
       const extraWhitespace = whitespaceRuns.reduce(
         (sum, run) => sum + run.length - 1,
         0,

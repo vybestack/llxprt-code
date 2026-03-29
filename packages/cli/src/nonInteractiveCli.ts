@@ -141,13 +141,13 @@ export async function runNonInteractive({
 
   const cleanupStdinCancellation = () => {
     // Clear any pending cancel message timer
-    if (cancelMessageTimer) {
+    if (cancelMessageTimer != null) {
       clearTimeout(cancelMessageTimer);
       cancelMessageTimer = null;
     }
 
     // Cleanup readline and stdin listeners
-    if (rl) {
+    if (rl != null) {
       rl.close();
       rl = null;
     }
@@ -184,7 +184,7 @@ export async function runNonInteractive({
     });
 
     // Emit init event for streaming JSON
-    if (streamFormatter) {
+    if (streamFormatter != null) {
       streamFormatter.emitEvent({
         type: JsonStreamEventType.INIT,
         timestamp: new Date().toISOString(),
@@ -224,7 +224,7 @@ export async function runNonInteractive({
       }
     }
 
-    if (!query) {
+    if (query == null) {
       const { processedQuery, error } = await handleAtCommand({
         query: input,
         config,
@@ -245,7 +245,7 @@ export async function runNonInteractive({
     }
 
     // Emit user message event for streaming JSON
-    if (streamFormatter) {
+    if (streamFormatter != null) {
       streamFormatter.emitEvent({
         type: JsonStreamEventType.MESSAGE,
         timestamp: new Date().toISOString(),
@@ -301,7 +301,7 @@ export async function runNonInteractive({
 
       let firstEventInTurn = true;
       const maybeEmitProfileName = () => {
-        if (firstEventInTurn && !jsonOutput && !streamFormatter) {
+        if (firstEventInTurn && !jsonOutput && streamFormatter == null) {
           const activeProfileName = config
             .getSettingsService()
             .getCurrentProfileName?.();
@@ -332,7 +332,7 @@ export async function runNonInteractive({
 
             if (thoughtText.trim()) {
               // Apply emoji filter if enabled
-              if (emojiFilter) {
+              if (emojiFilter != null) {
                 const filterResult = emojiFilter.filterText(thoughtText);
                 if (filterResult.blocked) {
                   continue;
@@ -352,7 +352,7 @@ export async function runNonInteractive({
           maybeEmitProfileName();
           let outputValue = event.value;
 
-          if (emojiFilter) {
+          if (emojiFilter != null) {
             const filterResult = emojiFilter.filterStreamChunk(outputValue);
 
             if (filterResult.blocked) {
@@ -378,7 +378,7 @@ export async function runNonInteractive({
             }
           }
 
-          if (streamFormatter) {
+          if (streamFormatter != null) {
             streamFormatter.emitEvent({
               type: JsonStreamEventType.MESSAGE,
               timestamp: new Date().toISOString(),
@@ -394,7 +394,7 @@ export async function runNonInteractive({
         } else if (event.type === GeminiEventType.ToolCallRequest) {
           flushThoughtBuffer();
           const toolCallRequest = event.value;
-          if (streamFormatter) {
+          if (streamFormatter != null) {
             streamFormatter.emitEvent({
               type: JsonStreamEventType.TOOL_USE,
               timestamp: new Date().toISOString(),
@@ -411,7 +411,7 @@ export async function runNonInteractive({
           };
           functionCalls.push(normalizedRequest);
         } else if (event.type === GeminiEventType.LoopDetected) {
-          if (streamFormatter) {
+          if (streamFormatter != null) {
             streamFormatter.emitEvent({
               type: JsonStreamEventType.ERROR,
               timestamp: new Date().toISOString(),
@@ -420,7 +420,7 @@ export async function runNonInteractive({
             });
           }
         } else if (event.type === GeminiEventType.MaxSessionTurns) {
-          if (streamFormatter) {
+          if (streamFormatter != null) {
             streamFormatter.emitEvent({
               type: JsonStreamEventType.ERROR,
               timestamp: new Date().toISOString(),
@@ -509,26 +509,27 @@ export async function runNonInteractive({
           });
           const toolResponse = completed.response;
 
-          if (streamFormatter) {
+          if (streamFormatter != null) {
             streamFormatter.emitEvent({
               type: JsonStreamEventType.TOOL_RESULT,
               timestamp: new Date().toISOString(),
               tool_id: requestInfo.callId,
-              status: toolResponse.error ? 'error' : 'success',
+              status: toolResponse.error != null ? 'error' : 'success',
               output:
                 typeof toolResponse.resultDisplay === 'string'
                   ? toolResponse.resultDisplay
                   : undefined,
-              error: toolResponse.error
-                ? {
-                    type: toolResponse.errorType || 'TOOL_EXECUTION_ERROR',
-                    message: toolResponse.error.message,
-                  }
-                : undefined,
+              error:
+                toolResponse.error != null
+                  ? {
+                      type: toolResponse.errorType || 'TOOL_EXECUTION_ERROR',
+                      message: toolResponse.error.message,
+                    }
+                  : undefined,
             });
           }
 
-          if (toolResponse.error) {
+          if (toolResponse.error != null) {
             if (!jsonOutput && !streamJsonOutput) {
               debugLogger.error(
                 `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
@@ -543,7 +544,7 @@ export async function runNonInteractive({
         currentMessages = toolResponseParts;
       } else {
         // Emit final result event for streaming JSON
-        if (streamFormatter) {
+        if (streamFormatter != null) {
           const metrics = uiTelemetryService.getMetrics();
           const durationMs = Date.now() - startTime;
           streamFormatter.emitEvent({

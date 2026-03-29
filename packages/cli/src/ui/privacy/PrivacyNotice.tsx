@@ -29,7 +29,7 @@ const PrivacyNoticeText = ({
   const activeProvider = providerManager?.getActiveProvider?.();
 
   // If we have a non-Gemini provider active, show its specific notice
-  if (activeProvider && activeProvider.name !== 'gemini') {
+  if (activeProvider != null && activeProvider.name !== 'gemini') {
     return (
       <MultiProviderPrivacyNotice
         providerName={activeProvider.name}

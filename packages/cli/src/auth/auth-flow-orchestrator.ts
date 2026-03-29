@@ -98,7 +98,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
   private requireRuntimeMessageBus(): MessageBus {
     const messageBus = this.runtimeMessageBus;
-    if (!messageBus) {
+    if (messageBus == null) {
       throw new Error(
         'OAuthManager requires a runtime MessageBus from the session/runtime composition root.',
       );
@@ -126,7 +126,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     }
 
     const provider = this.providerRegistry.getProvider(providerName);
-    if (!provider) {
+    if (provider == null) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
@@ -189,7 +189,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const thirtySecondsFromNow = nowInSeconds + 30;
 
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+    if (diskToken != null && diskToken.expiry > thirtySecondsFromNow) {
       if (!this.providerRegistry.isOAuthEnabled(providerName)) {
         this.providerRegistry.setOAuthEnabledState(providerName, true);
       }
@@ -249,7 +249,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     const nowInSeconds = Math.floor(Date.now() / 1000);
     const thirtySecondsFromNow = nowInSeconds + 30;
 
-    if (diskToken && diskToken.expiry > thirtySecondsFromNow) {
+    if (diskToken != null && diskToken.expiry > thirtySecondsFromNow) {
       if (!this.providerRegistry.isOAuthEnabled(providerName)) {
         this.providerRegistry.setOAuthEnabledState(providerName, true);
       }
@@ -278,7 +278,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     diskToken: import('./types.js').OAuthToken | undefined,
   ): Promise<boolean> {
     if (
-      !diskToken ||
+      diskToken == null ||
       typeof diskToken.refresh_token !== 'string' ||
       diskToken.refresh_token === ''
     ) {
@@ -286,7 +286,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     }
 
     const provider = this.providerRegistry.getProvider(providerName);
-    if (!provider) {
+    if (provider == null) {
       return false;
     }
 
@@ -362,7 +362,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       }
 
       const refreshedToken = await provider.refreshToken(latestToken);
-      if (refreshedToken) {
+      if (refreshedToken != null) {
         const mergedToken = mergeRefreshedToken(
           latestToken as OAuthTokenWithExtras,
           refreshedToken as OAuthTokenWithExtras,
@@ -511,7 +511,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     // @plan PLAN-20251213issue490
     if (buckets.length > 1) {
       const config = this.config;
-      if (config) {
+      if (config != null) {
         const handler = new BucketFailoverHandlerImpl(
           buckets,
           providerName,
@@ -547,7 +547,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         providerName,
         bucket,
       );
-      if (existingToken && existingToken.expiry > nowInSeconds + 30) {
+      if (existingToken != null && existingToken.expiry > nowInSeconds + 30) {
         logger.debug(`Bucket ${bucket} already authenticated, skipping`, {
           provider: providerName,
           bucket,
@@ -582,7 +582,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       try {
         const existingToken = await this.tokenStore.getToken(provider, bucket);
         const now = Math.floor(Date.now() / 1000);
-        if (existingToken && existingToken.expiry > now + 30) {
+        if (existingToken != null && existingToken.expiry > now + 30) {
           logger.debug(
             `Bucket ${bucket} already authenticated (cross-process), skipping`,
           );

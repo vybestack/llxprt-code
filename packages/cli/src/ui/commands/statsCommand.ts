@@ -115,14 +115,14 @@ async function fetchApiKeyProviderQuota(
     if (providerManager) {
       const providerInstance =
         providerManager.getProviderByName?.(activeProviderName);
-      if (providerInstance) {
+      if (providerInstance != null) {
         // Try providerConfig.baseUrl/baseURL first
         const providerConfig = (
           providerInstance as {
             providerConfig?: { baseUrl?: string; baseURL?: string };
           }
         ).providerConfig;
-        if (providerConfig) {
+        if (providerConfig != null) {
           const configBaseUrl =
             providerConfig.baseUrl ?? providerConfig.baseURL;
           if (configBaseUrl) {
@@ -143,7 +143,7 @@ async function fetchApiKeyProviderQuota(
               baseProviderConfig?: { baseURL?: string; baseUrl?: string };
             }
           ).baseProviderConfig;
-          if (baseProviderConfig) {
+          if (baseProviderConfig != null) {
             const baseConfigUrl =
               baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl;
             if (baseConfigUrl) {
@@ -246,7 +246,7 @@ async function fetchAllQuotaInfo(
 
   try {
     // 1. Fetch OAuth provider quotas (Anthropic + Codex + Gemini)
-    if (oauthManager) {
+    if (oauthManager != null) {
       const [anthropicResult, codexResult, geminiResult] =
         await Promise.allSettled([
           oauthManager.getAllAnthropicUsageInfo(),
@@ -389,7 +389,7 @@ async function fetchAllQuotaInfo(
 
     // 2. Fetch API-key provider quota (Z.ai, Synthetic, Chutes, Kimi)
     const apiKeyQuotaResult = await fetchApiKeyProviderQuota(runtimeApi);
-    if (apiKeyQuotaResult) {
+    if (apiKeyQuotaResult != null) {
       if (output.length > 0) {
         output.push('');
       }
@@ -548,7 +548,7 @@ export const statsCommand: SlashCommand = {
       action: async (context: CommandContext, _args: string) => {
         const { oauthManager } = context.services;
 
-        if (!oauthManager) {
+        if (oauthManager == null) {
           context.ui.addItem(
             {
               type: MessageType.INFO,
@@ -578,7 +578,7 @@ export const statsCommand: SlashCommand = {
             for (const bucket of buckets) {
               const stats = await tokenStore.getBucketStats(provider, bucket);
 
-              if (stats) {
+              if (stats != null) {
                 const lastUsedStr = stats.lastUsed
                   ? new Date(stats.lastUsed).toISOString().split('T')[0]
                   : 'Never';

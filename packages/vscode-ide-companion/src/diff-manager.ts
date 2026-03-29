@@ -141,7 +141,7 @@ export class DiffManager {
       }
     }
 
-    if (uriToClose) {
+    if (uriToClose != null) {
       const rightDoc = await vscode.workspace.openTextDocument(uriToClose);
       const modifiedContent = rightDoc.getText();
       await this.closeDiffEditor(uriToClose);
@@ -167,7 +167,7 @@ export class DiffManager {
    */
   async acceptDiff(rightDocUri: vscode.Uri) {
     const diffInfo = this.diffDocuments.get(rightDocUri.toString());
-    if (!diffInfo) {
+    if (diffInfo == null) {
       return;
     }
 
@@ -192,7 +192,7 @@ export class DiffManager {
    */
   async cancelDiff(rightDocUri: vscode.Uri) {
     const diffInfo = this.diffDocuments.get(rightDocUri.toString());
-    if (!diffInfo) {
+    if (diffInfo == null) {
       await this.closeDiffEditor(rightDocUri);
       return;
     }
@@ -215,7 +215,7 @@ export class DiffManager {
 
   private async onActiveEditorChange(editor: vscode.TextEditor | undefined) {
     let isVisible = false;
-    if (editor) {
+    if (editor != null) {
       isVisible = this.diffDocuments.has(editor.document.uri.toString());
       if (!isVisible) {
         for (const document of this.diffDocuments.values()) {
@@ -245,7 +245,7 @@ export class DiffManager {
       false,
     );
 
-    if (diffInfo) {
+    if (diffInfo != null) {
       this.diffDocuments.delete(rightDocUri.toString());
       this.diffContentProvider.deleteContent(rightDocUri);
     }

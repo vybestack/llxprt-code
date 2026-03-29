@@ -260,7 +260,7 @@ function makeExtMgr() {
 }
 
 async function runConfig(settings: Settings, argv?: string[]) {
-  if (argv) {
+  if (argv != null) {
     process.argv = ['node', 'script.js', ...argv];
   }
   const parsedArgv = await parseArguments(settings);

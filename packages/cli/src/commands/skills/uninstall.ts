@@ -23,7 +23,7 @@ export async function handleUninstall(args: UninstallArgs) {
 
     const result = await uninstallSkill(name, scope);
 
-    if (result) {
+    if (result != null) {
       debugLogger.log(
         chalk.green(
           `Successfully uninstalled skill: ${chalk.bold(name)} (scope: ${scope}, location: ${result.location})`,

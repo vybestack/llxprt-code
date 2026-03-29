@@ -154,7 +154,7 @@ export async function installSkill(
     const destPath = path.join(targetDir, skillName);
 
     const exists = await fs.stat(destPath).catch(() => null);
-    if (exists) {
+    if (exists != null) {
       onLog(`Skill "${skillName}" already exists. Overwriting...`);
       await fs.rm(destPath, { recursive: true, force: true });
     }
@@ -188,7 +188,7 @@ export async function uninstallSkill(
 
   const exists = await fs.stat(skillPath).catch(() => null);
 
-  if (!exists) {
+  if (exists == null) {
     return null;
   }
 

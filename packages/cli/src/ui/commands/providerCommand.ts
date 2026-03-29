@@ -97,7 +97,7 @@ async function handleSaveAlias(
   }
 
   const config = context.services.config;
-  if (!config) {
+  if (config == null) {
     return {
       type: 'message',
       messageType: 'error',
@@ -259,7 +259,7 @@ export const providerCommand: SlashCommand = {
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
       };
-      if (extendedContext.checkPaymentModeChange) {
+      if (extendedContext.checkPaymentModeChange != null) {
         setTimeout(
           () => extendedContext.checkPaymentModeChange!(fromProvider),
           100,

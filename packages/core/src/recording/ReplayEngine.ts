@@ -214,7 +214,7 @@ export async function replaySession(
         // @pseudocode line 114-120: provider_switch
         case 'provider_switch': {
           const switchPayload = payload as unknown as ProviderSwitchPayload;
-          if (metadata && switchPayload.provider) {
+          if (metadata != null && switchPayload.provider) {
             metadata.provider = switchPayload.provider;
             metadata.model = switchPayload.model;
           } else if (!switchPayload.provider) {
@@ -246,7 +246,7 @@ export async function replaySession(
         // @pseudocode line 126-131: directories_changed
         case 'directories_changed': {
           const dirPayload = payload as unknown as DirectoriesChangedPayload;
-          if (metadata && Array.isArray(dirPayload.directories)) {
+          if (metadata != null && Array.isArray(dirPayload.directories)) {
             metadata.workspaceDirs = dirPayload.directories;
           } else if (!Array.isArray(dirPayload?.directories)) {
             malformedCount++;

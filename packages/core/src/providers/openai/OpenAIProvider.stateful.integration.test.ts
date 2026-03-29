@@ -60,7 +60,11 @@ describe('OpenAIProvider Stateful Integration', () => {
           metadata: { source: 'OpenAIProvider.stateful.integration.test.ts' },
         },
       ));
-      if (runtimeContext && runtimeSettingsService && !runtimeContext.config) {
+      if (
+        runtimeContext &&
+        runtimeSettingsService &&
+        runtimeContext.config == null
+      ) {
         runtimeContext.config = createRuntimeConfigStub(runtimeSettingsService);
       }
     }
@@ -83,10 +87,10 @@ describe('OpenAIProvider Stateful Integration', () => {
   }
 
   const buildCallOptions = (contents: IContent[]) => {
-    if (!runtimeSettingsService || !runtimeContext) {
+    if (runtimeSettingsService == null || runtimeContext == null) {
       throw new Error('Runtime context not initialised');
     }
-    if (!runtimeContext.config) {
+    if (runtimeContext.config == null) {
       runtimeContext.config = createRuntimeConfigStub(runtimeSettingsService);
     }
     return createProviderCallOptions({
@@ -106,7 +110,7 @@ describe('OpenAIProvider Stateful Integration', () => {
         console.warn('Skipping test: API key not found');
         return;
       }
-      if (!runtimeSettingsService || !runtimeContext) {
+      if (runtimeSettingsService == null || runtimeContext == null) {
         console.warn('Skipping test: runtime context not initialised');
         return;
       }
@@ -187,7 +191,7 @@ describe('OpenAIProvider Stateful Integration', () => {
       ];
 
       try {
-        if (!runtimeSettingsService || !runtimeContext) {
+        if (runtimeSettingsService == null || runtimeContext == null) {
           console.warn('Skipping test: runtime context not initialised');
           return;
         }

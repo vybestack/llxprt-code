@@ -34,7 +34,7 @@ function getEncoder(): ReturnType<typeof encoding_for_model> | null {
     return null;
   }
 
-  if (!cachedEncoder) {
+  if (cachedEncoder == null) {
     try {
       cachedEncoder = encoding_for_model('gpt-4o');
       if (!isWindows) {
@@ -53,7 +53,7 @@ function getEncoder(): ReturnType<typeof encoding_for_model> | null {
 
 function encodeText(text: string): Uint32Array | null {
   const encoder = getEncoder();
-  if (!encoder) {
+  if (encoder == null) {
     return null;
   }
 
@@ -68,7 +68,7 @@ function encodeText(text: string): Uint32Array | null {
 export function estimateTokens(text: string): number {
   const encoded = encodeText(text);
 
-  if (encoded) {
+  if (encoded != null) {
     return encoded.length;
   }
 
@@ -211,7 +211,7 @@ export function limitOutputTokens(
     let truncatedContent = '';
     let truncatedTokenCount = 0;
 
-    if (encodedContent && encoder) {
+    if (encodedContent != null && encoder != null) {
       const truncatedTokens = encodedContent.subarray(0, targetTokenCount);
       truncatedContent = utf8Decoder.decode(encoder.decode(truncatedTokens));
       truncatedTokenCount = truncatedTokens.length;
@@ -260,7 +260,7 @@ export function limitOutputTokens(
   let truncatedContent = '';
   let truncatedTokenCount = 0;
 
-  if (encodedContent && encoder) {
+  if (encodedContent != null && encoder != null) {
     const truncatedTokens = encodedContent.subarray(0, targetTokenCount);
     truncatedContent = utf8Decoder.decode(encoder.decode(truncatedTokens));
     truncatedTokenCount = truncatedTokens.length;

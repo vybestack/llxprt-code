@@ -98,7 +98,7 @@ export function classifyGoogleError(error: unknown): unknown {
   }
 
   if (
-    !googleApiError ||
+    googleApiError == null ||
     googleApiError.code !== 429 ||
     googleApiError.details.length === 0
   ) {
@@ -152,7 +152,7 @@ export function classifyGoogleError(error: unknown): unknown {
   );
 
   // 1. Check for long-term limits in QuotaFailure or ErrorInfo
-  if (quotaFailure) {
+  if (quotaFailure != null) {
     for (const violation of quotaFailure.violations) {
       const quotaId = violation.quotaId ?? '';
       if (quotaId.includes('PerDay') || quotaId.includes('Daily')) {
@@ -164,7 +164,7 @@ export function classifyGoogleError(error: unknown): unknown {
     }
   }
 
-  if (errorInfo) {
+  if (errorInfo != null) {
     // New Cloud Code API quota handling
     if (errorInfo.domain) {
       const validDomains = [
@@ -226,7 +226,7 @@ export function classifyGoogleError(error: unknown): unknown {
   }
 
   // 3. Check for short-term limits in QuotaFailure or ErrorInfo
-  if (quotaFailure) {
+  if (quotaFailure != null) {
     for (const violation of quotaFailure.violations) {
       const quotaId = violation.quotaId ?? '';
       if (quotaId.includes('PerMinute')) {
@@ -239,7 +239,7 @@ export function classifyGoogleError(error: unknown): unknown {
     }
   }
 
-  if (errorInfo) {
+  if (errorInfo != null) {
     const quotaLimit = errorInfo.metadata?.['quota_limit'] ?? '';
     if (quotaLimit.includes('PerMinute')) {
       return new RetryableQuotaError(

@@ -374,7 +374,7 @@ describe('generateDynamicToolSettings', () => {
         return toolName === toolKey;
       });
 
-      if (!actualTool) {
+      if (actualTool == null) {
         console.error(`Tool not found for key: ${toolKey}`);
       }
 

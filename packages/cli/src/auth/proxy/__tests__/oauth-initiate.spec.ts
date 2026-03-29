@@ -129,7 +129,7 @@ class TestOAuthFlow {
   }
 
   async initiateDeviceFlow(_redirectUri?: string): Promise<DeviceCodeResponse> {
-    if (!this.initiateResult) {
+    if (this.initiateResult == null) {
       throw new Error('TestOAuthFlow: initiateResult not configured');
     }
     return this.initiateResult;

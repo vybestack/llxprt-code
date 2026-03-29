@@ -59,7 +59,7 @@ export async function initializeLsp(
       state.lspConfig.navigationTools !== false
     ) {
       const streams = state.lspServiceClient.getMcpTransportStreams();
-      if (streams) {
+      if (streams != null) {
         try {
           await Promise.race([
             registerMcpNavigationTools(state, host, streams),
@@ -126,7 +126,7 @@ async function registerMcpNavigationTools(
   const cleanup = async () => {
     registry.removeMcpToolsByServer('lsp-navigation');
 
-    if (state.lspMcpClient) {
+    if (state.lspMcpClient != null) {
       try {
         await state.lspMcpClient.close();
       } catch {
@@ -135,7 +135,7 @@ async function registerMcpNavigationTools(
     }
     state.lspMcpClient = undefined;
 
-    if (state.lspMcpTransport) {
+    if (state.lspMcpTransport != null) {
       try {
         await state.lspMcpTransport.close();
       } catch {
@@ -243,7 +243,7 @@ async function registerMcpNavigationTools(
     await client.connect(transport, { timeout: requestTimeoutMs });
 
     const capabilities = client.getServerCapabilities?.();
-    if (!capabilities?.tools) {
+    if (capabilities?.tools == null) {
       await cleanup();
       return;
     }
@@ -340,7 +340,7 @@ export async function shutdownLsp(
 ): Promise<void> {
   registry.removeMcpToolsByServer('lsp-navigation');
 
-  if (state.lspMcpClient) {
+  if (state.lspMcpClient != null) {
     try {
       await state.lspMcpClient.close();
     } catch {
@@ -349,7 +349,7 @@ export async function shutdownLsp(
   }
   state.lspMcpClient = undefined;
 
-  if (state.lspMcpTransport) {
+  if (state.lspMcpTransport != null) {
     try {
       await state.lspMcpTransport.close();
     } catch {
@@ -358,7 +358,7 @@ export async function shutdownLsp(
   }
   state.lspMcpTransport = undefined;
 
-  if (state.lspServiceClient) {
+  if (state.lspServiceClient != null) {
     try {
       await state.lspServiceClient.shutdown();
     } catch {

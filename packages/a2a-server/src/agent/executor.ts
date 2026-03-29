@@ -104,7 +104,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     const metadata = sdkTask.metadata || {};
     const persistedState = getPersistedState(metadata);
 
-    if (!persistedState) {
+    if (persistedState == null) {
       throw new Error(
         `Cannot reconstruct task ${sdkTask.id}: missing persisted state in metadata.`,
       );
@@ -123,7 +123,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     runtimeTask.taskState = persistedState._taskState;
     const contentGeneratorConfig =
       runtimeTask.config.getContentGeneratorConfig();
-    if (contentGeneratorConfig) {
+    if (contentGeneratorConfig != null) {
       await runtimeTask.geminiClient.initialize(contentGeneratorConfig);
     }
 
@@ -150,7 +150,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     );
     const contentGeneratorConfig2 =
       runtimeTask.config.getContentGeneratorConfig();
-    if (contentGeneratorConfig2) {
+    if (contentGeneratorConfig2 != null) {
       await runtimeTask.geminiClient.initialize(contentGeneratorConfig2);
     }
 
@@ -177,7 +177,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     );
     const wrapper = this.tasks.get(taskId);
 
-    if (!wrapper) {
+    if (wrapper == null) {
       logger.warn(
         `[CoderAgentExecutor] Task ${taskId} not found for cancellation.`,
       );
@@ -307,7 +307,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     );
 
     const store = requestStorage.getStore();
-    if (!store) {
+    if (store == null) {
       logger.error(
         '[CoderAgentExecutor] Could not get request from async local storage. Cancellation on socket close will not be handled for this request.',
       );
@@ -316,7 +316,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     const abortController = new AbortController();
     const abortSignal = abortController.signal;
 
-    if (store) {
+    if (store != null) {
       // Grab the raw socket from the request object
       const socket = store.req.socket;
       const onClientEnd = () => {
@@ -344,10 +344,10 @@ export class CoderAgentExecutor implements AgentExecutor {
 
     let wrapper: TaskWrapper | undefined = this.tasks.get(taskId);
 
-    if (wrapper) {
+    if (wrapper != null) {
       wrapper.task.eventBus = eventBus;
       logger.info(`[CoderAgentExecutor] Task ${taskId} found in memory cache.`);
-    } else if (sdkTask) {
+    } else if (sdkTask != null) {
       logger.info(
         `[CoderAgentExecutor] Task ${taskId} found in TaskStore. Reconstructing...`,
       );

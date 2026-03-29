@@ -56,7 +56,7 @@ export function getInitializationError(): Error | null {
  * Safe to call multiple times - will return cached result.
  */
 export async function initializeParser(): Promise<boolean> {
-  if (parser && bashLanguage) {
+  if (parser != null && bashLanguage != null) {
     return true;
   }
 
@@ -108,7 +108,7 @@ export function isParserAvailable(): boolean {
  * Returns null if parser is not available.
  */
 export function parseShellCommand(command: string): Tree | null {
-  if (!parser) {
+  if (parser == null) {
     return null;
   }
   return parser.parse(command);
@@ -119,7 +119,7 @@ export function parseShellCommand(command: string): Tree | null {
  * This handles pipelines, command lists (&&, ||, ;), and subshells.
  */
 export function extractCommandNames(tree: Tree): string[] {
-  if (!bashLanguage) {
+  if (bashLanguage == null) {
     return [];
   }
 
@@ -187,7 +187,7 @@ function extractNameFromNode(node: Node): string | null {
   switch (node.type) {
     case 'command': {
       const nameNode = node.childForFieldName('name');
-      if (!nameNode) {
+      if (nameNode == null) {
         return null;
       }
       return normalizeCommandName(nameNode.text);
@@ -196,7 +196,7 @@ function extractNameFromNode(node: Node): string | null {
     case 'unset_command':
     case 'test_command': {
       const firstChild = node.child(0);
-      if (!firstChild) {
+      if (firstChild == null) {
         return null;
       }
       return normalizeCommandName(firstChild.text);
@@ -223,7 +223,7 @@ export function collectCommandDetails(
 
   while (stack.length > 0) {
     const current = stack.pop();
-    if (!current) {
+    if (current == null) {
       continue;
     }
 
@@ -238,7 +238,7 @@ export function collectCommandDetails(
     // Push children in reverse order so we process them left-to-right
     for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
       const child = current.namedChild(i);
-      if (child) {
+      if (child != null) {
         stack.push(child);
       }
     }
@@ -256,7 +256,7 @@ function hasPromptCommandTransform(root: Node): boolean {
 
   while (stack.length > 0) {
     const current = stack.pop();
-    if (!current) {
+    if (current == null) {
       continue;
     }
 
@@ -276,7 +276,7 @@ function hasPromptCommandTransform(root: Node): boolean {
 
     for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
       const child = current.namedChild(i);
-      if (child) {
+      if (child != null) {
         stack.push(child);
       }
     }
@@ -292,13 +292,13 @@ function hasPromptCommandTransform(root: Node): boolean {
 export function parseCommandDetails(
   command: string,
 ): CommandParseResult | null {
-  if (!parser || !bashLanguage) {
+  if (parser == null || bashLanguage == null) {
     return null;
   }
 
   try {
     const tree = parser.parse(command);
-    if (!tree) {
+    if (tree == null) {
       return { details: [], hasError: true };
     }
 
@@ -348,7 +348,7 @@ export function parseCommandDetails(
  * - <() process substitution
  */
 export function hasCommandSubstitution(tree: Tree): boolean {
-  if (!bashLanguage) {
+  if (bashLanguage == null) {
     return false;
   }
 
@@ -399,7 +399,7 @@ export function splitCommandsWithTree(
         if (splitOnPipes) {
           // Recurse into pipeline children to get individual commands
           for (const child of node.children) {
-            if (child) extractCommands(child);
+            if (child != null) extractCommands(child);
           }
         } else {
           // Treat pipeline as atomic for instrumentation
@@ -409,18 +409,18 @@ export function splitCommandsWithTree(
       case 'list':
         // Lists are command chains (&&, ||, ;) - recurse into children
         for (const child of node.children) {
-          if (child) extractCommands(child);
+          if (child != null) extractCommands(child);
         }
         break;
       case 'program':
         for (const child of node.children) {
-          if (child) extractCommands(child);
+          if (child != null) extractCommands(child);
         }
         break;
       default:
         // For other node types, check children
         for (const child of node.children) {
-          if (child) extractCommands(child);
+          if (child != null) extractCommands(child);
         }
     }
   }

@@ -241,9 +241,8 @@ export function createAgentRuntimeState(
     model: params.model,
     baseUrl: params.baseUrl,
     proxyUrl: params.proxyUrl,
-    modelParams: params.modelParams
-      ? deepFreeze(params.modelParams)
-      : undefined,
+    modelParams:
+      params.modelParams != null ? deepFreeze(params.modelParams) : undefined,
     sessionId,
     updatedAt: getTimestamp(),
   });
@@ -333,9 +332,10 @@ export function updateAgentRuntimeState(
   const newState: AgentRuntimeState = Object.freeze({
     ...oldState,
     ...updates,
-    modelParams: updates.modelParams
-      ? deepFreeze(updates.modelParams)
-      : oldState.modelParams,
+    modelParams:
+      updates.modelParams != null
+        ? deepFreeze(updates.modelParams)
+        : oldState.modelParams,
     updatedAt,
   });
 
@@ -400,7 +400,8 @@ export function getAgentRuntimeStateSnapshot(
     model: state.model,
     baseUrl: state.baseUrl,
     proxyUrl: state.proxyUrl,
-    modelParams: state.modelParams ? { ...state.modelParams } : undefined,
+    modelParams:
+      state.modelParams != null ? { ...state.modelParams } : undefined,
     sessionId: state.sessionId,
     updatedAt: state.updatedAt,
     version: 1, // Schema version (line 341)
@@ -430,7 +431,7 @@ export function subscribeToAgentRuntimeState(
 
   // Get or create subscriber list (line 296)
   let subscribers = subscriptionRegistry.get(runtimeId);
-  if (!subscribers) {
+  if (subscribers == null) {
     subscribers = new Map();
     subscriptionRegistry.set(runtimeId, subscribers);
   }
@@ -447,7 +448,7 @@ export function subscribeToAgentRuntimeState(
   // Return unsubscribe function (lines 303-306)
   return () => {
     const subs = subscriptionRegistry.get(runtimeId);
-    if (subs) {
+    if (subs != null) {
       subs.delete(subscriptionId);
     }
   };
@@ -466,7 +467,7 @@ function invokeSubscribers(
   event: RuntimeStateChangedEvent,
 ): void {
   const subscribers = subscriptionRegistry.get(runtimeId);
-  if (!subscribers || subscribers.size === 0) {
+  if (subscribers == null || subscribers.size === 0) {
     return;
   }
 
@@ -521,7 +522,7 @@ export function getSessionId(state: AgentRuntimeState): string {
 export function getModelParams(
   state: AgentRuntimeState,
 ): Readonly<ModelParams> | undefined {
-  if (!state.modelParams) {
+  if (state.modelParams == null) {
     return undefined;
   }
   return Object.freeze({ ...state.modelParams });

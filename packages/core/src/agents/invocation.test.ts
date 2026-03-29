@@ -200,7 +200,7 @@ describe('SubagentInvocation', () => {
       mockExecutorInstance.run.mockImplementation(async () => {
         const onActivity = MockAgentExecutor.create.mock.calls[0][3];
 
-        if (onActivity) {
+        if (onActivity != null) {
           onActivity({
             isSubagentActivityEvent: true,
             agentName: 'MockAgent',
@@ -229,7 +229,7 @@ describe('SubagentInvocation', () => {
       mockExecutorInstance.run.mockImplementation(async () => {
         const onActivity = MockAgentExecutor.create.mock.calls[0][3];
 
-        if (onActivity) {
+        if (onActivity != null) {
           onActivity({
             isSubagentActivityEvent: true,
             agentName: 'MockAgent',
@@ -256,7 +256,7 @@ describe('SubagentInvocation', () => {
     it('should run successfully without an updateOutput callback', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {
         const onActivity = MockAgentExecutor.create.mock.calls[0][3];
-        if (onActivity) {
+        if (onActivity != null) {
           // Ensure calling activity doesn't crash when updateOutput is undefined
           onActivity({
             isSubagentActivityEvent: true,

@@ -92,7 +92,7 @@ function stripInternalReasoningKeys(
 export function filterOpenAIRequestParams(
   source: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | undefined {
-  if (!source) {
+  if (source == null) {
     return undefined;
   }
 
@@ -108,7 +108,7 @@ export function filterOpenAIRequestParams(
 
     if (normalizedKey === 'reasoning') {
       const sanitized = stripInternalReasoningKeys(value);
-      if (!sanitized) {
+      if (sanitized == null) {
         continue;
       }
       filtered[normalizedKey] = sanitized;

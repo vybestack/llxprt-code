@@ -64,7 +64,7 @@ export function useOpenAIProviderInfo(
 
   const getCachedConversation = useCallback(
     (conversationId: string, parentId: string) => {
-      if (!providerInfo.conversationCache) {
+      if (providerInfo.conversationCache == null) {
         return null;
       }
       return providerInfo.conversationCache.get(conversationId, parentId);

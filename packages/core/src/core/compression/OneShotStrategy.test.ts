@@ -426,7 +426,7 @@ describe('OneShotStrategy', () => {
           // If there's a tool response in the tail, its corresponding
           // tool call should also be in the tail
           const toolCallId = msg.blocks.find((b) => b.type === 'tool_response');
-          if (toolCallId && 'callId' in toolCallId) {
+          if (toolCallId != null && 'callId' in toolCallId) {
             const hasCall = tail.some(
               (m) =>
                 m.speaker === 'ai' &&

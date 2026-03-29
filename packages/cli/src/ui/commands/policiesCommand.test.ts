@@ -32,7 +32,7 @@ describe('policiesCommand', () => {
   });
 
   it('should return an error when config is not available', () => {
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -59,7 +59,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -104,7 +104,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -152,7 +152,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -186,7 +186,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -220,7 +220,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -253,7 +253,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 
@@ -289,7 +289,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
-    if (!policiesCommand.action) {
+    if (policiesCommand.action == null) {
       throw new Error('Policies command has no action');
     }
 

@@ -101,7 +101,7 @@ describe('GrepTool timeout functionality', () => {
             // Delay long enough to trigger timeout
             await new Promise<void>((resolve, reject) => {
               const timeoutId = setTimeout(resolve, 200);
-              if (signal) {
+              if (signal != null) {
                 signal.addEventListener('abort', () => {
                   clearTimeout(timeoutId);
                   reject(new Error('This operation was aborted'));
@@ -189,7 +189,7 @@ describe('GrepTool timeout functionality', () => {
           async *[Symbol.asyncIterator]() {
             await new Promise<void>((resolve, reject) => {
               const timeoutId = setTimeout(resolve, 200);
-              if (signal) {
+              if (signal != null) {
                 signal.addEventListener('abort', () => {
                   clearTimeout(timeoutId);
                   reject(new Error('This operation was aborted'));

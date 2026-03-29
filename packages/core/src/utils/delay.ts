@@ -21,7 +21,7 @@ export function createAbortError(): Error {
  */
 export function delay(ms: number, signal?: AbortSignal): Promise<void> {
   // If no abort signal is provided, set simple delay
-  if (!signal) {
+  if (signal == null) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 

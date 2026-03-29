@@ -12,7 +12,7 @@ import { mouseCommand } from './mouseCommand.js';
 describe('mouseCommand', () => {
   const runMouseCommand = async (args: string) => {
     const action = mouseCommand.action;
-    if (!action) {
+    if (action == null) {
       throw new Error('mouseCommand must have an action.');
     }
 

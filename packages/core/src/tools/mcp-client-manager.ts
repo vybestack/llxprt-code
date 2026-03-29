@@ -91,7 +91,7 @@ export class McpClientManager {
   private isAllowedMcpServer(name: string) {
     const allowedNames = this.cliConfig.getAllowedMcpServers();
     if (
-      allowedNames &&
+      allowedNames != null &&
       allowedNames.length > 0 &&
       allowedNames.indexOf(name) === -1
     ) {
@@ -99,7 +99,7 @@ export class McpClientManager {
     }
     const blockedServers = this.cliConfig.getBlockedMcpServers();
     if (
-      blockedServers &&
+      blockedServers != null &&
       blockedServers.length > 0 &&
       blockedServers.some((s) => s.name === name)
     ) {
@@ -110,7 +110,7 @@ export class McpClientManager {
 
   private async disconnectClient(name: string) {
     const existing = this.clients.get(name);
-    if (existing) {
+    if (existing != null) {
       try {
         this.clients.delete(name);
         this.eventEmitter?.emit('mcp-client-update', this.clients);
@@ -135,7 +135,7 @@ export class McpClientManager {
     config: MCPServerConfig,
   ): Promise<void> | void {
     if (!this.isAllowedMcpServer(name)) {
-      if (!this.blockedMcpServers.find((s) => s.name === name)) {
+      if (this.blockedMcpServers.find((s) => s.name === name) == null) {
         this.blockedMcpServers?.push({
           name,
           extensionName: config.extension?.name ?? '',
@@ -146,14 +146,18 @@ export class McpClientManager {
     if (!this.cliConfig.isTrustedFolder()) {
       return;
     }
-    if (config.extension && !config.extension.isActive) {
+    if (config.extension != null && !config.extension.isActive) {
       return;
     }
     const existing = this.clients.get(name);
-    if (existing && existing.getServerConfig().extension !== config.extension) {
-      const extensionText = config.extension
-        ? ` from extension "${config.extension.name}"`
-        : '';
+    if (
+      existing != null &&
+      existing.getServerConfig().extension !== config.extension
+    ) {
+      const extensionText =
+        config.extension != null
+          ? ` from extension "${config.extension.name}"`
+          : '';
       logger.warn(
         `Skipping MCP config for server with name "${name}"${extensionText} as it already exists.`,
       );
@@ -163,7 +167,7 @@ export class McpClientManager {
     const currentDiscoveryPromise = new Promise<void>((resolve, _reject) => {
       void (async () => {
         try {
-          if (existing) {
+          if (existing != null) {
             await existing.disconnect();
           }
 
@@ -186,7 +190,7 @@ export class McpClientManager {
                 }
               },
             );
-          if (!existing) {
+          if (existing == null) {
             this.clients.set(name, client);
             this.eventEmitter?.emit('mcp-client-update', this.clients);
           }
@@ -222,7 +226,7 @@ export class McpClientManager {
       })();
     });
 
-    if (this.discoveryPromise) {
+    if (this.discoveryPromise != null) {
       this.discoveryPromise = this.discoveryPromise.then(
         () => currentDiscoveryPromise,
       );
@@ -295,7 +299,7 @@ export class McpClientManager {
    */
   async restartServer(name: string) {
     const client = this.clients.get(name);
-    if (!client) {
+    if (client == null) {
       throw new Error(`No MCP server registered with the name "${name}"`);
     }
     await this.maybeDiscoverMcpServer(name, client.getServerConfig());

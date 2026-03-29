@@ -38,7 +38,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'list');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -65,7 +65,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'list');
 
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
@@ -87,7 +87,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable "File Reader"');
 
     expect(settings.get('tools.disabled')).toEqual(['file-reader']);
@@ -111,7 +111,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable code-editor');
 
     expect(setToolsSpy).toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toEqual([]);
@@ -153,7 +153,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable missing');
 
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0];
@@ -176,7 +176,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toEqual([]);
@@ -202,7 +202,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toEqual([]);
@@ -226,7 +226,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
+    if (toolsCommand.action == null) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable file-reader');
 
     (mockContext.ui.addItem as vi.Mock).mockClear();

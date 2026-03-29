@@ -53,7 +53,7 @@ async function writePortAndWorkspace({
 }: WritePortAndWorkspaceArgs): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const workspacePath =
-    workspaceFolders && workspaceFolders.length > 0
+    workspaceFolders != null && workspaceFolders.length > 0
       ? workspaceFolders.map((folder) => folder.uri.fsPath).join(path.delimiter)
       : '';
 
@@ -280,7 +280,7 @@ export class IDEServer {
         }
 
         if (
-          this.openFilesManager &&
+          this.openFilesManager != null &&
           sessionId &&
           !sessionsWithInitialNotification.has(sessionId)
         ) {
@@ -316,7 +316,7 @@ export class IDEServer {
         }
 
         if (
-          this.openFilesManager &&
+          this.openFilesManager != null &&
           sessionId &&
           !sessionsWithInitialNotification.has(sessionId)
         ) {
@@ -382,7 +382,7 @@ export class IDEServer {
   }
 
   broadcastIdeContextUpdate() {
-    if (!this.openFilesManager) {
+    if (this.openFilesManager == null) {
       return;
     }
     for (const transport of Object.values(this.transports)) {
@@ -395,7 +395,12 @@ export class IDEServer {
   }
 
   async syncEnvVars(): Promise<void> {
-    if (this.context && this.server && this.port && this.authToken) {
+    if (
+      this.context != null &&
+      this.server != null &&
+      this.port &&
+      this.authToken
+    ) {
       await writePortAndWorkspace({
         context: this.context,
         port: this.port,
@@ -408,10 +413,10 @@ export class IDEServer {
   }
 
   async stop(): Promise<void> {
-    if (this.server) {
+    if (this.server != null) {
       await new Promise<void>((resolve, reject) => {
         this.server!.close((err?: Error) => {
-          if (err) {
+          if (err != null) {
             this.log(`Error shutting down IDE server: ${err.message}`);
             return reject(err);
           }
@@ -422,7 +427,7 @@ export class IDEServer {
       this.server = undefined;
     }
 
-    if (this.context) {
+    if (this.context != null) {
       this.context.environmentVariableCollection.clear();
     }
     if (this.portFile) {

@@ -377,7 +377,7 @@ async function wireLoadBalancerFailover(
 
   for (const subProfileName of subProfileNames) {
     const subProfile = await loadSubProfileOrNull(subProfileName, manager);
-    if (!subProfile) {
+    if (subProfile == null) {
       continue;
     }
     shouldClearHandler =
@@ -427,7 +427,7 @@ export async function applyProfileSnapshot(
   setCurrentProfileName(settingsService, options.profileName);
 
   const oauthManager = getCliOAuthManager();
-  if (oauthManager) {
+  if (oauthManager != null) {
     scheduleProactiveRenewals(oauthManager, profile);
     clearProfileFailoverOnBucketChanges(oauthManager, config, profile);
     wireStandardProfileFailover(oauthManager, profile);
@@ -447,7 +447,7 @@ export async function saveProfileSnapshot(
   const snapshot = buildRuntimeProfileSnapshot();
 
   let finalProfile: Profile = snapshot;
-  if (additionalConfig) {
+  if (additionalConfig != null) {
     finalProfile = { ...snapshot, ...additionalConfig } as Profile;
   }
 

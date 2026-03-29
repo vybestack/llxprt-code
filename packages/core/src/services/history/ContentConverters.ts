@@ -210,7 +210,7 @@ export class ContentConverters {
     let responseIndex = 0;
 
     // Handle empty parts array explicitly
-    if (!content.parts || content.parts.length === 0) {
+    if (content.parts == null || content.parts.length === 0) {
       // Empty content - keep it empty
       // This represents an empty model response
     } else if (content.parts) {
@@ -238,11 +238,11 @@ export class ContentConverters {
               text: part.text,
             });
           }
-        } else if ('functionCall' in part && part.functionCall) {
+        } else if ('functionCall' in part && part.functionCall != null) {
           const toolName = part.functionCall.name || '';
           const rawId = part.functionCall.id;
           const generatedId =
-            !rawId && generateIdCb ? generateIdCb() : undefined;
+            !rawId && generateIdCb != null ? generateIdCb() : undefined;
           const finalId = generatedId
             ? generatedId
             : canonicalizeToolCallId({
@@ -266,12 +266,17 @@ export class ContentConverters {
               (part.functionCall.args as Record<string, unknown>) || {},
           });
           callIndex += 1;
-        } else if ('functionResponse' in part && part.functionResponse) {
+        } else if (
+          'functionResponse' in part &&
+          part.functionResponse != null
+        ) {
           const toolName = part.functionResponse.name || '';
           const rawId = part.functionResponse.id;
           const matched = !rawId ? getNextUnmatchedToolCall?.() : undefined;
           const generatedId =
-            !rawId && !matched && generateIdCb ? generateIdCb() : undefined;
+            !rawId && matched == null && generateIdCb != null
+              ? generateIdCb()
+              : undefined;
           const callId = matched?.historyId
             ? matched.historyId
             : (generatedId ??
@@ -294,7 +299,7 @@ export class ContentConverters {
           // Safely handle the response field which might not be a valid Record
           let result: Record<string, unknown> = {};
           try {
-            if (part.functionResponse.response) {
+            if (part.functionResponse.response != null) {
               if (
                 typeof part.functionResponse.response === 'object' &&
                 part.functionResponse.response !== null
@@ -340,7 +345,7 @@ export class ContentConverters {
             result,
           });
           responseIndex += 1;
-        } else if ('inlineData' in part && part.inlineData) {
+        } else if ('inlineData' in part && part.inlineData != null) {
           // Handle inline data (media)
           blocks.push({
             type: 'media',

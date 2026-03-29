@@ -93,7 +93,7 @@ function applyAfterHookModifications(
     | undefined,
   toolResult: ToolResult,
 ): ToolResult {
-  if (!afterResult) return toolResult;
+  if (afterResult == null) return toolResult;
 
   let finalResult = toolResult;
   const systemMessage = afterResult.systemMessage;
@@ -141,7 +141,7 @@ export class ToolExecutor {
     checkHookDecision(beforeResult, 'BeforeTool');
 
     const modifiedInput = beforeResult?.getModifiedToolInput();
-    if (modifiedInput) {
+    if (modifiedInput != null) {
       effectiveArgs = modifiedInput;
       try {
         invocation = scheduledCall.tool.build(modifiedInput);

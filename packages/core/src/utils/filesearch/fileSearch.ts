@@ -116,9 +116,9 @@ class RecursiveFileSearch implements FileSearch {
     options: SearchOptions = {},
   ): Promise<string[]> {
     if (
-      !this.resultCache ||
-      (!this.fzf && !this.options.disableFuzzySearch) ||
-      !this.ignore
+      this.resultCache == null ||
+      (this.fzf == null && !this.options.disableFuzzySearch) ||
+      this.ignore == null
     ) {
       throw new Error('Engine not initialized. Call initialize() first.');
     }
@@ -134,7 +134,7 @@ class RecursiveFileSearch implements FileSearch {
       filteredCandidates = candidates;
     } else {
       let shouldCache = true;
-      if (pattern.includes('*') || !this.fzf) {
+      if (pattern.includes('*') || this.fzf == null) {
         filteredCandidates = await filter(candidates, pattern, options.signal);
       } else {
         filteredCandidates = await this.fzf
@@ -202,7 +202,7 @@ class DirectoryFileSearch implements FileSearch {
     pattern: string,
     options: SearchOptions = {},
   ): Promise<string[]> {
-    if (!this.ignore) {
+    if (this.ignore == null) {
       throw new Error('Engine not initialized. Call initialize() first.');
     }
     pattern = pattern || '*';

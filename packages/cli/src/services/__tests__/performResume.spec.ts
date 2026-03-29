@@ -205,7 +205,7 @@ async function countFileEvents(filePath: string): Promise<number> {
 function extractSessionId(filePath: string): string {
   const basename = path.basename(filePath);
   const match = basename.match(/^session-(.+)\.jsonl$/);
-  if (!match) throw new Error(`Invalid session file path: ${filePath}`);
+  if (match == null) throw new Error(`Invalid session file path: ${filePath}`);
   return match[1];
 }
 
@@ -286,7 +286,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -324,7 +324,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -360,7 +360,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -389,7 +389,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
   });
 
@@ -730,7 +730,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -757,7 +757,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -797,7 +797,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -844,7 +844,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
   });
 
@@ -966,7 +966,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
   });
 
@@ -1014,7 +1014,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -1043,7 +1043,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -1072,7 +1072,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -1103,7 +1103,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -1132,7 +1132,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -1177,7 +1177,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
-      if (newLock) lockHandles.push(newLock);
+      if (newLock != null) lockHandles.push(newLock);
     });
 
     /**
@@ -1275,7 +1275,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
               // Cleanup
               const newLock = context.recordingCallbacks.getCurrentLockHandle();
-              if (newLock) await newLock.release();
+              if (newLock != null) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1379,7 +1379,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
                 // Cleanup lock
                 const newLock =
                   context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+                if (newLock != null) await newLock.release();
               }
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1486,7 +1486,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
                 // Cleanup lock
                 const newLock =
                   context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+                if (newLock != null) await newLock.release();
               }
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1537,7 +1537,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
               if (result.ok) {
                 const newLock =
                   context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+                if (newLock != null) await newLock.release();
               }
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
@@ -1585,7 +1585,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
                 // Cleanup lock
                 const newLock =
                   context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+                if (newLock != null) await newLock.release();
               }
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });

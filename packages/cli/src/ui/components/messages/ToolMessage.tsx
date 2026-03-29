@@ -122,7 +122,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
 
     const extractEchoText = (cmd: string): string | null => {
       const m = cmd.match(/^\s*echo\s+(.*)$/i);
-      if (!m) return null;
+      if (m == null) return null;
       let text = m[1].trim();
       if (
         (text.startsWith('"') && text.endsWith('"')) ||

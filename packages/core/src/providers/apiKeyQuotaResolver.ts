@@ -135,31 +135,31 @@ export async function fetchApiKeyQuota(
     switch (provider) {
       case 'zai': {
         const usage = await fetchZaiUsage(apiKey, baseUrl);
-        if (!usage) return null;
+        if (usage == null) return null;
         return { provider: 'Z.ai', lines: formatZaiUsage(usage) };
       }
 
       case 'synthetic': {
         const usage = await fetchSyntheticUsage(apiKey);
-        if (!usage) return null;
+        if (usage == null) return null;
         return { provider: 'Synthetic', lines: formatSyntheticUsage(usage) };
       }
 
       case 'chutes': {
         const usage = await fetchChutesUsage(apiKey);
-        if (!usage) return null;
+        if (usage == null) return null;
         return { provider: 'Chutes', lines: formatChutesUsage(usage) };
       }
 
       case 'kimi': {
         if (apiKey.startsWith('sk-kimi-')) {
           const usage = await fetchKimiCodeUsage(apiKey, baseUrl);
-          if (!usage) return null;
+          if (usage == null) return null;
           return { provider: 'Kimi Code', lines: formatKimiCodeUsage(usage) };
         }
 
         const usage = await fetchKimiUsage(apiKey, baseUrl);
-        if (!usage) return null;
+        if (usage == null) return null;
         return { provider: 'Kimi', lines: formatKimiUsage(usage) };
       }
 

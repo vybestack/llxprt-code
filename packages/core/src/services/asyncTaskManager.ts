@@ -149,7 +149,7 @@ export class AsyncTaskManager {
     // If a bookingId is provided, consume that reservation
     if (bookingId) {
       const reservation = this.pendingReservations.get(bookingId);
-      if (!reservation) {
+      if (reservation == null) {
         throw new Error(`Invalid or expired reservation: ${bookingId}`);
       }
       // Remove the consumed reservation
@@ -253,7 +253,7 @@ export class AsyncTaskManager {
     task.completedAt = Date.now();
 
     // Lines 176-179: Abort the running subagent
-    if (task.abortController) {
+    if (task.abortController != null) {
       task.abortController.abort();
     }
 
@@ -338,7 +338,7 @@ export class AsyncTaskManager {
    */
   markNotified(id: string): void {
     const task = this.tasks.get(id);
-    if (task && task.notifiedAt === undefined) {
+    if (task != null && task.notifiedAt === undefined) {
       task.notifiedAt = Date.now();
     }
   }

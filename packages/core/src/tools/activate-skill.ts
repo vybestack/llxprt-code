@@ -49,7 +49,7 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   getDescription(): string {
     const skillName = this.params.name;
     const skill = this.config.getSkillManager().getSkill(skillName);
-    if (skill) {
+    if (skill != null) {
       return `"${skillName}": ${skill.description}`;
     }
     return `"${skillName}" (?) unknown skill`;
@@ -69,14 +69,14 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   override async shouldConfirmExecute(
     _abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
-    if (!this.messageBus) {
+    if (this.messageBus == null) {
       return false;
     }
 
     const skillName = this.params.name;
     const skill = this.config.getSkillManager().getSkill(skillName);
 
-    if (!skill) {
+    if (skill == null) {
       return false;
     }
 
@@ -106,7 +106,7 @@ ${folderStructure}`,
     const skillManager = this.config.getSkillManager();
     const skill = skillManager.getSkill(skillName);
 
-    if (!skill) {
+    if (skill == null) {
       const skills = skillManager.getSkills();
       const availableSkills = skills.map((s) => s.name).join(', ');
       const errorMessage = `Skill "${skillName}" not found. Available skills are: ${availableSkills}`;

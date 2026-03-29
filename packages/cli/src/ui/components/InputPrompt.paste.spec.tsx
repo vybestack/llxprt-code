@@ -207,7 +207,7 @@ describe('InputPrompt paste functionality', () => {
 
     sendKey = async (key: Record<string, unknown>) => {
       const handler = keypressHandler;
-      if (!handler) {
+      if (handler == null) {
         throw new Error('keypressHandler not initialized');
       }
       await act(async () => {

@@ -137,7 +137,7 @@ export function resetTrustedFoldersForTesting(): void {
 }
 
 export function loadTrustedFolders(): LoadedTrustedFolders {
-  if (loadedTrustedFolders) {
+  if (loadedTrustedFolders != null) {
     return loadedTrustedFolders;
   }
 

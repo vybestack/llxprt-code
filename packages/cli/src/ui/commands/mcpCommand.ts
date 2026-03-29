@@ -50,7 +50,7 @@ const mcpAuthSchema: CommandArgumentSchema = [
      */
     completer: withFuzzyFilter(async (ctx) => {
       const { config } = ctx.services;
-      if (!config) {
+      if (config == null) {
         return [];
       }
 
@@ -70,7 +70,7 @@ const getMcpStatus = async (
   showTips: boolean = false,
 ): Promise<SlashCommandActionReturn> => {
   const { config } = context.services;
-  if (!config) {
+  if (config == null) {
     return {
       type: 'message',
       messageType: 'error',
@@ -198,7 +198,7 @@ const getMcpStatus = async (
         );
         const tokenStorage = new MCPOAuthTokenStorage();
         const hasToken = await tokenStorage.getCredentials(serverName);
-        if (hasToken) {
+        if (hasToken != null) {
           const isExpired = MCPOAuthTokenStorage.isTokenExpired(hasToken.token);
           if (isExpired) {
             message += ` ${COLOR_YELLOW}(OAuth token expired)${RESET_COLOR}`;
@@ -292,7 +292,7 @@ const getMcpStatus = async (
         }
         const parameters =
           tool.schema.parametersJsonSchema ?? tool.schema.parameters;
-        if (showSchema && parameters) {
+        if (showSchema && parameters != null) {
           // Prefix the parameters in cyan
           message += `    ${COLOR_CYAN}Parameters:${RESET_COLOR}\n`;
 
@@ -432,7 +432,7 @@ const authCommand: SlashCommand = {
     const serverName = args.trim();
     const { config } = context.services;
 
-    if (!config) {
+    if (config == null) {
       return {
         type: 'message',
         messageType: 'error',
@@ -506,7 +506,7 @@ const authCommand: SlashCommand = {
       const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
 
       let oauthConfig = server.oauth;
-      if (!oauthConfig) {
+      if (oauthConfig == null) {
         oauthConfig = { enabled: false };
       }
 
@@ -528,7 +528,7 @@ const authCommand: SlashCommand = {
 
       // Trigger tool re-discovery to pick up authenticated server
       const mcpClientManager = config.getMcpClientManager();
-      if (mcpClientManager) {
+      if (mcpClientManager != null) {
         context.ui.addItem(
           {
             type: 'info',
@@ -599,7 +599,7 @@ const refreshCommand: SlashCommand = {
     context: CommandContext,
   ): Promise<SlashCommandActionReturn> => {
     const { config } = context.services;
-    if (!config) {
+    if (config == null) {
       return {
         type: 'message',
         messageType: 'error',

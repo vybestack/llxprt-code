@@ -124,7 +124,7 @@ describe('OpenAIVercelProvider', () => {
 
     afterEach(() => {
       vi.restoreAllMocks();
-      if (originalFetch) {
+      if (originalFetch != null) {
         global.fetch = originalFetch;
       } else {
         // @ts-expect-error test cleanup
@@ -320,7 +320,7 @@ describe('OpenAIVercelProvider', () => {
 
     afterEach(() => {
       vi.restoreAllMocks();
-      if (originalFetch) {
+      if (originalFetch != null) {
         global.fetch = originalFetch;
       } else {
         // @ts-expect-error test cleanup

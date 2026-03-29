@@ -26,11 +26,11 @@ export function useAnimatedScrollbar(
       debugState.debugNumAnimatedComponents--;
       isAnimatingRef.current = false;
     }
-    if (animationFrame.current) {
+    if (animationFrame.current != null) {
       clearInterval(animationFrame.current);
       animationFrame.current = null;
     }
-    if (timeout.current) {
+    if (timeout.current != null) {
       clearTimeout(timeout.current);
       timeout.current = null;
     }
@@ -63,7 +63,7 @@ export function useAnimatedScrollbar(
       setScrollbarColor(interpolateColor(startColor, focusedColor, progress));
 
       if (progress === 1) {
-        if (animationFrame.current) {
+        if (animationFrame.current != null) {
           clearInterval(animationFrame.current);
           animationFrame.current = null;
         }

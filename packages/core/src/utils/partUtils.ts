@@ -80,10 +80,13 @@ export function partToString(
 export function getResponseText(
   response: GenerateContentResponse,
 ): string | null {
-  if (response.candidates && response.candidates.length > 0) {
+  if (response.candidates != null && response.candidates.length > 0) {
     const candidate = response.candidates[0];
 
-    if (candidate.content?.parts && candidate.content.parts.length > 0) {
+    if (
+      candidate.content?.parts != null &&
+      candidate.content.parts.length > 0
+    ) {
       return candidate.content.parts
         .filter((part) => part.text)
         .map((part) => part.text)

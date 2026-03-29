@@ -355,7 +355,7 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
 
       const contextAwareTool = new ContextAwareMockTool('context-tool');
       contextAwareTool.executeFn.mockImplementation(() => {
-        if (contextAwareTool.context) {
+        if (contextAwareTool.context != null) {
           capturedContexts.push({ ...contextAwareTool.context });
         }
         return Promise.resolve({

@@ -55,7 +55,7 @@ export class StdinRawModeManager {
       }
 
       // Allow custom error handling
-      if (this.options?.onError) {
+      if (this.options?.onError != null) {
         this.options.onError(err);
       }
 
@@ -213,7 +213,7 @@ export function installStdinErrorHandler(
   options?: StdinSafetyOptions,
 ): StdinErrorHandler {
   // Return existing handler if already installed (singleton pattern)
-  if (globalStdinErrorHandler) {
+  if (globalStdinErrorHandler != null) {
     return globalStdinErrorHandler;
   }
 
@@ -237,7 +237,7 @@ export function installStdinErrorHandler(
  * @internal
  */
 export function _resetGlobalStdinErrorHandler(): void {
-  if (globalStdinErrorHandler) {
+  if (globalStdinErrorHandler != null) {
     // Remove all instances of this handler from the listeners
     try {
       process.stdin.removeListener('error', globalStdinErrorHandler);

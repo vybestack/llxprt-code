@@ -54,7 +54,7 @@ export const SessionStateProvider: React.FC<SessionStateProviderProps> = ({
 // Hook to use the session state context
 export const useSessionState = (): SessionStateContextType => {
   const context = useContext(SessionStateContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useSessionState must be used within SessionStateProvider');
   }
   return context;

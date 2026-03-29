@@ -166,7 +166,7 @@ export class ComplexityAnalyzer {
         /(?:need to|want to|have to|should|must|will)\s+([^\r\n.?!]+)/i;
       const match = message.match(needToPattern);
 
-      if (match) {
+      if (match != null) {
         const taskString = match[1];
         const potentialTasks = taskString
           .split(this.taskSeparatorPattern)
@@ -208,7 +208,7 @@ export class ComplexityAnalyzer {
             const actionMatch = sentence.match(
               /(?:first,?\s*|then\s*|after that,?\s*|finally,?\s*)?(.+)/i,
             );
-            if (actionMatch) {
+            if (actionMatch != null) {
               const task = this.normalizeTaskText(actionMatch[1]);
               if (task.length > 0 && !tasks.includes(task)) {
                 addTask(task);
@@ -274,7 +274,7 @@ export class ComplexityAnalyzer {
   private countQuestions(message: string): number {
     const questionPattern = /[^.!?]*\?/g;
     const matches = message.match(questionPattern);
-    return matches ? matches.length : 0;
+    return matches != null ? matches.length : 0;
   }
 
   /**

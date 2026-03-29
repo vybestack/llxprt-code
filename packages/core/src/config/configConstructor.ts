@@ -207,14 +207,14 @@ function applySettingsService(
   params: ConfigParameters,
 ): void {
   const providedSettingsService = params.settingsService;
-  if (providedSettingsService) {
+  if (providedSettingsService != null) {
     registerSettingsService(providedSettingsService);
   }
 
   const existingContext = peekActiveProviderRuntimeContext();
-  if (providedSettingsService) {
+  if (providedSettingsService != null) {
     config.settingsService = providedSettingsService;
-  } else if (existingContext?.settingsService) {
+  } else if (existingContext?.settingsService != null) {
     config.settingsService = existingContext.settingsService;
   } else {
     config.settingsService = new SettingsService();

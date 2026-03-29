@@ -247,14 +247,14 @@ export function convertToolsToOpenAIVercel(
     functionDeclarations?: GeminiToolDeclaration[];
   }>,
 ): OpenAIVercelTool[] | undefined {
-  if (!geminiTools || geminiTools.length === 0) {
+  if (geminiTools == null || geminiTools.length === 0) {
     return undefined;
   }
 
   const openAITools: OpenAIVercelTool[] = [];
 
   for (const toolGroup of geminiTools) {
-    if (!toolGroup.functionDeclarations) {
+    if (toolGroup.functionDeclarations == null) {
       continue;
     }
 

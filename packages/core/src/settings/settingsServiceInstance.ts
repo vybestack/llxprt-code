@@ -24,7 +24,7 @@ let settingsServiceInstance: SettingsService | null = null;
  */
 export function getSettingsService(): SettingsService {
   const activeContext = peekActiveProviderRuntimeContext();
-  if (activeContext?.settingsService) {
+  if (activeContext?.settingsService != null) {
     settingsServiceInstance = activeContext.settingsService;
     return activeContext.settingsService;
   }
@@ -43,7 +43,7 @@ export function registerSettingsService(
   settingsServiceInstance = settingsService;
 
   const existingContext = peekActiveProviderRuntimeContext();
-  if (existingContext) {
+  if (existingContext != null) {
     setActiveProviderRuntimeContext({
       ...existingContext,
       settingsService,
@@ -64,7 +64,7 @@ export function registerSettingsService(
  * Reset the settings service instance (for testing)
  */
 export function resetSettingsService(): void {
-  if (settingsServiceInstance) {
+  if (settingsServiceInstance != null) {
     settingsServiceInstance.clear();
   }
   settingsServiceInstance = null;

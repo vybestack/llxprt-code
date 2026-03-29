@@ -43,7 +43,7 @@ export class DebugLogger {
    */
   static getLogger(namespace: string): DebugLogger {
     let logger = DebugLogger.instances.get(namespace);
-    if (!logger) {
+    if (logger == null) {
       logger = new DebugLogger(namespace);
       DebugLogger.instances.set(namespace, logger);
     }

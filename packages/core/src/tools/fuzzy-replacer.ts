@@ -247,7 +247,10 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
   }
 
   // Threshold judgment
-  if (maxSimilarity >= MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD && bestMatch) {
+  if (
+    maxSimilarity >= MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD &&
+    bestMatch != null
+  ) {
     const { startLine, endLine } = bestMatch;
     let matchStartIndex = 0;
     for (let k = 0; k < startLine; k++) {
@@ -292,7 +295,7 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (
           try {
             const regex = new RegExp(pattern);
             const match = line.match(regex);
-            if (match) {
+            if (match != null) {
               yield match[0];
             }
           } catch {
@@ -327,7 +330,7 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
     const minIndent = Math.min(
       ...nonEmptyLines.map((line) => {
         const match = line.match(/^(\s*)/);
-        return match ? match[1].length : 0;
+        return match != null ? match[1].length : 0;
       }),
     );
 

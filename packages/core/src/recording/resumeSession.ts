@@ -80,7 +80,7 @@ export interface ResumeError {
 function extractLockId(filePath: string): string {
   const basename = path.basename(filePath);
   const match = basename.match(/^session-(.+)\.jsonl$/);
-  if (!match) {
+  if (match == null) {
     throw new Error(`Cannot extract session ID from path: ${filePath}`);
   }
   return match[1];
@@ -133,7 +133,7 @@ export async function resumeSession(
       }
     }
 
-    if (!lockedSession) {
+    if (lockedSession == null) {
       return {
         ok: false,
         error: 'All sessions for this project are in use',

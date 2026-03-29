@@ -85,14 +85,15 @@ function buildHookResults(shapes: HookResultShape[]): HookExecutionResult[] {
     } as HookConfig,
     eventName: HookEventName.BeforeTool,
     success: s.success,
-    output: s.output
-      ? new DefaultHookOutput({
-          continue: s.output.continue,
-          stopReason: s.output.stopReason,
-          suppressOutput: s.output.suppressOutput,
-          systemMessage: s.output.systemMessage,
-        })
-      : undefined,
+    output:
+      s.output != null
+        ? new DefaultHookOutput({
+            continue: s.output.continue,
+            stopReason: s.output.stopReason,
+            suppressOutput: s.output.suppressOutput,
+            systemMessage: s.output.systemMessage,
+          })
+        : undefined,
     duration: s.durationMs,
     error: s.success ? undefined : new Error(`Hook ${i} failed`),
   }));

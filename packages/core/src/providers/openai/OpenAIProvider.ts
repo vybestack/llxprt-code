@@ -411,7 +411,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           toolsType: typeof tools,
           isArray: Array.isArray(tools),
           firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
-          toolsStructure: tools ? 'available' : 'undefined',
+          toolsStructure: tools != null ? 'available' : 'undefined',
           runtimeKey,
         },
       );
@@ -693,8 +693,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           stream: true, // Always stream for consistency
         },
         {
-          ...(abortSignal ? { signal: abortSignal } : {}),
-          ...(mergedHeaders ? { headers: mergedHeaders } : {}),
+          ...(abortSignal != null ? { signal: abortSignal } : {}),
+          ...(mergedHeaders != null ? { headers: mergedHeaders } : {}),
         },
       );
 

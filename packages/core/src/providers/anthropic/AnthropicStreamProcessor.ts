@@ -123,7 +123,7 @@ async function* processStreamEvents(
         findToolSchema,
         logger,
       );
-      if (stopResult.content) {
+      if (stopResult.content != null) {
         state.hasYieldedContent = true;
         yield stopResult.content;
       }
@@ -224,7 +224,7 @@ function* handleMessageStart(
     }
   ).message?.usage;
 
-  if (usage) {
+  if (usage != null) {
     const cacheRead = usage.cache_read_input_tokens ?? 0;
     const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
@@ -283,7 +283,10 @@ function handleContentBlockDelta(
     const textDelta = chunk.delta as TextDelta;
     logger.debug(() => `Received text delta: ${textDelta.text.length} chars`);
     return { textDelta: textDelta.text };
-  } else if (chunk.delta.type === 'input_json_delta' && currentToolCall) {
+  } else if (
+    chunk.delta.type === 'input_json_delta' &&
+    currentToolCall != null
+  ) {
     const jsonDelta = chunk.delta as InputJSONDelta;
     currentToolCall.input += jsonDelta.partial_json;
 
@@ -292,7 +295,10 @@ function handleContentBlockDelta(
       currentToolCall.name,
       'anthropic',
     );
-  } else if (chunk.delta.type === 'thinking_delta' && currentThinkingBlock) {
+  } else if (
+    chunk.delta.type === 'thinking_delta' &&
+    currentThinkingBlock != null
+  ) {
     const thinkingDelta = chunk.delta as {
       type: 'thinking_delta';
       thinking: string;
@@ -301,7 +307,10 @@ function handleContentBlockDelta(
     logger.debug(
       () => `Thinking delta chunk (${thinkingDelta.thinking.length} chars)`,
     );
-  } else if (chunk.delta.type === 'signature_delta' && currentThinkingBlock) {
+  } else if (
+    chunk.delta.type === 'signature_delta' &&
+    currentThinkingBlock != null
+  ) {
     const signatureDelta = chunk.delta as {
       type: 'signature_delta';
       signature: string;
@@ -414,7 +423,7 @@ function handleContentBlockStop(
   currentToolCall?: { id: string; name: string; input: string };
   currentThinkingBlock?: { thinking: string; signature?: string };
 } {
-  if (currentToolCall) {
+  if (currentToolCall != null) {
     return {
       content: completeToolCall(
         currentToolCall,
@@ -426,7 +435,7 @@ function handleContentBlockStop(
       currentToolCall: undefined,
       currentThinkingBlock,
     };
-  } else if (currentThinkingBlock) {
+  } else if (currentThinkingBlock != null) {
     return {
       content: completeThinkingBlock(currentThinkingBlock, chunk, logger),
       currentToolCall,

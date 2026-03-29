@@ -129,7 +129,7 @@ export async function readFileWithEncoding(filePath: string): Promise<string> {
   if (full.length === 0) return '';
 
   const bom = detectBOM(full);
-  if (!bom) {
+  if (bom == null) {
     // No BOM → treat as UTF‑8
     return full.toString('utf8');
   }
@@ -211,7 +211,7 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
 
     // BOM → text (avoid false positives for UTF‑16/32 with nulls)
     const bom = detectBOM(buf.subarray(0, Math.min(4, bytesRead)));
-    if (bom) return false;
+    if (bom != null) return false;
 
     let nonPrintableCount = 0;
     for (let i = 0; i < bytesRead; i++) {
@@ -229,7 +229,7 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
     );
     return false;
   } finally {
-    if (fh) {
+    if (fh != null) {
       try {
         await fh.close();
       } catch (closeError) {

@@ -133,7 +133,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
   });
 
   afterEach(async () => {
-    if (server) {
+    if (server != null) {
       try {
         await server.stop();
       } catch {

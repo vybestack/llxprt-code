@@ -80,7 +80,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
 
   constructor(private config: Config | null) {
     // Access extensionEnablementManager if available on config
-    if (config && 'extensionEnablementManager' in config) {
+    if (config != null && 'extensionEnablementManager' in config) {
       this.extensionEnablementManager = (
         config as Config & {
           extensionEnablementManager?: ExtensionEnablementManager;
@@ -102,7 +102,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
     const allCommands = this.registerBuiltinCommands();
 
     // Filter out commands from disabled extensions
-    if (this.extensionEnablementManager) {
+    if (this.extensionEnablementManager != null) {
       return allCommands.filter((cmd) => {
         // Built-in commands (no extensionName) are always included
         if (!cmd.extensionName) {

@@ -213,7 +213,7 @@ export function useSlashCompletion(
         `useEffect triggered - commandIndex: ${commandIndex}, reverseSearchActive: ${reverseSearchActive}`,
     );
 
-    if (!memoizedInput) return;
+    if (memoizedInput == null) return;
 
     const currentLine = memoizedInput.line;
 
@@ -248,13 +248,13 @@ export function useSlashCompletion(
       const completeParts = hasTrailingSpace ? rawParts : rawParts.slice(0, -1);
 
       for (const part of completeParts) {
-        if (!currentLevel) {
+        if (currentLevel == null) {
           break;
         }
         const found = currentLevel.find(
           (cmd) => cmd.name === part || cmd.altNames?.includes(part),
         );
-        if (!found) {
+        if (found == null) {
           break;
         }
         pathParts.push(part);
@@ -285,7 +285,7 @@ export function useSlashCompletion(
       }
 
       let exactMatchAsParent: SlashCommand | undefined;
-      if (!hasTrailingSpace && currentLevel) {
+      if (!hasTrailingSpace && currentLevel != null) {
         const candidate = commandPartial || argumentPartial;
         if (candidate) {
           exactMatchAsParent = currentLevel.find(
@@ -294,7 +294,7 @@ export function useSlashCompletion(
               cmd.subCommands,
           );
 
-          if (exactMatchAsParent) {
+          if (exactMatchAsParent != null) {
             // Only descend if there are NO other matches for the partial at this level.
             // This ensures that typing "/memory" still shows "/memory-leak" if it exists.
             const otherMatches = currentLevel.filter(
@@ -323,22 +323,22 @@ export function useSlashCompletion(
       // Check for perfect, executable match
       if (!hasTrailingSpace) {
         if (
-          leafCommand &&
+          leafCommand != null &&
           commandPartial === '' &&
           argumentPartial === '' &&
-          leafCommand.action &&
+          leafCommand.action != null &&
           !leafSupportsArguments
         ) {
           setIsPerfectMatch(true);
           setActiveHint('');
-        } else if (currentLevel && commandPartial) {
+        } else if (currentLevel != null && commandPartial) {
           const perfectMatch = currentLevel.find(
             (cmd) =>
               (cmd.name === commandPartial ||
                 cmd.altNames?.includes(commandPartial)) &&
               cmd.action,
           );
-          if (perfectMatch) {
+          if (perfectMatch != null) {
             setIsPerfectMatch(true);
             setActiveHint('');
           }
@@ -353,7 +353,7 @@ export function useSlashCompletion(
         ? argumentPartial
         : commandPartial;
 
-      if (hasTrailingSpace || exactMatchAsParent) {
+      if (hasTrailingSpace || exactMatchAsParent != null) {
         completionStart.current = currentLine.length;
         completionEnd.current = currentLine.length;
       } else if (activePartial) {
@@ -379,7 +379,7 @@ export function useSlashCompletion(
         const argString = argsForHandler.join(' ');
 
         // Check if command has schema-based completion
-        if (leafCommand!.schema) {
+        if (leafCommand!.schema != null) {
           /**
            * @plan:PLAN-20251013-AUTOCOMPLETE.P08
            * @requirement:REQ-002
@@ -458,7 +458,8 @@ export function useSlashCompletion(
           `Commands to search: ${commandsToSearch.length}, Partial: "${commandPartial}"`,
       );
       debugLogger.debug(
-        () => `currentLevel: ${currentLevel ? 'exists' : 'null/undefined'}`,
+        () =>
+          `currentLevel: ${currentLevel != null ? 'exists' : 'null/undefined'}`,
       );
       debugLogger.debug(() => `slashCommands at root: ${slashCommands.length}`);
       if (commandsToSearch.length > 0) {
@@ -470,7 +471,10 @@ export function useSlashCompletion(
               return false;
             }
             const config = commandContext.services?.config;
-            if (config && typeof config.isExtensionEnabled === 'function') {
+            if (
+              config != null &&
+              typeof config.isExtensionEnabled === 'function'
+            ) {
               if (!config.isExtensionEnabled(cmd.extensionName)) {
                 return false;
               }
@@ -597,7 +601,7 @@ export function useSlashCompletion(
 
           // Check if this entry should be ignored by filtering options
           if (
-            fileDiscovery &&
+            fileDiscovery != null &&
             fileDiscovery.shouldIgnoreFile(entryPathFromRoot, filterOptions)
           ) {
             continue;
@@ -686,7 +690,8 @@ export function useSlashCompletion(
         setIsLoadingSuggestions(true);
       }, 200); // Only show loading if operation takes more than 200ms
 
-      const fileDiscoveryService = config ? config.getFileService() : null;
+      const fileDiscoveryService =
+        config != null ? config.getFileService() : null;
       const enableRecursiveSearch =
         config?.getEnableRecursiveFileSearch() ?? true;
       const filterOptions =
@@ -701,7 +706,7 @@ export function useSlashCompletion(
             prefix &&
             enableRecursiveSearch
           ) {
-            if (fileDiscoveryService) {
+            if (fileDiscoveryService != null) {
               fetchedSuggestionsPerDir = await findFilesWithGlob(
                 prefix,
                 fileDiscoveryService,
@@ -738,7 +743,7 @@ export function useSlashCompletion(
                 path.join(baseDirAbsolute, entry.name),
               );
               if (
-                fileDiscoveryService &&
+                fileDiscoveryService != null &&
                 fileDiscoveryService.shouldIgnoreFile(
                   relativePath,
                   filterOptions,
@@ -854,7 +859,7 @@ export function useSlashCompletion(
 
     return () => {
       isMounted = false;
-      if (debounceTimeout) {
+      if (debounceTimeout != null) {
         clearTimeout(debounceTimeout);
       }
     };

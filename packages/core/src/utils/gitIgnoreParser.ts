@@ -25,7 +25,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
   ) {
     this.projectRoot = path.resolve(projectRoot);
     this.processedExtraPatterns = ignore();
-    if (this.extraPatterns) {
+    if (this.extraPatterns != null) {
       // extraPatterns are assumed to be from project root (like .geminiignore)
       this.processedExtraPatterns.add(
         this.processPatterns(this.extraPatterns, '.'),
@@ -198,7 +198,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
 
         if (this.cache.has(dir)) {
           const patterns = this.cache.get(dir);
-          if (patterns) {
+          if (patterns != null) {
             ig.add(patterns);
           }
         } else {
@@ -227,13 +227,13 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     const allPatterns: string[] = [];
 
     // Add global patterns
-    if (this.globalPatterns) {
+    if (this.globalPatterns != null) {
       // Note: ignore library doesn't expose patterns directly
       // This is a placeholder implementation
     }
 
     // Add extra patterns
-    if (this.extraPatterns) {
+    if (this.extraPatterns != null) {
       allPatterns.push(...this.extraPatterns);
     }
 

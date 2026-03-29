@@ -155,7 +155,7 @@ async function handleConfig(args: ConfigArgs): Promise<void> {
       args.name,
     );
 
-    if (!extension || !extensionConfig) {
+    if (extension == null || extensionConfig == null) {
       return;
     }
 
@@ -174,7 +174,7 @@ async function handleConfig(args: ConfigArgs): Promise<void> {
       args.name,
     );
 
-    if (!extension || !extensionConfig) {
+    if (extension == null || extensionConfig == null) {
       return;
     }
 
@@ -203,7 +203,7 @@ async function handleConfig(args: ConfigArgs): Promise<void> {
         workspaceDir: process.cwd(),
       });
 
-      if (!extensionConfig) {
+      if (extensionConfig == null) {
         console.error(
           `Failed to load configuration for extension "${extension.name}". Skipping.`,
         );

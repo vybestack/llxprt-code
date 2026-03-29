@@ -225,7 +225,7 @@ export class ExtensionAutoUpdater {
   }
 
   stop(): void {
-    if (this.intervalHandle) {
+    if (this.intervalHandle != null) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
     }
@@ -286,7 +286,7 @@ export class ExtensionAutoUpdater {
         continue;
       }
       const extension = extensionsByName.get(name);
-      if (!extension?.installMetadata) {
+      if (extension?.installMetadata == null) {
         entry.pendingInstall = false;
         entry.lastError = `Extension "${name}" is no longer installed.`;
         entry.state = ExtensionUpdateState.ERROR;
@@ -301,7 +301,7 @@ export class ExtensionAutoUpdater {
     extension: GeminiCLIExtension,
     state: ExtensionUpdateStateFile,
   ): Promise<void> {
-    if (!extension.installMetadata) {
+    if (extension.installMetadata == null) {
       return;
     }
 
@@ -415,7 +415,7 @@ export class ExtensionAutoUpdater {
         },
       );
 
-      if (!info) {
+      if (info == null) {
         throw new Error('Update returned undefined');
       }
 
@@ -450,7 +450,7 @@ export class ExtensionAutoUpdater {
       return;
     }
 
-    if (this.notify) {
+    if (this.notify != null) {
       this.notify(message, level);
       return;
     }

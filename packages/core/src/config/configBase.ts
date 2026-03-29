@@ -65,49 +65,49 @@ export abstract class ConfigBase extends ConfigBaseCore {
   }
 
   getGlobalMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return this.contextManager.getGlobalMemory();
     }
     return this.userMemory;
   }
 
   getEnvironmentMemory(): string {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return this.contextManager.getEnvironmentMemory();
     }
     return '';
   }
 
   getCoreMemory(): string | undefined {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return this.contextManager.getCoreMemory();
     }
     return undefined;
   }
 
   getLlxprtMdFileCount(): number {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return this.contextManager.getContextFileCount();
     }
     return this.llxprtMdFileCount;
   }
 
   getCoreMemoryFileCount(): number {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return this.contextManager.getCoreMemoryFileCount();
     }
     return 0;
   }
 
   getLlxprtMdFilePaths(): string[] {
-    if (this.getJitContextEnabled() && this.contextManager) {
+    if (this.getJitContextEnabled() && this.contextManager != null) {
       return Array.from(this.contextManager.getLoadedPaths());
     }
     return this.llxprtMdFilePaths;
   }
 
   async getGitService(): Promise<GitService> {
-    if (!this.gitService) {
+    if (this.gitService == null) {
       this.gitService = new GitService(this.targetDir, this.storage);
       await this.gitService.initialize();
     }
@@ -225,7 +225,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
         normalizedValue = 0;
       }
       const asyncTaskManager = this.getAsyncTaskManager();
-      if (asyncTaskManager) {
+      if (asyncTaskManager != null) {
         asyncTaskManager.setMaxAsyncTasks(normalizedValue);
       }
     }
@@ -240,7 +240,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
       key === 'socket-nodelay' ||
       key === 'streaming'
     ) {
-      if (this.providerManager) {
+      if (this.providerManager != null) {
         const activeProvider = this.providerManager.getActiveProvider();
         if (activeProvider) {
           if (

@@ -215,7 +215,7 @@ export class OAuthUtils {
     for (const endpoint of endpointsToTry) {
       const authServerMetadata =
         await this.fetchAuthorizationServerMetadata(endpoint);
-      if (authServerMetadata) {
+      if (authServerMetadata != null) {
         return authServerMetadata;
       }
     }
@@ -245,7 +245,7 @@ export class OAuthUtils {
       );
 
       // If root discovery fails and we have a path, try path-based discovery
-      if (!resourceMetadata) {
+      if (resourceMetadata == null) {
         const url = new URL(serverUrl);
         if (url.pathname && url.pathname !== '/') {
           const pathBasedUrls = this.buildWellKnownUrls(serverUrl, true);
@@ -255,7 +255,7 @@ export class OAuthUtils {
         }
       }
 
-      if (resourceMetadata) {
+      if (resourceMetadata != null) {
         // RFC 9728 Section 7.3: The client MUST ensure that the resource identifier URL
         // it is using as the prefix for the metadata request exactly matches the value
         // of the resource metadata parameter in the protected resource metadata document.
@@ -273,7 +273,7 @@ export class OAuthUtils {
         const authServerMetadata =
           await this.discoverAuthorizationServerMetadata(authServerUrl);
 
-        if (authServerMetadata) {
+        if (authServerMetadata != null) {
           const config = this.metadataToOAuthConfig(authServerMetadata);
           if (authServerMetadata.registration_endpoint) {
             debugLogger.log(
@@ -290,7 +290,7 @@ export class OAuthUtils {
       const authServerMetadata =
         await this.discoverAuthorizationServerMetadata(serverUrl);
 
-      if (authServerMetadata) {
+      if (authServerMetadata != null) {
         const config = this.metadataToOAuthConfig(authServerMetadata);
         if (authServerMetadata.registration_endpoint) {
           debugLogger.log(
@@ -322,7 +322,7 @@ export class OAuthUtils {
   static parseWWWAuthenticateHeader(header: string): string | null {
     // Parse Bearer realm and resource_metadata
     const match = header.match(/resource_metadata="([^"]+)"/);
-    if (match) {
+    if (match != null) {
       return match[1];
     }
     return null;
@@ -348,7 +348,7 @@ export class OAuthUtils {
     const resourceMetadata =
       await this.fetchProtectedResourceMetadata(resourceMetadataUri);
 
-    if (resourceMetadata && mcpServerUrl) {
+    if (resourceMetadata != null && mcpServerUrl) {
       // Validate resource parameter per RFC 9728 Section 7.3
       const expectedResource = this.buildResourceParameter(mcpServerUrl);
       if (resourceMetadata.resource !== expectedResource) {
@@ -366,7 +366,7 @@ export class OAuthUtils {
     const authServerMetadata =
       await this.discoverAuthorizationServerMetadata(authServerUrl);
 
-    if (authServerMetadata) {
+    if (authServerMetadata != null) {
       return this.metadataToOAuthConfig(authServerMetadata);
     }
 

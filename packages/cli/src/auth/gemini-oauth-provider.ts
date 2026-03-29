@@ -58,7 +58,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     this.initGuard = new InitializationGuard('wrap', this.name);
     this.dialog = new AuthCodeDialog();
 
-    if (!tokenStore) {
+    if (tokenStore == null) {
       debugLogger.warn(
         `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
           `Token persistence will not work. Please update your code.`,
@@ -108,7 +108,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   }
 
   async initializeToken(): Promise<void> {
-    if (!this.tokenStore) {
+    if (this.tokenStore == null) {
       return;
     }
 
@@ -117,12 +117,12 @@ export class GeminiOAuthProvider implements OAuthProvider {
         // Try to load from new location first
         let savedToken = await this.tokenStore!.getToken('gemini');
 
-        if (!savedToken) {
+        if (savedToken == null) {
           // Try to migrate from legacy locations
           savedToken = await this.migrateFromLegacyTokens();
         }
 
-        if (savedToken) {
+        if (savedToken != null) {
           this.currentToken = savedToken;
         }
       },
@@ -179,7 +179,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
       return await getOauthClient(config);
     } catch (error) {
       if (error instanceof Error) {
-        if (this.addItem) {
+        if (this.addItem != null) {
           this.addItem(
             {
               type: 'error',
@@ -224,7 +224,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private showGeminiFallbackInstructions(): void {
     const fallbackMessage = `Browser authentication was cancelled or failed.\nFallback options:\n1. Use API key: /keyfile <path-to-your-gemini-key>\n2. Set environment: export GEMINI_API_KEY=<your-key>\n3. Try OAuth again: /auth gemini enable`;
 
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem({ type: 'info', text: fallbackMessage }, Date.now());
     } else {
       const delivered = globalOAuthUI.callAddItem(
@@ -256,13 +256,13 @@ export class GeminiOAuthProvider implements OAuthProvider {
     }
 
     const token = this.credentialsToOAuthToken(credentials);
-    if (!token) {
+    if (token == null) {
       throw OAuthErrorFactory.authenticationRequired(this.name, {
         reason: 'Failed to convert credentials to OAuthToken',
       });
     }
 
-    if (this.tokenStore) {
+    if (this.tokenStore != null) {
       try {
         await this.tokenStore.saveToken('gemini', token);
       } catch (saveError) {
@@ -276,7 +276,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
     this.currentToken = token;
 
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem(
         {
           type: 'info',
@@ -307,7 +307,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
       async () => {
         // Read-only - no refresh, no migration writes
         // Try to get from current token first
-        if (this.currentToken) {
+        if (this.currentToken != null) {
           return this.currentToken;
         }
 
@@ -315,7 +315,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
         const token = await this.getTokenFromGoogleOAuth();
 
         // Update in-memory cache (but DO NOT persist)
-        if (token) {
+        if (token != null) {
           this.currentToken = token;
         }
 
@@ -351,7 +351,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
     this.currentToken = null;
 
     // Remove from new token storage location - THIS MUST SUCCEED
-    if (this.tokenStore) {
+    if (this.tokenStore != null) {
       await this.tokenStore.removeToken('gemini');
     }
 
@@ -430,7 +430,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
         // Try to get token from existing Google OAuth
         const token = await this.getTokenFromGoogleOAuth();
 
-        if (token) {
+        if (token != null) {
           this.logger.debug(
             () => 'Found Gemini token in legacy location (read-only)',
           );

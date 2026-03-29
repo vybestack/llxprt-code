@@ -110,7 +110,7 @@ class MockExtendedConfig implements ExtendedConfig {
       maxLogFiles?: number;
     };
   }): void {
-    if (settings.telemetry) {
+    if (settings.telemetry != null) {
       this.telemetrySettings = {
         ...this.telemetrySettings,
         ...settings.telemetry,

@@ -95,7 +95,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
         if (Array.isArray(parsed)) {
           // Recursively coerce the parsed array items
           const itemSchema = propertySchema.items;
-          if (itemSchema) {
+          if (itemSchema != null) {
             return parsed.map((item) => coerceValue(item, itemSchema));
           }
           return parsed;
@@ -106,7 +106,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
     }
     // Single string value → wrap in array
     const itemSchema = propertySchema.items;
-    if (itemSchema) {
+    if (itemSchema != null) {
       return [coerceValue(value, itemSchema)];
     }
     return [value];
@@ -115,7 +115,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
   // Single non-string value → Array coercion
   if (expectedType === 'array' && !Array.isArray(value)) {
     const itemSchema = propertySchema.items;
-    if (itemSchema) {
+    if (itemSchema != null) {
       return [coerceValue(value, itemSchema)];
     }
     return [value];
@@ -124,7 +124,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
   // Coerce items within arrays
   if (expectedType === 'array' && Array.isArray(value)) {
     const itemSchema = propertySchema.items;
-    if (itemSchema) {
+    if (itemSchema != null) {
       return value.map((item) => coerceValue(item, itemSchema));
     }
     return value;
@@ -138,7 +138,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
         const parsed = JSON.parse(trimmed);
         if (typeof parsed === 'object' && parsed !== null) {
           // Recursively coerce the parsed object if we have nested schema
-          if (propertySchema.properties) {
+          if (propertySchema.properties != null) {
             return coerceObjectProperties(parsed, propertySchema);
           }
           return parsed;
@@ -156,7 +156,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
-    propertySchema.properties
+    propertySchema.properties != null
   ) {
     return coerceObjectProperties(
       value as Record<string, unknown>,
@@ -175,7 +175,7 @@ function coerceObjectProperties(
   schema: PropertySchema,
 ): Record<string, unknown> {
   const properties = schema.properties;
-  if (!properties) {
+  if (properties == null) {
     return obj;
   }
 
@@ -243,7 +243,7 @@ export function coerceParametersToSchema(
   }
 
   // If schema doesn't have properties, return unchanged
-  if (!typedSchema.properties) {
+  if (typedSchema.properties == null) {
     return params;
   }
 

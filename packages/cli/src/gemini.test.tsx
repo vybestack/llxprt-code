@@ -202,7 +202,7 @@ describe('gemini.tsx main function', () => {
       (listener) => !initialUnhandledRejectionListeners.includes(listener),
     );
 
-    if (addedListener) {
+    if (addedListener != null) {
       process.removeListener('unhandledRejection', addedListener);
     }
     vi.restoreAllMocks();

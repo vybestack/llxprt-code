@@ -156,7 +156,7 @@ export class SubAgentScope {
     parentSignal?: AbortSignal,
   ): Promise<SubAgentScope> {
     const runtimeBundle = overrides.runtimeBundle;
-    if (!runtimeBundle) {
+    if (runtimeBundle == null) {
       throw new Error(
         'SubAgentScope.create requires a runtime bundle after initialization.',
       );
@@ -171,13 +171,13 @@ export class SubAgentScope {
     }
 
     const toolRegistry = overrides.toolRegistry ?? runtimeBundle.toolRegistry;
-    if (!toolRegistry) {
+    if (toolRegistry == null) {
       throw new Error(
         'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
       );
     }
 
-    if (toolConfig) {
+    if (toolConfig != null) {
       await validateToolsAgainstRuntime({
         toolConfig,
         toolRegistry,
@@ -219,10 +219,10 @@ export class SubAgentScope {
   }
 
   private bindParentSignal(abortController: AbortController): void {
-    if (!this.parentAbortSignal) {
+    if (this.parentAbortSignal == null) {
       return;
     }
-    if (this.parentAbortCleanup) {
+    if (this.parentAbortCleanup != null) {
       this.parentAbortCleanup();
     }
     const relayAbort = () => abortController.abort();
@@ -250,7 +250,7 @@ export class SubAgentScope {
       foregroundConfig: this.config,
       context,
     });
-    if (!chat) {
+    if (chat == null) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return null;
     }
@@ -261,7 +261,7 @@ export class SubAgentScope {
       this.runtimeContext.tools,
       this.toolConfig,
     );
-    if (this.outputConfig?.outputs) {
+    if (this.outputConfig?.outputs != null) {
       functionDeclarations.push(...getScopeLocalFuncDefs(this.outputConfig));
     }
     return { chat, abortController, functionDeclarations };
@@ -295,7 +295,7 @@ export class SubAgentScope {
     },
   ): Promise<void> {
     const setup = await this.prepareRun(context);
-    if (!setup) return;
+    if (setup == null) return;
     const { chat, abortController } = setup;
     const { scheduler, schedulerDispose } = await this.initScheduler(options);
 
@@ -331,7 +331,7 @@ export class SubAgentScope {
           abortController,
           execCtx,
         );
-        if (toolMessages) {
+        if (toolMessages != null) {
           currentMessages = toolMessages;
           continue;
         }
@@ -354,7 +354,7 @@ export class SubAgentScope {
           todoReminder,
           currentTurn,
         );
-        if (!nextMessages) break;
+        if (nextMessages == null) break;
         currentMessages = nextMessages;
       }
       finalizeOutput(this.output);
@@ -407,7 +407,7 @@ export class SubAgentScope {
           execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
           throw new Error(filtered.error ?? 'Content blocked by emoji filter');
         }
-        if (execCtx.onMessage && filtered.text) {
+        if (execCtx.onMessage != null && filtered.text) {
           execCtx.onMessage(filtered.text);
         }
       } else if (event.type === GeminiEventType.Error && event.value?.error) {
@@ -472,7 +472,7 @@ export class SubAgentScope {
         (call) =>
           call.status === 'error' && isFatalToolError(call.response.errorType),
       );
-      if (fatalCall) {
+      if (fatalCall != null) {
         const fatalMessage = buildToolUnavailableMessage(
           fatalCall.request.name,
           fatalCall.response.resultDisplay,
@@ -523,13 +523,14 @@ export class SubAgentScope {
    */
   async runNonInteractive(context: ContextState): Promise<void> {
     const setup = await this.prepareRun(context);
-    if (!setup) return;
+    if (setup == null) return;
     const { chat, abortController, functionDeclarations: toolsList } = setup;
 
     this.logger.debug(() => {
-      const outputs = this.outputConfig
-        ? Object.keys(this.outputConfig.outputs).join(', ')
-        : 'none';
+      const outputs =
+        this.outputConfig != null
+          ? Object.keys(this.outputConfig.outputs).join(', ')
+          : 'none';
       return `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${outputs} runConfig=${JSON.stringify(this.runConfig)}`;
     });
     const execCtx = this.buildExecCtx();
@@ -578,7 +579,7 @@ export class SubAgentScope {
           currentTurn,
           execCtx,
         );
-        if (!nextMessages) break;
+        if (nextMessages == null) break;
         currentMessages = nextMessages;
       }
       finalizeOutput(this.output);
@@ -619,7 +620,10 @@ export class SubAgentScope {
     for await (const resp of responseStream) {
       if (abortController.signal.aborted)
         return { functionCalls: [], textResponse: '' };
-      if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
+      if (
+        resp.type === StreamEventType.CHUNK &&
+        resp.value.functionCalls != null
+      ) {
         const chunkCalls = resp.value.functionCalls ?? [];
         if (chunkCalls.length > 0) {
           functionCalls.push(...chunkCalls);
@@ -690,7 +694,7 @@ export class SubAgentScope {
     if (this.activeAbortController?.signal.aborted) {
       return;
     }
-    if (!this.activeAbortController) {
+    if (this.activeAbortController == null) {
       return;
     }
     this.logger.warn(() => {
@@ -714,7 +718,7 @@ export class SubAgentScope {
   dispose(): void {
     // 1. Cancel any active operations
     if (
-      this.activeAbortController &&
+      this.activeAbortController != null &&
       !this.activeAbortController.signal.aborted
     ) {
       this.logger.debug(
@@ -726,7 +730,7 @@ export class SubAgentScope {
     this.activeAbortController = null;
 
     // 2. Clean up parent abort signal event listeners
-    if (this.parentAbortCleanup) {
+    if (this.parentAbortCleanup != null) {
       this.parentAbortCleanup();
       this.parentAbortCleanup = undefined;
     }

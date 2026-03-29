@@ -146,7 +146,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     ProfileManager: class MockProfileManager {
       async loadProfile(name: string) {
         const profile = mockProfiles.get(name);
-        if (!profile) {
+        if (profile == null) {
           throw new Error(`Profile ${name} not found`);
         }
         return profile;

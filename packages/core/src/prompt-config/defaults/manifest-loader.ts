@@ -123,7 +123,7 @@ function loadManifest(): Record<string, string> | null {
 
 export function loadPromptFromManifest(filename: string): string | null {
   const manifest = loadManifest();
-  if (manifest && hasOwn.call(manifest, filename)) {
+  if (manifest != null && hasOwn.call(manifest, filename)) {
     return manifest[filename];
   }
   return null;

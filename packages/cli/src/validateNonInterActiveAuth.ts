@@ -74,7 +74,7 @@ export async function validateNonInteractiveAuth(
   }
 
   // Apply compression settings after authentication
-  if (settings) {
+  if (settings != null) {
     const merged = settings.merged as Record<string, unknown>;
     const contextLimit = merged['context-limit'] as number | undefined;
     const compressionThreshold = merged['compression-threshold'] as
@@ -93,10 +93,10 @@ export async function validateNonInteractiveAuth(
   }
 
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
-  if (providerManager) {
+  if (providerManager != null) {
     const serverToolsProvider = providerManager.getServerToolsProvider?.();
     if (
-      serverToolsProvider &&
+      serverToolsProvider != null &&
       serverToolsProvider.name === 'gemini' &&
       'setConfig' in serverToolsProvider &&
       typeof serverToolsProvider.setConfig === 'function'

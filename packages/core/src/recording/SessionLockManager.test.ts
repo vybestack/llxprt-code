@@ -816,7 +816,7 @@ describe('SessionLockManager @plan:PLAN-20260211-SESSIONRECORDING.P10', () => {
     let childProcess: ChildProcess | null = null;
 
     afterEach(async () => {
-      if (childProcess && childProcess.exitCode === null) {
+      if (childProcess != null && childProcess.exitCode === null) {
         childProcess.kill('SIGKILL');
         await waitForExit(childProcess).catch(() => {});
       }

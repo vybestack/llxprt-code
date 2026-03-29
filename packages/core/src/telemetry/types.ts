@@ -78,7 +78,8 @@ export class StartSessionEvent {
     this.api_key_enabled = useGemini || useVertex;
     this.vertex_ai_enabled = useVertex;
     this.debug_enabled = config.getDebugMode();
-    this.mcp_servers = mcpServers ? Object.keys(mcpServers).join(',') : '';
+    this.mcp_servers =
+      mcpServers != null ? Object.keys(mcpServers).join(',') : '';
     this.telemetry_enabled = config.getTelemetryEnabled();
     this.telemetry_log_user_prompts_enabled =
       config.getTelemetryLogPromptsEnabled();
@@ -156,7 +157,7 @@ export class ToolCallEvent {
       'diffStat' in call.response.resultDisplay
     ) {
       const diffStat = call.response.resultDisplay.diffStat;
-      if (diffStat) {
+      if (diffStat != null) {
         this.metadata = {
           ai_added_lines: diffStat.ai_added_lines,
           ai_removed_lines: diffStat.ai_removed_lines,

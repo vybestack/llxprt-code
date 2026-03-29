@@ -51,7 +51,11 @@ export function shouldRetryOnStatus(
 
   if (!status && error && typeof error === 'object' && 'response' in error) {
     const response = (error as { response?: { status?: number } }).response;
-    if (response && typeof response === 'object' && 'status' in response) {
+    if (
+      response != null &&
+      typeof response === 'object' &&
+      'status' in response
+    ) {
       status = response.status;
     }
   }

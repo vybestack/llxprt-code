@@ -26,7 +26,7 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
   const settings = loadSettings();
   const userHooks = settings.merged.hooks;
 
-  if (!userHooks || Object.keys(userHooks).length === 0) {
+  if (userHooks == null || Object.keys(userHooks).length === 0) {
     debugLogger.log('No hooks found in user settings. Nothing to migrate.');
     return;
   }
@@ -88,7 +88,7 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
 
     const typedEventName = eventName as HookEventName;
 
-    if (!mergedHooks[typedEventName]) {
+    if (mergedHooks[typedEventName] == null) {
       mergedHooks[typedEventName] = [];
       changesMade = true;
     }

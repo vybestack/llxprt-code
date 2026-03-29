@@ -68,8 +68,8 @@ export async function executeApiRequest(
     while (true) {
       try {
         const response = await client.chat.completions.create(requestBody, {
-          ...(abortSignal ? { signal: abortSignal } : {}),
-          ...(mergedHeaders ? { headers: mergedHeaders } : {}),
+          ...(abortSignal != null ? { signal: abortSignal } : {}),
+          ...(mergedHeaders != null ? { headers: mergedHeaders } : {}),
         });
 
         // Dump successful streaming request if enabled
@@ -154,8 +154,8 @@ export async function executeApiRequest(
     while (true) {
       try {
         const response = (await client.chat.completions.create(requestBody, {
-          ...(abortSignal ? { signal: abortSignal } : {}),
-          ...(mergedHeaders ? { headers: mergedHeaders } : {}),
+          ...(abortSignal != null ? { signal: abortSignal } : {}),
+          ...(mergedHeaders != null ? { headers: mergedHeaders } : {}),
         })) as OpenAI.Chat.Completions.ChatCompletion;
 
         // Dump successful non-streaming request if enabled
@@ -176,7 +176,7 @@ export async function executeApiRequest(
         logger.debug(() => `[OpenAIProvider] Chat request error`, {
           errorType: error?.constructor?.name,
           status:
-            typeof error === 'object' && error && 'status' in error
+            typeof error === 'object' && error != null && 'status' in error
               ? (error as { status?: number }).status
               : undefined,
           errorKeys:

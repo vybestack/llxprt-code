@@ -205,7 +205,7 @@ function limitToolPayload(
 
   const originalLength = serializedResult.length;
 
-  if (!config) {
+  if (config == null) {
     const sanitized = sanitizeUnicode(serializedResult);
     return {
       text: sanitized,
@@ -243,7 +243,7 @@ export function buildToolResponsePayload(
 
   const formatted = formatToolResult(block.result, humanizeJson);
   const serializedResult =
-    config && formatted.raw ? formatted.raw : formatted.value;
+    config != null && formatted.raw ? formatted.raw : formatted.value;
   if (serializedResult) {
     const limited = limitToolPayload(serializedResult, block, config);
     payload.result = limited.text;

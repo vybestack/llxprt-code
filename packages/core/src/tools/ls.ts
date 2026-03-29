@@ -99,7 +99,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
    * @returns True when the filename matches an ignore pattern.
    */
   private shouldIgnore(filename: string, patterns?: string[]): boolean {
-    if (!patterns || patterns.length === 0) {
+    if (patterns == null || patterns.length === 0) {
       return false;
     }
     for (const pattern of patterns) {

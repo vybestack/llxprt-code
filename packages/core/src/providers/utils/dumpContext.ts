@@ -39,7 +39,7 @@ export interface DumpData {
 export function redactSensitiveData(request: DumpRequest): DumpRequest {
   const redacted: DumpRequest = {
     ...request,
-    headers: request.headers ? { ...request.headers } : undefined,
+    headers: request.headers != null ? { ...request.headers } : undefined,
   };
 
   // Redact Authorization header

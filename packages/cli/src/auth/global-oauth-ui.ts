@@ -79,7 +79,7 @@ class GlobalOAuthUI {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp?: number,
   ): number | undefined {
-    if (this.addItemCallback) {
+    if (this.addItemCallback != null) {
       return this.addItemCallback(itemData, baseTimestamp);
     }
     if (this.pendingItems.length >= MAX_PENDING_ITEMS) {

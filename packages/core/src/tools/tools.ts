@@ -104,7 +104,7 @@ export abstract class BaseToolInvocation<
   ) {}
 
   protected requireMessageBus(): MessageBus {
-    if (!this.messageBus) {
+    if (this.messageBus == null) {
       throw new Error('MessageBus is required for this invocation.');
     }
     return this.messageBus;
@@ -143,7 +143,7 @@ export abstract class BaseToolInvocation<
       outcome === ToolConfirmationOutcome.ProceedAlways ||
       outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave
     ) {
-      if (this.messageBus && this._toolName) {
+      if (this.messageBus != null && this._toolName) {
         const options = this.getPolicyUpdateOptions(outcome);
         this.messageBus.publish({
           type: MessageBusType.UPDATE_POLICY,
@@ -170,7 +170,7 @@ export abstract class BaseToolInvocation<
   protected getMessageBusDecision(
     abortSignal: AbortSignal,
   ): Promise<'ALLOW' | 'DENY' | 'ASK_USER'> {
-    if (!this.messageBus) {
+    if (this.messageBus == null) {
       // No bus wired: allow and let per-tool legacy confirmation logic decide.
       return Promise.resolve('ALLOW');
     }
@@ -189,7 +189,7 @@ export abstract class BaseToolInvocation<
       let timeoutId: NodeJS.Timeout | undefined;
 
       const cleanup = () => {
-        if (timeoutId) {
+        if (timeoutId != null) {
           clearTimeout(timeoutId);
           timeoutId = undefined;
         }
@@ -387,7 +387,7 @@ export abstract class DeclarativeTool<
    * @pseudocode lines 122-133
    */
   protected requireMessageBus(): MessageBus {
-    if (!this.messageBus) {
+    if (this.messageBus == null) {
       throw new Error(
         `MessageBus is required to build tool invocations for ${this.name}.`,
       );
@@ -663,7 +663,7 @@ export function hasCycleInSchema(schema: object): boolean {
       }
 
       const resolvedNode = resolveRef(ref);
-      if (resolvedNode) {
+      if (resolvedNode != null) {
         // Add it to both visited and the current path
         visitedRefs.add(ref);
         pathRefs.add(ref);

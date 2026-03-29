@@ -202,7 +202,7 @@ export function migrateLegacyApprovalMode(
 
   // Handle --allowed-tools flag
   const allowedTools = config.getAllowedTools();
-  if (allowedTools && allowedTools.length > 0) {
+  if (allowedTools != null && allowedTools.length > 0) {
     for (const tool of allowedTools) {
       rules.push({
         toolName: normalizeToolName(tool),
@@ -361,7 +361,7 @@ export async function createPolicyEngineConfig(
 
   // MCP servers that are explicitly excluded in settings.mcp.excluded
   // Priority: 2.9 (highest in user tier for security - persistent server blocks)
-  if (settings.mcp?.excluded) {
+  if (settings.mcp?.excluded != null) {
     for (const serverName of settings.mcp.excluded) {
       rules.push({
         toolName: `${serverName}__*`,
@@ -373,7 +373,7 @@ export async function createPolicyEngineConfig(
 
   // Tools that are explicitly excluded in the settings.
   // Priority: 2.4 (user tier - explicit temporary blocks)
-  if (settings.tools?.exclude) {
+  if (settings.tools?.exclude != null) {
     for (const tool of settings.tools.exclude) {
       rules.push({
         toolName: tool,
@@ -385,11 +385,11 @@ export async function createPolicyEngineConfig(
 
   // Tools that are explicitly allowed in the settings.
   // Priority: 2.3 (user tier - explicit temporary allows)
-  if (settings.tools?.allowed) {
+  if (settings.tools?.allowed != null) {
     for (const tool of settings.tools.allowed) {
       // Check for legacy ShellTool(args) format
       const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
-      if (match) {
+      if (match != null) {
         const [, toolName, argsStr] = match;
 
         // Normalize ShellTool alias
@@ -428,7 +428,7 @@ export async function createPolicyEngineConfig(
 
   // MCP servers that are trusted in the settings.
   // Priority: 2.2 (user tier - persistent trusted servers)
-  if (settings.mcpServers) {
+  if (settings.mcpServers != null) {
     for (const [serverName, serverConfig] of Object.entries(
       settings.mcpServers,
     )) {
@@ -446,7 +446,7 @@ export async function createPolicyEngineConfig(
 
   // MCP servers that are explicitly allowed in settings.mcp.allowed
   // Priority: 2.1 (user tier - persistent general server allows)
-  if (settings.mcp?.allowed) {
+  if (settings.mcp?.allowed != null) {
     for (const serverName of settings.mcp.allowed) {
       rules.push({
         toolName: `${serverName}__*`,
@@ -542,7 +542,7 @@ export function createPolicyUpdater(
           }
 
           // Initialize rule array if needed
-          if (!existingData.rule) {
+          if (existingData.rule == null) {
             existingData.rule = [];
           }
 

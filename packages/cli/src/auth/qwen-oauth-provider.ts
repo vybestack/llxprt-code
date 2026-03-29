@@ -73,7 +73,7 @@ export class QwenOAuthProvider implements OAuthProvider {
      * @requirement REQ-004.2
      * Deprecation warning for missing TokenStore
      */
-    if (!tokenStore) {
+    if (tokenStore == null) {
       debugLogger.warn(
         `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
           `Token persistence will not work. Please update your code.`,
@@ -122,7 +122,7 @@ export class QwenOAuthProvider implements OAuthProvider {
         const savedToken = await this.tokenStore?.getToken('qwen');
 
         // Line 20: IF savedToken AND NOT this.isTokenExpired(savedToken)
-        if (savedToken && !isTokenExpired(savedToken)) {
+        if (savedToken != null && !isTokenExpired(savedToken)) {
           // Line 21: RETURN
           return;
         }
@@ -189,7 +189,7 @@ export class QwenOAuthProvider implements OAuthProvider {
       url: authUrl,
     };
 
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem(historyItem);
     } else {
       const delivered = globalOAuthUI.callAddItem(historyItem);
@@ -222,7 +222,7 @@ export class QwenOAuthProvider implements OAuthProvider {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp?: number,
   ): void {
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem(itemData, baseTimestamp);
     } else {
       const delivered = globalOAuthUI.callAddItem(itemData, baseTimestamp);
@@ -344,7 +344,7 @@ export class QwenOAuthProvider implements OAuthProvider {
     return this.errorHandler.handleGracefully(
       async () => {
         // Line 88: AWAIT this.tokenStore.removeToken('qwen')
-        if (this.tokenStore && !token) {
+        if (this.tokenStore != null && token == null) {
           try {
             await this.tokenStore.removeToken('qwen');
           } catch (error) {
@@ -359,8 +359,8 @@ export class QwenOAuthProvider implements OAuthProvider {
         }
 
         // Line 89: PRINT "Successfully logged out from Qwen"
-        if (!token) {
-          if (this.addItem) {
+        if (token == null) {
+          if (this.addItem != null) {
             this.addItem(
               { type: 'info', text: 'Successfully logged out from Qwen' },
               Date.now(),

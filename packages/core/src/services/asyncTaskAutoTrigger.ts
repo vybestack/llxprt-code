@@ -114,7 +114,7 @@ export class AsyncTaskAutoTrigger {
       // between now and delivery).
       const result = this.reminderService.generateReminder();
 
-      if (!result) {
+      if (result == null) {
         // Nothing to notify (race condition - already delivered)
         return;
       }

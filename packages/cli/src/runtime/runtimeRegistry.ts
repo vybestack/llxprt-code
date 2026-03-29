@@ -46,12 +46,12 @@ export function resolveActiveRuntimeIdentity(): {
   metadata: Record<string, unknown>;
 } {
   const scope = getCurrentRuntimeScope();
-  if (scope) {
+  if (scope != null) {
     return scope;
   }
 
   const context = peekActiveProviderRuntimeContext();
-  if (context) {
+  if (context != null) {
     const candidateId =
       typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
         ? context.runtimeId
@@ -123,7 +123,7 @@ export function upsertRuntimeEntry(
 
 export function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
   const entry = runtimeRegistry.get(runtimeId);
-  if (entry) {
+  if (entry != null) {
     return entry;
   }
 

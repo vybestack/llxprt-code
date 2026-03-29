@@ -115,7 +115,7 @@ describe('Agent Server Endpoints', () => {
     if (server) {
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
-          if (err) return reject(err);
+          if (err != null) return reject(err);
           resolve();
         });
       });

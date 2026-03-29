@@ -320,7 +320,7 @@ export function useSelectionList<T>({
 
   useEffect(
     () => () => {
-      if (numberInputTimer.current) {
+      if (numberInputTimer.current != null) {
         clearTimeout(numberInputTimer.current);
       }
     },
@@ -343,7 +343,7 @@ export function useSelectionList<T>({
       }
 
       // Clear number input buffer on non-numeric key press
-      if (!isNumeric && numberInputTimer.current) {
+      if (!isNumeric && numberInputTimer.current != null) {
         clearTimeout(numberInputTimer.current);
         numberInputRef.current = '';
       }
@@ -371,7 +371,7 @@ export function useSelectionList<T>({
 
       // Handle numeric input for quick selection
       if (isNumeric) {
-        if (numberInputTimer.current) {
+        if (numberInputTimer.current != null) {
           clearTimeout(numberInputTimer.current);
         }
 

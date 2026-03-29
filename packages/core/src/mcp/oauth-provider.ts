@@ -215,14 +215,14 @@ export class MCPOAuthProvider {
       debugLogger.debug(`   Trying issuer URL: ${issuer}`);
       const metadata =
         await OAuthUtils.discoverAuthorizationServerMetadata(issuer);
-      if (metadata) {
+      if (metadata != null) {
         selectedIssuer = issuer;
         discoveredMetadata = metadata;
         break;
       }
     }
 
-    if (!discoveredMetadata) {
+    if (discoveredMetadata == null) {
       throw new Error(
         `Failed to fetch authorization server metadata for client registration (attempted issuers: ${attemptedIssuers.join(', ')})`,
       );
@@ -416,11 +416,11 @@ export class MCPOAuthProvider {
       code_challenge_method: 'S256',
     });
 
-    if (config.scopes && config.scopes.length > 0) {
+    if (config.scopes != null && config.scopes.length > 0) {
       params.append('scope', config.scopes.join(' '));
     }
 
-    if (config.audiences && config.audiences.length > 0) {
+    if (config.audiences != null && config.audiences.length > 0) {
       params.append('audience', config.audiences.join(' '));
     }
 
@@ -478,7 +478,7 @@ export class MCPOAuthProvider {
       params.append('client_secret', config.clientSecret);
     }
 
-    if (config.audiences && config.audiences.length > 0) {
+    if (config.audiences != null && config.audiences.length > 0) {
       params.append('audience', config.audiences.join(' '));
     }
 
@@ -597,11 +597,11 @@ export class MCPOAuthProvider {
       params.append('client_secret', config.clientSecret);
     }
 
-    if (config.scopes && config.scopes.length > 0) {
+    if (config.scopes != null && config.scopes.length > 0) {
       params.append('scope', config.scopes.join(' '));
     }
 
-    if (config.audiences && config.audiences.length > 0) {
+    if (config.audiences != null && config.audiences.length > 0) {
       params.append('audience', config.audiences.join(' '));
     }
 
@@ -710,7 +710,7 @@ export class MCPOAuthProvider {
     events?: EventEmitter,
   ): Promise<MCPOAuthToken> {
     const displayMessage = (message: string) => {
-      if (events) {
+      if (events != null) {
         events.emit(OAUTH_DISPLAY_MESSAGE_EVENT, message);
       } else {
         debugLogger.log(message);
@@ -741,7 +741,7 @@ export class MCPOAuthProvider {
                 wwwAuthenticate,
                 mcpServerUrl,
               );
-            if (discoveredConfig) {
+            if (discoveredConfig != null) {
               // Merge discovered config with existing config, preserving clientId and clientSecret
               config = {
                 ...config,
@@ -770,7 +770,7 @@ export class MCPOAuthProvider {
       if (!config.authorizationUrl) {
         const discoveredConfig =
           await this.discoverOAuthFromMCPServer(mcpServerUrl);
-        if (discoveredConfig) {
+        if (discoveredConfig != null) {
           // Merge discovered config with existing config, preserving clientId and clientSecret
           config = {
             ...config,
@@ -924,7 +924,11 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
 
       // Verify token was saved
       const savedToken = await tokenStorage.getCredentials(serverName);
-      if (savedToken && savedToken.token && savedToken.token.accessToken) {
+      if (
+        savedToken != null &&
+        savedToken.token &&
+        savedToken.token.accessToken
+      ) {
         debugLogger.debug('[OK] Token verification successful');
       } else {
         debugLogger.error(
@@ -954,7 +958,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     const tokenStorage = new MCPOAuthTokenStorage();
     const credentials = await tokenStorage.getCredentials(serverName);
 
-    if (!credentials) {
+    if (credentials == null) {
       debugLogger.debug(`No credentials found for server: ${serverName}`);
       return null;
     }

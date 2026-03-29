@@ -170,17 +170,17 @@ function formatBucket(
 export function formatSyntheticUsage(usage: SyntheticUsageInfo): string[] {
   const lines: string[] = [];
 
-  if (usage.subscription) {
+  if (usage.subscription != null) {
     const formatted = formatBucket(usage.subscription, 'Subscription');
     if (formatted) lines.push(formatted);
   }
 
-  if (usage.toolCallDiscounts) {
+  if (usage.toolCallDiscounts != null) {
     const formatted = formatBucket(usage.toolCallDiscounts, 'Tool calls');
     if (formatted) lines.push(formatted);
   }
 
-  if (usage.search?.hourly) {
+  if (usage.search?.hourly != null) {
     const formatted = formatBucket(usage.search.hourly, 'Search (hourly)');
     if (formatted) lines.push(formatted);
   }

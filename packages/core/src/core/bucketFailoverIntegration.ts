@@ -105,7 +105,7 @@ export async function executeProviderWithBucketFailover(
 
     try {
       // Refresh token for this bucket if callback provided
-      if (tokenRefreshCallback) {
+      if (tokenRefreshCallback != null) {
         logger.debug(() => `Refreshing OAuth token for bucket '${bucket}'`);
         await tokenRefreshCallback(bucket);
       }
@@ -124,7 +124,7 @@ export async function executeProviderWithBucketFailover(
         lastContent = chunk;
       }
 
-      if (!lastContent) {
+      if (lastContent == null) {
         throw new Error('Provider returned empty response');
       }
 
@@ -151,7 +151,7 @@ export async function executeProviderWithBucketFailover(
           const nextBucket = buckets[i + 1];
 
           // Notify about bucket switch
-          if (notificationCallback) {
+          if (notificationCallback != null) {
             notificationCallback(bucket, nextBucket);
           }
 
@@ -209,7 +209,7 @@ function formatAllBucketsExhaustedError(
     message += `\nUnattempted buckets: ${unattempted.join(', ')}\n`;
   }
 
-  if (lastError) {
+  if (lastError != null) {
     message += `\nLast error: ${lastError.message}`;
   }
 
@@ -237,7 +237,7 @@ export function shouldEnableBucketFailover(
       }
     | undefined,
 ): boolean {
-  if (!authConfig) {
+  if (authConfig == null) {
     return false;
   }
 
@@ -245,7 +245,7 @@ export function shouldEnableBucketFailover(
     return false;
   }
 
-  if (!authConfig.buckets || authConfig.buckets.length <= 1) {
+  if (authConfig.buckets == null || authConfig.buckets.length <= 1) {
     return false;
   }
 

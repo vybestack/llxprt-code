@@ -134,7 +134,7 @@ function applyThoughtToState(
     thoughtText,
     thinkingBlocksRef.current,
   );
-  if (thinkingBlock) {
+  if (thinkingBlock != null) {
     thinkingBlocksRef.current.push(thinkingBlock);
     const liveProfileName = getCurrentProfileName(config);
     setPendingHistoryItem((item) => {
@@ -221,7 +221,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         pendingHistoryItemRef.current?.type !== 'gemini' &&
         pendingHistoryItemRef.current?.type !== 'gemini_content'
       ) {
-        if (pendingHistoryItemRef.current)
+        if (pendingHistoryItemRef.current != null)
           flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem({
           type: 'gemini',
@@ -300,7 +300,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       if (turnCancelledRef.current) {
         return;
       }
-      if (pendingHistoryItemRef.current) {
+      if (pendingHistoryItemRef.current != null) {
         if (pendingHistoryItemRef.current.type === 'tool_group') {
           const updatedTools = pendingHistoryItemRef.current.tools.map(
             (tool) =>
@@ -342,7 +342,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
 
   const handleErrorEvent = useCallback(
     (eventValue: ErrorEvent['value'], userMessageTimestamp: number) => {
-      if (pendingHistoryItemRef.current) {
+      if (pendingHistoryItemRef.current != null) {
         flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
       }
@@ -376,7 +376,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         return;
       }
 
-      if (pendingHistoryItemRef.current) {
+      if (pendingHistoryItemRef.current != null) {
         flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
       }
@@ -410,7 +410,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       eventValue: ServerGeminiChatCompressedEvent['value'],
       userMessageTimestamp: number,
     ) => {
-      if (pendingHistoryItemRef.current) {
+      if (pendingHistoryItemRef.current != null) {
         addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         setPendingHistoryItem(null);
       }
@@ -594,7 +594,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       ) {
         const deduped = deduplicateToolCallRequests(toolCallRequests);
         if (deduped.length > 0) {
-          if (pendingHistoryItemRef.current) {
+          if (pendingHistoryItemRef.current != null) {
             addItem(pendingHistoryItemRef.current, userMessageTimestamp);
             setPendingHistoryItem(null);
           }

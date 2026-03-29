@@ -155,7 +155,7 @@ class TestOAuthFlow implements OAuthFlowInterface {
     this.lastExchangeCode = code;
     this.lastExchangeState = state ?? null;
 
-    if (!this.exchangeResult) {
+    if (this.exchangeResult == null) {
       throw new Error('TestOAuthFlow: exchangeResult not configured');
     }
     return this.exchangeResult;

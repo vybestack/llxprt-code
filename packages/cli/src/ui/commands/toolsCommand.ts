@@ -46,7 +46,7 @@ function stripQuotes(value: string): string {
 
 function getSettingsService(context: CommandContext): SettingsService | null {
   const config = context.services.config;
-  if (config && typeof config.getSettingsService === 'function') {
+  if (config != null && typeof config.getSettingsService === 'function') {
     return config.getSettingsService();
   }
   return null;
@@ -60,10 +60,10 @@ function readToolLists(context: CommandContext): {
   const config = context.services.config;
 
   const read = (key: string): unknown => {
-    if (settings) {
+    if (settings != null) {
       return settings.get(key);
     }
-    if (config && typeof config.getEphemeralSetting === 'function') {
+    if (config != null && typeof config.getEphemeralSetting === 'function') {
       return config.getEphemeralSetting(key);
     }
     return undefined;
@@ -97,13 +97,13 @@ function persistToolLists(
   const config = context.services.config;
   const settings = getSettingsService(context);
 
-  if (settings) {
+  if (settings != null) {
     settings.set('tools.disabled', disabledList);
     settings.set('disabled-tools', disabledList);
     settings.set('tools.allowed', allowedList);
   }
 
-  if (config) {
+  if (config != null) {
     if (typeof config.setEphemeralSetting === 'function') {
       config.setEphemeralSetting('tools.disabled', disabledList);
       config.setEphemeralSetting('disabled-tools', disabledList);
@@ -196,7 +196,7 @@ export const toolsCommand: SlashCommand = {
     const config = context.services.config;
     const toolRegistry = config?.getToolRegistry();
 
-    if (!toolRegistry) {
+    if (toolRegistry == null) {
       context.ui.addItem(
         {
           type: MessageType.ERROR,
@@ -247,7 +247,7 @@ export const toolsCommand: SlashCommand = {
       }
 
       const target = resolveToolByName(identifier, tools);
-      if (!target || 'serverName' in target) {
+      if (target == null || 'serverName' in target) {
         context.ui.addItem(
           {
             type: MessageType.ERROR,
@@ -280,7 +280,7 @@ export const toolsCommand: SlashCommand = {
           ? config.getGeminiClient()
           : undefined;
 
-      if (geminiClient && typeof geminiClient.setTools === 'function') {
+      if (geminiClient != null && typeof geminiClient.setTools === 'function') {
         try {
           await geminiClient.setTools();
         } catch (error) {

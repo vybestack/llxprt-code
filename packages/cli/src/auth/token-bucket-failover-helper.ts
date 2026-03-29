@@ -49,7 +49,7 @@ export function ensureFailoverHandler(
     return undefined;
   }
 
-  if (!config) {
+  if (config == null) {
     logger.warn(
       `[issue1029] CRITICAL: Profile has ${profileBuckets.length} buckets but no Config available to set failover handler! ` +
         `Bucket failover will NOT work. Ensure OAuthManager receives the active Config instance from the composition root.`,
@@ -81,7 +81,7 @@ export function ensureFailoverHandler(
       `[issue1029] Failover handler check: hasExisting=${!!failoverHandler}, sameBuckets=${sameBuckets}, sameScope=${sameScope}, existingBuckets=${JSON.stringify(existingBuckets)}`,
   );
 
-  if (!failoverHandler || !sameBuckets || !sameScope) {
+  if (failoverHandler == null || !sameBuckets || !sameScope) {
     const handler = new BucketFailoverHandlerImpl(
       profileBuckets,
       providerName,

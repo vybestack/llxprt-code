@@ -143,13 +143,14 @@ export async function getAllJsonlSessionFiles(
     try {
       const stat = await fs.stat(filePath);
       const header = await readSessionHeader(filePath);
-      const sessionInfo = header
-        ? {
-            id: header.sessionId,
-            lastUpdated: stat.mtime.toISOString(),
-            isCurrentSession: header.sessionId === currentSessionId,
-          }
-        : null;
+      const sessionInfo =
+        header != null
+          ? {
+              id: header.sessionId,
+              lastUpdated: stat.mtime.toISOString(),
+              isCurrentSession: header.sessionId === currentSessionId,
+            }
+          : null;
       entries.push({
         fileName,
         filePath,

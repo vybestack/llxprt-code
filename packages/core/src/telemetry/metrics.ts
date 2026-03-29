@@ -49,7 +49,7 @@ function getCommonAttributes(config: SessionConfig): Attributes {
 }
 
 export function getMeter(): Meter | undefined {
-  if (!cliMeter) {
+  if (cliMeter == null) {
     cliMeter = metrics.getMeter(SERVICE_NAME);
   }
   return cliMeter;
@@ -59,7 +59,7 @@ export function initializeMetrics(config: Config): void {
   if (isMetricsInitialized) return;
 
   const meter = getMeter();
-  if (!meter) return;
+  if (meter == null) return;
 
   toolCallCounter = meter.createCounter(METRIC_TOOL_CALL_COUNT, {
     description: 'Counts tool calls, tagged by function name and success.',
@@ -106,7 +106,11 @@ export function recordToolCallMetrics(
   decision?: 'accept' | 'reject' | 'modify' | 'auto_accept',
   tool_type?: 'native' | 'mcp',
 ): void {
-  if (!toolCallCounter || !toolCallLatencyHistogram || !isMetricsInitialized)
+  if (
+    toolCallCounter == null ||
+    toolCallLatencyHistogram == null ||
+    !isMetricsInitialized
+  )
     return;
 
   const metricAttributes: Attributes = {
@@ -129,7 +133,7 @@ export function recordTokenUsageMetrics(
   tokenCount: number,
   type: 'input' | 'output' | 'thought' | 'cache' | 'tool',
 ): void {
-  if (!tokenUsageCounter || !isMetricsInitialized) return;
+  if (tokenUsageCounter == null || !isMetricsInitialized) return;
   tokenUsageCounter.add(tokenCount, {
     ...getCommonAttributes(config),
     model,
@@ -145,8 +149,8 @@ export function recordApiResponseMetrics(
   error?: string,
 ): void {
   if (
-    !apiRequestCounter ||
-    !apiRequestLatencyHistogram ||
+    apiRequestCounter == null ||
+    apiRequestLatencyHistogram == null ||
     !isMetricsInitialized
   )
     return;
@@ -170,8 +174,8 @@ export function recordApiErrorMetrics(
   errorType?: string,
 ): void {
   if (
-    !apiRequestCounter ||
-    !apiRequestLatencyHistogram ||
+    apiRequestCounter == null ||
+    apiRequestLatencyHistogram == null ||
     !isMetricsInitialized
   )
     return;
@@ -196,7 +200,7 @@ export function recordFileOperationMetric(
   extension?: string,
   diffStat?: DiffStat,
 ): void {
-  if (!fileOperationCounter || !isMetricsInitialized) return;
+  if (fileOperationCounter == null || !isMetricsInitialized) return;
   const attributes: Attributes = {
     ...getCommonAttributes(config),
     operation,

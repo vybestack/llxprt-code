@@ -90,20 +90,20 @@ function formatHistoryAsMarkdown(history: Content[]): string {
     const role = item.role === 'user' ? 'User' : 'Assistant';
     transcript += `## ${role}\n\n`;
 
-    if (item.parts) {
+    if (item.parts != null) {
       for (const part of item.parts) {
         if (part.text) {
           transcript += `${part.text}\n\n`;
-        } else if (part.functionCall) {
+        } else if (part.functionCall != null) {
           transcript += `**Function Call:** \`${part.functionCall.name}\`\n\n`;
-          if (part.functionCall.args) {
+          if (part.functionCall.args != null) {
             transcript += '```json\n';
             transcript += JSON.stringify(part.functionCall.args, null, 2);
             transcript += '\n```\n\n';
           }
-        } else if (part.functionResponse) {
+        } else if (part.functionResponse != null) {
           transcript += `**Function Response:** \`${part.functionResponse.name}\`\n\n`;
-          if (part.functionResponse.response) {
+          if (part.functionResponse.response != null) {
             transcript += '```json\n';
             transcript += JSON.stringify(
               part.functionResponse.response,

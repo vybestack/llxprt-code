@@ -104,7 +104,7 @@ export async function hydrateModelsWithRegistry(
       // Try partial match for models with prefixes/suffixes
       findPartialMatch(model.id, registryMap);
 
-    if (!registryModel) {
+    if (registryModel == null) {
       // Model not found in registry - return unhydrated
       return { ...model, hydrated: false };
     }

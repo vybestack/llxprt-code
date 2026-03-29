@@ -12,7 +12,7 @@ const reactStub = vi.hoisted(() => {
 
   const notify = (index: number, value: unknown) => {
     const listener = listeners.get(index);
-    if (listener) {
+    if (listener != null) {
       listener(value);
     }
   };

@@ -144,7 +144,7 @@ export function useMouseSelection({
       event: MouseEvent,
     ): { node: DOMElement; point: { x: number; y: number } } | null => {
       const root = rootRef.current;
-      if (!root) return null;
+      if (root == null) return null;
 
       const x = event.col - 1;
       const y = event.row - 1;
@@ -158,7 +158,7 @@ export function useMouseSelection({
       }> = [];
 
       for (const entry of scrollables) {
-        if (!entry.ref.current || !entry.hasFocus()) continue;
+        if (entry.ref.current == null || !entry.hasFocus()) continue;
         const box = getBoundingBox(entry.ref.current);
         if (isInsideBox(point, box)) {
           scrollableCandidates.push({
@@ -187,7 +187,7 @@ export function useMouseSelection({
         point,
       );
 
-      if (innermostScrollable) {
+      if (innermostScrollable != null) {
         const { scrollTop, scrollLeft } = getScrollOffsets(
           innermostScrollable.node,
         );
@@ -214,13 +214,13 @@ export function useMouseSelection({
   const resolveSelectionPoint = useCallback(
     (event: MouseEvent): SelectionPoint | null => {
       if (!enabled) return null;
-      if (!selection) return null;
+      if (selection == null) return null;
 
       const target = findHitTestTarget(event);
-      if (!target) return null;
+      if (target == null) return null;
 
       const hit = hitTest(target.node, target.point.x, target.point.y);
-      if (!hit) return null;
+      if (hit == null) return null;
 
       return { node: hit.node, offset: hit.offset };
     },
@@ -229,7 +229,7 @@ export function useMouseSelection({
 
   const updateSelectionRange = useCallback(
     (anchor: SelectionPoint, focus: SelectionPoint) => {
-      if (!selection) return;
+      if (selection == null) return;
 
       const ordering = comparePoints(
         anchor.node,
@@ -244,7 +244,7 @@ export function useMouseSelection({
       range.setStart(start.node, start.offset);
       range.setEnd(end.node, end.offset);
 
-      if (!selectionRangeRef.current) {
+      if (selectionRangeRef.current == null) {
         selection.removeAllRanges();
         selection.addRange(range);
         selectionRangeRef.current = range;
@@ -256,7 +256,7 @@ export function useMouseSelection({
   );
 
   const copySelectionToClipboard = useCallback(async () => {
-    if (!selection || selection.rangeCount === 0) return;
+    if (selection == null || selection.rangeCount === 0) return;
     // Issue #885: Snapshot the text immediately before any async operations
     // to prevent race conditions where selection changes during copy
     const text = selection.toString();
@@ -273,11 +273,11 @@ export function useMouseSelection({
   const mouseHandler = useMemo(
     () => (event: MouseEvent) => {
       if (!enabled) return;
-      if (!selection) return;
+      if (selection == null) return;
 
       if (event.name === 'left-press') {
         const point = resolveSelectionPoint(event);
-        if (!point) return;
+        if (point == null) return;
         isDraggingRef.current = true;
         anchorPointRef.current = point;
         updateSelectionRange(point, point);
@@ -287,9 +287,9 @@ export function useMouseSelection({
       if (event.name === 'move') {
         if (!isDraggingRef.current) return;
         const anchor = anchorPointRef.current;
-        if (!anchor) return;
+        if (anchor == null) return;
         const point = resolveSelectionPoint(event);
-        if (!point) return;
+        if (point == null) return;
         updateSelectionRange(anchor, point);
         return;
       }
@@ -297,9 +297,9 @@ export function useMouseSelection({
       if (event.name === 'left-release') {
         if (!isDraggingRef.current) return;
         const anchor = anchorPointRef.current;
-        if (anchor) {
+        if (anchor != null) {
           const releasePoint = resolveSelectionPoint(event);
-          if (releasePoint) {
+          if (releasePoint != null) {
             updateSelectionRange(anchor, releasePoint);
           }
         }

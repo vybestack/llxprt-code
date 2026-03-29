@@ -90,7 +90,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     if (inCodeBlock) {
       const fenceMatch = line.match(codeFenceRegex);
       if (
-        fenceMatch &&
+        fenceMatch != null &&
         fenceMatch[1].startsWith(codeBlockFence[0]) &&
         fenceMatch[1].length >= codeBlockFence.length
       ) {
@@ -122,15 +122,15 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
     const tableRowMatch = line.match(tableRowRegex);
     const tableSeparatorMatch = line.match(tableSeparatorRegex);
 
-    if (codeFenceMatch) {
+    if (codeFenceMatch != null) {
       inCodeBlock = true;
       codeBlockFence = codeFenceMatch[1];
       codeBlockLang = codeFenceMatch[2] || null;
-    } else if (tableRowMatch && !inTable) {
+    } else if (tableRowMatch != null && !inTable) {
       // Potential table start - check if next line is separator
       if (
         index + 1 < lines.length &&
-        lines[index + 1].match(tableSeparatorRegex)
+        lines[index + 1].match(tableSeparatorRegex) != null
       ) {
         inTable = true;
         tableHeaders = tableRowMatch[1].split('|').map((cell) => cell.trim());
@@ -145,9 +145,9 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           </Box>,
         );
       }
-    } else if (inTable && tableSeparatorMatch) {
+    } else if (inTable && tableSeparatorMatch != null) {
       // Skip separator line - already handled
-    } else if (inTable && tableRowMatch) {
+    } else if (inTable && tableRowMatch != null) {
       // Add table row
       const cells = tableRowMatch[1].split('|').map((cell) => cell.trim());
       // Ensure row has same column count as headers
@@ -158,7 +158,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
         cells.length = tableHeaders.length;
       }
       tableRows.push(cells);
-    } else if (inTable && !tableRowMatch) {
+    } else if (inTable && tableRowMatch == null) {
       // End of table
       if (tableHeaders.length > 0 && tableRows.length > 0) {
         addContentBlock(
@@ -184,13 +184,13 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           </Box>,
         );
       }
-    } else if (hrMatch) {
+    } else if (hrMatch != null) {
       addContentBlock(
         <Box key={key}>
           <Text color={theme.ui.comment}>---</Text>
         </Box>,
       );
-    } else if (headerMatch) {
+    } else if (headerMatch != null) {
       const level = headerMatch[1].length;
       const headerText = headerMatch[2];
       let headerNode: React.ReactNode = null;
@@ -235,7 +235,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           break;
       }
       if (headerNode) addContentBlock(<Box key={key}>{headerNode}</Box>);
-    } else if (ulMatch) {
+    } else if (ulMatch != null) {
       const leadingWhitespace = ulMatch[1];
       const marker = ulMatch[2];
       const itemText = ulMatch[3];
@@ -248,7 +248,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           leadingWhitespace={leadingWhitespace}
         />,
       );
-    } else if (olMatch) {
+    } else if (olMatch != null) {
       const leadingWhitespace = olMatch[1];
       const marker = olMatch[2];
       const itemText = olMatch[3];

@@ -137,7 +137,7 @@ export class ASTContextCollector {
 
     // [CCR] Relation: Cross-file relationship analysis segment.
     // Reason: Optimized to use on-demand findInFiles instead of eager indexing.
-    if (repoContext) {
+    if (repoContext != null) {
       if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
         const workspaceFiles = await getWorkspaceFiles(workspaceRoot);
         await this.relationshipAnalyzer.buildSymbolIndex(workspaceFiles);

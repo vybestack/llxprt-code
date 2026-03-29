@@ -177,7 +177,7 @@ export const RuntimeContextProvider: React.FC<PropsWithChildren<unknown>> = ({
 
 export function useRuntimeBridge(): RuntimeContextBridge {
   const context = useContext(RuntimeContext);
-  if (!context) {
+  if (context == null) {
     throw new Error(
       'RuntimeContextProvider is missing from the component tree.',
     );
@@ -190,7 +190,7 @@ export function useRuntimeApi(): RuntimeApi {
 }
 
 export function getRuntimeBridge(): RuntimeContextBridge {
-  if (latestBridge) {
+  if (latestBridge != null) {
     return latestBridge;
   }
 

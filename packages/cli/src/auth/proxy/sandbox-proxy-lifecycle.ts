@@ -157,7 +157,7 @@ function buildDefaultFlowFactories(): Map<string, () => OAuthFlowInterface> {
 export async function createAndStartProxy(
   config: SandboxProxyConfig,
 ): Promise<SandboxProxyHandle> {
-  if (serverInstance) {
+  if (serverInstance != null) {
     return {
       stop: async () => {
         await stopProxy();
@@ -176,11 +176,11 @@ export async function createAndStartProxy(
     tokenStore,
     refreshFn: async (provider, currentToken) => {
       const flowFactory = flowFactories.get(provider);
-      if (!flowFactory) {
+      if (flowFactory == null) {
         throw new Error(`No OAuth provider configured for: ${provider}`);
       }
       const flowInstance = flowFactory();
-      if (!flowInstance.refreshToken) {
+      if (flowInstance.refreshToken == null) {
         throw new Error(`Provider ${provider} does not support token refresh`);
       }
       if (!currentToken.refresh_token) {
@@ -219,7 +219,7 @@ export async function createAndStartProxy(
  * Stops the credential proxy server and cleans up resources.
  */
 export async function stopProxy(): Promise<void> {
-  if (!serverInstance) {
+  if (serverInstance == null) {
     return;
   }
 

@@ -345,7 +345,7 @@ export const useWelcomeOnboarding = (
 
       // Authenticate FIRST before switching provider (prevents double OAuth)
       if (method === 'oauth') {
-        if (!oauthManager) {
+        if (oauthManager == null) {
           throw new Error('OAuth manager not available');
         }
         debug.log(`[triggerAuth] Starting OAuth for ${provider}`);

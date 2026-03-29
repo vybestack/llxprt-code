@@ -173,7 +173,7 @@ export async function getOrCreateScheduler(
   const interactiveMode = options?.interactiveMode ?? true;
   const entry = schedulerEntries.get(sessionId);
 
-  if (entry) {
+  if (entry != null) {
     entry.refCount += 1;
     if (entry.interactiveMode !== interactiveMode) {
       debugLog.debug(
@@ -201,7 +201,7 @@ export async function getOrCreateScheduler(
   }
 
   const inFlight = schedulerInitStates.get(sessionId);
-  if (inFlight) {
+  if (inFlight != null) {
     inFlight.refCount += 1;
     if (inFlight.interactiveMode !== interactiveMode) {
       debugLog.debug(
@@ -228,7 +228,7 @@ export async function getOrCreateScheduler(
       onEditorOpen: combinedCallbacks.onEditorOpen,
     });
     const existingEntry = schedulerEntries.get(sessionId);
-    if (existingEntry) {
+    if (existingEntry != null) {
       // Don't increment refCount here - our increment was already counted
       // in initState.refCount (line 184) which was transferred to existingEntry
       // when the original creator finished (line 250).
@@ -288,7 +288,7 @@ export async function getOrCreateScheduler(
 
 export function disposeScheduler(sessionId: string): void {
   const entry = schedulerEntries.get(sessionId);
-  if (entry) {
+  if (entry != null) {
     entry.refCount -= 1;
     if (entry.refCount > 0) {
       return;
@@ -306,7 +306,7 @@ export function disposeScheduler(sessionId: string): void {
   }
 
   const inFlight = schedulerInitStates.get(sessionId);
-  if (!inFlight) {
+  if (inFlight == null) {
     return;
   }
 

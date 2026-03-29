@@ -22,11 +22,13 @@ describe('buildResponsesRequest - undefined message handling', () => {
     const msg0 = request.input?.[0];
     const msg1 = request.input?.[1];
     const msg2 = request.input?.[2];
-    expect(msg0 && 'content' in msg0 ? msg0.content : undefined).toBe('Hello');
-    expect(msg1 && 'content' in msg1 ? msg1.content : undefined).toBe(
+    expect(msg0 != null && 'content' in msg0 ? msg0.content : undefined).toBe(
+      'Hello',
+    );
+    expect(msg1 != null && 'content' in msg1 ? msg1.content : undefined).toBe(
       'Hi there!',
     );
-    expect(msg2 && 'content' in msg2 ? msg2.content : undefined).toBe(
+    expect(msg2 != null && 'content' in msg2 ? msg2.content : undefined).toBe(
       'How are you?',
     );
   });

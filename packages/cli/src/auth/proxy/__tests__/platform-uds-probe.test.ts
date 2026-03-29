@@ -41,7 +41,7 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
   });
 
   afterEach(() => {
-    if (server) {
+    if (server != null) {
       server.close();
       server = null;
     }

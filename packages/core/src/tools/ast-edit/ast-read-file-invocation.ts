@@ -97,7 +97,7 @@ export class ASTReadFileToolInvocation
             (snippet) =>
               `- Line ${snippet.line}: ${snippet.text.substring(0, 60)}...`,
           ),
-        enhancedContext.connectedFiles &&
+        enhancedContext.connectedFiles != null &&
         enhancedContext.connectedFiles.length > 0
           ? [
               '',

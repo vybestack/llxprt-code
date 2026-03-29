@@ -45,7 +45,7 @@ export class OAuthCredentialStorage {
     try {
       const credentials = await this.storage.getCredentials(MAIN_ACCOUNT_KEY);
 
-      if (credentials?.token) {
+      if (credentials?.token != null) {
         const { accessToken, refreshToken, expiresAt, tokenType, scope } =
           credentials.token;
         // Convert from OAuthCredentials format to Google Credentials format

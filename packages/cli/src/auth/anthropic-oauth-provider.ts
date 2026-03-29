@@ -81,7 +81,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
      * @requirement REQ-004.2
      * Deprecation warning for missing TokenStore
      */
-    if (!_tokenStore) {
+    if (_tokenStore == null) {
       debugLogger.warn(
         `DEPRECATION: ${this.name} OAuth provider created without TokenStore. ` +
           `Token persistence will not work. Please update your code.`,
@@ -143,7 +143,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
         this.armPendingAuthDialog();
 
-        if (localCallback) {
+        if (localCallback != null) {
           return this.raceCallbackVsManualEntry(attemptId, localCallback);
         }
 
@@ -201,16 +201,17 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     const deviceCodeUrl =
       deviceCodeResponse.verification_uri_complete ||
       `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
-    const callbackUrl = localCallback
-      ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
-      : null;
+    const callbackUrl =
+      localCallback != null
+        ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
+        : null;
 
     const historyItem: HistoryItemOAuthURL = {
       type: 'oauth_url',
       text: `Please visit the following URL to authorize with Anthropic Claude:\n${deviceCodeUrl}`,
       url: deviceCodeUrl,
     };
-    if (this.addItem) {
+    if (this.addItem != null) {
       this.addItem(historyItem);
     } else {
       globalOAuthUI.callAddItem(historyItem);
@@ -378,7 +379,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @pseudocode lines 17-25
    */
   async initializeToken(): Promise<void> {
-    if (!this._tokenStore) {
+    if (this._tokenStore == null) {
       return;
     }
 
@@ -387,7 +388,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         // @pseudocode line 19: Load saved token from store
         const savedToken = await this._tokenStore!.getToken('anthropic');
         // @pseudocode lines 20-22: Check if token exists and not expired
-        if (savedToken && !isTokenExpired(savedToken)) {
+        if (savedToken != null && !isTokenExpired(savedToken)) {
           return; // Token is valid, ready to use
         }
       },
@@ -404,7 +405,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   async getToken(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
-    if (!this._tokenStore) {
+    if (this._tokenStore == null) {
       return null;
     }
 
@@ -463,9 +464,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     await this.ensureInitialized();
 
     // NO ERROR SUPPRESSION - let it fail loudly
-    if (token) {
+    if (token != null) {
       try {
-        if (this.deviceFlow.revokeToken) {
+        if (this.deviceFlow.revokeToken != null) {
           await this.deviceFlow.revokeToken(token.access_token);
         } else {
           this.logger.debug(

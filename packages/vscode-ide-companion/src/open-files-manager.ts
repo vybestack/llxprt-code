@@ -22,7 +22,7 @@ export class OpenFilesManager {
   constructor(private readonly context: vscode.ExtensionContext) {
     const editorWatcher = vscode.window.onDidChangeActiveTextEditor(
       (editor) => {
-        if (editor && this.isFileUri(editor.document.uri)) {
+        if (editor != null && this.isFileUri(editor.document.uri)) {
           this.addOrMoveToFront(editor);
           this.fireWithDebounce();
         }
@@ -78,7 +78,7 @@ export class OpenFilesManager {
 
     // Just add current active file on start-up.
     if (
-      vscode.window.activeTextEditor &&
+      vscode.window.activeTextEditor != null &&
       this.isFileUri(vscode.window.activeTextEditor.document.uri)
     ) {
       this.addOrMoveToFront(vscode.window.activeTextEditor);
@@ -92,7 +92,7 @@ export class OpenFilesManager {
   private addOrMoveToFront(editor: vscode.TextEditor) {
     // Deactivate previous active file
     const currentActive = this.openFiles.find((f) => f.isActive);
-    if (currentActive) {
+    if (currentActive != null) {
       currentActive.isActive = false;
       currentActive.cursor = undefined;
       currentActive.selectedText = undefined;
@@ -159,7 +159,7 @@ export class OpenFilesManager {
   }
 
   private fireWithDebounce() {
-    if (this.debounceTimer) {
+    if (this.debounceTimer != null) {
       clearTimeout(this.debounceTimer);
     }
     this.debounceTimer = setTimeout(() => {

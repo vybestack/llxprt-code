@@ -64,7 +64,7 @@ export class ShellProcessor implements IPromptProcessor {
     }
 
     const config = context.services.config;
-    if (!config) {
+    if (config == null) {
       throw new Error(
         `Security configuration not loaded. Cannot verify shell command permissions for '${this.commandName}'. Aborting.`,
       );
@@ -149,7 +149,7 @@ export class ShellProcessor implements IPromptProcessor {
         const executionResult = await result;
 
         // Handle Spawn Errors
-        if (executionResult.error && !executionResult.aborted) {
+        if (executionResult.error != null && !executionResult.aborted) {
           throw new Error(
             `Failed to start shell command in '${this.commandName}': ${executionResult.error.message}. Command: ${injection.resolvedCommand}`,
           );

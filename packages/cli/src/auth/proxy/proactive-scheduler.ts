@@ -67,7 +67,7 @@ export class ProactiveScheduler {
   cancel(provider: string, bucket: string): void {
     const key = `${provider}:${bucket}`;
     const timer = this.timers.get(key);
-    if (timer) {
+    if (timer != null) {
       clearTimeout(timer);
       this.timers.delete(key);
     }

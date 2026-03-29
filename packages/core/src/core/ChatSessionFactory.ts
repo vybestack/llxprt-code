@@ -169,13 +169,13 @@ function setupHistoryService(
   runtimeState: AgentRuntimeState,
 ): { historyService: HistoryService; reused: boolean } {
   const logger = new DebugLogger('llxprt:client:start');
-  if (storedHistoryService) {
+  if (storedHistoryService != null) {
     logger.debug('Reusing stored HistoryService to preserve UI conversation');
     return { historyService: storedHistoryService, reused: true };
   }
 
   const historyService = new HistoryService();
-  if (extraHistory && extraHistory.length > 0) {
+  if (extraHistory != null && extraHistory.length > 0) {
     const currentModel = runtimeState.model;
     for (const content of extraHistory) {
       const turnKey = historyService.generateTurnKey();

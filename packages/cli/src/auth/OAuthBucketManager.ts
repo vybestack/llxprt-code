@@ -106,7 +106,7 @@ export class OAuthBucketManager {
   ): Promise<BucketStatus> {
     const token = await this.tokenStore.getToken(provider, bucket);
 
-    if (!token) {
+    if (token == null) {
       return {
         bucket,
         authenticated: false,
@@ -146,7 +146,7 @@ export class OAuthBucketManager {
   async validateBucketExists(provider: string, bucket: string): Promise<void> {
     const token = await this.tokenStore.getToken(provider, bucket);
 
-    if (!token) {
+    if (token == null) {
       throw new Error(
         `OAuth bucket '${bucket}' for provider '${provider}' not found. ` +
           `Use /auth ${provider} login ${bucket} to authenticate.`,

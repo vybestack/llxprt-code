@@ -517,7 +517,7 @@ describe.skip('Conversation Logging Performance Impact', () => {
       await Promise.all(batchPromises);
 
       // Force garbage collection if available
-      if (global.gc) {
+      if (global.gc != null) {
         global.gc();
       }
     }

@@ -49,7 +49,7 @@ const findScrollableCandidates = (
   const candidates: Array<ScrollableEntry & { area: number }> = [];
 
   for (const entry of scrollables.values()) {
-    if (!entry.ref.current || !entry.hasFocus()) {
+    if (entry.ref.current == null || !entry.hasFocus()) {
       continue;
     }
 
@@ -129,7 +129,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
       flushScheduledRef.current = false;
       for (const [id, delta] of pendingScrollsRef.current.entries()) {
         const entry = scrollablesRef.current.get(id);
-        if (entry) {
+        if (entry != null) {
           entry.scrollBy(delta);
         }
       }
@@ -175,7 +175,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const handleLeftPress = useCallback((mouseEvent: MouseEvent) => {
     for (const entry of scrollablesRef.current.values()) {
-      if (!entry.ref.current || !entry.hasFocus()) {
+      if (entry.ref.current == null || !entry.hasFocus()) {
         continue;
       }
 
@@ -234,7 +234,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
           const newScrollTop = Math.round(
             (targetThumbY / maxThumbY) * maxScrollTop,
           );
-          if (entry.scrollTo) {
+          if (entry.scrollTo != null) {
             entry.scrollTo(newScrollTop);
           } else {
             entry.scrollBy(newScrollTop - scrollTop);
@@ -269,7 +269,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!state.active || !state.id) return false;
 
     const entry = scrollablesRef.current.get(state.id);
-    if (!entry || !entry.ref.current) {
+    if (entry == null || entry.ref.current == null) {
       state.active = false;
       return false;
     }
@@ -299,7 +299,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
       (targetThumbY / maxThumbY) * maxScrollTop,
     );
 
-    if (entry.scrollTo) {
+    if (entry.scrollTo != null) {
       entry.scrollTo(targetScrollTop, 0);
     } else {
       entry.scrollBy(targetScrollTop - scrollTop);
@@ -383,7 +383,7 @@ export const useScrollable = (
 
 export function useScrollProvider(): ScrollContextType {
   const context = useContext(ScrollContext);
-  if (!context) {
+  if (context == null) {
     throw new Error('useScrollProvider must be used within a ScrollProvider');
   }
   return context;

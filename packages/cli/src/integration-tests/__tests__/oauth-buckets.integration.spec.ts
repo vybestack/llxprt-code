@@ -564,7 +564,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
 
       expect(token1).not.toBeNull();
       expect(token2).not.toBeNull();
-      if (token1 && token2) {
+      if (token1 != null && token2 != null) {
         const now = Math.floor(Date.now() / 1000);
         expect(token1.expiry).toBeLessThan(now);
         expect(token2.expiry).toBeLessThan(now);
@@ -956,7 +956,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(geminiWork).not.toBeNull();
 
       // Verify expiry is tracked correctly
-      if (anthropicWork && geminiWork) {
+      if (anthropicWork != null && geminiWork != null) {
         const now = Math.floor(Date.now() / 1000);
         expect(anthropicWork.expiry).toBeGreaterThan(now); // Not expired
         expect(geminiWork.expiry).toBeGreaterThan(now); // Not expired
@@ -968,7 +968,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'personal-gmail',
       );
       expect(anthropicPersonal).not.toBeNull();
-      if (anthropicPersonal) {
+      if (anthropicPersonal != null) {
         const now = Math.floor(Date.now() / 1000);
         expect(anthropicPersonal.expiry).toBeLessThan(now); // Expired
       }

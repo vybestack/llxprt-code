@@ -60,7 +60,7 @@ export class ToolFormatter implements IToolFormatter {
         };
       }>
     | undefined {
-    if (!geminiTools) {
+    if (geminiTools == null) {
       this.logger.debug(
         () => `convertGeminiToOpenAI called with undefined tools`,
       );
@@ -140,7 +140,7 @@ export class ToolFormatter implements IToolFormatter {
         input_schema: { type: 'object'; [key: string]: unknown };
       }>
     | undefined {
-    if (!geminiTools) return undefined;
+    if (geminiTools == null) return undefined;
 
     const anthropicTools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
@@ -191,7 +191,7 @@ export class ToolFormatter implements IToolFormatter {
     }>,
     format: ToolFormat = 'openai',
   ): unknown {
-    if (!geminiTools) {
+    if (geminiTools == null) {
       this.logger.debug(
         () => `convertGeminiToFormat called with undefined tools`,
       );

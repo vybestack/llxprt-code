@@ -164,7 +164,7 @@ export function extractKimiToolCallsFromText(raw: string): {
             const match =
               /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
               /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
-            if (match) {
+            if (match != null) {
               toolName = match[1];
             } else {
               const colonParts = rawId.split(':');

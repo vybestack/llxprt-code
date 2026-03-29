@@ -83,7 +83,7 @@ export async function updateExtension(
       extensionDir: updatedExtensionStorage.getExtensionDir(),
       workspaceDir: cwd,
     });
-    if (!updatedExtension) {
+    if (updatedExtension == null) {
       dispatchExtensionStateUpdate({
         type: 'SET_STATE',
         payload: { name: extension.name, state: ExtensionUpdateState.ERROR },
@@ -164,7 +164,7 @@ export async function checkForAllExtensionUpdates(
   try {
     const promises: Array<Promise<void>> = [];
     for (const extension of extensions) {
-      if (!extension.installMetadata) {
+      if (extension.installMetadata == null) {
         dispatch({
           type: 'SET_STATE',
           payload: {

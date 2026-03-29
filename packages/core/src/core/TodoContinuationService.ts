@@ -282,7 +282,7 @@ export class TodoContinuationService {
   }
 
   isTodoPauseResponse(response: ToolCallResponseInfo | undefined): boolean {
-    if (!response?.responseParts) {
+    if (response?.responseParts == null) {
       return false;
     }
     return response.responseParts.some((part) => {
@@ -290,7 +290,7 @@ export class TodoContinuationService {
         part &&
         typeof part === 'object' &&
         'functionResponse' in part &&
-        part.functionResponse &&
+        part.functionResponse != null &&
         typeof part.functionResponse === 'object'
       ) {
         const name = (part.functionResponse as { name?: unknown }).name;

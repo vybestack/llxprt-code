@@ -155,7 +155,7 @@ function processInsertText(
   ) {
     let potentialPath = textToInsert.trim();
     const quoteMatch = potentialPath.match(/^'(.*)'$/);
-    if (quoteMatch) {
+    if (quoteMatch != null) {
       potentialPath = quoteMatch[1];
     }
     potentialPath = potentialPath.trim();
@@ -268,7 +268,7 @@ async function runExternalEditor(params: {
   try {
     setRawMode?.(false);
     const { status, error } = spawnSync(command, args, { stdio: 'inherit' });
-    if (error) throw error;
+    if (error != null) throw error;
     if (typeof status === 'number' && status !== 0)
       throw new Error(`External editor exited with status ${status}`);
 
@@ -364,7 +364,7 @@ export function useTextBuffer({
   const [visualScrollRow, setVisualScrollRow] = useState<number>(0);
 
   useEffect(() => {
-    if (onChange) {
+    if (onChange != null) {
       onChange(text);
     }
   }, [text, onChange]);
@@ -563,7 +563,7 @@ export function useTextBuffer({
   const moveToVisualPosition = useCallback(
     (visRow: number, visCol: number): void => {
       const pos = resolveVisualToLogical(visualLayout, visRow, visCol);
-      if (pos) {
+      if (pos != null) {
         dispatch({ type: 'set_cursor', payload: pos });
       }
     },

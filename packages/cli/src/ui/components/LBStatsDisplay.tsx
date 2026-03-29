@@ -80,7 +80,7 @@ export const LBStatsDisplay: React.FC = () => {
 
   // Check if provider exists and has getStats method
   if (
-    !lbProvider ||
+    lbProvider == null ||
     !('getStats' in lbProvider) ||
     typeof lbProvider.getStats !== 'function'
   ) {

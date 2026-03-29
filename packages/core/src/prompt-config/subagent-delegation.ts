@@ -22,7 +22,7 @@ export async function shouldIncludeSubagentDelegation(
   }
 
   const subagentManager = resolveSubagentManager();
-  if (!subagentManager) {
+  if (subagentManager == null) {
     return false;
   }
 

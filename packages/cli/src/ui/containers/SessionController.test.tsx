@@ -163,7 +163,9 @@ describe('SessionController', () => {
       return React.createElement(
         Text,
         null,
-        contextValue?.appDispatch ? 'Dispatch available' : 'No dispatch',
+        contextValue?.appDispatch != null
+          ? 'Dispatch available'
+          : 'No dispatch',
       );
     };
 

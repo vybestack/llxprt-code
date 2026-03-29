@@ -59,7 +59,7 @@ describe('bugCommand', () => {
       },
     });
 
-    if (!bugCommand.action) throw new Error('Action is not defined');
+    if (bugCommand.action == null) throw new Error('Action is not defined');
     await bugCommand.action(mockContext, 'A test bug');
 
     const expectedInfo = `
@@ -96,7 +96,7 @@ describe('bugCommand', () => {
         },
       },
     });
-    if (!bugCommand.action) throw new Error('Action is not defined');
+    if (bugCommand.action == null) throw new Error('Action is not defined');
     await bugCommand.action(mockContext, 'A custom bug');
 
     const expectedInfo = `

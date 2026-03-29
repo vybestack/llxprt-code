@@ -100,7 +100,7 @@ function createCompletedToolCallResponse(params: {
   agentId?: string;
 }) {
   return {
-    status: params.error ? ('error' as const) : ('success' as const),
+    status: params.error != null ? ('error' as const) : ('success' as const),
     request: {
       callId: params.callId,
       name: 'mock_tool',
@@ -365,7 +365,7 @@ describe('subagent.ts', () => {
         environmentContextLoader: environmentLoader,
       };
 
-      if (options.toolRegistry) {
+      if (options.toolRegistry != null) {
         overrides.toolRegistry = options.toolRegistry;
       }
 
@@ -451,7 +451,8 @@ describe('subagent.ts', () => {
       const generationConfig = callArgs?.[2];
       // Ensure it's defined before proceeding
       expect(generationConfig).toBeDefined();
-      if (!generationConfig) throw new Error('generationConfig is undefined');
+      if (generationConfig == null)
+        throw new Error('generationConfig is undefined');
       return generationConfig as GenerateContentConfig & {
         systemInstruction?: string | Content;
       };

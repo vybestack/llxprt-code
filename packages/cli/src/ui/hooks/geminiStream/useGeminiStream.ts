@@ -146,7 +146,7 @@ export const useGeminiStream = (
 
   const sanitizeContent = useCallback(
     (text: string) => {
-      if (!emojiFilter) {
+      if (emojiFilter == null) {
         return {
           text,
           feedback: undefined as string | undefined,
@@ -178,7 +178,7 @@ export const useGeminiStream = (
   const flushPendingHistoryItem = useCallback(
     (timestamp: number) => {
       const pending = pendingHistoryItemRef.current;
-      if (!pending) {
+      if (pending == null) {
         return;
       }
 
@@ -360,10 +360,10 @@ export const useGeminiStream = (
     }
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
-    if (abortControllerRef.current) {
+    if (abortControllerRef.current != null) {
       cancelAllToolCalls();
     }
-    if (pendingHistoryItemRef.current) {
+    if (pendingHistoryItemRef.current != null) {
       flushPendingHistoryItem(Date.now());
     }
     addItem(
@@ -409,7 +409,7 @@ export const useGeminiStream = (
     }
 
     const next = queuedSubmissionsRef.current.shift();
-    if (!next) {
+    if (next == null) {
       return;
     }
 
@@ -519,7 +519,7 @@ export const useGeminiStream = (
           abortSignal,
         );
         if (status === StreamProcessingStatus.UserCancelled) return;
-        if (pendingHistoryItemRef.current) {
+        if (pendingHistoryItemRef.current != null) {
           flushPendingHistoryItem(userMessageTimestamp);
           setPendingHistoryItem(null);
         }

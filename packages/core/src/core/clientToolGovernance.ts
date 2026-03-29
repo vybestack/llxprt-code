@@ -66,7 +66,7 @@ export function buildToolDeclarationsFromView(
   toolRegistry: ToolRegistry | undefined,
   view: ToolRegistryView,
 ): FunctionDeclaration[] {
-  if (!toolRegistry) {
+  if (toolRegistry == null) {
     return [];
   }
 
@@ -84,7 +84,7 @@ export function buildToolDeclarationsFromView(
     );
     for (const name of allowedNames) {
       const declaration = declarationsByName.get(name);
-      if (declaration) {
+      if (declaration != null) {
         declarations.push(declaration);
       }
     }
@@ -97,11 +97,11 @@ export function buildToolDeclarationsFromView(
     );
     for (const name of allowedNames) {
       const tool = toolsByName.get(name);
-      if (!tool) {
+      if (tool == null) {
         continue;
       }
       const schema = (tool as { schema?: FunctionDeclaration }).schema;
-      if (schema) {
+      if (schema != null) {
         declarations.push(schema);
       }
     }

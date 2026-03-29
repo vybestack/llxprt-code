@@ -85,7 +85,7 @@ export class RefreshCoordinator {
     const key = bucket ? `${provider}:${bucket}` : provider;
 
     const inflight = this.inflightMap.get(key);
-    if (inflight) return inflight;
+    if (inflight != null) return inflight;
 
     const lastRefresh = this.lastRefreshMap.get(key);
     if (lastRefresh !== undefined) {
@@ -122,7 +122,7 @@ export class RefreshCoordinator {
     const { tokenStore, refreshFn } = this.options;
 
     const currentToken = await tokenStore.getToken(provider, bucket);
-    if (!currentToken) {
+    if (currentToken == null) {
       return { status: 'error', error: 'Token not found' };
     }
 

@@ -67,7 +67,7 @@ export class AuthStatusService {
 
         const token = await this.tokenStore.getToken(providerName);
 
-        if (token) {
+        if (token != null) {
           const now = Date.now() / 1000;
           const expiresIn = Math.max(0, Math.floor(token.expiry - now));
           const authenticated = token.expiry > now;
@@ -127,7 +127,7 @@ export class AuthStatusService {
 
     // G1: consult provider override only when OAuth is enabled
     const provider = this.providerRegistry.getProvider(providerName);
-    if (provider?.isAuthenticated) {
+    if (provider?.isAuthenticated != null) {
       try {
         const overrideResult = await provider.isAuthenticated();
         if (overrideResult) {
@@ -144,7 +144,7 @@ export class AuthStatusService {
     }
 
     const token = await this.tokenStore.getToken(providerName, bucket);
-    if (!token) return false;
+    if (token == null) return false;
 
     const now = Date.now() / 1000;
     return token.expiry > now;
@@ -170,7 +170,7 @@ export class AuthStatusService {
     }
 
     const provider = this.providerRegistry.getProvider(providerName);
-    if (!provider) {
+    if (provider == null) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
@@ -195,7 +195,7 @@ export class AuthStatusService {
     // Best-effort provider-side revoke
     if ('logout' in provider && typeof provider.logout === 'function') {
       try {
-        if (tokenForLogout) {
+        if (tokenForLogout != null) {
           await provider.logout(tokenForLogout);
         }
       } catch (error) {
@@ -304,7 +304,7 @@ export class AuthStatusService {
       const token = await this.tokenStore.getToken(provider, bucket);
       const isSessionBucket = bucket === sessionBucket;
 
-      if (token) {
+      if (token != null) {
         const authenticated = token.expiry > now;
         statuses.push({
           bucket,
@@ -364,13 +364,13 @@ export class AuthStatusService {
       // Still attempt scope flush below
     }
 
-    if (providerManager) {
+    if (providerManager != null) {
       const rawProvider = providerManager.getProviderByName(providerName);
       const provider = unwrapLoggingProvider(
         rawProvider as { name: string } | undefined,
       );
 
-      if (!provider) {
+      if (provider == null) {
         logger.debug(
           `Provider ${providerName} not found in runtime manager; skipping cache clear.`,
         );
@@ -431,7 +431,10 @@ export class AuthStatusService {
     runtimeContext: { runtimeId?: string } | undefined,
   ): void {
     const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
-    if (runtimeContext && typeof runtimeContext.runtimeId === 'string') {
+    if (
+      runtimeContext != null &&
+      typeof runtimeContext.runtimeId === 'string'
+    ) {
       if (!knownRuntimeIds.includes(runtimeContext.runtimeId)) {
         knownRuntimeIds.push(runtimeContext.runtimeId);
       }

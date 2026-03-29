@@ -56,7 +56,10 @@ export const useThemeCommand = (
     }
 
     // Check for invalid theme configuration on startup
-    if (effectiveTheme && !themeManager.findThemeByName(effectiveTheme)) {
+    if (
+      effectiveTheme &&
+      themeManager.findThemeByName(effectiveTheme) == null
+    ) {
       appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
       appDispatch({
         type: 'SET_THEME_ERROR',
@@ -121,7 +124,7 @@ export const useThemeCommand = (
         // Only allow selecting themes available in the merged custom themes or built-in themes
         const isBuiltIn = themeManager.findThemeByName(themeName);
         const isCustom = themeName && mergedCustomThemes[themeName];
-        if (!isBuiltIn && !isCustom) {
+        if (isBuiltIn == null && !isCustom) {
           appDispatch({
             type: 'SET_THEME_ERROR',
             payload: `Theme "${themeName}" not found in selected scope.`,
@@ -130,7 +133,7 @@ export const useThemeCommand = (
           return;
         }
         loadedSettings.setValue(scope, 'ui.theme', themeName); // Update the merged settings
-        if (loadedSettings.merged.ui?.customThemes) {
+        if (loadedSettings.merged.ui?.customThemes != null) {
           themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
         }
         applyTheme(loadedSettings.merged.ui?.theme); // Apply the current theme

@@ -43,7 +43,7 @@ function addShellCommandToGeminiHistory(
       ? resultText.substring(0, MAX_OUTPUT_LENGTH) + '\n... (truncated)'
       : resultText;
 
-  if (geminiClient) {
+  if (geminiClient != null) {
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     geminiClient.addHistory({
       role: 'user',
@@ -140,7 +140,7 @@ export const useShellCommandProcessor = (
           tools: [initialToolDisplay],
         };
 
-        if (pendingHistoryItemRef) {
+        if (pendingHistoryItemRef != null) {
           pendingHistoryItemRef.current = initialPendingItem;
         }
         setPendingHistoryItem(initialPendingItem);
@@ -275,7 +275,7 @@ export const useShellCommandProcessor = (
                       tools: [{ ...initialToolDisplay, ptyId: pid }],
                     };
 
-              if (pendingHistoryItemRef) {
+              if (pendingHistoryItemRef != null) {
                 pendingHistoryItemRef.current = nextItem;
               }
 
@@ -301,7 +301,7 @@ export const useShellCommandProcessor = (
               let finalOutput = mainContent;
               let finalStatus = ToolCallStatus.Success;
 
-              if (result.error) {
+              if (result.error != null) {
                 finalStatus = ToolCallStatus.Error;
                 finalOutput = `${result.error.message}\n${finalOutput}`;
               } else if (result.aborted) {

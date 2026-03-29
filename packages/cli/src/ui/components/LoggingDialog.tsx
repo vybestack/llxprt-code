@@ -81,7 +81,7 @@ const formatTokenCount = (tokens?: {
   input?: number;
   output?: number;
 }): string => {
-  if (!tokens) return '';
+  if (tokens == null) return '';
   const parts: string[] = [];
   if (tokens.input) parts.push(`in:${tokens.input}`);
   if (tokens.output) parts.push(`out:${tokens.output}`);
@@ -190,7 +190,7 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
 
     // Format the main content
     let mainContent = '';
-    if (entry.type === 'request' && entry.messages) {
+    if (entry.type === 'request' && entry.messages != null) {
       const lastMessage = entry.messages[entry.messages.length - 1];
       if (lastMessage) {
         mainContent = formatContent(lastMessage.content, contentWidth);
@@ -207,7 +207,7 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
         toolContent += ' FAILED';
       }
       // Add git stats if present
-      if (entry.gitStats) {
+      if (entry.gitStats != null) {
         const { linesAdded, linesRemoved, filesChanged } = entry.gitStats;
         toolContent += ` [+${linesAdded} -${linesRemoved} in ${filesChanged} files]`;
       }

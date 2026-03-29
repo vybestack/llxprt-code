@@ -59,7 +59,7 @@ export const CacheStatsDisplay: React.FC = () => {
       }
     ).getCacheStatistics?.() ?? null;
 
-  if (!cacheStats) {
+  if (cacheStats == null) {
     return (
       <Box
         borderStyle="round"
