@@ -86,6 +86,7 @@ export interface UIStateParams {
   providerOptions: string[];
   selectedProvider: string;
   currentModel: string;
+  contextLimit: number | undefined;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: AnyDeclarativeTool[];
@@ -287,6 +288,7 @@ function buildDialogData(p: UIStateParams) {
     providerOptions: p.providerOptions,
     selectedProvider: p.selectedProvider,
     currentModel: p.currentModel,
+    contextLimit: p.contextLimit,
     profiles: p.profiles,
     toolsDialogAction: p.toolsDialogAction,
     toolsDialogTools: p.toolsDialogTools,

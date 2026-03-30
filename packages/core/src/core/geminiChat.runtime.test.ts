@@ -544,4 +544,101 @@ describe('GeminiChat runtime context', () => {
     expect(anthropicCalls).toHaveLength(1);
     expect(settingsService.get('activeProvider')).toBe('openai');
   });
+
+  it.each([
+    {
+      label: 'stopReason',
+      metadata: { stopReason: 'end_turn' },
+    },
+    {
+      label: 'finishReason',
+      metadata: { finishReason: 'stop' },
+    },
+  ])(
+    'coalesces $label metadata into a terminal Finished event in Turn stream',
+    async ({ metadata }) => {
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: vi.fn(async function* (
+          _options: GenerateChatOptions,
+        ) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'first chunk' }],
+          };
+          yield {
+            speaker: 'ai',
+            blocks: [],
+            metadata,
+          };
+        }),
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+        getAuthToken: vi.fn(async () => 'stub-auth-token'),
+      };
+
+      manager.registerProvider(provider);
+
+      const runtimeState = createAgentRuntimeState({
+        runtimeId: 'runtime-test',
+        provider: provider.name,
+        model: config.getModel(),
+        sessionId: config.getSessionId(),
+      });
+      const historyService = new HistoryService();
+      const view = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 128000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+          'reasoning.includeInContext': true,
+        },
+        provider: createProviderAdapterFromManager(config.getProviderManager()),
+        telemetry: createTelemetryAdapterFromConfig(config),
+        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+        providerRuntime: { ...providerRuntime },
+      });
+
+      const chat = new GeminiChat(
+        view,
+        {} as unknown as ContentGenerator,
+        {},
+        [],
+      );
+      const { Turn, GeminiEventType } = await import('./turn.js');
+      const turn = new Turn(chat, 'prompt-123');
+
+      const events = [] as Array<{ type: string; value?: unknown }>;
+      for await (const event of turn.run(
+        [{ text: 'Hello there!' }] as Part[],
+        new AbortController().signal,
+      )) {
+        events.push({
+          type: event.type,
+          value: 'value' in event ? event.value : undefined,
+        });
+      }
+
+      const contentEvents = events.filter(
+        (event) => event.type === GeminiEventType.Content,
+      );
+      expect(contentEvents).toHaveLength(1);
+      expect(contentEvents[0].value).toBe('first chunk');
+
+      const finishedEvents = events.filter(
+        (event) => event.type === GeminiEventType.Finished,
+      );
+      expect(finishedEvents).toHaveLength(1);
+      expect(finishedEvents[0].value).toMatchObject({ reason: 'STOP' });
+    },
+  );
 });

@@ -104,8 +104,10 @@ describe('run_shell_command', () => {
     rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
 
     // Use 'wc' directly — the fake response fixture always emits 'wc -l'
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
       args: ['--allowed-tools=run_shell_command(wc)'],
+      stdin: 'Count lines in test.txt',
       yolo: false,
     });
 
@@ -142,8 +144,10 @@ describe('run_shell_command', () => {
 
     rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
 
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
-      args: '--allowed-tools=run_shell_command',
+      args: ['--allowed-tools=run_shell_command'],
+      stdin: 'Count lines in test.txt',
       yolo: false,
     });
 
@@ -215,8 +219,10 @@ describe('run_shell_command', () => {
     rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
 
     // Use 'wc' directly — the fake response fixture always emits 'wc -l'
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
-      args: '--allowed-tools=ShellTool(wc)',
+      args: ['--allowed-tools=ShellTool(wc)'],
+      stdin: 'Count lines in test.txt',
       yolo: false,
     });
 
@@ -252,11 +258,13 @@ describe('run_shell_command', () => {
     });
 
     // Use 'wc' directly — the fake response fixture always emits 'wc -l'
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
       args: [
         '--allowed-tools=run_shell_command(wc)',
         '--allowed-tools=run_shell_command(ls)',
       ],
+      stdin: 'List files and count lines',
       yolo: false,
     });
 

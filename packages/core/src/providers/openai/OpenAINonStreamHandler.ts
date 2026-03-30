@@ -33,6 +33,7 @@ import {
   sanitizeToolArgumentsString,
   extractKimiToolCallsFromText,
 } from './OpenAIResponseParser.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 
 export interface NonStreamHandlerDeps {
   toolCallPipeline: ToolCallPipeline;
@@ -185,6 +186,8 @@ export async function* handleNonStreamingResponse(
   }
 
   // Emit the complete response
+  const stopReason = mapFinishReasonToStopReason(choice.finish_reason);
+
   if (blocks.length > 0) {
     const responseContent: IContent = {
       speaker: 'ai',
@@ -205,7 +208,10 @@ export async function* handleNonStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
       };
+    } else if (stopReason) {
+      responseContent.metadata = { stopReason };
     }
 
     // Propagate terminal metadata so downstream turn handling and telemetry
@@ -237,6 +243,7 @@ export async function* handleNonStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
       },
     };
 
@@ -257,6 +264,12 @@ export async function* handleNonStreamingResponse(
         stopReason: choice.finish_reason,
         finishReason: choice.finish_reason,
       },
+    } as IContent;
+  } else if (stopReason) {
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: { stopReason },
     } as IContent;
   }
 }

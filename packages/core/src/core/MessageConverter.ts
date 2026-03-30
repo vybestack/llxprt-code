@@ -488,16 +488,15 @@ export function applyResponseMetadata(
     response.usageMetadata = usageMetadata;
   }
 
-  // Map stopReason and/or finishReason to Gemini finishReason
-  // (issue #1844): providers may emit either field; honor both.
-  const inputStopReason = input.metadata?.stopReason;
-  const inputFinishReason = input.metadata?.finishReason;
+  // Map terminal metadata to Gemini finishReason.
+  // Providers may emit stopReason (Anthropic/Gemini-style) or
+  // finishReason (OpenAI-style); coalesce them to a single lookup path.
+  const terminationReason =
+    input.metadata?.stopReason ?? input.metadata?.finishReason;
 
-  if ((inputStopReason || inputFinishReason) && response.candidates?.[0]) {
-    // Build a unified mapping table covering Anthropic-style stop reasons,
-    // OpenAI-style finish reasons, and Responses API statuses.
-    const finishReasonMap: Record<string, FinishReason> = {
-      // Anthropic-style stopReason values
+  if (terminationReason && response.candidates?.[0]) {
+    const finishReasonByTerminationReason: Record<string, FinishReason> = {
+      // Anthropic/Gemini-style values
       end_turn: FinishReason.STOP,
       max_tokens: FinishReason.MAX_TOKENS,
       stop_sequence: FinishReason.STOP,
@@ -505,7 +504,7 @@ export function applyResponseMetadata(
       pause_turn: FinishReason.STOP,
       refusal: FinishReason.STOP,
       model_context_window_exceeded: FinishReason.MAX_TOKENS,
-      // OpenAI-style finishReason values
+      // OpenAI Chat Completions-style values
       stop: FinishReason.STOP,
       length: FinishReason.MAX_TOKENS,
       tool_calls: FinishReason.STOP,
@@ -515,12 +514,7 @@ export function applyResponseMetadata(
       incomplete: FinishReason.MAX_TOKENS,
       failed: FinishReason.STOP,
     };
-
-    // Prefer stopReason (Anthropic/Gemini native) over finishReason (OpenAI)
-    const mappedReason =
-      (inputStopReason && finishReasonMap[inputStopReason]) ??
-      (inputFinishReason && finishReasonMap[inputFinishReason]);
-
+    const mappedReason = finishReasonByTerminationReason[terminationReason];
     if (mappedReason) {
       response.candidates[0].finishReason = mappedReason;
     }

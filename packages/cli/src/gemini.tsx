@@ -348,7 +348,8 @@ export async function main() {
   // but no listeners are registered yet, so yargs output would be lost.
   const rawArgs = process.argv.slice(2);
   if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
-    debugLogger.log(await getCliVersion());
+    writeToStdout(`${await getCliVersion()}
+`);
     process.exit(0);
   }
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {

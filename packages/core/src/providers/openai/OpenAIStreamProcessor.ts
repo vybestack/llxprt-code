@@ -40,6 +40,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 import { type ToolFormat } from '../../tools/IToolFormatter.js';
 
 export interface StreamProcessorDeps {
@@ -566,6 +567,8 @@ export async function* processStreamingResponse(
         blocks: combinedBlocks,
       };
 
+      const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+
       if (state.streamingUsage) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
         combinedContent.metadata = {
@@ -580,7 +583,10 @@ export async function* processStreamingResponse(
             cacheCreationTokens: cacheMetrics.cacheCreationTokens,
             cacheMissTokens: cacheMetrics.cacheMissTokens,
           },
+          ...(stopReason && { stopReason }),
         };
+      } else if (stopReason) {
+        combinedContent.metadata = { stopReason };
       }
 
       // Propagate terminal metadata so downstream turn handling and telemetry
@@ -605,6 +611,7 @@ export async function* processStreamingResponse(
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
     const cacheMetrics = extractCacheMetrics(state.streamingUsage);
+    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
     const metaOnlyContent: IContent = {
       speaker: 'ai',
       blocks: [],
@@ -620,6 +627,7 @@ export async function* processStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
       },
     };
 
