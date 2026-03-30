@@ -34,6 +34,24 @@ import {
   extractKimiToolCallsFromText,
 } from './OpenAIResponseParser.js';
 
+/**
+ * Map OpenAI finish_reason to the stopReason format expected by MessageConverter.
+ * OpenAI values: stop, length, tool_calls, content_filter
+ * MessageConverter expects: end_turn, max_tokens, stop_sequence, tool_use, etc.
+ */
+function mapFinishReasonToStopReason(
+  finishReason: string | null | undefined,
+): string | undefined {
+  if (!finishReason) return undefined;
+  const mapping: Record<string, string> = {
+    stop: 'end_turn',
+    length: 'max_tokens',
+    tool_calls: 'tool_use',
+    content_filter: 'end_turn',
+  };
+  return mapping[finishReason] ?? finishReason;
+}
+
 export interface NonStreamHandlerDeps {
   toolCallPipeline: ToolCallPipeline;
   textToolParser: GemmaToolCallParser;
@@ -185,6 +203,8 @@ export async function* handleNonStreamingResponse(
   }
 
   // Emit the complete response
+  const stopReason = mapFinishReasonToStopReason(choice.finish_reason);
+
   if (blocks.length > 0) {
     const responseContent: IContent = {
       speaker: 'ai',
@@ -205,7 +225,10 @@ export async function* handleNonStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
       };
+    } else if (stopReason) {
+      responseContent.metadata = { stopReason };
     }
 
     yield responseContent;
@@ -227,7 +250,14 @@ export async function* handleNonStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
       },
+    } as IContent;
+  } else if (stopReason) {
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: { stopReason },
     } as IContent;
   }
 }

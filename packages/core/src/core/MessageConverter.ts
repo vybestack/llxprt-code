@@ -491,6 +491,7 @@ export function applyResponseMetadata(
   // Map stopReason to finishReason
   if (input.metadata?.stopReason && response.candidates?.[0]) {
     const finishReasonByStopReason: Record<string, FinishReason> = {
+      // Anthropic-style values
       end_turn: FinishReason.STOP,
       max_tokens: FinishReason.MAX_TOKENS,
       stop_sequence: FinishReason.STOP,
@@ -498,6 +499,11 @@ export function applyResponseMetadata(
       pause_turn: FinishReason.STOP,
       refusal: FinishReason.STOP,
       model_context_window_exceeded: FinishReason.MAX_TOKENS,
+      // OpenAI-style values (for robustness if passed through unmapped)
+      stop: FinishReason.STOP,
+      length: FinishReason.MAX_TOKENS,
+      tool_calls: FinishReason.STOP,
+      content_filter: FinishReason.STOP,
     };
     const finishReason = finishReasonByStopReason[input.metadata.stopReason];
     if (finishReason) {

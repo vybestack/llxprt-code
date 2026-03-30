@@ -67,6 +67,24 @@ interface StreamingState {
   allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[];
 }
 
+/**
+ * Map OpenAI finish_reason to the stopReason format expected by MessageConverter.
+ * OpenAI values: stop, length, tool_calls, content_filter
+ * MessageConverter expects: end_turn, max_tokens, stop_sequence, tool_use, etc.
+ */
+function mapFinishReasonToStopReason(
+  finishReason: string | null | undefined,
+): string | undefined {
+  if (!finishReason) return undefined;
+  const mapping: Record<string, string> = {
+    stop: 'end_turn',
+    length: 'max_tokens',
+    tool_calls: 'tool_use',
+    content_filter: 'end_turn',
+  };
+  return mapping[finishReason] ?? finishReason;
+}
+
 function createStreamingState(): StreamingState {
   return {
     accumulatedText: '',
@@ -564,6 +582,8 @@ export async function* processStreamingResponse(
         blocks: combinedBlocks,
       };
 
+      const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+
       if (state.streamingUsage) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
         combinedContent.metadata = {
@@ -578,7 +598,10 @@ export async function* processStreamingResponse(
             cacheCreationTokens: cacheMetrics.cacheCreationTokens,
             cacheMissTokens: cacheMetrics.cacheMissTokens,
           },
+          ...(stopReason && { stopReason }),
         };
+      } else if (stopReason) {
+        combinedContent.metadata = { stopReason };
       }
 
       yield combinedContent;
@@ -592,6 +615,7 @@ export async function* processStreamingResponse(
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
     const cacheMetrics = extractCacheMetrics(state.streamingUsage);
+    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
     yield {
       speaker: 'ai',
       blocks: [],
@@ -607,6 +631,7 @@ export async function* processStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
       },
     } as IContent;
   }
