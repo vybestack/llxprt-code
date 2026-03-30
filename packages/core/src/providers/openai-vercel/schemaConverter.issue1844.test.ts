@@ -6,28 +6,27 @@
 
 /**
  * Regression tests for issue #1844:
- * OpenAI-Vercel schema converter should fall back to `parameters` when
- * `parametersJsonSchema` is absent — subagent declarations set `parameters`.
+ * OpenAI-Vercel schema converter should consume `parametersJsonSchema` directly.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
 
 let convertToolsToOpenAIVercel: typeof import('./schemaConverter.js').convertToolsToOpenAIVercel;
 
-describe('issue #1844 – OpenAI-Vercel schema converter fallback', () => {
+describe('issue #1844 – OpenAI-Vercel schema converter schema source', () => {
   beforeAll(async () => {
     const mod = await import('./schemaConverter.js');
     convertToolsToOpenAIVercel = mod.convertToolsToOpenAIVercel;
   });
 
-  it('should use parameters when parametersJsonSchema is absent (subagent path)', () => {
+  it('should use parametersJsonSchema when present', () => {
     const tools = [
       {
         functionDeclarations: [
           {
             name: 'write_file',
             description: 'Write a file to disk',
-            parameters: {
+            parametersJsonSchema: {
               type: 'object',
               properties: {
                 path: { type: 'string', description: 'File path' },
@@ -50,25 +49,19 @@ describe('issue #1844 – OpenAI-Vercel schema converter fallback', () => {
     );
   });
 
-  it('should prefer parametersJsonSchema when both are present', () => {
+  it('should return valid empty schema when parametersJsonSchema is absent', () => {
     const tools = [
       {
         functionDeclarations: [
           {
-            name: 'my_tool',
-            description: 'A tool',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                query: { type: 'string' },
-              },
-              required: ['query'],
-            },
+            name: 'no_schema_tool',
+            description: 'No schema',
             parameters: {
               type: 'object',
               properties: {
-                other: { type: 'string' },
+                ignored: { type: 'string' },
               },
+              required: ['ignored'],
             },
           },
         ],
@@ -77,6 +70,10 @@ describe('issue #1844 – OpenAI-Vercel schema converter fallback', () => {
 
     const result = convertToolsToOpenAIVercel(tools);
     expect(result).toBeDefined();
-    expect(result![0].function.parameters?.properties).toHaveProperty('query');
+    expect(result![0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+      required: [],
+    });
   });
 });

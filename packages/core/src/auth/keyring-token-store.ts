@@ -38,6 +38,7 @@ const DEFAULT_BUCKET = 'default';
 const DEFAULT_LOCK_WAIT_MS = 10_000;
 const DEFAULT_STALE_THRESHOLD_MS = 30_000;
 const LOCK_POLL_INTERVAL_MS = 100;
+const LOCK_WRITE_GRACE_MS = 750;
 
 /** Lazily resolved to avoid crashing when homedir() is undefined at import time. */
 let _lockDir: string | undefined;
@@ -163,7 +164,22 @@ export class KeyringTokenStore implements TokenStore {
           flag: 'wx',
           mode: 0o600,
         });
-        return true;
+
+        // Verify we actually hold the lock (defense against race conditions
+        // where multiple clients might simultaneously write the lock file)
+        try {
+          const content = await fs.readFile(lockPath, 'utf8');
+          const existing = JSON.parse(content) as {
+            pid: number;
+            timestamp: number;
+          };
+          if (existing.pid === process.pid) {
+            return true;
+          }
+          // Another process won the race - continue waiting
+        } catch {
+          // Lock file disappeared or is corrupt - continue to retry
+        }
       } catch (writeError) {
         const err = writeError as NodeJS.ErrnoException;
         if (err.code !== 'EEXIST') {
@@ -180,6 +196,21 @@ export class KeyringTokenStore implements TokenStore {
         };
         const lockAge = Date.now() - existing.timestamp;
 
+        // Treat very recent lock files with invalid/zero pid as in-flight writes.
+        // On some CI file systems we can briefly observe a partially visible lock
+        // file right after creation; do not break those immediately.
+        const hasValidPid =
+          typeof existing.pid === 'number' &&
+          Number.isInteger(existing.pid) &&
+          existing.pid > 0;
+        const isRecentInFlightWrite =
+          !hasValidPid && lockAge <= LOCK_WRITE_GRACE_MS;
+
+        if (isRecentInFlightWrite) {
+          await sleep(LOCK_POLL_INTERVAL_MS);
+          continue;
+        }
+
         if (lockAge > staleMs) {
           // Stale lock — break it
           try {
@@ -190,7 +221,20 @@ export class KeyringTokenStore implements TokenStore {
           continue;
         }
       } catch {
-        // Lock file unreadable or corrupt — break it
+        // Lock file unreadable or corrupt.
+        // A just-created lock can be observed mid-write on some file systems;
+        // give it a short grace window before treating it as truly corrupt.
+        try {
+          const stat = await fs.stat(lockPath);
+          const fileAge = Date.now() - stat.mtimeMs;
+          if (fileAge <= LOCK_WRITE_GRACE_MS) {
+            await sleep(LOCK_POLL_INTERVAL_MS);
+            continue;
+          }
+        } catch {
+          // Ignore stat errors and fall through to unlink attempt.
+        }
+
         try {
           await fs.unlink(lockPath);
         } catch {

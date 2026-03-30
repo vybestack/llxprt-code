@@ -135,10 +135,9 @@ export function createToolRegistryViewFromRegistry(
           : typeof (tool as { description?: string }).description === 'string'
             ? (tool as { description: string }).description
             : '';
-      const parameterSchema =
-        (schema as { parameters?: Record<string, unknown> })?.parameters ??
-        (schema as { parametersJsonSchema?: Record<string, unknown> })
-          ?.parametersJsonSchema;
+      const parameterSchema = (
+        schema as { parametersJsonSchema?: Record<string, unknown> }
+      )?.parametersJsonSchema;
 
       return {
         name: (tool as { name?: string }).name ?? name,

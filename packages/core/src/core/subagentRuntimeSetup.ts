@@ -75,24 +75,15 @@ export function convertMetadataToFunctionDeclaration(
 
   const parameterType = (rawSchema.type as Type | undefined) ?? Type.OBJECT;
   const parameterProperties = { ...properties };
-  const parameters = {
-    ...rawSchema,
-    type: parameterType,
-    properties: parameterProperties,
-  } as FunctionDeclaration['parameters'];
   const parametersJsonSchema: Record<string, unknown> = {
     ...rawSchema,
     type: parameterType,
-    properties: { ...parameterProperties },
+    properties: parameterProperties,
   };
 
-  // Issue #1844: Populate parametersJsonSchema alongside parameters so
-  // OpenAI and OpenAI-Vercel converters (which read parametersJsonSchema
-  // exclusively) receive a valid schema for subagent/runtime tool declarations.
   return {
     name: metadata.name ?? fallbackName,
     description: metadata.description ?? '',
-    parameters,
     parametersJsonSchema,
   };
 }
@@ -308,7 +299,7 @@ export function getScopeLocalFuncDefs(
     name: 'self_emitvalue',
     description: `* This tool emits A SINGLE return value from this execution, such that it can be collected and presented to the calling function.
         * You can only emit ONE VALUE each time you call this tool. You are expected to call this tool MULTIPLE TIMES if you have MULTIPLE OUTPUTS.`,
-    parameters: {
+    parametersJsonSchema: {
       type: Type.OBJECT,
       properties: {
         emit_variable_name: {

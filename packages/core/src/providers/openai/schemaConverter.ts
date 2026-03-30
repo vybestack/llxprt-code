@@ -66,7 +66,6 @@ interface GeminiToolDeclaration {
   name: string;
   description?: string;
   parametersJsonSchema?: unknown;
-  parameters?: unknown;
 }
 
 /**
@@ -261,11 +260,7 @@ export function convertToolsToOpenAI(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
-      // Try parametersJsonSchema first, fall back to parameters
-      // (subagent tools use `parameters`, foreground tools use `parametersJsonSchema`)
-      const parameters = convertSchemaToOpenAI(
-        decl.parametersJsonSchema ?? decl.parameters,
-      );
+      const parameters = convertSchemaToOpenAI(decl.parametersJsonSchema);
 
       openAITools.push({
         type: 'function',

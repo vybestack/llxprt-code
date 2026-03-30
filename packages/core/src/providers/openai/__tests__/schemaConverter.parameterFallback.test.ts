@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { convertToolsToOpenAI } from '../schemaConverter.js';
 
-describe('convertToolsToOpenAI — parametersJsonSchema / parameters fallback', () => {
-  it('uses parametersJsonSchema when present (foreground tools)', () => {
+describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
+  it('uses parametersJsonSchema when present', () => {
     const tools = [
       {
         functionDeclarations: [
@@ -30,7 +30,7 @@ describe('convertToolsToOpenAI — parametersJsonSchema / parameters fallback', 
     expect(result![0].function.parameters.required).toContain('path');
   });
 
-  it('falls back to parameters when parametersJsonSchema is absent (subagent tools)', () => {
+  it('returns empty schema when parametersJsonSchema is absent', () => {
     const tools = [
       {
         functionDeclarations: [
@@ -55,12 +55,11 @@ describe('convertToolsToOpenAI — parametersJsonSchema / parameters fallback', 
     expect(result).toBeDefined();
     expect(result).toHaveLength(1);
     expect(result![0].function.name).toBe('search_code');
-    // The key assertion: parameters must NOT be empty
-    expect(result![0].function.parameters.properties).toHaveProperty('query');
-    expect(result![0].function.parameters.properties).toHaveProperty(
-      'maxResults',
-    );
-    expect(result![0].function.parameters.required).toContain('query');
+    expect(result![0].function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+      required: [],
+    });
   });
 
   it('returns empty schema only when neither field is present', () => {
@@ -83,7 +82,7 @@ describe('convertToolsToOpenAI — parametersJsonSchema / parameters fallback', 
     expect(result![0].function.parameters.properties).toEqual({});
   });
 
-  it('prefers parametersJsonSchema over parameters when both are present', () => {
+  it('uses parametersJsonSchema when both fields are present', () => {
     const tools = [
       {
         functionDeclarations: [
@@ -120,30 +119,30 @@ describe('convertToolsToOpenAI — parametersJsonSchema / parameters fallback', 
     );
   });
 
-  it('handles mixed tool groups (foreground + subagent style)', () => {
+  it('handles mixed tool groups with and without parametersJsonSchema', () => {
     const tools = [
       {
         functionDeclarations: [
           {
-            name: 'foreground_tool',
+            name: 'schema_tool',
             description: 'Uses parametersJsonSchema',
             parametersJsonSchema: {
               type: 'object',
               properties: {
-                fg_param: { type: 'string' },
+                schema_param: { type: 'string' },
               },
-              required: ['fg_param'],
+              required: ['schema_param'],
             },
           },
           {
-            name: 'subagent_tool',
-            description: 'Uses parameters only',
+            name: 'legacy_tool',
+            description: 'Missing parametersJsonSchema',
             parameters: {
               type: 'object',
               properties: {
-                sa_param: { type: 'number' },
+                legacy_param: { type: 'number' },
               },
-              required: ['sa_param'],
+              required: ['legacy_param'],
             },
           },
         ],
@@ -155,10 +154,16 @@ describe('convertToolsToOpenAI — parametersJsonSchema / parameters fallback', 
     expect(result).toBeDefined();
     expect(result).toHaveLength(2);
 
-    const fgTool = result!.find((t) => t.function.name === 'foreground_tool');
-    const saTool = result!.find((t) => t.function.name === 'subagent_tool');
+    const schemaTool = result!.find((t) => t.function.name === 'schema_tool');
+    const legacyTool = result!.find((t) => t.function.name === 'legacy_tool');
 
-    expect(fgTool!.function.parameters.properties).toHaveProperty('fg_param');
-    expect(saTool!.function.parameters.properties).toHaveProperty('sa_param');
+    expect(schemaTool!.function.parameters.properties).toHaveProperty(
+      'schema_param',
+    );
+    expect(legacyTool!.function.parameters).toEqual({
+      type: 'object',
+      properties: {},
+      required: [],
+    });
   });
 });

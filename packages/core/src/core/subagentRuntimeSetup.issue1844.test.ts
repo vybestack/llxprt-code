@@ -6,9 +6,8 @@
 
 /**
  * Regression tests for issue #1844:
- * Subagent/runtime tool declarations must populate both `parameters` (Gemini)
- * and `parametersJsonSchema` (OpenAI/OpenAI-Vercel) so downstream converters
- * don't see empty schemas.
+ * Subagent/runtime tool declarations must populate `parametersJsonSchema`
+ * so downstream converters don't see empty schemas.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -31,7 +30,7 @@ describe('issue #1844 – subagent tool schema regression', () => {
       mod.convertMetadataToFunctionDeclaration;
   }, 30000);
 
-  it('should populate parametersJsonSchema alongside parameters for OpenAI converters', () => {
+  it('should populate parametersJsonSchema for OpenAI converters', () => {
     const metadata = {
       name: 'read_file',
       description: 'Read a file',
@@ -46,11 +45,6 @@ describe('issue #1844 – subagent tool schema regression', () => {
 
     const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
 
-    // Gemini path uses `parameters`
-    expect(decl.parameters).toBeDefined();
-    expect(decl.parameters?.properties).toHaveProperty('path');
-
-    // OpenAI / OpenAI-Vercel converters read `parametersJsonSchema`
     expect(
       (decl as unknown as { parametersJsonSchema?: unknown })
         .parametersJsonSchema,
@@ -59,10 +53,6 @@ describe('issue #1844 – subagent tool schema regression', () => {
       (decl as unknown as { parametersJsonSchema?: Record<string, unknown> })
         .parametersJsonSchema?.properties,
     ).toHaveProperty('path');
-    expect(
-      (decl as unknown as { parametersJsonSchema?: Record<string, unknown> })
-        .parametersJsonSchema,
-    ).not.toBe(decl.parameters);
   });
 
   it('should still provide parametersJsonSchema when parameterSchema is absent', () => {
@@ -72,9 +62,6 @@ describe('issue #1844 – subagent tool schema regression', () => {
     };
 
     const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
-
-    // Should still provide both fields (even if empty)
-    expect(decl.parameters).toBeDefined();
 
     // parametersJsonSchema should be present (even if minimal) so converters
     // don't skip the tool entirely
