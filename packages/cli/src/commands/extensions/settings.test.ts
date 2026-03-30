@@ -314,6 +314,7 @@ describe('extensionConfig gate (settings)', () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
+    const originalExitCode = process.exitCode;
 
     const parser = yargs([]).command(listCommand).fail(false);
     await parser.parseAsync('list myext');
@@ -323,7 +324,33 @@ describe('extensionConfig gate (settings)', () => {
     );
     expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
     expect(mockGetEnvContents).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
 
+    process.exitCode = originalExitCode;
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should block list when experimental.extensionConfig is not set', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {},
+    });
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const originalExitCode = process.exitCode;
+
+    const parser = yargs([]).command(listCommand).fail(false);
+    await parser.parseAsync('list myext');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Extension configuration is currently disabled'),
+    );
+    expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+    expect(mockGetEnvContents).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = originalExitCode;
     consoleErrorSpy.mockRestore();
   });
 

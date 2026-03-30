@@ -271,6 +271,7 @@ export async function runVerificationPass(
   initialSummary: string,
 ): Promise<string> {
   const verificationRequest: IContent[] = [
+    COMPRESSION_SECURITY_PREAMBLE,
     {
       speaker: 'human',
       blocks: [
@@ -320,7 +321,8 @@ export async function runVerificationPass(
     if (
       trimmed &&
       trimmed !== 'VERIFIED' &&
-      trimmed.includes('<state_snapshot>')
+      trimmed.includes('<state_snapshot>') &&
+      trimmed.includes('</state_snapshot>')
     ) {
       return trimmed;
     }

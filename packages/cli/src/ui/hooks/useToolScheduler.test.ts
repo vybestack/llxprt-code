@@ -846,7 +846,10 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    const details = waitingCall.confirmationDetails as Extract<typeof waitingCall.confirmationDetails, { onConfirm: unknown }>;
+    const details = waitingCall.confirmationDetails as Extract<
+      typeof waitingCall.confirmationDetails,
+      { onConfirm: unknown }
+    >;
     const onConfirm = details.onConfirm;
     expect(onConfirm).toBeDefined();
 
@@ -922,7 +925,10 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    const details = waitingCall.confirmationDetails as Extract<typeof waitingCall.confirmationDetails, { onConfirm: unknown }>;
+    const details = waitingCall.confirmationDetails as Extract<
+      typeof waitingCall.confirmationDetails,
+      { onConfirm: unknown }
+    >;
     const onConfirm = details.onConfirm;
 
     // Cancel the confirmation

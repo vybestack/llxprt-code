@@ -3133,7 +3133,7 @@ describe('useGeminiStream', () => {
       const { result } = renderWithMcp('in_progress', 2);
 
       await act(async () => {
-        void result.current.submitQuery('hello world');
+        await result.current.submitQuery('hello world');
       });
 
       expect(mockAddItem).toHaveBeenCalledWith(
@@ -3150,7 +3150,7 @@ describe('useGeminiStream', () => {
       const { result } = renderWithMcp('completed', 2);
 
       await act(async () => {
-        void result.current.submitQuery('hello world');
+        await result.current.submitQuery('hello world');
       });
 
       expect(mockAddItem).not.toHaveBeenCalledWith(
@@ -3167,7 +3167,7 @@ describe('useGeminiStream', () => {
       const { result } = renderWithMcp('in_progress', 0, {});
 
       await act(async () => {
-        void result.current.submitQuery('hello world');
+        await result.current.submitQuery('hello world');
       });
 
       expect(mockAddItem).not.toHaveBeenCalledWith(
@@ -3184,7 +3184,7 @@ describe('useGeminiStream', () => {
       const { result } = renderWithMcp('in_progress', 2);
 
       await act(async () => {
-        void result.current.submitQuery('/help');
+        await result.current.submitQuery('/help');
       });
 
       expect(mockAddItem).not.toHaveBeenCalledWith(
@@ -3262,7 +3262,7 @@ describe('useGeminiStream', () => {
       );
 
       await act(async () => {
-        void result.current.submitQuery('hello world');
+        await result.current.submitQuery('hello world');
       });
 
       expect(mockAddItem).not.toHaveBeenCalledWith(
@@ -3279,7 +3279,7 @@ describe('useGeminiStream', () => {
       const { result } = renderWithMcp('not_started', 2);
 
       await act(async () => {
-        void result.current.submitQuery('hello world');
+        await result.current.submitQuery('hello world');
       });
 
       expect(mockAddItem).toHaveBeenCalledWith(
@@ -3296,7 +3296,7 @@ describe('useGeminiStream', () => {
       const { result } = renderWithMcp('in_progress', 2);
 
       await act(async () => {
-        void result.current.submitQuery('continuation query', {
+        await result.current.submitQuery('continuation query', {
           isContinuation: true,
         });
       });

@@ -86,7 +86,7 @@ export async function installSkill(
   requestConsent: (
     skills: SkillDefinition[],
     targetDir: string,
-  ) => Promise<boolean> = () => Promise.resolve(true),
+  ) => Promise<boolean>,
 ): Promise<Array<{ name: string; location: string }>> {
   let sourcePath = source;
   let tempDirToClean: string | undefined = undefined;

@@ -104,19 +104,22 @@ function resolveFiltering(
 ): Pick<ContextResolutionResult, 'fileFiltering' | 'memoryFileFiltering'> & {
   fileService: FileDiscoveryService;
 } {
-  const memoryFileFiltering = {
-    ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-    ...profileMergedSettings.fileFiltering,
-  };
-
   const { enableFuzzySearch, ...fileFilteringFromSettings } =
     profileMergedSettings.fileFiltering ?? {};
+
+  const disableFuzzySearch =
+    typeof enableFuzzySearch === 'boolean' ? !enableFuzzySearch : false;
+
+  const memoryFileFiltering = {
+    ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+    ...fileFilteringFromSettings,
+    disableFuzzySearch,
+  };
 
   const fileFiltering = {
     ...DEFAULT_FILE_FILTERING_OPTIONS,
     ...fileFilteringFromSettings,
-    disableFuzzySearch:
-      typeof enableFuzzySearch === 'boolean' ? !enableFuzzySearch : false,
+    disableFuzzySearch,
   };
 
   // Set the context filename BEFORE loading memory

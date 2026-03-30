@@ -2694,12 +2694,12 @@ describe('Transformation Utilities', () => {
         { initialProps: { vp: viewport } },
       );
 
-      const originalLayout = result.current.visualLayout;
+      const originalLayout = result.current.allVisualLines;
 
       // Shrink viewport to force wrapping change
       rerender({ vp: { width: 10, height: 24 } });
 
-      expect(result.current.visualLayout).not.toBe(originalLayout);
+      expect(result.current.allVisualLines).not.toBe(originalLayout);
       expect(result.current.allVisualLines.length).toBeGreaterThan(1);
     });
 

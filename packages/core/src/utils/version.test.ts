@@ -4,11 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, afterEach } from 'vitest';
 import { getCoreVersion } from './version.js';
 import * as packageModule from './package.js';
 
 describe('getCoreVersion', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('should return the version from package.json', async () => {
     vi.spyOn(packageModule, 'getPackageJson').mockResolvedValue({
       name: '@vybestack/llxprt-code-core',

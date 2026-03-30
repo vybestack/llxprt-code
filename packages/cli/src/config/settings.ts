@@ -1044,6 +1044,18 @@ export function migrateDeprecatedSettings(
           newRoot['enableAutoUpdateNotification'],
         );
       }
+      if (removeDeprecated) {
+        loadedSettings.setValue(
+          scope,
+          'disableAutoUpdate' as keyof Settings,
+          undefined,
+        );
+        loadedSettings.setValue(
+          scope,
+          'disableUpdateNag' as keyof Settings,
+          undefined,
+        );
+      }
       anyModified = true;
     }
 

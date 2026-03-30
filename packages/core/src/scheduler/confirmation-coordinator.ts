@@ -424,6 +424,8 @@ export class ConfirmationCoordinator {
         );
       }
       this.pendingConfirmations.delete(response.correlationId);
+      this.statusMutator.setOutcome(callId, ToolConfirmationOutcome.Cancel);
+      void this.handleCancellation(callId);
       return;
     }
 

@@ -467,6 +467,7 @@ describe('extensions config command', () => {
       const consoleErrorSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
+      const originalExitCode = process.exitCode;
 
       const parser = yargs([]).command(configCommand).fail(false);
       await parser.parseAsync('config test-ext TEST_VAR');
@@ -478,7 +479,9 @@ describe('extensions config command', () => {
       );
       expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
       expect(mockUpdateSetting).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
 
+      process.exitCode = originalExitCode;
       consoleErrorSpy.mockRestore();
     });
 
