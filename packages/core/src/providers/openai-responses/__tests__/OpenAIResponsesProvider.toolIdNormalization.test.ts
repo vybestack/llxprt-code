@@ -80,7 +80,7 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const functionCallItem = input.find(
         (item) =>
           typeof item === 'object' &&
-          item !== null &&
+          item != null &&
           'type' in item &&
           item.type === 'function_call',
       ) as { type: string; call_id: string } | undefined;
@@ -88,7 +88,7 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const functionCallOutputItem = input.find(
         (item) =>
           typeof item === 'object' &&
-          item !== null &&
+          item != null &&
           'type' in item &&
           item.type === 'function_call_output',
       ) as { type: string; call_id: string } | undefined;
@@ -131,7 +131,7 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const functionCallItem = input.find(
         (item) =>
           typeof item === 'object' &&
-          item !== null &&
+          item != null &&
           'type' in item &&
           item.type === 'function_call',
       ) as { type: string; call_id: string } | undefined;
@@ -139,7 +139,7 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const functionCallOutputItem = input.find(
         (item) =>
           typeof item === 'object' &&
-          item !== null &&
+          item != null &&
           'type' in item &&
           item.type === 'function_call_output',
       ) as { type: string; call_id: string } | undefined;
@@ -178,7 +178,7 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const functionCallItem = input.find(
         (item) =>
           typeof item === 'object' &&
-          item !== null &&
+          item != null &&
           'type' in item &&
           item.type === 'function_call',
       ) as { type: string; call_id: string } | undefined;
@@ -186,7 +186,7 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const functionCallOutputItem = input.find(
         (item) =>
           typeof item === 'object' &&
-          item !== null &&
+          item != null &&
           'type' in item &&
           item.type === 'function_call_output',
       ) as { type: string; call_id: string } | undefined;

@@ -134,7 +134,7 @@ export class SessionLockManager {
         return false;
       } catch (error: unknown) {
         const code = (error as NodeJS.ErrnoException).code;
-        return !(code === 'EPERM');
+        return code !== 'EPERM';
       }
     } catch {
       return true;

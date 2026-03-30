@@ -380,11 +380,15 @@ describe('ast-edit characterization tests', () => {
           mockConfig,
         ) as unknown as TestableASTEditTool;
         const schema = tool.schema.parametersJsonSchema;
-        const allParams = Object.keys(schema.properties).sort();
-        const requiredParams = [...schema.required].sort();
+        const allParams = Object.keys(schema.properties).sort((a, b) =>
+          a.localeCompare(b),
+        );
+        const requiredParams = [...schema.required].sort((a, b) =>
+          a.localeCompare(b),
+        );
         const optionalParams = allParams
           .filter((p) => !requiredParams.includes(p))
-          .sort();
+          .sort((a, b) => a.localeCompare(b));
         expect(optionalParams).toStrictEqual(['force', 'last_modified']);
       });
 
@@ -422,11 +426,15 @@ describe('ast-edit characterization tests', () => {
           mockConfig,
         ) as unknown as TestableASTReadFileTool;
         const schema = tool.schema.parametersJsonSchema;
-        const allParams = Object.keys(schema.properties).sort();
-        const requiredParams = [...schema.required].sort();
+        const allParams = Object.keys(schema.properties).sort((a, b) =>
+          a.localeCompare(b),
+        );
+        const requiredParams = [...schema.required].sort((a, b) =>
+          a.localeCompare(b),
+        );
         const optionalParams = allParams
           .filter((p) => !requiredParams.includes(p))
-          .sort();
+          .sort((a, b) => a.localeCompare(b));
         expect(optionalParams).toStrictEqual(['limit', 'offset']);
       });
 

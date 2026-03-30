@@ -154,7 +154,7 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
   if (
     expectedType === 'object' &&
     typeof value === 'object' &&
-    value !== null &&
+    value != null &&
     !Array.isArray(value) &&
     propertySchema.properties != null
   ) {

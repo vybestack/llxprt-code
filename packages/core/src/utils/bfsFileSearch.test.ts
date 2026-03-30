@@ -59,8 +59,10 @@ describe('bfsFileSearch', () => {
     const targetFilePath1 = await createTestFile('content1', 'a', 'target.txt');
     const targetFilePath2 = await createTestFile('content2', 'b', 'target.txt');
     const result = await bfsFileSearch(testRootDir, { fileName: 'target.txt' });
-    result.sort();
-    expect(result).toStrictEqual([targetFilePath1, targetFilePath2].sort());
+    result.sort((a, b) => a.localeCompare(b));
+    expect(result).toStrictEqual(
+      [targetFilePath1, targetFilePath2].sort((a, b) => a.localeCompare(b)),
+    );
   });
 
   it('should return an empty array if no file is found', async () => {
@@ -128,8 +130,10 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
       maxDepth: 1,
     });
-    result.sort();
-    expect(result).toStrictEqual([rootFile, level1File].sort());
+    result.sort((a, b) => a.localeCompare(b));
+    expect(result).toStrictEqual(
+      [rootFile, level1File].sort((a, b) => a.localeCompare(b)),
+    );
   });
 
   it('should find files at all depths when maxDepth is undefined', async () => {
@@ -140,8 +144,10 @@ describe('bfsFileSearch', () => {
     const result = await bfsFileSearch(testRootDir, {
       fileName: 'target.txt',
     });
-    result.sort();
-    expect(result).toStrictEqual([rootFile, level1File, level2File].sort());
+    result.sort((a, b) => a.localeCompare(b));
+    expect(result).toStrictEqual(
+      [rootFile, level1File, level2File].sort((a, b) => a.localeCompare(b)),
+    );
   });
 
   it('should find files at all depths when maxDepth is very large', async () => {
@@ -153,8 +159,10 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
       maxDepth: 999999,
     });
-    result.sort();
-    expect(result).toStrictEqual([rootFile, level1File, level2File].sort());
+    result.sort((a, b) => a.localeCompare(b));
+    expect(result).toStrictEqual(
+      [rootFile, level1File, level2File].sort((a, b) => a.localeCompare(b)),
+    );
   });
 
   it('should work correctly when maxDepth and maxDirs are both set', async () => {
@@ -261,7 +269,9 @@ describe('bfsFileSearch', () => {
         fileService,
       });
 
-      expect(result.sort()).toStrictEqual([target1, target2].sort());
+      expect(result.sort((a, b) => a.localeCompare(b))).toStrictEqual(
+        [target1, target2].sort((a, b) => a.localeCompare(b)),
+      );
     });
   });
 
@@ -299,7 +309,7 @@ describe('bfsFileSearch', () => {
       durations.push(duration);
 
       // Verify consistency: all iterations should find the exact same files
-      const sortedResult = result.sort();
+      const sortedResult = result.sort((a, b) => a.localeCompare(b));
       if (firstResultSorted === undefined) {
         foundFiles = result.length;
         firstResultSorted = sortedResult;

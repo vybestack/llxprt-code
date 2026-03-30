@@ -199,17 +199,15 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
     const normalized = rawTodos.map((todo, index) => {
       const normalizedId =
-        todo?.id !== undefined &&
-        todo?.id !== null &&
-        `${todo.id}`.trim() !== ''
+        todo?.id != undefined && todo?.id != null && `${todo.id}`.trim() !== ''
           ? String(todo.id)
           : String(index + 1);
 
       const normalizedSubtasks = Array.isArray(todo?.subtasks)
         ? todo.subtasks.map((subtask, subIndex) => {
             const subtaskId =
-              subtask?.id !== undefined &&
-              subtask?.id !== null &&
+              subtask?.id != undefined &&
+              subtask?.id != null &&
               `${subtask.id}`.trim() !== ''
                 ? String(subtask.id)
                 : `${normalizedId}-${subIndex + 1}`;

@@ -182,7 +182,7 @@ export function isValidContent(content: Content): boolean {
     return false;
   }
   for (const part of content.parts) {
-    if (part === undefined || Object.keys(part).length === 0) {
+    if (part == undefined || Object.keys(part).length === 0) {
       return false;
     }
     if (!part.thought && part.text !== undefined && part.text === '') {
@@ -210,7 +210,7 @@ export function validateHistory(history: Content[]): void {
 export function extractCuratedHistory(
   comprehensiveHistory: Content[],
 ): Content[] {
-  if (comprehensiveHistory === undefined || comprehensiveHistory.length === 0) {
+  if (comprehensiveHistory == undefined || comprehensiveHistory.length === 0) {
     return [];
   }
   const curatedHistory: Content[] = [];

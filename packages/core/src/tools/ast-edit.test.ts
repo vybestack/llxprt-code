@@ -199,7 +199,9 @@ describe('AST Tools', () => {
       // Type-only exports (EnhancedDeclaration, ASTEditToolParams, ASTReadFileToolParams)
       // are erased at runtime and correctly excluded from this check. Their compile-time
       // correctness is verified by TypeScript's type checker during `npm run typecheck`.
-      const actualExports = Object.keys(AstEditModule).sort();
+      const actualExports = Object.keys(AstEditModule).sort((a, b) =>
+        a.localeCompare(b),
+      );
       const expectedExports = [
         'ASTEditTool',
         'ASTReadFileTool',
@@ -208,7 +210,7 @@ describe('AST Tools', () => {
         'KEYWORDS',
         'LANGUAGE_MAP',
         'REGEX',
-      ].sort();
+      ].sort((a, b) => a.localeCompare(b));
 
       expect(actualExports).toStrictEqual(expectedExports);
     });

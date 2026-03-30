@@ -302,7 +302,7 @@ export class ContentConverters {
             if (part.functionResponse.response != null) {
               if (
                 typeof part.functionResponse.response === 'object' &&
-                part.functionResponse.response !== null
+                part.functionResponse.response != null
               ) {
                 // If it's already an object, use it directly
                 result = part.functionResponse.response;

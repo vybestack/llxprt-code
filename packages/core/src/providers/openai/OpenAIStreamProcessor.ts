@@ -414,7 +414,7 @@ export async function* processStreamingResponse(
       const deltaToolCalls = choice.delta?.tool_calls;
       if (deltaToolCalls != null && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
-          if (deltaToolCall.index === undefined) continue;
+          if (deltaToolCall.index == undefined) continue;
 
           deps.toolCallPipeline.addFragment(deltaToolCall.index, {
             id: deltaToolCall.id,

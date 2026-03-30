@@ -282,7 +282,7 @@ export function convertToolsToAnthropic(
       {
         toolNames: anthropicTools.map((t) => t.name),
         firstToolHasRequired:
-          anthropicTools[0]?.input_schema.required !== undefined,
+          anthropicTools[0]?.input_schema.required != undefined,
       },
     );
   }

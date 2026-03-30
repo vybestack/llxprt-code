@@ -461,7 +461,9 @@ class WriteFileToolInvocation extends BaseToolInvocation<
           // Separate written file from other files
           const allFiles = Object.keys(allDiagnostics);
           const otherFiles = allFiles.filter((f) => f !== filePath);
-          const otherFilesSorted = otherFiles.sort();
+          const otherFilesSorted = otherFiles.sort((a, b) =>
+            a.localeCompare(b),
+          );
           const cappedOtherFiles = otherFilesSorted.slice(
             0,
             maxProjectDiagnosticsFiles,

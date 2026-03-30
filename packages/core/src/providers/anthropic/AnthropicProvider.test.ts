@@ -2265,11 +2265,9 @@ describe('AnthropicProvider', () => {
           pollutedText,
           '5m' as const,
         );
-        expect(Object.keys(sanitizedText).sort()).toStrictEqual([
-          'cache_control',
-          'text',
-          'type',
-        ]);
+        expect(
+          Object.keys(sanitizedText).sort((a, b) => a.localeCompare(b)),
+        ).toStrictEqual(['cache_control', 'text', 'type']);
         expect(sanitizedText.type).toBe('text');
         expect(sanitizedText.text).toBe('hello');
         expect(sanitizedText.cache_control).toStrictEqual({
@@ -2289,7 +2287,9 @@ describe('AnthropicProvider', () => {
           pollutedToolResult,
           '5m' as const,
         );
-        expect(Object.keys(sanitizedToolResult).sort()).toStrictEqual([
+        expect(
+          Object.keys(sanitizedToolResult).sort((a, b) => a.localeCompare(b)),
+        ).toStrictEqual([
           'cache_control',
           'content',
           'is_error',
@@ -2309,13 +2309,9 @@ describe('AnthropicProvider', () => {
           pollutedToolUse,
           '1h' as const,
         );
-        expect(Object.keys(sanitizedToolUse).sort()).toStrictEqual([
-          'cache_control',
-          'id',
-          'input',
-          'name',
-          'type',
-        ]);
+        expect(
+          Object.keys(sanitizedToolUse).sort((a, b) => a.localeCompare(b)),
+        ).toStrictEqual(['cache_control', 'id', 'input', 'name', 'type']);
         expect(sanitizedToolUse.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '1h',
@@ -4152,11 +4148,9 @@ describe('AnthropicProvider', () => {
         _debug: 'leak',
       };
       const result = sanitizeBlockForCacheControl(block, '5m');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'text',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'text', 'type']);
       expect(result).toStrictEqual({
         type: 'text',
         text: 'hello',
@@ -4173,13 +4167,9 @@ describe('AnthropicProvider', () => {
         _sdk_internal: 999,
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'id',
-        'input',
-        'name',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'id', 'input', 'name', 'type']);
       expect(result).toStrictEqual({
         type: 'tool_use',
         id: 'toolu_abc',
@@ -4198,7 +4188,9 @@ describe('AnthropicProvider', () => {
         extra_meta: 'should vanish',
       };
       const result = sanitizeBlockForCacheControl(block, '5m');
-      expect(Object.keys(result).sort()).toStrictEqual([
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual([
         'cache_control',
         'content',
         'is_error',
@@ -4221,12 +4213,9 @@ describe('AnthropicProvider', () => {
         content: 'ok',
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'content',
-        'tool_use_id',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'content', 'tool_use_id', 'type']);
       expect(result).toStrictEqual({
         type: 'tool_result',
         tool_use_id: 'toolu_456',
@@ -4255,12 +4244,9 @@ describe('AnthropicProvider', () => {
         _internal: 'drop me',
       };
       const result = sanitizeBlockForCacheControl(block, '5m');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'signature',
-        'thinking',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'signature', 'thinking', 'type']);
       expect(result).toStrictEqual({
         type: 'thinking',
         thinking: 'I am thinking...',
@@ -4275,11 +4261,9 @@ describe('AnthropicProvider', () => {
         thinking: 'pondering',
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'thinking',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'thinking', 'type']);
       expect('signature' in result).toBe(false);
     });
 
@@ -4290,11 +4274,9 @@ describe('AnthropicProvider', () => {
         _extra: 'polluted',
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'data',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'data', 'type']);
       expect(result).toStrictEqual({
         type: 'redacted_thinking',
         data: 'base64data==',
@@ -4311,11 +4293,9 @@ describe('AnthropicProvider', () => {
       const result = sanitizeBlockForCacheControl(block, '5m');
       // Should produce a minimal text fallback, not spread unknown keys
       expect(result.type).toBe('text');
-      expect(Object.keys(result).sort()).toStrictEqual([
-        'cache_control',
-        'text',
-        'type',
-      ]);
+      expect(
+        Object.keys(result).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(['cache_control', 'text', 'type']);
       expect(result).not.toHaveProperty('url');
       expect(result).not.toHaveProperty('secretKey');
     });

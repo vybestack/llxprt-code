@@ -213,7 +213,9 @@ describe('BINARY_EXTENSIONS', () => {
   });
 
   it('should be sorted', () => {
-    const sortedExtensions = [...BINARY_EXTENSIONS].sort();
+    const sortedExtensions = [...BINARY_EXTENSIONS].sort((a, b) =>
+      a.localeCompare(b),
+    );
     expect(BINARY_EXTENSIONS).toStrictEqual(sortedExtensions);
   });
 

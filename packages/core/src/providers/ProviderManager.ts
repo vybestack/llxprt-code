@@ -170,7 +170,7 @@ export class ProviderManager implements IProviderManager {
 
     if (
       typeof init === 'object' &&
-      init !== null &&
+      init != null &&
       'settingsService' in init &&
       ('runtimeId' in init || 'metadata' in init)
     ) {

@@ -1682,14 +1682,12 @@ describe('Shell Environment Sanitization', () => {
 
       // Result should contain exactly the allowlisted vars that exist in env
       // All LLXPRT_* vars are now allowed (changed from LLXPRT_CODE* only)
-      expect(Object.keys(sanitized).sort()).toStrictEqual(
-        [
-          'HOME',
-          'LLXPRT_CODE_TEST_FOO',
-          'LLXPRT_CUSTOM',
-          'PATH',
-          'USER',
-        ].sort(),
+      expect(
+        Object.keys(sanitized).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(
+        ['HOME', 'LLXPRT_CODE_TEST_FOO', 'LLXPRT_CUSTOM', 'PATH', 'USER'].sort(
+          (a, b) => a.localeCompare(b),
+        ),
       );
     });
 

@@ -371,7 +371,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         const allStatuses = urlContextMeta.urlMetadata.map(
           (m: UrlMetadata) => m.urlRetrievalStatus,
         );
-        if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
+        if (allStatuses.every((s) => s != 'URL_RETRIEVAL_STATUS_SUCCESS')) {
           processingError = true;
         }
       } else if (!responseText.trim() && !sources?.length) {

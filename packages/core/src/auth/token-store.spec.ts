@@ -141,7 +141,11 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       await tokenStore.saveToken('gemini', _validGeminiToken);
       await tokenStore.saveToken('anthropic', validQwenToken);
       const providers = await tokenStore.listProviders();
-      expect(providers.sort()).toEqual(['anthropic', 'gemini', 'qwen']);
+      expect(providers.sort((a, b) => a.localeCompare(b))).toEqual([
+        'anthropic',
+        'gemini',
+        'qwen',
+      ]);
       expect(providers).toHaveLength(3);
     });
 

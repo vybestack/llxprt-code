@@ -863,14 +863,14 @@ export abstract class BaseProvider implements IProvider {
       }
       if (
         input.resolved.baseURL !== undefined &&
-        input.resolved.baseURL !== null &&
+        input.resolved.baseURL != null &&
         typeof input.resolved.baseURL !== 'string'
       ) {
         resolvedMissing.push('resolved.baseURL');
       }
       if (
-        input.resolved.authToken === undefined ||
-        input.resolved.authToken === null
+        input.resolved.authToken == undefined ||
+        input.resolved.authToken == null
       ) {
         resolvedMissing.push('resolved.authToken');
       }

@@ -113,7 +113,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
   if (!Array.isArray(request)) {
     if (
       typeof request === 'object' &&
-      request !== null &&
+      request != null &&
       'text' in request &&
       request.text
     ) {
@@ -128,7 +128,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
       textLength += part.length;
     } else if (
       typeof part === 'object' &&
-      part !== null &&
+      part != null &&
       'text' in part &&
       part.text
     ) {

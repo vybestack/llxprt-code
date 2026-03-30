@@ -1142,7 +1142,7 @@ sub memory
       const reminderPart = secondRequest?.find(
         (part) =>
           typeof part === 'object' &&
-          part !== null &&
+          part != null &&
           'text' in part &&
           typeof part.text === 'string' &&
           part.text.includes('System Note'),
@@ -2147,7 +2147,7 @@ sub memory
       const continuationPart = secondRequest?.find(
         (part) =>
           typeof part === 'object' &&
-          part !== null &&
+          part != null &&
           'text' in part &&
           typeof part.text === 'string' &&
           part.text.includes('Continue and take the next concrete action now'),

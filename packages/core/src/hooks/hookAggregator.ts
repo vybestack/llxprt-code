@@ -288,12 +288,16 @@ export class HookAggregator {
       // ANY mode if present (and no NONE)
       finalMode = FunctionCallingConfigMode.ANY;
       // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = Array.from(allFunctionNames).sort();
+      finalFunctionNames = Array.from(allFunctionNames).sort((a, b) =>
+        a.localeCompare(b),
+      );
     } else {
       // Default to AUTO mode
       finalMode = FunctionCallingConfigMode.AUTO;
       // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = Array.from(allFunctionNames).sort();
+      finalFunctionNames = Array.from(allFunctionNames).sort((a, b) =>
+        a.localeCompare(b),
+      );
     }
 
     merged.hookSpecificOutput = {

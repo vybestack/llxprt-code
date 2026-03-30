@@ -75,7 +75,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
     }
 
     const summaries: SubagentSummary[] = [];
-    for (const name of names.sort()) {
+    for (const name of names.sort((a, b) => a.localeCompare(b))) {
       try {
         const config = await this.subagentManager.loadSubagent(name);
         summaries.push(this.buildSummary(config));

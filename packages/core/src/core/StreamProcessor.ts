@@ -607,7 +607,7 @@ export class StreamProcessor {
 
     // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
     // Use explicit check for undefined to allow 0 values
-    if (actualPromptTokens !== null && actualPromptTokens !== undefined) {
+    if (actualPromptTokens !== null && actualPromptTokens != undefined) {
       if (actualPromptTokens > 0) {
         this.logger.debug(
           () =>

@@ -158,7 +158,7 @@ export class TodoContinuationService {
     const suffixAlreadyPresent = parts.some(
       (part) =>
         typeof part === 'object' &&
-        part !== null &&
+        part != null &&
         'text' in part &&
         typeof part.text === 'string' &&
         part.text.includes(TODO_PROMPT_SUFFIX),
@@ -262,7 +262,7 @@ export class TodoContinuationService {
     const alreadyPresent = parts.some(
       (part) =>
         typeof part === 'object' &&
-        part !== null &&
+        part != null &&
         'text' in part &&
         typeof part.text === 'string' &&
         part.text === reminderText,

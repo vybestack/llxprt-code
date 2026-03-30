@@ -701,7 +701,9 @@ included directory memory
     // Should have loaded all files
     expect(result.fileCount).toBe(numDirs);
     expect(result.filePaths.length).toBe(numDirs);
-    expect(result.filePaths.sort()).toStrictEqual(createdFiles.sort());
+    expect(result.filePaths.sort((a, b) => a.localeCompare(b))).toStrictEqual(
+      createdFiles.sort((a, b) => a.localeCompare(b)),
+    );
 
     // Content should include all project contents
     for (let i = 0; i < numDirs; i++) {
@@ -737,8 +739,8 @@ included directory memory
     expect(result.fileCount).toBe(2);
     expect(result.memoryContent).toContain('Parent content');
     expect(result.memoryContent).toContain('Child content');
-    expect(result.filePaths.sort()).toStrictEqual(
-      [parentFile, childFile].sort(),
+    expect(result.filePaths.sort((a, b) => a.localeCompare(b))).toStrictEqual(
+      [parentFile, childFile].sort((a, b) => a.localeCompare(b)),
     );
 
     // Check that files are not duplicated
@@ -1039,8 +1041,10 @@ included directory memory
       );
 
       expect(result.files).toHaveLength(2);
-      expect(result.files.map((f) => f.path).sort()).toStrictEqual(
-        [directFile, llxprtFile].sort(),
+      expect(
+        result.files.map((f) => f.path).sort((a, b) => a.localeCompare(b)),
+      ).toStrictEqual(
+        [directFile, llxprtFile].sort((a, b) => a.localeCompare(b)),
       );
     });
 

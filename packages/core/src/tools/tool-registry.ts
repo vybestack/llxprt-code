@@ -148,7 +148,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
     }
 
     // if there is any error, non-zero exit code, signal, or stderr, return error details instead of stdout
-    if (error || code !== 0 || exitSignal || stderr) {
+    if (error || code != 0 || exitSignal || stderr) {
       const llmContent = [
         `Stdout: ${stdout || '(empty)'}`,
         `Stderr: ${stderr || '(empty)'}`,

@@ -253,7 +253,7 @@ export function extractExtensionsFromPatterns(patterns: string[]): string[] {
         return [];
       }),
   );
-  return Array.from(extensions).sort();
+  return Array.from(extensions).sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -273,4 +273,4 @@ export const BINARY_EXTENSIONS: string[] = [
   '.a',
   '.lib',
   '.wasm',
-].sort();
+].sort((a, b) => a.localeCompare(b));

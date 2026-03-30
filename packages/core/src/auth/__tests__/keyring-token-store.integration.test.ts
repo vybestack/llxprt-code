@@ -657,7 +657,9 @@ describe('KeyringTokenStore Integration', () => {
             await setup.tokenStore.saveToken(p, makeToken());
           }
           const listed = await setup.tokenStore.listProviders();
-          expect(listed).toStrictEqual([...providers].sort());
+          expect(listed).toStrictEqual(
+            [...providers].sort((a, b) => a.localeCompare(b)),
+          );
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }
@@ -682,7 +684,9 @@ describe('KeyringTokenStore Integration', () => {
             await setup.tokenStore.saveToken('bucketprov', makeToken(), b);
           }
           const listed = await setup.tokenStore.listBuckets('bucketprov');
-          expect(listed).toStrictEqual([...buckets].sort());
+          expect(listed).toStrictEqual(
+            [...buckets].sort((a, b) => a.localeCompare(b)),
+          );
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }

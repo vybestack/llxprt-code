@@ -241,7 +241,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
         maxDepth,
         fileService,
       });
-      downwardPaths.sort();
+      downwardPaths.sort((a, b) => a.localeCompare(b));
       for (const dPath of downwardPaths) {
         allPaths.add(dPath);
       }
@@ -496,7 +496,7 @@ export async function loadEnvironmentMemory(
     .flatMap((ext: GeminiCLIExtension) => ext.contextFiles ?? []);
   extensionPaths.forEach((p: string) => allPaths.add(p));
 
-  const sortedPaths = Array.from(allPaths).sort();
+  const sortedPaths = Array.from(allPaths).sort((a, b) => a.localeCompare(b));
   const contents = await readGeminiMdFiles(sortedPaths, debugMode, 'tree');
 
   return {
@@ -545,7 +545,7 @@ export async function loadCoreMemory(
     }
   }
 
-  const sortedPaths = Array.from(allPaths).sort();
+  const sortedPaths = Array.from(allPaths).sort((a, b) => a.localeCompare(b));
   const results: Array<{ path: string; content: string }> = [];
 
   for (const filePath of sortedPaths) {

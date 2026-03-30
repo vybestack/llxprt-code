@@ -51,7 +51,7 @@ export class PromptLoader {
     shouldCompress: boolean,
   ): Promise<LoadFileResult> {
     // Step 1: Validate input
-    if (filePath === null || filePath === undefined) {
+    if (filePath == null || filePath == undefined) {
       return { success: false, content: '', error: 'Invalid file path' };
     }
 

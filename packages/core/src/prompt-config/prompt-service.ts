@@ -478,7 +478,7 @@ export class PromptService {
       }
 
       // Sort and return
-      return toolNames.sort();
+      return toolNames.sort((a, b) => a.localeCompare(b));
     } catch (error) {
       // Directory read fails: Return empty array
       if (this.config.debugMode) {

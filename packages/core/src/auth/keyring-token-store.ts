@@ -329,7 +329,7 @@ export class KeyringTokenStore implements TokenStore {
           providerSet.add(provider);
         }
       }
-      return Array.from(providerSet).sort();
+      return Array.from(providerSet).sort((a, b) => a.localeCompare(b));
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(() => `Failed to list providers: ${msg}`);
@@ -353,7 +353,7 @@ export class KeyringTokenStore implements TokenStore {
           buckets.push(bucket);
         }
       }
-      return buckets.sort();
+      return buckets.sort((a, b) => a.localeCompare(b));
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(

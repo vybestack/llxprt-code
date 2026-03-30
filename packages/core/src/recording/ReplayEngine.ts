@@ -179,7 +179,7 @@ export async function replaySession(
           const compPayload = payload as unknown as CompressedPayload;
           if (
             compPayload.summary?.speaker &&
-            compPayload.itemsCompressed !== undefined
+            compPayload.itemsCompressed != undefined
           ) {
             history = [compPayload.summary];
           } else {

@@ -70,7 +70,7 @@ export function isProQuotaExceededError(error: unknown): boolean {
       }
       if (
         typeof gaxiosError.response.data === 'object' &&
-        gaxiosError.response.data !== null &&
+        gaxiosError.response.data != null &&
         'error' in gaxiosError.response.data
       ) {
         const errorData = gaxiosError.response.data as {

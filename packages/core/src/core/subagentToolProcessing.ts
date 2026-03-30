@@ -144,9 +144,7 @@ export function finalizeOutput(output: OutputObject): void {
   const emittedEntries = Object.entries(emittedVars)
     .filter(
       ([, value]) =>
-        value !== undefined &&
-        value !== null &&
-        String(value).trim().length > 0,
+        value != undefined && value != null && String(value).trim().length > 0,
     )
     .map(([key, value]) => `${key}=${String(value)}`);
 

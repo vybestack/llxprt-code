@@ -283,7 +283,7 @@ export function convertToolsToOpenAIResponses(
       {
         toolNames: responsesTools.map((t) => t.name),
         firstToolHasRequired:
-          responsesTools[0]?.parameters.required !== undefined,
+          responsesTools[0]?.parameters.required != undefined,
       },
     );
   }

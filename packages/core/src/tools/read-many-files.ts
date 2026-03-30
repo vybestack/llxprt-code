@@ -298,7 +298,9 @@ ${finalExclusionPatternsForDescription
       };
     }
 
-    const sortedFiles = Array.from(filesToConsider).sort();
+    const sortedFiles = Array.from(filesToConsider).sort((a, b) =>
+      a.localeCompare(b),
+    );
 
     // Get limits from ephemeral settings
     const ephemeralSettings = this.config.getEphemeralSettings();

@@ -102,7 +102,7 @@ export function parseLspConfig(
   if (lsp === true) {
     return { servers: [] };
   }
-  return lsp.servers === undefined ? { ...lsp, servers: [] } : lsp;
+  return lsp.servers == undefined ? { ...lsp, servers: [] } : lsp;
 }
 
 /**

@@ -251,7 +251,7 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && data !== null) {
+    if (typeof data === 'object' && data != null) {
       if ('error' in data) {
         outerError = (data as { error: ErrorShape }).error;
       }
@@ -307,7 +307,7 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && data !== null) {
+    if (typeof data === 'object' && data != null) {
       if ('error' in data) {
         outerError = (data as { error: ErrorShape }).error;
       }

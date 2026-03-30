@@ -250,7 +250,9 @@ describe('BaseProvider stateless contract', () => {
     const snapshots = provider.snapshotsFor('call-override');
     expect(snapshots).not.toHaveLength(0);
     expect(
-      Array.from(new Set(snapshots.map((entry) => entry.model))).sort(),
+      Array.from(new Set(snapshots.map((entry) => entry.model))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
     ).toStrictEqual([call.model]);
     expect(
       Array.from(new Set(snapshots.map((entry) => entry.baseUrl))).sort(),
@@ -300,14 +302,18 @@ describe('BaseProvider stateless contract', () => {
     expect(snapshotsB).not.toHaveLength(0);
 
     expect(
-      Array.from(new Set(snapshotsA.map((entry) => entry.model))).sort(),
+      Array.from(new Set(snapshotsA.map((entry) => entry.model))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
     ).toStrictEqual([callA.model]);
     expect(
       Array.from(new Set(snapshotsA.map((entry) => entry.baseUrl))).sort(),
     ).toStrictEqual([callA.baseUrl]);
 
     expect(
-      Array.from(new Set(snapshotsB.map((entry) => entry.model))).sort(),
+      Array.from(new Set(snapshotsB.map((entry) => entry.model))).sort((a, b) =>
+        a.localeCompare(b),
+      ),
     ).toStrictEqual([callB.model]);
     expect(
       Array.from(new Set(snapshotsB.map((entry) => entry.baseUrl))).sort(),
@@ -363,7 +369,7 @@ describe('BaseProvider stateless contract', () => {
           snapshot.authToken === undefined ? '' : snapshot.authToken,
         ),
       ),
-    ).sort();
+    ).sort((a, b) => a.localeCompare(b));
 
     expect(baselineTokens).toStrictEqual(['']);
   });

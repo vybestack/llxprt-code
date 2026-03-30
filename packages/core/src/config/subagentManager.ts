@@ -199,11 +199,11 @@ export class SubagentManager {
     profile: string,
     systemPrompt: string,
   ): Promise<void> {
-    if (profile === undefined || profile.trim() === '') {
+    if (profile == undefined || profile.trim() === '') {
       throw new Error('Profile name is required.');
     }
 
-    if (systemPrompt === undefined || systemPrompt.trim() === '') {
+    if (systemPrompt == undefined || systemPrompt.trim() === '') {
       throw new Error(ERROR_MESSAGES.PROMPT_REQUIRED);
     }
 
@@ -441,7 +441,9 @@ export class SubagentManager {
     );
 
     // Return deduplicated, sorted list
-    return [...userSubagents, ...settingsNames, ...extensionNames].sort();
+    return [...userSubagents, ...settingsNames, ...extensionNames].sort(
+      (a, b) => a.localeCompare(b),
+    );
   }
 
   /**
@@ -460,7 +462,7 @@ export class SubagentManager {
       const subagentNames = subagentFiles.map((file) => file.slice(0, -5)); // Remove .json extension
 
       // Sort alphabetically
-      subagentNames.sort();
+      subagentNames.sort((a, b) => a.localeCompare(b));
 
       return subagentNames;
     } catch (error) {
@@ -615,8 +617,8 @@ export class SubagentManager {
   async validateProfileReference(profileName: string): Promise<boolean> {
     // Validate input
     if (
-      profileName === undefined ||
-      profileName === null ||
+      profileName == undefined ||
+      profileName == null ||
       profileName.trim() === ''
     ) {
       return false;
@@ -645,7 +647,7 @@ export class SubagentManager {
   private getSubagentPath(name: string): string {
     // Centralize all name validation in this helper
     // 1. Validate name is not undefined or null
-    if (name === undefined || name === null) {
+    if (name == undefined || name == null) {
       throw new Error(ERROR_MESSAGES.NAME_REQUIRED);
     }
 
@@ -664,15 +666,15 @@ export class SubagentManager {
 
     // 5. Validate baseDir is provided to the instance
     if (
-      this.baseDir === undefined ||
-      this.baseDir === null ||
+      this.baseDir == undefined ||
+      this.baseDir == null ||
       this.baseDir.trim() === ''
     ) {
       throw new Error('Base directory is required');
     }
 
     // 6. Validate profileManager is provided to the instance
-    if (this.profileManager === undefined || this.profileManager === null) {
+    if (this.profileManager == undefined || this.profileManager == null) {
       throw new Error('ProfileManager instance is required');
     }
 

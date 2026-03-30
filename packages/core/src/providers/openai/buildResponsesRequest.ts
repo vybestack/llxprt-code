@@ -211,7 +211,7 @@ export function buildResponsesRequest(
   if (processedMessages != null) {
     // First, extract function calls from assistant messages and function call outputs from tool messages
     processedMessages
-      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
+      .filter((msg): msg is IContent => msg != undefined && msg != null)
       .forEach((msg) => {
         // Extract function calls from AI messages
         // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
@@ -271,7 +271,7 @@ export function buildResponsesRequest(
 
     // Then, create the regular messages array (excluding tool messages)
     transformedMessages = processedMessages
-      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
+      .filter((msg): msg is IContent => msg != undefined && msg != null)
       .filter((msg) => msg.speaker !== 'tool') // Exclude tool messages
       .map((msg) => {
         // Extract text content from blocks
@@ -323,7 +323,7 @@ export function buildResponsesRequest(
         return result as ResponsesMessage;
       })
       .filter(
-        (msg): msg is NonNullable<typeof msg> => msg !== null,
+        (msg): msg is NonNullable<typeof msg> => msg != null,
       ) as ResponsesMessage[];
   }
 

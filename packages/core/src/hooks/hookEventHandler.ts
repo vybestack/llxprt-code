@@ -625,7 +625,7 @@ export class HookEventHandler {
     eventName: HookEventName,
     hookResults: readonly HookExecutionResult[],
   ): void {
-    if (this.debugLogger === undefined) return;
+    if (this.debugLogger == undefined) return;
 
     for (const result of hookResults) {
       const record = {
@@ -663,7 +663,7 @@ export class HookEventHandler {
     hookResults: readonly HookExecutionResult[],
     totalDurationMs: number,
   ): void {
-    if (this.debugLogger === undefined) return;
+    if (this.debugLogger == undefined) return;
 
     const hookCount = hookResults.length;
     const successCount = hookResults.filter((r) => r.success).length;

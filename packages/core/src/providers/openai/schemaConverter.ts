@@ -279,7 +279,7 @@ export function convertToolsToOpenAI(
       {
         toolNames: openAITools.map((t) => t.function.name),
         firstToolHasRequired:
-          openAITools[0]?.function.parameters.required !== undefined,
+          openAITools[0]?.function.parameters.required != undefined,
       },
     );
   }

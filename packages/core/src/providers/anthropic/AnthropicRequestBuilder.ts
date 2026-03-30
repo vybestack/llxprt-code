@@ -278,7 +278,7 @@ export function buildThinkingConfig(options: {
  */
 export function sortObjectKeys<T extends Record<string, unknown>>(obj: T): T {
   const sorted = Object.keys(obj)
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
     .reduce(
       (acc, key) => {
         acc[key] = obj[key];

@@ -1113,7 +1113,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
             await setup.tokenStore.saveToken(p, makeMinimalToken());
           }
           const listed = await setup.tokenStore.listProviders();
-          const sortedProviders = [...providers].sort();
+          const sortedProviders = [...providers].sort((a, b) =>
+            a.localeCompare(b),
+          );
           expect(listed).toStrictEqual(sortedProviders);
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });

@@ -76,7 +76,9 @@ export class PromptCache {
     // Extract key components with defaults
     const provider = context.provider || 'unknown';
     const model = context.model || 'unknown';
-    const tools = [...(context.enabledTools || [])].sort();
+    const tools = [...(context.enabledTools || [])].sort((a, b) =>
+      a.localeCompare(b),
+    );
     const envFlags: string[] = [];
 
     // Build environment flags
@@ -130,7 +132,7 @@ export class PromptCache {
     const key = this.generateKey(context);
 
     // Validate inputs
-    if (!key || prompt === null || prompt === undefined) {
+    if (!key || prompt == null || prompt == undefined) {
       return;
     }
 

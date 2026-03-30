@@ -402,7 +402,7 @@ class EditToolInvocation extends BaseToolInvocation<
       } else if (occurrences === 0) {
         const replaceLine = filteredParams.replaceBeginLineNumber;
 
-        if (replaceLine && replaceLine > 0 && currentContent !== null) {
+        if (replaceLine && replaceLine > 0 && currentContent != null) {
           const lines = currentContent.split('\n');
 
           if (replaceLine > lines.length) {

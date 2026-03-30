@@ -30,7 +30,7 @@ export class TemplateEngine {
     options?: TemplateProcessingOptions,
   ): string {
     // Step 1: Validate inputs
-    if (content === null || content === undefined) {
+    if (content == null || content == undefined) {
       return '';
     }
 

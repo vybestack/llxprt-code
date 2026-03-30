@@ -115,7 +115,7 @@ export function isShellInvocationAllowlisted(
   if (
     !('params' in invocation) ||
     typeof invocation.params !== 'object' ||
-    invocation.params === null ||
+    invocation.params == null ||
     !('command' in invocation.params)
   ) {
     return false;

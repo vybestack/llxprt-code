@@ -30,7 +30,7 @@ function findFunctionCallOutput(
       output: string;
     } =>
       typeof item === 'object' &&
-      item !== null &&
+      item != null &&
       'type' in item &&
       item.type === 'function_call_output',
   );
