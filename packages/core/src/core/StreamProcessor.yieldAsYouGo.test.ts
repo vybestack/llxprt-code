@@ -92,6 +92,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       historyService: history,
       logger: {
         debug: () => {},
+        info: () => {},
         warn: () => {},
         error: () => {},
         enabled: false,
@@ -164,7 +165,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     expect(firstConsumerIdx).toBeLessThan(secondSourceIdx);
   });
 
-  it('does not hang when the source stream stalls then aborts', async () => {
+  it('yields chunks immediately even when the source stream stalls', async () => {
     let resolveStall: (() => void) | undefined;
     const stallPromise = new Promise<void>((r) => {
       resolveStall = r;
