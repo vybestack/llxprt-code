@@ -363,59 +363,19 @@ export class StreamProcessor {
 
   /**
    * Process streaming response chunks into a complete conversation turn.
-   * This is an async generator that yields each chunk and then records history.
+   * Yields each chunk immediately as it arrives from the provider stream,
+   * while simultaneously tracking metadata for validation and history.
+   *
+   * CRITICAL: This method must yield chunks inline during the for-await loop.
+   * Collecting all chunks first (as was done in a prior refactoring) blocks
+   * the entire pipeline — no output reaches the user, no abort signal checks
+   * run, and stalled provider streams hang indefinitely. See #1846.
    */
   async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
     userInput: Content | Content[],
   ): AsyncGenerator<GenerateContentResponse> {
-    const {
-      modelResponseParts,
-      finishReason,
-      hasToolCall,
-      hasTextResponse,
-      hasThinkingResponse,
-      allChunks,
-    } = await this._aggregateStreamChunks(streamResponse);
-
-    // Yield all chunks to the UI immediately
-    for (const chunk of allChunks) {
-      yield chunk;
-    }
-
-    // Validate and consolidate response
-    const consolidatedParts = this._consolidateTextParts(modelResponseParts);
-    const responseText = this._extractResponseText(consolidatedParts);
-
-    // Validate stream completion using pre-computed flags from raw (unfiltered)
-    // parts, since modelResponseParts may have thoughts stripped out.
-    this._validateStreamCompletion(
-      userInput,
-      hasToolCall,
-      hasTextResponse,
-      hasThinkingResponse,
-      finishReason,
-      responseText,
-    );
-
-    // Record history with usage metadata
-    await this._recordHistoryWithUsage(userInput, consolidatedParts, allChunks);
-  }
-
-  /**
-   * Aggregate stream chunks and track metadata.
-   * Helper to keep processStreamResponse under 80 lines.
-   */
-  private async _aggregateStreamChunks(
-    streamResponse: AsyncGenerator<GenerateContentResponse>,
-  ): Promise<{
-    modelResponseParts: Part[];
-    finishReason: FinishReason | undefined;
-    hasToolCall: boolean;
-    hasTextResponse: boolean;
-    hasThinkingResponse: boolean;
-    allChunks: GenerateContentResponse[];
-  }> {
+    // Aggregate metadata inline while yielding each chunk immediately
     const modelResponseParts: Part[] = [];
     let hasToolCall = false;
     let finishReason: FinishReason | undefined;
@@ -426,12 +386,14 @@ export class StreamProcessor {
       this.runtimeContext.ephemerals.reasoning.includeInContext();
 
     for await (const chunk of streamResponse) {
+      // Track finish reason
       const candidateWithReason = chunk?.candidates?.find(
         (c) => c.finishReason,
       );
       if (candidateWithReason)
         finishReason = candidateWithReason.finishReason as FinishReason;
 
+      // Track response content flags for later validation
       if (isValidResponse(chunk)) {
         const parts = chunk.candidates?.[0]?.content?.parts;
         if (parts) {
@@ -453,6 +415,7 @@ export class StreamProcessor {
         }
       }
 
+      // Track token usage
       if (chunk.usageMetadata?.promptTokenCount !== undefined) {
         const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
         this.compressionHandler.lastPromptTokenCount =
@@ -461,16 +424,25 @@ export class StreamProcessor {
           (chunkUsage.cache_creation_input_tokens || 0);
       }
       allChunks.push(chunk);
+
+      // Yield immediately — this is the critical fix for #1846
+      yield chunk;
     }
 
-    return {
-      modelResponseParts,
-      finishReason,
+    // Post-stream: validate and record history
+    const consolidatedParts = this._consolidateTextParts(modelResponseParts);
+    const responseText = this._extractResponseText(consolidatedParts);
+
+    this._validateStreamCompletion(
+      userInput,
       hasToolCall,
       hasTextResponse,
       hasThinkingResponse,
-      allChunks,
-    };
+      finishReason,
+      responseText,
+    );
+
+    await this._recordHistoryWithUsage(userInput, consolidatedParts, allChunks);
   }
 
   /**
