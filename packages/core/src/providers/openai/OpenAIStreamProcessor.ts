@@ -40,6 +40,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 import { type ToolFormat } from '../../tools/IToolFormatter.js';
 
 export interface StreamProcessorDeps {
@@ -65,24 +66,6 @@ interface StreamingState {
     ReturnType<typeof ToolCallPipeline.prototype.process>
   > | null;
   allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[];
-}
-
-/**
- * Map OpenAI finish_reason to the stopReason format expected by MessageConverter.
- * OpenAI values: stop, length, tool_calls, content_filter
- * MessageConverter expects: end_turn, max_tokens, stop_sequence, tool_use, etc.
- */
-function mapFinishReasonToStopReason(
-  finishReason: string | null | undefined,
-): string | undefined {
-  if (!finishReason) return undefined;
-  const mapping: Record<string, string> = {
-    stop: 'end_turn',
-    length: 'max_tokens',
-    tool_calls: 'tool_use',
-    content_filter: 'end_turn',
-  };
-  return mapping[finishReason] ?? finishReason;
 }
 
 function createStreamingState(): StreamingState {

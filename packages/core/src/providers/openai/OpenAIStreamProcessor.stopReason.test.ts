@@ -156,7 +156,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
-    it('should propagate content_filter (mapped to end_turn) through to finishReason STOP', () => {
+    it('should propagate end_turn stopReason through to finishReason STOP (no usage)', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Filtered content' }],
