@@ -1720,26 +1720,30 @@ describe('RetryOrchestrator', () => {
         } as unknown as GenerateChatOptions['runtime'],
       };
 
-      try {
-        await consumeStream(orchestrator.generateChatCompletion(options));
-        expect.fail('Should have thrown AllBucketsExhaustedError');
-      } catch (error) {
-        // EXPECTATION: Error includes bucketFailureReasons
-        expect(error).toHaveProperty('bucketFailureReasons');
-        const reasons = (
-          error as { bucketFailureReasons: Record<string, string> }
-        ).bucketFailureReasons;
-        expect(reasons.bucket1).toBe('quota-exhausted');
-        expect(reasons.bucket2).toBe('expired-refresh-failed');
-        expect(reasons.bucket3).toBe('no-token');
+      const error = await consumeStream(
+        orchestrator.generateChatCompletion(options),
+      ).then(
+        () => {
+          throw new Error('Should have thrown AllBucketsExhaustedError');
+        },
+        (e: unknown) => e,
+      );
 
-        // EXPECTATION: Error message includes detailed failure reasons
-        expect((error as Error).message).toContain('bucket1: quota-exhausted');
-        expect((error as Error).message).toContain(
-          'bucket2: expired-refresh-failed',
-        );
-        expect((error as Error).message).toContain('bucket3: no-token');
-      }
+      // EXPECTATION: Error includes bucketFailureReasons
+      expect(error).toHaveProperty('bucketFailureReasons');
+      const reasons = (
+        error as { bucketFailureReasons: Record<string, string> }
+      ).bucketFailureReasons;
+      expect(reasons.bucket1).toBe('quota-exhausted');
+      expect(reasons.bucket2).toBe('expired-refresh-failed');
+      expect(reasons.bucket3).toBe('no-token');
+
+      // EXPECTATION: Error message includes detailed failure reasons
+      expect((error as Error).message).toContain('bucket1: quota-exhausted');
+      expect((error as Error).message).toContain(
+        'bucket2: expired-refresh-failed',
+      );
+      expect((error as Error).message).toContain('bucket3: no-token');
     });
 
     /**

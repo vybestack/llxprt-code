@@ -135,11 +135,10 @@ describe('FakeProvider', () => {
 
     const block = chunks[0].blocks[0];
     expect(block.type).toBe('tool_call');
-    if (block.type === 'tool_call') {
-      expect((block.parameters as { file_path: string }).file_path).toBe(
-        '/my/test/dir/output.txt',
-      );
-    }
+    expect(
+      (block as { type: string; parameters: { file_path: string } }).parameters
+        .file_path,
+    ).toBe('/my/test/dir/output.txt');
   });
 
   it('returns stub values for metadata methods', async () => {

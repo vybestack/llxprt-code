@@ -526,12 +526,10 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
 
     const provider = new HarnessProvider(config, settingsService);
     const providerConfigRef = provider as unknown as {
-      baseProviderConfig?: { baseURL?: string };
+      baseProviderConfig: { baseURL?: string };
     };
-    if (providerConfigRef.baseProviderConfig != null) {
-      providerConfigRef.baseProviderConfig.baseURL =
-        'https://provider-config.example.com';
-    }
+    providerConfigRef.baseProviderConfig.baseURL =
+      'https://provider-config.example.com';
     manager.registerProvider(provider);
 
     settingsService.set('activeProvider', provider.name);

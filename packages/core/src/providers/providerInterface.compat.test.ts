@@ -116,9 +116,7 @@ describe('generateChatCompletion compatibility', () => {
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
 
-    if (runtime.config == null) {
-      runtime.config = fakeConfig;
-    }
+    runtime.config ??= fakeConfig;
 
     setActiveProviderRuntimeContext(runtime);
     try {

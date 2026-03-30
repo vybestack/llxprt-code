@@ -260,12 +260,13 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
 
     // No assistant message should contain "[No content generated]"
-    for (const msg of request.messages) {
-      if (msg.role === 'assistant') {
-        if (typeof msg.content === 'string') {
-          expect(msg.content).not.toBe('[No content generated]');
-        }
-      }
+    const assistantStringContent = request.messages
+      .filter(
+        (msg) => msg.role === 'assistant' && typeof msg.content === 'string',
+      )
+      .map((msg) => msg.content as string);
+    for (const content of assistantStringContent) {
+      expect(content).not.toBe('[No content generated]');
     }
   });
 
@@ -417,10 +418,13 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
 
     // No messages should have been turned into "[No content generated]"
     // The old thinking should be preserved as text (fallback for redaction without signature)
-    for (const msg of request.messages) {
-      if (msg.role === 'assistant' && typeof msg.content === 'string') {
-        expect(msg.content).not.toBe('[No content generated]');
-      }
+    const assistantStringContent = request.messages
+      .filter(
+        (msg) => msg.role === 'assistant' && typeof msg.content === 'string',
+      )
+      .map((msg) => msg.content as string);
+    for (const content of assistantStringContent) {
+      expect(content).not.toBe('[No content generated]');
     }
 
     // Explicitly verify the redacted thinking was preserved as text fallback

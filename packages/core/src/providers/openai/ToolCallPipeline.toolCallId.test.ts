@@ -231,24 +231,20 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
       };
 
       // 2. Provider adds fragments to pipeline with ID preservation
-      if (deltaChunk1.delta.tool_calls) {
-        for (const deltaToolCall of deltaChunk1.delta.tool_calls) {
-          pipeline.addFragment(deltaToolCall.index, {
-            id: deltaToolCall.id, // Preserve the tool_call_id from OpenAI API
-            name: deltaToolCall.function?.name,
-            args: deltaToolCall.function?.arguments,
-          });
-        }
+      for (const deltaToolCall of deltaChunk1.delta.tool_calls ?? []) {
+        pipeline.addFragment(deltaToolCall.index, {
+          id: deltaToolCall.id, // Preserve the tool_call_id from OpenAI API
+          name: deltaToolCall.function?.name,
+          args: deltaToolCall.function?.arguments,
+        });
       }
 
-      if (deltaChunk2.delta.tool_calls) {
-        for (const deltaToolCall of deltaChunk2.delta.tool_calls) {
-          pipeline.addFragment(deltaToolCall.index, {
-            id: deltaToolCall.id, // Preserve the tool_call_id (same ID across fragments)
-            name: deltaToolCall.function?.name,
-            args: deltaToolCall.function?.arguments,
-          });
-        }
+      for (const deltaToolCall of deltaChunk2.delta.tool_calls ?? []) {
+        pipeline.addFragment(deltaToolCall.index, {
+          id: deltaToolCall.id, // Preserve the tool_call_id (same ID across fragments)
+          name: deltaToolCall.function?.name,
+          args: deltaToolCall.function?.arguments,
+        });
       }
 
       // 3. Pipeline processes and normalizes

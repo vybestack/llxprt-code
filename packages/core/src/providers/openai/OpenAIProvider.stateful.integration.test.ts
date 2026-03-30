@@ -106,14 +106,6 @@ describe('OpenAIProvider Stateful Integration', () => {
   it.skip(
     'should maintain context across multiple turns with a stateful model (o3)',
     async () => {
-      if (!apiKey) {
-        console.warn('Skipping test: API key not found');
-        return;
-      }
-      if (runtimeSettingsService == null || runtimeContext == null) {
-        console.warn('Skipping test: runtime context not initialised');
-        return;
-      }
       runtimeSettingsService?.set('model', 'o3');
       runtimeSettingsService?.setProviderSetting(provider.name, 'model', 'o3');
 
@@ -161,13 +153,9 @@ describe('OpenAIProvider Stateful Integration', () => {
   );
 
   // TODO: Revert this before finishing. Forcing test to run for TDD.
-  it(
+  it.skip(
     'should not break stateless models by correctly passing full message history',
     async () => {
-      if (!apiKey) {
-        console.warn('Skipping test: API key not found');
-        return;
-      }
       runtimeSettingsService?.set('model', 'gpt-3.5-turbo');
       runtimeSettingsService?.setProviderSetting(
         provider.name,
@@ -190,27 +178,12 @@ describe('OpenAIProvider Stateful Integration', () => {
         },
       ];
 
-      try {
-        if (runtimeSettingsService == null || runtimeContext == null) {
-          console.warn('Skipping test: runtime context not initialised');
-          return;
-        }
-        const response = await collectResponse(
-          provider.generateChatCompletion(buildCallOptions(history)),
-        );
+      const response = await collectResponse(
+        provider.generateChatCompletion(buildCallOptions(history)),
+      );
 
-        // Assert that the model received the full history
-        expect(response.toLowerCase()).toContain('banana');
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message.includes("You didn't provide an API key")
-        ) {
-          console.warn('Skipping test: OpenAI API key not available');
-          return;
-        }
-        throw error;
-      }
+      // Assert that the model received the full history
+      expect(response.toLowerCase()).toContain('banana');
     },
     { timeout: 30000 },
   );
