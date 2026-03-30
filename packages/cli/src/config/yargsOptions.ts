@@ -394,9 +394,4 @@ export const deprecatedOptions = [
     message:
       'Use settings.json instead. This flag will be removed in a future version.',
   },
-  {
-    key: 'prompt',
-    message:
-      'Use the positional prompt instead. This flag will be removed in a future version.',
-  },
 ] as const;
