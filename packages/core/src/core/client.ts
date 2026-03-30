@@ -214,8 +214,8 @@ export class GeminiClient {
         this.currentSequenceModel = null;
       },
       updateTelemetryTokenCount: () => this.updateTelemetryTokenCount(),
-      sendMessageStream: (req, sig, pid, trns, isRetry) =>
-        this.sendMessageStream(req, sig, pid, trns, isRetry),
+      sendMessageStream: (req, sig, pid, trns, isRetry, is413) =>
+        this.sendMessageStream(req, sig, pid, trns, isRetry, is413),
     };
   }
 
@@ -673,6 +673,7 @@ export class GeminiClient {
     prompt_id: string,
     turns: number = this.MAX_TURNS,
     isInvalidStreamRetry: boolean = false,
+    is413Retry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     return yield* this.messageStreamOrchestrator.execute(
       initialRequest,
@@ -680,6 +681,7 @@ export class GeminiClient {
       prompt_id,
       turns,
       isInvalidStreamRetry,
+      is413Retry,
     );
   }
 

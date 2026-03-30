@@ -11,6 +11,7 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 import type { GenerateContentResponse } from '@google/genai';
 import type { Content, Part } from '@google/genai';
 
+// Minimal mock of dependencies needed by StreamProcessor
 function createMockRuntimeContext() {
   return {
     ephemerals: {
@@ -75,8 +76,11 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
   let processor: StreamProcessor;
 
   beforeEach(() => {
+    // StreamProcessor only needs a few fields from its constructor deps.
+    // We provide minimal stubs to avoid constructing the entire runtime.
     processor = Object.create(StreamProcessor.prototype);
 
+    // Inject required private fields
     const ctx = createMockRuntimeContext();
     const compression = createMockCompressionHandler();
     const conversation = createMockConversationManager();
@@ -90,6 +94,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       logger: new DebugLogger('test'),
     });
 
+    // Stub internal methods that processStreamResponse calls post-loop
     (processor as unknown as Record<string, unknown>)['_consolidateTextParts'] =
       (parts: Part[]) => parts;
     (processor as unknown as Record<string, unknown>)['_extractResponseText'] =
@@ -103,6 +108,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
   });
 
   it('yields each chunk before the source stream ends', async () => {
+    // Track the order of events: source yields vs consumer receives
     const timeline: string[] = [];
 
     async function* slowSource(): AsyncGenerator<GenerateContentResponse> {
@@ -122,6 +128,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
     const gen = processor.processStreamResponse(slowSource(), userInput);
 
+    // Consume chunks one at a time and record when we receive each
     const result1 = await gen.next();
     timeline.push('consumer:received:1');
 
@@ -131,12 +138,22 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     const result3 = await gen.next();
     timeline.push('consumer:received:3');
 
+    // Drain the generator
     await gen.next();
 
     expect(result1.done).toBe(false);
     expect(result2.done).toBe(false);
     expect(result3.done).toBe(false);
 
+    // THE CRITICAL ASSERTION: Consumer receives each chunk immediately
+    // after the source yields it, NOT after all chunks are collected.
+    //
+    // In a correct yield-as-you-go implementation, the timeline looks like:
+    //   source:yield:1, consumer:received:1, source:yield:2, consumer:received:2, ...
+    //
+    // In the broken collect-then-yield implementation, it would look like:
+    //   source:yield:1, source:yield:2, source:yield:3, source:done,
+    //   consumer:received:1, consumer:received:2, consumer:received:3
     const firstConsumerIdx = timeline.indexOf('consumer:received:1');
     const secondSourceIdx = timeline.indexOf('source:yield:2');
 
@@ -151,6 +168,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
     async function* stallingSource(): AsyncGenerator<GenerateContentResponse> {
       yield makeChunk('first chunk');
+      // Simulate an API stall — the stream just stops producing
       await stallPromise;
       yield makeFinishChunk('resumed', 'STOP');
     }
@@ -162,6 +180,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
     const gen = processor.processStreamResponse(stallingSource(), userInput);
 
+    // We should get the first chunk immediately, even though the stream stalls
     const result1 = await gen.next();
     expect(result1.done).toBe(false);
 
@@ -169,12 +188,14 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     const text = chunk?.candidates?.[0]?.content?.parts?.[0]?.text;
     expect(text).toBe('first chunk');
 
+    // Unstall the stream so the test can complete
     resolveStall?.();
 
+    // Drain remaining
     const result2 = await gen.next();
     expect(result2.done).toBe(false);
 
-    await gen.next();
+    await gen.next(); // generator done
   });
 
   it('yields the correct number of chunks matching the source', async () => {

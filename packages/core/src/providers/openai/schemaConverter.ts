@@ -261,6 +261,8 @@ export function convertToolsToOpenAI(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
+      // Try parametersJsonSchema first, fall back to parameters
+      // (subagent tools use `parameters`, foreground tools use `parametersJsonSchema`)
       const parameters = convertSchemaToOpenAI(
         decl.parametersJsonSchema ?? decl.parameters,
       );
