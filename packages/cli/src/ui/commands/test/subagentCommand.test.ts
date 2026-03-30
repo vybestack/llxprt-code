@@ -127,6 +127,8 @@ const createTestContext = ({
     tokenTracking: {
       tokensPerMinute: 0,
       throttleWaitTimeMs: 0,
+      timeToFirstToken: null,
+      tokensPerSecond: 0,
       sessionTokenUsage: {
         input: 0,
         output: 0,

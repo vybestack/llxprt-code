@@ -164,58 +164,6 @@ describe('file-system', () => {
     const newFileContent = rig.readFile(fileName);
     expect(newFileContent).toBe('1.0.1');
   });
-
-  it.skip('should replace multiple instances of a string', async () => {
-    rig.setup('should replace multiple instances of a string');
-    const fileName = 'ambiguous.txt';
-    const fileContent = 'Hey there, \ntest line\ntest line';
-    const expectedContent = 'Hey there, \nnew line\nnew line';
-    rig.createFile(fileName, fileContent);
-
-    const result = await rig.run({
-      args: `rewrite the file ${fileName} to replace all instances of "test line" with "new line"`,
-    });
-
-    const validTools = ['write_file', 'edit'];
-    const foundToolCall = await rig.waitForAnyToolCall(validTools);
-    if (!foundToolCall) {
-      printDebugInfo(rig, result, {
-        'Tool call found': foundToolCall,
-        'Tool logs': rig.readToolLogs(),
-      });
-    }
-    expect(
-      foundToolCall,
-      `Expected to find one of ${validTools.join(', ')} tool calls`,
-    ).toBeTruthy();
-
-    const toolLogs = rig.readToolLogs();
-    const successfulEdit = toolLogs.some(
-      (log) =>
-        validTools.includes(log.toolRequest.name) && log.toolRequest.success,
-    );
-    if (!successfulEdit) {
-      console.error(
-        `Expected a successful edit tool call (${validTools.join(', ')}), but none was found.`,
-      );
-      printDebugInfo(rig, result);
-    }
-    expect(
-      successfulEdit,
-      `Expected a successful edit tool call (${validTools.join(', ')})`,
-    ).toBeTruthy();
-
-    const newFileContent = rig.readFile(fileName);
-    if (newFileContent !== expectedContent) {
-      printDebugInfo(rig, result, {
-        'Final file content': newFileContent,
-        'Expected file content': expectedContent,
-        'Tool logs': rig.readToolLogs(),
-      });
-    }
-    expect(newFileContent).toBe(expectedContent);
-  });
-
   it('should fail safely when trying to edit a non-existent file', async () => {
     await rig.setup(
       'should fail safely when trying to edit a non-existent file',

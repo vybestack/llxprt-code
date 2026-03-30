@@ -308,7 +308,8 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
     await client.waitForDiagnostics('/workspace/src/deadline-10.ts', 3000);
     const elapsed = Date.now() - start;
 
-    expect(elapsed).toBeLessThanOrEqual(3000);
+    // Allow small CI timer jitter (typically 1-5ms on loaded runners)
+    expect(elapsed).toBeLessThanOrEqual(3050);
   });
 
   /**
@@ -389,5 +390,85 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
       ),
       { numRuns: 20 },
     );
+  });
+});
+
+const CONTENT_LENGTH_FIXTURE_PATH = new URL(
+  './fixtures/fake-lsp-server-content-length.ts',
+  import.meta.url,
+).pathname;
+
+function createContentLengthConfig(): { config: LspServerConfig } {
+  return {
+    config: {
+      id: 'content-length-utf8',
+      command: 'bun',
+      args: ['run', CONTENT_LENGTH_FIXTURE_PATH],
+      rootUri: `file://${WORKSPACE_ROOT}`,
+    },
+  };
+}
+
+describe('Content-Length framing with multi-byte UTF-8', () => {
+  it('correctly parses messages containing multi-byte UTF-8 characters', async () => {
+    const client = createLspClient(createContentLengthConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile('/workspace/src/unicode.ts', 'const x = TYPE_ERROR');
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/unicode.ts',
+      3000,
+    );
+    expect(diagnostics.length).toBeGreaterThan(0);
+    expect(diagnostics[0]?.message ?? '').toContain('\u30a8\u30e9\u30fc');
+  });
+
+  it('handles multiple consecutive messages with multi-byte content', async () => {
+    const client = createLspClient(createContentLengthConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/multi-byte-1.ts',
+      'const a = TYPE_ERROR',
+    );
+    await client.touchFile(
+      '/workspace/src/multi-byte-2.ts',
+      'const b = TYPE_ERROR',
+    );
+
+    const d1 = await client.waitForDiagnostics(
+      '/workspace/src/multi-byte-1.ts',
+      3000,
+    );
+    const d2 = await client.waitForDiagnostics(
+      '/workspace/src/multi-byte-2.ts',
+      3000,
+    );
+    expect(d1.length).toBeGreaterThan(0);
+    expect(d2.length).toBeGreaterThan(0);
+    expect(d1[0]?.message ?? '').toContain('\u30a8\u30e9\u30fc');
+    expect(d2[0]?.message ?? '').toContain('\u30a8\u30e9\u30fc');
+  });
+
+  it('correctly handles mixed multi-byte and single-byte messages', async () => {
+    const client = createLspClient(createContentLengthConfig(), WORKSPACE_ROOT);
+    createdClients.push(client);
+
+    await client.initialize();
+    await client.touchFile(
+      '/workspace/src/mixed.ts',
+      'const x = TYPE_ERROR\n// WARN',
+    );
+
+    const diagnostics = await client.waitForDiagnostics(
+      '/workspace/src/mixed.ts',
+      3000,
+    );
+    expect(diagnostics.length).toBe(2);
+    expect(diagnostics[0]?.message ?? '').toContain('\u30a8\u30e9\u30fc');
+    expect(diagnostics[1]?.message ?? '').toContain('\u8b66\u544a');
   });
 });

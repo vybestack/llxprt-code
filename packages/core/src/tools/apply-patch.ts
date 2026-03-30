@@ -31,6 +31,7 @@ import { getGitStatsService } from '../services/git-stats-service.js';
 import { APPLY_PATCH_TOOL } from './tool-names.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 /**
  * Type representing a parsed patch operation
@@ -232,13 +233,13 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
 
     // Validate file path is within workspace
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
-      const directories = workspaceContext.getDirectories();
+    const pathError = validatePathWithinWorkspace(workspaceContext, filePath);
+    if (pathError) {
       return {
-        llmContent: `File path must be within one of the workspace directories: ${directories.join(', ')}`,
-        returnDisplay: `Error: File path outside workspace`,
+        llmContent: pathError,
+        returnDisplay: 'File path is not within workspace',
         error: {
-          message: `File path must be within workspace`,
+          message: pathError,
           type: ToolErrorType.INVALID_TOOL_PARAMS,
         },
       };
@@ -487,9 +488,9 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(workspaceContext, filePath);
+    if (pathError) {
+      return pathError;
     }
 
     if (!params.patch_content || params.patch_content.trim() === '') {

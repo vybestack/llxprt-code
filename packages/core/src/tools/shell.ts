@@ -55,6 +55,7 @@ import {
 import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 // Throttle interval for shell output updates to avoid excessive UI updates.
 // Using 100ms provides responsive feedback without overwhelming the system.
@@ -850,9 +851,13 @@ export class ShellTool extends BaseDeclarativeTool<
     if (dirPath) {
       const workspaceContext = this.config.getWorkspaceContext();
       if (path.isAbsolute(dirPath)) {
-        if (!workspaceContext.isPathWithinWorkspace(dirPath)) {
-          const directories = workspaceContext.getDirectories();
-          return `Directory must be within one of the workspace directories: ${directories.join(', ')}`;
+        const pathError = validatePathWithinWorkspace(
+          workspaceContext,
+          dirPath,
+          'Directory',
+        );
+        if (pathError) {
+          return pathError;
         }
         return null;
       }
@@ -860,9 +865,13 @@ export class ShellTool extends BaseDeclarativeTool<
       // Multi-segment relative paths (e.g., "src/utils") resolve against targetDir
       if (dirPath.includes(path.sep) || dirPath.includes('/')) {
         const resolvedPath = path.resolve(this.config.getTargetDir(), dirPath);
-        if (!workspaceContext.isPathWithinWorkspace(resolvedPath)) {
-          const directories = workspaceContext.getDirectories();
-          return `Directory must be within one of the workspace directories: ${directories.join(', ')}`;
+        const pathError = validatePathWithinWorkspace(
+          workspaceContext,
+          resolvedPath,
+          'Directory',
+        );
+        if (pathError) {
+          return pathError;
         }
         return null;
       }

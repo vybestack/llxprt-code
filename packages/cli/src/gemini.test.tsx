@@ -17,7 +17,8 @@ import {
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
-import { loadCliConfig, parseArguments } from './config/config.js';
+import { loadCliConfig } from './config/config.js';
+import { parseArguments } from './config/cliArgParser.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
@@ -28,6 +29,7 @@ import {
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
+import { getCliVersion } from './utils/version.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -71,6 +73,9 @@ vi.mock('./config/config.js', () => ({
     getQuestion: vi.fn(() => ''),
     getProvider: vi.fn(() => undefined),
   } as unknown as Config),
+}));
+
+vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn().mockResolvedValue({
     model: undefined,
     sandbox: undefined,
@@ -266,6 +271,58 @@ describe('gemini.tsx main function', () => {
     expect(loadSettingsMock).not.toHaveBeenCalled();
   });
 
+  it('should print version and exit when --version is passed', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'llxprt', '--version'];
+
+    const getCliVersionMock = vi.mocked(getCliVersion);
+    getCliVersionMock.mockResolvedValue('1.2.3');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+
+    mockWriteToStdout.mockClear();
+
+    try {
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(mockWriteToStdout).toHaveBeenCalledWith(`1.2.3
+`);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    }
+
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('should print version and exit when -v is passed', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'llxprt', '-v'];
+
+    const getCliVersionMock = vi.mocked(getCliVersion);
+    getCliVersionMock.mockResolvedValue('1.2.3');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+
+    mockWriteToStdout.mockClear();
+
+    try {
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(mockWriteToStdout).toHaveBeenCalledWith(`1.2.3
+`);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    }
+
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+  });
+
   it('should log unhandled promise rejections and open debug console on first error', async () => {
     const appEventsMock = vi.mocked(appEvents);
     const rejectionError = new Error('Test unhandled rejection');
@@ -381,6 +438,7 @@ describe('gemini.tsx main function', () => {
       allowedMcpServerNames: undefined,
       allowedTools: undefined,
       experimentalAcp: false,
+      experimentalUi: undefined,
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
@@ -524,6 +582,7 @@ describe('gemini.tsx main function', () => {
       allowedMcpServerNames: undefined,
       allowedTools: undefined,
       experimentalAcp: false,
+      experimentalUi: undefined,
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,

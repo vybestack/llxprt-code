@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadCliConfig, parseArguments } from './config.js';
+import { loadCliConfig } from './config.js';
+import { parseArguments } from './cliArgParser.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core';
 import { type Settings, createTestMergedSettings } from './settings.js';

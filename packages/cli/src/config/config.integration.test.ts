@@ -254,11 +254,11 @@ describe('Configuration Integration Tests', () => {
   });
 
   describe('Approval Mode Integration Tests', () => {
-    let parseArguments: typeof import('./config').parseArguments;
+    let parseArguments: typeof import('./cliArgParser').parseArguments;
 
     beforeEach(async () => {
       // Import the argument parsing function for integration testing
-      const { parseArguments: parseArgs } = await import('./config');
+      const { parseArguments: parseArgs } = await import('./cliArgParser');
       parseArguments = parseArgs;
     });
 
@@ -399,10 +399,10 @@ describe('Configuration Integration Tests', () => {
   });
 
   describe('CLI --set argument parsing', () => {
-    let parseArguments: typeof import('./config').parseArguments;
+    let parseArguments: typeof import('./cliArgParser').parseArguments;
 
     beforeEach(async () => {
-      const { parseArguments: parseArgs } = await import('./config');
+      const { parseArguments: parseArgs } = await import('./cliArgParser');
       parseArguments = parseArgs;
     });
 

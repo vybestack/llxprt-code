@@ -21,7 +21,7 @@ import {
   loadCoreMemoryContent,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
+import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import { loadSettings } from '../../config/settings.js';
 import {
   SessionStateProvider,

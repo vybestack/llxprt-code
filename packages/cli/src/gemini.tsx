@@ -41,7 +41,8 @@ import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
-import { loadCliConfig, parseArguments } from './config/config.js';
+import { loadCliConfig } from './config/config.js';
+import { parseArguments } from './config/cliArgParser.js';
 import {
   dynamicSettingsRegistry,
   generateDynamicToolSettings,
@@ -347,7 +348,8 @@ export async function main() {
   // but no listeners are registered yet, so yargs output would be lost.
   const rawArgs = process.argv.slice(2);
   if (rawArgs.includes('--version') || rawArgs.includes('-v')) {
-    debugLogger.log(await getCliVersion());
+    writeToStdout(`${await getCliVersion()}
+`);
     process.exit(0);
   }
   if (rawArgs.includes('--help') || rawArgs.includes('-h')) {

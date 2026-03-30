@@ -16,7 +16,7 @@ import {
   type FileDiscoveryService,
   type LoadServerHierarchicalMemoryResponse,
 } from '@vybestack/llxprt-code-core';
-import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
+import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
@@ -40,9 +40,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('../../config/config.js', async (importOriginal) => {
+vi.mock('../../config/environmentLoader.js', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('../../config/config.js')>();
+    await importOriginal<typeof import('../../config/environmentLoader.js')>();
   return {
     ...original,
     loadHierarchicalLlxprtMemory: vi.fn(),

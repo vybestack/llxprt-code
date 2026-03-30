@@ -37,6 +37,7 @@ import {
   type RunConfig,
 } from './subagentTypes.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { AnsiLine } from '../utils/terminalSerializer.js';
 
 // ---------------------------------------------------------------------------
 // Shared execution context — all loop helpers receive this instead of `this`
@@ -400,6 +401,7 @@ export function createCompletionChannel(
         typeof output === 'string'
           ? output
           : output
+              .filter((line): line is AnsiLine => Array.isArray(line))
               .map((line) => line.map((token) => token.text).join(''))
               .join('\n');
       ctx.onMessage(textOutput);

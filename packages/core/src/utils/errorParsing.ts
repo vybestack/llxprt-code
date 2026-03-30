@@ -10,44 +10,42 @@ import {
   isApiError,
   isStructuredError,
 } from './quotaErrorDetection.js';
-import {
-  DEFAULT_GEMINI_MODEL,
-  DEFAULT_GEMINI_FLASH_MODEL,
-} from '../config/models.js';
+import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
 import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
-// Free Tier message functions
-const getRateLimitErrorMessageGoogleFree = (
-  fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
-) =>
-  `\nPossible quota limitations in place or slow response times detected. Switching to the ${fallbackModel} model for the rest of this session.`;
+// Shared quota/auth guidance strings
+const AUTH_QUOTA_DOC_URL =
+  'https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md';
+const AI_STUDIO_KEY_URL = 'https://aistudio.google.com/apikey';
+const FREE_TIER_GUIDANCE = `For more information about authentication and quota limits, see ${AUTH_QUOTA_DOC_URL}, or use /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
+const PAID_TIER_THANKS =
+  'We appreciate you for choosing Gemini Code Assist and the Gemini CLI.';
+const PAID_TIER_AUTH_HINT = `consider using /auth to switch to using a paid API key from AI Studio at ${AI_STUDIO_KEY_URL}`;
 
+// Provider-neutral rate limit message (used when no Google-specific quota detector matches)
+const GENERIC_RATE_LIMIT_MESSAGE =
+  '\nRate limit exceeded. Please wait a moment and retry, or use /model to switch to a different model.';
+
+// Google Free Tier message functions
 const getRateLimitErrorMessageGoogleProQuotaFree = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
-  fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
 ) =>
-  `\nYou have reached your daily ${currentModel} quota limit. You will be switched to the ${fallbackModel} model for the rest of this session. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily ${currentModel} quota limit. ${FREE_TIER_GUIDANCE}`;
 
 const getRateLimitErrorMessageGoogleGenericQuotaFree = () =>
-  `\nYou have reached your daily quota limit. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily quota limit. ${FREE_TIER_GUIDANCE}`;
 
-// Legacy/Standard Tier message functions
-const getRateLimitErrorMessageGooglePaid = (
-  fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
-) =>
-  `\nPossible quota limitations in place or slow response times detected. Switching to the ${fallbackModel} model for the rest of this session. We appreciate you for choosing Gemini Code Assist and the Gemini CLI.`;
-
+// Google Legacy/Standard Tier message functions
 const getRateLimitErrorMessageGoogleProQuotaPaid = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
-  fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
 ) =>
-  `\nYou have reached your daily ${currentModel} quota limit. You will be switched to the ${fallbackModel} model for the rest of this session. We appreciate you for choosing Gemini Code Assist and the Gemini CLI. To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily ${currentModel} quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
 
 const getRateLimitErrorMessageGoogleGenericQuotaPaid = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
 ) =>
-  `\nYou have reached your daily quota limit. We appreciate you for choosing Gemini Code Assist and the Gemini CLI. To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily quota limit. ${PAID_TIER_THANKS} To continue accessing the ${currentModel} model today, ${PAID_TIER_AUTH_HINT}`;
 
 function buildStatusSuffix(status?: number, statusLabel?: string): string {
   const parts: string[] = [];
@@ -121,7 +119,6 @@ function getRateLimitMessage(
   error?: unknown,
   userTier?: UserTierId,
   currentModel?: string,
-  fallbackModel?: string,
 ): string {
   // Determine if user is on a paid tier (Legacy or Standard) - default to FREE if not specified
   const isPaidTier =
@@ -131,11 +128,9 @@ function getRateLimitMessage(
     return isPaidTier
       ? getRateLimitErrorMessageGoogleProQuotaPaid(
           currentModel || DEFAULT_GEMINI_MODEL,
-          fallbackModel,
         )
       : getRateLimitErrorMessageGoogleProQuotaFree(
           currentModel || DEFAULT_GEMINI_MODEL,
-          fallbackModel,
         );
   }
 
@@ -147,16 +142,13 @@ function getRateLimitMessage(
       : getRateLimitErrorMessageGoogleGenericQuotaFree();
   }
 
-  return isPaidTier
-    ? getRateLimitErrorMessageGooglePaid(fallbackModel)
-    : getRateLimitErrorMessageGoogleFree(fallbackModel);
+  return GENERIC_RATE_LIMIT_MESSAGE;
 }
 
 export function parseAndFormatApiError(
   error: unknown,
   userTier?: UserTierId,
   currentModel?: string,
-  fallbackModel?: string,
 ): string {
   const errorCode = getErrorCodeFromUnknown(error);
   if (errorCode === STREAM_INTERRUPTED_ERROR_CODE) {
@@ -179,7 +171,7 @@ export function parseAndFormatApiError(
     const status = getErrorStatus(error);
     let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
     if (status === 429) {
-      text += getRateLimitMessage(error, userTier, currentModel, fallbackModel);
+      text += getRateLimitMessage(error, userTier, currentModel);
     }
     return text;
   }
@@ -216,12 +208,7 @@ export function parseAndFormatApiError(
         );
         let text = `[API Error: ${finalMessage}${statusSuffix}]`;
         if (parsedError.error.code === 429) {
-          text += getRateLimitMessage(
-            parsedError,
-            userTier,
-            currentModel,
-            fallbackModel,
-          );
+          text += getRateLimitMessage(parsedError, userTier, currentModel);
         }
         return text;
       }

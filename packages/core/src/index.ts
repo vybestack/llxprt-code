@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// Export safety utilities
+export * from './safety/index.js';
+
 // Export config
 export * from './config/config.js';
 export * from './config/profileManager.js';

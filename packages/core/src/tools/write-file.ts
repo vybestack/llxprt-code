@@ -38,6 +38,7 @@ import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -689,9 +690,9 @@ export class WriteFileTool
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(workspaceContext, filePath);
+    if (pathError) {
+      return pathError;
     }
 
     try {

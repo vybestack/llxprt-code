@@ -404,8 +404,9 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toMatch(/5/);
     });
 
-    it.skip('should work with a specific model', async () => {
+    it.skipIf(skipTests)('should work with a specific model', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
+
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.model-specific.${Math.random()

@@ -12,7 +12,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { type HistoryItem, MessageType } from '../../../types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import { loadHierarchicalLlxprtMemory } from '../../../../config/config.js';
+import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';
 
 interface UseMemoryRefreshActionParams {
   config: Config;

@@ -1,9 +1,11 @@
 /**
- * @requirement:Issue-181
+ * @requirement:Issue-181 Issue-1769
  * Test suite for Anthropic OAuth default settings
  *
  * Verifies that when switching to Anthropic provider with OAuth (subscription mode),
- * sensible defaults are set for context_limit and max_tokens to avoid user errors.
+ * user-set values for context_limit, max_tokens, and maxOutputTokens are preserved.
+ * Hardcoded defaults have been removed (Issue #1769); defaults now come from
+ * the anthropic.config alias ephemeralSettings instead.
  * This applies when either:
  * - authOnly=true is set (explicit OAuth mode), OR
  * - oauthManager.isOAuthEnabled('anthropic') returns true (OAuth is actively being used)
@@ -221,6 +223,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+vi.mock('../providers/providerAliases.js', () => ({
+  loadProviderAliasEntries: () => [],
+}));
+
 const {
   switchActiveProvider,
   setCliRuntimeContext,
@@ -275,49 +281,47 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
   });
 
   describe('when switching to Anthropic with authOnly=true', () => {
-    it('should set context_limit to 190000 if not already set', async () => {
-      // Arrange: Configure authOnly mode (OAuth subscription)
+    it('should NOT inject hardcoded context-limit default (Issue #1769)', async () => {
       stubConfig.setEphemeralSetting('authOnly', true);
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: context_limit should default to 190000
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBe(190000);
+      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
     });
 
-    it('should set max_tokens to 10000 if not already set', async () => {
-      // Arrange: Configure authOnly mode (OAuth subscription)
+    it('should NOT inject hardcoded max_tokens default (Issue #1769)', async () => {
       stubConfig.setEphemeralSetting('authOnly', true);
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: max_tokens should default to 10000
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(10000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+    });
+
+    it('should restore maxOutputTokens when previously set and no explicit max_tokens (Issue #1769)', async () => {
+      stubConfig.setEphemeralSetting('authOnly', true);
+      stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
     });
 
     it('should NOT override existing context_limit ephemeral setting', async () => {
-      // Arrange: User has already set context_limit
       stubConfig.setEphemeralSetting('authOnly', true);
       stubConfig.setEphemeralSetting('context-limit', 150000);
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: User's context_limit should be preserved
       expect(stubConfig.getEphemeralSetting('context-limit')).toBe(150000);
     });
 
     it('should NOT override existing max_tokens ephemeral setting', async () => {
-      // Arrange: User has already set max_tokens
       stubConfig.setEphemeralSetting('authOnly', true);
       stubConfig.setEphemeralSetting('max_tokens', 8192);
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: User's max_tokens should be preserved
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
     });
   });
@@ -361,49 +365,47 @@ describe('Anthropic OAuth defaults (Issue #181)', () => {
   });
 
   describe('when switching to Anthropic with OAuth enabled (via oauthManager)', () => {
-    it('should set context_limit to 190000 when OAuth is enabled even without authOnly', async () => {
-      // Arrange: OAuth is enabled via oauthManager, but authOnly is not set
+    it('should NOT inject hardcoded context-limit default (Issue #1769)', async () => {
       mockOAuthEnabledForAnthropic = true;
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: context_limit should default to 190000
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBe(190000);
+      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
     });
 
-    it('should set max_tokens to 10000 when OAuth is enabled even without authOnly', async () => {
-      // Arrange: OAuth is enabled via oauthManager, but authOnly is not set
+    it('should NOT inject hardcoded max_tokens default (Issue #1769)', async () => {
       mockOAuthEnabledForAnthropic = true;
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: max_tokens should default to 10000
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(10000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+    });
+
+    it('should restore maxOutputTokens when previously set and no explicit max_tokens (Issue #1769)', async () => {
+      mockOAuthEnabledForAnthropic = true;
+      stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
+
+      await switchActiveProvider('anthropic');
+
+      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
+      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
     });
 
     it('should NOT override existing context_limit when OAuth is enabled', async () => {
-      // Arrange: OAuth enabled, user has already set context_limit
       mockOAuthEnabledForAnthropic = true;
       stubConfig.setEphemeralSetting('context-limit', 150000);
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: User's context_limit should be preserved
       expect(stubConfig.getEphemeralSetting('context-limit')).toBe(150000);
     });
 
     it('should NOT override existing max_tokens when OAuth is enabled', async () => {
-      // Arrange: OAuth enabled, user has already set max_tokens
       mockOAuthEnabledForAnthropic = true;
       stubConfig.setEphemeralSetting('max_tokens', 8192);
 
-      // Act: Switch to Anthropic provider
       await switchActiveProvider('anthropic');
 
-      // Assert: User's max_tokens should be preserved
       expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
     });
   });

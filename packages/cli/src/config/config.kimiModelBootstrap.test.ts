@@ -6,7 +6,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Settings } from './settings.js';
-import { parseArguments, loadCliConfig } from './config.js';
+import { loadCliConfig } from './config.js';
+import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import { ExtensionStorage } from './extension.js';
 import {

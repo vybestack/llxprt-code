@@ -47,7 +47,7 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
   })),
 }));
 
-vi.mock('../../config/config.js', () => ({
+vi.mock('../../config/environmentLoader.js', () => ({
   loadHierarchicalLlxprtMemory: vi.fn(() =>
     Promise.resolve({
       memoryContent: 'test memory content',
@@ -320,10 +320,10 @@ describe('SessionController', () => {
   });
 
   it('should handle memory refresh errors', async () => {
-    const configModule = await import('../../config/config.js');
-    vi.mocked(configModule.loadHierarchicalLlxprtMemory).mockRejectedValueOnce(
-      new Error('Memory load failed'),
-    );
+    const envLoaderModule = await import('../../config/environmentLoader.js');
+    vi.mocked(
+      envLoaderModule.loadHierarchicalLlxprtMemory,
+    ).mockRejectedValueOnce(new Error('Memory load failed'));
 
     let contextValue: SessionContextType | undefined;
 
@@ -377,9 +377,9 @@ describe('SessionController', () => {
 
     await contextValue!.performMemoryRefresh();
 
-    const configModule = await import('../../config/config.js');
+    const envLoaderModule = await import('../../config/environmentLoader.js');
     const mockLoadHierarchicalLlxprtMemory = vi.mocked(
-      configModule.loadHierarchicalLlxprtMemory,
+      envLoaderModule.loadHierarchicalLlxprtMemory,
     );
     const settingsModule = await import('../../config/settings.js');
     const loadSettingsMock = vi.mocked(settingsModule.loadSettings);

@@ -22,40 +22,6 @@ function getLineCountCommand(): { command: string; tool: string } {
   }
 }
 
-function getAllowedListCommand(): string {
-  switch (shell) {
-    case 'powershell':
-      return 'Get-ChildItem';
-    case 'cmd':
-      return 'dir';
-    case 'bash':
-    default:
-      return 'ls';
-  }
-}
-
-function getChainedEchoCommand(): { allowPattern: string; command: string } {
-  const secondCommand = getAllowedListCommand();
-  switch (shell) {
-    case 'powershell':
-      return {
-        allowPattern: 'Write-Output',
-        command: `Write-Output "foo" && ${secondCommand}`,
-      };
-    case 'cmd':
-      return {
-        allowPattern: 'echo',
-        command: `echo "foo" && ${secondCommand}`,
-      };
-    case 'bash':
-    default:
-      return {
-        allowPattern: 'echo',
-        command: `echo "foo" && ${secondCommand}`,
-      };
-  }
-}
-
 describe('run_shell_command', () => {
   let rig: TestRig;
 
@@ -126,34 +92,31 @@ describe('run_shell_command', () => {
     validateModelOutput(result, 'test-stdin', 'Shell command stdin test');
   });
 
-  it.skip('should run allowed sub-command in non-interactive mode', async () => {
-    await rig.setup('should run allowed sub-command in non-interactive mode');
+  it('should run allowed sub-command in non-interactive mode', async () => {
+    await rig.setup('should run allowed sub-command in non-interactive mode', {
+      settings: { tools: { core: ['run_shell_command'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.allowed-sub.responses.jsonl',
+      ),
+    });
 
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { tool, command } = getLineCountCommand();
-    const prompt = `use ${command} to tell me how many lines there are in ${testFile}`;
+    rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
 
-    // Provide the prompt via stdin to simulate non-interactive mode
+    // Use 'wc' directly — the fake response fixture always emits 'wc -l'
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
-      args: [`--allowed-tools=run_shell_command(${tool})`],
-      stdin: prompt,
+      args: ['--allowed-tools=run_shell_command(wc)'],
+      stdin: 'Count lines in test.txt',
       yolo: false,
     });
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
 
     if (!foundToolCall) {
-      const toolLogs = rig.readToolLogs().map(({ toolRequest }) => ({
-        name: toolRequest.name,
-        success: toolRequest.success,
-        args: toolRequest.args,
-      }));
       printDebugInfo(rig, result, {
         'Found tool call': foundToolCall,
-        'Allowed tools flag': `run_shell_command(${tool})`,
-        Prompt: prompt,
-        'Tool logs': toolLogs,
-        Result: result,
+        'Allowed tools flag': 'run_shell_command(wc)',
       });
     }
 
@@ -170,16 +133,21 @@ describe('run_shell_command', () => {
     expect(toolCall.toolRequest.success).toBe(true);
   });
 
-  it.skip('should succeed with no parens in non-interactive mode', async () => {
-    await rig.setup('should succeed with no parens in non-interactive mode');
+  it('should succeed with no parens in non-interactive mode', async () => {
+    await rig.setup('should succeed with no parens in non-interactive mode', {
+      settings: { tools: { core: ['run_shell_command'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.allowed-no-parens.responses.jsonl',
+      ),
+    });
 
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { command } = getLineCountCommand();
-    const prompt = `use ${command} to tell me how many lines there are in ${testFile}`;
+    rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
 
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
-      args: '--allowed-tools=run_shell_command',
-      stdin: prompt,
+      args: ['--allowed-tools=run_shell_command'],
+      stdin: 'Count lines in test.txt',
       yolo: false,
     });
 
@@ -239,33 +207,31 @@ describe('run_shell_command', () => {
     expect(toolCall.toolRequest.success).toBe(true);
   });
 
-  it.skip('should work with ShellTool alias', async () => {
-    await rig.setup('should work with ShellTool alias');
+  it('should work with ShellTool alias', async () => {
+    await rig.setup('should work with ShellTool alias', {
+      settings: { tools: { core: ['run_shell_command'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.shell-tool-alias.responses.jsonl',
+      ),
+    });
 
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { tool, command } = getLineCountCommand();
-    const prompt = `use ${command} to tell me how many lines there are in ${testFile}`;
+    rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
 
+    // Use 'wc' directly — the fake response fixture always emits 'wc -l'
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
-      args: `--allowed-tools=ShellTool(${tool})`,
-      stdin: prompt,
+      args: ['--allowed-tools=ShellTool(wc)'],
+      stdin: 'Count lines in test.txt',
       yolo: false,
     });
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
 
     if (!foundToolCall) {
-      const toolLogs = rig.readToolLogs().map(({ toolRequest }) => ({
-        name: toolRequest.name,
-        success: toolRequest.success,
-        args: toolRequest.args,
-      }));
       printDebugInfo(rig, result, {
         'Found tool call': foundToolCall,
-        'Allowed tools flag': `ShellTool(${tool})`,
-        Prompt: prompt,
-        'Tool logs': toolLogs,
-        Result: result,
+        'Allowed tools flag': 'ShellTool(wc)',
       });
     }
 
@@ -282,26 +248,27 @@ describe('run_shell_command', () => {
     expect(toolCall.toolRequest.success).toBe(true);
   });
 
-  // TODO(#11062): Un-skip this once we can make it reliable by using hard coded
-  // model responses.
-  it.skip('should combine multiple --allowed-tools flags', async () => {
-    await rig.setup('should combine multiple --allowed-tools flags');
+  it('should combine multiple --allowed-tools flags', async () => {
+    await rig.setup('should combine multiple --allowed-tools flags', {
+      settings: { tools: { core: ['run_shell_command'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.combine-allowed.responses.jsonl',
+      ),
+    });
 
-    const { tool, command } = getLineCountCommand();
-    const prompt =
-      `use both ${command} and ls to count the number of lines in files in this ` +
-      `directory. Do not pipe these commands into each other, run them separately.`;
-
+    // Use 'wc' directly — the fake response fixture always emits 'wc -l'
+    // Provide a prompt via stdin to avoid "No input provided via stdin" error in CI
     const result = await rig.run({
       args: [
-        `--allowed-tools=run_shell_command(${tool})`,
+        '--allowed-tools=run_shell_command(wc)',
         '--allowed-tools=run_shell_command(ls)',
       ],
-      stdin: prompt,
+      stdin: 'List files and count lines',
       yolo: false,
     });
 
-    for (const expected of ['ls', tool]) {
+    for (const expected of ['ls', 'wc']) {
       const foundToolCall = await rig.waitForToolCall(
         'run_shell_command',
         15000,
@@ -374,33 +341,6 @@ describe('run_shell_command', () => {
       'Expected failing run_shell_command invocation',
     ).toBeTruthy();
     expect(failureLog!.toolRequest.success).toBe(false);
-  });
-
-  // TODO(#11966): Deflake this test and re-enable once the underlying race is resolved.
-  it.skip('should reject chained commands when only the first segment is allowlisted in non-interactive mode', async () => {
-    await rig.setup(
-      'should reject chained commands when only the first segment is allowlisted',
-    );
-
-    const chained = getChainedEchoCommand();
-    const shellInjection = `!{${chained.command}}`;
-
-    await rig.run({
-      args: `--allowed-tools=ShellTool(${chained.allowPattern})`,
-      stdin: `${shellInjection}\n`,
-      yolo: false,
-    });
-
-    // CLI should refuse to execute the chained command without scheduling run_shell_command.
-    const toolLogs = rig
-      .readToolLogs()
-      .filter((log) => log.toolRequest.name === 'run_shell_command');
-
-    // Success is false because tool is in the scheduled state.
-    for (const log of toolLogs) {
-      expect(log.toolRequest.success).toBe(false);
-      expect(log.toolRequest.args).toContain('&&');
-    }
   });
 
   it('should allow all with "ShellTool" and other specific tools', async () => {
@@ -485,21 +425,26 @@ describe('run_shell_command', () => {
     }
   });
 
-  it.skip('should run a platform-specific file listing command', async () => {
-    await rig.setup('should run platform-specific file listing');
-    const fileName = `test-file-${Math.random().toString(36).substring(7)}.txt`;
-    rig.createFile(fileName, 'test content');
+  it('should run a platform-specific file listing command', async () => {
+    await rig.setup('should run platform-specific file listing', {
+      settings: { tools: { core: ['run_shell_command'] } },
+      fakeResponsesPath: join(
+        import.meta.dirname,
+        'run-shell-command.platform-list.responses.jsonl',
+      ),
+    });
 
-    const prompt = `Run a shell command to list the files in the current directory and tell me what they are.`;
-    const result = await rig.run({ args: prompt });
+    rig.createFile('test-file.txt', 'test content');
+
+    const result = await rig.run({
+      args: 'List the files in the current directory.',
+    });
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
-    // Debugging info
-    if (!foundToolCall || !result.includes(fileName)) {
+    if (!foundToolCall) {
       printDebugInfo(rig, result, {
         'Found tool call': foundToolCall,
-        'Contains fileName': result.includes(fileName),
       });
     }
 
@@ -508,8 +453,12 @@ describe('run_shell_command', () => {
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
 
-    validateModelOutput(result, fileName, 'Platform-specific listing test');
-    expect(result).toContain(fileName);
+    const toolCall = rig
+      .readToolLogs()
+      .filter(
+        (toolCall) => toolCall.toolRequest.name === 'run_shell_command',
+      )[0];
+    expect(toolCall.toolRequest.success).toBe(true);
   });
 
   it('rejects invalid shell expressions', async () => {

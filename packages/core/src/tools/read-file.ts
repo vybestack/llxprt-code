@@ -32,6 +32,7 @@ import {
   getGitLineChanges,
   GitLineChangeMarker,
 } from '../utils/gitLineChanges.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 /**
  * Parameters for the ReadFile tool
@@ -375,9 +376,9 @@ If git status cannot be read, the tool will still return file content and includ
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(workspaceContext, filePath);
+    if (pathError) {
+      return pathError;
     }
     if (params.offset !== undefined && params.offset < 0) {
       return 'Offset must be a non-negative number';

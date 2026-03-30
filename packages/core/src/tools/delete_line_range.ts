@@ -31,6 +31,7 @@ import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { collectLspDiagnosticsBlock } from './lsp-diagnostics-helper.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 /**
  * Parameters for the DeleteLineRange tool
@@ -292,9 +293,12 @@ export class DeleteLineRangeTool extends BaseDeclarativeTool<
     }
 
     const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(params.absolute_path)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    const pathError = validatePathWithinWorkspace(
+      workspaceContext,
+      params.absolute_path,
+    );
+    if (pathError) {
+      return pathError;
     }
 
     if (params.start_line < 1) {

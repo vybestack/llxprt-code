@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { READ_ONLY_TOOL_NAMES } from '../config.js';
+import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
 
 describe('non-interactive approval defaults', () => {
   it('treats ls as a read-only tool', () => {

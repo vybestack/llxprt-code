@@ -88,8 +88,8 @@ async function resolveApiKey(
  *
  * Detection strategy (in priority order):
  * 1. Ephemeral base-url setting (most specific, user override)
- * 2. Provider config baseUrl/baseURL (from providerConfig)
- * 3. Base provider config baseURL/baseUrl (from baseProviderConfig)
+ * 2. Provider config base-url (from providerConfig) - uses kebab-case per PR #1491
+ * 3. Base provider config base-url (from baseProviderConfig) - uses kebab-case per PR #1491
  * 4. Provider name detection (least specific, fallback only)
  */
 async function fetchApiKeyProviderQuota(
@@ -116,15 +116,14 @@ async function fetchApiKeyProviderQuota(
       const providerInstance =
         providerManager.getProviderByName?.(activeProviderName);
       if (providerInstance) {
-        // Try providerConfig.baseUrl/baseURL first
+        // Try providerConfig['base-url'] first (kebab-case per PR #1491)
         const providerConfig = (
           providerInstance as {
-            providerConfig?: { baseUrl?: string; baseURL?: string };
+            providerConfig?: { 'base-url'?: string };
           }
         ).providerConfig;
         if (providerConfig) {
-          const configBaseUrl =
-            providerConfig.baseUrl ?? providerConfig.baseURL;
+          const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
           if (configBaseUrl) {
             provider = detectApiKeyProvider(configBaseUrl);
             baseUrlForFetch = configBaseUrl;
@@ -136,16 +135,16 @@ async function fetchApiKeyProviderQuota(
           }
         }
 
-        // Try baseProviderConfig.baseURL/baseUrl if still not found
+        // Try baseProviderConfig['base-url'] if still not found (kebab-case per PR #1491)
         if (!provider) {
           const baseProviderConfig = (
             providerInstance as {
-              baseProviderConfig?: { baseURL?: string; baseUrl?: string };
+              baseProviderConfig?: { 'base-url'?: string };
             }
           ).baseProviderConfig;
           if (baseProviderConfig) {
             const baseConfigUrl =
-              baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl;
+              baseProviderConfig['base-url']?.trim() || undefined;
             if (baseConfigUrl) {
               provider = detectApiKeyProvider(baseConfigUrl);
               baseUrlForFetch = baseConfigUrl;

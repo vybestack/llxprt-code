@@ -62,7 +62,7 @@ export function createTestMergedSettings(
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
 // Keys that exist at root level but should be migrated to ui.* namespace
-// These are read from effectiveSettings.ui.* in config.ts but may exist at root in user settings
+// These are read from profileMergedSettings.ui.* in config.ts but may exist at root in user settings
 const LEGACY_UI_KEYS = [
   'usageStatisticsEnabled',
   'contextFileName',

@@ -58,6 +58,7 @@ const makeParams = (): UIStateParams => ({
   providerOptions: [],
   selectedProvider: '',
   currentModel: '',
+  contextLimit: undefined,
   profiles: [],
   toolsDialogAction: 'enable',
   toolsDialogTools: [],

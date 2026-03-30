@@ -81,14 +81,6 @@ export interface OutputSettings {
   format?: OutputFormat;
 }
 
-export interface CodebaseInvestigatorSettings {
-  enabled?: boolean;
-  maxNumTurns?: number;
-  maxTimeMinutes?: number;
-  thinkingBudget?: number;
-  model?: string;
-}
-
 export interface IntrospectionAgentSettings {
   enabled?: boolean;
 }
@@ -418,7 +410,6 @@ export interface ConfigParameters {
     adminSkillsEnabled?: boolean;
   }>;
   outputSettings?: OutputSettings;
-  codebaseInvestigatorSettings?: CodebaseInvestigatorSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
 

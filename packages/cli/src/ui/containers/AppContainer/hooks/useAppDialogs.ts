@@ -134,6 +134,9 @@ function useDialogsCore(
 ) {
   const { config, settings, addItem, consoleMessages } = p;
   const { currentModel, setCurrentModel } = useModelTracking({ config });
+  const [contextLimit, setContextLimit] = useState<number | undefined>(
+    () => config.getEphemeralSetting('context-limit') as number | undefined,
+  );
   const displayPrefs = useDisplayPreferences();
   const orchestration = useDialogOrchestration();
   const workspace = useWorkspaceMigration(settings);
@@ -157,6 +160,8 @@ function useDialogsCore(
   return {
     currentModel,
     setCurrentModel,
+    contextLimit,
+    setContextLimit,
     ...displayPrefs,
     ...orchestration,
     ...workspace,
@@ -187,6 +192,8 @@ function useDialogsAuthProviders(
   st: ReturnType<typeof useDialogsState>,
   currentModel: string,
   setCurrentModel: (model: string) => void,
+  contextLimit: number | undefined,
+  setContextLimit: (limit: number | undefined) => void,
   setShowErrorDetails: (value: boolean) => void,
 ) {
   const {
@@ -215,6 +222,8 @@ function useDialogsAuthProviders(
     currentModel,
     setCurrentModel,
     getActiveModelName: runtime.getActiveModelName,
+    contextLimit,
+    setContextLimit,
   });
   useAppEventHandlers({
     handleNewMessage,
@@ -244,6 +253,8 @@ function useDialogsAuth(
   st: ReturnType<typeof useDialogsState>,
   currentModel: string,
   setCurrentModel: (model: string) => void,
+  contextLimit: number | undefined,
+  setContextLimit: (limit: number | undefined) => void,
   setShowErrorDetails: (value: boolean) => void,
 ) {
   const { config, settings, appState, addItem } = p;
@@ -261,6 +272,8 @@ function useDialogsAuth(
     st,
     currentModel,
     setCurrentModel,
+    contextLimit,
+    setContextLimit,
     setShowErrorDetails,
   );
   return {
@@ -370,6 +383,8 @@ export function useAppDialogs(params: AppDialogsParams) {
     st,
     core.currentModel,
     core.setCurrentModel,
+    core.contextLimit,
+    core.setContextLimit,
     core.setShowErrorDetails,
   );
   const profiles = useDialogsProfiles(params);

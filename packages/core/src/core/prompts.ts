@@ -123,7 +123,7 @@ function extractFolderStructureHeader(lines: string[]): {
   return { header, body: lines.slice(index) };
 }
 
-function compactFolderStructureSnapshot(
+export function compactFolderStructureSnapshot(
   structure?: string,
 ): string | undefined {
   if (!structure) {

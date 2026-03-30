@@ -41,7 +41,7 @@ exports[`SettingsDialog > Initial Rendering > should render settings list with v
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -87,7 +87,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'accessibility settings
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -133,7 +133,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'all boolean settings d
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -179,7 +179,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'default state' correct
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -225,7 +225,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'file filtering setting
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -271,7 +271,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'focused on scope selec
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -317,7 +317,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'mixed boolean and numb
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -363,7 +363,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'tools and security set
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -409,7 +409,7 @@ exports[`SettingsDialog > Snapshot Tests > should render 'various boolean settin
 │    Workspace Settings                                                                            │
 │    System Settings                                                                               │
 │                                                                                                  │
-│  (Use Enter to select, Tab to change focus, Esc to close)                                        │
+│  (Type to search, Esc to clear, Enter to navigate)                                               │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;

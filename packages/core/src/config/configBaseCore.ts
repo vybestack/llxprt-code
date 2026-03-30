@@ -53,7 +53,6 @@ import {
   type SummarizeToolOutputSettings,
   type ComplexityAnalyzerSettings,
   type OutputSettings,
-  type CodebaseInvestigatorSettings,
   type IntrospectionAgentSettings,
   type TelemetrySettings,
   type GeminiCLIExtension,
@@ -205,7 +204,6 @@ export abstract class ConfigBaseCore {
       }>)
     | undefined;
   protected readonly outputSettings!: OutputSettings;
-  protected readonly codebaseInvestigatorSettings!: CodebaseInvestigatorSettings;
   protected readonly introspectionAgentSettings!: IntrospectionAgentSettings;
   protected readonly useWriteTodos!: boolean;
   /**
@@ -660,12 +658,6 @@ export abstract class ConfigBaseCore {
   }
   getOutputSettings(): OutputSettings {
     return this.outputSettings;
-  }
-  getCodebaseInvestigatorSettings(): CodebaseInvestigatorSettings {
-    return this.codebaseInvestigatorSettings;
-  }
-  getIntrospectionAgentSettings(): IntrospectionAgentSettings {
-    return this.introspectionAgentSettings;
   }
   getUseWriteTodos(): boolean {
     return this.useWriteTodos;

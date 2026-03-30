@@ -331,4 +331,41 @@ describe('setCommand runtime integration', () => {
       content: "No custom header named 'X-Test' found",
     });
   });
+
+  it('clears ephemeral setting when unsetting modelparam', async () => {
+    const result = await setCommand.action!(
+      context,
+      'unset modelparam max_tokens',
+    );
+
+    expect(mockRuntime.clearActiveModelParam).toHaveBeenCalledWith(
+      'max_tokens',
+    );
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'max_tokens',
+      undefined,
+    );
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content: "Model parameter 'max_tokens' cleared",
+    });
+  });
+
+  it('surfaces error from clearActiveModelParam even when ephemeral also cleared', async () => {
+    mockRuntime.clearActiveModelParam.mockImplementationOnce(() => {
+      throw new Error('cannot clear');
+    });
+
+    const result = await setCommand.action!(
+      context,
+      'unset modelparam max_tokens',
+    );
+
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Failed to clear model parameter: cannot clear',
+    });
+  });
 });

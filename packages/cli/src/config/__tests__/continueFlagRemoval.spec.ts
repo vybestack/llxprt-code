@@ -16,7 +16,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fc from 'fast-check';
-import { parseArguments } from '../config.js';
+import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 
 describe('CLI --resume flag removal', () => {

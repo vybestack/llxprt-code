@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { isNodeError } from './errors.js';
 import type { WorkspaceContext } from './workspaceContext.js';
+import { validatePathWithinWorkspace } from '../safety/index.js';
 
 export type ResolvedSearchTarget =
   | { readonly kind: 'all-workspaces' }
@@ -24,11 +25,13 @@ export function resolveTextSearchTarget(
 
   const targetPath = path.resolve(targetDir, relativePath);
 
-  if (!workspaceContext.isPathWithinWorkspace(targetPath)) {
-    const directories = workspaceContext.getDirectories();
-    throw new Error(
-      `Path validation failed: Attempted path "${relativePath}" resolves outside the allowed workspace directories: ${directories.join(', ')}`,
-    );
+  const pathError = validatePathWithinWorkspace(
+    workspaceContext,
+    targetPath,
+    'Path',
+  );
+  if (pathError) {
+    throw new Error('Path validation failed: ' + pathError);
   }
 
   let stats: fs.Stats;

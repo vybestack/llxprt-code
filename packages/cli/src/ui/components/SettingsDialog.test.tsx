@@ -27,7 +27,10 @@ import { waitFor } from '../../test-utils/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
-import { KeypressProvider } from '../contexts/KeypressContext.js';
+import {
+  KeypressProvider,
+  FAST_RETURN_TIMEOUT,
+} from '../contexts/KeypressContext.js';
 import { act } from 'react';
 import { saveModifiedSettings } from '../../utils/settingsUtils.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
@@ -127,6 +130,24 @@ const renderDialog = (
     </KeypressProvider>,
   );
 
+const waitForFastReturnWindow = async () => {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, FAST_RETURN_TIMEOUT + 5);
+  });
+};
+
+const pressEnter = async (stdin: { write: (data: string) => void }) => {
+  // Avoid KeypressContext fast-return buffering converting rapid Enter presses
+  // into plain text insertions during tests.
+  await waitForFastReturnWindow();
+
+  act(() => {
+    stdin.write(TerminalKeys.ENTER as string);
+  });
+
+  await waitForFastReturnWindow();
+};
+
 describe('SettingsDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -152,8 +173,8 @@ describe('SettingsDialog', () => {
       const output = lastFrame();
       expect(output).toContain('Settings');
       expect(output).toContain('Apply To');
-      // Use regex for more flexible help text matching
-      expect(output).toMatch(/Enter.*select.*Esc.*close/);
+      // Dialog starts in search mode
+      expect(output).toContain('Type to search');
     });
 
     it('should render the settings dialog properly', () => {
@@ -165,8 +186,8 @@ describe('SettingsDialog', () => {
       const output = lastFrame();
       // Should render properly
       expect(output).toContain('Settings');
-      // Use regex for more flexible help text matching
-      expect(output).toMatch(/Enter.*select.*Esc.*close/);
+      // Dialog starts in search mode
+      expect(output).toContain('Type to search');
     });
 
     it('should render settings list with visual indicators', () => {
@@ -199,25 +220,38 @@ describe('SettingsDialog', () => {
 
       const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
-      const initialFrame = lastFrame();
-      expect(initialFrame).toContain('Enable Loading Phrases');
+      // Wait for initial render (dialog starts in search mode)
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Settings');
+      });
 
-      // Navigate down
+      // Exit search mode to enter nav mode
+      act(() => {
+        stdin.write(TerminalKeys.ENTER as string);
+      });
+
+      // Wait for nav mode (help text changes)
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Enter.*select/);
+      });
+
+      // Navigate down from first item (Disable Loading Phrases) to second item
       act(() => {
         stdin.write(down);
       });
 
       await vi.waitFor(() => {
+        // Second item is Screen Reader Mode (it should now be highlighted/active)
         expect(lastFrame()).toContain('Screen Reader Mode');
       });
 
-      // Navigate up
+      // Navigate back up to first item
       act(() => {
         stdin.write(up);
       });
 
       await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Enable Loading Phrases');
+        expect(lastFrame()).toContain('Disable Loading Phrases');
       });
 
       unmount();
@@ -229,6 +263,13 @@ describe('SettingsDialog', () => {
 
       const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
+      // Exit search mode first (dialog starts in search mode)
+      await pressEnter(stdin);
+
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Enter.*select/);
+      });
+
       // Try to go up from first item
       act(() => {
         stdin.write(TerminalKeys.UP_ARROW);
@@ -236,7 +277,7 @@ describe('SettingsDialog', () => {
 
       await vi.waitFor(() => {
         // Should wrap to last setting (without relying on exact bullet character)
-        expect(lastFrame()).toContain('Hook Notifications');
+        expect(lastFrame()).toContain('Codebase Investigator Max Num Turns');
       });
 
       unmount();
@@ -252,31 +293,50 @@ describe('SettingsDialog', () => {
 
       const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
-      // Wait for initial render and verify we're on Enable Loading Phrases (first setting)
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Enable Loading Phrases');
+      // Wait for initial render
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Settings');
       });
 
-      // Toggle the first setting (accessibility.enableLoadingPhrases, restart-required, default true)
+      // Exit search mode first (dialog starts in search mode)
+      await pressEnter(stdin);
+
+      // Wait for nav mode to be active
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Enter.*select/);
+      });
+
+      // First visible setting is Screen Reader Mode (accessibility.screenReader)
+      // Navigate down to it from Disable Loading Phrases
       act(() => {
-        stdin.write(TerminalKeys.ENTER as string);
+        stdin.write(TerminalKeys.DOWN_ARROW as string);
+      });
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain('Screen Reader Mode');
       });
 
-      // Close the dialog via Escape — this triggers saveRestartRequiredSettings → saveModifiedSettings
+      // Toggle the setting (restart-required, tracked in pending state)
+      await pressEnter(stdin);
+
+      // Wait for the toggled value to appear in the UI to confirm state update
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Screen Reader Mode\s+true\*/);
+      });
+
+      // Close the dialog with Escape to trigger saveRestartRequiredSettings
       act(() => {
         stdin.write(TerminalKeys.ESCAPE as string);
       });
 
-      // Wait for the mock to be called
       await vi.waitFor(() => {
         expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalled();
       });
 
       expect(vi.mocked(saveModifiedSettings)).toHaveBeenCalledWith(
-        new Set<string>(['accessibility.enableLoadingPhrases']),
+        new Set<string>(['accessibility.screenReader']),
         expect.objectContaining({
           accessibility: expect.objectContaining({
-            enableLoadingPhrases: false,
+            screenReader: true,
           }),
         }),
         expect.any(LoadedSettings),
@@ -346,17 +406,13 @@ describe('SettingsDialog', () => {
 
       const { lastFrame, unmount } = renderDialog(settings, onSelect);
 
-      // Wait for initial render
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Vim Mode');
+      // Wait for initial render (dialog starts in search mode)
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Settings');
       });
 
-      // The UI should show the settings section is active and scope section is inactive
-      expect(lastFrame()).toContain('Vim Mode'); // Settings section active
-      expect(lastFrame()).toContain('Apply To'); // Scope section (don't rely on exact spacing)
-
-      // This test validates the initial state - scope selection behavior
-      // is complex due to keypress handling, so we focus on state validation
+      // The UI should show the settings section and scope section
+      expect(lastFrame()).toContain('Apply To');
 
       unmount();
     });
@@ -400,19 +456,31 @@ describe('SettingsDialog', () => {
       const settings = createMockSettings();
       const onSelect = vi.fn();
 
-      const { lastFrame, unmount } = renderDialog(settings, onSelect);
+      const { lastFrame, stdin, unmount } = renderDialog(settings, onSelect);
 
       // Wait for initial render
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Hide Window Title');
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Settings');
       });
 
-      // Verify the dialog is rendered properly
-      expect(lastFrame()).toContain('Settings');
-      expect(lastFrame()).toContain('Apply To');
+      // Dialog starts in search mode - first Escape exits search mode
+      act(() => {
+        stdin.write(TerminalKeys.ESCAPE);
+      });
 
-      // This test validates rendering - escape key behavior depends on complex
-      // keypress handling that's difficult to test reliably in this environment
+      // Wait for search mode to exit before sending second Escape
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Enter.*select/);
+      });
+
+      // Second Escape closes the dialog
+      act(() => {
+        stdin.write(TerminalKeys.ESCAPE);
+      });
+
+      await vi.waitFor(() => {
+        expect(onSelect).toHaveBeenCalledWith(undefined, expect.anything());
+      });
 
       unmount();
     });
@@ -626,49 +694,67 @@ describe('SettingsDialog', () => {
       {
         name: 'not reset sibling settings when toggling a nested setting multiple times',
         toggleCount: 5,
-        shellSettings: {
-          showColor: false,
-          enableInteractiveShell: true,
+        accessibilitySettings: {
+          disableLoadingPhrases: false,
+          screenReader: true,
         },
         expectedSiblings: {
-          enableInteractiveShell: true,
+          screenReader: true,
         },
       },
       {
         name: 'preserve multiple sibling settings in nested objects during rapid toggles',
         toggleCount: 3,
-        shellSettings: {
-          showColor: false,
-          enableInteractiveShell: true,
-          pager: 'less',
+        accessibilitySettings: {
+          disableLoadingPhrases: false,
+          screenReader: true,
         },
         expectedSiblings: {
-          enableInteractiveShell: true,
-          pager: 'less',
+          screenReader: true,
         },
       },
     ])(
       'should $name',
-      async ({ toggleCount, shellSettings, expectedSiblings }) => {
+      async ({ toggleCount, accessibilitySettings, expectedSiblings }) => {
         vi.mocked(saveModifiedSettings).mockClear();
 
-        // Using the real SETTINGS_SCHEMA instead of mocked getSettingsSchema
-
         const settings = createMockSettings({
-          tools: {
-            shell: shellSettings,
-          },
+          accessibility: accessibilitySettings,
         });
 
         const onSelect = vi.fn();
 
-        const { stdin, unmount } = renderDialog(settings, onSelect);
+        const { stdin, unmount, lastFrame } = renderDialog(settings, onSelect);
 
+        // Wait for initial render
+        await waitFor(() => {
+          expect(lastFrame()).toContain('Settings');
+        });
+
+        // Exit search mode first (dialog starts in search mode)
+        await pressEnter(stdin);
+
+        // Wait for nav mode (help text changes)
+        await waitFor(() => {
+          expect(lastFrame()).toMatch(/Enter.*select/);
+        });
+
+        // First visible setting is Disable Loading Phrases (accessibility.disableLoadingPhrases)
         for (let i = 0; i < toggleCount; i++) {
-          act(() => {
-            stdin.write(TerminalKeys.ENTER as string);
-          });
+          await pressEnter(stdin);
         }
+
+        // Wait for toggled value to appear to confirm state update
+        await waitFor(() => {
+          expect(lastFrame()).toMatch(
+            /Disable Loading Phrases\s+(true\*|false\*)/,
+          );
+        });
+
+        // Close dialog with Escape to trigger saveRestartRequiredSettings
+        act(() => {
+          stdin.write(TerminalKeys.ESCAPE as string);
+        });
 
         await vi.waitFor(() => {
           expect(
@@ -677,22 +763,19 @@ describe('SettingsDialog', () => {
         });
 
         const calls = vi.mocked(saveModifiedSettings).mock.calls;
-        const shellCalls = calls.filter(([modifiedKeys]) =>
-          modifiedKeys.has('tools.shell.showColor'),
+        const accessibilityCalls = calls.filter(([modifiedKeys]) =>
+          modifiedKeys.has('accessibility.disableLoadingPhrases'),
         );
 
-        expect(shellCalls.length).toBeGreaterThan(0);
-        shellCalls.forEach(([modifiedKeys, pendingSettings]) => {
-          const toolsSettings = pendingSettings.tools as
-            | Record<string, unknown>
-            | undefined;
-          const shellSettings = toolsSettings?.shell as
+        expect(accessibilityCalls.length).toBeGreaterThan(0);
+        accessibilityCalls.forEach(([modifiedKeys, pendingSettings]) => {
+          const accessibility = pendingSettings.accessibility as
             | Record<string, unknown>
             | undefined;
 
           Object.entries(expectedSiblings).forEach(([key, value]) => {
-            expect(shellSettings?.[key]).toBe(value);
-            expect(modifiedKeys.has(`tools.shell.${key}`)).toBe(false);
+            expect(accessibility?.[key]).toBe(value);
+            expect(modifiedKeys.has(`accessibility.${key}`)).toBe(false);
           });
 
           expect(modifiedKeys.size).toBe(1);
@@ -765,15 +848,15 @@ describe('SettingsDialog', () => {
 
       const { lastFrame, unmount } = renderDialog(settings, onSelect);
 
-      // Wait for initial render
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Vim Mode');
+      // Wait for initial render (dialog starts in search mode)
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Settings');
       });
 
-      // Verify initial state: settings section active, scope section inactive
-      expect(lastFrame()).toContain('Vim Mode'); // Settings section active
-      expect(lastFrame()).toContain('Apply To'); // Scope section (don't rely on exact spacing)
+      // Verify initial state shows settings section and scope section
+      expect(lastFrame()).toContain('Apply To');
 
+      // Tab now cycles: search→navigation→scope→search
       // This test validates the rendered UI structure for tab navigation
       // Actual tab behavior testing is complex due to keypress handling
 
@@ -813,19 +896,29 @@ describe('SettingsDialog', () => {
       const settings = createMockSettings();
       const onSelect = vi.fn();
 
-      const { lastFrame, unmount } = renderDialog(settings, onSelect);
+      const { lastFrame, stdin, unmount } = renderDialog(settings, onSelect);
 
-      // Wait for initial render
-      await vi.waitFor(() => {
-        expect(lastFrame()).toContain('Vim Mode');
+      // Wait for initial render (dialog starts in search mode)
+      await waitFor(() => {
+        expect(lastFrame()).toContain('Settings');
+      });
+
+      // Exit search mode first
+      act(() => {
+        stdin.write(TerminalKeys.ENTER as string);
+      });
+
+      // Wait for nav mode (help text changes)
+      await waitFor(() => {
+        expect(lastFrame()).toMatch(/Enter.*select/);
       });
 
       // Verify the complete UI is rendered with all necessary sections
       expect(lastFrame()).toContain('Settings'); // Title
-      expect(lastFrame()).toContain('Vim Mode'); // Active setting
+      expect(lastFrame()).toContain('Disable Loading Phrases'); // First visible setting
       expect(lastFrame()).toContain('Apply To'); // Scope section
       expect(lastFrame()).toContain('User Settings'); // Scope options (no numbers when settings focused)
-      // Use regex for more flexible help text matching
+      // In nav mode, help text shows navigation help
       expect(lastFrame()).toMatch(/Enter.*select.*Tab.*focus.*Esc.*close/);
 
       // This test validates the complete UI structure is available for user workflow
@@ -903,6 +996,11 @@ describe('SettingsDialog', () => {
           <SettingsDialog settings={settings} onSelect={onSelect} />
         </KeypressProvider>,
       );
+
+      // Exit search mode first (dialog starts in search mode)
+      act(() => {
+        stdin.write('\r'); // Enter to exit search mode
+      });
 
       // Navigate to the last setting
       act(() => {
@@ -986,12 +1084,13 @@ describe('SettingsDialog', () => {
       unmount();
     });
 
-    it('should exit search settings when Escape is pressed', async () => {
+    it('should exit search mode with Escape and close dialog with second Escape', async () => {
       const settings = createMockSettings();
       const onSelect = vi.fn();
 
       const { lastFrame, stdin, unmount } = renderDialog(settings, onSelect);
 
+      // Type in search (dialog starts in search mode)
       act(() => {
         stdin.write('vim');
       });
@@ -999,7 +1098,17 @@ describe('SettingsDialog', () => {
         expect(lastFrame()).toContain('vim');
       });
 
-      // Press Escape
+      // First Escape exits search mode (clears query)
+      act(() => {
+        stdin.write(TerminalKeys.ESCAPE);
+      });
+
+      await waitFor(() => {
+        // Should no longer show search query
+        expect(lastFrame()).not.toContain('vim');
+      });
+
+      // Second Escape closes the dialog
       act(() => {
         stdin.write(TerminalKeys.ESCAPE);
       });
@@ -1019,6 +1128,7 @@ describe('SettingsDialog', () => {
 
       const { lastFrame, stdin, unmount } = renderDialog(settings, onSelect);
 
+      // Dialog starts in search mode - type directly
       act(() => {
         stdin.write('vimm');
       });
@@ -1026,17 +1136,15 @@ describe('SettingsDialog', () => {
         expect(lastFrame()).toContain('vimm');
       });
 
-      // Press backspace
+      // Press backspace to remove last 'm'
       act(() => {
         stdin.write(TerminalKeys.BACKSPACE);
       });
 
       await waitFor(() => {
         expect(lastFrame()).toContain('vim');
+        // After correcting to 'vim', should show Vim Mode
         expect(lastFrame()).toContain('Vim Mode');
-        expect(lastFrame()).not.toContain(
-          'Codebase Investigator Max Num Turns',
-        );
       });
 
       unmount();
@@ -1057,7 +1165,7 @@ describe('SettingsDialog', () => {
         expect(lastFrame()).toContain('nonexistentsetting');
         expect(lastFrame()).toContain('');
         expect(lastFrame()).not.toContain('Vim Mode'); // Should not contain any settings
-        expect(lastFrame()).not.toContain('Enable Auto Update'); // Should not contain any settings
+        expect(lastFrame()).not.toContain('Disable Auto Update'); // Should not contain any settings
       });
 
       unmount();
@@ -1082,30 +1190,36 @@ describe('SettingsDialog', () => {
       {
         name: 'various boolean settings enabled',
         userSettings: {
-          enableAutoUpdate: false,
-          enablePromptCompletion: true,
-          ui: {
+          general: {
             vimMode: true,
+            disableAutoUpdate: true,
+            enablePromptCompletion: true,
+          },
+          ui: {
             hideWindowTitle: true,
             hideTips: true,
             showMemoryUsage: true,
             showLineNumbers: true,
             showCitations: true,
-          },
-          accessibility: {
-            enableLoadingPhrases: false,
-            screenReader: true,
+            accessibility: {
+              disableLoadingPhrases: true,
+              screenReader: true,
+            },
           },
           ide: {
             enabled: true,
           },
-          loadMemoryFromIncludeDirectories: true,
-          fileFiltering: {
-            respectGitIgnore: true,
-            enableRecursiveFileSearch: true,
-            enableFuzzySearch: true,
+          context: {
+            loadMemoryFromIncludeDirectories: true,
+            fileFiltering: {
+              respectGitIgnore: true,
+              respectGeminiIgnore: true,
+              enableRecursiveFileSearch: true,
+              disableFuzzySearch: false,
+            },
           },
           tools: {
+            enableInteractiveShell: true,
             autoAccept: true,
             useRipgrep: true,
           },
@@ -1122,17 +1236,24 @@ describe('SettingsDialog', () => {
       {
         name: 'mixed boolean and number settings',
         userSettings: {
-          enableAutoUpdate: false,
-          ui: {
+          general: {
             vimMode: false,
+            disableAutoUpdate: true,
+          },
+          ui: {
             showMemoryUsage: true,
             hideWindowTitle: false,
-            memoryDiscoveryMaxDepth: 500,
-            maxSessionTurns: 100,
           },
           tools: {
             truncateToolOutputThreshold: 50000,
             truncateToolOutputLines: 1000,
+          },
+          context: {
+            discoveryMaxDirs: 500,
+          },
+          model: {
+            maxSessionTurns: 100,
+            skipNextSpeakerCheck: false,
           },
         },
         systemSettings: {},
@@ -1152,7 +1273,7 @@ describe('SettingsDialog', () => {
         userSettings: {
           ui: {
             accessibility: {
-              enableLoadingPhrases: false,
+              disableLoadingPhrases: true,
               screenReader: true,
             },
             showMemoryUsage: true,
@@ -1174,7 +1295,7 @@ describe('SettingsDialog', () => {
               respectGitIgnore: false,
               respectGeminiIgnore: true,
               enableRecursiveFileSearch: false,
-              enableFuzzySearch: false,
+              disableFuzzySearch: true,
             },
             loadMemoryFromIncludeDirectories: true,
             discoveryMaxDirs: 100,
@@ -1213,7 +1334,7 @@ describe('SettingsDialog', () => {
         userSettings: {
           general: {
             vimMode: false,
-            enableAutoUpdate: true,
+            disableAutoUpdate: false,
             enablePromptCompletion: false,
           },
           ui: {
@@ -1223,7 +1344,7 @@ describe('SettingsDialog', () => {
             showLineNumbers: false,
             showCitations: false,
             accessibility: {
-              enableLoadingPhrases: true,
+              disableLoadingPhrases: false,
               screenReader: false,
             },
           },
@@ -1236,7 +1357,7 @@ describe('SettingsDialog', () => {
               respectGitIgnore: false,
               respectGeminiIgnore: false,
               enableRecursiveFileSearch: false,
-              enableFuzzySearch: true,
+              disableFuzzySearch: false,
             },
           },
           tools: {

@@ -52,6 +52,7 @@ export interface MessageStreamDeps {
     prompt_id: string,
     turns?: number,
     isInvalidStreamRetry?: boolean,
+    is413Retry?: boolean,
   ) => AsyncGenerator<ServerGeminiStreamEvent, Turn>;
 }
 
@@ -62,6 +63,7 @@ interface StreamContext {
   signal: AbortSignal;
   turns: number;
   isInvalidStreamRetry: boolean;
+  is413Retry: boolean;
 }
 
 interface IterationResult {
@@ -91,6 +93,7 @@ export class MessageStreamOrchestrator {
     prompt_id: string,
     turns: number,
     isInvalidStreamRetry: boolean,
+    is413Retry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     this.deps.logger.debug(
       () => 'DEBUG: GeminiClient.sendMessageStream called',
@@ -107,6 +110,7 @@ export class MessageStreamOrchestrator {
       signal,
       turns,
       isInvalidStreamRetry,
+      is413Retry,
     };
 
     const request = yield* this._preflight(initialRequest, ctx);
@@ -332,6 +336,7 @@ export class MessageStreamOrchestrator {
         turn,
         ctx,
         hadToolCallsThisTurn,
+        initialRequest,
       );
       if (iterResult.earlyReturn) return turn;
       hadToolCallsThisTurn = iterResult.hadToolCallsThisTurn;
@@ -359,6 +364,7 @@ export class MessageStreamOrchestrator {
     turn: Turn,
     ctx: StreamContext,
     hadToolCallsPrior: boolean,
+    initialRequest: PartListUnion,
   ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult> {
     const { loopDetector, todoContinuationService, updateTelemetryTokenCount } =
       this.deps;
@@ -419,6 +425,7 @@ export class MessageStreamOrchestrator {
         ctx,
         deferredEvents,
         { hadToolCallsThisTurn, todoPauseSeen, hadThinking, hadContent },
+        initialRequest,
       );
       if (terminalResult) return terminalResult;
     }
@@ -444,11 +451,47 @@ export class MessageStreamOrchestrator {
       hadThinking: boolean;
       hadContent: boolean;
     },
+    initialRequest: PartListUnion,
   ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
     const { config, sendMessageStream } = this.deps;
     const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
 
     if (event.type === GeminiEventType.Error) {
+      const errorStatus =
+        event.value?.error && typeof event.value.error === 'object'
+          ? (event.value.error as { status?: number }).status
+          : undefined;
+
+      if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
+        if (ctx.is413Retry) {
+          for (const d of deferredEvents) yield d;
+          await this._fireAfterHook(ctx);
+          return this._earlyIterResult(state.hadToolCallsThisTurn, {
+            ...state,
+            deferredEvents,
+          });
+        }
+        const toolNames = this._extractToolNamesFromRequest(initialRequest);
+        const toolList =
+          toolNames.length > 0
+            ? ` The tools involved were: ${toolNames.join(', ')}.`
+            : '';
+        const message = `System: The previous tool calls produced a response that was too large (HTTP 413).${toolList} Please retry with fewer or more focused queries.`;
+        yield* sendMessageStream(
+          [{ text: message }],
+          signal,
+          ctx.prompt_id,
+          boundedTurns - 1,
+          false,
+          true,
+        );
+        await this._fireAfterHook(ctx);
+        return this._earlyIterResult(state.hadToolCallsThisTurn, {
+          ...state,
+          deferredEvents,
+        });
+      }
+
       for (const d of deferredEvents) yield d;
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
@@ -483,6 +526,25 @@ export class MessageStreamOrchestrator {
     }
 
     return undefined;
+  }
+
+  private _extractToolNamesFromRequest(request: PartListUnion): string[] {
+    if (!Array.isArray(request)) return [];
+    const names = new Set<string>();
+    for (const part of request) {
+      if (
+        typeof part === 'object' &&
+        part !== null &&
+        'functionResponse' in part
+      ) {
+        const funcResp = (part as { functionResponse: { name?: string } })
+          .functionResponse;
+        if (funcResp?.name) {
+          names.add(funcResp.name);
+        }
+      }
+    }
+    return [...names];
   }
 
   private _earlyIterResult(
