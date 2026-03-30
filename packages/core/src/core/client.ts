@@ -647,10 +647,10 @@ export class GeminiClient {
       clearStoredHistoryService: () => {
         this._storedHistoryService = undefined;
       },
-      extraHistory,
       generateContentConfig: this.generateContentConfig,
       todoContinuationService: this.todoContinuationService,
       toolRegistry: this.config.getToolRegistry(),
+      extraHistory,
     });
     this.chat = chat;
     return chat;

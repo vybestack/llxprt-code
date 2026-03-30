@@ -38,9 +38,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -72,9 +72,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -104,9 +104,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -136,9 +136,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -171,9 +171,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -209,9 +209,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -243,9 +243,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -275,9 +275,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
     expect(results).toStrictEqual(
       expect.arrayContaining(['.', 'src/', 'src/file1.js']),
@@ -300,9 +300,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -326,9 +326,9 @@ describe('crawler', () => {
     const results = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
+      ignore,
     });
 
     expect(results).toStrictEqual(
@@ -357,9 +357,9 @@ describe('crawler', () => {
       const options = {
         crawlDirectory: tmpDir,
         cwd: tmpDir,
-        ignore,
         cache: true,
         cacheTtl: 10,
+        ignore,
       };
 
       const crawlSpy = vi.spyOn(cache, 'read');
@@ -394,9 +394,9 @@ describe('crawler', () => {
       const getOptions = (ignore: Ignore) => ({
         crawlDirectory: tmpDir,
         cwd: tmpDir,
-        ignore,
         cache: true,
         cacheTtl: 10000,
+        ignore,
       });
 
       // Initial crawl to populate the cache
@@ -428,9 +428,9 @@ describe('crawler', () => {
       const options = {
         crawlDirectory: tmpDir,
         cwd: tmpDir,
-        ignore,
         cache: true,
-        cacheTtl: 10, // 10 seconds
+        cacheTtl: 10,
+        ignore,
       };
 
       const readSpy = vi.spyOn(cache, 'read');
@@ -459,9 +459,9 @@ describe('crawler', () => {
       const getOptions = (maxDepth?: number) => ({
         crawlDirectory: tmpDir,
         cwd: tmpDir,
-        ignore,
         cache: true,
         cacheTtl: 10000,
+        ignore,
         maxDepth,
       });
 
@@ -511,9 +511,9 @@ describe('crawler', () => {
       return crawl({
         crawlDirectory: tmpDir,
         cwd: tmpDir,
-        ignore,
         cache: false,
         cacheTtl: 0,
+        ignore,
         maxDepth,
       });
     };

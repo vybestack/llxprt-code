@@ -11,10 +11,10 @@ import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const createMockCommand = (name: string, kind: CommandKind): SlashCommand => ({
-  name,
   description: `Description for ${name}`,
-  kind,
   action: vi.fn(),
+  name,
+  kind,
 });
 
 const mockCommandA = createMockCommand('command-a', CommandKind.BUILT_IN);

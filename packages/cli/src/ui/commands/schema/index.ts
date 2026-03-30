@@ -524,10 +524,10 @@ export function tokenize(fullLine: string): TokenInfo {
   }
 
   return {
-    tokens,
     partialToken: partialTokenValue,
-    hasTrailingSpace,
     position: tokens.length,
+    tokens,
+    hasTrailingSpace,
   };
 }
 

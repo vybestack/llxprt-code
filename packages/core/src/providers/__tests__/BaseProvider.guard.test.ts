@@ -115,8 +115,8 @@ describe('BaseProvider runtime guard', () => {
 
     const iterator = provider.generateChatCompletion({
       contents: [prompt],
-      settings,
       metadata: { scenario: 'missing-config' },
+      settings,
     } as GenerateChatOptions);
 
     await expect(iterator.next()).rejects.toMatchObject({

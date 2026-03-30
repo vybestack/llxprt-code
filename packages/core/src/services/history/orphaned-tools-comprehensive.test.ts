@@ -117,9 +117,9 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
           { type: 'text', text: 'Using multiple tools' },
           ...toolCallIds.map((id) => ({
             type: 'tool_call' as const,
-            id,
             name: 'tool',
             parameters: {},
+            id,
           })),
         ],
       });

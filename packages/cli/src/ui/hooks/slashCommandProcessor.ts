@@ -305,7 +305,6 @@ export const useSlashCommandProcessor = (
         subagentManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
       },
       ui: {
-        addItem,
         clear: () => {
           clearItems();
           if (!alternateBuffer) {
@@ -314,26 +313,27 @@ export const useSlashCommandProcessor = (
           }
           refreshStatic();
         },
-        loadHistory,
         setDebugMessage: actions.setDebugMessage,
-        pendingItem,
-        setPendingItem,
         toggleCorgiMode: actions.toggleCorgiMode,
         toggleDebugProfiler: actions.toggleDebugProfiler,
-        toggleVimEnabled,
         setGeminiMdFileCount: setLlxprtMdFileCount,
-        setLlxprtMdFileCount,
         updateHistoryTokenCount: session.updateHistoryTokenCount,
-        reloadCommands,
-        extensionsUpdateState,
         dispatchExtensionStateUpdate: actions.dispatchExtensionStateUpdate,
         addConfirmUpdateExtensionRequest:
           actions.addConfirmUpdateExtensionRequest,
+        addItem,
+        loadHistory,
+        pendingItem,
+        setPendingItem,
+        toggleVimEnabled,
+        setLlxprtMdFileCount,
+        reloadCommands,
+        extensionsUpdateState,
       },
       session: {
         stats: session.stats,
+        isProcessing: localIsProcessing,
         sessionShellAllowlist,
-        isProcessing: localIsProcessing, // @plan PLAN-20260214-SESSIONBROWSER.P23
       },
       todoContext,
       recordingIntegration,

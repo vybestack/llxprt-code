@@ -506,8 +506,8 @@ describe('Authentication (REQ-OAV-003)', () => {
           },
         ],
         settings: settingsService,
-        runtime,
         resolved: { streaming: false },
+        runtime,
       });
 
       const iterator = provider.generateChatCompletion(options);

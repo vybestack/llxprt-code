@@ -170,8 +170,8 @@ describe('MessageBus', () => {
         expect(handler).toHaveBeenCalledWith(
           expect.objectContaining({
             type: MessageBusType.TOOL_POLICY_REJECTION,
-            toolCall,
             reason: 'Policy denied execution',
+            toolCall,
           }),
         );
       });

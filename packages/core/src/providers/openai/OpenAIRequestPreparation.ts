@@ -127,14 +127,14 @@ export async function prepareRequest(
     () => config?.getSubagentManager?.(),
   );
   const systemPrompt = await getCoreSystemPromptAsync({
-    userMemory,
-    mcpInstructions,
-    model,
     tools: toolNamesArg,
-    includeSubagentDelegation,
     interactionMode: config?.isInteractive?.()
       ? 'interactive'
       : 'non-interactive',
+    userMemory,
+    mcpInstructions,
+    model,
+    includeSubagentDelegation,
   });
 
   // Add system prompt as the first message

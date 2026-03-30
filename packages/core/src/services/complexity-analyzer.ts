@@ -102,8 +102,8 @@ export class ComplexityAnalyzer {
       taskCount: detectedTasks.length,
       hasSequentialIndicators: sequentialIndicators.length > 0,
       sequentialIndicatorCount: sequentialIndicators.length,
-      questionCount,
       messageLength: message.length,
+      questionCount,
     });
 
     const narrativeComplexity = this.isNarrativeComplex(

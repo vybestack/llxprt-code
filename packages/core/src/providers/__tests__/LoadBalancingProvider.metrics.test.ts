@@ -41,8 +41,8 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
     config = {
       profileName: 'test-lb',
       strategy: 'failover',
-      subProfiles,
       lbProfileEphemeralSettings: {},
+      subProfiles,
     };
   });
 

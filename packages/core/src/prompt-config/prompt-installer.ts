@@ -404,10 +404,10 @@ export class PromptInstaller {
 
     return {
       success: errors.length === 0,
+      baseDir: expandedBaseDir,
       installed,
       skipped,
       errors,
-      baseDir: expandedBaseDir,
       conflicts,
       notices,
     };
@@ -880,9 +880,9 @@ export class PromptInstaller {
         );
         return {
           success: false,
+          stillInvalid: validation.errors,
           repaired,
           errors,
-          stillInvalid: validation.errors,
         };
       }
     }
@@ -979,9 +979,9 @@ export class PromptInstaller {
 
     return {
       success: finalValidation.isValid && errors.length === 0,
+      stillInvalid: finalValidation.errors,
       repaired,
       errors,
-      stillInvalid: finalValidation.errors,
     };
   }
 

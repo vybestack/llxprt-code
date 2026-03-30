@@ -132,8 +132,8 @@ describe('useTokenMetricsTracking', () => {
     const { result } = renderHook(() =>
       useTokenMetricsTracking({
         config: config as never,
-        updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
+        updateHistoryTokenCount,
       }),
     );
 
@@ -168,8 +168,8 @@ describe('useTokenMetricsTracking', () => {
     renderHook(() =>
       useTokenMetricsTracking({
         config: config as never,
-        updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
+        updateHistoryTokenCount,
       }),
     );
 
@@ -220,8 +220,8 @@ describe('useTokenMetricsTracking', () => {
     const { unmount } = renderHook(() =>
       useTokenMetricsTracking({
         config: config as never,
-        updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
+        updateHistoryTokenCount,
       }),
     );
 
@@ -274,8 +274,8 @@ describe('useTokenMetricsTracking', () => {
     renderHook(() =>
       useTokenMetricsTracking({
         config: config as never,
-        updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
+        updateHistoryTokenCount,
       }),
     );
 
@@ -316,8 +316,8 @@ describe('useTokenMetricsTracking', () => {
     renderHook(() =>
       useTokenMetricsTracking({
         config: config as never,
-        updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
+        updateHistoryTokenCount,
       }),
     );
 

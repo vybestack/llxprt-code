@@ -55,8 +55,8 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       const toolName = 'test_tool';
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
-        toolName,
         persist: true,
+        toolName,
       });
 
       // Wait for async operations
@@ -142,8 +142,8 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
-        toolName,
         persist: true,
+        toolName,
         commandPrefix,
       });
 
@@ -231,8 +231,8 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
-        toolName,
         persist: true,
+        toolName,
         mcpName,
       });
 
@@ -264,8 +264,8 @@ describe('createPolicyUpdater - TOML Persistence', () => {
 
       messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
-        toolName,
         persist: true,
+        toolName,
         mcpName,
       });
 

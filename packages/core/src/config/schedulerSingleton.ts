@@ -266,8 +266,8 @@ export async function getOrCreateScheduler(
 
   const initState: SchedulerInitState = {
     promise: creationPromise,
-    callbacks,
     refCount: 1,
+    callbacks,
     interactiveMode,
   };
   schedulerInitStates.set(sessionId, initState);

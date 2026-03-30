@@ -458,12 +458,12 @@ const saveCommand: SlashCommand = {
         const lbProfile = {
           version: 1 as const,
           type: 'loadbalancer' as const,
-          policy,
           profiles: selectedProfiles,
           provider: '',
           model: '',
           modelParams: {},
           ephemeralSettings: filteredEphemerals,
+          policy,
         };
 
         await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);

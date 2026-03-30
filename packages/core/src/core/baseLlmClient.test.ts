@@ -129,8 +129,8 @@ describe('BaseLLMClient', () => {
 
       await baseLlmClient.generateJson({
         prompt: 'Generate data',
-        schema,
         model: 'gemini-pro',
+        schema,
       });
 
       const callArgs = vi.mocked(mockContentGenerator.generateContent).mock

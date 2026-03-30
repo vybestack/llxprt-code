@@ -889,12 +889,12 @@ describe('handleAtCommand', () => {
         const query = queryTemplate(fileName);
 
         const result = await handleAtCommand({
-          query,
           config: mockConfig,
           addItem: mockAddItem,
           onDebugMessage: mockOnDebugMessage,
-          messageId,
           signal: abortController.signal,
+          query,
+          messageId,
         });
 
         const fileInQuery = fileName;

@@ -70,8 +70,8 @@ function makeAiToolCall(
       blocks: [
         {
           type: 'tool_call',
-          id,
           name: toolName,
+          id,
           parameters,
         } as ToolCallBlock,
       ],

@@ -33,7 +33,6 @@ const createRuntimeBundle = (label = 'bundle') => {
   };
   const runtimeContext = {
     state: { runtimeId: `${label}-runtime-id`, sessionId: `${label}-session` },
-    history,
     ephemerals: {
       compressionThreshold: () => 0.85,
       contextLimit: () => 20_000,
@@ -44,6 +43,7 @@ const createRuntimeBundle = (label = 'bundle') => {
     provider: {},
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: {},
+    history,
   } as unknown as SubAgentScopeInstance['runtimeContext'];
 
   return {

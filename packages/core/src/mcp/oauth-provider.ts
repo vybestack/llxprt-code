@@ -468,10 +468,10 @@ export class MCPOAuthProvider {
 
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
-      code,
       redirect_uri: redirectUri,
       code_verifier: codeVerifier,
       client_id: config.clientId!,
+      code,
     });
 
     if (config.clientSecret) {

@@ -393,8 +393,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'hello',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       const state = getBufferState(result);
@@ -410,9 +410,9 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'hello\nworld',
-          initialCursorOffset: 7, // Should be at 'o' in 'world'
-          viewport,
+          initialCursorOffset: 7,
           isValidPath: () => false,
+          viewport,
         }),
       );
       const state = getBufferState(result);
@@ -522,8 +522,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'abc',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('right'));
@@ -537,8 +537,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'ab',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor at [0,2]
@@ -556,8 +556,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'a\nb',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => {
@@ -584,8 +584,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'a\nb',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       // cursor at [0,0]
@@ -772,8 +772,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: text,
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       expect(result.current.allVisualLines).toStrictEqual([
@@ -946,8 +946,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'test',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end'));
@@ -980,8 +980,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: '你好',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor at [0,2]
@@ -1133,8 +1133,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'a',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end'));
@@ -1155,8 +1155,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'abcde',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor at the end
@@ -1196,8 +1196,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'abcde',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor at the end
@@ -1214,8 +1214,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'abcde',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor at the end
@@ -1232,8 +1232,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'ab',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor [0,2]
@@ -1343,8 +1343,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: '@pac',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 1, 0, 4, 'packages'));
@@ -1357,8 +1357,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'hello\nworld\nagain',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 2, 1, 3, ' new ')); // replace 'llo\nwor' with ' new '
@@ -1371,8 +1371,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'hello world',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 5, 0, 11, '')); // delete ' world'
@@ -1385,8 +1385,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'world',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 0, 0, 0, 'hello '));
@@ -1399,8 +1399,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'hello',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 5, 0, 5, ' world'));
@@ -1413,8 +1413,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'old text',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 0, 0, 8, 'new text'));
@@ -1427,8 +1427,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'hello *** world',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 6, 0, 9, '你好'));
@@ -1441,8 +1441,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'test',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => {
@@ -1461,8 +1461,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'first\nsecond\nthird',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       act(() => result.current.replaceRange(0, 2, 2, 3, 'X')); // Replace 'rst\nsecond\nthi'
@@ -1475,8 +1475,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'one two three',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       // Replace "two" with "new\nline"
@@ -1774,9 +1774,9 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'ab',
-          viewport,
           isValidPath: () => false,
           singleLine: true,
+          viewport,
         }),
       );
       act(() => result.current.move('end')); // cursor at [0,2]
@@ -2266,9 +2266,9 @@ describe('Unicode helper functions', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: '你好世界',
-          initialCursorOffset: 4, // End of string
-          viewport,
+          initialCursorOffset: 4,
           isValidPath: () => false,
+          viewport,
         }),
       );
 
@@ -2325,9 +2325,9 @@ describe('Unicode helper functions', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'Hello你好World',
-          initialCursorOffset: 10, // End
-          viewport,
+          initialCursorOffset: 10,
           isValidPath: () => false,
+          viewport,
         }),
       );
 

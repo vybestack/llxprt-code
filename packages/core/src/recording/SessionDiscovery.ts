@@ -133,13 +133,13 @@ export class SessionDiscovery {
 
       summaries.push({
         sessionId: header.sessionId,
-        filePath,
         projectHash: header.projectHash,
         startTime: header.startTime,
         lastModified: stat.mtime,
         fileSize: stat.size,
         provider: header.provider,
         model: header.model,
+        filePath,
       });
     }
 
@@ -255,13 +255,13 @@ export class SessionDiscovery {
 
       summaries.push({
         sessionId: header.sessionId,
-        filePath,
         projectHash: header.projectHash,
         startTime: header.startTime,
         lastModified: stat.mtime,
         fileSize: stat.size,
         provider: header.provider,
         model: header.model,
+        filePath,
       });
     }
 

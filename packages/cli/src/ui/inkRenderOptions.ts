@@ -42,8 +42,8 @@ export const inkRenderOptions = (
     stderr: sharedStdio.stderr,
     exitOnCtrlC: false,
     patchConsole: false,
-    isScreenReaderEnabled,
     alternateBuffer: useAlternateBuffer,
+    isScreenReaderEnabled,
     incrementalRendering,
   };
 };

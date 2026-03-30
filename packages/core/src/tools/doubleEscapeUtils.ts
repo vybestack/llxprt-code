@@ -312,10 +312,10 @@ export function logDoubleEscapingInChunk(
       () =>
         `[${format}] Detected potential double-escaping in streaming chunk for ${toolName}`,
       {
-        chunk,
         tool: toolName,
-        format,
         pattern: 'Contains escaped quotes that suggest double-stringification',
+        chunk,
+        format,
       },
     );
   }

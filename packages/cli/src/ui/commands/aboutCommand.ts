@@ -141,13 +141,13 @@ export const aboutCommand: SlashCommand = {
 
     const aboutItem: Omit<HistoryItemAbout, 'id'> = {
       type: MessageType.ABOUT,
+      keyfile: keyfilePath,
+      key: keyStatus,
       cliVersion,
       osVersion,
       sandboxEnv,
       modelVersion,
       gcpProject,
-      keyfile: keyfilePath,
-      key: keyStatus,
       ideClient,
       provider,
       baseURL,

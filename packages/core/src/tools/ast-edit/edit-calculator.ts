@@ -84,13 +84,13 @@ export async function calculateEdit(
       type: ToolErrorType.FILE_MODIFIED_CONFLICT,
     };
     return {
-      currentContent,
       newContent: currentContent ?? '',
       occurrences: 0,
-      error,
-      isNewFile,
       astValidation: undefined,
       fileFreshness: currentMtime,
+      currentContent,
+      error,
+      isNewFile,
     };
   }
 

@@ -98,13 +98,13 @@ export async function fetchChutesUsage(
     const [quotasResponse, userResponse] = await Promise.all([
       fetch(CHUTES_QUOTAS_ENDPOINT, {
         method: 'GET',
-        headers,
         signal: AbortSignal.timeout(10_000),
+        headers,
       }),
       fetch(CHUTES_USER_ENDPOINT, {
         method: 'GET',
-        headers,
         signal: AbortSignal.timeout(10_000),
+        headers,
       }),
     ]);
 

@@ -157,8 +157,8 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       const endpointUrl = await this.buildEndpointUrl();
       const response = await fetch(endpointUrl, {
         method: 'POST',
-        headers,
         body: JSON.stringify(codeRequest),
+        headers,
         signal,
       });
 

@@ -239,11 +239,11 @@ export class Task {
   ): Message {
     return {
       kind: 'message',
-      role,
       parts: [{ kind: 'text', text }],
       messageId: uuidv4(),
       taskId: this.id,
       contextId: this.contextId,
+      role,
     };
   }
 
@@ -282,8 +282,8 @@ export class Task {
       contextId: this.contextId,
       status: {
         state: stateToReport,
-        message, // Shorthand property
         timestamp: timestamp || new Date().toISOString(),
+        message,
       },
       final,
       metadata,
@@ -357,9 +357,9 @@ export class Task {
       kind: 'artifact-update',
       taskId: this.id,
       contextId: this.contextId,
-      artifact,
       append: true,
       lastChunk: false,
+      artifact,
     };
     this.eventBus?.publish(artifactEvent);
   }

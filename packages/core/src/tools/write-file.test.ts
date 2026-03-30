@@ -444,8 +444,8 @@ describe('WriteFileTool', () => {
 
       const params = {
         file_path: filePath,
-        content,
         modified_by_user: true,
+        content,
       };
       const invocation = tool.build(params);
       const result = await invocation.execute(abortSignal);
@@ -459,8 +459,8 @@ describe('WriteFileTool', () => {
 
       const params = {
         file_path: filePath,
-        content,
         modified_by_user: false,
+        content,
       };
       const invocation = tool.build(params);
       const result = await invocation.execute(abortSignal);

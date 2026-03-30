@@ -63,10 +63,10 @@ function makeConfig(
   return {
     sessionId: overrides.sessionId ?? crypto.randomUUID(),
     projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
+    chatsDir,
   };
 }
 
@@ -347,9 +347,9 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       await fs.writeFile(
         lockPath,
         JSON.stringify({
-          pid: 999999999, // Very unlikely to be an actual process
+          pid: 999999999,
+          timestamp: Date.now() - 60000,
           sessionId,
-          timestamp: Date.now() - 60000, // Old timestamp
         }),
       );
 

@@ -70,8 +70,8 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
     config = {
       profileName: 'test-lb',
       strategy: 'failover',
-      subProfiles,
       lbProfileEphemeralSettings: {},
+      subProfiles,
     };
   });
 

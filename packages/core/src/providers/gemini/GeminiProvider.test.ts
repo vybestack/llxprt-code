@@ -742,8 +742,8 @@ describe('GeminiProvider', () => {
       const generator = provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
-          contents,
           resolved: { model: 'gemini-3-flash-preview' },
+          contents,
         }),
       );
       await generator.next();

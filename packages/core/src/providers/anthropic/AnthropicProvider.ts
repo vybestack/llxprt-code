@@ -59,11 +59,11 @@ export class AnthropicProvider extends BaseProvider {
     // Initialize base provider with auth configuration
     const baseConfig: BaseProviderConfig = {
       name: 'anthropic',
-      apiKey,
-      baseURL,
       envKeyNames: ['ANTHROPIC_API_KEY'],
       isOAuthEnabled: !!oauthManager,
       oauthProvider: oauthManager != null ? 'anthropic' : undefined,
+      apiKey,
+      baseURL,
       oauthManager,
     };
 
@@ -525,8 +525,6 @@ export class AnthropicProvider extends BaseProvider {
     const requestContext = await prepareAnthropicRequest({
       content: options.contents,
       tools: options.tools,
-      options,
-      isOAuth,
       providerName: this.name,
       config: options.config ?? options.runtime?.config ?? this.globalConfig,
       getMaxTokensForModel: (m) => this.getMaxTokensForModel(m),
@@ -535,15 +533,17 @@ export class AnthropicProvider extends BaseProvider {
       logger: this.getLogger(),
       toolsLogger: this.getToolsLogger(),
       cacheLogger: this.getCacheLogger(),
+      options,
+      isOAuth,
     });
 
     // Build custom headers
     const customHeaders = buildAnthropicCustomHeaders({
       baseHeaders: this.getCustomHeaders() || {},
-      isOAuth,
       wantCaching: requestContext.wantCaching,
       ttl: requestContext.ttl,
       cacheLogger: requestContext.cacheLogger,
+      isOAuth,
     });
 
     // Proactive rate limit throttling — ephemeral settings:
@@ -586,10 +586,10 @@ export class AnthropicProvider extends BaseProvider {
 
     const { response, rateLimitInfo } = await executeAnthropicApiCall({
       apiCallFn: apiCallWithResponse,
-      dumpMode,
-      baseURL,
       requestBody: requestContext.requestBody,
       streamingEnabled: requestContext.streamingEnabled,
+      dumpMode,
+      baseURL,
       rateLimitLogger,
     });
 
@@ -603,16 +603,16 @@ export class AnthropicProvider extends BaseProvider {
       yield* processAnthropicStream(
         response as AsyncIterable<Anthropic.MessageStreamEvent>,
         {
-          isOAuth,
           tools: options.tools,
           unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
           findToolSchema: (t, name, oauth) =>
             this.findToolSchema(t, name, oauth),
           maxAttempts: requestContext.maxAttempts,
           initialDelayMs: requestContext.initialDelayMs,
-          apiCallWithResponse,
           logger: this.getStreamingLogger(),
           cacheLogger: requestContext.cacheLogger,
+          isOAuth,
+          apiCallWithResponse,
           rateLimitLogger,
         },
       );

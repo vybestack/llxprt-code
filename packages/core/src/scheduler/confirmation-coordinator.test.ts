@@ -118,8 +118,8 @@ function makeConfirmationDetails(
     title: 'Run command',
     command: 'echo test',
     rootCommand: 'echo',
-    correlationId,
     onConfirm: vi.fn().mockResolvedValue(undefined),
+    correlationId,
   } as unknown as ToolCallConfirmationDetails;
 }
 

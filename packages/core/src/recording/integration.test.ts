@@ -72,10 +72,10 @@ function makeConfig(
   return {
     sessionId: overrides.sessionId ?? crypto.randomUUID(),
     projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
+    chatsDir,
   };
 }
 
@@ -128,12 +128,12 @@ function makeResumeRequest(
   overrides: Partial<ResumeRequest> = {},
 ): ResumeRequest {
   return {
-    continueRef,
     projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
     currentProvider: overrides.currentProvider ?? 'anthropic',
     currentModel: overrides.currentModel ?? 'claude-4',
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
+    continueRef,
+    chatsDir,
   };
 }
 

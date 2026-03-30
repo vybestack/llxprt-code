@@ -98,11 +98,11 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
+        settings,
+        runtime,
       });
 
       for await (const _content of provider.generateChatCompletion(options)) {
@@ -161,11 +161,11 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
+        settings,
+        runtime,
       });
 
       for await (const _content of provider.generateChatCompletion(options)) {
@@ -225,11 +225,11 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
+        settings,
+        runtime,
       });
 
       for await (const _content of provider.generateChatCompletion(options)) {
@@ -291,11 +291,11 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
+        settings,
+        runtime,
       });
 
       for await (const _content of provider.generateChatCompletion(options)) {
@@ -369,11 +369,11 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
+        settings,
+        runtime,
       });
 
       const results: Array<{ speaker: string; blocks: unknown[] }> = [];
@@ -445,11 +445,11 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
+        settings,
+        runtime,
       });
 
       const results: Array<{ speaker: string; blocks: unknown[] }> = [];
@@ -518,8 +518,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           {
             speaker: 'human',
@@ -542,6 +540,8 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
             blocks: [{ type: 'text', text: 'follow up question' }],
           },
         ],
+        settings,
+        runtime,
       });
 
       for await (const _content of provider.generateChatCompletion(options)) {
@@ -613,8 +613,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const options = createProviderCallOptions({
         providerName: provider.name,
-        settings,
-        runtime,
         contents: [
           {
             speaker: 'human',
@@ -637,6 +635,8 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
             blocks: [{ type: 'text', text: 'follow up question' }],
           },
         ],
+        settings,
+        runtime,
       });
 
       for await (const _content of provider.generateChatCompletion(options)) {

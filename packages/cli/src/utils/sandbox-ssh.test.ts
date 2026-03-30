@@ -255,12 +255,12 @@ function mockValidPodmanConnection() {
 function mockTunnelProcess(exitCode: number | null = null) {
   const fakeProcess = {
     pid: 99999,
-    exitCode,
     on: vi.fn().mockReturnThis(),
     removeListener: vi.fn().mockReturnThis(),
     kill: vi.fn(),
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
+    exitCode,
   };
   vi.mocked(child_process.spawn).mockReturnValue(
     fakeProcess as unknown as child_process.ChildProcess,

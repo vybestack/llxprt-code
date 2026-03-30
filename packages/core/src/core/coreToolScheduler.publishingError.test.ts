@@ -81,7 +81,6 @@ describe('CoreToolScheduler publishing error handling', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);
         calls.forEach((call) => {
@@ -95,6 +94,7 @@ describe('CoreToolScheduler publishing error handling', () => {
       },
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
     });
 
     const signal = new AbortController().signal;
@@ -177,10 +177,10 @@ describe('CoreToolScheduler publishing error handling', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     // Spy on publishBufferedResults to throw an error, simulating a publishing failure

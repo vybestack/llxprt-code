@@ -29,8 +29,8 @@ function createTestConfigWithNotificationHook(command: string): Config {
     hooks: [
       {
         type: 'command' as HookType.Command,
-        command,
         timeout: 5000,
+        command,
       },
     ],
   };

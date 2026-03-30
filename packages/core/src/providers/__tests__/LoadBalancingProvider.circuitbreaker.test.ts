@@ -51,8 +51,8 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
     config = {
       profileName: 'test-lb',
       strategy: 'failover',
-      subProfiles,
       lbProfileEphemeralSettings: {},
+      subProfiles,
     };
   });
 

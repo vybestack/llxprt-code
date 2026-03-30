@@ -60,9 +60,9 @@ describe('SessionDiscovery extensions', () => {
     };
     return {
       v: 1,
-      seq,
       ts: new Date().toISOString(),
       type: 'session_start',
+      seq,
       payload,
     };
   }
@@ -82,9 +82,9 @@ describe('SessionDiscovery extensions', () => {
     const payload: ContentPayload = { content };
     return {
       v: 1,
-      seq,
       ts: new Date().toISOString(),
       type: 'content',
+      seq,
       payload,
     };
   }
@@ -114,9 +114,9 @@ describe('SessionDiscovery extensions', () => {
     const payload: ContentPayload = { content };
     return {
       v: 1,
-      seq,
       ts: new Date().toISOString(),
       type: 'content',
+      seq,
       payload,
     };
   }
@@ -143,9 +143,9 @@ describe('SessionDiscovery extensions', () => {
     const payload: ContentPayload = { content };
     return {
       v: 1,
-      seq,
       ts: new Date().toISOString(),
       type: 'content',
+      seq,
       payload,
     };
   }

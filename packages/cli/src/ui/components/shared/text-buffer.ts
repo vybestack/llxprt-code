@@ -326,7 +326,6 @@ export function useTextBuffer({
       lines: lines.length === 0 ? [''] : lines,
       cursorRow: initialCursorRow,
       cursorCol: initialCursorCol,
-      transformationsByLine,
       preferredCol: null,
       undoStack: [],
       redoStack: [],
@@ -334,6 +333,7 @@ export function useTextBuffer({
       selectionAnchor: null,
       viewportWidth: viewport.width,
       viewportHeight: viewport.height,
+      transformationsByLine,
       visualLayout,
     };
   }, [initialText, initialCursorOffset, viewport.width, viewport.height]);
@@ -577,20 +577,19 @@ export function useTextBuffer({
 
   const returnValue: TextBuffer = useMemo(
     () => ({
-      lines,
-      text,
       cursor: [cursorRow, cursorCol],
-      preferredCol,
-      selectionAnchor,
-
       allVisualLines: visualLines,
       viewportVisualLines: renderedVisualLines,
-      visualCursor,
-      visualScrollRow,
       visualToLogicalMap: visualLayout.visualToLogicalMap,
       transformationsByLine: state.transformationsByLine,
       visualToTransformedMap: visualLayout.visualToTransformedMap,
-
+      ...vimCallbacks,
+      lines,
+      text,
+      preferredCol,
+      selectionAnchor,
+      visualCursor,
+      visualScrollRow,
       setText,
       insert,
       newline,
@@ -610,7 +609,6 @@ export function useTextBuffer({
       killLineLeft,
       handleInput,
       openInExternalEditor,
-      ...vimCallbacks,
     }),
     [
       lines,

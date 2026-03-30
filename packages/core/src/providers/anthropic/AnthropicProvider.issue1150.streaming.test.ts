@@ -145,11 +145,11 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   /**

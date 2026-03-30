@@ -58,10 +58,10 @@ export function enableSkill(
   if (foundInDisabledScopes.length === 0) {
     return {
       status: 'no-op',
-      skillName,
       action: 'enable',
       modifiedScopes: [],
       alreadyInStateScopes: alreadyEnabledScopes,
+      skillName,
     };
   }
 
@@ -80,10 +80,10 @@ export function enableSkill(
 
   return {
     status: 'success',
-    skillName,
     action: 'enable',
-    modifiedScopes,
     alreadyInStateScopes: alreadyEnabledScopes,
+    skillName,
+    modifiedScopes,
   };
 }
 
@@ -98,11 +98,11 @@ export function disableSkill(
   if (!isLoadableSettingScope(scope)) {
     return {
       status: 'error',
-      skillName,
       action: 'disable',
       modifiedScopes: [],
       alreadyInStateScopes: [],
       error: `Invalid settings scope: ${scope}`,
+      skillName,
     };
   }
 
@@ -113,10 +113,10 @@ export function disableSkill(
   if (currentScopeDisabled.includes(skillName)) {
     return {
       status: 'no-op',
-      skillName,
       action: 'disable',
       modifiedScopes: [],
       alreadyInStateScopes: [{ scope, path: scopePath }],
+      skillName,
     };
   }
 
@@ -143,9 +143,9 @@ export function disableSkill(
 
   return {
     status: 'success',
-    skillName,
     action: 'disable',
     modifiedScopes: [{ scope, path: scopePath }],
     alreadyInStateScopes: alreadyDisabledInOther,
+    skillName,
   };
 }

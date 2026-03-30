@@ -69,8 +69,8 @@ function makeAiToolCall(
       blocks: [
         {
           type: 'tool_call',
-          id,
           name: toolName,
+          id,
           parameters,
         } as ToolCallBlock,
       ],
@@ -91,10 +91,10 @@ function makeToolResponse(
     blocks: [
       {
         type: 'tool_response',
+        ...(error !== undefined ? { error } : {}),
         callId,
         toolName,
         result,
-        ...(error !== undefined ? { error } : {}),
       } as ToolResponseBlock,
     ],
     metadata: { timestamp: Date.now() },
@@ -871,9 +871,9 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           blocks: [
             {
               type: 'tool_call',
-              id,
               name: toolName,
               parameters: { file_path: '/workspace/test.ts' },
+              id,
             } as ToolCallBlock,
           ],
           metadata: { timestamp: Date.now() },

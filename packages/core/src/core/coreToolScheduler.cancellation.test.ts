@@ -126,10 +126,10 @@ describe('CoreToolScheduler cancellation edge cases', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -238,10 +238,10 @@ describe('CoreToolScheduler cancellation edge cases', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -329,10 +329,10 @@ describe('CoreToolScheduler cancellation edge cases', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();

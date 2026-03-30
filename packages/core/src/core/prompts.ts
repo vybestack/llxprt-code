@@ -498,10 +498,10 @@ export async function getCoreSystemPromptAsync(
     model: modelArg,
     tools: toolsArg,
     provider: providerArg,
-    includeSubagentDelegation,
     asyncSubagentsEnabled: asyncSubagentsEnabledArg,
     profileAsyncEnabled: profileAsyncEnabledArg,
     interactionMode: interactionModeArg,
+    includeSubagentDelegation,
   });
 
   return service.getPrompt(context, effectiveUserMemory, effectiveCoreMemory);

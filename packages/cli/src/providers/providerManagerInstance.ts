@@ -367,9 +367,9 @@ export function createProviderManager(
     textToolCallModels: settingsData.textToolCallModels,
     providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
     openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
-    allowBrowserEnvironment,
     getEphemeralSettings:
       config != null ? () => config.getEphemeralSettings() : undefined,
+    allowBrowserEnvironment,
   };
 
   // All providers are now registered via alias configs

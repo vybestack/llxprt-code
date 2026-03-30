@@ -586,12 +586,12 @@ function* emitKeys(
       // Emit first escape key here, then continue processing
       keypressHandler({
         name: 'escape',
-        shift,
-        meta,
-        ctrl,
         paste: false,
         sequence: ESC,
         insertable: false,
+        shift,
+        meta,
+        ctrl,
       });
     } else if (escaped) {
       // Escape sequence timeout
@@ -608,10 +608,10 @@ function* emitKeys(
     ) {
       keypressHandler({
         name: name || '',
+        paste: false,
         shift,
         meta,
         ctrl,
-        paste: false,
         sequence,
         insertable,
       });

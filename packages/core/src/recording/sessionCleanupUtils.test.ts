@@ -64,7 +64,6 @@ function writeSessionFile(
   const event = JSON.stringify({
     v: 1,
     seq: 1,
-    ts,
     type: 'session_start',
     payload: {
       sessionId,
@@ -74,6 +73,7 @@ function writeSessionFile(
       model: 'test-model',
       startTime: ts,
     },
+    ts,
   });
   fs.writeFileSync(filePath, event + '\n');
   return filePath;
@@ -107,7 +107,6 @@ function makeEntry(
   const stat = fs.statSync(filePath);
   return {
     fileName: path.basename(filePath),
-    filePath,
     stat: { mtime: stat.mtime, size: stat.size },
     sessionInfo: {
       id: sessionId,
@@ -115,6 +114,7 @@ function makeEntry(
       isCurrentSession: false,
     },
     ...overrides,
+    filePath,
   };
 }
 

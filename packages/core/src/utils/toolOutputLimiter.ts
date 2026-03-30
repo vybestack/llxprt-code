@@ -196,12 +196,12 @@ export function limitOutputTokens(
     return {
       content: '',
       wasTruncated: true,
-      originalTokens,
       message: `${toolName} output exceeded token limit (${originalTokens} > ${effectiveLimit}). The results were found but are too large to display. Please:
 1. Use more specific search patterns or file paths to narrow results
 2. Search for specific function/class names instead of generic terms
 3. Look in specific directories rather than the entire codebase
 4. Use exact match patterns when possible`,
+      originalTokens,
     };
   } else if (limits.truncateMode === 'truncate') {
     // Truncate content to fit within effective limit (accounting for escape buffer)
@@ -226,8 +226,8 @@ export function limitOutputTokens(
     return {
       content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
       wasTruncated: true,
-      originalTokens,
       message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
+      originalTokens,
     };
   }
   // 'sample' mode - for line-based content, sample evenly
@@ -249,8 +249,8 @@ export function limitOutputTokens(
         sampledLines.join('\n') +
         `\n\n[Sampled ${sampledLines.length} of ${lines.length} lines due to token limit]`,
       wasTruncated: true,
-      originalTokens,
       message: `Output sampled to fit within ${limits.maxTokens} token limit`,
+      originalTokens,
     };
   }
   // Single line or non-line content, fall back to truncate with escape buffer
@@ -275,8 +275,8 @@ export function limitOutputTokens(
   return {
     content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
     wasTruncated: true,
-    originalTokens,
     message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
+    originalTokens,
   };
 }
 

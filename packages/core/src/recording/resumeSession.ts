@@ -218,8 +218,8 @@ export async function resumeSession(
     ok: true,
     history: replayResult.history,
     metadata: replayResult.metadata,
-    recording,
     lockHandle: lockedSession.lockHandle,
     warnings: replayResult.warnings,
+    recording,
   };
 }

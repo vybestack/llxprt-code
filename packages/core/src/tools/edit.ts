@@ -607,9 +607,6 @@ class EditToolInvocation extends BaseToolInvocation<
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Edit: ${shortenPath(makeRelative(filePath, this.config.getTargetDir()))}`,
-      fileName,
-      filePath,
-      fileDiff,
       originalContent: editData.currentContent,
       newContent: filteredNewContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
@@ -638,6 +635,9 @@ class EditToolInvocation extends BaseToolInvocation<
           // The filtering has already been applied in calculateEdit()
         }
       },
+      fileName,
+      filePath,
+      fileDiff,
       ideConfirmation,
     };
     return confirmationDetails;
@@ -743,13 +743,13 @@ class EditToolInvocation extends BaseToolInvocation<
         DEFAULT_CREATE_PATCH_OPTIONS,
       );
       const displayResult = {
-        fileDiff,
-        fileName,
         filePath: this.params.file_path,
         originalContent: editData.currentContent,
         newContent: editData.newContent,
-        diffStat,
         isNewFile: editData.isNewFile,
+        fileDiff,
+        fileName,
+        diffStat,
       };
 
       const llmSuccessMessageParts = [

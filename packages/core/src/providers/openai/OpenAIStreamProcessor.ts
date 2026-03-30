@@ -715,11 +715,11 @@ export async function* processStreamingResponse(
       () => `[Streaming pipeline] Stream completed with accumulated content`,
       {
         textLength: state.accumulatedText.length,
-        toolCallCount,
         textBufferLength: state.textBuffer.length,
         reasoningLength: state.accumulatedReasoningContent.length,
         thinkingLength: state.accumulatedThinkingContent.length,
         totalChunksReceived: state.allChunks.length,
+        toolCallCount,
       },
     );
   }

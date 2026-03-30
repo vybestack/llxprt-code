@@ -156,9 +156,9 @@ function ensureRuntime(
 
   return createProviderRuntimeContext({
     settingsService: settings,
-    config,
     runtimeId: resolvedRuntimeId,
     metadata: runtimeMetadata,
+    config,
   });
 }
 
@@ -188,14 +188,14 @@ function ensureInvocation(
       : undefined;
 
   return createRuntimeInvocationContext({
+    userMemory: userMemorySnapshot,
+    fallbackRuntimeId: runtime.runtimeId ?? `${providerName}.runtime`,
     runtime,
     settings,
     providerName,
     metadata,
     ephemeralsSnapshot,
-    userMemory: userMemorySnapshot,
     telemetry,
-    fallbackRuntimeId: runtime.runtimeId ?? `${providerName}.runtime`,
   });
 }
 
@@ -247,11 +247,11 @@ export function createProviderCallOptions(
     contents: init.contents ?? [],
     tools: init.tools,
     metadata: mergedMetadata,
+    resolved: init.resolved,
+    userMemory: init.userMemory,
     settings,
     config,
     runtime,
     invocation,
-    resolved: init.resolved,
-    userMemory: init.userMemory,
   };
 }

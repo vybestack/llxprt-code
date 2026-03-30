@@ -34,8 +34,8 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
 
     const request = buildResponsesRequest({
       model: 'o3',
-      messages,
       stream: true,
+      messages,
     });
 
     // Check that input messages don't have tool_calls

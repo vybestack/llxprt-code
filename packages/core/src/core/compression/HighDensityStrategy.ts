@@ -782,9 +782,9 @@ export class HighDensityStrategy implements CompressionStrategy {
           }
           inclusions.get(resolvedFilePath)!.push({
             messageIndex: index,
-            blockIndex,
             startOffset: match.startOffset,
             endOffset: match.endOffset,
+            blockIndex,
           });
         }
       }

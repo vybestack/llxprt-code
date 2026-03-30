@@ -56,12 +56,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-42',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -128,12 +128,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-allowlist',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const configWithRegistry = {
@@ -192,12 +192,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-empty-whitelist',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const configWithRegistry = {
@@ -250,12 +250,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-canonical-excluded',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const configWithRegistry = {
@@ -307,12 +307,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-explicit-empty-whitelist',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const configWithRegistry = {
@@ -376,12 +376,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-session',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -426,12 +426,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-session-explicit',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -480,12 +480,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-session-missing',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(configWithoutSessionId, {
@@ -517,12 +517,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-77',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -557,12 +557,12 @@ describe('TaskTool', () => {
     });
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-100',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -620,12 +620,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-42',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
 
@@ -653,18 +653,18 @@ describe('TaskTool', () => {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.ERROR,
       },
-      runInteractive,
       runNonInteractive: vi.fn(),
       onMessage: undefined,
+      runInteractive,
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-99',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -719,12 +719,12 @@ describe('TaskTool', () => {
             () =>
               resolve({
                 agentId: 'agent-launch',
-                scope,
-                dispose,
                 prompt: {} as unknown,
                 profile: {} as unknown,
                 config: {} as unknown,
                 runtime: {} as unknown,
+                scope,
+                dispose,
               }),
             25,
           );
@@ -774,12 +774,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-default',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const configWithSettings = {
@@ -830,12 +830,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-max',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const configWithSettings = {
@@ -888,12 +888,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-unlimited',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const configWithSettings = {
@@ -954,12 +954,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-timeout',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const configWithSettings = {
@@ -1019,12 +1019,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-abort',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const configWithSettings = {
@@ -1100,12 +1100,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-42',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -1163,12 +1163,12 @@ describe('TaskTool', () => {
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-42',
-      scope,
-      dispose,
       prompt: {} as unknown,
       profile: {} as unknown,
       config: {} as unknown,
       runtime: {} as unknown,
+      scope,
+      dispose,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -1776,12 +1776,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-xml-001',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
@@ -1837,12 +1837,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-xml-002',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
@@ -1880,12 +1880,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-xml-err',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
@@ -1924,12 +1924,12 @@ describe('TaskTool', () => {
       };
       const launch = vi.fn().mockResolvedValue({
         agentId: 'agent-xml-empty',
-        scope,
-        dispose,
         prompt: {} as unknown,
         profile: {} as unknown,
         config: {} as unknown,
         runtime: {} as unknown,
+        scope,
+        dispose,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {

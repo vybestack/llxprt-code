@@ -393,8 +393,8 @@ describe('buildResponsesRequest', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         prompt: 'What is the weather?',
-        tools,
         tool_choice: 'auto',
+        tools,
       };
 
       const result = buildResponsesRequest(params);

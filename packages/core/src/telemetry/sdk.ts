@@ -104,11 +104,11 @@ export function initializeTelemetry(config: Config): void {
   });
 
   sdk = new NodeSDK({
-    resource,
     spanProcessors: [spanProcessor],
     logRecordProcessors: [logProcessor],
-    metricReader,
     instrumentations: [new HttpInstrumentation()],
+    resource,
+    metricReader,
   });
 
   try {

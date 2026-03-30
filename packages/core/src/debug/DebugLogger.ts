@@ -135,14 +135,13 @@ export class DebugLogger {
     const timestamp = new Date().toISOString(); // Line 43
 
     const logEntry: LogEntry = {
-      // Lines 45-51
-      timestamp,
       namespace: this._namespace,
       level: 'log',
-      message,
       args: args.length > 0 ? args : undefined,
       runId: this._fileOutput.runId,
       pid: process.pid,
+      timestamp,
+      message,
     };
 
     const target = this._configManager.getOutputTarget();
@@ -183,13 +182,13 @@ export class DebugLogger {
     const timestamp = new Date().toISOString();
 
     const logEntry: LogEntry = {
-      timestamp,
       namespace: this._namespace,
       level: 'debug',
-      message,
       args: args.length > 0 ? args : undefined,
       runId: this._fileOutput.runId,
       pid: process.pid,
+      timestamp,
+      message,
     };
 
     const target = this._configManager.getOutputTarget();
@@ -231,13 +230,13 @@ export class DebugLogger {
     const timestamp = new Date().toISOString();
 
     const logEntry: LogEntry = {
-      timestamp,
       namespace: this._namespace,
-      level,
-      message,
       args: args.length > 0 ? args : undefined,
       runId: this._fileOutput.runId,
       pid: process.pid,
+      timestamp,
+      level,
+      message,
     };
 
     const target = this._configManager.getOutputTarget();

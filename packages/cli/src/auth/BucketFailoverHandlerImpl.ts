@@ -578,8 +578,8 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     );
     logger.debug('No more buckets available for failover', {
       provider: this.provider,
-      currentBucket,
       attemptedAll: true,
+      currentBucket,
     });
     return false;
   }

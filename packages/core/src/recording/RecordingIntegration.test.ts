@@ -62,10 +62,10 @@ function makeConfig(
   return {
     sessionId: overrides.sessionId ?? 'recording-int-session-0001',
     projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
     workspaceDirs: overrides.workspaceDirs ?? ['/workspace/project-a'],
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
+    chatsDir,
   };
 }
 
@@ -101,8 +101,8 @@ function toolResponseContent(toolName: string): IContent {
       {
         type: 'tool_response',
         callId: `call_${toolName}`,
-        toolName,
         result: { ok: true },
+        toolName,
       },
     ],
   };

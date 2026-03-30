@@ -118,13 +118,13 @@ export function logApiError(
   const errorType = error instanceof Error ? error.name : 'unknown';
 
   runtimeContext.telemetry.logApiError({
-    model,
-    promptId,
-    durationMs,
     error: errorMessage,
-    errorType,
     sessionId: runtimeState.sessionId,
     runtimeId: runtimeState.runtimeId,
     provider: runtimeState.provider,
+    model,
+    promptId,
+    durationMs,
+    errorType,
   });
 }

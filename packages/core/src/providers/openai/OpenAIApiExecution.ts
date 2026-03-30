@@ -140,10 +140,10 @@ export async function executeApiRequest(
           () =>
             `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
           {
-            model,
             baseURL: baseURL ?? getBaseURL(),
-            streamingEnabled,
             hasTools: formattedTools?.length ?? 0,
+            model,
+            streamingEnabled,
             status,
           },
         );
@@ -235,10 +235,10 @@ export async function executeApiRequest(
           () =>
             `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
           {
-            model,
             baseURL: baseURL ?? getBaseURL(),
-            streamingEnabled,
             hasTools: formattedTools?.length ?? 0,
+            model,
+            streamingEnabled,
             status,
           },
         );

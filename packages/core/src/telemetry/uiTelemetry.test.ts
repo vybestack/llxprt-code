@@ -35,19 +35,17 @@ const createFakeCompletedToolCall = (
 ): CompletedToolCall => {
   const request = {
     callId: `call_${name}_${Date.now()}`,
-    name,
     args: { foo: 'bar' },
     isClientInitiated: false,
     prompt_id: 'prompt-id-1',
     agentId: 'primary',
+    name,
   };
   const tool = new MockTool(name);
 
   if (success) {
     return {
       status: 'success',
-      request,
-      tool,
       invocation: tool.build({ param: 'test' }),
       response: {
         callId: request.callId,
@@ -66,13 +64,13 @@ const createFakeCompletedToolCall = (
         agentId: 'primary',
       },
       durationMs: duration,
+      request,
+      tool,
       outcome,
     } as SuccessfulToolCall;
   }
   return {
     status: 'error',
-    request,
-    tool,
     response: {
       callId: request.callId,
       responseParts: [
@@ -90,6 +88,8 @@ const createFakeCompletedToolCall = (
       agentId: 'primary',
     },
     durationMs: duration,
+    request,
+    tool,
     outcome,
   } as ErroredToolCall;
 };

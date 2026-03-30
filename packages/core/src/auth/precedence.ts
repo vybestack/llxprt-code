@@ -227,8 +227,8 @@ function ensureRuntimeState(
     state = {
       runtimeAuthScopeId: runtimeId,
       entries: new Map(),
-      metadata,
       settingsSubscriptions: [],
+      metadata,
     };
     runtimeScopedStates.set(runtimeId, state);
   }
@@ -384,14 +384,14 @@ function storeRuntimeScopedToken(
   if (entry == null) {
     entry = {
       key: cacheKey,
-      providerId,
-      profileId,
       runtimeAuthScopeId: state.runtimeAuthScopeId,
-      token,
       createdAt: now,
       updatedAt: now,
-      expiresAt,
       stale: false,
+      providerId,
+      profileId,
+      token,
+      expiresAt,
     };
     state.entries.set(cacheKey, entry);
   } else {
@@ -759,8 +759,6 @@ export class AuthPrecedenceResolver {
       try {
         const requestMetadata: OAuthTokenRequestMetadata = {
           runtimeAuthScopeId: runtimeState?.runtimeAuthScopeId ?? 'no-runtime',
-          providerId,
-          profileId,
           cliScope:
             runtimeContext?.metadata != null &&
             typeof runtimeContext.metadata === 'object'
@@ -771,6 +769,8 @@ export class AuthPrecedenceResolver {
             typeof runtimeContext.metadata === 'object'
               ? runtimeContext.metadata
               : undefined,
+          providerId,
+          profileId,
         };
 
         const token = await this.oauthManager.getToken(

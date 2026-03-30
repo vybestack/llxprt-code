@@ -66,9 +66,9 @@ describe('Circular Reference Handling', () => {
       status: 'success',
       request: mockRequest,
       response: mockResponse,
-      tool,
       invocation: tool.build({}),
       durationMs: 100,
+      tool,
     };
 
     // Create a tool call event with circular references in function_args
@@ -118,9 +118,9 @@ describe('Circular Reference Handling', () => {
       status: 'success',
       request: mockRequest,
       response: mockResponse,
-      tool,
       invocation: tool.build({}),
       durationMs: 100,
+      tool,
     };
 
     const event = new ToolCallEvent(mockCompletedToolCall);

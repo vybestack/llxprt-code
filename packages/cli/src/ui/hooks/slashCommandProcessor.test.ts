@@ -94,7 +94,6 @@ const coreMocks = vi.hoisted(() => {
     Config: class {},
     GitService: vi.fn(),
     Logger: StubLogger,
-    logSlashCommand,
     SlashCommandEvent: class {
       name: string;
       subcommand?: string;
@@ -111,7 +110,6 @@ const coreMocks = vi.hoisted(() => {
     Storage: class {},
     ProfileManager: class {},
     SubagentManager: class {},
-    uiTelemetryService,
     SessionMetrics: class {},
     ModelMetrics: class {},
     DebugLogger: class {
@@ -126,6 +124,8 @@ const coreMocks = vi.hoisted(() => {
         removeStatusChangeListener: vi.fn(),
       }),
     },
+    logSlashCommand,
+    uiTelemetryService,
   };
 });
 

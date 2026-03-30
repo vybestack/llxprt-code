@@ -359,8 +359,8 @@ describe('Property-based validation invariants @plan:PLAN-20250218-HOOKSYSTEM.P1
     (message, extra) => {
       const payload = {
         notification_type: NotificationType.ToolPermission,
-        message,
         details: { ...extra },
+        message,
       };
       // eslint-disable-next-line vitest/no-standalone-expect
       expect(validateNotificationInput(payload)).toBe(true);

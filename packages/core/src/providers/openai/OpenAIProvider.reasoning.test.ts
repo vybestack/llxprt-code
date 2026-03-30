@@ -225,8 +225,8 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
           (thought) =>
             ({
               type: 'thinking',
-              thought,
               sourceField: 'reasoning_content',
+              thought,
             }) as ThinkingBlock,
         ),
         {

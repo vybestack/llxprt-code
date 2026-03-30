@@ -336,14 +336,14 @@ describe('createChatSession', () => {
     const clearFn = vi.fn();
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: existingHistoryService,
       clearStoredHistoryService: clearFn,
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      todoContinuationService,
     });
 
     expect(clearFn).toHaveBeenCalled();
@@ -363,14 +363,14 @@ describe('createChatSession', () => {
     const clearFn = vi.fn();
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
       clearStoredHistoryService: clearFn,
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      todoContinuationService,
     });
 
     expect(clearFn).not.toHaveBeenCalled();
@@ -396,15 +396,15 @@ describe('createChatSession', () => {
     ];
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
       clearStoredHistoryService: vi.fn(),
-      extraHistory,
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      extraHistory,
+      todoContinuationService,
     });
 
     expect(mockHistoryInstance.add).toHaveBeenCalled();
@@ -416,14 +416,14 @@ describe('createChatSession', () => {
     const todoContinuationService = makeTodoContinuationService();
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
       clearStoredHistoryService: vi.fn(),
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      todoContinuationService,
     });
 
     expect(GeminiChat).toHaveBeenCalledWith(
@@ -442,14 +442,14 @@ describe('createChatSession', () => {
     const todoContinuationService = makeTodoContinuationService();
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
       clearStoredHistoryService: vi.fn(),
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      todoContinuationService,
     });
 
     expect(GeminiChat).toHaveBeenCalledWith(
@@ -473,14 +473,14 @@ describe('createChatSession', () => {
     );
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
       clearStoredHistoryService: vi.fn(),
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      todoContinuationService,
     });
 
     expect(mockChat.setActiveTodosProvider).toHaveBeenCalledWith(
@@ -502,14 +502,14 @@ describe('createChatSession', () => {
     const todoContinuationService = makeTodoContinuationService();
 
     await createChatSession({
-      config,
-      runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
       clearStoredHistoryService: vi.fn(),
       generateContentConfig: {},
-      todoContinuationService,
       toolRegistry: undefined,
+      config,
+      runtimeState,
+      todoContinuationService,
     });
 
     expect(
@@ -536,14 +536,14 @@ describe('createChatSessionSafe', () => {
 
     await expect(
       createChatSessionSafe({
-        config,
-        runtimeState,
         contentGenerator: makeContentGenerator(),
         storedHistoryService: undefined,
         clearStoredHistoryService: vi.fn(),
         generateContentConfig: {},
-        todoContinuationService,
         toolRegistry: undefined,
+        config,
+        runtimeState,
+        todoContinuationService,
       }),
     ).rejects.toThrow('Failed to initialize chat');
   });

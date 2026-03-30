@@ -244,9 +244,9 @@ export abstract class BaseToolInvocation<
       try {
         this.messageBus?.publish({
           type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+          serverName: this.getServerName(),
           toolCall,
           correlationId,
-          serverName: this.getServerName(),
         });
       } catch {
         cleanup();

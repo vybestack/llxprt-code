@@ -116,10 +116,10 @@ export class QwenDeviceFlow {
           return {
             access_token: validatedResponse.access_token,
             token_type: 'Bearer',
-            expiry,
             refresh_token: validatedResponse.refresh_token,
-            scope: validatedResponse.scope || undefined, // Convert null to undefined
-            resource_url: validatedResponse.resource_url, // Include the API endpoint from Qwen
+            scope: validatedResponse.scope || undefined,
+            resource_url: validatedResponse.resource_url,
+            expiry,
           };
         }
 
@@ -197,10 +197,10 @@ export class QwenDeviceFlow {
     return {
       access_token: validatedResponse.access_token,
       token_type: 'Bearer',
+      refresh_token: validatedResponse.refresh_token || refreshToken,
+      scope: validatedResponse.scope || undefined,
+      resource_url: validatedResponse.resource_url,
       expiry,
-      refresh_token: validatedResponse.refresh_token || refreshToken, // Use new refresh token if provided, otherwise keep the old one
-      scope: validatedResponse.scope || undefined, // Convert null to undefined
-      resource_url: validatedResponse.resource_url, // Include the API endpoint from Qwen
     };
   }
 

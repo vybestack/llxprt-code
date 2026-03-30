@@ -38,8 +38,8 @@ export class AcpFileSystemService implements FileSystemService {
 
     await this.connection.writeTextFile({
       path: filePath,
-      content,
       sessionId: this.sessionId,
+      content,
     });
   }
 }

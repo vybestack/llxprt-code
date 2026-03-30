@@ -69,13 +69,13 @@ export function shouldRetryOnStatus(
   logger?.debug(() => `shouldRetryOnStatus checking error:`, {
     hasError: !!error,
     errorType: error?.constructor?.name,
-    status,
     errorMessage: error instanceof Error ? error.message : String(error),
     errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
     errorData:
       error && typeof error === 'object' && 'error' in error
         ? (error as { error?: unknown }).error
         : undefined,
+    status,
   });
 
   const shouldRetry = Boolean(

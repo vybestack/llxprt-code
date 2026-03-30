@@ -109,9 +109,9 @@ describe('useSessionInitialization', () => {
     renderHook(() =>
       useSessionInitialization({
         config: config as never,
+        resumedHistory: [],
         addItem,
         loadHistory,
-        resumedHistory: [],
       }),
     );
 

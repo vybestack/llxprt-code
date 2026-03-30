@@ -91,10 +91,10 @@ function createScheduler(
     config: mockConfig,
     messageBus: mockConfig.getMessageBus(),
     toolRegistry: mockConfig.getToolRegistry(),
-    onAllToolCallsComplete,
-    onToolCallsUpdate,
     getPreferredEditor: () => 'vscode',
     onEditorClose: vi.fn(),
+    onAllToolCallsComplete,
+    onToolCallsUpdate,
   });
 }
 

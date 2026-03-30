@@ -111,8 +111,8 @@ describe('ProviderManager runtime guard plumbing', () => {
           providerName: provider.name,
           contents: [prompt],
           settings: settingsService,
-          config,
           runtime: runtimeContext,
+          config,
         }),
       ),
     );
@@ -157,8 +157,8 @@ describe('ProviderManager runtime guard plumbing', () => {
           providerName: provider.name,
           contents: [prompt],
           settings: settingsService,
-          config,
           runtime: runtimeContext,
+          config,
         }),
       ),
     );
@@ -182,12 +182,12 @@ describe('ProviderManager runtime guard plumbing', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'runtime-with-ephemerals',
           settingsService,
           config,
         },
+        config,
       },
       'openai',
     );
@@ -234,8 +234,8 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
         contents: [prompt],
         runtime: {
           runtimeId: 'test-runtime',
-          settingsService,
           config: undefined as unknown as Config,
+          settingsService,
         },
       }),
     ).toThrow(
@@ -260,12 +260,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
         {
           contents: [prompt],
           settings: settingsService,
-          config,
           runtime: {
             runtimeId: 'test-runtime',
             settingsService,
             config,
           },
+          config,
         },
         'openai',
       ),
@@ -296,13 +296,13 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'test-runtime',
           settingsService,
           config,
           metadata: { source: 'test' },
         },
+        config,
       },
       'stub-provider',
     );
@@ -331,12 +331,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'runtime-config-baseurl',
           settingsService,
           config,
         },
+        config,
       },
       'stub-provider',
     );
@@ -373,12 +373,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: subagentSettings,
-        config,
         runtime: {
           runtimeId: 'runtime-mismatched-settings',
           settingsService: subagentSettings,
           config,
         },
+        config,
       },
       'anthropic',
     );
@@ -411,12 +411,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: subagentSettings,
-        config,
         runtime: {
           runtimeId: 'runtime-mismatched-settings',
           settingsService: subagentSettings,
           config,
         },
+        config,
       },
       'anthropic',
     );
@@ -443,12 +443,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'runtime-cross-provider-baseurl',
           settingsService,
           config,
         },
+        config,
       },
       'anthropic',
     );
@@ -475,12 +475,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'runtime-cross-provider-authkey',
           settingsService,
           config,
         },
+        config,
       },
       'anthropic',
     );
@@ -506,12 +506,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'runtime-model-precedence',
           settingsService,
           config,
         },
+        config,
       },
       'anthropic',
     );
@@ -542,12 +542,12 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'runtime-provider-baseurl',
           settingsService,
           config,
         },
+        config,
       },
       provider.name,
     );
@@ -576,7 +576,6 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
       {
         contents: [prompt],
         settings: settingsService,
-        config,
         runtime: {
           runtimeId: 'test-runtime',
           settingsService,
@@ -584,6 +583,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
           metadata: { runtimeSource: 'test', injected: true },
         },
         metadata: { explicitField: 'value' },
+        config,
       },
       'stub-provider',
     );

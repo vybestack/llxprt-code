@@ -164,8 +164,8 @@ export function processFinalToolName(
   // If validation failed, log the issue and return a more informative fallback
   logger.error(() => 'Tool name validation failed, using enhanced fallback', {
     originalName: toolName,
-    availableToolNames,
     reason: validation.reason,
+    availableToolNames,
   });
 
   // Use a more descriptive fallback that includes debugging information

@@ -84,9 +84,9 @@ export const useTodoContinuation = (
       return {
         streamCompleted: true,
         noToolCallsMade: !hadBlockingToolCalls,
-        hasActiveTodos,
         continuationEnabled: isEnabled,
         notAlreadyContinuing: !continuationState.isActive,
+        hasActiveTodos,
         todoPaused,
       };
     },
@@ -250,8 +250,8 @@ export const useTodoContinuation = (
       todoContext.setPaused(true);
       return {
         type: 'pause' as const,
-        reason,
         message: `Task paused: ${reason}`,
+        reason,
       };
     },
     [todoContext],

@@ -129,14 +129,14 @@ export async function processRestorableToolCalls<HistoryType>(
 
       const clientHistory = await geminiClient.getHistory();
       const checkpointData: ToolCallData<HistoryType> = {
-        history,
-        clientHistory,
         toolCall: {
           name: toolCall.name,
           args: toolCall.args,
         },
-        commitHash,
         messageId: toolCall.prompt_id,
+        history,
+        clientHistory,
+        commitHash,
       };
 
       const fileName = `${checkpointFileName}.json`;

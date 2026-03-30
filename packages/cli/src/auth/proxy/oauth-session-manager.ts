@@ -72,14 +72,14 @@ export class PKCESessionStore {
   ): string {
     const sessionId = crypto.randomBytes(16).toString('hex');
     this.sessions.set(sessionId, {
+      createdAt: Date.now(),
+      used: false,
       sessionId,
       provider,
       bucket,
       flowType,
       flowInstance,
-      createdAt: Date.now(),
       peerIdentity,
-      used: false,
     });
     return sessionId;
   }

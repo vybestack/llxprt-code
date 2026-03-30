@@ -191,11 +191,11 @@ function ScrollableList<T>(
   const scrollableEntry = useMemo(
     () => ({
       ref: containerRef,
-      getScrollState,
-      scrollBy,
       scrollTo: (scrollTop: number) =>
         virtualizedListRef.current?.scrollTo(scrollTop),
       hasFocus: hasFocusCallback,
+      getScrollState,
+      scrollBy,
       flashScrollbar,
     }),
     [getScrollState, hasFocusCallback, flashScrollbar, scrollBy],

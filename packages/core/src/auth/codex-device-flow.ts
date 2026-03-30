@@ -197,10 +197,10 @@ export class CodexDeviceFlow {
     const codexToken: CodexOAuthToken = CodexOAuthTokenSchema.parse({
       access_token: tokenResponse.access_token,
       token_type: tokenResponse.token_type,
-      expiry,
       refresh_token: tokenResponse.refresh_token,
       account_id: accountId,
       id_token: tokenResponse.id_token,
+      expiry,
     });
 
     this.logger.debug(
@@ -261,10 +261,10 @@ export class CodexDeviceFlow {
     return CodexOAuthTokenSchema.parse({
       access_token: tokenResponse.access_token,
       token_type: tokenResponse.token_type,
-      expiry,
       refresh_token: tokenResponse.refresh_token ?? refreshToken,
       account_id: accountId,
       id_token: tokenResponse.id_token,
+      expiry,
     });
   }
 

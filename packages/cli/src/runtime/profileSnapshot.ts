@@ -153,8 +153,8 @@ export function buildRuntimeProfileSnapshot(): Profile {
     version: 1,
     provider: providerName,
     model: currentModel,
-    modelParams,
     ephemeralSettings: snapshot as Profile['ephemeralSettings'],
+    modelParams,
   };
 }
 

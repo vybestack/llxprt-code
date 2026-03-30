@@ -151,11 +151,11 @@ export async function performResume(
   // 5. Phase 1: Acquire new session (before disposing old)
   const resumeResult = await resumeSession({
     continueRef: targetSession.sessionId,
-    projectHash,
-    chatsDir,
     currentProvider: context.currentProvider,
     currentModel: context.currentModel,
     workspaceDirs: context.workspaceDirs,
+    projectHash,
+    chatsDir,
   });
 
   if (resumeResult.ok === false) {

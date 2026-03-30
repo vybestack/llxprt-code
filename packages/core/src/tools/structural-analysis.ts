@@ -388,8 +388,8 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
             definitions.push({
               file: relPath,
               line: range.start.line + 1,
-              kind,
               text: m.text().substring(0, 200),
+              kind,
             });
           }
         } catch {
@@ -447,9 +447,9 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
     return {
       mode: 'definitions',
-      symbol,
       truncated: false,
       results: definitions,
+      symbol,
     };
   }
 
@@ -540,7 +540,6 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
     return {
       mode: 'hierarchy',
-      symbol,
       truncated: false,
       results: {
         extends: extendsParent,
@@ -548,6 +547,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
         extendedBy,
         implementedBy,
       },
+      symbol,
     };
   }
 
@@ -1037,9 +1037,9 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
     return {
       mode: 'references',
-      symbol,
       truncated: false,
       results: { categories, counts },
+      symbol,
     };
   }
 

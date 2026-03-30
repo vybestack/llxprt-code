@@ -108,9 +108,9 @@ function sessionStartLine(
   };
   return JSON.stringify({
     v: 1,
-    seq,
     ts: '2026-02-11T16:00:00.000Z',
     type: 'session_start',
+    seq,
     payload,
   });
 }
@@ -121,10 +121,10 @@ function sessionStartLine(
 function contentLine(seq: number, content: IContent): string {
   return JSON.stringify({
     v: 1,
-    seq,
     ts: new Date().toISOString(),
     type: 'content',
     payload: { content },
+    seq,
   });
 }
 
@@ -138,10 +138,10 @@ function compressedLine(
 ): string {
   return JSON.stringify({
     v: 1,
-    seq,
     ts: new Date().toISOString(),
     type: 'compressed',
     payload: { summary, itemsCompressed },
+    seq,
   });
 }
 
@@ -151,10 +151,10 @@ function compressedLine(
 function rewindLine(seq: number, itemsRemoved: number): string {
   return JSON.stringify({
     v: 1,
-    seq,
     ts: new Date().toISOString(),
     type: 'rewind',
     payload: { itemsRemoved },
+    seq,
   });
 }
 
@@ -168,10 +168,10 @@ function providerSwitchLine(
 ): string {
   return JSON.stringify({
     v: 1,
-    seq,
     ts: new Date().toISOString(),
     type: 'provider_switch',
     payload: { provider, model },
+    seq,
   });
 }
 
@@ -185,10 +185,10 @@ function sessionEventLine(
 ): string {
   return JSON.stringify({
     v: 1,
-    seq,
     ts: new Date().toISOString(),
     type: 'session_event',
     payload: { severity, message },
+    seq,
   });
 }
 
@@ -198,10 +198,10 @@ function sessionEventLine(
 function _directoriesChangedLine(seq: number, directories: string[]): string {
   return JSON.stringify({
     v: 1,
-    seq,
     ts: new Date().toISOString(),
     type: 'directories_changed',
     payload: { directories },
+    seq,
   });
 }
 

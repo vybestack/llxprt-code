@@ -122,11 +122,11 @@ function loadExtension(extensionDir: string): GeminiCLIExtension | null {
       name: config.name,
       version: config.version,
       path: extensionDir,
-      contextFiles,
-      installMetadata,
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
-      isActive: true, // Barring any other signals extensions should be considered Active.
+      isActive: true,
+      contextFiles,
+      installMetadata,
     } as GeminiCLIExtension;
   } catch (e) {
     logger.error(

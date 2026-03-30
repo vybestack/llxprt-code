@@ -221,8 +221,8 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       const truncated = allMatches.length > limit;
       const result: AstGrepResult = {
         matches: allMatches.slice(0, limit),
-        truncated,
         skippedFiles: skippedFiles > 0 ? skippedFiles : undefined,
+        truncated,
       };
       if (truncated) {
         result.totalMatches = allMatches.length;

@@ -601,8 +601,8 @@ describe('InputPrompt', () => {
     mockedUseCommandCompletion.mockReturnValue({
       ...mockCommandCompletion,
       showSuggestions: true,
-      suggestions,
       activeSuggestionIndex: activeIndex,
+      suggestions,
     });
     props.buffer.setText(bufferText);
     const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
@@ -1213,10 +1213,10 @@ describe('InputPrompt', () => {
 
       mockedUseCommandCompletion.mockReturnValue({
         ...mockCommandCompletion,
-        showSuggestions,
         suggestions: showSuggestions
           ? [{ label: 'suggestion', value: 'suggestion' }]
           : [],
+        showSuggestions,
       });
 
       const { unmount } = renderWithProviders(<InputPrompt {...props} />);
@@ -2271,8 +2271,6 @@ describe('InputPrompt', () => {
         const mockAccept = vi.fn();
         mockedUseCommandCompletion.mockReturnValue({
           ...mockCommandCompletion,
-          showSuggestions,
-          suggestions,
           promptCompletion: {
             text: ghostText,
             accept: mockAccept,
@@ -2281,6 +2279,8 @@ describe('InputPrompt', () => {
             isActive: ghostText !== '',
             markSelected: vi.fn(),
           },
+          showSuggestions,
+          suggestions,
         });
 
         const { stdin, unmount } = renderWithProviders(

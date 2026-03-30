@@ -1132,10 +1132,10 @@ export async function main() {
   try {
     await runNonInteractive({
       config: nonInteractiveConfig,
+      runtimeMessageBus: sessionMessageBus,
       settings,
       input,
       prompt_id,
-      runtimeMessageBus: sessionMessageBus,
     });
 
     // Fire SessionEnd hook on successful completion

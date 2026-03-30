@@ -77,9 +77,9 @@ export class CrossFileRelationshipAnalyzer {
 
           this.symbolIndex.get(decl.name)!.push({
             type: 'definition',
-            filePath,
             line: decl.line,
             column: decl.column,
+            filePath,
           });
         }
 
@@ -92,10 +92,10 @@ export class CrossFileRelationshipAnalyzer {
 
             this.symbolIndex.get(item)!.push({
               type: 'import',
-              filePath,
               line: imp.line,
-              column: 0, // Default column for imports
+              column: 0,
               sourceModule: imp.module,
+              filePath,
             });
           }
         }

@@ -243,8 +243,8 @@ export function createAgentRuntimeState(
     proxyUrl: params.proxyUrl,
     modelParams:
       params.modelParams != null ? deepFreeze(params.modelParams) : undefined,
-    sessionId,
     updatedAt: getTimestamp(),
+    sessionId,
   });
 
   // Register state in global registry (line 103)
@@ -355,9 +355,9 @@ export function updateAgentRuntimeState(
   // Emit event (lines 234-241)
   const event: RuntimeStateChangedEvent = {
     runtimeId: newState.runtimeId,
-    changes,
     snapshot: getAgentRuntimeStateSnapshot(newState),
     timestamp: newState.updatedAt,
+    changes,
   };
 
   invokeSubscribers(newState.runtimeId, event);

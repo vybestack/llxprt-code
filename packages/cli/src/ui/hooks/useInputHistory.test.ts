@@ -119,11 +119,11 @@ describe('useInputHistory', () => {
       const currentQuery = 'current query';
       const { result } = renderHook(() =>
         useInputHistory({
-          userMessages,
           onSubmit: mockOnSubmit,
           isActive: true,
-          currentQuery,
           onChange: mockOnChange,
+          userMessages,
+          currentQuery,
         }),
       );
 
@@ -138,11 +138,11 @@ describe('useInputHistory', () => {
       const currentQuery = 'original user input';
       const { result } = renderHook(() =>
         useInputHistory({
-          userMessages,
           onSubmit: mockOnSubmit,
           isActive: true,
-          currentQuery,
           onChange: mockOnChange,
+          userMessages,
+          currentQuery,
         }),
       );
 

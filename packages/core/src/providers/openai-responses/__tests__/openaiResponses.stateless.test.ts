@@ -140,8 +140,8 @@ function buildCallOptions(
   const { contents = [], ...rest } = overrides;
   return createProviderCallOptions({
     providerName: provider.name,
-    contents,
     ...rest,
+    contents,
   });
 }
 

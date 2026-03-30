@@ -124,8 +124,8 @@ export const continueCommand: SlashCommand = {
       // Interactive mode with active conversation requires confirmation (REQ-RC-010)
       return {
         type: 'perform_resume',
-        sessionRef,
         requiresConfirmation: true,
+        sessionRef,
       };
     }
 

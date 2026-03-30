@@ -510,11 +510,11 @@ export class ShellExecutionService {
             output: combinedOutput.trim(),
             exitCode: code,
             signal: signal ? (os.constants.signals[signal] ?? null) : null,
-            error,
             aborted: abortSignal.aborted,
             inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: child.pid,
             executionMethod: 'child_process',
+            error,
           });
         };
 
@@ -648,20 +648,20 @@ export class ShellExecutionService {
       delete envVars.BASH_ENV;
 
       const ptyProcess = ptyInfo.module.spawn(executable, args, {
-        cwd,
         name: 'xterm-256color',
-        cols,
-        rows,
         env: envVars,
         handleFlowControl: true,
+        cwd,
+        cols,
+        rows,
       });
 
       const result = new Promise<ShellExecutionResult>((resolve) => {
         const headlessTerminal = new Terminal({
           allowProposedApi: true,
+          scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
           cols,
           rows,
-          scrollback: shellExecutionConfig.scrollback ?? SCROLLBACK_LIMIT,
         });
         headlessTerminal.scrollToTop();
 
@@ -815,13 +815,13 @@ export class ShellExecutionService {
           resolveResult({
             rawOutput: finalBuffer,
             output: fullOutput,
-            exitCode,
             signal: signal ?? null,
-            error,
             aborted: abortSignal.aborted,
             inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: ptyProcess.pid,
             executionMethod: ptyInfo.name ?? 'node-pty',
+            exitCode,
+            error,
           });
         };
 
@@ -1016,11 +1016,11 @@ export class ShellExecutionService {
                 output: getFullBufferText(headlessTerminal),
                 exitCode: 1,
                 signal: null,
-                error,
                 aborted: true,
                 inactivityTimedOut: inactivityAbortController.signal.aborted,
-                pid,
                 executionMethod: ptyInfo.name ?? 'node-pty',
+                error,
+                pid,
               });
               return;
             }
@@ -1058,11 +1058,11 @@ export class ShellExecutionService {
                 output: getFullBufferText(headlessTerminal),
                 exitCode: 1,
                 signal: null,
-                error,
                 aborted: true,
                 inactivityTimedOut: inactivityAbortController.signal.aborted,
-                pid,
                 executionMethod: ptyInfo.name ?? 'node-pty',
+                error,
+                pid,
               });
             }, SIGKILL_TIMEOUT_MS);
           }

@@ -75,9 +75,9 @@ export class ConversationFileWriter {
   ): void {
     this.writeEntry({
       type: 'tool_call',
-      provider,
       tool: toolName,
       ...context,
+      provider,
     });
   }
 }

@@ -25,9 +25,9 @@ export function useResponsive(): UseResponsiveReturn {
 
   return {
     width: columns,
-    breakpoint,
     isNarrow: isNarrowWidth(columns),
     isStandard: breakpoint === 'STANDARD',
     isWide: breakpoint === 'WIDE',
+    breakpoint,
   };
 }

@@ -197,9 +197,9 @@ export class SkillManager {
         name: skillName,
         description: config.description || '',
         location: skillPath,
-        body,
         source: 'builtin',
         disabled: config.disabled,
+        body,
       };
     } catch {
       return null;

@@ -114,8 +114,8 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'missing-settings-runtime',
       settingsService: undefined as unknown as SettingsService,
-      config,
       metadata: { source: 'test' },
+      config,
     };
 
     const iterator = wrapper.generateChatCompletion({
@@ -139,8 +139,8 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'complete-runtime',
       settingsService: settings,
-      config,
       metadata: { source: 'test' },
+      config,
     };
 
     const iterator = wrapper.generateChatCompletion(
@@ -169,25 +169,25 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     wrapper.setRuntimeContextResolver(() => ({
       runtimeId: 'injected-runtime',
       settingsService: settings,
-      config,
       metadata: { injected: true, source: 'resolver' },
+      config,
     }));
 
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'provided-runtime',
       settingsService: settings,
-      config,
       metadata: { provided: true, source: 'caller' },
+      config,
     };
 
     const iterator = wrapper.generateChatCompletion(
       createProviderCallOptions({
         providerName: provider.name,
         contents: [],
+        metadata: { explicit: true },
         settings,
         config,
         runtime,
-        metadata: { explicit: true },
       }),
     );
 

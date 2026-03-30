@@ -183,7 +183,6 @@ export class CoderAgentExecutor implements AgentExecutor {
       );
       eventBus.publish({
         kind: 'status-update',
-        taskId,
         contextId: uuidv4(),
         status: {
           state: 'failed',
@@ -196,6 +195,7 @@ export class CoderAgentExecutor implements AgentExecutor {
           },
         },
         final: true,
+        taskId,
       });
       return;
     }
@@ -208,7 +208,6 @@ export class CoderAgentExecutor implements AgentExecutor {
       );
       eventBus.publish({
         kind: 'status-update',
-        taskId,
         contextId: task.contextId,
         status: {
           state: task.taskState,
@@ -226,6 +225,7 @@ export class CoderAgentExecutor implements AgentExecutor {
           },
         },
         final: true,
+        taskId,
       });
       return;
     }
@@ -260,7 +260,6 @@ export class CoderAgentExecutor implements AgentExecutor {
       );
       eventBus.publish({
         kind: 'status-update',
-        taskId,
         contextId: task.contextId,
         status: {
           state: 'failed',
@@ -278,6 +277,7 @@ export class CoderAgentExecutor implements AgentExecutor {
           },
         },
         final: true,
+        taskId,
       });
     }
   };
@@ -363,7 +363,6 @@ export class CoderAgentExecutor implements AgentExecutor {
         };
         eventBus.publish({
           kind: 'status-update',
-          taskId,
           contextId: sdkTask.contextId,
           status: {
             state: 'failed',
@@ -383,6 +382,7 @@ export class CoderAgentExecutor implements AgentExecutor {
           },
           final: true,
           metadata: { coderAgent: stateChange },
+          taskId,
         });
         return;
       }

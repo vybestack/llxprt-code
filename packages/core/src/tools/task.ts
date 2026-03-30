@@ -1215,13 +1215,13 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       params.context ?? params.context_vars ?? params.contextVars ?? {};
 
     return {
+      toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
+      async: params.async ?? false,
       subagentName,
       goalPrompt,
       behaviourPrompts,
-      toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
-      async: params.async ?? false,
     };
   }
 

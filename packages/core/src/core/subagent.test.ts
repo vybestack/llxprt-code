@@ -294,7 +294,6 @@ describe('subagent.ts', () => {
             topP: defaultModelConfig.top_p,
           },
         },
-        history,
         ephemerals: {
           compressionThreshold: () => 0.8,
           contextLimit: () => 60_000,
@@ -312,6 +311,7 @@ describe('subagent.ts', () => {
             set: vi.fn(),
           },
         } as unknown as ProviderRuntimeContext,
+        history,
       };
 
       const contentGenerator =

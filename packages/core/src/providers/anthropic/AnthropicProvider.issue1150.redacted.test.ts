@@ -134,11 +134,11 @@ describe('AnthropicProvider Issue #1150: redacted_thinking Data Validation', () 
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   /**

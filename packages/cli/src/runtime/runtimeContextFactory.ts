@@ -229,8 +229,8 @@ export function createIsolatedRuntimeContext(
     new Config({
       sessionId: runtimeId,
       targetDir: workspaceDir,
-      debugMode,
       cwd: workspaceDir,
+      debugMode,
       model,
       settingsService,
     });
@@ -282,9 +282,9 @@ export function createIsolatedRuntimeContext(
 
   const initialRuntimeContext = createProviderRuntimeContext({
     settingsService: resolvedSettingsService,
+    metadata: baseMetadata,
     config,
     runtimeId,
-    metadata: baseMetadata,
   });
 
   const providerManager = new ProviderManager({
@@ -330,9 +330,9 @@ export function createIsolatedRuntimeContext(
     await runWithRuntimeScope(scope, async () => {
       const scopedRuntime = createProviderRuntimeContext({
         settingsService: resolvedSettingsService,
-        config,
         runtimeId: currentRuntimeId,
         metadata: currentMetadata,
+        config,
       });
       (
         providerManager as unknown as { runtime?: ProviderRuntimeContext }
@@ -348,12 +348,12 @@ export function createIsolatedRuntimeContext(
 
       if (options.prepare != null) {
         await options.prepare({
-          config,
           settingsService: resolvedSettingsService,
-          providerManager,
-          oauthManager,
           runtimeId: currentRuntimeId,
           metadata: currentMetadata,
+          config,
+          providerManager,
+          oauthManager,
         });
       }
 
@@ -398,11 +398,11 @@ export function createIsolatedRuntimeContext(
 
       if (options.onCleanup != null) {
         await options.onCleanup({
-          config,
           settingsService: resolvedSettingsService,
-          providerManager,
           runtimeId: currentRuntimeId,
           metadata: currentMetadata,
+          config,
+          providerManager,
         });
       }
 

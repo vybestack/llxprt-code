@@ -29,8 +29,8 @@ const mocks = vi.hoisted(() => {
   return {
     getProviderManagerMock: vi.fn(),
     refreshAliasProvidersMock: vi.fn(),
-    runtimeApi,
     getRuntimeApiMock: vi.fn(() => runtimeApi),
+    runtimeApi,
   };
 });
 

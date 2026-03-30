@@ -86,9 +86,7 @@ export class ASTEditToolInvocation
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Edit: ${shortenPath(makeRelative(this.params.file_path, this.config.getTargetDir()))}`,
-      fileName,
       filePath: this.params.file_path,
-      fileDiff,
       originalContent: editData.currentContent,
       newContent: editData.newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
@@ -100,6 +98,8 @@ export class ASTEditToolInvocation
         astValidation: editData.astValidation,
         fileFreshness: editData.fileFreshness,
       },
+      fileName,
+      fileDiff,
     };
 
     return confirmationDetails;
@@ -281,14 +281,14 @@ export class ASTEditToolInvocation
         .join('\n');
 
       const returnDisplay: FileDiff = {
-        fileDiff,
-        fileName,
         originalContent: currentContent,
-        newContent,
         metadata: {
           astValidation,
           currentMtime,
         },
+        fileDiff,
+        fileName,
+        newContent,
       };
 
       return {

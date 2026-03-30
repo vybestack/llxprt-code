@@ -288,8 +288,8 @@ export async function triggerToolNotificationHook(
 
     return {
       notificationType: NotificationType.ToolPermission,
-      message,
       details: serializedDetails,
+      message,
     };
   } catch (error) {
     debugLogger.debug(

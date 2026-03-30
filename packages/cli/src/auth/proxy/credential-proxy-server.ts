@@ -572,26 +572,23 @@ export class CredentialProxyServer {
 
       // Store session with flow instance for later exchange
       this.oauthSessions.set(sessionId, {
-        provider,
-        bucket,
         complete: false,
         createdAt: Date.now(),
         used: false,
-        flowType,
-        flowInstance,
-        // Store PKCE state for pkce_redirect flows (NOT returned to client)
         pkceState:
           flowType === 'pkce_redirect'
             ? initiationResult.device_code
             : undefined,
-        // Store device_code for device_code flows - needed for polling
         deviceCode:
           flowType === 'device_code' ? initiationResult.device_code : undefined,
-        // Store poll interval for device_code flows (may increase on slow_down)
         pollInterval:
           flowType === 'device_code'
             ? (initiationResult.interval ?? 5)
             : undefined,
+        provider,
+        bucket,
+        flowType,
+        flowInstance,
       });
 
       // Build response based on flow type

@@ -52,8 +52,8 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     config = {
       profileName: 'test-lb',
       strategy: 'failover',
-      subProfiles,
       lbProfileEphemeralSettings: {},
+      subProfiles,
     };
   });
 

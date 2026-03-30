@@ -250,8 +250,8 @@ export class Config extends ConfigBase {
 
       logger.debug('Storing history for later use', {
         historyLength: existingHistory.length,
-        fromGenaiToVertex,
         willStripThoughts: fromGenaiToVertex,
+        fromGenaiToVertex,
       });
 
       // Use storeHistoryForLaterUse to ensure history is preserved through initialization
@@ -562,8 +562,8 @@ export class Config extends ConfigBase {
       terminalHeight: this.getPtyTerminalHeight(),
       showColor: this.getAllowPtyThemeOverride(),
       scrollback: this.getPtyScrollbackLimit(),
-      inactivityTimeoutMs,
       isSandboxOrCI: !!this.getSandbox() || process.env.CI === 'true',
+      inactivityTimeoutMs,
     };
   }
 

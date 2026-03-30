@@ -237,10 +237,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -307,10 +307,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -384,10 +384,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -473,10 +473,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -509,8 +509,8 @@ describe('CoreToolScheduler', () => {
     expect(busHandler).toBeDefined();
     busHandler?.({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
+      correlationId,
     });
 
     await vi.waitFor(() => {
@@ -610,10 +610,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -639,11 +639,11 @@ describe('CoreToolScheduler', () => {
     expect(busHandler).toBeDefined();
     busHandler?.({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
       outcome: ToolConfirmationOutcome.SuggestEdit,
       payload: {
         editedCommand: 'npm install',
       },
+      correlationId,
     });
 
     await vi.waitFor(() => {
@@ -729,10 +729,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const request = {
@@ -802,9 +802,9 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
+      getPreferredEditor: () => 'vscode',
       onAllToolCallsComplete,
       onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
     });
 
     const request = {
@@ -881,9 +881,9 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
+      getPreferredEditor: () => 'vscode',
       onAllToolCallsComplete,
       onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
     });
 
     // ACT
@@ -954,9 +954,9 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
+      getPreferredEditor: () => 'vscode',
       onAllToolCallsComplete,
       onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
     });
 
     // ACT
@@ -1036,9 +1036,9 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
+      getPreferredEditor: () => 'vscode',
       onAllToolCallsComplete,
       onToolCallsUpdate,
-      getPreferredEditor: () => 'vscode',
     });
 
     // ACT - Schedule both tools in a batch
@@ -1134,10 +1134,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -1207,9 +1207,9 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
     });
 
     const abortController = new AbortController();
@@ -1285,10 +1285,10 @@ describe('CoreToolScheduler', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -1404,10 +1404,10 @@ describe('CoreToolScheduler with payload', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -1530,10 +1530,10 @@ describe('CoreToolScheduler with payload', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -1934,10 +1934,10 @@ describe('CoreToolScheduler edit cancellation', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -2256,10 +2256,10 @@ describe('CoreToolScheduler YOLO mode', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -2353,10 +2353,10 @@ describe.skip('CoreToolScheduler request queueing', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -2478,10 +2478,10 @@ describe.skip('CoreToolScheduler request queueing', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -2609,10 +2609,10 @@ describe.skip('CoreToolScheduler request queueing', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -2671,10 +2671,10 @@ describe.skip('CoreToolScheduler request queueing', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -2765,7 +2765,6 @@ describe.skip('CoreToolScheduler request queueing', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: toolRegistry as unknown as ToolRegistry,
-      onAllToolCallsComplete,
       onToolCallsUpdate: (toolCalls) => {
         onToolCallsUpdate(toolCalls);
         // Capture confirmation handlers for awaiting_approval tools
@@ -2787,6 +2786,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
       },
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
     });
 
     const abortController = new AbortController();
@@ -3473,10 +3473,10 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -3584,10 +3584,10 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const abortController = new AbortController();
@@ -3690,10 +3690,10 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const request = {
@@ -3813,10 +3813,10 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const request = {
@@ -3919,8 +3919,8 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
       config: mockConfig,
       messageBus: mockMessageBus,
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
+      onAllToolCallsComplete,
     });
 
     const abortController = new AbortController();
@@ -3990,8 +3990,8 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
       config: mockConfig,
       messageBus: mockMessageBus,
       toolRegistry: mockToolRegistry,
-      onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
+      onAllToolCallsComplete,
     });
 
     const abortController = new AbortController();

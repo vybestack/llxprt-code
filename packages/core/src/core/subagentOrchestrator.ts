@@ -179,10 +179,7 @@ export class SubagentOrchestrator {
         : `${subagent.name}-${agentRuntimeId}`;
 
     return {
-      agentId,
-      scope,
       prompt: promptConfig,
-      profile,
       config: subagent,
       runtime: runtimeResult,
       dispose: async () => {
@@ -205,6 +202,9 @@ export class SubagentOrchestrator {
           }
         }
       },
+      agentId,
+      scope,
+      profile,
     };
   }
 
@@ -603,7 +603,6 @@ export class SubagentOrchestrator {
       runtimeId: agentRuntimeId,
       provider: profile.provider,
       model: modelConfig.model,
-      baseUrl,
       proxyUrl: this.getStringSetting(profile.ephemeralSettings, [
         'proxy',
         'proxy-url',
@@ -613,6 +612,7 @@ export class SubagentOrchestrator {
         topP: modelConfig.top_p,
         maxTokens: profile.modelParams.max_tokens ?? undefined,
       },
+      baseUrl,
       sessionId,
     });
   }

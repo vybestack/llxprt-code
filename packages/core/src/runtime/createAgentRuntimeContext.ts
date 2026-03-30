@@ -243,11 +243,11 @@ export function createAgentRuntimeContext(
 
   const context: AgentRuntimeContext = {
     state: options.state,
-    history,
-    ephemerals,
     telemetry: options.telemetry,
     provider: options.provider,
     tools: options.tools,
+    history,
+    ephemerals,
     providerRuntime,
   };
 

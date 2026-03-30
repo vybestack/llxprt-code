@@ -182,8 +182,8 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
       const endpointUrl = await this.buildEndpointUrl();
       const response = await fetch(endpointUrl, {
         method: 'POST',
-        headers,
         body: JSON.stringify(searchRequest),
+        headers,
         signal,
       });
 

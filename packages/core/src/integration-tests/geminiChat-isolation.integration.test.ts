@@ -52,8 +52,8 @@ const noopToolsView: ToolRegistryView = {
 function createProviderRuntimeStub(runtimeId: string) {
   return createProviderRuntimeContext({
     settingsService: new SettingsService(),
-    runtimeId,
     metadata: { source: 'geminiChat-isolation.integration.test' },
+    runtimeId,
   });
 }
 
@@ -540,8 +540,8 @@ describe('GeminiChat Isolation Integration Tests', () => {
         const state = createAgentRuntimeState({
           runtimeId: `runtime-${index}`,
           provider: 'gemini',
-          model,
           sessionId: `session-${index}`,
+          model,
         });
 
         return buildRuntimeContext(state, {});

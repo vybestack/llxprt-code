@@ -35,8 +35,8 @@ export const terminalSetupCommand: SlashCommand = {
 
       return {
         type: 'message',
-        content,
         messageType: result.success ? 'info' : 'error',
+        content,
       };
     } catch (error) {
       return {

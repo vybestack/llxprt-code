@@ -149,16 +149,16 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Insert: ${shortenPath(relativePath)} (at line ${this.params.line_number})`,
-      fileName,
       filePath: this.params.absolute_path,
-      fileDiff,
-      originalContent,
-      newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
         }
       },
+      fileName,
+      fileDiff,
+      originalContent,
+      newContent,
       ideConfirmation,
     };
     return confirmationDetails;

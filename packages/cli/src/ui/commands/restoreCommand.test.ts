@@ -245,8 +245,8 @@ describe('restoreCommand', () => {
         {
           args: partialArg,
           completedArgs: [],
-          partialArg,
           commandPathLength: 1,
+          partialArg,
         },
         fullLine,
       );

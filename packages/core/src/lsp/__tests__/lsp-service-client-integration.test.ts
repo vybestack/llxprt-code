@@ -94,9 +94,9 @@ const createConfig = (command: string): ClientConfig => ({
   servers: [
     {
       id: 'ts',
-      command,
       args: [],
       filetypes: ['typescript'],
+      command,
     },
   ],
 });

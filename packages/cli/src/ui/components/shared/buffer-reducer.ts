@@ -120,10 +120,10 @@ function handleSetText(
   const lastIdx = lines.length - 1;
   return {
     ...nextState,
-    lines,
     cursorRow: lastIdx,
     cursorCol: cpLen(lines[lastIdx] ?? ''),
     preferredCol: null,
+    lines,
   };
 }
 

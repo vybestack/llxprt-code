@@ -347,8 +347,8 @@ export async function processSlashCommandResult(
         name: toolName,
         args: toolArgs,
         isClientInitiated: true,
-        prompt_id,
         agentId: DEFAULT_AGENT_ID,
+        prompt_id,
       };
       await scheduleToolCalls([toolCallRequest], abortSignal);
       return { queryToSend: null, shouldProceed: false };

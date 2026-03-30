@@ -690,7 +690,7 @@ export function handleOpenLineAbove(state: TextBufferState): TextBufferState {
     0,
     '\n',
   );
-  return { ...resultState, cursorRow, cursorCol: 0 };
+  return { ...resultState, cursorCol: 0, cursorRow };
 }
 
 export function handleAppendAtLineEnd(state: TextBufferState): TextBufferState {

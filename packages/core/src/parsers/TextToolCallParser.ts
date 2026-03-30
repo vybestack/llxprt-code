@@ -155,11 +155,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
       const fullEnd = endMarkerIndex + endMarker.length;
       matches.push({
-        start,
         end: fullEnd,
-        toolName,
         rawArgs: jsonSegment.segment,
         fullMatch: content.slice(start, fullEnd),
+        start,
+        toolName,
       });
 
       searchIndex = fullEnd;
@@ -214,9 +214,9 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           matches.push({
             start: startIndex,
             end: fullEnd,
-            toolName,
             rawArgs: argsText,
             fullMatch: content.slice(startIndex, fullEnd),
+            toolName,
           });
           searchIndex = fullEnd;
           continue;
@@ -374,11 +374,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
       const fullEnd = closingIndex + closing.length;
       matches.push({
-        start,
         end: fullEnd,
-        toolName,
         rawArgs: content.slice(bodyStart, closingIndex),
         fullMatch: content.slice(start, fullEnd),
+        start,
+        toolName,
       });
 
       searchIndex = fullEnd;
@@ -453,11 +453,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
 
       matches.push({
-        start,
         end: closingIndex,
-        toolName,
         rawArgs: this.parseAttributeArguments(attributeText),
         fullMatch: content.slice(start, closingIndex),
+        start,
+        toolName,
       });
 
       searchIndex = closingIndex;
@@ -500,11 +500,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
 
       matches.push({
-        start,
         end: closingIndex,
-        toolName,
         rawArgs: this.parseAttributeArguments(attributeText),
         fullMatch: content.slice(start, closingIndex),
+        start,
+        toolName,
       });
 
       searchIndex = closingIndex;

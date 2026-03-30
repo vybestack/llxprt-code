@@ -188,8 +188,8 @@ const createRuntimeContext = (
 ): ProviderRuntimeContext => ({
   runtimeId: 'test-runtime',
   settingsService: settings,
-  config,
   metadata: { source: 'LoggingProviderWrapper.apiTelemetry.test' },
+  config,
 });
 
 describe('LoggingProviderWrapper API Telemetry', () => {
@@ -353,10 +353,10 @@ describe('LoggingProviderWrapper API Telemetry', () => {
         createProviderCallOptions({
           providerName: provider.name,
           contents: [],
+          resolved: { model: 'custom-model-name' },
           settings,
           config,
           runtime,
-          resolved: { model: 'custom-model-name' },
         }),
       );
 
@@ -417,10 +417,10 @@ describe('LoggingProviderWrapper API Telemetry', () => {
               blocks: [{ type: 'text', text: 'Hello' }],
             },
           ],
+          resolved: { model: 'explicitly-requested-model' },
           settings,
           config,
           runtime,
-          resolved: { model: 'explicitly-requested-model' },
         }),
       );
 

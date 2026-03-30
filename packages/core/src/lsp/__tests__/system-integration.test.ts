@@ -261,13 +261,13 @@ describe('LSP system integration (P35)', () => {
 
     return {
       sessionId: 'p35-session-id',
-      targetDir,
       debugMode: false,
       cwd: targetDir,
       model: 'gemini-2.0-flash-exp',
       settingsService:
         settingsService as unknown as ConfigParameters['settingsService'],
       ...overrides,
+      targetDir,
     };
   }
 

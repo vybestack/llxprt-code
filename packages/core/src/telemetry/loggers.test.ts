@@ -480,10 +480,10 @@ describe('loggers', () => {
           errorType: undefined,
           agentId: 'agent-42',
         },
-        tool,
         invocation: {} as AnyToolInvocation,
         durationMs: 100,
         outcome: ToolConfirmationOutcome.ProceedOnce,
+        tool,
       };
       const event = new ToolCallEvent(call);
 

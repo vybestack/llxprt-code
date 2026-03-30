@@ -466,12 +466,12 @@ describe('Profile with Keyfile Integration Tests', () => {
 
         const profile: Profile = {
           version: 1,
-          provider,
           model: 'test-model',
           modelParams: {},
           ephemeralSettings: {
             'auth-keyfile': keyfilePath,
           },
+          provider,
         };
 
         await profileManager.saveProfile(name, profile);

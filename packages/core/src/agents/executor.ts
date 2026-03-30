@@ -393,12 +393,12 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         profile: {
           config: this.runtimeContext,
           state: runtimeState,
-          settings,
-          providerRuntime,
           contentGeneratorConfig:
             this.runtimeContext.getContentGeneratorConfig(),
           toolRegistry: this.toolRegistry,
           providerManager: this.runtimeContext.getProviderManager?.(),
+          settings,
+          providerRuntime,
         },
         overrides: {
           contentGenerator: (() => {
@@ -593,11 +593,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       }
 
       const requestInfo: ToolCallRequestInfo = {
-        callId,
         name: functionCall.name as string,
-        args,
         isClientInitiated: true,
         prompt_id: promptId,
+        callId,
+        args,
       };
 
       // Create a promise for the tool execution

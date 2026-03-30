@@ -58,9 +58,9 @@ function createMCPCredentials(
     token: {
       accessToken: `mcp_token_${serverName}`,
       refreshToken: opts?.refreshToken,
-      expiresAt,
       tokenType: opts?.tokenType || 'Bearer',
       scope: opts?.scope,
+      expiresAt,
     },
     updatedAt: Date.now(),
   };

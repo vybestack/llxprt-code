@@ -287,11 +287,10 @@ const buildMockScheduler = (
         config: nextConfig,
       };
     }),
-
     toolCalls: [],
+    toolRegistry: mockToolRegistry as unknown as ToolRegistry,
     callbacks,
     config,
-    toolRegistry: mockToolRegistry as unknown as ToolRegistry,
   };
   return scheduler;
 };
@@ -768,7 +767,6 @@ describe('useReactToolScheduler', () => {
     expect(onComplete).toHaveBeenCalledWith([
       expect.objectContaining({
         status: 'success',
-        request,
         response: expect.objectContaining({
           resultDisplay: 'Confirmed display',
           responseParts: expect.arrayContaining([
@@ -779,6 +777,7 @@ describe('useReactToolScheduler', () => {
             }),
           ]),
         }),
+        request,
       }),
     ]);
   });
@@ -819,7 +818,6 @@ describe('useReactToolScheduler', () => {
     expect(onComplete).toHaveBeenCalledWith([
       expect.objectContaining({
         status: 'cancelled',
-        request,
         response: expect.objectContaining({
           responseParts: expect.arrayContaining([
             expect.objectContaining({
@@ -831,6 +829,7 @@ describe('useReactToolScheduler', () => {
             }),
           ]),
         }),
+        request,
       }),
     ]);
   });
@@ -905,7 +904,6 @@ describe('useReactToolScheduler', () => {
     expect(onComplete).toHaveBeenCalledWith([
       expect.objectContaining({
         status: 'success',
-        request,
         response: expect.objectContaining({
           resultDisplay: 'Final display',
           responseParts: expect.arrayContaining([
@@ -916,6 +914,7 @@ describe('useReactToolScheduler', () => {
             }),
           ]),
         }),
+        request,
       }),
     ]);
     expect(result.current[0]).toStrictEqual([]);
@@ -1258,8 +1257,8 @@ describe('mapToDisplay', () => {
       it(`should map ToolCall with status '${status}' (${testName}) correctly`, () => {
         const toolCall: ToolCall = {
           request: baseRequest,
-          status,
           ...(extraProps || {}),
+          status,
         } as ToolCall;
 
         const display = mapToDisplay(toolCall);

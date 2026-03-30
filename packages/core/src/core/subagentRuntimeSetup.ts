@@ -410,11 +410,6 @@ export function createSchedulerConfig(
   return {
     getToolRegistry: () => toolExecutorContext.getToolRegistry(),
     getSessionId: () => toolExecutorContext.getSessionId(),
-    getEphemeralSettings,
-    getEphemeralSetting,
-    getExcludeTools,
-    getTelemetryLogPromptsEnabled,
-    getAllowedTools,
     getApprovalMode: () =>
       typeof foregroundConfig.getApprovalMode === 'function'
         ? foregroundConfig.getApprovalMode()
@@ -443,6 +438,11 @@ export function createSchedulerConfig(
     getHookSystem: () => foregroundConfig.getHookSystem?.(),
     getWorkingDir: () => foregroundConfig.getWorkingDir?.() ?? process.cwd(),
     getTargetDir: () => foregroundConfig.getTargetDir?.() ?? process.cwd(),
+    getEphemeralSettings,
+    getEphemeralSetting,
+    getExcludeTools,
+    getTelemetryLogPromptsEnabled,
+    getAllowedTools,
   } as unknown as Config;
 }
 

@@ -214,8 +214,8 @@ export async function loadAgentRuntime(
     provider: providerAdapter,
     telemetry: telemetryAdapter,
     tools: toolsView,
-    history,
     providerRuntime: profile.providerRuntime,
+    history,
   });
 
   let contentGenerator: ContentGenerator;

@@ -467,10 +467,10 @@ function buildThinkingAndRequestBody(params: {
 
   const thinkingConfig = buildThinkingConfig({
     reasoningEnabled: shouldIncludeThinking,
-    reasoningBudgetTokens,
-    adaptiveThinking,
     thinkingEffort: mappedEffort,
     model: currentModel,
+    reasoningBudgetTokens,
+    adaptiveThinking,
   });
 
   return buildAnthropicRequestBody({
@@ -482,10 +482,10 @@ function buildThinkingAndRequestBody(params: {
         ? anthropicTools
         : undefined,
     maxTokens: getMaxTokensForModel(currentModel),
-    streamingEnabled,
     modelParams: requestOverrides,
     thinking: thinkingConfig.thinking,
     outputConfig: thinkingConfig.output_config,
+    streamingEnabled,
   });
 }
 
@@ -674,15 +674,15 @@ function buildRequestContext(params: {
   const requestBody = buildThinkingAndRequestBody({
     currentModel: requestSettings.currentModel,
     rawEffort: reasoningSettings.rawEffort,
-    shouldIncludeThinking,
     reasoningBudgetTokens: reasoningSettings.reasoningBudgetTokens,
     adaptiveThinking: reasoningSettings.adaptiveThinking,
     anthropicMessages: systemContext.messages,
     systemField: systemContext.systemField,
-    anthropicTools,
-    getMaxTokensForModel,
     streamingEnabled: requestSettings.streamingEnabled,
     requestOverrides: requestSettings.requestOverrides,
+    shouldIncludeThinking,
+    anthropicTools,
+    getMaxTokensForModel,
   });
 
   logRequestDebugInfo({
@@ -729,10 +729,10 @@ export async function prepareAnthropicRequest(
       content: params.content,
       tools: params.tools,
       isOAuth: params.isOAuth,
-      reasoningSettings,
       config: configForMessages,
       unprefixToolName: params.unprefixToolName,
       logger: params.logger,
+      reasoningSettings,
     });
 
   const requestSettings = resolveRequestSettings(
@@ -761,15 +761,15 @@ export async function prepareAnthropicRequest(
   const systemContext = await buildSystemContext({
     isOAuth: params.isOAuth,
     currentModel: requestSettings.currentModel,
+    wantCaching: requestSettings.wantCaching,
+    ttl: requestSettings.ttl,
+    cacheLogger: params.cacheLogger,
     userMemory,
     mcpInstructions,
     toolNamesForPrompt,
     includeSubagentDelegation,
     interactionMode,
     anthropicMessages,
-    wantCaching: requestSettings.wantCaching,
-    ttl: requestSettings.ttl,
-    cacheLogger: params.cacheLogger,
   });
 
   return buildRequestContext({

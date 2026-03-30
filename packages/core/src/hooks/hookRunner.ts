@@ -377,13 +377,13 @@ export class HookRunner {
         }
 
         resolve({
+          success: exitCode === EXIT_CODE_SUCCESS,
+          exitCode: exitCode || EXIT_CODE_SUCCESS,
           hookConfig,
           eventName,
-          success: exitCode === EXIT_CODE_SUCCESS,
           output,
           stdout,
           stderr,
-          exitCode: exitCode || EXIT_CODE_SUCCESS,
           duration,
         });
       });

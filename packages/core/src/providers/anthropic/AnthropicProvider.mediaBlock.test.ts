@@ -118,11 +118,11 @@ describe('AnthropicProvider MediaBlock support', () => {
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   beforeEach(() => {

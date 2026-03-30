@@ -422,9 +422,9 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
 
     return {
       providerName: provider.name,
+      isPaidMode: provider.isPaidMode?.(),
       modelName,
       displayLabel,
-      isPaidMode: provider.isPaidMode?.(),
       baseURL,
     };
   } catch {

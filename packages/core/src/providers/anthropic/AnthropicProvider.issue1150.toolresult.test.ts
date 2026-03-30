@@ -151,11 +151,11 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   /**

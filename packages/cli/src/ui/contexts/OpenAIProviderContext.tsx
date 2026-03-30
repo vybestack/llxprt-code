@@ -87,9 +87,9 @@ export const OpenAIProviderContextProvider: React.FC<{
       isResponsesAPI: providerInfo.isResponsesAPI,
       currentModel: providerInfo.currentModel,
       conversationCache: providerInfo.conversationCache,
+      getCachedConversation: providerInfo.getCachedConversation,
       remoteTokenStats,
       updateRemoteTokenStats,
-      getCachedConversation: providerInfo.getCachedConversation,
     }),
     [
       providerInfo.provider,

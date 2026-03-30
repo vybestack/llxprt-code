@@ -101,8 +101,8 @@ function buildRuntimeContext(
     },
     providerRuntime: {
       runtimeId: 'test-runtime',
-      settingsService,
       config: {} as never,
+      settingsService,
     },
   });
 }

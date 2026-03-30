@@ -707,11 +707,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         if (isAtCommand(trimmedQuery)) {
           const atCommandResult = await handleAtCommand({
             query: trimmedQuery,
+            messageId: userMessageTimestamp,
+            signal: abortSignal,
             config,
             addItem,
             onDebugMessage,
-            messageId: userMessageTimestamp,
-            signal: abortSignal,
           });
           if (atCommandResult.error) {
             onDebugMessage(atCommandResult.error);

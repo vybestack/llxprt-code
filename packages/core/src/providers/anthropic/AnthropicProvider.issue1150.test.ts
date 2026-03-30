@@ -120,11 +120,11 @@ describe('AnthropicProvider Issue #1150: Thinking blocks disappear after tool ca
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   it('should preserve thinking blocks after first tool call in multi-turn conversation', async () => {

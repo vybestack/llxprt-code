@@ -332,10 +332,10 @@ export class SessionRecordingService {
     const grandparentDir = path.dirname(parentDir);
     return {
       chatsDirExists: existsSync(this.chatsDir),
-      parentDir,
       parentDirExists: existsSync(parentDir),
-      grandparentDir,
       grandparentDirExists: existsSync(grandparentDir),
+      parentDir,
+      grandparentDir,
     };
   }
 

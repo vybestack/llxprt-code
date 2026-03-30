@@ -301,22 +301,22 @@ export function useCommandCompletion(
   }
 
   return {
+    activeHint: '',
+    getCommandFromSuggestion: () => null,
+    isArgumentCompletion: false,
+    leafCommand: null,
     suggestions,
     activeSuggestionIndex,
     visibleStartIndex,
     showSuggestions,
     isLoadingSuggestions,
     isPerfectMatch,
-    activeHint: '',
     setActiveSuggestionIndex,
     setShowSuggestions,
     resetCompletionState,
     navigateUp,
     navigateDown,
     handleAutocomplete,
-    getCommandFromSuggestion: () => null, // Not in slash mode, so no command mapping
-    isArgumentCompletion: false,
-    leafCommand: null,
     promptCompletion,
   };
 }

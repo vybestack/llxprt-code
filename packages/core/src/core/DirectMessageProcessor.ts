@@ -293,8 +293,8 @@ export class DirectMessageProcessor {
       if (hookResult.syntheticResponse != null) {
         return {
           effectiveToolsFromConfig: effectiveToolsFromConfig || [],
-          contentsForApi,
           syntheticResponse: hookResult.syntheticResponse,
+          contentsForApi,
         };
       }
       if (hookResult.modifiedContents != null) {
@@ -304,8 +304,8 @@ export class DirectMessageProcessor {
 
     return {
       effectiveToolsFromConfig: effectiveToolsFromConfig || [],
-      contentsForApi,
       syntheticResponse: undefined,
+      contentsForApi,
     };
   }
 

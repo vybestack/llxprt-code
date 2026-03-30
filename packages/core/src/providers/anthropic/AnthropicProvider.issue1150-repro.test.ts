@@ -117,11 +117,11 @@ describe('AnthropicProvider Issue #1150 Reproduction: Edge cases causing thinkin
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   it('keeps thinking enabled when the only thinking block is more than 3 AI messages back', async () => {

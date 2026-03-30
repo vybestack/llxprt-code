@@ -155,8 +155,8 @@ export async function getPathSuggestions(
 
       return {
         label: entry.name + suffix,
-        value,
         isDirectory: isDir,
+        value,
       };
     });
   } catch {

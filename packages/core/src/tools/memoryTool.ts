@@ -279,15 +279,15 @@ class MemoryToolInvocation extends BaseToolInvocation<
       title: `Confirm Memory Save: ${tildeifyPath(memoryFilePath)}`,
       fileName: memoryFilePath,
       filePath: memoryFilePath,
-      fileDiff,
       originalContent: currentContent,
-      newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           MemoryToolInvocation.allowlist.add(allowlistKey);
         }
         await this.publishPolicyUpdate(outcome);
       },
+      fileDiff,
+      newContent,
     };
     return confirmationDetails;
   }

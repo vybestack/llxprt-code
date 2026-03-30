@@ -24,13 +24,13 @@ describe('useConsoleMessages', () => {
     const { handleNewMessage, ...rest } = useConsoleMessages();
     const log = useCallback(
       (content: string) => {
-        handleNewMessage({ type: 'log', content, count: 1 });
+        handleNewMessage({ type: 'log', count: 1, content });
       },
       [handleNewMessage],
     );
     const error = useCallback(
       (content: string) => {
-        handleNewMessage({ type: 'error', content, count: 1 });
+        handleNewMessage({ type: 'error', count: 1, content });
       },
       [handleNewMessage],
     );

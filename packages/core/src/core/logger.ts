@@ -256,10 +256,10 @@ export class Logger {
     // _updateLogFile will verify and potentially recalculate based on the file's actual state.
     const newEntryObject: LogEntry = {
       sessionId: this.sessionId,
-      messageId: this.messageId, // This will be recalculated in _updateLogFile
+      messageId: this.messageId,
+      timestamp: new Date().toISOString(),
       type,
       message,
-      timestamp: new Date().toISOString(),
     };
 
     try {

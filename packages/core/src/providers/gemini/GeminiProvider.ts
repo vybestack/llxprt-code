@@ -142,11 +142,11 @@ export class GeminiProvider extends BaseProvider {
   ) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
-      apiKey,
-      baseURL,
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
       isOAuthEnabled: !!oauthManager,
       oauthProvider: oauthManager != null ? 'gemini' : undefined,
+      apiKey,
+      baseURL,
       oauthManager,
     };
 
@@ -1346,8 +1346,8 @@ export class GeminiProvider extends BaseProvider {
     const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
     requestLogger.log(() => '[GeminiProvider] request config overrides', {
       hasDirectOverrides: !!directOverrides,
-      serverTools,
       toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
+      serverTools,
     });
 
     // Debug: Log thinking configuration
@@ -1428,8 +1428,8 @@ export class GeminiProvider extends BaseProvider {
         nonThoughtTextPartsCount: nonThoughtTextParts.length,
         thoughtTextLength: thoughtText.length,
         thoughtTextPreview: thoughtText.substring(0, 200),
-        includeThoughts,
         willYieldThinkingBlock: !!(thoughtText && includeThoughts),
+        includeThoughts,
       });
 
       const functionCalls =
@@ -1578,14 +1578,14 @@ export class GeminiProvider extends BaseProvider {
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
-        includeSubagentDelegation,
         interactionMode: subagentConfig?.isInteractive?.()
           ? 'interactive'
           : 'non-interactive',
+        userMemory,
+        mcpInstructions,
+        includeSubagentDelegation,
       });
 
       const contentsWithSystemPrompt = [
@@ -1604,8 +1604,8 @@ export class GeminiProvider extends BaseProvider {
       const oauthRequest = {
         model: currentModel,
         contents: contentsWithSystemPrompt,
-        systemInstruction,
         config: oauthConfig,
+        systemInstruction,
       };
 
       // Use runtime metadata from options for session ID
@@ -1753,21 +1753,21 @@ export class GeminiProvider extends BaseProvider {
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
-        includeSubagentDelegation,
         interactionMode: subagentConfig?.isInteractive?.()
           ? 'interactive'
           : 'non-interactive',
+        userMemory,
+        mcpInstructions,
+        includeSubagentDelegation,
       });
 
       const apiRequest = {
         model: currentModel,
         contents: contentsWithSignatures,
-        systemInstruction,
         config: { ...requestConfig },
+        systemInstruction,
       };
 
       if (streamingEnabled) {

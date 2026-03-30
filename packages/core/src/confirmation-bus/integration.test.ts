@@ -293,8 +293,8 @@ priority = 50
       expect(rejectionHandler).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageBusType.TOOL_POLICY_REJECTION,
-          toolCall,
           reason: 'Policy denied execution',
+          toolCall,
         }),
       );
 

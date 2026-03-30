@@ -87,14 +87,12 @@ describe('useVim hook', () => {
     const lines = text.split('\n');
 
     return {
-      lines,
       get cursor() {
         return cursorState.pos;
       },
       set cursor(newPos: [number, number]) {
         cursorState.pos = newPos;
       },
-      text,
       move: vi.fn().mockImplementation((direction: string) => {
         let [row, col] = cursorState.pos;
         const _line = lines[row] || '';
@@ -116,7 +114,6 @@ describe('useVim hook', () => {
       replaceRangeByOffset: vi.fn(),
       handleInput: vi.fn(),
       setText: vi.fn(),
-      // Vim-specific methods
       vimDeleteWordForward: vi.fn(),
       vimDeleteWordBackward: vi.fn(),
       vimDeleteWordEnd: vi.fn(),
@@ -162,6 +159,8 @@ describe('useVim hook', () => {
           cursorState.pos = [row, col - 1];
         }
       }),
+      lines,
+      text,
     };
   };
 

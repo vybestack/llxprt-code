@@ -104,8 +104,8 @@ function buildCallOptions(
   const { contents = [], ...rest } = overrides;
   return createProviderCallOptions({
     providerName: provider.name,
-    contents,
     ...rest,
+    contents,
   });
 }
 
@@ -222,13 +222,13 @@ describe('Gemini provider thinkingLevel tests', () => {
       provider.generateChatCompletion(
         buildCallOptions(provider, {
           contents: [createHumanContent('test thinking 2x')],
-          settings,
-          config,
-          runtime,
           ephemerals: {
             'reasoning.enabled': true,
           },
           resolved: { model: 'gemini-2.5-pro' },
+          settings,
+          config,
+          runtime,
         }),
       ),
     );
@@ -271,14 +271,14 @@ describe('Gemini provider thinkingLevel tests', () => {
       provider.generateChatCompletion(
         buildCallOptions(provider, {
           contents: [createHumanContent('test thinking 3x')],
-          settings,
-          config,
-          runtime,
           ephemerals: {
             'reasoning.enabled': true,
             'reasoning.effort': 'high',
           },
           resolved: { model: 'gemini-3-flash-preview' },
+          settings,
+          config,
+          runtime,
         }),
       ),
     );
@@ -338,14 +338,14 @@ describe('Gemini provider thinkingLevel tests', () => {
         provider.generateChatCompletion(
           buildCallOptions(provider, {
             contents: [createHumanContent(`test effort ${effort}`)],
-            settings,
-            config,
-            runtime,
             ephemerals: {
               'reasoning.enabled': true,
               'reasoning.effort': effort,
             },
             resolved: { model: 'gemini-3-pro-preview' },
+            settings,
+            config,
+            runtime,
           }),
         ),
       );
@@ -389,13 +389,13 @@ describe('Gemini provider thinkingLevel tests', () => {
       provider.generateChatCompletion(
         buildCallOptions(provider, {
           contents: [createHumanContent('test thinking 3x default')],
-          settings,
-          config,
-          runtime,
           ephemerals: {
             'reasoning.enabled': true,
           },
           resolved: { model: 'gemini-3-flash-preview' },
+          settings,
+          config,
+          runtime,
         }),
       ),
     );
@@ -441,14 +441,14 @@ describe('Gemini provider thinkingLevel tests', () => {
       provider.generateChatCompletion(
         buildCallOptions(provider, {
           contents: [createHumanContent('test thinking 2x budget')],
-          settings,
-          config,
-          runtime,
           ephemerals: {
             'reasoning.enabled': true,
             'reasoning.maxTokens': 4096,
           },
           resolved: { model: 'gemini-2.5-flash' },
+          settings,
+          config,
+          runtime,
         }),
       ),
     );
@@ -491,13 +491,13 @@ describe('Gemini provider thinkingLevel tests', () => {
       provider.generateChatCompletion(
         buildCallOptions(provider, {
           contents: [createHumanContent('test thinking 2x auto')],
-          settings,
-          config,
-          runtime,
           ephemerals: {
             'reasoning.enabled': true,
           },
           resolved: { model: 'gemini-2.5-pro' },
+          settings,
+          config,
+          runtime,
         }),
       ),
     );

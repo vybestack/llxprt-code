@@ -153,11 +153,11 @@ export class ResultAggregator {
     };
     this.pendingResults.set(callId, {
       result: cancelledResult,
-      callId,
       toolName: scheduledCall.request.name,
+      isCancelled: true,
+      callId,
       scheduledCall,
       executionIndex,
-      isCancelled: true,
     });
   }
 

@@ -269,6 +269,6 @@ export function sanitizeHistoryForCompression(
       .filter((b): b is ContentBlock => b !== null);
 
     const speaker = msg.speaker === 'tool' ? ('human' as const) : msg.speaker;
-    return { ...msg, speaker, blocks: sanitizedBlocks };
+    return { ...msg, blocks: sanitizedBlocks, speaker };
   });
 }

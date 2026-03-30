@@ -83,11 +83,11 @@ const buildModelRows = (models: Record<string, ModelMetrics>) => {
       const inputTokens = metrics.tokens.input ?? promptTokens - cachedTokens;
       return {
         key: name,
-        modelName,
         requests: metrics.api.totalRequests,
         cachedTokens: cachedTokens.toLocaleString(),
         inputTokens: inputTokens.toLocaleString(),
         outputTokens: metrics.tokens.candidates.toLocaleString(),
+        modelName,
       };
     },
   );

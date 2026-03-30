@@ -100,8 +100,8 @@ export class ProviderPerformanceTracker {
   recordError(duration: number, error: string): void {
     this.metrics.errors.push({
       timestamp: Date.now(),
+      error: error.substring(0, 200),
       duration,
-      error: error.substring(0, 200), // Truncate long errors
     });
 
     // Update error rate

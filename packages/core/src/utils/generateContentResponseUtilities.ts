@@ -325,7 +325,6 @@ export const createErrorResponse = (
   errorType: ToolErrorType | undefined,
 ): ToolCallResponseInfo => ({
   callId: request.callId,
-  error,
   responseParts: [
     // Only functionResponse — the functionCall is already recorded in history
     // from the model's assistant message. Re-emitting it here would create
@@ -339,6 +338,7 @@ export const createErrorResponse = (
     },
   ],
   resultDisplay: error.message,
-  errorType,
   agentId: request.agentId ?? DEFAULT_AGENT_ID,
+  error,
+  errorType,
 });

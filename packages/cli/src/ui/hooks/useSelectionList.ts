@@ -184,10 +184,10 @@ function selectionListReducer(
 
       return {
         ...state,
-        items,
-        initialIndex,
         activeIndex: targetIndex,
         pendingHighlight: false,
+        items,
+        initialIndex,
       };
     }
 
@@ -252,10 +252,10 @@ export function useSelectionList<T>({
 
   const [state, dispatch] = useReducer(selectionListReducer, {
     activeIndex: computeInitialIndex(initialIndex, baseItems),
-    initialIndex,
     pendingHighlight: false,
     pendingSelect: false,
     items: baseItems,
+    initialIndex,
   });
   const numberInputRef = useRef('');
   const numberInputTimer = useRef<NodeJS.Timeout | null>(null);

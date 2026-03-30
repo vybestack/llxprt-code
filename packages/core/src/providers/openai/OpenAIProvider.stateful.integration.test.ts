@@ -95,10 +95,10 @@ describe('OpenAIProvider Stateful Integration', () => {
     }
     return createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: runtimeSettingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
+      contents,
     });
   };
 

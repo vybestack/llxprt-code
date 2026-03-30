@@ -244,8 +244,8 @@ describe('AuthStatusService.isAuthenticated', () => {
     const provider = makeProvider('qwen', { isAuthenticated: isAuthMock });
     const service = makeService({
       providers: [provider],
-      tokenStore,
       oauthEnabled: true,
+      tokenStore,
     });
     const result = await service.isAuthenticated('qwen');
     // Override threw → fallback → valid token found → true
@@ -267,8 +267,8 @@ describe('AuthStatusService.isAuthenticated', () => {
     const provider = makeProvider('qwen', { isAuthenticated: isAuthMock });
     const service = makeService({
       providers: [provider],
-      tokenStore,
       oauthEnabled: true,
+      tokenStore,
     });
     const result = await service.isAuthenticated('qwen');
     // Override returned false → fallback → valid token found → true
@@ -295,8 +295,8 @@ describe('AuthStatusService.isAuthenticated', () => {
     const provider = makeProvider('anthropic');
     const service = makeService({
       providers: [provider],
-      tokenStore,
       oauthEnabled: false,
+      tokenStore,
     });
     const result = await service.isAuthenticated('anthropic');
     expect(result).toBe(false);
@@ -534,8 +534,8 @@ describe('AuthStatusService.getAuthStatus', () => {
     const validToken: OAuthToken = {
       access_token: 'valid',
       refresh_token: 'r',
-      expiry,
       token_type: 'Bearer',
+      expiry,
     };
     const tokenStore = makeTokenStore({
       getToken: vi.fn().mockResolvedValue(validToken),
@@ -543,8 +543,8 @@ describe('AuthStatusService.getAuthStatus', () => {
     const provider = makeProvider('anthropic');
     const service = makeService({
       providers: [provider],
-      tokenStore,
       oauthEnabled: true,
+      tokenStore,
     });
     const statuses = await service.getAuthStatus();
     expect(statuses[0]).toMatchObject({
@@ -560,8 +560,8 @@ describe('AuthStatusService.getAuthStatus', () => {
     const expiredToken: OAuthToken = {
       access_token: 'expired',
       refresh_token: 'r',
-      expiry,
       token_type: 'Bearer',
+      expiry,
     };
     const tokenStore = makeTokenStore({
       getToken: vi.fn().mockResolvedValue(expiredToken),
@@ -569,8 +569,8 @@ describe('AuthStatusService.getAuthStatus', () => {
     const provider = makeProvider('anthropic');
     const service = makeService({
       providers: [provider],
-      tokenStore,
       oauthEnabled: true,
+      tokenStore,
     });
 
     const statuses = await service.getAuthStatus();
@@ -644,8 +644,8 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
     const validToken: OAuthToken = {
       access_token: 'tok',
       refresh_token: 'r',
-      expiry,
       token_type: 'Bearer',
+      expiry,
     };
     const tokenStore = makeTokenStore({
       listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),

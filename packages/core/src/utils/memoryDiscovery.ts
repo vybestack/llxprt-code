@@ -235,11 +235,11 @@ async function getGeminiMdFilePathsInternalForEachDir(
 
       const downwardPaths = await bfsFileSearch(resolvedCwd, {
         fileName: geminiMdFilename,
+        debug: debugMode,
+        fileFilteringOptions: mergedOptions,
         maxDirs,
         maxDepth,
-        debug: debugMode,
         fileService,
-        fileFilteringOptions: mergedOptions,
       });
       downwardPaths.sort();
       for (const dPath of downwardPaths) {

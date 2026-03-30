@@ -100,8 +100,8 @@ export function ThemeDialog({
           themeNameDisplay: theme.name,
           themeTypeDisplay: capitalize(theme.type),
           key: theme.name,
-          isCompatible,
           themeType: theme.type,
+          isCompatible,
         };
       }),
       ...customThemeNames.map((name) => ({

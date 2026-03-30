@@ -72,8 +72,8 @@ function makeAiToolCall(
       blocks: [
         {
           type: 'tool_call',
-          id,
           name: toolName,
+          id,
           parameters,
         } as ToolCallBlock,
       ],
@@ -92,16 +92,16 @@ function _makeAiMultiToolCall(
     callIds.push(id);
     return {
       type: 'tool_call' as const,
-      id,
       name: c.toolName,
       parameters: c.parameters,
+      id,
     } as ToolCallBlock;
   });
   return {
     entry: {
       speaker: 'ai',
-      blocks,
       metadata: { timestamp: Date.now() },
+      blocks,
     },
     callIds,
   };
@@ -914,10 +914,10 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         blocks: [
           {
             type: 'tool_response',
-            callId,
             toolName: 'read_file',
             result: `content ${i}`,
             isComplete: true,
+            callId,
           } as ToolResponseBlock,
         ],
         metadata: { timestamp: 1100 + i },

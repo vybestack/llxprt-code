@@ -122,17 +122,9 @@ export function createRuntimeInvocationContext(
   const userMemory = init.userMemory;
 
   const context: RuntimeInvocationContext = {
-    runtimeId,
     metadata: mergedMetadata,
     settings: init.settings,
-    ephemerals,
-    cliSettings,
-    modelBehavior,
-    modelParams,
-    customHeaders,
     telemetry: init.telemetry,
-    userMemory,
-    redaction,
     getEphemeral<T = unknown>(key: string): T | undefined {
       return ephemerals[key] as T | undefined;
     },
@@ -154,6 +146,14 @@ export function createRuntimeInvocationContext(
       }
       return raw as T;
     },
+    runtimeId,
+    ephemerals,
+    cliSettings,
+    modelBehavior,
+    modelParams,
+    customHeaders,
+    userMemory,
+    redaction,
   };
 
   return Object.freeze(context);

@@ -309,12 +309,12 @@ export class GeminiChat {
 
     return {
       ...baseRuntime,
-      runtimeId,
       metadata: {
         ...(baseRuntime.metadata ?? {}),
         source,
         ...metadata,
       },
+      runtimeId,
     };
   }
 

@@ -247,10 +247,10 @@ describe('CoreToolScheduler Duplication Prevention', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const request = {
@@ -374,10 +374,10 @@ describe('CoreToolScheduler Duplication Prevention', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const request = {
@@ -409,10 +409,10 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     // Simulate message bus confirmation
     mockMessageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
       confirmed: true,
       requiresUserConfirmation: false,
+      correlationId,
     });
 
     // Wait for completion
@@ -525,10 +525,10 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     // scheduler1 should process it, scheduler2 should ignore it silently
     mockMessageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
       confirmed: true,
       requiresUserConfirmation: false,
+      correlationId,
     });
 
     // Wait for completion on scheduler1
@@ -599,10 +599,10 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
       config: mockConfig,
       messageBus: mockConfig.getMessageBus(),
       toolRegistry: mockConfig.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     const request = {
@@ -637,10 +637,10 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
     // Now simulate user confirmation via message bus
     mockMessageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
       confirmed: true,
       requiresUserConfirmation: false,
+      correlationId,
     });
 
     // Wait for completion

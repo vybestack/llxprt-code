@@ -178,9 +178,9 @@ export async function runNonInteractive({
     const geminiClient = config.getGeminiClient();
     setActiveProviderRuntimeContext({
       settingsService: config.getSettingsService(),
-      config,
       runtimeId: config.getSessionId?.(),
       metadata: { source: 'nonInteractiveCli' },
+      config,
     });
 
     // Emit init event for streaming JSON
@@ -227,11 +227,11 @@ export async function runNonInteractive({
     if (query == null) {
       const { processedQuery, error } = await handleAtCommand({
         query: input,
-        config,
         addItem: (_item, _timestamp) => 0,
         onDebugMessage: () => {},
         messageId: Date.now(),
         signal: abortController.signal,
+        config,
       });
 
       if (error || !processedQuery) {

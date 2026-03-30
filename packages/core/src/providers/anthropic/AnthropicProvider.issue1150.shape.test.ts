@@ -146,11 +146,11 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   /**

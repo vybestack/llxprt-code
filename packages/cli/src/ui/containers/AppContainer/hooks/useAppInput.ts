@@ -155,7 +155,6 @@ function useSlashActions(
     openProfileListDialog: p.openProfileListDialog,
     viewProfileDetail: p.viewProfileDetail,
     openProfileEditor: p.openProfileEditor,
-    quitHandler,
     setDebugMessage: p.setDebugMessage,
     toggleCorgiMode: p.toggleCorgiMode,
     toggleDebugProfiler: p.toggleDebugProfiler,
@@ -163,6 +162,7 @@ function useSlashActions(
     addConfirmUpdateExtensionRequest: p.addConfirmUpdateExtensionRequest,
     welcomeActions: p.welcomeActions as { resetAndReopen: () => void },
     openSessionBrowserDialog: p.openSessionBrowserDialog,
+    quitHandler,
   });
 }
 
@@ -257,10 +257,10 @@ function useInputBuffer(
   );
   const buffer = useTextBuffer({
     initialText: '',
+    isValidPath: core.isValidPath,
     viewport,
     stdin,
     setRawMode,
-    isValidPath: core.isValidPath,
     shellModeActive,
   });
   const inputHistoryStore = useInputHistoryStore();

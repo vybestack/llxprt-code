@@ -110,8 +110,8 @@ function buildCallOptions(
   const { contents = [], ...rest } = overrides;
   return createProviderCallOptions({
     providerName: provider.name,
-    contents,
     ...rest,
+    contents,
   });
 }
 
@@ -422,9 +422,6 @@ describe('Gemini provider stateless contract tests', () => {
       provider.generateChatCompletion(
         buildCallOptions(provider, {
           contents: [createHumanContent('use tool')],
-          settings,
-          config,
-          runtime,
           tools: [
             {
               functionDeclarations: [
@@ -436,6 +433,9 @@ describe('Gemini provider stateless contract tests', () => {
               ],
             },
           ],
+          settings,
+          config,
+          runtime,
         }),
       ),
     );

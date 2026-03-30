@@ -168,13 +168,13 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       const config = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
-        config,
         messageBus: getTestRuntimeMessageBus(config),
         toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
+        config,
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
       });
 
       const abortController = new AbortController();
@@ -212,13 +212,13 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       const config = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
-        config,
         messageBus: getTestRuntimeMessageBus(config),
         toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
+        config,
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
       });
 
       const abortController = new AbortController();
@@ -276,13 +276,13 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       const config = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
-        config,
         messageBus: getTestRuntimeMessageBus(config),
         toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
+        config,
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
       });
 
       const abortController = new AbortController();
@@ -333,13 +333,13 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       const config = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
-        config,
         messageBus: getTestRuntimeMessageBus(config),
         toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
+        config,
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
       });
 
       const abortController = new AbortController();
@@ -387,13 +387,13 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       const config = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
-        config,
         messageBus: getTestRuntimeMessageBus(config),
         toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
+        config,
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
       });
 
       const abortController = new AbortController();
@@ -434,13 +434,13 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       const config = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
-        config,
         messageBus: getTestRuntimeMessageBus(config),
         toolRegistry: config.getToolRegistry(),
-        onAllToolCallsComplete,
-        onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
         onEditorClose: vi.fn(),
+        config,
+        onAllToolCallsComplete,
+        onToolCallsUpdate,
       });
 
       // First batch

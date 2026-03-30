@@ -86,14 +86,13 @@ function createTestRuntimeContext(
 
   const providerRuntime = createProviderRuntimeContext({
     settingsService: config?.getSettingsService?.() ?? new SettingsService(),
-    config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'geminiChat.runtimeState.test' },
+    config,
   });
 
   return createAgentRuntimeContext({
     state: runtimeState,
-    settings,
     provider: createProviderAdapterFromManager(config?.getProviderManager?.()),
     telemetry:
       config != null
@@ -106,6 +105,7 @@ function createTestRuntimeContext(
     tools: createToolRegistryViewFromRegistry(config?.getToolRegistry?.()),
     history: historyService,
     providerRuntime: { ...providerRuntime },
+    settings,
   });
 }
 

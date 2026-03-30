@@ -60,8 +60,8 @@ export class ToolCallTrackerService {
     const toolCall: TodoToolCall = {
       id: toolCallId,
       name: toolName,
-      parameters,
       timestamp: new Date(),
+      parameters,
     };
 
     // Ensure we have a map for this session

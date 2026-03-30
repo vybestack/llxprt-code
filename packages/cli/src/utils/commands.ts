@@ -46,7 +46,7 @@ export function parseSlashCommand(
   );
 
   if (commandToExecute == null) {
-    return { commandToExecute: undefined, args, canonicalPath: [] };
+    return { commandToExecute: undefined, canonicalPath: [], args };
   }
 
   // Build canonical path starting with the parent command

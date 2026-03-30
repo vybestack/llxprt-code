@@ -260,13 +260,13 @@ describe('LSP E2E integration (P36)', () => {
 
     return {
       sessionId: 'p36-session-id',
-      targetDir,
       debugMode: false,
       cwd: targetDir,
       model: 'gemini-2.0-flash-exp',
       settingsService:
         settingsService as unknown as ConfigParameters['settingsService'],
       ...overrides,
+      targetDir,
     };
   }
 

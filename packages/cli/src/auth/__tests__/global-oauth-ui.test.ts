@@ -20,8 +20,8 @@ type ItemData = Omit<HistoryItemWithoutId, 'id'>;
 function makeOAuthItem(text: string): ItemData {
   const item: HistoryItemOAuthURL = {
     type: 'oauth_url',
-    text,
     url: `https://example.com/${text}`,
+    text,
   };
   return item;
 }

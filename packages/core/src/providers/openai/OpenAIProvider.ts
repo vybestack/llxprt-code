@@ -94,10 +94,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       {
         name: 'openai',
         apiKey: normalizedApiKey,
-        baseURL,
-        envKeyNames: ['OPENAI_API_KEY'], // Support environment variable fallback
+        envKeyNames: ['OPENAI_API_KEY'],
         isOAuthEnabled: (isQwenEndpoint || forceQwenOAuth) && !!oauthManager,
         oauthProvider: isQwenEndpoint || forceQwenOAuth ? 'qwen' : undefined,
+        baseURL,
         oauthManager,
       },
       config,
@@ -525,22 +525,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const resolved = options.resolved;
       logger.debug(() => `[OpenAIProvider] Resolved request context`, {
         provider: this.name,
-        model,
         resolvedModel: resolved.model,
         resolvedBaseUrl: resolved.baseURL,
         authTokenPresent: Boolean(resolved.authToken),
         messageCount: options.contents.length,
         toolCount: options.tools?.length ?? 0,
         metadataKeys: Object.keys(metadata ?? {}),
+        model,
       });
 
       logger.debug(() => `[OpenAIProvider] Sending chat request`, {
-        model,
         baseURL: baseURL ?? this.getBaseURL(),
-        streamingEnabled,
         toolCount: formattedTools?.length ?? 0,
         hasAuthToken: Boolean(options.resolved.authToken),
         messageCount: messagesWithSystem.length,
+        model,
+        streamingEnabled,
       });
 
       if ('tools' in requestBody) {
@@ -578,8 +578,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const deps = {
         toolCallPipeline: this.toolCallPipeline,
         textToolParser: this.textToolParser,
-        logger,
         getBaseURL: () => this.getBaseURL(),
+        logger,
       };
 
       yield* processStreamingResponse(

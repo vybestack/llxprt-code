@@ -202,11 +202,11 @@ describe('bfsFileSearch', () => {
       const fileService = new FileDiscoveryService(projectRoot);
       const result = await bfsFileSearch(projectRoot, {
         fileName: 'target.txt',
-        fileService,
         fileFilteringOptions: {
           respectGitIgnore: true,
           respectLlxprtIgnore: true,
         },
+        fileService,
       });
 
       expect(result).toStrictEqual([targetFilePath]);
@@ -225,11 +225,11 @@ describe('bfsFileSearch', () => {
       const fileService = new FileDiscoveryService(projectRoot);
       const result = await bfsFileSearch(projectRoot, {
         fileName: 'target.txt',
-        fileService,
         fileFilteringOptions: {
           respectGitIgnore: false,
           respectLlxprtIgnore: true,
         },
+        fileService,
       });
 
       expect(result).toStrictEqual([targetFilePath]);
@@ -254,11 +254,11 @@ describe('bfsFileSearch', () => {
       const fileService = new FileDiscoveryService(projectRoot);
       const result = await bfsFileSearch(projectRoot, {
         fileName: 'target.txt',
-        fileService,
         fileFilteringOptions: {
           respectGitIgnore: false,
           respectLlxprtIgnore: false,
         },
+        fileService,
       });
 
       expect(result.sort()).toStrictEqual([target1, target2].sort());

@@ -37,9 +37,9 @@ const renderWithMockedStats = (metrics: SessionMetrics) => {
     stats: {
       sessionId: 'test-session-id',
       sessionStartTime: new Date(),
-      metrics,
       lastPromptTokenCount: 0,
       promptCount: 5,
+      metrics,
     },
 
     getPromptCount: () => 5,

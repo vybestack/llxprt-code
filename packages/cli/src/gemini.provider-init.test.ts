@@ -310,10 +310,9 @@ describe('gemini main provider initialization', () => {
       })),
       getScreenReader: vi.fn(() => false),
       getTerminalBackground: vi.fn(() => undefined),
-
-      getGeminiClient,
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
+      getGeminiClient,
     } as unknown as Config;
 
     const coreModule = await import('@vybestack/llxprt-code-core');

@@ -67,9 +67,9 @@ function buildAggregated(
   return {
     success: options.success ?? true,
     finalOutput: allOutputs.length > 0 ? allOutputs[0] : undefined,
-    allOutputs,
     errors: [],
     totalDuration: options.totalDuration ?? 100,
+    allOutputs,
   };
 }
 

@@ -370,8 +370,8 @@ export async function loadPoliciesFromToml(
                   toolName: effectiveToolName,
                   decision: rule.decision,
                   priority: transformPriority(rule.priority, tier),
-                  argsPattern,
                   allowRedirection: rule.allowRedirection,
+                  argsPattern,
                 };
 
                 return policyRule;

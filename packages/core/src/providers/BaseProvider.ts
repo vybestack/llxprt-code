@@ -773,12 +773,12 @@ export abstract class BaseProvider implements IProvider {
 
     const guard = this.assertRuntimeContext({
       providerKey: `BaseProvider.${this.name}`,
-      settings,
       config: configCandidate,
       runtime: providedOptions.runtime,
+      stage: 'normalizeGenerateChatOptions',
+      settings,
       metadata,
       resolved,
-      stage: 'normalizeGenerateChatOptions',
     });
     const finalConfig = guard.runtime.config ?? configCandidate ?? undefined;
     const normalizedRuntime: ProviderRuntimeContext = {
@@ -791,7 +791,6 @@ export abstract class BaseProvider implements IProvider {
       providedOptions.invocation ??
       createRuntimeInvocationContext({
         runtime: normalizedRuntime,
-        settings,
         providerName: this.name,
         ephemeralsSnapshot: this.buildEphemeralsSnapshot(settings),
         telemetry: resolved.telemetry,
@@ -801,16 +800,17 @@ export abstract class BaseProvider implements IProvider {
             ? providedOptions.userMemory
             : undefined,
         fallbackRuntimeId: `${this.name}:normalizeGenerateChatOptions`,
+        settings,
       });
 
     return {
       ...providedOptions,
       contents: providedOptions.contents,
       tools: providedOptions.tools ?? maybeTools,
-      settings,
       config: finalConfig,
       runtime: normalizedRuntime,
       metadata: guard.metadata,
+      settings,
       resolved,
       invocation,
     };
@@ -880,12 +880,12 @@ export abstract class BaseProvider implements IProvider {
     if (missingFields.length > 0) {
       throw new MissingProviderRuntimeError({
         providerKey: input.providerKey,
-        missingFields,
         stage: input.stage,
         metadata: {
           ...(input.metadata ?? {}),
           requirement: 'REQ-SP4-001',
         },
+        missingFields,
       });
     }
 

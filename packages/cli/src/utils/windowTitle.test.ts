@@ -186,9 +186,9 @@ describe('computeTerminalTitle', () => {
       const title = computeTerminalTitle({
         streamingState: StreamingState.Idle,
         isConfirming: false,
-        folderName,
         showThoughts: false,
         useDynamicTitle: true,
+        folderName,
       });
 
       expect(title.length).toBe(80);

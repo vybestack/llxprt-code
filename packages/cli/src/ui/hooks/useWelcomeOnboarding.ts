@@ -229,8 +229,8 @@ export const useWelcomeOnboarding = (
     setState((prev) => ({
       ...prev,
       authInProgress: false,
-      error,
       step: 'auth_method',
+      error,
     }));
   }, []);
 

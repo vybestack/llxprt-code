@@ -31,9 +31,9 @@ function createToolCallAiMessage(callIds: string[]): IContent {
     speaker: 'ai',
     blocks: callIds.map((id) => ({
       type: 'tool_call' as const,
-      id,
       name: 'some_tool',
       parameters: {},
+      id,
     })),
   };
 }
@@ -44,9 +44,9 @@ function createToolResponseMessage(callId: string): IContent {
     blocks: [
       {
         type: 'tool_response' as const,
-        callId,
         toolName: 'some_tool',
         result: 'Tool output',
+        callId,
       },
     ],
   };

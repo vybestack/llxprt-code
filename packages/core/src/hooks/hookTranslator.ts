@@ -208,13 +208,13 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
 
     return {
       model: sdkRequest.model || DEFAULT_GEMINI_FLASH_MODEL,
-      messages,
       config: {
         temperature: config?.temperature,
         maxOutputTokens: config?.maxOutputTokens,
         topP: config?.topP,
         topK: config?.topK,
       },
+      messages,
     };
   }
 

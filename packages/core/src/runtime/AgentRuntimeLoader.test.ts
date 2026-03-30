@@ -132,11 +132,11 @@ describe('AgentRuntimeLoader', () => {
 
     const baseOptions = {
       profile: {
-        config,
         state: runtimeState,
         settings: settingsSnapshot,
-        providerRuntime,
         contentGeneratorConfig: createContentGeneratorConfig(),
+        config,
+        providerRuntime,
       },
       overrides: {
         providerAdapter,
@@ -179,11 +179,11 @@ describe('AgentRuntimeLoader', () => {
     const sharedHistory = new HistoryService();
     const bundle = await loadAgentRuntime({
       profile: {
-        config,
         state: runtimeState,
         settings: settingsSnapshot,
-        providerRuntime,
         contentGeneratorConfig: createContentGeneratorConfig(),
+        config,
+        providerRuntime,
       },
       overrides: {
         providerAdapter,
@@ -208,11 +208,11 @@ describe('AgentRuntimeLoader', () => {
 
     const bundle = await loadAgentRuntime({
       profile: {
-        config,
         state: runtimeState,
         settings: mutableSettings,
-        providerRuntime,
         contentGeneratorConfig: createContentGeneratorConfig(),
+        config,
+        providerRuntime,
       },
       overrides: {
         providerAdapter,
@@ -243,7 +243,6 @@ describe('AgentRuntimeLoader', () => {
 
     const bundle = await loadAgentRuntime({
       profile: {
-        config,
         state: runtimeState,
         settings: {
           ...settingsSnapshot,
@@ -252,9 +251,10 @@ describe('AgentRuntimeLoader', () => {
             disabled: ['beta'],
           },
         },
-        providerRuntime,
         toolRegistry: registry,
         contentGeneratorConfig: createContentGeneratorConfig(),
+        config,
+        providerRuntime,
       },
       overrides: {
         providerAdapter,

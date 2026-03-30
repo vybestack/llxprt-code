@@ -67,7 +67,6 @@ describe('GeminiChat Context Limit Enforcement', () => {
 
     runtimeSetup = createGeminiChatRuntime({
       provider: mockProvider,
-      providerManager,
       configOverrides: {
         getModel: vi.fn().mockReturnValue('hf:zai-org/GLM-4.6'),
         setModel: vi.fn(),
@@ -80,6 +79,7 @@ describe('GeminiChat Context Limit Enforcement', () => {
         }),
         getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
+      providerManager,
     });
 
     mockConfig = runtimeSetup.config;

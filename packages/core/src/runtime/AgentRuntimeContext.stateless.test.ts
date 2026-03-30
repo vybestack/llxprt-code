@@ -57,13 +57,13 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     const context = createAgentRuntimeContext({
       state: baseState,
       settings: {},
-      provider,
-      telemetry,
-      tools,
       providerRuntime: createProviderRuntimeContext({
         settingsService: new SettingsService(),
         runtimeId: baseState.runtimeId,
       }),
+      provider,
+      telemetry,
+      tools,
     });
 
     const requestEvent = { model: 'stub-model', promptId: 'req-1' };

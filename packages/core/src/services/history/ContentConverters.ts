@@ -254,9 +254,9 @@ export class ContentConverters {
               });
           this.logger.debug('Converting functionCall to tool_call block:', {
             originalId: part.functionCall.id,
-            finalId,
             name: part.functionCall.name,
             usedCallback: !!generatedId,
+            finalId,
           });
           blocks.push({
             type: 'tool_call',
@@ -340,8 +340,8 @@ export class ContentConverters {
 
           blocks.push({
             type: 'tool_response',
-            callId,
             toolName: matched?.toolName || part.functionResponse.name || '',
+            callId,
             result,
           });
           responseIndex += 1;
@@ -374,7 +374,6 @@ export class ContentConverters {
 
     this.logger.debug('Converted to IContent:', {
       originalRole: content.role,
-      finalSpeaker,
       blockCount: blocks.length,
       blockTypes: blocks.map((b) => b.type),
       toolCallIds: blocks
@@ -383,6 +382,7 @@ export class ContentConverters {
       toolResponseCallIds: blocks
         .filter((b) => b.type === 'tool_response')
         .map((b) => b.callId),
+      finalSpeaker,
     });
 
     return result;

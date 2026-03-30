@@ -65,7 +65,6 @@ export function buildSettingsSnapshot(
 
   return {
     compressionThreshold: compressionThreshold ?? 0.85,
-    contextLimit,
     preserveThreshold: preserveThreshold ?? 0.2,
     telemetry: { enabled: true, target: null },
     tools: getToolGovernanceEphemerals(config),
@@ -95,6 +94,7 @@ export function buildSettingsSnapshot(
     'reasoning.maxTokens': config.getEphemeralSetting('reasoning.maxTokens') as
       | number
       | undefined,
+    contextLimit,
   };
 }
 
@@ -290,20 +290,20 @@ export async function createChatSession(
   const settings = buildSettingsSnapshot(config);
   const providerRuntime = createProviderRuntimeContext({
     settingsService: config.getSettingsService(),
-    config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'GeminiClient.startChat' },
+    config,
   });
 
   const runtimeBundle = await loadAgentRuntime({
     profile: {
-      config,
       state: runtimeState,
+      contentGeneratorConfig: config.getContentGeneratorConfig(),
+      providerManager: config.getProviderManager?.(),
+      config,
       settings,
       providerRuntime,
-      contentGeneratorConfig: config.getContentGeneratorConfig(),
       toolRegistry,
-      providerManager: config.getProviderManager?.(),
     },
     overrides: { historyService, contentGenerator },
   });

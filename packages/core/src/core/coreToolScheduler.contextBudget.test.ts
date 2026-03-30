@@ -198,13 +198,13 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     });
 
     const scheduler = new CoreToolScheduler({
-      config,
       messageBus: getTestRuntimeMessageBus(config),
       toolRegistry: config.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      config,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -241,13 +241,13 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     const config = createConfig(tools);
 
     const scheduler = new CoreToolScheduler({
-      config,
       messageBus: getTestRuntimeMessageBus(config),
       toolRegistry: config.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      config,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -305,13 +305,13 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     });
 
     const scheduler = new CoreToolScheduler({
-      config,
       messageBus: getTestRuntimeMessageBus(config),
       toolRegistry: config.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      config,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(
@@ -391,10 +391,10 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       tools.set(name, new OrderTrackingTool(name, 10));
       requests.push({
         callId: `id-${i}`,
-        name,
         args: {},
         isClientInitiated: false,
         prompt_id: 'p1',
+        name,
       });
     }
 
@@ -403,13 +403,13 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     });
 
     const scheduler = new CoreToolScheduler({
-      config,
       messageBus: getTestRuntimeMessageBus(config),
       toolRegistry: config.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      config,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(requests, new AbortController().signal);
@@ -441,10 +441,10 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       tools.set(name, new OrderTrackingTool(name, 10));
       requests.push({
         callId: `min-${i}`,
-        name,
         args: {},
         isClientInitiated: false,
         prompt_id: 'p1',
+        name,
       });
     }
 
@@ -453,13 +453,13 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     });
 
     const scheduler = new CoreToolScheduler({
-      config,
       messageBus: getTestRuntimeMessageBus(config),
       toolRegistry: config.getToolRegistry(),
-      onAllToolCallsComplete,
-      onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
+      config,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
     });
 
     await scheduler.schedule(requests, new AbortController().signal);

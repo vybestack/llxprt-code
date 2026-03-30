@@ -156,8 +156,8 @@ export function recordApiResponseMetrics(
     return;
   const metricAttributes: Attributes = {
     ...getCommonAttributes(config),
-    model,
     status_code: statusCode ?? (error ? 'error' : 'ok'),
+    model,
   };
   apiRequestCounter.add(1, metricAttributes);
   apiRequestLatencyHistogram.record(durationMs, {
@@ -181,9 +181,9 @@ export function recordApiErrorMetrics(
     return;
   const metricAttributes: Attributes = {
     ...getCommonAttributes(config),
-    model,
     status_code: statusCode ?? 'error',
     error_type: errorType ?? 'unknown',
+    model,
   };
   apiRequestCounter.add(1, metricAttributes);
   apiRequestLatencyHistogram.record(durationMs, {

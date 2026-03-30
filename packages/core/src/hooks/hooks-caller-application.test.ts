@@ -220,13 +220,13 @@ function createTestScheduler(config: Config) {
   const onToolCallsUpdate = vi.fn();
 
   const scheduler = new CoreToolScheduler({
-    config,
     messageBus: config.getMessageBus(),
     toolRegistry: config.getToolRegistry(),
-    onAllToolCallsComplete,
-    onToolCallsUpdate,
     getPreferredEditor: () => 'vscode',
     onEditorClose: vi.fn(),
+    config,
+    onAllToolCallsComplete,
+    onToolCallsUpdate,
   });
 
   return { scheduler, onAllToolCallsComplete, onToolCallsUpdate };

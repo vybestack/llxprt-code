@@ -128,7 +128,6 @@ function buildToolConfig(
   return {
     coreTools: profileSettingsWithTools.coreTools || undefined,
     allowedTools: allowedTools.length > 0 ? [...allowedTools] : undefined,
-    policyEngineConfig,
     excludeTools: [...excludeTools],
     toolDiscoveryCommand: profileSettingsWithTools.toolDiscoveryCommand,
     toolCallCommand: profileSettingsWithTools.toolCallCommand,
@@ -136,10 +135,11 @@ function buildToolConfig(
       ? profileSettingsWithTools.mcpServerCommand
       : undefined,
     mcpServers: mcpEnabled ? mcpServers : {},
-    mcpEnabled,
     allowedMcpServers: mcpEnabled
       ? (argv.allowedMcpServerNames ?? profileSettingsWithTools.mcp?.allowed)
       : undefined,
+    policyEngineConfig,
+    mcpEnabled,
   };
 }
 
@@ -168,7 +168,6 @@ function buildSessionBaseArgs(
     adminSkillsEnabled,
   } = input;
   return {
-    sessionId,
     embeddingModel: undefined,
     sandbox: sandboxConfig,
     targetDir: cwd,
@@ -176,15 +175,10 @@ function buildSessionBaseArgs(
     loadMemoryFromIncludeDirectories:
       context.resolvedLoadMemoryFromIncludeDirectories,
     debugMode: context.debugMode,
-    outputFormat,
-    question,
     ...toolConfig,
-    extensionsEnabled,
-    adminSkillsEnabled,
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: [...filePaths],
-    approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage ||
       profileSettingsWithTools.ui?.showMemoryUsage ||
@@ -193,7 +187,6 @@ function buildSessionBaseArgs(
       profileSettingsWithTools.security?.disableYoloMode ||
       profileSettingsWithTools.admin?.secureModeEnabled,
     accessibility: { ...profileSettingsWithTools.accessibility, screenReader },
-    telemetry,
     usageStatisticsEnabled:
       profileSettingsWithTools.ui?.usageStatisticsEnabled ?? true,
     fileFiltering: context.fileFiltering,
@@ -206,11 +199,18 @@ function buildSessionBaseArgs(
       process.env.https_proxy ||
       process.env.HTTP_PROXY ||
       process.env.http_proxy,
-    cwd,
     fileDiscoveryService: context.fileService,
     bugCommand: profileSettingsWithTools.bugCommand,
     model: providerModel.model,
     provider: providerModel.provider,
+    sessionId,
+    outputFormat,
+    question,
+    extensionsEnabled,
+    adminSkillsEnabled,
+    approvalMode,
+    telemetry,
+    cwd,
     sanitizationConfig,
   };
 }

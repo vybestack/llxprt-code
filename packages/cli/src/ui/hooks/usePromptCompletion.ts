@@ -245,9 +245,9 @@ export function usePromptCompletion({
   return {
     text: ghostText,
     isLoading: isLoadingGhostText,
-    isActive,
     accept: acceptGhostText,
     clear: clearGhostText,
     markSelected: markSuggestionSelected,
+    isActive,
   };
 }

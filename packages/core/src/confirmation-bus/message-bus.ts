@@ -123,9 +123,9 @@ export class MessageBus {
     if (decision === PolicyDecision.DENY) {
       this.publish({
         type: MessageBusType.TOOL_POLICY_REJECTION,
+        reason: 'Policy denied execution',
         toolCall,
         correlationId,
-        reason: 'Policy denied execution',
       });
       return false;
     }

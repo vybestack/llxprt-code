@@ -76,8 +76,8 @@ function createTestStorage(
 ): ProviderKeyStorage {
   const secureStore = new SecureStore('llxprt-code-provider-keys', {
     keyringLoader: async () => mockKeyring,
-    fallbackDir,
     fallbackPolicy: 'allow',
+    fallbackDir,
   });
   return new ProviderKeyStorage({ secureStore });
 }

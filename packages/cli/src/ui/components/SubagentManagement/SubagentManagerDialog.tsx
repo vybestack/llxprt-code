@@ -91,14 +91,14 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 
         return {
           ...prev,
-          subagents,
           profiles: profileNames,
-          selectedSubagent,
           currentView:
             selectedSubagent != null || prev.currentView !== initialView
               ? prev.currentView
               : initialView,
           isLoading: false,
+          subagents,
+          selectedSubagent,
         };
       });
     } catch (err) {

@@ -124,9 +124,9 @@ export function toGenerateContentRequest(
 ): CAGenerateContentRequest {
   return {
     model: req.model,
-    project,
     user_prompt_id: userPromptId,
     request: toVertexGenerateContentRequest(req, _sessionId),
+    project,
   };
 }
 

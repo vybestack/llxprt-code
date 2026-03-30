@@ -454,8 +454,8 @@ describe('BaseProvider', () => {
       // When: Make multiple API calls
       const options = {
         contents: [userMessage('')],
-        settings,
         config: runtimeConfig,
+        settings,
         runtime,
       } as const;
       await provider.generateChatCompletion(options).next();

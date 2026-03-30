@@ -310,7 +310,6 @@ export class ConfirmationCoordinator {
 
     const wrappedDetails: ToolCallConfirmationDetails = {
       ...confirmationDetails,
-      correlationId,
       onConfirm: (
         outcome: ToolConfirmationOutcome,
         payload?: ToolConfirmationPayload,
@@ -323,6 +322,7 @@ export class ConfirmationCoordinator {
           payload,
           false,
         ),
+      correlationId,
     };
 
     this.pendingConfirmations.set(correlationId, reqInfo.callId);
@@ -727,11 +727,11 @@ export class ConfirmationCoordinator {
         outcome !== ToolConfirmationOutcome.SuggestEdit;
       this.messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        requiresUserConfirmation: false,
         correlationId,
         outcome,
         payload,
         confirmed,
-        requiresUserConfirmation: false,
       });
     }
   }

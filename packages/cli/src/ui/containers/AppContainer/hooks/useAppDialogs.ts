@@ -224,7 +224,6 @@ function useDialogsAuthProviders(
     isAuthDialogOpen: auth.isAuthDialogOpen,
     openAuthDialog: auth.openAuthDialog,
     handleAuthSelect: auth.handleAuthSelect,
-    isOAuthCodeDialogOpen,
     isEditorDialogOpen: editor.isEditorDialogOpen,
     openEditorDialog: editor.openEditorDialog,
     handleEditorSelect: editor.handleEditorSelect,
@@ -235,6 +234,7 @@ function useDialogsAuthProviders(
     exitProviderDialog: provider.closeDialog,
     providerOptions: provider.providers,
     selectedProvider: provider.currentProvider,
+    isOAuthCodeDialogOpen,
   };
 }
 
@@ -351,12 +351,12 @@ function useDialogsProfiles(p: AppDialogsParams) {
     closeProfileEditor: profileMgmt.closeEditor,
     saveProfileFromEditor: profileMgmt.saveProfile,
     isToolsDialogOpen: toolsRaw.showDialog,
-    openToolsDialog,
     exitToolsDialog: toolsRaw.closeDialog,
     toolsDialogAction: toolsRaw.action,
     toolsDialogTools: toolsRaw.availableTools,
     toolsDialogDisabledTools: toolsRaw.disabledTools,
     handleToolsSelect: toolsRaw.handleSelect,
+    openToolsDialog,
     performMemoryRefresh,
     useAlternateBuffer,
   };

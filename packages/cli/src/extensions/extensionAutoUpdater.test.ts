@@ -88,10 +88,10 @@ describe('ExtensionAutoUpdater', () => {
       ...createUpdaterOptions({ installMode: 'immediate' }),
       extensionLoader: loader,
       updateChecker: checker,
-      updateExecutor,
       stateStore: store,
       notify: (message, level) => messages.push({ message, level }),
       now: () => 1000,
+      updateExecutor,
     });
 
     await updater.checkNow();
@@ -128,9 +128,9 @@ describe('ExtensionAutoUpdater', () => {
       ...createUpdaterOptions({ installMode: 'on-restart' }),
       extensionLoader: loader,
       updateChecker: checker,
-      updateExecutor,
       stateStore: store,
       now: () => 2000,
+      updateExecutor,
     });
 
     await updater.checkNow();
@@ -160,10 +160,10 @@ describe('ExtensionAutoUpdater', () => {
       ...createUpdaterOptions({ installMode: 'manual' }),
       extensionLoader: loader,
       updateChecker: checker,
-      updateExecutor,
       stateStore: store,
       notify: (message, level) => messages.push({ message, level }),
       now: () => 3000,
+      updateExecutor,
     });
 
     await updater.checkNow();

@@ -261,7 +261,6 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       type: 'info',
       title: `Confirm Web Fetch`,
       prompt: this.params.prompt,
-      urls,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           // No need to publish a policy update as the default policy for
@@ -271,6 +270,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
           await this.publishPolicyUpdate(outcome);
         }
       },
+      urls,
     };
     return confirmationDetails;
   }

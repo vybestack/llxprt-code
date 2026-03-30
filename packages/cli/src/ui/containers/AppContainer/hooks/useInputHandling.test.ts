@@ -33,15 +33,15 @@ const createHarness = (
 
   return {
     buffer: { setText: bufferSetText } as unknown as TextBuffer,
-    bufferSetText,
-    addInput,
-    submitQuery,
     pendingHistoryItems: [],
     lastSubmittedPromptRef: { current: 'last submitted prompt' },
     hadToolCallsRef: { current: true },
-    clearPause,
     todoContinuationRef: { current: { clearPause } },
     ...overrides,
+    bufferSetText,
+    addInput,
+    submitQuery,
+    clearPause,
   };
 };
 

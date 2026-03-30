@@ -438,8 +438,8 @@ function handleContentBlockStop(
   } else if (currentThinkingBlock != null) {
     return {
       content: completeThinkingBlock(currentThinkingBlock, chunk, logger),
-      currentToolCall,
       currentThinkingBlock: undefined,
+      currentToolCall,
     };
   }
 

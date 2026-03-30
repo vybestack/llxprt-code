@@ -67,6 +67,6 @@ export async function copyTextToClipboard(
     // System clipboard failed, but OSC52 was still attempted
     const errorMessage =
       err instanceof Error ? err.message : 'Unknown clipboard error';
-    return { success: false, text, error: errorMessage };
+    return { success: false, error: errorMessage, text };
   }
 }

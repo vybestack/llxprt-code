@@ -545,9 +545,9 @@ describe('AppContainer.mount', () => {
         config: mockConfig as unknown as Config,
         settings: mockSettings,
         version: '1.0.0-test',
-        resumedHistory,
         appState: initialAppState,
         appDispatch: vi.fn(),
+        resumedHistory,
       };
 
       // Act & Assert: Should not throw when rendering with resumed history
@@ -565,9 +565,9 @@ describe('AppContainer.mount', () => {
         config: mockConfig as unknown as Config,
         settings: mockSettings,
         version: '1.0.0-test',
-        startupWarnings,
         appState: initialAppState,
         appDispatch: vi.fn(),
+        startupWarnings,
       };
 
       // Act & Assert: Should not throw when rendering with startup warnings

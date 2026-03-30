@@ -682,7 +682,6 @@ export function useSessionBrowser(
 
   // Return object with getters for synchronous observation
   return {
-    sessions,
     get filteredSessions() {
       return getSortedSessions();
     },
@@ -701,7 +700,6 @@ export function useSessionBrowser(
     get isSearching() {
       return isSearchingRef.current;
     },
-    isLoading,
     get isResuming() {
       return isResumingRef.current;
     },
@@ -714,7 +712,6 @@ export function useSessionBrowser(
     get error() {
       return errorRef.current;
     },
-    skippedCount,
     get totalPages() {
       return getPaginationValues().totalPages;
     },
@@ -724,6 +721,9 @@ export function useSessionBrowser(
     get selectedSession() {
       return getPaginationValues().selectedSession;
     },
+    sessions,
+    isLoading,
+    skippedCount,
     handleKeypress,
   };
 }

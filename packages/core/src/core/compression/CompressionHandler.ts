@@ -605,14 +605,14 @@ export class CompressionHandler {
       logger: this.logger,
       resolveProvider: (profileName?) =>
         this.providerResolver(profileName ?? 'compression'),
-      promptResolver,
-      promptBaseDir,
       promptContext: {
         provider: this.runtimeContext.state.provider,
         model: this.runtimeContext.state.model,
       },
-      promptId,
       ...(activeTodos ? { activeTodos } : {}),
+      promptResolver,
+      promptBaseDir,
+      promptId,
     };
   }
 

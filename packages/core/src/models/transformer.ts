@@ -65,25 +65,13 @@ export function transformModel(
   const status = mapStatus(model.status);
 
   return {
-    // Core identity (IModel compatible)
     id: fullId,
     name: model.name,
     provider: provider.name,
-
-    // Provider info
-    providerId,
     providerName: provider.name,
-    modelId,
     family: model.family,
-
-    // IModel compatibility
-    supportedToolFormats,
     contextWindow: model.limit.context,
     maxOutputTokens: model.limit.output,
-
-    // Extended data
-    capabilities,
-
     pricing:
       model.cost != null
         ? {
@@ -94,12 +82,10 @@ export function transformModel(
             cacheWrite: model.cost.cache_write,
           }
         : undefined,
-
     limits: {
       contextWindow: model.limit.context,
       maxOutput: model.limit.output,
     },
-
     metadata: {
       knowledgeCutoff: model.knowledge,
       releaseDate: model.release_date,
@@ -107,14 +93,15 @@ export function transformModel(
       openWeights: model.open_weights,
       status,
     },
-
     defaultProfile: generateDefaultProfile(model),
-
-    // Provider config
     envVars: provider.env,
     apiEndpoint: provider.api,
     npmPackage: provider.npm,
     docUrl: provider.doc,
+    providerId,
+    modelId,
+    supportedToolFormats,
+    capabilities,
   };
 }
 

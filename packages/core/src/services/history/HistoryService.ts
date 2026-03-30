@@ -770,7 +770,6 @@ export class HistoryService
         if (this.logger.enabled) {
           this.logger.debug('Analyzing AI message:', {
             messageIndex: aiMessagesAnalyzed,
-            hasValidContent,
             blockCount: content.blocks?.length || 0,
             blocks: content.blocks?.map((b) => ({
               type: b.type,
@@ -782,6 +781,7 @@ export class HistoryService
               hasUsage: !!content.metadata?.usage,
               tokens: content.metadata?.usage?.totalTokens,
             },
+            hasValidContent,
           });
         }
 
@@ -1702,11 +1702,11 @@ export class HistoryService
 
     return {
       totalMessages: this.history.length,
+      totalTokens: hasTokens ? totalTokens : undefined,
       userMessages,
       aiMessages,
       toolCalls,
       toolResponses,
-      totalTokens: hasTokens ? totalTokens : undefined,
     };
   }
 }

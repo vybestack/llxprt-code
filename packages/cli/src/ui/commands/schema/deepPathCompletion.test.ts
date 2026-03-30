@@ -23,8 +23,8 @@ const literal = (
   next?: CommandArgumentSchema,
 ): LiteralArgument => ({
   kind: 'literal',
-  value,
   description: description ?? `Literal ${value}`,
+  value,
   next,
 });
 

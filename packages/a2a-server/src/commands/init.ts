@@ -96,8 +96,6 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
 
     const event: AgentExecutionEvent = {
       kind: 'status-update',
-      taskId,
-      contextId,
       status: {
         state: statusState,
         message: {
@@ -115,6 +113,8 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
         coderAgent: { kind: eventType },
         model: context.config.getModel(),
       },
+      taskId,
+      contextId,
     };
 
     logger.info('[EventBus event]: ', event);
@@ -149,8 +149,8 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
 
     const agentSettings: AgentSettings = {
       kind: CoderAgentEvent.StateAgentSettingsEvent,
-      workspacePath,
       autoExecute: true,
+      workspacePath,
     };
 
     if (typeof result.content !== 'string') {
@@ -164,11 +164,11 @@ Write the complete content to the \`LLXPRT.md\` file. The output must be well-fo
         role: 'user',
         parts: [{ kind: 'text', text: promptText }],
         messageId: uuidv4(),
-        taskId,
-        contextId,
         metadata: {
           coderAgent: agentSettings,
         },
+        taskId,
+        contextId,
       },
       taskId,
       contextId,

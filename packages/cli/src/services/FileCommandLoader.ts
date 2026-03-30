@@ -86,8 +86,8 @@ export class FileCommandLoader implements ICommandLoader {
     const globOptions = {
       nodir: true,
       dot: true,
-      signal,
       follow: true,
+      signal,
     };
 
     // Load commands from each directory
@@ -250,9 +250,7 @@ export class FileCommandLoader implements ICommandLoader {
 
     return {
       name: baseCommandName,
-      description,
       kind: CommandKind.FILE,
-      extensionName,
       action: async (
         context: CommandContext,
         _args: string,
@@ -293,6 +291,8 @@ export class FileCommandLoader implements ICommandLoader {
           throw e;
         }
       },
+      description,
+      extensionName,
     };
   }
 }

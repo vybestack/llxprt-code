@@ -45,9 +45,9 @@ function buildCodexCallOptions(
 
   return createProviderCallOptions({
     providerName: provider.name,
-    contents,
     invocation: invocationWithToken,
     ...rest,
+    contents,
   });
 }
 

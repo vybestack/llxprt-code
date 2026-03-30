@@ -270,8 +270,8 @@ export function convertToolsToOpenAIResponses(
         type: 'function',
         name: decl.name,
         description: decl.description || null,
-        parameters,
         strict: null,
+        parameters,
       });
     }
   }

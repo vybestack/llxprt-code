@@ -147,8 +147,8 @@ describe('modifyWithEditor', () => {
       expect(result).toStrictEqual({
         updatedParams: {
           ...mockParams,
-          modifiedContent,
           oldContent: currentContent,
+          modifiedContent,
         },
         updatedDiff: 'mock diff content',
       });

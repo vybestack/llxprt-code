@@ -27,8 +27,8 @@ const literal = (
   next?: CommandArgumentSchema,
 ): LiteralArgument => ({
   kind: 'literal',
-  value,
   description: description || `Literal ${value}`,
+  value,
   next,
 });
 
@@ -41,11 +41,11 @@ const value = (
   next?: CommandArgumentSchema,
 ): ValueArgument => ({
   kind: 'value',
-  name,
-  description,
   options: (options || []).map((opt) =>
     typeof opt === 'string' ? { value: opt } : opt,
   ),
+  name,
+  description,
   completer,
   hint,
   next,

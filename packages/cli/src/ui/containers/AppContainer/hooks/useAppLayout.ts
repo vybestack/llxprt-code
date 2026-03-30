@@ -190,10 +190,10 @@ function useLayoutMeasure(p: AppLayoutParams) {
     useLayoutMeasurement({
       enabled: true,
       copyShortcutEnabled: p.copyModeEnabled,
+      showErrorDetails: p.showErrorDetails,
       setFooterHeight,
       terminalHeight,
       consoleMessages,
-      showErrorDetails: p.showErrorDetails,
     });
   const staticExtraHeight = 3;
   const availableTerminalHeight = useMemo(

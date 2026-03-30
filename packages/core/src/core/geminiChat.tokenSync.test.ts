@@ -82,7 +82,6 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
 
     runtimeSetup = createGeminiChatRuntime({
       provider: mockProvider,
-      providerManager,
       configOverrides: {
         getModel: vi.fn().mockReturnValue('gemini-pro'),
         setModel: vi.fn(),
@@ -92,6 +91,7 @@ describe('GeminiChat Token Count Sync - API Usage Metadata', () => {
         getEphemeralSetting: vi.fn().mockReturnValue(undefined),
         getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
+      providerManager,
     });
 
     mockConfig = runtimeSetup.config;

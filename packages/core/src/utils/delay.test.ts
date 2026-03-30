@@ -64,8 +64,8 @@ describe('abortableDelay', () => {
         .mockImplementation((_type: string, listener: () => void) => {
           mockSignal.__listener = listener;
         }),
-      removeEventListener,
       __listener: undefined as (() => void) | undefined,
+      removeEventListener,
     } as unknown as AbortSignal & { __listener?: () => void };
 
     const promise = delay(150, mockSignal);

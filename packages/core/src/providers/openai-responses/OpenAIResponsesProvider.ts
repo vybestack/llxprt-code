@@ -89,15 +89,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     const baseConfig: BaseProviderConfig = {
       name: 'openai-responses',
-      apiKey,
       baseURL: baseURL || 'https://api.openai.com/v1',
       envKeyNames: ['OPENAI_API_KEY'],
       isOAuthEnabled: isCodex && !!oauthManager,
       oauthProvider: isCodex ? 'codex' : undefined,
       oauthManager: isCodex ? oauthManager : undefined,
-      // Must set supportsOAuth here because supportsOAuth() is called in super()
-      // before _isCodexMode is set
       supportsOAuth: isCodex,
+      apiKey,
     };
 
     super(baseConfig, config);
@@ -533,14 +531,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
-      userMemory,
-      mcpInstructions,
       model: resolvedModel,
       tools: toolNamesForPrompt,
-      includeSubagentDelegation,
       interactionMode: options.config?.isInteractive?.()
         ? 'interactive'
         : 'non-interactive',
+      userMemory,
+      mcpInstructions,
+      includeSubagentDelegation,
     });
 
     // Responses API input types: messages, function_call, function_call_output, reasoning
@@ -1131,8 +1129,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
       const response = await fetch(responsesURL, {
         method: 'POST',
-        headers,
         body: bodyBlob,
+        headers,
       });
 
       try {

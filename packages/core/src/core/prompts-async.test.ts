@@ -237,8 +237,8 @@ describe('prompts async integration', () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
-        tools,
         includeSubagentDelegation: true,
+        tools,
       });
 
       expect(prompt).toContain('# Subagent Delegation');
@@ -252,8 +252,8 @@ describe('prompts async integration', () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
-        tools,
         includeSubagentDelegation: false,
+        tools,
       });
 
       expect(prompt).not.toContain('Subagent Delegation');
@@ -269,8 +269,8 @@ describe('prompts async integration', () => {
       const tools = ['read_file', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
-        tools,
         includeSubagentDelegation: true,
+        tools,
       });
 
       expect(prompt).not.toContain('Subagent Delegation');
@@ -283,8 +283,8 @@ describe('prompts async integration', () => {
       const tools = ['read_file', 'list_subagents'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
-        tools,
         includeSubagentDelegation: true,
+        tools,
       });
 
       expect(prompt).not.toContain('Subagent Delegation');
@@ -310,8 +310,8 @@ describe('prompts async integration', () => {
       const tools = ['read_file', 'list_subagents', 'task'];
       const prompt = await getCoreSystemPromptAsync({
         ...baseOptions,
-        tools,
         includeSubagentDelegation: false,
+        tools,
       });
 
       expect(prompt).not.toContain('{{SUBAGENT_DELEGATION}}');

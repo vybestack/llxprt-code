@@ -189,9 +189,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         todosAdded: stateChange.added.length,
         todosRemoved: stateChange.removed.length,
         statusChanged: stateChange.statusChanged.length,
+        reminder: reminder ?? undefined,
         statistics,
         nextAction,
-        reminder: reminder ?? undefined,
       },
     };
   }

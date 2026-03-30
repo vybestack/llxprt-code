@@ -126,8 +126,8 @@ describe('useStaticRefreshManager', () => {
         streamingState: StreamingState.Idle,
         terminalWidth: 100,
         terminalHeight: 30,
-        refreshStatic,
         constrainHeight: false,
+        refreshStatic,
         setConstrainHeight,
       }),
     );
@@ -152,8 +152,8 @@ describe('useStaticRefreshManager', () => {
         streamingState: StreamingState.Idle,
         terminalWidth: 100,
         terminalHeight: 30,
-        refreshStatic,
         constrainHeight: true,
+        refreshStatic,
         setConstrainHeight,
       }),
     );

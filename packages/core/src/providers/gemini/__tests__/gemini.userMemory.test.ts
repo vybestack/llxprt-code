@@ -163,9 +163,9 @@ describe('GeminiProvider userMemory preservation (Issue #409)', () => {
       resolved: {
         model: 'gemini-2.5-pro',
       },
+      userMemory: TEST_USER_MEMORY,
       runtime,
       invocation,
-      userMemory: TEST_USER_MEMORY,
     });
 
     // Queue a response

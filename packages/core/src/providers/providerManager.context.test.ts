@@ -20,13 +20,13 @@ function createStubProvider(name: string): IProvider {
   });
 
   return {
-    name,
     isDefault: true,
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
-    generateChatCompletion,
     getServerTools: () => [],
     invokeServerTool: vi.fn(),
+    name,
+    generateChatCompletion,
   };
 }
 

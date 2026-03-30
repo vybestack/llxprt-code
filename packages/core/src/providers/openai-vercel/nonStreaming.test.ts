@@ -499,14 +499,14 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       ];
 
       const options = createProviderCallOptions({
-        config,
         contents: messages,
         settings: settingsService,
         resolved: {
           streaming: false,
         },
-        tools,
         providerName: 'openaivercel',
+        config,
+        tools,
       });
 
       const iterator = provider.generateChatCompletion(options);

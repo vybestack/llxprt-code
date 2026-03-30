@@ -63,10 +63,10 @@ function makeConfig(
   return {
     sessionId: overrides.sessionId ?? crypto.randomUUID(),
     projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
     provider: overrides.provider ?? 'anthropic',
     model: overrides.model ?? 'claude-4',
+    chatsDir,
   };
 }
 

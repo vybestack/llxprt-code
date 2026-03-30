@@ -225,8 +225,8 @@ function limitToolPayload(
   return {
     text: sanitized,
     truncated: limited.wasTruncated,
-    originalLength,
     limitMessage: limited.wasTruncated ? limited.message : undefined,
+    originalLength,
   };
 }
 

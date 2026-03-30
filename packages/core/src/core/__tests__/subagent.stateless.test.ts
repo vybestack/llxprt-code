@@ -197,7 +197,6 @@ function createStatelessRuntimeBundle(options?: {
 
   const runtimeContext: AgentRuntimeContext = Object.freeze({
     state: runtimeState,
-    history,
     ephemerals: {
       compressionThreshold: () => 0.8,
       contextLimit: () => 60_000,
@@ -207,6 +206,7 @@ function createStatelessRuntimeBundle(options?: {
     telemetry: telemetryAdapter,
     provider: providerAdapter,
     tools: toolsView,
+    history,
     providerRuntime,
   });
 

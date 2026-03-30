@@ -149,11 +149,11 @@ function createDeveloperRoleToSystemFetch(
 
     return innerFetch(input, {
       ...init,
-      headers,
       body: JSON.stringify({
         ...(parsedBody as Record<string, unknown>),
         messages: rewrittenMessages,
       }),
+      headers,
     });
   };
 }
@@ -293,10 +293,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       {
         name: 'openaivercel',
         apiKey: normalizedApiKey,
-        baseURL,
         envKeyNames: ['OPENAI_API_KEY'],
         isOAuthEnabled: shouldEnableQwenOAuth && !!oauthManager,
         oauthProvider: shouldEnableQwenOAuth ? 'qwen' : undefined,
+        baseURL,
         oauthManager,
       },
       config,
@@ -652,14 +652,14 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
-      userMemory,
-      mcpInstructions,
       model: modelId,
       tools: toolNamesArg,
-      includeSubagentDelegation,
       interactionMode: options.config?.isInteractive?.()
         ? 'interactive'
         : 'non-interactive',
+      userMemory,
+      mcpInstructions,
+      includeSubagentDelegation,
     });
 
     // Filter thinking from context based on settings
@@ -780,9 +780,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       logger.debug(() => `[OpenAIVercelProvider] Sending chat request`, {
         model: modelId,
         baseURL: resolved.baseURL ?? this.getBaseURL(),
-        streamingEnabled,
         hasTools: !!aiTools,
         toolCount: aiTools != null ? Object.keys(aiTools).length : 0,
+        streamingEnabled,
         maxOutputTokens,
       });
     }
@@ -790,10 +790,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     if (streamingEnabled) {
       // Streaming mode via streamText()
       const streamOptions: Record<string, unknown> = {
-        model,
         system: systemPrompt,
-        messages,
         tools: aiTools,
+        model,
+        messages,
         maxOutputTokens,
         temperature,
         topP,
@@ -1263,8 +1263,8 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
         const toolContent: IContent = {
           speaker: 'ai',
-          blocks,
           ...(metadata != null ? { metadata } : {}),
+          blocks,
         };
 
         yield toolContent;
@@ -1300,10 +1300,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
             ? formattedTools
             : aiTools) ?? undefined;
         const generateOptions: Record<string, unknown> = {
-          model,
           system: systemPrompt,
-          messages,
           tools: toolsForGenerate,
+          model,
+          messages,
           maxOutputTokens,
           temperature,
           topP,
@@ -1448,7 +1448,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
         const content: IContent = {
           speaker: 'ai',
-          blocks,
           ...(usageMeta != null
             ? {
                 metadata: {
@@ -1456,6 +1455,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
                 },
               }
             : {}),
+          blocks,
         };
 
         yield content;

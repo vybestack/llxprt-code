@@ -374,14 +374,14 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
     return Promise.resolve({
       provider: activeProvider,
-      model,
       profile: this.getCurrentProfileName(),
-      providerSettings,
       ephemeralSettings: this.settings.global,
-      modelParams,
       allSettings: {
         providers: this.settings.providers as Record<string, ProviderSettings>,
       },
+      model,
+      providerSettings,
+      modelParams,
     });
   }
 

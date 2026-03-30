@@ -182,13 +182,12 @@ export class GeminiAgent {
       profileManager != null ? await profileManager.listProfiles() : [];
     const authMethods = profileNames.map((name) => ({
       id: name,
-      name,
       description: null,
+      name,
     }));
 
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
-      authMethods,
       agentCapabilities: {
         loadSession: false,
         promptCapabilities: {
@@ -197,6 +196,7 @@ export class GeminiAgent {
           embeddedContext: true,
         },
       },
+      authMethods,
     };
   }
 
@@ -911,9 +911,9 @@ export class Session {
             toolCallId: callId,
             status: 'pending',
             title: invocation.getDescription(),
-            content,
             locations: invocation.toolLocations(),
             kind: tool.kind,
+            content,
           },
         };
 

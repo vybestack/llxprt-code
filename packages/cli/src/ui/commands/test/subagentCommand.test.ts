@@ -141,10 +141,10 @@ const createTestContext = ({
   const stats: SessionStatsState = {
     sessionId: 'test-session',
     sessionStartTime: new Date(),
-    metrics,
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 0,
+    metrics,
   };
 
   return {
@@ -155,8 +155,8 @@ const createTestContext = ({
     },
     services: {
       config: null,
-      settings,
       git: undefined,
+      settings,
       logger,
       profileManager,
       subagentManager,

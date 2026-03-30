@@ -80,11 +80,11 @@ describe('createAgentRuntimeContext', () => {
     it('should throw if provider is missing', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: undefined as unknown as AgentRuntimeProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: mockProviderRuntime,
+        settings,
       };
 
       expect(() => createAgentRuntimeContext(options)).toThrow(
@@ -95,11 +95,11 @@ describe('createAgentRuntimeContext', () => {
     it('should throw if telemetry is missing', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: undefined as unknown as AgentRuntimeTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: mockProviderRuntime,
+        settings,
       };
 
       expect(() => createAgentRuntimeContext(options)).toThrow(
@@ -110,11 +110,11 @@ describe('createAgentRuntimeContext', () => {
     it('should throw if tools is missing', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: undefined as unknown as ToolRegistryView,
         providerRuntime: mockProviderRuntime,
+        settings,
       };
 
       expect(() => createAgentRuntimeContext(options)).toThrow(
@@ -125,11 +125,11 @@ describe('createAgentRuntimeContext', () => {
     it('should throw if providerRuntime is missing', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: undefined as unknown as ProviderRuntimeContext,
+        settings,
       };
 
       expect(() => createAgentRuntimeContext(options)).toThrow(
@@ -142,11 +142,11 @@ describe('createAgentRuntimeContext', () => {
     it('should return initial context limit from settings', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: mockProviderRuntime,
+        settings,
       };
 
       const context = createAgentRuntimeContext(options);
@@ -429,11 +429,11 @@ describe('createAgentRuntimeContext', () => {
     it('should freeze the returned context', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: mockProviderRuntime,
+        settings,
       };
 
       const context = createAgentRuntimeContext(options);
@@ -448,11 +448,11 @@ describe('createAgentRuntimeContext', () => {
 
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: runtimeWithMetadata,
+        settings,
       };
 
       const context = createAgentRuntimeContext(options);
@@ -470,12 +470,12 @@ describe('createAgentRuntimeContext', () => {
 
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: mockProviderRuntime,
         history: mockHistory,
+        settings,
       };
 
       const context = createAgentRuntimeContext(options);
@@ -485,11 +485,11 @@ describe('createAgentRuntimeContext', () => {
     it('should create new history service when not provided', () => {
       const options: AgentRuntimeContextFactoryOptions = {
         state: mockState,
-        settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
         providerRuntime: mockProviderRuntime,
+        settings,
       };
 
       const context = createAgentRuntimeContext(options);

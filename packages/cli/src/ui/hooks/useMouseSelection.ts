@@ -163,8 +163,8 @@ export function useMouseSelection({
         if (isInsideBox(point, box)) {
           scrollableCandidates.push({
             node: entry.ref.current,
-            box,
             area: box.width * box.height,
+            box,
           });
         }
       }

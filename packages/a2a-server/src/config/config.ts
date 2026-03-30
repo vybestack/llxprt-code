@@ -41,10 +41,10 @@ export async function loadConfig(
     sessionId: taskId,
     model: DEFAULT_GEMINI_MODEL,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
-    sandbox: undefined, // Sandbox might not be relevant for a server-side agent
-    targetDir: workspaceDir, // Or a specific directory the agent operates on
+    sandbox: undefined,
+    targetDir: workspaceDir,
     debugMode: process.env['DEBUG'] === 'true' || false,
-    question: '', // Not used in server mode directly like CLI
+    question: '',
     coreTools: settings.coreTools || undefined,
     excludeTools: settings.excludeTools || undefined,
     showMemoryUsage: (settings.showMemoryUsage ?? false) || false,
@@ -52,7 +52,6 @@ export async function loadConfig(
       process.env['GEMINI_YOLO_MODE'] === 'true'
         ? ApprovalMode.YOLO
         : ApprovalMode.DEFAULT,
-    mcpServers,
     cwd: workspaceDir,
     telemetry: {
       enabled: settings.telemetry?.enabled,
@@ -62,7 +61,6 @@ export async function loadConfig(
         settings.telemetry?.otlpEndpoint,
       logPrompts: settings.telemetry?.logPrompts,
     },
-    // Git-aware file filtering settings
     fileFiltering: {
       respectGitIgnore: settings.fileFiltering?.respectGitIgnore,
       enableRecursiveFileSearch:
@@ -71,6 +69,7 @@ export async function loadConfig(
     ideMode: false,
     folderTrust: settings.folderTrust === true,
     interactive: true,
+    mcpServers,
     extensions,
   };
 

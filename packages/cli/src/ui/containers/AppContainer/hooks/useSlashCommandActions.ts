@@ -78,6 +78,8 @@ export function useSlashCommandActions({
 }: UseSlashCommandActionsParams) {
   return useMemo(
     () => ({
+      quit: quitHandler,
+      openWelcomeDialog: welcomeActions.resetAndReopen,
       openAuthDialog,
       openThemeDialog,
       openEditorDialog,
@@ -93,13 +95,11 @@ export function useSlashCommandActions({
       openProfileListDialog,
       viewProfileDetail,
       openProfileEditor,
-      quit: quitHandler,
       setDebugMessage,
       toggleCorgiMode,
       toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
-      openWelcomeDialog: welcomeActions.resetAndReopen,
       openSessionBrowserDialog,
     }),
     [

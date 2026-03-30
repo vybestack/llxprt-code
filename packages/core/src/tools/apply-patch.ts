@@ -202,11 +202,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Apply Patch: ${shortenPath(relativePath)}`,
-      fileName,
-      filePath,
-      fileDiff,
       originalContent: currentContent,
-      newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
@@ -220,6 +216,10 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
           }
         }
       },
+      fileName,
+      filePath,
+      fileDiff,
+      newContent,
       ideConfirmation,
     };
     return confirmationDetails;

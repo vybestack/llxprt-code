@@ -119,9 +119,9 @@ export function selectAvailableProvider(
   if (trimmedRequested && availableProviders.includes(trimmedRequested)) {
     return {
       providerName: trimmedRequested,
-      warnings,
       didFallback: false,
       requestedProvider: trimmedRequested,
+      warnings,
     };
   }
 
@@ -140,9 +140,9 @@ export function selectAvailableProvider(
 
   return {
     providerName: fallbackProvider,
-    warnings,
     didFallback: Boolean(trimmedRequested),
     requestedProvider: trimmedRequested || null,
+    warnings,
   };
 }
 
@@ -486,13 +486,13 @@ export async function applyProfileWithGuards(
         providerName: subProfile.provider,
         model: subProfile.model,
         baseURL: subProfile.ephemeralSettings?.['base-url'],
-        authToken,
-        authKeyfile,
         ephemeralSettings: (subProfile.ephemeralSettings ?? {}) as Record<
           string,
           unknown
         >,
         modelParams: (subProfile.modelParams ?? {}) as Record<string, unknown>,
+        authToken,
+        authKeyfile,
       };
 
       resolvedSubProfiles.push(resolved);
@@ -837,11 +837,11 @@ export async function applyProfileWithGuards(
   return {
     providerName: provider.name,
     modelName: appliedModelName,
-    infoMessages,
-    warnings,
     providerChanged: providerSwitch.changed,
     didFallback: selection.didFallback,
-    requestedProvider,
     baseUrl: resolvedBaseUrl,
+    infoMessages,
+    warnings,
+    requestedProvider,
   };
 }

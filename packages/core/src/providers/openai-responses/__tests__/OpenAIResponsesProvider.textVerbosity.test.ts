@@ -81,11 +81,11 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const options = createProviderCallOptions({
       providerName: provider.name,
-      settings,
-      runtime,
       contents: [
         { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       ],
+      settings,
+      runtime,
     });
 
     for await (const _content of provider.generateChatCompletion(options)) {
@@ -143,11 +143,11 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const options = createProviderCallOptions({
       providerName: provider.name,
-      settings,
-      runtime,
       contents: [
         { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       ],
+      settings,
+      runtime,
     });
 
     for await (const _content of provider.generateChatCompletion(options)) {
@@ -205,11 +205,11 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const options = createProviderCallOptions({
       providerName: provider.name,
-      settings,
-      runtime,
       contents: [
         { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       ],
+      settings,
+      runtime,
     });
 
     for await (const _content of provider.generateChatCompletion(options)) {
@@ -266,11 +266,11 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const options = createProviderCallOptions({
       providerName: provider.name,
-      settings,
-      runtime,
       contents: [
         { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       ],
+      settings,
+      runtime,
     });
 
     for await (const _content of provider.generateChatCompletion(options)) {
@@ -328,11 +328,11 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const options = createProviderCallOptions({
       providerName: provider.name,
-      settings,
-      runtime,
       contents: [
         { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       ],
+      settings,
+      runtime,
     });
 
     for await (const _content of provider.generateChatCompletion(options)) {

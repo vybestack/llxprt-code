@@ -137,16 +137,16 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Delete: ${shortenPath(relativePath)} (lines ${this.params.start_line}-${this.params.end_line})`,
-      fileName,
       filePath: this.params.absolute_path,
-      fileDiff,
-      originalContent,
-      newContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
         }
       },
+      fileName,
+      fileDiff,
+      originalContent,
+      newContent,
       ideConfirmation,
     };
     return confirmationDetails;

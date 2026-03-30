@@ -238,9 +238,7 @@ export async function createMockApiServer(): Promise<MockApiServer> {
   }
 
   return {
-    server,
     port: address.port,
-    requests,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((err) => {
@@ -251,5 +249,7 @@ export async function createMockApiServer(): Promise<MockApiServer> {
           }
         });
       }),
+    server,
+    requests,
   };
 }

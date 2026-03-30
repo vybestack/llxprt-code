@@ -119,11 +119,11 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
   ) =>
     createProviderCallOptions({
       providerName: provider.name,
-      contents,
       settings: settingsService,
       runtime: runtimeContext,
       config: runtimeContext.config,
       ...overrides,
+      contents,
     });
 
   it('preserves unsigned thinking blocks as thinking type (z.ai GLM models)', async () => {

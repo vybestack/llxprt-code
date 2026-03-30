@@ -153,7 +153,6 @@ function createErrorCompletedToolCall(
 ): CompletedToolCall {
   return {
     status: 'error',
-    request,
     response: {
       callId: request.callId,
       agentId: request.agentId ?? DEFAULT_AGENT_ID,
@@ -172,6 +171,7 @@ function createErrorCompletedToolCall(
         },
       ] as Part[],
     },
+    request,
     durationMs,
   };
 }

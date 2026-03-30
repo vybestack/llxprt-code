@@ -1583,8 +1583,8 @@ export function getDirectSettingSpecs(): DirectSettingSpec[] {
 
     specs.push({
       value: spec.key,
-      hint,
       description: spec.description,
+      hint,
       options,
     });
   }

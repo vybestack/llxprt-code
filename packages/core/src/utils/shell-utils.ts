@@ -566,11 +566,11 @@ export function checkCommandPermissions(
     if (disallowedCommands.length > 0) {
       return {
         allAllowed: false,
-        disallowedCommands,
         blockReason: `Command(s) not on the global or session allowlist. Disallowed commands: ${disallowedCommands
           .map((c) => JSON.stringify(c))
           .join(', ')}`,
-        isHardDenial: false, // This is a soft denial; confirmation is possible.
+        isHardDenial: false,
+        disallowedCommands,
       };
     }
   } else {
@@ -595,11 +595,11 @@ export function checkCommandPermissions(
       if (disallowedCommands.length > 0) {
         return {
           allAllowed: false,
-          disallowedCommands,
           blockReason: `Command(s) not in the allowed commands list. Disallowed commands: ${disallowedCommands
             .map((c) => JSON.stringify(c))
             .join(', ')}`,
-          isHardDenial: false, // This is a soft denial.
+          isHardDenial: false,
+          disallowedCommands,
         };
       }
     }

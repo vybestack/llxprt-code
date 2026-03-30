@@ -985,10 +985,10 @@ export class LoggingProviderWrapper implements IProvider {
       fileWriter.writeResponse(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
+        error: error ? String(error) : undefined,
         promptId,
         duration,
         success,
-        error: error ? String(error) : undefined,
       });
     } catch (logError) {
       this.debug.warn(() => `Failed to log conversation response: ${logError}`);
@@ -1272,10 +1272,10 @@ export class LoggingProviderWrapper implements IProvider {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
         params: redactedParams,
+        error: error ? String(error) : undefined,
         result,
         duration,
         success,
-        error: error ? String(error) : undefined,
         gitStats,
       });
     } catch (logError) {

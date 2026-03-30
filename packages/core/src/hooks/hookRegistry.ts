@@ -261,11 +261,11 @@ export class HookRegistry {
 
         this.entries.push({
           config: hookConfig,
-          source,
-          eventName,
           matcher: definition.matcher,
           sequential: definition.sequential,
           enabled: !isDisabled,
+          source,
+          eventName,
         });
       } else {
         // Invalid hooks are logged and discarded here, they won't reach HookRunner

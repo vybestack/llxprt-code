@@ -373,9 +373,9 @@ export class ProviderManager implements IProviderManager {
     const baseMetadata = baseRuntime.metadata ?? {};
     const callMetadata: Record<string, unknown> = {
       ...baseMetadata,
-      source,
       requirement: 'REQ-SP4-001',
       generatedAt: new Date().toISOString(),
+      source,
     };
 
     const baseId = baseRuntime.runtimeId;
@@ -422,11 +422,11 @@ export class ProviderManager implements IProviderManager {
         message:
           'ProviderManager requires call-scoped settings; legacy provider state is disabled.',
         requirement: 'REQ-SP4-002',
-        runtimeId,
         stage: 'normalizeRuntimeInputs',
         metadata: {
           hint: 'SettingsService must be provided in options.settings or runtime.settingsService',
         },
+        runtimeId,
       });
     }
 
@@ -436,11 +436,11 @@ export class ProviderManager implements IProviderManager {
         message:
           'ProviderManager requires call-scoped config; legacy provider state is disabled.',
         requirement: 'REQ-SP4-002',
-        runtimeId,
         stage: 'normalizeRuntimeInputs',
         metadata: {
           hint: 'Config must be provided in options.config or runtime.config',
         },
+        runtimeId,
       });
     }
 
@@ -485,9 +485,9 @@ export class ProviderManager implements IProviderManager {
         (providerSettings.apiKey as string | undefined),
       telemetry: {
         ...rawOptions.resolved?.telemetry,
-        runtimeId,
         normalizedAt: new Date().toISOString(),
         provider: targetProvider,
+        runtimeId,
       },
     };
 
@@ -624,9 +624,9 @@ export class ProviderManager implements IProviderManager {
         providerKey: 'ProviderManager',
         message: `Incomplete runtime resolution (${missingFields.join(', ')}) for runtimeId=${runtimeId}`,
         requirement: 'REQ-SP4-003',
-        runtimeId,
         stage: 'normalizeRuntimeInputs',
         metadata: { missingFields, provider: targetProvider },
+        runtimeId,
       });
     }
 
@@ -663,16 +663,16 @@ export class ProviderManager implements IProviderManager {
           targetProvider,
         ),
         telemetry: resolved.telemetry,
-        metadata,
         userMemory: userMemorySnapshot ?? undefined,
         fallbackRuntimeId: runtimeId,
+        metadata,
       });
 
     return {
       ...rawOptions,
       settings: settingsService,
-      config,
       runtime: normalizedRuntime,
+      config,
       resolved,
       userMemory,
       metadata,
@@ -1138,8 +1138,8 @@ export class ProviderManager implements IProviderManager {
       currentModel: this.getStoredModelName(provider) || 'unknown',
       toolFormat: toolFormatSetting,
       isPaidMode: provider.isPaidMode?.() || false,
-      capabilities,
       sessionStartTime: Date.now(),
+      capabilities,
     };
   }
 
@@ -1378,10 +1378,10 @@ export class ProviderManager implements IProviderManager {
         providerKey: 'ProviderManager',
         missingFields: ['runtime'],
         requirement: 'REQ-SP4-004',
-        stage,
         metadata: {
           hint: 'Register CLI runtime context before invoking providers.',
         },
+        stage,
       });
     }
 
@@ -1390,11 +1390,11 @@ export class ProviderManager implements IProviderManager {
         providerKey: 'ProviderManager',
         missingFields: ['settings'],
         requirement: 'REQ-SP4-004',
-        stage,
         metadata: {
           runtimeId: runtimeContext.runtimeId,
           hint: 'ProviderManager requires a SettingsService for stateless invocation.',
         },
+        stage,
       });
     }
 
@@ -1404,11 +1404,11 @@ export class ProviderManager implements IProviderManager {
         providerKey: 'ProviderManager',
         missingFields: ['config'],
         requirement: 'REQ-SP4-004',
-        stage,
         metadata: {
           runtimeId: runtimeContext.runtimeId,
           hint: 'ProviderManager requires Config before stateless invocation.',
         },
+        stage,
       });
     }
 

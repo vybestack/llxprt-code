@@ -267,8 +267,8 @@ File: ${resolved.basename}
 
         results.push({
           filePath: relativeFilePath || path.basename(absoluteFilePath),
-          lineNumber,
           line: lineContent,
+          lineNumber,
         });
       }
     }

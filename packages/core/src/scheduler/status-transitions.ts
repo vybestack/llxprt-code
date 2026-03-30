@@ -143,10 +143,10 @@ export function buildCancelledTransition(
           },
         },
       ],
-      resultDisplay,
       error: undefined,
       errorType: undefined,
       agentId: ctx.request.agentId ?? DEFAULT_AGENT_ID,
+      resultDisplay,
     },
     durationMs: computeDuration(ctx.startTime),
     outcome: ctx.outcome,
@@ -161,10 +161,10 @@ export function buildAwaitingApprovalTransition(
     request: ctx.request,
     tool: ctx.tool,
     status: 'awaiting_approval',
-    confirmationDetails,
     startTime: ctx.startTime,
     outcome: ctx.outcome,
     invocation: ctx.invocation,
+    confirmationDetails,
   } as WaitingToolCall;
 }
 
@@ -175,10 +175,10 @@ export function buildSimpleTransition(
   return {
     request: ctx.request,
     tool: ctx.tool,
-    status,
     startTime: ctx.startTime,
     outcome: ctx.outcome,
     invocation: ctx.invocation,
+    status,
   } as ScheduledToolCall | ValidatingToolCall | ExecutingToolCall;
 }
 

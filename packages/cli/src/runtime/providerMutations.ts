@@ -271,12 +271,12 @@ export async function updateActiveProviderApiKey(
     );
     return {
       changed: true,
-      providerName,
       message:
         `API key removed for provider '${providerName}'` +
         (providerName === 'gemini' && isPaidMode === false
           ? '\n✓ You are now using OAuth (no paid usage).'
           : ''),
+      providerName,
       isPaidMode,
     };
   }
@@ -295,12 +295,12 @@ export async function updateActiveProviderApiKey(
   );
   return {
     changed: true,
-    providerName,
     message:
       `API key updated for provider '${providerName}'` +
       (providerName === 'gemini' && isPaidMode !== false
         ? '\nWARNING: Gemini now runs in paid mode.'
         : ''),
+    providerName,
     isPaidMode,
   };
 }
@@ -321,8 +321,8 @@ export async function updateActiveProviderBaseUrl(
     config.setEphemeralSetting('base-url', undefined);
     return {
       changed: true,
-      providerName,
       message: `Base URL cleared; provider '${providerName}' now uses the default endpoint.`,
+      providerName,
     };
   }
 
@@ -334,9 +334,9 @@ export async function updateActiveProviderBaseUrl(
   config.setEphemeralSetting('base-url', normalizedBaseUrl);
   return {
     changed: true,
-    providerName,
     message: `Base URL updated to '${normalizedBaseUrl}' for provider '${providerName}'.`,
     baseUrl: normalizedBaseUrl,
+    providerName,
   };
 }
 
@@ -449,8 +449,8 @@ export async function setActiveModel(
 
   return {
     providerName: activeProvider.name,
-    previousModel,
     nextModel: modelName,
+    previousModel,
     authRefreshed,
   };
 }

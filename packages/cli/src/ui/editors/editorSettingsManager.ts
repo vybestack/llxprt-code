@@ -62,8 +62,8 @@ class EditorSettingsManager {
 
         return {
           name: EDITOR_DISPLAY_NAMES[type] + labelSuffix,
-          type,
           disabled: !hasEditor || !isAllowedInSandbox,
+          type,
         };
       }),
     ];

@@ -194,11 +194,11 @@ export class ASTQueryExtractor {
         const name = this.extractNameBasic(trimmed);
         const column = Math.max(0, line.indexOf(name));
         declarations.push({
-          name,
           type: trimmed.includes(KEYWORDS.CLASS) ? 'class' : 'function',
           line: index + 1,
-          column,
           signature: this.extractSignatureBasic(trimmed),
+          name,
+          column,
         });
       }
     });

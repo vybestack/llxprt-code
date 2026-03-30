@@ -89,10 +89,10 @@ export function handlePolicyDenial(
   };
   messageBus.publish({
     type: MessageBusType.TOOL_POLICY_REJECTION,
-    toolCall,
     correlationId: randomUUID(),
     reason: message,
     serverName: context.serverName,
+    toolCall,
   });
 }
 
@@ -110,8 +110,8 @@ export function publishConfirmationRequest(
   };
   messageBus.publish({
     type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+    serverName: context.serverName,
     toolCall,
     correlationId,
-    serverName: context.serverName,
   });
 }

@@ -110,9 +110,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -152,9 +152,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -188,9 +188,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -227,10 +227,10 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
         resolved: { streaming: true },
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -274,10 +274,10 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
         modelOverride: 'gpt-5',
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -313,9 +313,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -348,9 +348,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -385,9 +385,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -423,9 +423,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -458,9 +458,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -493,9 +493,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -536,9 +536,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -580,9 +580,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -622,9 +622,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -660,10 +660,10 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
         resolved: { streaming: true },
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -712,10 +712,10 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
         resolved: { streaming: true },
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -751,9 +751,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -779,9 +779,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -832,9 +832,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -867,9 +867,9 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);
@@ -898,10 +898,10 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       ];
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
-        config,
         contents: content,
         settings: settingsService,
         resolved: { streaming: false },
+        config,
       });
 
       const iterator = provider.generateChatCompletion(options);

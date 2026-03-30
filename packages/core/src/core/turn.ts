@@ -520,12 +520,12 @@ export class Turn {
     const args = fnCall.args || {};
 
     const toolCallRequest: ToolCallRequestInfo = {
-      callId,
       name: name || 'undefined_tool_name',
-      args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,
       agentId: this.agentId ?? DEFAULT_AGENT_ID,
+      callId,
+      args,
     };
 
     this.pendingToolCalls.push(toolCallRequest);

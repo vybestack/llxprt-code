@@ -59,7 +59,6 @@ describe('GeminiChat hook execution control', () => {
 
     const runtimeSetup = createGeminiChatRuntime({
       provider: mockProvider,
-      providerManager,
       configOverrides: {
         getHookSystem: vi.fn(() => mockHookSystem),
         getEnableHooks: vi.fn(() => true),
@@ -71,6 +70,7 @@ describe('GeminiChat hook execution control', () => {
         getEphemeralSetting: vi.fn(),
         getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
+      providerManager,
     });
 
     const mockConfig = runtimeSetup.config;

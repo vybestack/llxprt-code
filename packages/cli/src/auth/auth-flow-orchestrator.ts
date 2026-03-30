@@ -550,8 +550,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       if (existingToken != null && existingToken.expiry > nowInSeconds + 30) {
         logger.debug(`Bucket ${bucket} already authenticated, skipping`, {
           provider: providerName,
-          bucket,
           expiry: existingToken.expiry,
+          bucket,
         });
       } else {
         unauthenticated.push(bucket);

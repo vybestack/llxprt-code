@@ -264,10 +264,6 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Write: ${shortenPath(relativePath)}`,
-      fileName,
-      filePath,
-      fileDiff,
-      originalContent,
       newContent: correctedContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
@@ -288,6 +284,10 @@ class WriteFileToolInvocation extends BaseToolInvocation<
           this.params.content = correctedContent;
         }
       },
+      fileName,
+      filePath,
+      fileDiff,
+      originalContent,
       ideConfirmation,
     };
     return confirmationDetails;

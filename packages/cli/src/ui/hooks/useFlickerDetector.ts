@@ -34,8 +34,8 @@ export function useFlickerDetector(
       if (measurement.height > terminalHeight && constrainHeight) {
         appEvents.emit(AppEvent.Flicker, {
           contentHeight: measurement.height,
-          terminalHeight,
           overflow: measurement.height - terminalHeight,
+          terminalHeight,
         });
       }
     }

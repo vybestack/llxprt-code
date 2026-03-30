@@ -58,8 +58,8 @@ export async function activateIsolatedRuntimeContext(
   };
   const overrides: IsolatedRuntimeActivationOptions = {
     ...options,
-    runtimeId,
     metadata: mergedMetadata,
+    runtimeId,
   };
 
   enterRuntimeScope({ runtimeId, metadata: mergedMetadata });
@@ -160,9 +160,9 @@ export function setCliRuntimeContext(
   setActiveProviderRuntimeContext(nextContext);
 
   upsertRuntimeEntry(runtimeId, {
-    settingsService,
     config: config ?? null,
-    metadata,
     profileManager: options.profileManager,
+    settingsService,
+    metadata,
   });
 }

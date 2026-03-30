@@ -653,14 +653,9 @@ function createProviderSwitchContext(
 
   if (currentProvider === name) {
     return {
-      name,
-      currentProvider,
       autoOAuth: false,
       skipModelDefaults: true,
       preserveEphemerals: [],
-      config,
-      settingsService,
-      providerManager,
       activeProvider: providerManager.getActiveProvider(),
       baseProvider: {},
       aliasConfig: undefined,
@@ -676,6 +671,11 @@ function createProviderSwitchContext(
       maxOutputTokensBeforeSwitch: undefined,
       infoMessages: [],
       addItem: options.addItem,
+      name,
+      currentProvider,
+      config,
+      settingsService,
+      providerManager,
     };
   }
 
@@ -685,14 +685,8 @@ function createProviderSwitchContext(
   ];
 
   const context: ProviderSwitchContext = {
-    name,
-    currentProvider,
     autoOAuth: options.autoOAuth ?? false,
     skipModelDefaults: options.skipModelDefaults ?? false,
-    preserveEphemerals,
-    config,
-    settingsService,
-    providerManager,
     activeProvider: providerManager.getActiveProvider(),
     baseProvider: {},
     aliasConfig: getAliasConfig(name),
@@ -708,6 +702,12 @@ function createProviderSwitchContext(
     maxOutputTokensBeforeSwitch: undefined,
     infoMessages: [],
     addItem: options.addItem,
+    name,
+    currentProvider,
+    preserveEphemerals,
+    config,
+    settingsService,
+    providerManager,
   };
 
   const ephemeralSnapshot = clearEphemeralsForSwitch(context);

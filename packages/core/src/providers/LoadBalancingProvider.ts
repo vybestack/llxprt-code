@@ -524,8 +524,8 @@ export class LoadBalancingProvider implements IProvider {
       profileName: this.config.profileName,
       totalRequests: this.totalRequests,
       lastSelected: this.lastSelected,
-      profileCounts,
       backendMetrics: backendMetricsRecord,
+      profileCounts,
       circuitBreakerStates,
       currentTPM,
     };

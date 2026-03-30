@@ -92,7 +92,7 @@ export async function bfsFileSearch(
         if (debug) {
           logger.debug(`Full error for ${dir}:`, error);
         }
-        return { currentDir: dir, depth, entries: [] };
+        return { currentDir: dir, entries: [], depth };
       }
     });
 

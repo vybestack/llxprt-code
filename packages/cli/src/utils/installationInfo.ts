@@ -88,10 +88,10 @@ export function getInstallationInfo(
         return {
           packageManager: PackageManager.HOMEBREW,
           isGlobal: true,
-          updateCommand,
           updateMessage: isAutoUpdateDisabled
             ? `Please run "${updateCommand}" to update`
             : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
+          updateCommand,
         };
       } catch (_error) {
         // Brew is not installed or llxprt-code is not installed via brew.
@@ -118,10 +118,10 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.PNPM,
         isGlobal: true,
-        updateCommand,
         updateMessage: isAutoUpdateDisabled
           ? `Please run ${updateCommand} to update`
           : 'Installed with pnpm. Attempting to automatically update now...',
+        updateCommand,
       };
     }
 
@@ -131,10 +131,10 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.YARN,
         isGlobal: true,
-        updateCommand,
         updateMessage: isAutoUpdateDisabled
           ? `Please run ${updateCommand} to update`
           : 'Installed with yarn. Attempting to automatically update now...',
+        updateCommand,
       };
     }
 
@@ -151,10 +151,10 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.BUN,
         isGlobal: true,
-        updateCommand,
         updateMessage: isAutoUpdateDisabled
           ? `Please run ${updateCommand} to update`
           : 'Installed with bun. Attempting to automatically update now...',
+        updateCommand,
       };
     }
 
@@ -184,10 +184,10 @@ export function getInstallationInfo(
     return {
       packageManager: PackageManager.NPM,
       isGlobal: true,
-      updateCommand,
       updateMessage: isAutoUpdateDisabled
         ? `Please run ${updateCommand} to update`
         : 'Installed with npm. Attempting to automatically update now...',
+      updateCommand,
     };
   } catch (error) {
     debugLogger.log(String(error));
