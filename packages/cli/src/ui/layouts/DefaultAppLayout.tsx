@@ -156,6 +156,7 @@ export const DefaultAppLayout = ({
     vimMode,
     tokenMetrics,
     currentModel,
+    contextLimit,
     availableTerminalHeight: uiAvailableTerminalHeight,
     activeShellPtyId,
     embeddedShellFocused,
@@ -539,11 +540,7 @@ export const DefaultAppLayout = ({
                 historyTokenCount={historyTokenCount}
                 nightly={nightly}
                 vimMode={vimModeEnabled ? vimMode : undefined}
-                contextLimit={
-                  config.getEphemeralSetting('context-limit') as
-                    | number
-                    | undefined
-                }
+                contextLimit={contextLimit}
                 isTrustedFolder={config.isTrustedFolder()}
                 tokensPerMinute={tokenMetrics.tokensPerMinute}
                 throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
@@ -711,11 +708,7 @@ export const DefaultAppLayout = ({
               historyTokenCount={historyTokenCount}
               nightly={nightly}
               vimMode={vimModeEnabled ? vimMode : undefined}
-              contextLimit={
-                config.getEphemeralSetting('context-limit') as
-                  | number
-                  | undefined
-              }
+              contextLimit={contextLimit}
               isTrustedFolder={config.isTrustedFolder()}
               tokensPerMinute={tokenMetrics.tokensPerMinute}
               throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
