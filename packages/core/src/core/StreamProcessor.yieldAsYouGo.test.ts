@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StreamProcessor } from './StreamProcessor.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import type { GenerateContentResponse } from '@google/genai';
 import type { Content, Part } from '@google/genai';
 
@@ -90,13 +91,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
       compressionHandler: compression,
       conversationManager: conversation,
       historyService: history,
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-        enabled: false,
-      },
+      logger: new DebugLogger('test'),
     });
 
     // Stub internal methods that processStreamResponse calls post-loop
