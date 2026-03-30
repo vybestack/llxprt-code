@@ -233,6 +233,7 @@ function buildUIStateParamsCore(r: HookResults) {
       : d.providerOptions,
     selectedProvider: d.selectedProvider,
     currentModel: d.currentModel,
+    contextLimit: d.contextLimit,
     profiles: d.profiles,
     toolsDialogAction: d.toolsDialogAction,
     toolsDialogTools: d.toolsDialogTools,
