@@ -228,30 +228,14 @@ export async function* processStreamingResponse(
   deps.toolCallPipeline.reset();
 
   try {
-    // Collect all chunks first
+    // Process chunks inline as they arrive from the HTTP stream.
+    // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
+    // prevents abort signal checks, and causes indefinite hangs. See #1846.
     for await (const chunk of response) {
       if (abortSignal?.aborted) {
         break;
       }
       state.allChunks.push(chunk);
-    }
-
-    deps.logger.debug(
-      () =>
-        `[Streaming pipeline] Collected ${state.allChunks.length} chunks from stream`,
-      {
-        firstChunkDelta: state.allChunks[0]?.choices?.[0]?.delta,
-        lastChunkFinishReason:
-          state.allChunks[state.allChunks.length - 1]?.choices?.[0]
-            ?.finish_reason,
-      },
-    );
-
-    // Process all collected chunks
-    for (const chunk of state.allChunks) {
-      if (abortSignal?.aborted) {
-        break;
-      }
 
       const chunkRecord = chunk as unknown as Record<string, unknown>;
       let parsedData: Record<string, unknown> | undefined;
