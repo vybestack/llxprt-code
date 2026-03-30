@@ -526,7 +526,7 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
+      expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'Hello' }],
@@ -609,7 +609,7 @@ describe('AnthropicProvider', () => {
         collected.push(chunk);
       }
 
-      expect(collected).toEqual([
+      expect(collected).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'Done' }],
@@ -798,7 +798,7 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
+      expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [
@@ -889,7 +889,7 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
+      expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'ok' }],
@@ -961,7 +961,7 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
+      expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'done' }],
@@ -1142,7 +1142,7 @@ describe('AnthropicProvider', () => {
       const createCall = mockAnthropicInstance.messages.create.mock.calls[0][0];
       expect(createCall.tools).toBeDefined();
       expect(createCall.tools).toHaveLength(1);
-      expect(createCall.tools[0]).toEqual({
+      expect(createCall.tools[0]).toStrictEqual({
         name: 'test_tool',
         description: 'A test tool',
         input_schema: {
@@ -1179,7 +1179,7 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
+      expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'Success' }],
@@ -1216,7 +1216,7 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
+      expect(chunks).toStrictEqual([
         {
           speaker: 'ai',
           blocks: [{ type: 'text', text: 'Success' }],
@@ -1273,7 +1273,7 @@ describe('AnthropicProvider', () => {
           chunks.push(chunk);
         }
 
-        expect(chunks).toEqual([
+        expect(chunks).toStrictEqual([
           {
             speaker: 'ai',
             blocks: [{ type: 'text', text: 'Fixed and working' }],
@@ -1340,7 +1340,7 @@ describe('AnthropicProvider', () => {
       const request = mockMessagesCreate.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
 
-      expect(anthropicMessages).toEqual([
+      expect(anthropicMessages).toStrictEqual([
         { role: 'user', content: '[Empty message]' },
         { role: 'assistant', content: '[No content generated]' },
         { role: 'user', content: 'next' },
@@ -1386,7 +1386,7 @@ describe('AnthropicProvider', () => {
       const request = mockMessagesCreate.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
 
-      expect(anthropicMessages).toEqual([
+      expect(anthropicMessages).toStrictEqual([
         { role: 'user', content: 'hello' },
         { role: 'assistant', content: '' },
       ]);
@@ -1435,7 +1435,7 @@ describe('AnthropicProvider', () => {
       const request = mockMessagesCreate.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
 
-      expect(anthropicMessages).toEqual([
+      expect(anthropicMessages).toStrictEqual([
         { role: 'user', content: 'start' },
         { role: 'assistant', content: '[No content generated]' },
         { role: 'user', content: 'next' },
@@ -1544,7 +1544,7 @@ describe('AnthropicProvider', () => {
       const request = mockMessagesCreate.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
 
-      expect(anthropicMessages).toEqual([
+      expect(anthropicMessages).toStrictEqual([
         { role: 'user', content: 'start' },
         { role: 'assistant', content: '[No content generated]' },
         { role: 'user', content: 'next' },
@@ -1597,7 +1597,7 @@ describe('AnthropicProvider', () => {
       const request = mockMessagesCreate.mock.calls[0][0];
       const anthropicMessages = request.messages as AnthropicMessage[];
 
-      expect(anthropicMessages).toEqual([
+      expect(anthropicMessages).toStrictEqual([
         { role: 'user', content: 'start' },
         { role: 'assistant', content: '[No content generated]' },
         { role: 'user', content: 'next' },
@@ -1652,7 +1652,7 @@ describe('AnthropicProvider', () => {
 
       const assistantMessage = anthropicMessages[1];
       expect(assistantMessage.role).toBe('assistant');
-      expect(assistantMessage.content).toEqual([
+      expect(assistantMessage.content).toStrictEqual([
         {
           type: 'tool_use',
           id: 'toolu_tool-1',
@@ -1766,7 +1766,7 @@ describe('AnthropicProvider', () => {
         expect(systemBlocks.length).toBeGreaterThan(0);
 
         const lastBlock = systemBlocks[systemBlocks.length - 1];
-        expect(lastBlock.cache_control).toEqual({
+        expect(lastBlock.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '5m',
         });
@@ -1808,7 +1808,7 @@ describe('AnthropicProvider', () => {
         expect(systemBlocks.length).toBeGreaterThan(0);
 
         const lastBlock = systemBlocks[systemBlocks.length - 1];
-        expect(lastBlock.cache_control).toEqual({
+        expect(lastBlock.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '1h',
         });
@@ -1939,7 +1939,7 @@ describe('AnthropicProvider', () => {
         // The last content block should have cache_control
         const lastContentBlock = contentBlocks[contentBlocks.length - 1];
         expect(lastContentBlock.type).toBe('text');
-        expect(lastContentBlock.cache_control).toEqual({
+        expect(lastContentBlock.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '5m',
         });
@@ -2007,7 +2007,7 @@ describe('AnthropicProvider', () => {
         // The last content block should be a tool_result with cache_control
         const lastContentBlock = contentBlocks[contentBlocks.length - 1];
         expect(lastContentBlock.type).toBe('tool_result');
-        expect(lastContentBlock.cache_control).toEqual({
+        expect(lastContentBlock.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '5m',
         });
@@ -2173,7 +2173,7 @@ describe('AnthropicProvider', () => {
 
         const actualKeys = Object.keys(cachedBlock!);
         const extraKeys = actualKeys.filter((k) => !allowed.has(k));
-        expect(extraKeys).toEqual([]);
+        expect(extraKeys).toStrictEqual([]);
       });
 
       it('should not send extra keys on last text block when prompt-caching is enabled (issue #1414)', async () => {
@@ -2247,7 +2247,7 @@ describe('AnthropicProvider', () => {
         const allowedTextKeys = new Set(['type', 'text', 'cache_control']);
         const blockKeys = Object.keys(cachedBlock!);
         const extraKeys = blockKeys.filter((k) => !allowedTextKeys.has(k));
-        expect(extraKeys).toEqual([]);
+        expect(extraKeys).toStrictEqual([]);
 
         // Now verify the sanitization works when a block HAS extra keys.
         // We call sanitizeBlockForCacheControl directly with a polluted block.
@@ -2265,14 +2265,14 @@ describe('AnthropicProvider', () => {
           pollutedText,
           '5m' as const,
         );
-        expect(Object.keys(sanitizedText).sort()).toEqual([
+        expect(Object.keys(sanitizedText).sort()).toStrictEqual([
           'cache_control',
           'text',
           'type',
         ]);
         expect(sanitizedText.type).toBe('text');
         expect(sanitizedText.text).toBe('hello');
-        expect(sanitizedText.cache_control).toEqual({
+        expect(sanitizedText.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '5m',
         });
@@ -2289,7 +2289,7 @@ describe('AnthropicProvider', () => {
           pollutedToolResult,
           '5m' as const,
         );
-        expect(Object.keys(sanitizedToolResult).sort()).toEqual([
+        expect(Object.keys(sanitizedToolResult).sort()).toStrictEqual([
           'cache_control',
           'content',
           'is_error',
@@ -2309,14 +2309,14 @@ describe('AnthropicProvider', () => {
           pollutedToolUse,
           '1h' as const,
         );
-        expect(Object.keys(sanitizedToolUse).sort()).toEqual([
+        expect(Object.keys(sanitizedToolUse).sort()).toStrictEqual([
           'cache_control',
           'id',
           'input',
           'name',
           'type',
         ]);
-        expect(sanitizedToolUse.cache_control).toEqual({
+        expect(sanitizedToolUse.cache_control).toStrictEqual({
           type: 'ephemeral',
           ttl: '1h',
         });
@@ -2373,7 +2373,11 @@ describe('AnthropicProvider', () => {
         expect(request.tools).toBeDefined();
 
         const toolNames = request.tools.map((t: { name: string }) => t.name);
-        expect(toolNames).toEqual(['alpha_tool', 'middle_tool', 'zebra_tool']);
+        expect(toolNames).toStrictEqual([
+          'alpha_tool',
+          'middle_tool',
+          'zebra_tool',
+        ]);
       });
 
       it('should sort JSON schema keys alphabetically', async () => {
@@ -2423,7 +2427,7 @@ describe('AnthropicProvider', () => {
 
         const tool = request.tools[0];
         const propertyKeys = Object.keys(tool.input_schema.properties);
-        expect(propertyKeys).toEqual(['apple', 'middle', 'zebra']);
+        expect(propertyKeys).toStrictEqual(['apple', 'middle', 'zebra']);
       });
     });
 
@@ -2750,12 +2754,12 @@ describe('AnthropicProvider', () => {
         expect(rateLimitInfo).toBeDefined();
         expect(rateLimitInfo?.requestsLimit).toBe(1000);
         expect(rateLimitInfo?.requestsRemaining).toBe(950);
-        expect(rateLimitInfo?.requestsReset).toEqual(
+        expect(rateLimitInfo?.requestsReset).toStrictEqual(
           new Date('2025-11-21T12:00:00Z'),
         );
         expect(rateLimitInfo?.tokensLimit).toBe(100000);
         expect(rateLimitInfo?.tokensRemaining).toBe(95000);
-        expect(rateLimitInfo?.tokensReset).toEqual(
+        expect(rateLimitInfo?.tokensReset).toStrictEqual(
           new Date('2025-11-21T12:00:00Z'),
         );
         expect(rateLimitInfo?.inputTokensLimit).toBe(50000);
@@ -4148,12 +4152,12 @@ describe('AnthropicProvider', () => {
         _debug: 'leak',
       };
       const result = sanitizeBlockForCacheControl(block, '5m');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'text',
         'type',
       ]);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'text',
         text: 'hello',
         cache_control: { type: 'ephemeral', ttl: '5m' },
@@ -4169,14 +4173,14 @@ describe('AnthropicProvider', () => {
         _sdk_internal: 999,
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'id',
         'input',
         'name',
         'type',
       ]);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool_use',
         id: 'toolu_abc',
         name: 'read_file',
@@ -4194,14 +4198,14 @@ describe('AnthropicProvider', () => {
         extra_meta: 'should vanish',
       };
       const result = sanitizeBlockForCacheControl(block, '5m');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'content',
         'is_error',
         'tool_use_id',
         'type',
       ]);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool_result',
         tool_use_id: 'toolu_123',
         content: 'file data',
@@ -4217,13 +4221,13 @@ describe('AnthropicProvider', () => {
         content: 'ok',
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'content',
         'tool_use_id',
         'type',
       ]);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool_result',
         tool_use_id: 'toolu_456',
         content: 'ok',
@@ -4251,13 +4255,13 @@ describe('AnthropicProvider', () => {
         _internal: 'drop me',
       };
       const result = sanitizeBlockForCacheControl(block, '5m');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'signature',
         'thinking',
         'type',
       ]);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'thinking',
         thinking: 'I am thinking...',
         signature: 'sig123',
@@ -4271,7 +4275,7 @@ describe('AnthropicProvider', () => {
         thinking: 'pondering',
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'thinking',
         'type',
@@ -4286,12 +4290,12 @@ describe('AnthropicProvider', () => {
         _extra: 'polluted',
       };
       const result = sanitizeBlockForCacheControl(block, '1h');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'data',
         'type',
       ]);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'redacted_thinking',
         data: 'base64data==',
         cache_control: { type: 'ephemeral', ttl: '1h' },
@@ -4307,7 +4311,7 @@ describe('AnthropicProvider', () => {
       const result = sanitizeBlockForCacheControl(block, '5m');
       // Should produce a minimal text fallback, not spread unknown keys
       expect(result.type).toBe('text');
-      expect(Object.keys(result).sort()).toEqual([
+      expect(Object.keys(result).sort()).toStrictEqual([
         'cache_control',
         'text',
         'type',

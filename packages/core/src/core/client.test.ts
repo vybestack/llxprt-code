@@ -521,12 +521,12 @@ describe('Gemini Client (client.ts)', () => {
 
       const result = await client.generateEmbedding(texts);
 
-      expect(result).toEqual(mockEmbeddings);
+      expect(result).toStrictEqual(mockEmbeddings);
     });
 
     it('should return an empty array if an empty array is passed', async () => {
       const result = await client.generateEmbedding([]);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should throw an error if API response has no embeddings array', async () => {
@@ -831,7 +831,7 @@ sub memory
       );
 
       // Check that generateJson returns the correct result
-      expect(result).toEqual({ key: 'value' });
+      expect(result).toStrictEqual({ key: 'value' });
 
       // Verify generateContent was called (now via BaseLLMClient)
       expect(mockGenerator.generateContent).toHaveBeenCalledWith(
@@ -881,7 +881,7 @@ sub memory
       );
 
       // Check that generateJson returns the correct result
-      expect(result).toEqual({ key: 'value' });
+      expect(result).toStrictEqual({ key: 'value' });
 
       // Verify generateContent was called with custom config (now via BaseLLMClient)
       expect(mockGenerator.generateContent).toHaveBeenCalledWith(
@@ -1505,7 +1505,7 @@ sub memory
       }
 
       // Verify that the max session turns limit was respected
-      expect(events).toEqual([{ type: GeminiEventType.MaxSessionTurns }]);
+      expect(events).toStrictEqual([{ type: GeminiEventType.MaxSessionTurns }]);
     });
 
     it.skip('should respect MAX_TURNS limit even when turns parameter is set to a large value', async () => {
@@ -1989,7 +1989,7 @@ sub memory
       const events = await fromAsync(stream);
 
       // Assert
-      expect(events).toEqual([
+      expect(events).toStrictEqual([
         { type: GeminiEventType.InvalidStream },
         { type: GeminiEventType.Content, value: 'Continued content' },
       ]);
@@ -2039,7 +2039,7 @@ sub memory
       const events = await fromAsync(stream);
 
       // Assert
-      expect(events).toEqual([{ type: GeminiEventType.InvalidStream }]);
+      expect(events).toStrictEqual([{ type: GeminiEventType.InvalidStream }]);
 
       // Verify that turn.run was called only once
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
@@ -3071,7 +3071,7 @@ sub memory
         },
         'test-session-id',
       );
-      expect(models).toEqual(mockModels);
+      expect(models).toStrictEqual(mockModels);
     });
 
     it('should return OAuth marker for OAuth auth types', async () => {
@@ -3169,7 +3169,7 @@ sub memory
       await client.setHistory(history);
 
       // Assert
-      expect(client['_previousHistory']).toEqual(history);
+      expect(client['_previousHistory']).toStrictEqual(history);
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
 
@@ -3193,7 +3193,7 @@ sub memory
 
       // Assert
       expect(mockChat.setHistory).toHaveBeenCalledWith(history);
-      expect(client['_previousHistory']).toEqual(history);
+      expect(client['_previousHistory']).toStrictEqual(history);
       expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
     });
 

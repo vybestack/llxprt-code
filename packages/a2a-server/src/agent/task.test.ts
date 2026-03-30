@@ -73,7 +73,7 @@ describe('Task', () => {
 
     await task.scheduleToolCalls(requests, abortController.signal);
 
-    expect(requests).toEqual(originalRequests);
+    expect(requests).toStrictEqual(originalRequests);
   });
 
   describe('acceptAgentMessage', () => {
@@ -145,7 +145,7 @@ describe('Task', () => {
 
       // Access private field for testing
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((task as any).modelInfo).toEqual({
+      expect((task as any).modelInfo).toStrictEqual({
         model: 'gemini-2.0-flash-exp',
       });
     });
@@ -286,7 +286,7 @@ describe('Task', () => {
 
       // Should have the latest modelInfo
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((task as any).modelInfo).toEqual({
+      expect((task as any).modelInfo).toStrictEqual({
         model: 'gemini-2.0-flash-exp',
       });
     });

@@ -328,7 +328,7 @@ describe('Config LSP Integration (P33)', () => {
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig).toBeDefined();
-      expect(lspConfig?.servers).toEqual([]);
+      expect(lspConfig?.servers).toStrictEqual([]);
     });
 
     it('should enable LSP with custom diagnosticTimeout', async () => {
@@ -357,7 +357,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       const lspConfig = config.getLspConfig();
-      expect(lspConfig?.includeSeverities).toEqual(['error', 'warning']);
+      expect(lspConfig?.includeSeverities).toStrictEqual(['error', 'warning']);
     });
   });
 
@@ -390,7 +390,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       const lspConfig = config.getLspConfig();
-      expect(lspConfig?.includeSeverities).toEqual(['error']);
+      expect(lspConfig?.includeSeverities).toStrictEqual(['error']);
     });
 
     it('should support error and warning severity filter', async () => {
@@ -404,7 +404,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       const lspConfig = config.getLspConfig();
-      expect(lspConfig?.includeSeverities).toEqual(['error', 'warning']);
+      expect(lspConfig?.includeSeverities).toStrictEqual(['error', 'warning']);
     });
   });
 
@@ -644,7 +644,7 @@ describe('Config LSP Integration (P33)', () => {
       // Config should still be accessible even though service failed
       const lspConfig = config.getLspConfig();
       expect(lspConfig).toBeDefined();
-      expect(lspConfig?.includeSeverities).toEqual(['error', 'warning']);
+      expect(lspConfig?.includeSeverities).toStrictEqual(['error', 'warning']);
     });
   });
 
@@ -667,7 +667,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       const lspConfig = config.getLspConfig();
-      expect(lspConfig).toEqual(customConfig);
+      expect(lspConfig).toStrictEqual(customConfig);
     });
 
     it('should return same LspServiceClient instance from getLspServiceClient()', async () => {
@@ -728,7 +728,7 @@ describe('Config LSP Integration (P33)', () => {
       await initializeTestConfig(config);
 
       const lspConfig = config.getLspConfig();
-      expect(lspConfig?.includeSeverities).toEqual(['error']);
+      expect(lspConfig?.includeSeverities).toStrictEqual(['error']);
       expect(lspConfig?.maxDiagnosticsPerFile).toBeUndefined();
       expect(lspConfig?.maxProjectDiagnosticsFiles).toBeUndefined();
       expect(lspConfig?.diagnosticTimeout).toBeUndefined();

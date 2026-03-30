@@ -22,12 +22,12 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 describe('ExtensionsCommand', () => {
   it('should have the correct name', () => {
     const command = new ExtensionsCommand();
-    expect(command.name).toEqual('extensions');
+    expect(command.name).toStrictEqual('extensions');
   });
 
   it('should have the correct description', () => {
     const command = new ExtensionsCommand();
-    expect(command.description).toEqual('Manage extensions.');
+    expect(command.description).toStrictEqual('Manage extensions.');
   });
 
   it('should have "extensions list" as a subcommand', () => {
@@ -48,7 +48,10 @@ describe('ExtensionsCommand', () => {
 
     const result = await command.execute({ config: mockConfig }, []);
 
-    expect(result).toEqual({ name: 'extensions list', data: mockExtensions });
+    expect(result).toStrictEqual({
+      name: 'extensions list',
+      data: mockExtensions,
+    });
     expect(mockListExtensions).toHaveBeenCalledWith(mockConfig);
   });
 });
@@ -56,7 +59,7 @@ describe('ExtensionsCommand', () => {
 describe('ListExtensionsCommand', () => {
   it('should have the correct name', () => {
     const command = new ListExtensionsCommand();
-    expect(command.name).toEqual('extensions list');
+    expect(command.name).toStrictEqual('extensions list');
   });
 
   it('should call listExtensions with the provided config', async () => {
@@ -67,7 +70,10 @@ describe('ListExtensionsCommand', () => {
 
     const result = await command.execute({ config: mockConfig }, []);
 
-    expect(result).toEqual({ name: 'extensions list', data: mockExtensions });
+    expect(result).toStrictEqual({
+      name: 'extensions list',
+      data: mockExtensions,
+    });
     expect(mockListExtensions).toHaveBeenCalledWith(mockConfig);
   });
 
@@ -78,7 +84,7 @@ describe('ListExtensionsCommand', () => {
 
     const result = await command.execute({ config: mockConfig }, []);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'extensions list',
       data: 'No extensions installed.',
     });

@@ -54,7 +54,7 @@ describe('ListCheckpointsCommand', () => {
 
   it('should have the correct name', () => {
     const command = new ListCheckpointsCommand();
-    expect(command.name).toEqual('restore list');
+    expect(command.name).toStrictEqual('restore list');
   });
 
   it('should return error when checkpointing is disabled', async () => {
@@ -63,7 +63,7 @@ describe('ListCheckpointsCommand', () => {
 
     const result = await command.execute(context, []);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'restore list',
       data: { error: 'Checkpointing is not enabled' },
     });
@@ -77,7 +77,7 @@ describe('ListCheckpointsCommand', () => {
 
     const result = await command.execute(context, []);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'restore list',
       data: 'No checkpoints found.',
     });
@@ -100,7 +100,7 @@ describe('ListCheckpointsCommand', () => {
       'checkpoint1.json',
       'checkpoint2.json',
     ]);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'restore list',
       data: 'checkpoint1\ncheckpoint2',
     });
@@ -132,7 +132,7 @@ describe('RestoreCommand', () => {
 
   it('should have the correct name', () => {
     const command = new RestoreCommand();
-    expect(command.name).toEqual('restore');
+    expect(command.name).toStrictEqual('restore');
   });
 
   it('should require workspace', () => {
@@ -155,7 +155,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(context, []);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
   });
 
@@ -164,7 +164,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(context, ['../../../etc/passwd']);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
     expect((result.data as { error?: string }).error).toContain('traversal');
   });
@@ -174,7 +174,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(context, ['subdir/name.json']);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
     expect((result.data as { error?: string }).error).toContain('traversal');
   });
@@ -185,7 +185,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(context, ['nonexistent.json']);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
   });
 
@@ -197,7 +197,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(context, ['symlink.json']);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
     expect((result.data as { error?: string }).error).toContain('symlink');
   });
@@ -218,7 +218,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(context, ['invalid.json']);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
   });
 
@@ -245,7 +245,7 @@ describe('RestoreCommand', () => {
     const result = await command.execute(context, ['valid.json']);
 
     expect(mockGit.restoreProjectFromSnapshot).toHaveBeenCalledWith('abc123');
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'restore',
       data: {
         toolCall: validData.toolCall,
@@ -277,7 +277,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(contextNoGit, ['valid.json']);
 
-    expect(result.name).toEqual('restore');
+    expect(result.name).toStrictEqual('restore');
     expect(result.data).toHaveProperty('error');
     expect((result.data as { error?: string }).error).toContain('Git');
   });
@@ -304,7 +304,7 @@ describe('RestoreCommand', () => {
 
     const result = await command.execute(contextNoGit, ['valid.json']);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'restore',
       data: {
         toolCall: validData.toolCall,

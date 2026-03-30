@@ -162,7 +162,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
       expect(request.thinking).toBeDefined();
-      expect(request.thinking).toEqual({
+      expect(request.thinking).toStrictEqual({
         type: 'enabled',
         budget_tokens: 5000,
       });

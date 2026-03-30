@@ -103,7 +103,7 @@ describe('UiTelemetryService', () => {
 
   it('should have correct initial metrics', () => {
     const metrics = service.getMetrics();
-    expect(metrics).toEqual({
+    expect(metrics).toStrictEqual({
       models: {},
       tools: {
         totalCalls: 0,
@@ -179,7 +179,7 @@ describe('UiTelemetryService', () => {
       service.addEvent(event);
 
       const metrics = service.getMetrics();
-      expect(metrics.models['gemini-2.5-pro']).toEqual({
+      expect(metrics.models['gemini-2.5-pro']).toStrictEqual({
         api: {
           totalRequests: 1,
           totalErrors: 0,
@@ -230,7 +230,7 @@ describe('UiTelemetryService', () => {
       service.addEvent(event2);
 
       const metrics = service.getMetrics();
-      expect(metrics.models['gemini-2.5-pro']).toEqual({
+      expect(metrics.models['gemini-2.5-pro']).toStrictEqual({
         api: {
           totalRequests: 2,
           totalErrors: 0,
@@ -301,7 +301,7 @@ describe('UiTelemetryService', () => {
       service.addEvent(event);
 
       const metrics = service.getMetrics();
-      expect(metrics.models['gemini-2.5-pro']).toEqual({
+      expect(metrics.models['gemini-2.5-pro']).toStrictEqual({
         api: {
           totalRequests: 1,
           totalErrors: 1,
@@ -344,7 +344,7 @@ describe('UiTelemetryService', () => {
       service.addEvent(errorEvent);
 
       const metrics = service.getMetrics();
-      expect(metrics.models['gemini-2.5-pro']).toEqual({
+      expect(metrics.models['gemini-2.5-pro']).toStrictEqual({
         api: {
           totalRequests: 2,
           totalErrors: 1,
@@ -384,7 +384,7 @@ describe('UiTelemetryService', () => {
       expect(tools.totalFail).toBe(0);
       expect(tools.totalDurationMs).toBe(150);
       expect(tools.totalDecisions[ToolCallDecision.ACCEPT]).toBe(1);
-      expect(tools.byName['test_tool']).toEqual({
+      expect(tools.byName['test_tool']).toStrictEqual({
         count: 1,
         success: 1,
         fail: 0,
@@ -418,7 +418,7 @@ describe('UiTelemetryService', () => {
       expect(tools.totalFail).toBe(1);
       expect(tools.totalDurationMs).toBe(200);
       expect(tools.totalDecisions[ToolCallDecision.REJECT]).toBe(1);
-      expect(tools.byName['test_tool']).toEqual({
+      expect(tools.byName['test_tool']).toStrictEqual({
         count: 1,
         success: 0,
         fail: 1,
@@ -463,13 +463,13 @@ describe('UiTelemetryService', () => {
       const metrics = service.getMetrics();
       const { tools } = metrics;
 
-      expect(tools.totalDecisions).toEqual({
+      expect(tools.totalDecisions).toStrictEqual({
         [ToolCallDecision.ACCEPT]: 0,
         [ToolCallDecision.REJECT]: 0,
         [ToolCallDecision.MODIFY]: 0,
         [ToolCallDecision.AUTO_ACCEPT]: 0,
       });
-      expect(tools.byName['test_tool'].decisions).toEqual({
+      expect(tools.byName['test_tool'].decisions).toStrictEqual({
         [ToolCallDecision.ACCEPT]: 0,
         [ToolCallDecision.REJECT]: 0,
         [ToolCallDecision.MODIFY]: 0,
@@ -509,7 +509,7 @@ describe('UiTelemetryService', () => {
       expect(tools.totalDurationMs).toBe(250);
       expect(tools.totalDecisions[ToolCallDecision.ACCEPT]).toBe(1);
       expect(tools.totalDecisions[ToolCallDecision.REJECT]).toBe(1);
-      expect(tools.byName['test_tool']).toEqual({
+      expect(tools.byName['test_tool']).toStrictEqual({
         count: 2,
         success: 1,
         fail: 1,
@@ -573,7 +573,7 @@ describe('UiTelemetryService', () => {
 
       const metricsAfter = service.getMetrics();
 
-      expect(metricsAfter).toEqual(metricsBefore);
+      expect(metricsAfter).toStrictEqual(metricsBefore);
       expect(service.getLastPromptTokenCount()).toBe(75);
     });
   });

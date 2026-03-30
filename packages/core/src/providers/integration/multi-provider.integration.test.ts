@@ -107,7 +107,7 @@ describe('Multi-Provider Integration Tests', () => {
         if (!manager) return; // Guard for when test is skipped
 
         // Initially no providers
-        expect(manager.listProviders()).toEqual([]);
+        expect(manager.listProviders()).toStrictEqual([]);
         expect(manager.hasActiveProvider()).toBe(false);
 
         // Register OpenAI provider
@@ -115,7 +115,7 @@ describe('Multi-Provider Integration Tests', () => {
         manager.registerProvider(openaiProvider);
 
         // Verify registration
-        expect(manager.listProviders()).toEqual(['openai']);
+        expect(manager.listProviders()).toStrictEqual(['openai']);
         expect(manager.hasActiveProvider()).toBe(false); // Not active yet
 
         // Activate provider
