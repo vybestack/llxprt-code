@@ -56,7 +56,7 @@ export async function checkForUpdates(
       return null;
     }
     const packageJson = await getPackageJson(__dirname);
-    if (packageJson == null || !packageJson.name || !packageJson.version) {
+    if (!packageJson?.name || !packageJson.version) {
       return null;
     }
 

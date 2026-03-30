@@ -70,7 +70,7 @@ export class SecureInputHandler {
         const lineBreakMatch = RegExp(/[\r\n]/).exec(patContent);
         if (lineBreakMatch != null) {
           const keyToMask = patContent.substring(0, lineBreakMatch.index);
-          const afterLineBreak = patContent.substring(lineBreakMatch.index!);
+          const afterLineBreak = patContent.substring(lineBreakMatch.index);
           return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
         }
         return `${prefix}${this.maskValue(patContent)}`;
@@ -88,7 +88,7 @@ export class SecureInputHandler {
         const lineBreakMatch = RegExp(/[\r\n]/).exec(valueContent);
         if (lineBreakMatch != null) {
           const keyToMask = valueContent.substring(0, lineBreakMatch.index);
-          const afterLineBreak = valueContent.substring(lineBreakMatch.index!);
+          const afterLineBreak = valueContent.substring(lineBreakMatch.index);
           return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
         }
         return `${prefix}${this.maskValue(valueContent)}`;
@@ -115,7 +115,7 @@ export class SecureInputHandler {
         // Check if the key contains newlines or carriage returns
         const lineBreakMatch = RegExp(/[\r\n]/).exec(keyContent);
         if (lineBreakMatch != null) {
-          const lineBreakIndex = lineBreakMatch.index!;
+          const lineBreakIndex = lineBreakMatch.index;
           // Mask only up to the line break, preserve everything after
           const keyToMask = keyContent.substring(0, lineBreakIndex);
           const afterLineBreak = keyContent.substring(lineBreakIndex);

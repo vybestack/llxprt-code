@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback } from 'react';
+import type React from 'react';
+import { useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';

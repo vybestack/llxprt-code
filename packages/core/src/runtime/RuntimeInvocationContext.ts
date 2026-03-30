@@ -141,7 +141,7 @@ export function createRuntimeInvocationContext(
       providerName: string,
     ): T | undefined {
       const raw = ephemerals[providerName];
-      if (!Boolean(raw) || typeof raw !== 'object') {
+      if (!raw || typeof raw !== 'object') {
         return undefined;
       }
       return raw as T;

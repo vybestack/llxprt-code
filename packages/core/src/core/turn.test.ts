@@ -14,10 +14,10 @@ import {
   DEFAULT_AGENT_ID,
 } from './turn.js';
 import type { Content } from '@google/genai';
-import {
-  type GenerateContentResponse,
-  type Part,
-  type FinishReason,
+import type {
+  GenerateContentResponse,
+  Part,
+  FinishReason,
 } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
 import {

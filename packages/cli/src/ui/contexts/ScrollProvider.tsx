@@ -269,7 +269,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!state.active || !state.id) return false;
 
     const entry = scrollablesRef.current.get(state.id);
-    if (entry == null || entry.ref.current == null) {
+    if (entry?.ref.current == null) {
       state.active = false;
       return false;
     }

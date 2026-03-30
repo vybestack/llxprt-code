@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext } from 'react';
+import type React from 'react';
+import { createContext, useContext } from 'react';
 import type { AppAction } from '../reducers/appReducer.js';
 
 const AppDispatchContext = createContext<React.Dispatch<AppAction> | undefined>(

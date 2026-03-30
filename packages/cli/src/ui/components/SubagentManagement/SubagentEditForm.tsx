@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import type React from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { useTextBuffer } from '../shared/text-buffer.js';
 import { Colors } from '../../colors.js';

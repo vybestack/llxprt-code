@@ -100,7 +100,7 @@ export async function loadSkillFromFile(
     }
 
     const frontmatter = yaml.load(match[1]);
-    if (!Boolean(frontmatter) || typeof frontmatter !== 'object') {
+    if (!frontmatter || typeof frontmatter !== 'object') {
       return null;
     }
 
@@ -134,7 +134,7 @@ function loadSkillFromFileSync(
     }
 
     const frontmatter = yaml.load(match[1]);
-    if (!Boolean(frontmatter) || typeof frontmatter !== 'object') {
+    if (!frontmatter || typeof frontmatter !== 'object') {
       return null;
     }
 

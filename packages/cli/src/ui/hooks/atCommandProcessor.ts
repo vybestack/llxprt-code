@@ -17,7 +17,7 @@ import {
   unescapePath,
   debugLogger,
   validatePathWithinWorkspace,
-  DiscoveredMCPResource,
+  type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
 import {
   type HistoryItem,

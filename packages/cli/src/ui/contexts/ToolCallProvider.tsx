@@ -4,13 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-} from 'react';
+import type React from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   type ToolCallContextType,
   ToolCallContext,

@@ -180,7 +180,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
-      if (!Boolean(current[k]) || typeof current[k] !== 'object') {
+      if (!current[k] || typeof current[k] !== 'object') {
         current[k] = {};
       }
       current = current[k] as Record<string, unknown>;

@@ -157,11 +157,7 @@ function readAliasFile(
       } else {
         parsed.modelDefaults = parsed.modelDefaults.filter(
           (entry: unknown): entry is ModelDefaultRule => {
-            if (
-              !Boolean(entry) ||
-              typeof entry !== 'object' ||
-              Array.isArray(entry)
-            ) {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
               debugLogger.warn(
                 `[ProviderAliases] Skipping non-object modelDefaults entry in ${filePath}`,
               );
@@ -185,7 +181,7 @@ function readAliasFile(
             }
 
             if (
-              !Boolean(rule.ephemeralSettings) ||
+              !rule.ephemeralSettings ||
               typeof rule.ephemeralSettings !== 'object' ||
               Array.isArray(rule.ephemeralSettings)
             ) {

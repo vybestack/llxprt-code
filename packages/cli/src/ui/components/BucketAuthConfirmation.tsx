@@ -10,7 +10,7 @@ import {
   MessageBusType,
   type BucketAuthConfirmationRequest,
   DebugLogger,
-  MessageBus,
+  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import {
   RadioButtonSelect,
