@@ -61,6 +61,7 @@ interface StreamingState {
     total_tokens?: number;
   } | null;
   lastFinishReason: string | null | undefined;
+  hasEmittedTerminalMetadata: boolean;
   cachedPipelineResult: Awaited<
     ReturnType<typeof ToolCallPipeline.prototype.process>
   > | null;
@@ -76,6 +77,7 @@ function createStreamingState(): StreamingState {
     accumulatedReasoningContent: '',
     streamingUsage: null,
     lastFinishReason: null,
+    hasEmittedTerminalMetadata: false,
     cachedPipelineResult: null,
     allChunks: [],
   };
@@ -228,30 +230,14 @@ export async function* processStreamingResponse(
   deps.toolCallPipeline.reset();
 
   try {
-    // Collect all chunks first
+    // Process chunks inline as they arrive from the HTTP stream.
+    // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
+    // prevents abort signal checks, and causes indefinite hangs. See #1846.
     for await (const chunk of response) {
       if (abortSignal?.aborted) {
         break;
       }
       state.allChunks.push(chunk);
-    }
-
-    deps.logger.debug(
-      () =>
-        `[Streaming pipeline] Collected ${state.allChunks.length} chunks from stream`,
-      {
-        firstChunkDelta: state.allChunks[0]?.choices?.[0]?.delta,
-        lastChunkFinishReason:
-          state.allChunks[state.allChunks.length - 1]?.choices?.[0]
-            ?.finish_reason,
-      },
-    );
-
-    // Process all collected chunks
-    for (const chunk of state.allChunks) {
-      if (abortSignal?.aborted) {
-        break;
-      }
 
       const chunkRecord = chunk as unknown as Record<string, unknown>;
       let parsedData: Record<string, unknown> | undefined;
@@ -597,6 +583,17 @@ export async function* processStreamingResponse(
         };
       }
 
+      // Propagate terminal metadata so downstream turn handling and telemetry
+      // receive a finish signal (issue #1844).
+      if (state.lastFinishReason) {
+        if (!combinedContent.metadata) {
+          combinedContent.metadata = {};
+        }
+        combinedContent.metadata.stopReason = state.lastFinishReason;
+        combinedContent.metadata.finishReason = state.lastFinishReason;
+        state.hasEmittedTerminalMetadata = true;
+      }
+
       yield combinedContent;
     }
   }
@@ -608,7 +605,7 @@ export async function* processStreamingResponse(
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
     const cacheMetrics = extractCacheMetrics(state.streamingUsage);
-    yield {
+    const metaOnlyContent: IContent = {
       speaker: 'ai',
       blocks: [],
       metadata: {
@@ -623,6 +620,34 @@ export async function* processStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+      },
+    };
+
+    // Propagate terminal metadata on usage-only chunk (issue #1844).
+    if (state.lastFinishReason && metaOnlyContent.metadata) {
+      metaOnlyContent.metadata.stopReason = state.lastFinishReason;
+      metaOnlyContent.metadata.finishReason = state.lastFinishReason;
+      state.hasEmittedTerminalMetadata = true;
+    }
+
+    yield metaOnlyContent;
+  }
+
+  // Emit a terminal metadata chunk even when there is no usage, so
+  // downstream turn handling always receives a finish signal (issue #1844).
+  if (
+    state.lastFinishReason &&
+    !state.streamingUsage &&
+    !state.hasEmittedTerminalMetadata &&
+    deps.toolCallPipeline.getStats().collector.totalCalls === 0
+  ) {
+    state.hasEmittedTerminalMetadata = true;
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        stopReason: state.lastFinishReason,
+        finishReason: state.lastFinishReason,
       },
     } as IContent;
   }

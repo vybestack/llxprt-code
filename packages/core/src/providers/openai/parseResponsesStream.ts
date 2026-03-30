@@ -467,6 +467,7 @@ export async function* parseResponsesStream(
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
+                  const terminalReason = event.response.status ?? 'completed';
                   yield {
                     speaker: 'ai',
                     blocks: [],
@@ -479,6 +480,11 @@ export async function* parseResponsesStream(
                           event.response.usage.input_tokens_details
                             ?.cached_tokens ?? 0,
                       },
+                      // Propagate terminal status in both normalized and provider-style
+                      // fields so downstream turn handling and telemetry receive a
+                      // finish signal even when providers only expose response.status.
+                      stopReason: terminalReason,
+                      finishReason: terminalReason,
                     },
                   };
                 }

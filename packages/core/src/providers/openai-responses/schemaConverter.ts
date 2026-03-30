@@ -259,10 +259,7 @@ export function convertToolsToOpenAIResponses(
 
     for (const decl of toolGroup.functionDeclarations) {
       // Try parametersJsonSchema first, fall back to parameters
-      const toolParameters =
-        'parametersJsonSchema' in decl
-          ? decl.parametersJsonSchema
-          : decl.parameters;
+      const toolParameters = decl.parametersJsonSchema ?? decl.parameters;
 
       const parameters = convertSchemaToOpenAIResponses(toolParameters);
 

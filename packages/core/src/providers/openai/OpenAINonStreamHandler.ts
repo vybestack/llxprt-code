@@ -208,11 +208,21 @@ export async function* handleNonStreamingResponse(
       };
     }
 
+    // Propagate terminal metadata so downstream turn handling and telemetry
+    // receive a finish signal (issue #1844).
+    if (choice.finish_reason) {
+      if (!responseContent.metadata) {
+        responseContent.metadata = {};
+      }
+      responseContent.metadata.stopReason = choice.finish_reason;
+      responseContent.metadata.finishReason = choice.finish_reason;
+    }
+
     yield responseContent;
   } else if (completion.usage) {
     // Emit metadata-only response
     const cacheMetrics = extractCacheMetrics(completion.usage);
-    yield {
+    const metadataOnly: IContent = {
       speaker: 'ai',
       blocks: [],
       metadata: {
@@ -227,6 +237,25 @@ export async function* handleNonStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+      },
+    };
+
+    // Propagate terminal metadata on usage-only responses too (issue #1844).
+    if (choice.finish_reason && metadataOnly.metadata) {
+      metadataOnly.metadata.stopReason = choice.finish_reason;
+      metadataOnly.metadata.finishReason = choice.finish_reason;
+    }
+
+    yield metadataOnly;
+  } else if (choice.finish_reason) {
+    // Emit a metadata-only chunk even without usage so downstream receives
+    // the terminal finish signal (issue #1844).
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        stopReason: choice.finish_reason,
+        finishReason: choice.finish_reason,
       },
     } as IContent;
   }

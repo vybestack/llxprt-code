@@ -73,14 +73,27 @@ export function convertMetadataToFunctionDeclaration(
   const properties =
     (rawSchema.properties as Record<string, unknown> | undefined) ?? {};
 
+  const parameterType = (rawSchema.type as Type | undefined) ?? Type.OBJECT;
+  const parameterProperties = { ...properties };
+  const parameters = {
+    ...rawSchema,
+    type: parameterType,
+    properties: parameterProperties,
+  } as FunctionDeclaration['parameters'];
+  const parametersJsonSchema: Record<string, unknown> = {
+    ...rawSchema,
+    type: parameterType,
+    properties: { ...parameterProperties },
+  };
+
+  // Issue #1844: Populate parametersJsonSchema alongside parameters so
+  // OpenAI and OpenAI-Vercel converters (which read parametersJsonSchema
+  // exclusively) receive a valid schema for subagent/runtime tool declarations.
   return {
     name: metadata.name ?? fallbackName,
     description: metadata.description ?? '',
-    parameters: {
-      ...rawSchema,
-      type: (rawSchema.type as Type | undefined) ?? Type.OBJECT,
-      properties,
-    } as FunctionDeclaration['parameters'],
+    parameters,
+    parametersJsonSchema,
   };
 }
 

@@ -528,6 +528,130 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].finish_reasons).toEqual(['length']);
     });
+
+    // Issue #1844: stopReason fallback when finishReason is absent
+    it('should populate finish_reasons from metadata.stopReason when finishReason is absent (logResponseStream path)', async () => {
+      // Provider that emits stopReason but NOT finishReason (e.g., Anthropic/parseResponsesStream)
+      const provider = new (class implements IProvider {
+        name = 'stopreason-provider';
+        async getModels(): Promise<never[]> {
+          return [];
+        }
+        getDefaultModel(): string {
+          return 'stopreason-model';
+        }
+        getServerTools(): string[] {
+          return [];
+        }
+        async invokeServerTool(
+          _toolName: string,
+          _params: unknown,
+          _config?: unknown,
+        ): Promise<unknown> {
+          return {};
+        }
+        async *generateChatCompletion(
+          _options: GenerateChatOptions,
+        ): AsyncIterableIterator<IContent> {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Test' }],
+            metadata: {
+              usage: {
+                promptTokens: 10,
+                completionTokens: 5,
+                totalTokens: 15,
+              },
+              stopReason: 'end_turn',
+            },
+          } as IContent;
+        }
+      })();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume
+      }
+
+      expect(loggers.logApiResponse).toHaveBeenCalled();
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
+      expect(call[1].finish_reasons).toEqual(['end_turn']);
+    });
+
+    it('should populate finish_reasons from metadata.stopReason via processStreamForMetrics path', async () => {
+      const provider = new (class implements IProvider {
+        name = 'stopreason-metrics-provider';
+        async getModels(): Promise<never[]> {
+          return [];
+        }
+        getDefaultModel(): string {
+          return 'stopreason-model';
+        }
+        getServerTools(): string[] {
+          return [];
+        }
+        async invokeServerTool(
+          _toolName: string,
+          _params: unknown,
+          _config?: unknown,
+        ): Promise<unknown> {
+          return {};
+        }
+        async *generateChatCompletion(
+          _options: GenerateChatOptions,
+        ): AsyncIterableIterator<IContent> {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Test' }],
+            metadata: {
+              usage: {
+                promptTokens: 10,
+                completionTokens: 5,
+                totalTokens: 15,
+              },
+              stopReason: 'completed',
+            },
+          } as IContent;
+        }
+      })();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [],
+          settings,
+          config,
+          runtime,
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume
+      }
+
+      expect(loggers.logApiResponse).toHaveBeenCalled();
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
+      expect(call[1].finish_reasons).toEqual(['completed']);
+    });
   });
 
   describe('TPM tracking (Issue #1764)', () => {

@@ -65,6 +65,7 @@ interface GeminiToolDeclaration {
   name: string;
   description?: string;
   parametersJsonSchema?: unknown;
+  parameters?: unknown;
 }
 
 /**
@@ -259,7 +260,9 @@ export function convertToolsToOpenAIVercel(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
-      const parameters = convertSchemaToOpenAI(decl.parametersJsonSchema);
+      const parameters = convertSchemaToOpenAI(
+        decl.parametersJsonSchema ?? decl.parameters,
+      );
 
       openAITools.push({
         type: 'function',
