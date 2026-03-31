@@ -114,7 +114,7 @@ describe('ToolFormatter', () => {
       ).toBe('number');
     });
 
-    it('should handle tools with undefined parameters', () => {
+    it('should throw when parametersJsonSchema is missing', () => {
       const formatter = new ToolFormatter();
 
       const geminiTools = [
@@ -129,16 +129,12 @@ describe('ToolFormatter', () => {
         },
       ];
 
-      const result = formatter.convertGeminiToOpenAI(geminiTools);
-
-      expect(result).toBeDefined();
-      expect(result).toHaveLength(1);
-
-      const tool = result![0];
-      expect(tool.function.parameters).toEqual({});
+      expect(() => formatter.convertGeminiToOpenAI(geminiTools)).toThrow(
+        'Tool "simple_tool" is missing parametersJsonSchema',
+      );
     });
 
-    it('should handle tools with empty object parameters', () => {
+    it('should throw when parametersJsonSchema is absent even if parameters is present', () => {
       const formatter = new ToolFormatter();
 
       const geminiTools = [
@@ -153,13 +149,9 @@ describe('ToolFormatter', () => {
         },
       ];
 
-      const result = formatter.convertGeminiToOpenAI(geminiTools);
-
-      expect(result).toBeDefined();
-      expect(result).toHaveLength(1);
-
-      const tool = result![0];
-      expect(tool.function.parameters).toEqual({});
+      expect(() => formatter.convertGeminiToOpenAI(geminiTools)).toThrow(
+        'Tool "simple_tool" is missing parametersJsonSchema',
+      );
     });
 
     it('should convert list_directory tool properly', () => {

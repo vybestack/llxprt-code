@@ -11,6 +11,7 @@ import {
 } from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
 import { DebugLogger } from '../../debug/index.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
@@ -480,10 +481,9 @@ export async function* parseResponsesStream(
                           event.response.usage.input_tokens_details
                             ?.cached_tokens ?? 0,
                       },
-                      // Propagate terminal status in both normalized and provider-style
-                      // fields so downstream turn handling and telemetry receive a
-                      // finish signal even when providers only expose response.status.
-                      stopReason: terminalReason,
+                      // stopReason is normalized via mapFinishReasonToStopReason;
+                      // finishReason preserves the raw provider value for diagnostics.
+                      stopReason: mapFinishReasonToStopReason(terminalReason),
                       finishReason: terminalReason,
                     },
                   };

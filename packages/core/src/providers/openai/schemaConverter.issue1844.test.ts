@@ -46,31 +46,20 @@ describe('issue #1844 – OpenAI schema converter schema source', () => {
     expect(result![0].function.parameters.required).toContain('path');
   });
 
-  it('should return valid empty schema when parametersJsonSchema is absent', () => {
+  it('should throw when parametersJsonSchema is absent', () => {
     const tools = [
       {
         functionDeclarations: [
           {
             name: 'no_schema_tool',
             description: 'No schema',
-            parameters: {
-              type: 'object',
-              properties: {
-                ignored: { type: 'string' },
-              },
-              required: ['ignored'],
-            },
           },
         ],
       },
     ];
 
-    const result = convertToolsToOpenAI(tools);
-    expect(result).toBeDefined();
-    expect(result![0].function.parameters).toEqual({
-      type: 'object',
-      properties: {},
-      required: [],
-    });
+    expect(() => convertToolsToOpenAI(tools)).toThrow(
+      'Tool "no_schema_tool" is missing parametersJsonSchema',
+    );
   });
 });

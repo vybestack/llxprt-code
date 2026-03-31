@@ -65,8 +65,8 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
       cachedTokens: 0,
     });
 
-    // Should have terminal metadata from status
-    expect(terminalMessage!.metadata!.stopReason).toBe('completed');
+    // stopReason is normalized (completed → end_turn), finishReason preserves raw value
+    expect(terminalMessage!.metadata!.stopReason).toBe('end_turn');
     expect(terminalMessage!.metadata!.finishReason).toBe('completed');
   });
 
@@ -88,7 +88,8 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
       (m) => m.metadata?.usage || m.metadata?.stopReason,
     );
     expect(terminalMessage).toBeDefined();
-    expect(terminalMessage!.metadata!.stopReason).toBe('completed');
+    // stopReason is normalized (completed → end_turn), finishReason preserves raw value
+    expect(terminalMessage!.metadata!.stopReason).toBe('end_turn');
     expect(terminalMessage!.metadata!.finishReason).toBe('completed');
   });
 });

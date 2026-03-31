@@ -96,7 +96,8 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
 
     const withMeta = results.find((result) => result.metadata);
     expect(withMeta).toBeDefined();
-    expect(withMeta!.metadata!.stopReason).toBe('stop');
+    // stopReason is normalized (stop → end_turn), finishReason preserves raw value
+    expect(withMeta!.metadata!.stopReason).toBe('end_turn');
     expect(withMeta!.metadata!.finishReason).toBe('stop');
   });
 
@@ -122,7 +123,8 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
 
     const withMeta = results.find((result) => result.metadata);
     expect(withMeta).toBeDefined();
-    expect(withMeta!.metadata!.stopReason).toBe('tool_calls');
+    // stopReason is normalized (tool_calls → tool_use), finishReason preserves raw value
+    expect(withMeta!.metadata!.stopReason).toBe('tool_use');
     expect(withMeta!.metadata!.finishReason).toBe('tool_calls');
   });
 
@@ -192,7 +194,7 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     const lastChunk = results[results.length - 1];
 
     expect(continuationRequested).toBe(false);
-    expect(lastChunk.metadata?.stopReason).toBe('stop');
+    expect(lastChunk.metadata?.stopReason).toBe('end_turn');
     expect(lastChunk.metadata?.finishReason).toBe('stop');
   });
 
@@ -266,7 +268,8 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
       type: 'thinking',
       thought: 'First think through the request.',
     });
-    expect(results[0].metadata?.stopReason).toBe('stop');
+    // stopReason is normalized (stop → end_turn), finishReason preserves raw value
+    expect(results[0].metadata?.stopReason).toBe('end_turn');
     expect(results[0].metadata?.finishReason).toBe('stop');
   });
 });

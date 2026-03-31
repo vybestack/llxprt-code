@@ -30,58 +30,6 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
     expect(result![0].function.parameters.required).toContain('path');
   });
 
-  it('returns empty schema when parametersJsonSchema is absent', () => {
-    const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'search_code',
-            description: 'Search the codebase',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: { type: 'string', description: 'Search query' },
-                maxResults: { type: 'number', description: 'Max results' },
-              },
-              required: ['query'],
-            },
-          },
-        ],
-      },
-    ];
-
-    const result = convertToolsToOpenAIVercel(tools);
-
-    expect(result).toBeDefined();
-    expect(result).toHaveLength(1);
-    expect(result![0].function.name).toBe('search_code');
-    expect(result![0].function.parameters).toEqual({
-      type: 'object',
-      properties: {},
-      required: [],
-    });
-  });
-
-  it('returns empty schema only when neither field is present', () => {
-    const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'no_params_tool',
-            description: 'A tool with no parameters',
-          },
-        ],
-      },
-    ];
-
-    const result = convertToolsToOpenAIVercel(tools);
-
-    expect(result).toBeDefined();
-    expect(result).toHaveLength(1);
-    expect(result![0].function.parameters.type).toBe('object');
-    expect(result![0].function.parameters.properties).toEqual({});
-  });
-
   it('uses parametersJsonSchema when both fields are present', () => {
     const tools = [
       {
@@ -116,6 +64,23 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
     );
     expect(result![0].function.parameters.properties).not.toHaveProperty(
       'fromParameters',
+    );
+  });
+
+  it('throws when parametersJsonSchema is absent', () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'search_code',
+            description: 'Search the codebase',
+          },
+        ],
+      },
+    ];
+
+    expect(() => convertToolsToOpenAIVercel(tools)).toThrow(
+      'Tool "search_code" is missing parametersJsonSchema',
     );
   });
 });

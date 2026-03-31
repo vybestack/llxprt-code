@@ -134,7 +134,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
               function: {
                 name: func.name,
                 description: func.description || '',
-                parameters: func.parametersJsonSchema || {},
+                parameters: func.parametersJsonSchema,
               },
             });
           }

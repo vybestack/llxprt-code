@@ -590,12 +590,15 @@ export async function* processStreamingResponse(
       }
 
       // Propagate terminal metadata so downstream turn handling and telemetry
-      // receive a finish signal (issue #1844).
+      // receive a finish signal (issue #1844).  stopReason stays normalized
+      // (via mapFinishReasonToStopReason above); finishReason preserves the
+      // raw provider value for diagnostics.
       if (state.lastFinishReason) {
         if (!combinedContent.metadata) {
           combinedContent.metadata = {};
         }
-        combinedContent.metadata.stopReason = state.lastFinishReason;
+        // stopReason was already set to the normalized value above; do NOT
+        // overwrite it with the raw provider string.
         combinedContent.metadata.finishReason = state.lastFinishReason;
         state.hasEmittedTerminalMetadata = true;
       }
@@ -632,8 +635,8 @@ export async function* processStreamingResponse(
     };
 
     // Propagate terminal metadata on usage-only chunk (issue #1844).
+    // stopReason stays normalized; finishReason preserves raw value.
     if (state.lastFinishReason && metaOnlyContent.metadata) {
-      metaOnlyContent.metadata.stopReason = state.lastFinishReason;
       metaOnlyContent.metadata.finishReason = state.lastFinishReason;
       state.hasEmittedTerminalMetadata = true;
     }
@@ -650,11 +653,14 @@ export async function* processStreamingResponse(
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
     state.hasEmittedTerminalMetadata = true;
+    const normalizedStopReason = mapFinishReasonToStopReason(
+      state.lastFinishReason,
+    );
     yield {
       speaker: 'ai',
       blocks: [],
       metadata: {
-        stopReason: state.lastFinishReason,
+        stopReason: normalizedStopReason,
         finishReason: state.lastFinishReason,
       },
     } as IContent;

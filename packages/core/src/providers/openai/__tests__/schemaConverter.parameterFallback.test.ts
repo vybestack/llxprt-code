@@ -30,58 +30,6 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
     expect(result![0].function.parameters.required).toContain('path');
   });
 
-  it('returns empty schema when parametersJsonSchema is absent', () => {
-    const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'search_code',
-            description: 'Search the codebase',
-            parameters: {
-              type: 'object',
-              properties: {
-                query: { type: 'string', description: 'Search query' },
-                maxResults: { type: 'number', description: 'Max results' },
-              },
-              required: ['query'],
-            },
-          },
-        ],
-      },
-    ];
-
-    const result = convertToolsToOpenAI(tools);
-
-    expect(result).toBeDefined();
-    expect(result).toHaveLength(1);
-    expect(result![0].function.name).toBe('search_code');
-    expect(result![0].function.parameters).toEqual({
-      type: 'object',
-      properties: {},
-      required: [],
-    });
-  });
-
-  it('returns empty schema only when neither field is present', () => {
-    const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'no_params_tool',
-            description: 'A tool with no parameters',
-          },
-        ],
-      },
-    ];
-
-    const result = convertToolsToOpenAI(tools);
-
-    expect(result).toBeDefined();
-    expect(result).toHaveLength(1);
-    expect(result![0].function.parameters.type).toBe('object');
-    expect(result![0].function.parameters.properties).toEqual({});
-  });
-
   it('uses parametersJsonSchema when both fields are present', () => {
     const tools = [
       {
@@ -119,13 +67,30 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
     );
   });
 
-  it('handles mixed tool groups with and without parametersJsonSchema', () => {
+  it('throws when parametersJsonSchema is absent', () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'search_code',
+            description: 'Search the codebase',
+          },
+        ],
+      },
+    ];
+
+    expect(() => convertToolsToOpenAI(tools)).toThrow(
+      'Tool "search_code" is missing parametersJsonSchema',
+    );
+  });
+
+  it('throws for mixed tool group when any declaration lacks parametersJsonSchema', () => {
     const tools = [
       {
         functionDeclarations: [
           {
             name: 'schema_tool',
-            description: 'Uses parametersJsonSchema',
+            description: 'Has schema',
             parametersJsonSchema: {
               type: 'object',
               properties: {
@@ -136,34 +101,14 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
           },
           {
             name: 'legacy_tool',
-            description: 'Missing parametersJsonSchema',
-            parameters: {
-              type: 'object',
-              properties: {
-                legacy_param: { type: 'number' },
-              },
-              required: ['legacy_param'],
-            },
+            description: 'Missing schema',
           },
         ],
       },
     ];
 
-    const result = convertToolsToOpenAI(tools);
-
-    expect(result).toBeDefined();
-    expect(result).toHaveLength(2);
-
-    const schemaTool = result!.find((t) => t.function.name === 'schema_tool');
-    const legacyTool = result!.find((t) => t.function.name === 'legacy_tool');
-
-    expect(schemaTool!.function.parameters.properties).toHaveProperty(
-      'schema_param',
+    expect(() => convertToolsToOpenAI(tools)).toThrow(
+      'Tool "legacy_tool" is missing parametersJsonSchema',
     );
-    expect(legacyTool!.function.parameters).toEqual({
-      type: 'object',
-      properties: {},
-      required: [],
-    });
   });
 });

@@ -77,6 +77,32 @@ describe('issue #1844 – MessageConverter finishReason/stopReason mapping', () 
     expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
   });
 
+  it('should map metadata.finishReason "function_call" to candidate.finishReason STOP', () => {
+    const input: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: '' }],
+      metadata: {
+        finishReason: 'function_call',
+      },
+    };
+
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe(FinishReason.STOP);
+  });
+
+  it('should map metadata.finishReason "content_filter" to candidate.finishReason SAFETY', () => {
+    const input: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: '' }],
+      metadata: {
+        finishReason: 'content_filter',
+      },
+    };
+
+    const response = convertIContentToResponse(input);
+    expect(response.candidates?.[0]?.finishReason).toBe('SAFETY');
+  });
+
   it('should prefer stopReason over finishReason when both are present', () => {
     const input: IContent = {
       speaker: 'ai',

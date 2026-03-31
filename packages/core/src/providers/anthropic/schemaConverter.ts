@@ -256,6 +256,12 @@ export function convertToolsToAnthropic(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
+      if (!decl.parametersJsonSchema) {
+        throw new Error(
+          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+        );
+      }
       const inputSchema = convertSchemaToAnthropic(decl.parametersJsonSchema);
 
       // Prefix tool names for OAuth to avoid conflicts with Claude Code built-in tools

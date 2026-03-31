@@ -49,7 +49,7 @@ describe('issue #1844 – OpenAI-Vercel schema converter schema source', () => {
     );
   });
 
-  it('should return valid empty schema when parametersJsonSchema is absent', () => {
+  it('should throw when parametersJsonSchema is absent', () => {
     const tools = [
       {
         functionDeclarations: [
@@ -68,12 +68,8 @@ describe('issue #1844 – OpenAI-Vercel schema converter schema source', () => {
       },
     ];
 
-    const result = convertToolsToOpenAIVercel(tools);
-    expect(result).toBeDefined();
-    expect(result![0].function.parameters).toEqual({
-      type: 'object',
-      properties: {},
-      required: [],
-    });
+    expect(() => convertToolsToOpenAIVercel(tools)).toThrow(
+      'Tool "no_schema_tool" is missing parametersJsonSchema',
+    );
   });
 });

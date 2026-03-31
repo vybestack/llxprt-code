@@ -158,12 +158,14 @@ export class KeyringTokenStore implements TokenStore {
     );
 
     while (Date.now() - startTime < waitMs) {
+      let createdLockInfo: { pid: number; timestamp: number } | null = null;
       try {
         const lockInfo = { pid: process.pid, timestamp: Date.now() };
         await fs.writeFile(lockPath, JSON.stringify(lockInfo), {
           flag: 'wx',
           mode: 0o600,
         });
+        createdLockInfo = lockInfo;
 
         // Verify we actually hold the lock (defense against race conditions
         // where multiple clients might simultaneously write the lock file)
@@ -173,12 +175,16 @@ export class KeyringTokenStore implements TokenStore {
             pid: number;
             timestamp: number;
           };
-          if (existing.pid === process.pid) {
+          if (
+            existing.pid === createdLockInfo.pid &&
+            existing.timestamp === createdLockInfo.timestamp
+          ) {
             return true;
           }
           // Another process won the race - continue waiting
         } catch {
-          // Lock file disappeared or is corrupt - continue to retry
+          // Lock file disappeared or is unreadable; fall through to post-write
+          // ownership check in the existing-lock path below.
         }
       } catch (writeError) {
         const err = writeError as NodeJS.ErrnoException;

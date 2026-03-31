@@ -215,12 +215,15 @@ export async function* handleNonStreamingResponse(
     }
 
     // Propagate terminal metadata so downstream turn handling and telemetry
-    // receive a finish signal (issue #1844).
+    // receive a finish signal (issue #1844).  stopReason stays normalized
+    // (via mapFinishReasonToStopReason above); finishReason preserves the
+    // raw provider value for diagnostics.
     if (choice.finish_reason) {
       if (!responseContent.metadata) {
         responseContent.metadata = {};
       }
-      responseContent.metadata.stopReason = choice.finish_reason;
+      // stopReason was already set to the normalized value above; do NOT
+      // overwrite it with the raw provider string.
       responseContent.metadata.finishReason = choice.finish_reason;
     }
 
@@ -249,19 +252,18 @@ export async function* handleNonStreamingResponse(
 
     // Propagate terminal metadata on usage-only responses too (issue #1844).
     if (choice.finish_reason && metadataOnly.metadata) {
-      metadataOnly.metadata.stopReason = choice.finish_reason;
       metadataOnly.metadata.finishReason = choice.finish_reason;
     }
 
     yield metadataOnly;
   } else if (choice.finish_reason) {
     // Emit a metadata-only chunk even without usage so downstream receives
-    // the terminal finish signal (issue #1844).
+    // the terminal finish signal (issue #1844).  stopReason is normalized.
     yield {
       speaker: 'ai',
       blocks: [],
       metadata: {
-        stopReason: choice.finish_reason,
+        stopReason,
         finishReason: choice.finish_reason,
       },
     } as IContent;

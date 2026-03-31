@@ -508,7 +508,8 @@ export function applyResponseMetadata(
       stop: FinishReason.STOP,
       length: FinishReason.MAX_TOKENS,
       tool_calls: FinishReason.STOP,
-      content_filter: FinishReason.STOP,
+      function_call: FinishReason.STOP,
+      content_filter: FinishReason.SAFETY,
       // OpenAI Responses API status values
       completed: FinishReason.STOP,
       incomplete: FinishReason.MAX_TOKENS,

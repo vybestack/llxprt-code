@@ -259,6 +259,12 @@ export function convertToolsToOpenAIVercel(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
+      if (!decl.parametersJsonSchema) {
+        throw new Error(
+          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+        );
+      }
       const parameters = convertSchemaToOpenAI(decl.parametersJsonSchema);
 
       openAITools.push({
