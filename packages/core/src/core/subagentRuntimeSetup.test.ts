@@ -74,8 +74,14 @@ describe('subagentRuntimeSetup', () => {
         },
       };
       const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
-      expect(decl.parameters).toBeDefined();
-      expect(decl.parameters?.properties).toHaveProperty('foo');
+      expect(decl.parametersJsonSchema).toBeDefined();
+      expect(decl.parametersJsonSchema).toEqual(
+        expect.objectContaining({
+          properties: expect.objectContaining({
+            foo: expect.anything(),
+          }),
+        }),
+      );
     });
 
     it('should handle metadata without parameters', () => {
@@ -85,7 +91,7 @@ describe('subagentRuntimeSetup', () => {
       };
       const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
       expect(decl.name).toBe('no_params_tool');
-      expect(decl.parameters).toBeDefined();
+      expect(decl.parametersJsonSchema).toBeDefined();
     });
   });
 

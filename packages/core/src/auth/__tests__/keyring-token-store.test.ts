@@ -722,6 +722,38 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
 
   /**
    * @plan PLAN-20260213-KEYRINGTOKENSTORE.P05
+   * @requirement R8.7
+   * @given A recent lock file with invalid pid metadata (simulating in-flight write)
+   * @when acquireRefreshLock is called with waitMs shorter than grace window
+   * @then Returns false without breaking the lock file
+   */
+  it('acquireRefreshLock does not break recent in-flight lock metadata', async () => {
+    const lockDir = path.join(tempDir, 'locks');
+    await fs.mkdir(lockDir, { recursive: true, mode: 0o700 });
+    const lockFile = path.join(lockDir, 'inflight-test-refresh.lock');
+
+    await fs.writeFile(
+      lockFile,
+      JSON.stringify({ pid: 0, timestamp: Date.now() }),
+      { mode: 0o600 },
+    );
+
+    const acquired = await tokenStore.acquireRefreshLock('inflight-test', {
+      waitMs: 200,
+      staleMs: 30_000,
+    });
+
+    expect(acquired).toBe(false);
+
+    const stillExists = await fs
+      .access(lockFile)
+      .then(() => true)
+      .catch(() => false);
+    expect(stillExists).toBe(true);
+  });
+
+  /**
+   * @plan PLAN-20260213-KEYRINGTOKENSTORE.P05
    * @requirement R8.6
    * @given Corrupt lock file (invalid JSON)
    * @when acquireRefreshLock is called

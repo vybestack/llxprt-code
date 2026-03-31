@@ -62,6 +62,7 @@ interface StreamingState {
     total_tokens?: number;
   } | null;
   lastFinishReason: string | null | undefined;
+  hasEmittedTerminalMetadata: boolean;
   cachedPipelineResult: Awaited<
     ReturnType<typeof ToolCallPipeline.prototype.process>
   > | null;
@@ -77,6 +78,7 @@ function createStreamingState(): StreamingState {
     accumulatedReasoningContent: '',
     streamingUsage: null,
     lastFinishReason: null,
+    hasEmittedTerminalMetadata: false,
     cachedPipelineResult: null,
     allChunks: [],
   };
@@ -587,6 +589,20 @@ export async function* processStreamingResponse(
         combinedContent.metadata = { stopReason };
       }
 
+      // Propagate terminal metadata so downstream turn handling and telemetry
+      // receive a finish signal (issue #1844).  stopReason stays normalized
+      // (via mapFinishReasonToStopReason above); finishReason preserves the
+      // raw provider value for diagnostics.
+      if (state.lastFinishReason) {
+        if (!combinedContent.metadata) {
+          combinedContent.metadata = {};
+        }
+        // stopReason was already set to the normalized value above; do NOT
+        // overwrite it with the raw provider string.
+        combinedContent.metadata.finishReason = state.lastFinishReason;
+        state.hasEmittedTerminalMetadata = true;
+      }
+
       yield combinedContent;
     }
   }
@@ -599,7 +615,7 @@ export async function* processStreamingResponse(
   ) {
     const cacheMetrics = extractCacheMetrics(state.streamingUsage);
     const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
-    yield {
+    const metaOnlyContent: IContent = {
       speaker: 'ai',
       blocks: [],
       metadata: {
@@ -615,6 +631,37 @@ export async function* processStreamingResponse(
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
         ...(stopReason && { stopReason }),
+      },
+    };
+
+    // Propagate terminal metadata on usage-only chunk (issue #1844).
+    // stopReason stays normalized; finishReason preserves raw value.
+    if (state.lastFinishReason && metaOnlyContent.metadata) {
+      metaOnlyContent.metadata.finishReason = state.lastFinishReason;
+      state.hasEmittedTerminalMetadata = true;
+    }
+
+    yield metaOnlyContent;
+  }
+
+  // Emit a terminal metadata chunk even when there is no usage, so
+  // downstream turn handling always receives a finish signal (issue #1844).
+  if (
+    state.lastFinishReason &&
+    !state.streamingUsage &&
+    !state.hasEmittedTerminalMetadata &&
+    deps.toolCallPipeline.getStats().collector.totalCalls === 0
+  ) {
+    state.hasEmittedTerminalMetadata = true;
+    const normalizedStopReason = mapFinishReasonToStopReason(
+      state.lastFinishReason,
+    );
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        stopReason: normalizedStopReason,
+        finishReason: state.lastFinishReason,
       },
     } as IContent;
   }

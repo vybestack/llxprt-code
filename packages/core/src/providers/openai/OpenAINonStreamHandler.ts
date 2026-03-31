@@ -214,11 +214,24 @@ export async function* handleNonStreamingResponse(
       responseContent.metadata = { stopReason };
     }
 
+    // Propagate terminal metadata so downstream turn handling and telemetry
+    // receive a finish signal (issue #1844).  stopReason stays normalized
+    // (via mapFinishReasonToStopReason above); finishReason preserves the
+    // raw provider value for diagnostics.
+    if (choice.finish_reason) {
+      if (!responseContent.metadata) {
+        responseContent.metadata = {};
+      }
+      // stopReason was already set to the normalized value above; do NOT
+      // overwrite it with the raw provider string.
+      responseContent.metadata.finishReason = choice.finish_reason;
+    }
+
     yield responseContent;
   } else if (completion.usage) {
     // Emit metadata-only response
     const cacheMetrics = extractCacheMetrics(completion.usage);
-    yield {
+    const metadataOnly: IContent = {
       speaker: 'ai',
       blocks: [],
       metadata: {
@@ -234,6 +247,24 @@ export async function* handleNonStreamingResponse(
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
         ...(stopReason && { stopReason }),
+      },
+    };
+
+    // Propagate terminal metadata on usage-only responses too (issue #1844).
+    if (choice.finish_reason && metadataOnly.metadata) {
+      metadataOnly.metadata.finishReason = choice.finish_reason;
+    }
+
+    yield metadataOnly;
+  } else if (choice.finish_reason) {
+    // Emit a metadata-only chunk even without usage so downstream receives
+    // the terminal finish signal (issue #1844).  stopReason is normalized.
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        stopReason,
+        finishReason: choice.finish_reason,
       },
     } as IContent;
   } else if (stopReason) {

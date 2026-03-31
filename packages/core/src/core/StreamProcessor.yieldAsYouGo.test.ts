@@ -162,8 +162,8 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
   it('yields chunks immediately even when the source stream stalls', async () => {
     let resolveStall: (() => void) | undefined;
-    const stallPromise = new Promise<void>((r) => {
-      resolveStall = r;
+    const stallPromise = new Promise<void>((resolve) => {
+      resolveStall = resolve;
     });
 
     async function* stallingSource(): AsyncGenerator<GenerateContentResponse> {
@@ -189,7 +189,7 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     expect(text).toBe('first chunk');
 
     // Unstall the stream so the test can complete
-    resolveStall!();
+    resolveStall?.();
 
     // Drain remaining
     const result2 = await gen.next();

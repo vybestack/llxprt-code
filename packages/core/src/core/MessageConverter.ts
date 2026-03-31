@@ -488,10 +488,15 @@ export function applyResponseMetadata(
     response.usageMetadata = usageMetadata;
   }
 
-  // Map stopReason to finishReason
-  if (input.metadata?.stopReason && response.candidates?.[0]) {
-    const finishReasonByStopReason: Record<string, FinishReason> = {
-      // Anthropic-style values
+  // Map terminal metadata to Gemini finishReason.
+  // Providers may emit stopReason (Anthropic/Gemini-style) or
+  // finishReason (OpenAI-style); coalesce them to a single lookup path.
+  const terminationReason =
+    input.metadata?.stopReason ?? input.metadata?.finishReason;
+
+  if (terminationReason && response.candidates?.[0]) {
+    const finishReasonByTerminationReason: Record<string, FinishReason> = {
+      // Anthropic/Gemini-style values
       end_turn: FinishReason.STOP,
       max_tokens: FinishReason.MAX_TOKENS,
       stop_sequence: FinishReason.STOP,
@@ -499,15 +504,20 @@ export function applyResponseMetadata(
       pause_turn: FinishReason.STOP,
       refusal: FinishReason.STOP,
       model_context_window_exceeded: FinishReason.MAX_TOKENS,
-      // OpenAI-style values (for robustness if passed through unmapped)
+      // OpenAI Chat Completions-style values
       stop: FinishReason.STOP,
       length: FinishReason.MAX_TOKENS,
       tool_calls: FinishReason.STOP,
-      content_filter: FinishReason.STOP,
+      function_call: FinishReason.STOP,
+      content_filter: FinishReason.SAFETY,
+      // OpenAI Responses API status values
+      completed: FinishReason.STOP,
+      incomplete: FinishReason.MAX_TOKENS,
+      failed: FinishReason.STOP,
     };
-    const finishReason = finishReasonByStopReason[input.metadata.stopReason];
-    if (finishReason) {
-      response.candidates[0].finishReason = finishReason;
+    const mappedReason = finishReasonByTerminationReason[terminationReason];
+    if (mappedReason) {
+      response.candidates[0].finishReason = mappedReason;
     }
   }
 

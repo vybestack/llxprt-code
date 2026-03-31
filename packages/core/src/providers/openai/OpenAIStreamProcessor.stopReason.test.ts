@@ -334,7 +334,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
       expect(response.candidates[0].finishReason).toBe('STOP');
     });
 
-    it('should map raw "content_filter" finish_reason to STOP', () => {
+    it('should map raw "content_filter" finish_reason to SAFETY', () => {
       const icontent: IContent = {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'Filtered' }],
@@ -342,7 +342,7 @@ describe('Issue #1837: OpenAI provider stopReason propagation', () => {
       };
 
       const response = geminiChat.convertIContentToResponse(icontent);
-      expect(response.candidates[0].finishReason).toBe('STOP');
+      expect(response.candidates[0].finishReason).toBe('SAFETY');
     });
   });
 });

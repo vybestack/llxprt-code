@@ -92,8 +92,8 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
               description: func.description || '',
               input_schema: {
                 type: 'object',
-                properties: func.parameters?.properties || {},
-                required: func.parameters?.required || [],
+                properties: func.parametersJsonSchema?.properties || {},
+                required: func.parametersJsonSchema?.required || [],
               },
             });
           }
@@ -114,8 +114,8 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
                 description: func.description || '',
                 input_schema: {
                   type: 'object',
-                  properties: func.parameters?.properties || {},
-                  required: func.parameters?.required || [],
+                  properties: func.parametersJsonSchema?.properties || {},
+                  required: func.parametersJsonSchema?.required || [],
                 },
               });
             }
@@ -134,7 +134,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
               function: {
                 name: func.name,
                 description: func.description || '',
-                parameters: func.parameters || {},
+                parameters: func.parametersJsonSchema,
               },
             });
           }
@@ -783,7 +783,7 @@ describe('AnthropicProvider', () => {
             {
               name: 'get_weather',
               description: 'Get the weather',
-              parameters: { type: 'object', properties: {} },
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
         },
@@ -1114,7 +1114,7 @@ describe('AnthropicProvider', () => {
             {
               name: 'test_tool',
               description: 'A test tool',
-              parameters: {
+              parametersJsonSchema: {
                 type: 'object',
                 properties: { foo: { type: 'string' } },
               },
@@ -2341,17 +2341,17 @@ describe('AnthropicProvider', () => {
               {
                 name: 'zebra_tool',
                 description: 'Z tool',
-                parameters: { type: 'object', properties: {} },
+                parametersJsonSchema: { type: 'object', properties: {} },
               },
               {
                 name: 'alpha_tool',
                 description: 'A tool',
-                parameters: { type: 'object', properties: {} },
+                parametersJsonSchema: { type: 'object', properties: {} },
               },
               {
                 name: 'middle_tool',
                 description: 'M tool',
-                parameters: { type: 'object', properties: {} },
+                parametersJsonSchema: { type: 'object', properties: {} },
               },
             ],
           },
@@ -2393,7 +2393,7 @@ describe('AnthropicProvider', () => {
               {
                 name: 'test_tool',
                 description: 'Test',
-                parameters: {
+                parametersJsonSchema: {
                   type: 'object',
                   properties: {
                     zebra: { type: 'string' },
@@ -3724,7 +3724,7 @@ describe('AnthropicProvider', () => {
             {
               name: 'read_file',
               description: 'Read a file',
-              parameters: { type: 'object', properties: {} },
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
         },
@@ -3773,7 +3773,7 @@ describe('AnthropicProvider', () => {
             {
               name: 'read_file',
               description: 'Read a file',
-              parameters: { type: 'object', properties: {} },
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
         },

@@ -11,6 +11,7 @@ import {
 } from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
 import { DebugLogger } from '../../debug/index.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
@@ -467,6 +468,7 @@ export async function* parseResponsesStream(
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
+                  const terminalReason = event.response.status ?? 'completed';
                   yield {
                     speaker: 'ai',
                     blocks: [],
@@ -479,6 +481,10 @@ export async function* parseResponsesStream(
                           event.response.usage.input_tokens_details
                             ?.cached_tokens ?? 0,
                       },
+                      // stopReason is normalized via mapFinishReasonToStopReason;
+                      // finishReason preserves the raw provider value for diagnostics.
+                      stopReason: mapFinishReasonToStopReason(terminalReason),
+                      finishReason: terminalReason,
                     },
                   };
                 }

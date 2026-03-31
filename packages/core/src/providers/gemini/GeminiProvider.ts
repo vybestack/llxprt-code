@@ -1238,6 +1238,12 @@ export class GeminiProvider extends BaseProvider {
     const geminiTools = tools
       ? tools.map((toolGroup) => ({
           functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
+            if (!decl.parametersJsonSchema) {
+              throw new Error(
+                `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+                  `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+              );
+            }
             let parameters = decl.parametersJsonSchema;
             // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
             // This ensures compatibility and prevents API errors when using tools.
@@ -1249,8 +1255,6 @@ export class GeminiProvider extends BaseProvider {
               !('type' in (parameters as Record<string, unknown>))
             ) {
               parameters = { type: Type.OBJECT, ...parameters };
-            } else if (!parameters) {
-              parameters = { type: Type.OBJECT, properties: {} };
             }
             return {
               name: decl.name,

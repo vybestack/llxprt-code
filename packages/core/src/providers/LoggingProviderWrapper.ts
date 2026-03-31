@@ -708,15 +708,16 @@ export class LoggingProviderWrapper implements IProvider {
           firstChunkTime = performance.now() - startTime;
         }
 
-        // Extract token usage and finishReason from IContent metadata
+        // Extract token usage and finishReason/stopReason from IContent metadata
+        // (issue #1844): providers may emit either field; honor both.
         if (chunk && typeof chunk === 'object') {
           const content = chunk;
           if (content.metadata?.usage) {
             latestTokenUsage = content.metadata.usage;
           }
-          const metaFinishReason = (
-            content.metadata as Record<string, unknown> | undefined
-          )?.finishReason;
+          const metaFinishReason =
+            (content.metadata as Record<string, unknown> | undefined)
+              ?.finishReason ?? content.metadata?.stopReason;
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
@@ -844,15 +845,16 @@ export class LoggingProviderWrapper implements IProvider {
           responseContent += content;
         }
 
-        // Extract token usage and finishReason from IContent metadata
+        // Extract token usage and finishReason/stopReason from IContent metadata
+        // (issue #1844): providers may emit either field; honor both.
         if (chunk && typeof chunk === 'object') {
           const content = chunk;
           if (content.metadata?.usage) {
             latestTokenUsage = content.metadata.usage;
           }
-          const metaFinishReason = (
-            content.metadata as Record<string, unknown> | undefined
-          )?.finishReason;
+          const metaFinishReason =
+            (content.metadata as Record<string, unknown> | undefined)
+              ?.finishReason ?? content.metadata?.stopReason;
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
