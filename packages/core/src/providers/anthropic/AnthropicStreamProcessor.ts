@@ -129,7 +129,7 @@ async function* processStreamEvents(
       }
       currentToolCall = stopResult.currentToolCall;
       currentThinkingBlock = stopResult.currentThinkingBlock;
-    } else if (chunk.type === 'message_delta' && chunk.usage) {
+    } else if (chunk.type === 'message_delta') {
       yield* handleMessageDelta(chunk, logger);
     }
   }
@@ -441,23 +441,44 @@ function* handleMessageDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
   logger: { debug: (fn: () => string) => void },
 ): Generator<IContent> {
-  const usage = chunk.usage as {
-    input_tokens: number;
-    output_tokens: number;
-    cache_read_input_tokens?: number;
-    cache_creation_input_tokens?: number;
-  };
+  const usage = chunk.usage as
+    | {
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      }
+    | undefined;
+
+  const stopReason = (chunk as unknown as { delta?: { stop_reason?: string } })
+    .delta?.stop_reason;
+
+  if (!usage) {
+    logger.debug(
+      () =>
+        `Received message_delta without usage metadata; stopReason=${String(stopReason)}`,
+    );
+
+    if (stopReason) {
+      yield {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          stopReason,
+        },
+      } as IContent;
+    }
+
+    return;
+  }
 
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
   logger.debug(
     () =>
-      `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
+      `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, stopReason=${String(stopReason)}`,
   );
-
-  const stopReason = (chunk as unknown as { delta?: { stop_reason?: string } })
-    .delta?.stop_reason;
 
   yield {
     speaker: 'ai',

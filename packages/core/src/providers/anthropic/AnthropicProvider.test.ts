@@ -1053,7 +1053,7 @@ describe('AnthropicProvider', () => {
             delta: { type: 'text_delta', text: 'Hello' },
           };
           yield { type: 'content_block_stop' }; // Should be ignored
-          yield { type: 'message_delta' }; // Should be ignored without usage
+          yield { type: 'message_delta' }; // Should be ignored without usage/stop_reason
           yield {
             type: 'content_block_delta',
             delta: { type: 'text_delta', text: ' world' },
@@ -1091,6 +1091,48 @@ describe('AnthropicProvider', () => {
       expect(
         (contentChunks[1].blocks[0] as { type: 'text'; text: string }).text,
       ).toBe(' world');
+    });
+
+    it('should propagate stopReason from message_delta even when usage is absent', async () => {
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Hello' },
+          };
+          yield {
+            type: 'message_delta',
+            delta: { stop_reason: 'end_turn' },
+          };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: ' world' },
+          };
+        },
+      };
+
+      mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Say hello' }],
+        },
+      ];
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      const stopReasonChunk = chunks.find(
+        (c) => c.metadata?.stopReason === 'end_turn',
+      );
+      expect(stopReasonChunk).toBeDefined();
+      expect(stopReasonChunk?.metadata?.usage).toBeUndefined();
     });
 
     it('should use ToolFormatter for tool conversion', async () => {
