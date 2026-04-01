@@ -16,6 +16,8 @@ import stripAnsi from 'strip-ansi';
 import * as os from 'node:os';
 import { LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 
+const WELCOME_CONFIG_FILENAME = 'welcomeConfig.json';
+
 /**
  * Options for running a command with timeout support.
  */
@@ -607,6 +609,12 @@ export class TestRig {
     // Create a settings file to point the CLI to the local collector
     const llxprtDir = join(this.testDir, LLXPRT_DIR);
     mkdirSync(llxprtDir, { recursive: true });
+
+    const welcomeConfigPath = join(this.testDir, WELCOME_CONFIG_FILENAME);
+    writeFileSync(
+      welcomeConfigPath,
+      JSON.stringify({ welcomeCompleted: true }, null, 2),
+    );
     // In sandbox mode, use an absolute path for telemetry inside the container
     // The container mounts the test directory at the same path as the host
     const telemetryPath = join(this.testDir, 'telemetry.log'); // Always use test directory for telemetry
@@ -846,6 +854,10 @@ export class TestRig {
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
         LLXPRT_SANDBOX: 'false',
+        LLXPRT_CODE_WELCOME_CONFIG_PATH: join(
+          this.testDir!,
+          WELCOME_CONFIG_FILENAME,
+        ),
         // When fakeResponsesPath is set, tell CLI to use FakeProvider
         ...(this.fakeResponsesPath
           ? { LLXPRT_FAKE_RESPONSES: this.fakeResponsesPath }
@@ -1589,6 +1601,10 @@ export class TestRig {
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
         LLXPRT_SANDBOX: 'false',
+        LLXPRT_CODE_WELCOME_CONFIG_PATH: join(
+          this.testDir!,
+          WELCOME_CONFIG_FILENAME,
+        ),
         // When fakeResponsesPath is set, tell CLI to use FakeProvider
         ...(this.fakeResponsesPath
           ? { LLXPRT_FAKE_RESPONSES: this.fakeResponsesPath }
