@@ -163,42 +163,40 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
     const messages: LLMRequest['messages'] = [];
 
     // Convert contents to messages format (simplified)
-    if (sdkRequest.contents) {
-      const contents = Array.isArray(sdkRequest.contents)
-        ? sdkRequest.contents
-        : [sdkRequest.contents];
+    const contents = Array.isArray(sdkRequest.contents)
+      ? sdkRequest.contents
+      : [sdkRequest.contents];
 
-      for (const content of contents) {
-        if (typeof content === 'string') {
+    for (const content of contents) {
+      if (typeof content === 'string') {
+        messages.push({
+          role: 'user',
+          content,
+        });
+      } else if (isContentWithParts(content)) {
+        const role =
+          content.role === 'model'
+            ? ('model' as const)
+            : content.role === 'system'
+              ? ('system' as const)
+              : ('user' as const);
+
+        const parts = Array.isArray(content.parts)
+          ? content.parts
+          : [content.parts];
+
+        // Extract only text parts - intentionally filtering out non-text content
+        const textContent = parts
+          .filter(hasTextProperty)
+          .map((part) => part.text)
+          .join('');
+
+        // Only add message if there's text content
+        if (textContent) {
           messages.push({
-            role: 'user',
-            content,
+            role,
+            content: textContent,
           });
-        } else if (isContentWithParts(content)) {
-          const role =
-            content.role === 'model'
-              ? ('model' as const)
-              : content.role === 'system'
-                ? ('system' as const)
-                : ('user' as const);
-
-          const parts = Array.isArray(content.parts)
-            ? content.parts
-            : [content.parts];
-
-          // Extract only text parts - intentionally filtering out non-text content
-          const textContent = parts
-            .filter(hasTextProperty)
-            .map((part) => part.text)
-            .join('');
-
-          // Only add message if there's text content
-          if (textContent) {
-            messages.push({
-              role,
-              content: textContent,
-            });
-          }
         }
       }
     }
@@ -268,12 +266,12 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   toHookLLMResponse(sdkResponse: GenerateContentResponse): LLMResponse {
     return {
       text: getResponseText(sdkResponse) ?? undefined,
-      candidates: (sdkResponse.candidates || []).map((candidate) => {
+      candidates: (sdkResponse.candidates ?? []).map((candidate) => {
         // Extract text parts from the candidate
         const textParts =
           candidate.content?.parts
             ?.filter(hasTextProperty)
-            .map((part) => part.text) || [];
+            .map((part) => part.text) ?? [];
 
         return {
           content: {
@@ -284,8 +282,8 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
             candidate.finishReason as LLMResponse['candidates'][0]['finishReason'],
           index: candidate.index,
           safetyRatings: candidate.safetyRatings?.map((rating) => ({
-            category: String(rating.category || ''),
-            probability: String(rating.probability || ''),
+            category: String(rating.category ?? ''),
+            probability: String(rating.probability ?? ''),
           })),
         };
       }),

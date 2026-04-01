@@ -20,6 +20,7 @@ import type {
   BeforeAgentInput,
   BeforeModelInput,
   BeforeModelOutput,
+  BeforeToolInput,
 } from './types.js';
 import type { LLMRequest } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
@@ -74,7 +75,7 @@ export class HookRunner {
       );
     } catch (error) {
       const duration = Date.now() - startTime;
-      const hookId = hookConfig.name || hookConfig.command || 'unknown';
+      const hookId = hookConfig.name ?? hookConfig.command;
       const errorMessage = `Hook execution failed for event '${eventName}' (hook: ${hookId}): ${error}`;
       debugLogger.warn(`Hook execution error (non-fatal): ${errorMessage}`);
 
@@ -187,17 +188,14 @@ export class HookRunner {
             const modifiedToolInput =
               hookOutput.hookSpecificOutput['tool_input'];
             if (
-              modifiedToolInput &&
+              modifiedToolInput != null &&
               typeof modifiedToolInput === 'object' &&
               !Array.isArray(modifiedToolInput) &&
               'tool_input' in modifiedInput
             ) {
               // Merge modified input with existing tool_input
-              (
-                modifiedInput as import('./types.js').BeforeToolInput
-              ).tool_input = {
-                ...(modifiedInput as import('./types.js').BeforeToolInput)
-                  .tool_input,
+              (modifiedInput as BeforeToolInput).tool_input = {
+                ...(modifiedInput as BeforeToolInput).tool_input,
                 ...(modifiedToolInput as Record<string, unknown>),
               };
             }
@@ -276,7 +274,7 @@ export class HookRunner {
       const env = {
         ...sanitizeEnvironment(
           process.env,
-          sanitizationConfig || {
+          sanitizationConfig ?? {
             enableEnvironmentVariableRedaction: false,
             allowedEnvironmentVariables: [],
             blockedEnvironmentVariables: [],
@@ -312,24 +310,22 @@ export class HookRunner {
       }, timeout);
 
       // Send input to stdin
-      if (child.stdin) {
-        child.stdin.on('error', (err: NodeJS.ErrnoException) => {
-          // Ignore EPIPE errors which happen when the child process closes stdin early
-          if (err.code !== 'EPIPE') {
-            debugLogger.debug(`Hook stdin error: ${err}`);
-          }
-        });
-        child.stdin.write(JSON.stringify(input));
-        child.stdin.end();
-      }
+      child.stdin.on('error', (err: NodeJS.ErrnoException) => {
+        // Ignore EPIPE errors which happen when the child process closes stdin early
+        if (err.code !== 'EPIPE') {
+          debugLogger.debug(`Hook stdin error: ${err}`);
+        }
+      });
+      child.stdin.write(JSON.stringify(input));
+      child.stdin.end();
 
       // Collect stdout
-      child.stdout?.on('data', (data: Buffer) => {
+      child.stdout.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
       // Collect stderr
-      child.stderr?.on('data', (data: Buffer) => {
+      child.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 
@@ -361,7 +357,7 @@ export class HookRunner {
               // it's double-encoded JSON string.
               parsed = JSON.parse(parsed);
             }
-            if (parsed) {
+            if (parsed != null) {
               output = parsed as HookOutput;
             }
           } catch {
@@ -372,13 +368,13 @@ export class HookRunner {
           // Convert error output to structured format
           output = this.convertPlainTextToHookOutput(
             stderr.trim(),
-            exitCode || EXIT_CODE_NON_BLOCKING_ERROR,
+            exitCode ?? EXIT_CODE_NON_BLOCKING_ERROR,
           );
         }
 
         resolve({
           success: exitCode === EXIT_CODE_SUCCESS,
-          exitCode: exitCode || EXIT_CODE_SUCCESS,
+          exitCode: exitCode ?? EXIT_CODE_SUCCESS,
           hookConfig,
           eventName,
           output,

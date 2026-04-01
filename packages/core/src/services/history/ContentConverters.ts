@@ -34,16 +34,14 @@ export class ContentConverters {
   static toGeminiContent(iContent: IContent): Content {
     this.logger.debug('Converting IContent to Gemini Content:', {
       speaker: iContent.speaker,
-      blockCount: iContent.blocks?.length || 0,
-      blockTypes: iContent.blocks?.map((b) => b.type) || [],
-      toolCallIds:
-        iContent.blocks
-          ?.filter((b) => b.type === 'tool_call')
-          .map((b) => b.id) || [],
-      toolResponseCallIds:
-        iContent.blocks
-          ?.filter((b) => b.type === 'tool_response')
-          .map((b) => b.callId) || [],
+      blockCount: iContent.blocks.length,
+      blockTypes: iContent.blocks.map((b) => b.type),
+      toolCallIds: iContent.blocks
+        .filter((b) => b.type === 'tool_call')
+        .map((b) => b.id),
+      toolResponseCallIds: iContent.blocks
+        .filter((b) => b.type === 'tool_response')
+        .map((b) => b.callId),
     });
     // Tool responses should have 'user' role in Gemini format
     let role: 'user' | 'model';
@@ -68,7 +66,7 @@ export class ContentConverters {
           this.logger.debug('Converting tool_call block to functionCall:', {
             id: toolCall.id,
             name: toolCall.name,
-            hasParameters: !!toolCall.parameters,
+            hasParameters: toolCall.parameters != null,
           });
           parts.push({
             functionCall: {
@@ -86,8 +84,8 @@ export class ContentConverters {
             {
               callId: toolResponse.callId,
               toolName: toolResponse.toolName,
-              hasResult: !!toolResponse.result,
-              hasError: !!toolResponse.error,
+              hasResult: toolResponse.result != null,
+              hasError: toolResponse.error != null,
             },
           );
           parts.push({
@@ -177,7 +175,7 @@ export class ContentConverters {
   ): IContent {
     this.logger.debug('Converting Gemini Content to IContent:', {
       role: content.role,
-      partCount: content.parts?.length || 0,
+      partCount: content.parts?.length ?? 0,
       partTypes:
         content.parts?.map((p) => {
           if ('text' in p) return 'text';
@@ -185,13 +183,13 @@ export class ContentConverters {
           if ('functionResponse' in p) return 'functionResponse';
           if ('thought' in p) return 'thought';
           return 'other';
-        }) || [],
+        }) ?? [],
       functionCallIds:
         content.parts
           ?.filter((p) => 'functionCall' in p)
           .map(
             (p) => (p as { functionCall?: { id?: string } }).functionCall?.id,
-          ) || [],
+          ) ?? [],
       functionResponseIds:
         content.parts
           ?.filter((p) => 'functionResponse' in p)
@@ -199,7 +197,7 @@ export class ContentConverters {
             (p) =>
               (p as { functionResponse?: { id?: string } }).functionResponse
                 ?.id,
-          ) || [],
+          ) ?? [],
     });
     const speaker = content.role === 'user' ? 'human' : 'ai';
     const blocks: ContentBlock[] = [];
@@ -213,11 +211,11 @@ export class ContentConverters {
     if (content.parts == null || content.parts.length === 0) {
       // Empty content - keep it empty
       // This represents an empty model response
-    } else if (content.parts) {
+    } else {
       for (const part of content.parts) {
         if ('text' in part && part.text !== undefined) {
           // Check if this is a thinking block
-          if ('thought' in part && part.thought) {
+          if ('thought' in part && part.thought === true) {
             const partWithMetadata = part as Part & {
               llxprtSourceField?: ThinkingBlock['sourceField'];
             };
@@ -239,71 +237,67 @@ export class ContentConverters {
             });
           }
         } else if ('functionCall' in part && part.functionCall != null) {
-          const toolName = part.functionCall.name || '';
+          const toolName = part.functionCall.name ?? '';
           const rawId = part.functionCall.id;
           const generatedId =
             !rawId && generateIdCb != null ? generateIdCb() : undefined;
-          const finalId = generatedId
-            ? generatedId
-            : canonicalizeToolCallId({
-                providerName,
-                rawId,
-                toolName,
-                turnKey,
-                callIndex,
-              });
+          const finalId =
+            generatedId ??
+            canonicalizeToolCallId({
+              providerName,
+              rawId,
+              toolName,
+              turnKey,
+              callIndex,
+            });
           this.logger.debug('Converting functionCall to tool_call block:', {
             originalId: part.functionCall.id,
             name: part.functionCall.name,
-            usedCallback: !!generatedId,
+            usedCallback: generatedId != null,
             finalId,
           });
           blocks.push({
             type: 'tool_call',
             id: finalId,
             name: toolName,
-            parameters:
-              (part.functionCall.args as Record<string, unknown>) || {},
+            parameters: part.functionCall.args as Record<string, unknown>,
           });
           callIndex += 1;
         } else if (
           'functionResponse' in part &&
           part.functionResponse != null
         ) {
-          const toolName = part.functionResponse.name || '';
+          const toolName = part.functionResponse.name ?? '';
           const rawId = part.functionResponse.id;
           const matched = !rawId ? getNextUnmatchedToolCall?.() : undefined;
           const generatedId =
             !rawId && matched == null && generateIdCb != null
               ? generateIdCb()
               : undefined;
-          const callId = matched?.historyId
-            ? matched.historyId
-            : (generatedId ??
-              canonicalizeToolResponseId({
-                providerName,
-                rawId,
-                toolName,
-                turnKey,
-                callIndex: responseIndex,
-              }));
+          const callId =
+            matched?.historyId ??
+            generatedId ??
+            canonicalizeToolResponseId({
+              providerName,
+              rawId,
+              toolName,
+              turnKey,
+              callIndex: responseIndex,
+            });
           this.logger.debug(
             'Converting functionResponse to tool_response block:',
             {
               originalId: part.functionResponse.id,
               finalId: callId,
               toolName: part.functionResponse.name,
-              matchedByPosition: !!matched,
+              matchedByPosition: matched != null,
             },
           );
           // Safely handle the response field which might not be a valid Record
           let result: Record<string, unknown> = {};
           try {
             if (part.functionResponse.response != null) {
-              if (
-                typeof part.functionResponse.response === 'object' &&
-                part.functionResponse.response != null
-              ) {
+              if (typeof part.functionResponse.response === 'object') {
                 // If it's already an object, use it directly
                 result = part.functionResponse.response;
               } else if (typeof part.functionResponse.response === 'string') {
@@ -334,13 +328,13 @@ export class ContentConverters {
             );
             result = {
               error: 'Failed to process tool response',
-              output: String(part.functionResponse.response || ''),
+              output: String(part.functionResponse.response ?? ''),
             };
           }
 
           blocks.push({
             type: 'tool_response',
-            toolName: matched?.toolName || part.functionResponse.name || '',
+            toolName: matched?.toolName ?? part.functionResponse.name ?? '',
             callId,
             result,
           });
@@ -349,8 +343,8 @@ export class ContentConverters {
           // Handle inline data (media)
           blocks.push({
             type: 'media',
-            mimeType: part.inlineData.mimeType || '',
-            data: part.inlineData.data || '',
+            mimeType: part.inlineData.mimeType ?? '',
+            data: part.inlineData.data ?? '',
             encoding: 'base64',
           });
         }
@@ -426,12 +420,12 @@ export class ContentConverters {
       roles: contents.map((c) => c.role),
       totalFunctionCalls: contents.reduce(
         (acc, c) =>
-          acc + (c.parts?.filter((p) => 'functionCall' in p).length || 0),
+          acc + (c.parts?.filter((p) => 'functionCall' in p).length ?? 0),
         0,
       ),
       totalFunctionResponses: contents.reduce(
         (acc, c) =>
-          acc + (c.parts?.filter((p) => 'functionResponse' in p).length || 0),
+          acc + (c.parts?.filter((p) => 'functionResponse' in p).length ?? 0),
         0,
       ),
     });

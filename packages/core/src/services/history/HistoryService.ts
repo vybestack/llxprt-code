@@ -264,7 +264,7 @@ export class HistoryService
     if (this.isCompressing) {
       this.logger.debug('Queueing add operation during compression', {
         speaker: content.speaker,
-        blockTypes: content.blocks?.map((b) => b.type),
+        blockTypes: content.blocks.map((b) => b.type),
       });
 
       this.pendingOperations.push(() => {
@@ -281,12 +281,12 @@ export class HistoryService
     // Log content being added with any tool call/response IDs
     this.logger.debug('Adding content to history:', {
       speaker: content.speaker,
-      blockTypes: content.blocks?.map((b) => b.type),
+      blockTypes: content.blocks.map((b) => b.type),
       toolCallIds: content.blocks
-        ?.filter((b) => b.type === 'tool_call')
+        .filter((b) => b.type === 'tool_call')
         .map((b) => b.id),
       toolResponseIds: content.blocks
-        ?.filter((b) => b.type === 'tool_response')
+        .filter((b) => b.type === 'tool_response')
         .map((b) => ({
           callId: b.callId,
           toolName: b.toolName,
@@ -296,7 +296,7 @@ export class HistoryService
     });
 
     // Only do basic validation - must have valid speaker
-    if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
+    if (['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
 
       this.logger.debug(
@@ -324,7 +324,7 @@ export class HistoryService
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       // Always derive token counts from the stored content to avoid double counting
       // when providers attach aggregate usage metadata (which already includes prompt tokens).
-      const defaultModel = modelName || 'gpt-4.1';
+      const defaultModel = modelName ?? 'gpt-4.1';
       const contentTokens = await this.estimateContentTokens(
         content,
         defaultModel,
@@ -393,7 +393,7 @@ export class HistoryService
           } else {
             // Try to stringify the result
             try {
-              blockText = JSON.stringify(block.result || '');
+              blockText = JSON.stringify(block.result ?? '');
             } catch (error) {
               // Handle circular references or other JSON.stringify errors
               this.logger.debug(
@@ -418,7 +418,7 @@ export class HistoryService
           break;
         case 'media':
           // For media, just count the caption if any
-          blockText = block.caption || '';
+          blockText = block.caption ?? '';
           break;
         default:
           // Unknown block type, skip
@@ -474,7 +474,7 @@ export class HistoryService
 
     let total = 0;
     for (const content of contents) {
-      const effectiveModel = content.metadata?.model || modelName || 'gpt-4.1';
+      const effectiveModel = content.metadata?.model ?? modelName ?? 'gpt-4.1';
       try {
         total += await this.estimateContentTokens(content, effectiveModel);
       } catch (error) {
@@ -496,7 +496,7 @@ export class HistoryService
           total += estimateTextTokens(serialized);
         } else {
           const blockStrings = content.blocks
-            ?.map((block) => {
+            .map((block) => {
               switch (block.type) {
                 case 'text':
                   return block.text;
@@ -761,7 +761,7 @@ export class HistoryService
       if (content.speaker === 'human' || content.speaker === 'tool') {
         // Always include user and tool messages
         curated.push(content);
-      } else if (content.speaker === 'ai') {
+      } else {
         aiMessagesAnalyzed++;
         // Only include AI messages if they have valid content
         const hasValidContent = ContentValidation.hasContent(content);
@@ -770,12 +770,12 @@ export class HistoryService
         if (this.logger.enabled) {
           this.logger.debug('Analyzing AI message:', {
             messageIndex: aiMessagesAnalyzed,
-            blockCount: content.blocks?.length || 0,
-            blocks: content.blocks?.map((b) => ({
+            blockCount: content.blocks.length,
+            blocks: content.blocks.map((b) => ({
               type: b.type,
-              textLength: b.type === 'text' ? b.text?.length : null,
-              textPreview: b.type === 'text' ? b.text?.substring(0, 50) : null,
-              isEmpty: b.type === 'text' ? !b.text?.trim() : false,
+              textLength: b.type === 'text' ? b.text.length : null,
+              textPreview: b.type === 'text' ? b.text.substring(0, 50) : null,
+              isEmpty: b.type === 'text' ? !b.text.trim() : false,
             })),
             metadata: {
               hasUsage: !!content.metadata?.usage,
@@ -876,7 +876,7 @@ export class HistoryService
 
       for (const content of this.history) {
         // Use the model from content metadata, or fall back to provided default
-        const modelToUse = content.metadata?.model || defaultModel;
+        const modelToUse = content.metadata?.model ?? defaultModel;
         newTotal += await this.estimateContentTokens(content, modelToUse);
       }
 
@@ -961,7 +961,7 @@ export class HistoryService
     const respondedCallIds = new Set<string>();
 
     for (const content of this.history) {
-      if (!content.blocks) continue;
+      if (content.blocks.length === 0) continue;
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
           const response = block;
@@ -976,7 +976,7 @@ export class HistoryService
     const seenToolCallIds = new Set<string>();
 
     for (const content of this.history) {
-      if (!content.blocks) continue;
+      if (content.blocks.length === 0) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
 
@@ -1005,7 +1005,7 @@ export class HistoryService
   validateAndFix(): void {
     const respondedCallIds = new Set<string>();
     for (const content of this.history) {
-      if (!content.blocks) continue;
+      if (content.blocks.length === 0) continue;
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
           const response = block;
@@ -1020,7 +1020,7 @@ export class HistoryService
 
     for (let i = 0; i < this.history.length; i++) {
       const content = this.history[i];
-      if (content.speaker !== 'ai' || !content.blocks) continue;
+      if (content.speaker !== 'ai') continue;
 
       const toolCalls = content.blocks.filter(
         (b): b is ToolCallBlock => b.type === 'tool_call',
@@ -1029,7 +1029,7 @@ export class HistoryService
       if (toolCalls.length === 0) continue;
 
       const missing = toolCalls.filter(
-        (tc) => tc.id && !respondedCallIds.has(tc.id),
+        (tc) => tc.id !== '' && !respondedCallIds.has(tc.id),
       );
 
       if (missing.length === 0) continue;
@@ -1121,7 +1121,7 @@ export class HistoryService
     const result: IContent[] = [];
 
     for (const content of contents) {
-      if (content.speaker !== 'tool' || !content.blocks?.length) {
+      if (content.speaker !== 'tool' || content.blocks.length === 0) {
         result.push(content);
         continue;
       }
@@ -1169,7 +1169,7 @@ export class HistoryService
     const normalized: IContent[] = [];
 
     for (const content of contents) {
-      if (content.blocks && content.blocks.length > 0) {
+      if (content.blocks.length > 0) {
         for (const block of content.blocks) {
           if (block.type === 'tool_call') {
             seenToolCallIds.add(block.id);
@@ -1177,7 +1177,7 @@ export class HistoryService
         }
       }
 
-      if (content.speaker === 'tool' && content.blocks?.length) {
+      if (content.speaker === 'tool' && content.blocks.length > 0) {
         const missingResponses = content.blocks.filter(
           (block) =>
             block.type === 'tool_response' &&
@@ -1240,7 +1240,7 @@ export class HistoryService
     const respondedCallIds = new Set<string>();
 
     for (const content of contents) {
-      if (!content.blocks?.length) continue;
+      if (content.blocks.length === 0) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_response') continue;
         const callId = block.callId;
@@ -1256,7 +1256,7 @@ export class HistoryService
       const content = contents[i];
       result.push(content);
 
-      if (content.speaker !== 'ai' || !content.blocks?.length) continue;
+      if (content.speaker !== 'ai' || content.blocks.length === 0) continue;
 
       const toolCalls = content.blocks.filter(
         (b): b is ToolCallBlock => b.type === 'tool_call',
@@ -1264,7 +1264,7 @@ export class HistoryService
       if (toolCalls.length === 0) continue;
 
       const missing = toolCalls.filter(
-        (tc) => tc.id && !respondedCallIds.has(tc.id),
+        (tc) => tc.id !== '' && !respondedCallIds.has(tc.id),
       );
       if (missing.length === 0) continue;
 
@@ -1309,7 +1309,7 @@ export class HistoryService
 
     for (let i = 0; i < contents.length; i++) {
       const content = contents[i];
-      if (!content.blocks?.length) continue;
+      if (content.blocks.length === 0) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
         const id = block.id;
@@ -1332,14 +1332,14 @@ export class HistoryService
 
     const scoreResponse = (response: ToolResponseBlock): number => {
       let score = 0;
-      if (response.isComplete) score += 2;
+      if (response.isComplete === true) score += 2;
       if (response.error) score -= 1;
       if (response.result !== undefined && response.result !== null) score += 1;
       return score;
     };
 
     const strippedContents: Array<IContent | null> = contents.map((content) => {
-      if (!content.blocks?.length) return content;
+      if (content.blocks.length === 0) return content;
 
       const toolResponseBlocks = content.blocks.filter(
         (b): b is ToolResponseBlock => b.type === 'tool_response',

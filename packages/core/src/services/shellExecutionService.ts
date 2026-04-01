@@ -21,6 +21,7 @@ import {
   type AnsiOutput,
 } from '../utils/terminalSerializer.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import type { EnvironmentSanitizationConfig } from './environmentSanitization.js';
 const { Terminal } = pkg;
 
 const shellDebug = new DebugLogger('llxprt:shell:render');
@@ -100,7 +101,7 @@ export interface ShellExecutionConfig {
   scrollback?: number;
   inactivityTimeoutMs?: number;
   isSandboxOrCI?: boolean;
-  sanitizationConfig?: import('./environmentSanitization.js').EnvironmentSanitizationConfig;
+  sanitizationConfig?: EnvironmentSanitizationConfig;
 }
 
 export type ShellOutputEvent =
@@ -140,7 +141,8 @@ function isIgnorablePtyExitError(e: unknown): boolean {
   const err = e as { code?: string; message?: string };
   return (
     err.code === 'ESRCH' ||
-    !!err.message?.includes('Cannot resize a pty that has already exited')
+    err.message?.includes('Cannot resize a pty that has already exited') ===
+      true
   );
 }
 
@@ -159,7 +161,7 @@ const getFullBufferText = (terminal: pkg.Terminal): string => {
     let trimRight = true;
     if (i + 1 < buffer.length) {
       const nextLine = buffer.getLine(i + 1);
-      if (nextLine?.isWrapped) {
+      if (nextLine?.isWrapped === true) {
         trimRight = false;
       }
     }
@@ -332,7 +334,7 @@ export class ShellExecutionService {
           TERM: 'xterm-256color',
           PAGER: 'cat',
         },
-        !!shellExecutionConfig.isSandboxOrCI,
+        shellExecutionConfig.isSandboxOrCI === true,
       );
       delete envVars.BASH_ENV;
 
@@ -363,11 +365,15 @@ export class ShellExecutionService {
         let sniffBuffer = Buffer.alloc(0);
         let totalBytesReceived = 0;
         let inactivityTimeout: NodeJS.Timeout | null = null;
-        const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
+        const inactivityTimeoutMs = shellExecutionConfig.inactivityTimeoutMs;
         const inactivityAbortController = new AbortController();
 
         const resetInactivityTimer = () => {
-          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
+          if (
+            inactivityTimeoutMs == null ||
+            inactivityTimeoutMs <= 0 ||
+            exited
+          ) {
             return;
           }
 
@@ -384,11 +390,11 @@ export class ShellExecutionService {
         };
 
         // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
-        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
+        if (inactivityTimeoutMs != null && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
             async () => {
-              if (child.pid && !exited) {
+              if (child.pid != null && !exited) {
                 const pid = child.pid;
                 if (isWindows) {
                   cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
@@ -398,10 +404,12 @@ export class ShellExecutionService {
                     await new Promise((res) =>
                       setTimeout(res, SIGKILL_TIMEOUT_MS),
                     );
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
                     if (!exited) {
                       process.kill(-pid, 'SIGKILL');
                     }
                   } catch (_e) {
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
                     if (!exited) child.kill('SIGKILL');
                   }
                 }
@@ -510,7 +518,7 @@ export class ShellExecutionService {
             rawOutput: finalBuffer,
             output: combinedOutput.trim(),
             exitCode: code,
-            signal: signal ? (os.constants.signals[signal] ?? null) : null,
+            signal: signal ? os.constants.signals[signal] : null,
             aborted: abortSignal.aborted,
             inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: child.pid,
@@ -527,17 +535,19 @@ export class ShellExecutionService {
         });
 
         const abortHandler = async () => {
-          if (child.pid && !exited) {
+          if (child.pid != null && !exited) {
             if (isWindows) {
               cpSpawn('taskkill', ['/pid', child.pid.toString(), '/f', '/t']);
             } else {
               try {
                 process.kill(-child.pid, 'SIGTERM');
                 await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
                 if (!exited) {
                   process.kill(-child.pid, 'SIGKILL');
                 }
               } catch (_e) {
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
                 if (!exited) child.kill('SIGKILL');
               }
             }
@@ -546,21 +556,12 @@ export class ShellExecutionService {
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
-        if (child.once) {
-          child.once('exit', (code, signal) => {
-            handleExit(code, signal);
-          });
-          child.once('close', (code, signal) => {
-            handleExit(code, signal);
-          });
-        } else {
-          child.on('exit', (code, signal) => {
-            handleExit(code, signal);
-          });
-          child.on('close', (code, signal) => {
-            handleExit(code, signal);
-          });
-        }
+        child.once('exit', (code, signal) => {
+          handleExit(code, signal);
+        });
+        child.once('close', (code, signal) => {
+          handleExit(code, signal);
+        });
 
         function cleanup() {
           exited = true;
@@ -573,8 +574,8 @@ export class ShellExecutionService {
 
           if (!cleanedUp) {
             cleanedUp = true;
-            child.stdout?.removeAllListeners('data');
-            child.stderr?.removeAllListeners('data');
+            child.stdout.removeAllListeners('data');
+            child.stderr.removeAllListeners('data');
             child.removeAllListeners('error');
             child.removeAllListeners('exit');
             child.removeAllListeners('close');
@@ -644,7 +645,7 @@ export class ShellExecutionService {
           TERM: 'xterm-256color',
           PAGER: shellExecutionConfig.pager ?? 'cat',
         },
-        !!shellExecutionConfig.isSandboxOrCI,
+        shellExecutionConfig.isSandboxOrCI === true,
       );
       delete envVars.BASH_ENV;
 
@@ -727,7 +728,7 @@ export class ShellExecutionService {
             return;
           }
 
-          if (!shellExecutionConfig.disableDynamicLineTrimming) {
+          if (shellExecutionConfig.disableDynamicLineTrimming !== true) {
             if (!hasStartedOutput) {
               const bufferText = getFullBufferText(headlessTerminal);
               if (bufferText.trim().length === 0) {
@@ -740,10 +741,10 @@ export class ShellExecutionService {
 
           const buffer = headlessTerminal.buffer.active;
           let newOutput: AnsiOutput;
-          if (shellExecutionConfig.showColor) {
+          if (shellExecutionConfig.showColor === true) {
             newOutput = serializeTerminalToObject(headlessTerminal);
           } else {
-            newOutput = (serializeTerminalToObject(headlessTerminal) || [])
+            newOutput = serializeTerminalToObject(headlessTerminal)
               .filter((line): line is AnsiLine => Array.isArray(line))
               .map((line) =>
                 line.map((token) => {
@@ -775,9 +776,10 @@ export class ShellExecutionService {
 
           const trimmedOutput = newOutput.slice(0, lastNonEmptyLine + 1);
 
-          const finalOutput = shellExecutionConfig.disableDynamicLineTrimming
-            ? newOutput
-            : trimmedOutput;
+          const finalOutput =
+            shellExecutionConfig.disableDynamicLineTrimming === true
+              ? newOutput
+              : trimmedOutput;
 
           // Using stringify for a quick deep comparison.
           const finalJson = JSON.stringify(finalOutput);
@@ -785,11 +787,10 @@ export class ShellExecutionService {
           if (outputJson !== finalJson) {
             // Extract text from cursor line for debug
             const cursorLine = finalOutput[buffer.cursorY];
-            const cursorLineText =
-              cursorLine
-                ?.map((t) => t.text)
-                .join('')
-                .trimEnd() ?? '(no line)';
+            const cursorLineText = cursorLine
+              .map((t) => t.text)
+              .join('')
+              .trimEnd();
             shellDebug.log(
               'renderFn: CHANGED cursorY=%d cursorX=%d lines=%d cursorLine=%s',
               buffer.cursorY,
@@ -822,7 +823,7 @@ export class ShellExecutionService {
             aborted: abortSignal.aborted,
             inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: ptyProcess.pid,
-            executionMethod: ptyInfo.name ?? 'node-pty',
+            executionMethod: ptyInfo.name,
             exitCode,
             error,
           });
@@ -857,7 +858,11 @@ export class ShellExecutionService {
         });
 
         const resetInactivityTimer = () => {
-          if (!inactivityTimeoutMs || inactivityTimeoutMs <= 0 || exited) {
+          if (
+            inactivityTimeoutMs == null ||
+            inactivityTimeoutMs <= 0 ||
+            exited
+          ) {
             return;
           }
 
@@ -874,11 +879,11 @@ export class ShellExecutionService {
         };
 
         // Set up inactivity abort handler (mirrors abortHandler's SIGKILL escalation)
-        if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
+        if (inactivityTimeoutMs != null && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
             async () => {
-              if (ptyProcess.pid && !exited) {
+              if (ptyProcess.pid != null && !exited) {
                 const pid = ptyProcess.pid;
                 if (isWindows) {
                   cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
@@ -888,10 +893,12 @@ export class ShellExecutionService {
                     await new Promise((res) =>
                       setTimeout(res, SIGKILL_TIMEOUT_MS),
                     );
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
                     if (!exited) {
                       process.kill(-pid, 'SIGKILL');
                     }
                   } catch (_e) {
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
                     if (!exited) ptyProcess.kill('SIGKILL');
                   }
                 }
@@ -1009,7 +1016,7 @@ export class ShellExecutionService {
         );
 
         const abortHandler = async () => {
-          if (ptyProcess.pid && !exited) {
+          if (ptyProcess.pid != null && !exited) {
             const pid = ptyProcess.pid;
             if (isWindows) {
               cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
@@ -1021,7 +1028,7 @@ export class ShellExecutionService {
                 signal: null,
                 aborted: true,
                 inactivityTimedOut: inactivityAbortController.signal.aborted,
-                executionMethod: ptyInfo.name ?? 'node-pty',
+                executionMethod: ptyInfo.name,
                 error,
                 pid,
               });
@@ -1040,6 +1047,7 @@ export class ShellExecutionService {
             }
 
             await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in closure
             if (exited) {
               return;
             }
@@ -1063,7 +1071,7 @@ export class ShellExecutionService {
                 signal: null,
                 aborted: true,
                 inactivityTimedOut: inactivityAbortController.signal.aborted,
-                executionMethod: ptyInfo.name ?? 'node-pty',
+                executionMethod: ptyInfo.name,
                 error,
                 pid,
               });
@@ -1107,7 +1115,7 @@ export class ShellExecutionService {
     }
 
     const fallbackPtyId = this.lastActivePtyId;
-    if (fallbackPtyId && fallbackPtyId !== pid) {
+    if (fallbackPtyId != null && fallbackPtyId !== pid) {
       const fallbackPty = this.activePtys.get(fallbackPtyId);
       if (fallbackPty != null) {
         fallbackPty.ptyProcess.write(input);
@@ -1210,7 +1218,7 @@ export class ShellExecutionService {
     const targetPty =
       activePty != null
         ? { id: pid, pty: activePty }
-        : fallbackPtyId
+        : fallbackPtyId != null
           ? { id: fallbackPtyId, pty: this.activePtys.get(fallbackPtyId) }
           : null;
 
