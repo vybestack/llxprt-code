@@ -91,7 +91,14 @@ async function* flushTextBuffer(
   _isKimiK2Model: boolean,
 ): AsyncGenerator<IContent, void, unknown> {
   const parsedToolCalls: ToolCallBlock[] = [];
+  const originalBufferLength = buffer.length;
   let workingText = buffer;
+
+  deps.logger.debug(() => `[stream:buffer] flushing buffered text`, {
+    bufferLength: originalBufferLength,
+    accumulatedThinkingLength: state.accumulatedThinkingContent.length,
+    hasEmittedThinking: state.hasEmittedThinking,
+  });
 
   // Extract <think> tags
   const tagBasedThinking = extractThinkTagsAsBlock(workingText);
@@ -148,12 +155,13 @@ async function* flushTextBuffer(
     );
   }
 
-  // Emit accumulated thinking BEFORE tool calls or text content
-  if (
+  const shouldEmitThinking =
     !state.hasEmittedThinking &&
     state.accumulatedThinkingContent.length > 0 &&
-    (parsedToolCalls.length > 0 || cleanedText.trim().length > 0)
-  ) {
+    (parsedToolCalls.length > 0 || cleanedText.trim().length > 0);
+
+  // Emit accumulated thinking BEFORE tool calls or text content
+  if (shouldEmitThinking) {
     yield {
       speaker: 'ai',
       blocks: [
@@ -190,6 +198,26 @@ async function* flushTextBuffer(
         } as TextBlock,
       ],
     } as IContent;
+  }
+
+  if (
+    !shouldEmitThinking &&
+    parsedToolCalls.length === 0 &&
+    cleanedText.length === 0
+  ) {
+    deps.logger.warn(() => `[stream:buffer] flush produced no emitted blocks`, {
+      bufferLength: originalBufferLength,
+      hadThinkTags: Boolean(tagBasedThinking),
+      cleanedWorkingTextLength: workingText.length,
+      accumulatedThinkingLength: state.accumulatedThinkingContent.length,
+    });
+  } else {
+    deps.logger.debug(() => `[stream:buffer] flush emitted buffered content`, {
+      bufferLength: originalBufferLength,
+      emittedThinking: shouldEmitThinking,
+      toolCallCount: parsedToolCalls.length,
+      textLength: cleanedText.length,
+    });
   }
 }
 
@@ -366,6 +394,18 @@ export async function* processStreamingResponse(
           ).length;
           const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
 
+          deps.logger.debug(
+            () => `[stream:kimi-buffer] updated buffered text state`,
+            {
+              model,
+              detectedFormat,
+              bufferLength: state.textBuffer.length,
+              kimiBeginCount,
+              kimiEndCount,
+              hasOpenKimiSection,
+            },
+          );
+
           // Emit buffered text at natural break points
           if (
             !hasOpenKimiSection &&
@@ -375,6 +415,17 @@ export async function* processStreamingResponse(
               state.textBuffer.endsWith('? ') ||
               state.textBuffer.length > 100)
           ) {
+            deps.logger.debug(
+              () =>
+                `[stream:kimi-buffer] flushing buffered text at natural boundary`,
+              {
+                model,
+                detectedFormat,
+                bufferLength: state.textBuffer.length,
+                kimiBeginCount,
+                kimiEndCount,
+              },
+            );
             yield* flushTextBuffer(
               state.textBuffer,
               state,
@@ -382,6 +433,18 @@ export async function* processStreamingResponse(
               isKimiK2Model,
             );
             state.textBuffer = '';
+          } else if (hasOpenKimiSection) {
+            deps.logger.debug(
+              () =>
+                `[stream:kimi-buffer] suppressing flush because tool-call section is still open`,
+              {
+                model,
+                detectedFormat,
+                bufferLength: state.textBuffer.length,
+                kimiBeginCount,
+                kimiEndCount,
+              },
+            );
           }
         } else {
           // Emit immediately for non-buffered providers
@@ -480,6 +543,14 @@ export async function* processStreamingResponse(
 
   // Final buffer flush
   if (state.textBuffer.length > 0) {
+    deps.logger.debug(
+      () => `[stream:buffer] final flush of remaining buffered text`,
+      {
+        bufferLength: state.textBuffer.length,
+        model,
+        detectedFormat,
+      },
+    );
     yield* flushTextBuffer(state.textBuffer, state, deps, isKimiK2Model);
     state.textBuffer = '';
   }
@@ -504,7 +575,29 @@ export async function* processStreamingResponse(
   }
 
   // Process pipeline and emit combined content
+  const pipelineStatsBeforeProcess = deps.toolCallPipeline.getStats();
+  const incompleteToolCallsBeforeProcess =
+    pipelineStatsBeforeProcess.collector.totalCalls -
+    pipelineStatsBeforeProcess.collector.completedCalls;
+  deps.logger.debug(
+    () => `[stream:tool-pipeline] processing collected tool-call fragments`,
+    {
+      model,
+      collectorStats: pipelineStatsBeforeProcess.collector,
+      incompleteToolCallsBeforeProcess,
+    },
+  );
   state.cachedPipelineResult = await deps.toolCallPipeline.process(abortSignal);
+  deps.logger.debug(
+    () => `[stream:tool-pipeline] completed tool-call processing`,
+    {
+      model,
+      collectorStatsBeforeReset: pipelineStatsBeforeProcess.collector,
+      normalizedCount: state.cachedPipelineResult.normalized.length,
+      failedCount: state.cachedPipelineResult.failed.length,
+      incompleteToolCallsBeforeProcess,
+    },
+  );
 
   {
     const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
@@ -568,6 +661,19 @@ export async function* processStreamingResponse(
       };
 
       const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+      deps.logger.debug(
+        () => `[stream:terminal] building combined terminal content`,
+        {
+          model,
+          combinedBlockCount: combinedBlocks.length,
+          cleanedReasoningLength: cleanedReasoning.length,
+          reasoningToolCallCount: reasoningToolCalls.length,
+          pipelineToolCallCount: pipelineToolCallBlocks.length,
+          rawFinishReason: state.lastFinishReason,
+          stopReason,
+          hasStreamingUsage: Boolean(state.streamingUsage),
+        },
+      );
 
       if (state.streamingUsage) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
@@ -603,7 +709,30 @@ export async function* processStreamingResponse(
         state.hasEmittedTerminalMetadata = true;
       }
 
+      deps.logger.debug(
+        () => `[stream:terminal] emitting combined terminal content`,
+        {
+          model,
+          blockCount: combinedContent.blocks.length,
+          stopReason: combinedContent.metadata?.stopReason,
+          finishReason: combinedContent.metadata?.finishReason,
+          hasUsage: Boolean(combinedContent.metadata?.usage),
+          hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
+        },
+      );
       yield combinedContent;
+    } else {
+      deps.logger.debug(
+        () => `[stream:terminal] skipped combined terminal content emission`,
+        {
+          model,
+          cleanedReasoningLength: cleanedReasoning.length,
+          reasoningToolCallCount: reasoningToolCalls.length,
+          pipelineToolCallCount: pipelineToolCallBlocks.length,
+          rawFinishReason: state.lastFinishReason,
+          hasStreamingUsage: Boolean(state.streamingUsage),
+        },
+      );
     }
   }
 
@@ -641,7 +770,27 @@ export async function* processStreamingResponse(
       state.hasEmittedTerminalMetadata = true;
     }
 
+    deps.logger.debug(
+      () => `[stream:terminal] emitting usage-only terminal metadata chunk`,
+      {
+        model,
+        stopReason: metaOnlyContent.metadata?.stopReason,
+        finishReason: metaOnlyContent.metadata?.finishReason,
+        hasUsage: Boolean(metaOnlyContent.metadata?.usage),
+        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
+      },
+    );
     yield metaOnlyContent;
+  } else if (state.streamingUsage) {
+    deps.logger.debug(
+      () => `[stream:terminal] skipped usage-only terminal metadata chunk`,
+      {
+        model,
+        reasoningLength: state.accumulatedReasoningContent.length,
+        collectorStats: deps.toolCallPipeline.getStats().collector,
+        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
+      },
+    );
   }
 
   // Emit a terminal metadata chunk even when there is no usage, so
@@ -656,6 +805,14 @@ export async function* processStreamingResponse(
     const normalizedStopReason = mapFinishReasonToStopReason(
       state.lastFinishReason,
     );
+    deps.logger.debug(
+      () => `[stream:terminal] emitting metadata-only terminal chunk`,
+      {
+        model,
+        stopReason: normalizedStopReason,
+        finishReason: state.lastFinishReason,
+      },
+    );
     yield {
       speaker: 'ai',
       blocks: [],
@@ -664,6 +821,16 @@ export async function* processStreamingResponse(
         finishReason: state.lastFinishReason,
       },
     } as IContent;
+  } else if (state.lastFinishReason && !state.streamingUsage) {
+    deps.logger.debug(
+      () => `[stream:terminal] skipped metadata-only terminal chunk`,
+      {
+        model,
+        finishReason: state.lastFinishReason,
+        hasEmittedTerminalMetadata: state.hasEmittedTerminalMetadata,
+        collectorStats: deps.toolCallPipeline.getStats().collector,
+      },
+    );
   }
 
   // Handle empty streaming responses after tool calls

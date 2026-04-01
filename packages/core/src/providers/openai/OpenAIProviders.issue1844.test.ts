@@ -198,6 +198,84 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     expect(lastChunk.metadata?.finishReason).toBe('stop');
   });
 
+  it('should emit buffered text followed by a metadata-only stop chunk for Fireworks Kimi terminal flushes', async () => {
+    const chunks = [
+      {
+        id: 'chunk-1',
+        object: 'chat.completion.chunk',
+        created: Date.now(),
+        model: 'accounts/fireworks/models/kimi-k2-instruct-0905',
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'Hello there this buffered reply' },
+            finish_reason: null,
+          },
+        ],
+      },
+      {
+        id: 'chunk-2',
+        object: 'chat.completion.chunk',
+        created: Date.now(),
+        model: 'accounts/fireworks/models/kimi-k2-instruct-0905',
+        choices: [
+          {
+            index: 0,
+            delta: { content: ' ends only at the terminal chunk' },
+            finish_reason: 'stop',
+          },
+        ],
+      },
+    ];
+
+    let continuationRequested = false;
+    const results = await collectResults(
+      processStreamingResponse(
+        createChunkStream(chunks) as unknown as Parameters<
+          typeof processStreamingResponse
+        >[0],
+        'accounts/fireworks/models/kimi-k2-instruct-0905',
+        'openai',
+        undefined,
+        {} as Parameters<typeof processStreamingResponse>[4],
+        [],
+        {} as Parameters<typeof processStreamingResponse>[6],
+        undefined,
+        undefined,
+        {
+          toolCallPipeline: new ToolCallPipeline(),
+          textToolParser: {
+            parse: (text: string) => ({ toolCalls: [], cleanedContent: text }),
+          },
+          logger: {
+            debug: vi.fn(),
+            warn: vi.fn(),
+            log: vi.fn(),
+            error: vi.fn(),
+          },
+          getBaseURL: () => 'https://api.fireworks.ai/inference/v1',
+        } as unknown as Parameters<typeof processStreamingResponse>[9],
+        async function* () {
+          continuationRequested = true;
+          yield* [] as IContent[];
+        } as Parameters<typeof processStreamingResponse>[10],
+      ),
+    );
+
+    expect(continuationRequested).toBe(false);
+    expect(results).toHaveLength(2);
+    expect(results[0].blocks).toEqual([
+      {
+        type: 'text',
+        text: 'Hello there this buffered reply ends only at the terminal chunk',
+      },
+    ]);
+    expect(results[0].metadata).toBeUndefined();
+    expect(results[1].blocks).toEqual([]);
+    expect(results[1].metadata?.stopReason).toBe('end_turn');
+    expect(results[1].metadata?.finishReason).toBe('stop');
+  });
+
   it('should not emit a duplicate terminal metadata chunk when reasoning content already carries the finish signal', async () => {
     const chunks = [
       {

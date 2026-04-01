@@ -1654,6 +1654,75 @@ sub memory
       // Verify that turn.run was called only once
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
+    it('should not trigger thinking-only continuation after InvalidStream when flag is false', async () => {
+      vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+        false,
+      );
+
+      const forwardedRequests: Part[][] = [];
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
+          yield {
+            type: GeminiEventType.Thought,
+            value: {
+              subject: 'Planning',
+              description: 'I will do something',
+            },
+          };
+          yield { type: GeminiEventType.InvalidStream };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      todoStoreReadMock.mockResolvedValue([]);
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Do something' }],
+        new AbortController().signal,
+        'prompt-thinking-invalid-stream-no-continue',
+      );
+      const events = await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      expect(forwardedRequests).toHaveLength(1);
+      expect(
+        forwardedRequests[0]?.some(
+          (part) =>
+            typeof part === 'object' &&
+            part !== null &&
+            'text' in part &&
+            typeof part.text === 'string' &&
+            part.text.includes(
+              'Continue and take the next concrete action now',
+            ),
+        ),
+      ).toBe(false);
+      expect(events).toEqual([
+        {
+          type: GeminiEventType.Thought,
+          value: {
+            subject: 'Planning',
+            description: 'I will do something',
+          },
+        },
+        { type: GeminiEventType.InvalidStream },
+      ]);
+    });
 
     it('should stop recursing after one retry when InvalidStream events are repeatedly received', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(

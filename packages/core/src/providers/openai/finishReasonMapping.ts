@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+import { DebugLogger } from '../../debug/index.js';
+
+const logger = new DebugLogger('llxprt:providers:openai:finish-reason');
+
 /**
  * Map OpenAI finish_reason to the stopReason format expected by MessageConverter.
  * OpenAI values: stop, length, tool_calls, content_filter, function_call
@@ -35,5 +39,18 @@ export function mapFinishReasonToStopReason(
     incomplete: 'max_tokens',
     failed: 'end_turn',
   };
-  return mapping[finishReason] ?? finishReason;
+  const mappedReason = mapping[finishReason];
+
+  if (!mappedReason) {
+    logger.warn(() => `[stream:finish-reason] unmapped provider finishReason`, {
+      finishReason,
+    });
+    return finishReason;
+  }
+
+  logger.debug(() => `[stream:finish-reason] mapped provider finishReason`, {
+    finishReason,
+    stopReason: mappedReason,
+  });
+  return mappedReason;
 }

@@ -462,8 +462,28 @@ export class MessageStreamOrchestrator {
           ? (event.value.error as { status?: number }).status
           : undefined;
 
+      this.deps.logger.debug(
+        () => `[stream:orchestrator] handling error event`,
+        {
+          errorStatus,
+          continueOnFailedApiCall: config.getContinueOnFailedApiCall(),
+          deferredEventCount: deferredEvents.length,
+          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+          hadContent: state.hadContent,
+          hadThinking: state.hadThinking,
+        },
+      );
+
       if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
         if (ctx.is413Retry) {
+          this.deps.logger.warn(
+            () =>
+              `[stream:orchestrator] received repeated 413 after retry; ending iteration`,
+            {
+              deferredEventCount: deferredEvents.length,
+              hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+            },
+          );
           for (const d of deferredEvents) yield d;
           await this._fireAfterHook(ctx);
           return this._earlyIterResult(state.hadToolCallsThisTurn, {
@@ -477,6 +497,15 @@ export class MessageStreamOrchestrator {
             ? ` The tools involved were: ${toolNames.join(', ')}.`
             : '';
         const message = `System: The previous tool calls produced a response that was too large (HTTP 413).${toolList} Please retry with fewer or more focused queries.`;
+        this.deps.logger.warn(
+          () =>
+            `[stream:orchestrator] retrying after 413 tool-response overflow`,
+          {
+            toolNames,
+            deferredEventCount: deferredEvents.length,
+            hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+          },
+        );
         yield* sendMessageStream(
           [{ text: message }],
           signal,
@@ -492,6 +521,17 @@ export class MessageStreamOrchestrator {
         });
       }
 
+      this.deps.logger.warn(
+        () =>
+          `[stream:orchestrator] error event ending iteration without retry`,
+        {
+          errorStatus,
+          deferredEventCount: deferredEvents.length,
+          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+          hadContent: state.hadContent,
+          hadThinking: state.hadThinking,
+        },
+      );
       for (const d of deferredEvents) yield d;
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
@@ -500,24 +540,41 @@ export class MessageStreamOrchestrator {
       });
     }
 
-    if (
-      event.type === GeminiEventType.InvalidStream &&
-      config.getContinueOnFailedApiCall()
-    ) {
-      if (ctx.isInvalidStreamRetry) {
+    if (event.type === GeminiEventType.InvalidStream) {
+      this.deps.logger.warn(
+        () => `[stream:orchestrator] handling InvalidStream event`,
+        {
+          continueOnFailedApiCall: config.getContinueOnFailedApiCall(),
+          isInvalidStreamRetry: ctx.isInvalidStreamRetry,
+          deferredEventCount: deferredEvents.length,
+          hadToolCallsThisTurn: state.hadToolCallsThisTurn,
+          hadContent: state.hadContent,
+          hadThinking: state.hadThinking,
+        },
+      );
+      if (config.getContinueOnFailedApiCall()) {
+        if (ctx.isInvalidStreamRetry) {
+          yield* this._fireAfterHookAndEmitClearContext(ctx);
+          return this._earlyIterResult(state.hadToolCallsThisTurn, {
+            ...state,
+            deferredEvents,
+          });
+        }
+        yield* sendMessageStream(
+          [{ text: 'System: Please continue.' }],
+          signal,
+          ctx.prompt_id,
+          boundedTurns - 1,
+          true,
+        );
         yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(state.hadToolCallsThisTurn, {
           ...state,
           deferredEvents,
         });
       }
-      yield* sendMessageStream(
-        [{ text: 'System: Please continue.' }],
-        signal,
-        ctx.prompt_id,
-        boundedTurns - 1,
-        true,
-      );
+
+      for (const d of deferredEvents) yield d;
       yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
         ...state,
@@ -687,6 +744,13 @@ export class MessageStreamOrchestrator {
   ): AsyncGenerator<ServerGeminiStreamEvent, PostTurnResult> {
     const { todoContinuationService, sendMessageStream } = this.deps;
     const getBoundedTurns = () => Math.min(ctx.turns, MAX_TURNS);
+
+    this.deps.logger.debug(
+      () => `[stream:orchestrator] finishing turn after tool-call path`,
+      {
+        deferredEventCount: deferredEvents.length,
+      },
+    );
 
     const reminderState =
       await todoContinuationService.getTodoReminderForCurrentState();

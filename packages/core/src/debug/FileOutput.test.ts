@@ -331,6 +331,59 @@ describe('FileOutput', () => {
     expect(fs.appendFile).toHaveBeenCalled();
   });
 
+  it('should flush queued entries that were still pending at dispose time @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
+    fileOutput = FileOutput.getInstance();
+
+    let resolveAppendStarted!: () => void;
+    const appendStarted = new Promise<void>((resolve) => {
+      resolveAppendStarted = resolve;
+    });
+
+    let resolveFirstAppend!: () => void;
+    const firstAppend = new Promise<void>((resolve) => {
+      resolveFirstAppend = resolve;
+    });
+
+    vi.mocked(fs.appendFile)
+      .mockImplementationOnce(() => {
+        resolveAppendStarted();
+        return firstAppend;
+      })
+      .mockResolvedValue(undefined);
+
+    const firstEntry: LogEntry = {
+      timestamp: '2025-01-21T00:00:00.000Z',
+      namespace: 'test',
+      level: 'log',
+      message: 'first message',
+      runId: 'test-run',
+      pid: 12345,
+    };
+    const secondEntry: LogEntry = {
+      timestamp: '2025-01-21T00:00:01.000Z',
+      namespace: 'test',
+      level: 'log',
+      message: 'second message',
+      runId: 'test-run',
+      pid: 12345,
+    };
+
+    const firstWrite = fileOutput.write(firstEntry);
+    await appendStarted;
+
+    const secondWrite = fileOutput.write(secondEntry);
+    const disposePromise = fileOutput.dispose();
+
+    resolveFirstAppend();
+
+    await Promise.all([firstWrite, secondWrite, disposePromise]);
+
+    expect(fs.appendFile).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fs.appendFile).mock.calls[1][1]).toBe(
+      JSON.stringify(secondEntry) + '\n',
+    );
+  });
+
   /**
    * @requirement REQ-005.10
    * @scenario Error handling
@@ -377,8 +430,11 @@ describe('FileOutput', () => {
   it('should limit queue size to prevent memory issues @plan:PLAN-20250120-DEBUGLOGGING.P10', async () => {
     fileOutput = FileOutput.getInstance();
 
-    // Block writes to allow queue to build up
-    vi.mocked(fs.appendFile).mockImplementation(() => new Promise(() => {}));
+    let resolveAppend!: () => void;
+    const blockedAppend = new Promise<void>((resolve) => {
+      resolveAppend = resolve;
+    });
+    vi.mocked(fs.appendFile).mockImplementation(() => blockedAppend);
 
     // Add more entries than max queue size (1000)
     const entries: LogEntry[] = [];
@@ -400,6 +456,8 @@ describe('FileOutput', () => {
     // We can't directly test the queue size, but the implementation
     // should handle this gracefully without memory issues
     expect(true).toBe(true); // Test that we don't crash
+
+    resolveAppend();
   });
 
   /**
