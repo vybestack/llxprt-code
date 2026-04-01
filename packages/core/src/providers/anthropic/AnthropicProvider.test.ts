@@ -1135,6 +1135,48 @@ describe('AnthropicProvider', () => {
       expect(stopReasonChunk?.metadata?.usage).toBeUndefined();
     });
 
+    it('should not retry after stopReason-only message_delta if a transient stream error follows', async () => {
+      settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'message_delta',
+            delta: { stop_reason: 'end_turn' },
+          };
+          throw new Error('Connection terminated after terminal metadata');
+        },
+      };
+
+      const mockWithResponse = vi.fn().mockResolvedValue({
+        data: mockStream,
+      });
+
+      mockMessagesCreate.mockReturnValue({
+        withResponse: mockWithResponse,
+      } as unknown as Promise<Anthropic.Message>);
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Say hello' }],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
+
+      const firstChunk = await generator.next();
+      expect(firstChunk.done).toBe(false);
+      expect(firstChunk.value.metadata?.stopReason).toBe('end_turn');
+
+      await expect(generator.next()).rejects.toThrow(
+        'Connection terminated after terminal metadata',
+      );
+      expect(mockWithResponse).toHaveBeenCalledTimes(1);
+    });
+
     it('should use ToolFormatter for tool conversion', async () => {
       // Disable prompt caching for this test to get simpler system prompt
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');

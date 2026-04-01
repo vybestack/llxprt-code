@@ -45,10 +45,12 @@ export type StreamProcessorOptions = {
   rateLimitLogger: { debug: (fn: () => string) => void };
 };
 
+type StreamState = { hasYieldedContent: boolean };
+
 async function* processStreamEvents(
   stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
-  state: { hasYieldedContent: boolean },
+  state: StreamState,
 ): AsyncGenerator<IContent> {
   const {
     isOAuth,
@@ -130,7 +132,7 @@ async function* processStreamEvents(
       currentToolCall = stopResult.currentToolCall;
       currentThinkingBlock = stopResult.currentThinkingBlock;
     } else if (chunk.type === 'message_delta') {
-      yield* handleMessageDelta(chunk, logger);
+      yield* handleMessageDelta(chunk, logger, state);
     }
   }
 }
@@ -153,7 +155,7 @@ export async function* processAnthropicStream(
   while (streamingAttempt < maxAttempts) {
     streamingAttempt++;
 
-    const state = { hasYieldedContent: false };
+    const state: StreamState = { hasYieldedContent: false };
 
     try {
       if (streamingAttempt > 1) {
@@ -440,6 +442,7 @@ function handleContentBlockStop(
 function* handleMessageDelta(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_delta' },
   logger: { debug: (fn: () => string) => void },
+  state: StreamState,
 ): Generator<IContent> {
   const usage = chunk.usage as
     | {
@@ -460,6 +463,7 @@ function* handleMessageDelta(
     );
 
     if (stopReason) {
+      state.hasYieldedContent = true;
       yield {
         speaker: 'ai',
         blocks: [],
