@@ -65,7 +65,7 @@ export async function executeApiRequest(
   const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
   if (streamingEnabled) {
-    while (true) {
+    for (;;) {
       try {
         const response = await client.chat.completions.create(requestBody, {
           ...(abortSignal != null ? { signal: abortSignal } : {}),
@@ -80,7 +80,7 @@ export async function executeApiRequest(
             requestBody,
             { streaming: true },
             false,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 
@@ -91,20 +91,20 @@ export async function executeApiRequest(
         if (
           errorMessage.includes('Tool is not present in the tools list') &&
           (model.toLowerCase().includes('qwen') ||
-            getBaseURL()?.includes('cerebras'))
+            getBaseURL()?.includes('cerebras') === true)
         ) {
           logger.error(
             'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
             {
               error,
               model,
-              toolsProvided: formattedTools?.length || 0,
+              toolsProvided: formattedTools?.length ?? 0,
               toolNames: formattedTools?.map((t) => t.function.name),
               streamingEnabled,
             },
           );
           const enhancedError = new Error(
-            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length ?? 0} tools. Known API issue.`,
           );
           (enhancedError as Error & { originalError?: unknown }).originalError =
             error;
@@ -121,7 +121,7 @@ export async function executeApiRequest(
             requestBody,
             { error: dumpErrorMessage },
             true,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 
@@ -151,7 +151,7 @@ export async function executeApiRequest(
       }
     }
   } else {
-    while (true) {
+    for (;;) {
       try {
         const response = (await client.chat.completions.create(requestBody, {
           ...(abortSignal != null ? { signal: abortSignal } : {}),
@@ -166,7 +166,7 @@ export async function executeApiRequest(
             requestBody,
             response,
             false,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 
@@ -180,13 +180,15 @@ export async function executeApiRequest(
               ? (error as { status?: number }).status
               : undefined,
           errorKeys:
-            error && typeof error === 'object' ? Object.keys(error) : [],
+            error != null && typeof error === 'object'
+              ? Object.keys(error)
+              : [],
         });
 
         const isCerebrasToolError =
           errorMessage.includes('Tool is not present in the tools list') &&
           (model.toLowerCase().includes('qwen') ||
-            getBaseURL()?.includes('cerebras'));
+            getBaseURL()?.includes('cerebras') === true);
 
         if (isCerebrasToolError) {
           logger.error(
@@ -194,13 +196,13 @@ export async function executeApiRequest(
             {
               error,
               model,
-              toolsProvided: formattedTools?.length || 0,
+              toolsProvided: formattedTools?.length ?? 0,
               toolNames: formattedTools?.map((t) => t.function.name),
               streamingEnabled,
             },
           );
           const enhancedError = new Error(
-            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length ?? 0} tools. Known API issue.`,
           );
           (enhancedError as Error & { originalError?: unknown }).originalError =
             error;
@@ -217,7 +219,7 @@ export async function executeApiRequest(
             requestBody,
             { error: dumpErrorMessage },
             true,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 

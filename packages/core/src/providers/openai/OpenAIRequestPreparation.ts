@@ -47,7 +47,7 @@ export async function prepareRequest(
 ): Promise<RequestContext> {
   const { contents, tools, metadata } = options;
   const model = options.resolved.model || defaultModel;
-  const ephemeralSettings = options.invocation?.ephemerals ?? {};
+  const ephemeralSettings = options.invocation.ephemerals;
 
   // Detect the tool format to use BEFORE building messages
   const detectedFormat = detectToolFormat(model, logger);
@@ -97,9 +97,9 @@ export async function prepareRequest(
       inputToolsLength: tools?.length,
       inputFirstGroup: tools?.[0],
       inputFunctionDeclarationsLength: tools?.[0]?.functionDeclarations?.length,
-      outputHasTools: !!formattedTools,
-      outputToolsLength: formattedTools?.length,
-      outputToolNames: formattedTools?.map((t) => t.function.name),
+      outputHasTools: true,
+      outputToolsLength: formattedTools.length,
+      outputToolNames: formattedTools.map((t) => t.function.name),
     });
   }
 
@@ -119,18 +119,20 @@ export async function prepareRequest(
 
   const userMemory = await resolveUserMemory(
     options.userMemory,
-    () => options.invocation?.userMemory,
+    () => options.invocation.userMemory,
   );
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial mock in tests
   const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
   const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
     toolNamesArg ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial mock in tests
     () => config?.getSubagentManager?.(),
   );
   const systemPrompt = await getCoreSystemPromptAsync({
     tools: toolNamesArg,
-    interactionMode: config?.isInteractive?.()
-      ? 'interactive'
-      : 'non-interactive',
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial mock in tests
+    interactionMode:
+      config?.isInteractive?.() === true ? 'interactive' : 'non-interactive',
     userMemory,
     mcpInstructions,
     model,
@@ -144,7 +146,7 @@ export async function prepareRequest(
   ];
 
   const maxTokens =
-    (metadata?.maxTokens as number | undefined) ??
+    (metadata.maxTokens as number | undefined) ??
     (ephemeralSettings['max-tokens'] as number | undefined);
 
   // Build request
@@ -172,7 +174,7 @@ export async function prepareRequest(
 
   // Inject thinking parameter for reasoning models
   if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
-    const reasoningEnabled = options.invocation?.modelBehavior?.[
+    const reasoningEnabled = options.invocation.modelBehavior[
       'reasoning.enabled'
     ] as boolean | undefined;
     if (reasoningEnabled === true) {
@@ -193,9 +195,9 @@ export async function prepareRequest(
   // Add stream options if streaming is enabled
   const streamOptions = (ephemeralSettings['stream-options'] as
     | { include_usage?: boolean }
-    | undefined) || { include_usage: true };
+    | undefined) ?? { include_usage: true };
 
-  if (streamingEnabled && streamOptions) {
+  if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
   }
 
