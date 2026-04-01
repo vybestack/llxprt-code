@@ -21,6 +21,8 @@ interface InputHandlingHarness {
   hadToolCallsRef: { current: boolean };
   clearPause: ReturnType<typeof vi.fn>;
   todoContinuationRef: { current: { clearPause: () => void } | null };
+  isMcpReady: boolean;
+  addMessage: ReturnType<typeof vi.fn>;
 }
 
 const createHarness = (
@@ -41,6 +43,8 @@ const createHarness = (
     hadToolCallsRef: { current: true },
     clearPause,
     todoContinuationRef: { current: { clearPause } },
+    isMcpReady: true,
+    addMessage: vi.fn(),
     ...overrides,
   };
 };
@@ -62,6 +66,8 @@ describe('useInputHandling', () => {
         lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
         hadToolCallsRef: harness.hadToolCallsRef,
         todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
       }),
     );
 
@@ -84,6 +90,8 @@ describe('useInputHandling', () => {
         lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
         hadToolCallsRef: harness.hadToolCallsRef,
         todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
       }),
     );
 
@@ -122,6 +130,8 @@ describe('useInputHandling', () => {
         lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
         hadToolCallsRef: harness.hadToolCallsRef,
         todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
       }),
     );
 
@@ -150,6 +160,8 @@ describe('useInputHandling', () => {
         lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
         hadToolCallsRef: harness.hadToolCallsRef,
         todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
       }),
     );
 
@@ -179,6 +191,8 @@ describe('useInputHandling', () => {
         lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
         hadToolCallsRef: harness.hadToolCallsRef,
         todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
       }),
     );
 
@@ -191,5 +205,91 @@ describe('useInputHandling', () => {
     expect(harness.clearPause).not.toHaveBeenCalled();
     expect(harness.addInput).not.toHaveBeenCalled();
     expect(harness.submitQuery).not.toHaveBeenCalled();
+  });
+
+  it('queues non-slash prompt when MCP is not ready', () => {
+    const harness = createHarness({
+      isMcpReady: false,
+    });
+
+    const { result } = renderHook(() =>
+      useInputHandling({
+        buffer: harness.buffer,
+        inputHistoryStore: { addInput: harness.addInput },
+        submitQuery: harness.submitQuery,
+        pendingHistoryItems: harness.pendingHistoryItems,
+        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
+        hadToolCallsRef: harness.hadToolCallsRef,
+        todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
+      }),
+    );
+
+    act(() => {
+      result.current.handleFinalSubmit('search my files');
+    });
+
+    // Should be queued, not submitted
+    expect(harness.addMessage).toHaveBeenCalledWith('search my files');
+    expect(harness.addInput).toHaveBeenCalledWith('search my files');
+    expect(harness.submitQuery).not.toHaveBeenCalled();
+    // Should not reset tool call ref since submission is deferred
+    expect(harness.hadToolCallsRef.current).toBe(true);
+  });
+
+  it('lets slash commands through even when MCP is not ready', () => {
+    const harness = createHarness({
+      isMcpReady: false,
+    });
+
+    const { result } = renderHook(() =>
+      useInputHandling({
+        buffer: harness.buffer,
+        inputHistoryStore: { addInput: harness.addInput },
+        submitQuery: harness.submitQuery,
+        pendingHistoryItems: harness.pendingHistoryItems,
+        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
+        hadToolCallsRef: harness.hadToolCallsRef,
+        todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
+      }),
+    );
+
+    act(() => {
+      result.current.handleFinalSubmit('/help');
+    });
+
+    // Slash commands bypass MCP gate
+    expect(harness.submitQuery).toHaveBeenCalledWith('/help');
+    expect(harness.addMessage).not.toHaveBeenCalled();
+  });
+
+  it('submits directly when MCP is ready', () => {
+    const harness = createHarness({
+      isMcpReady: true,
+    });
+
+    const { result } = renderHook(() =>
+      useInputHandling({
+        buffer: harness.buffer,
+        inputHistoryStore: { addInput: harness.addInput },
+        submitQuery: harness.submitQuery,
+        pendingHistoryItems: harness.pendingHistoryItems,
+        lastSubmittedPromptRef: harness.lastSubmittedPromptRef,
+        hadToolCallsRef: harness.hadToolCallsRef,
+        todoContinuationRef: harness.todoContinuationRef,
+        isMcpReady: harness.isMcpReady,
+        addMessage: harness.addMessage,
+      }),
+    );
+
+    act(() => {
+      result.current.handleFinalSubmit('analyze the codebase');
+    });
+
+    expect(harness.submitQuery).toHaveBeenCalledWith('analyze the codebase');
+    expect(harness.addMessage).not.toHaveBeenCalled();
   });
 });

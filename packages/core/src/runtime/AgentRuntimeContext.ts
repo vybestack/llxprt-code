@@ -70,6 +70,11 @@ export interface ReadonlySettingsSnapshot {
    * If undefined, uses the compression strategy's defaultThreshold.
    */
   'compression.density.optimizeThreshold'?: number;
+  /**
+   * When true, run a self-verification pass after initial compression
+   * to catch omissions in the summary. Defaults to false.
+   */
+  compressionVerification?: boolean;
 }
 
 /**
@@ -223,6 +228,11 @@ export interface AgentRuntimeContext {
      * Value is a fraction (0-1) of context limit.
      */
     densityOptimizeThreshold(): number | undefined;
+    /**
+     * When true, run a self-verification pass after initial compression
+     * to catch omissions in the summary. Defaults to false.
+     */
+    compressionVerification(): boolean;
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

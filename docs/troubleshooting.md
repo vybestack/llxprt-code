@@ -56,7 +56,7 @@ Dumps are saved to `~/.llxprt/dumps/` as timestamped JSON files.
 
 ### /debug
 
-Control the debug logger at runtime — same namespaces as `LLXPRT_DEBUG` but toggled without restarting:
+Control the debug logger at runtime — same namespaces as `LLXPRT_DEBUG` but toggled without restarting. In interactive mode, press **F12** to open the debug console.
 
 ```
 /debug status                    # Show current debug state

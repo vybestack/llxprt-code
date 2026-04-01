@@ -26,6 +26,21 @@ import {
 
 vi.mock('node:fs');
 
+function createMCPTool(
+  serverName: string,
+  toolName: string,
+  description: string,
+): DiscoveredMCPTool {
+  const mockCallable = {} as CallableTool;
+  return new DiscoveredMCPTool(
+    mockCallable,
+    serverName,
+    toolName,
+    description,
+    {},
+  );
+}
+
 // Mock ./mcp-client.js to control its behavior within tool-registry tests
 vi.mock('./mcp-client.js', async () => {
   const originalModule = await vi.importActual('./mcp-client.js');
@@ -825,6 +840,48 @@ describe('ToolRegistry', () => {
           )?.async,
         ).toBeDefined();
       });
+    });
+  });
+
+  describe('getTool', () => {
+    it('should retrieve an MCP tool by its fully qualified name even if registered with generated name', () => {
+      const serverName = 'my-server';
+      const toolName = 'my-tool';
+      const mcpTool = createMCPTool(serverName, toolName, 'description');
+      const registeredName = generateMcpToolName(serverName, toolName);
+
+      toolRegistry.registerTool(mcpTool);
+
+      // Verify it is available by generated MCP name
+      expect(toolRegistry.getTool(registeredName)).toBeDefined();
+      expect(toolRegistry.getTool(registeredName)?.name).toBe(registeredName);
+
+      // Verify it is also available via getFullyQualifiedName() fallback lookup
+      const fullyQualifiedName = mcpTool.getFullyQualifiedName();
+      const retrievedTool = toolRegistry.getTool(fullyQualifiedName);
+
+      expect(retrievedTool).toBeDefined();
+      expect(retrievedTool?.name).toBe(registeredName);
+    });
+
+    it('should retrieve an MCP tool by its fully qualified name when tool name has special characters', () => {
+      const serverName = 'my-server';
+      const toolName = 'my tool';
+      const mcpTool = createMCPTool(serverName, toolName, 'description');
+      const registeredName = generateMcpToolName(serverName, toolName);
+
+      toolRegistry.registerTool(mcpTool);
+
+      // Verify it is available by generated MCP name
+      expect(toolRegistry.getTool(registeredName)).toBeDefined();
+      expect(toolRegistry.getTool(registeredName)?.name).toBe(registeredName);
+
+      // Verify it is also available via getFullyQualifiedName() fallback lookup
+      const fullyQualifiedName = mcpTool.getFullyQualifiedName();
+      const retrievedTool = toolRegistry.getTool(fullyQualifiedName);
+
+      expect(retrievedTool).toBeDefined();
+      expect(retrievedTool?.name).toBe(registeredName);
     });
   });
 });

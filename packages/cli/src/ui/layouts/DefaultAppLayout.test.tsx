@@ -206,7 +206,6 @@ function createBaseUIState() {
     isFolderTrustDialogOpen: false,
     isWelcomeDialogOpen: false,
     isPermissionsDialogOpen: false,
-    shellConfirmationRequest: null,
     confirmationRequest: null,
     isThemeDialogOpen: false,
     isSettingsDialogOpen: false,

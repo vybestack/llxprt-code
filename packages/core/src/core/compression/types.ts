@@ -119,10 +119,17 @@ export interface CompressionContext {
   readonly promptBaseDir: string;
   readonly promptContext: Readonly<Partial<PromptContext>>;
   readonly promptId: string;
+  readonly trigger?: 'manual' | 'auto';
   /** @plan PLAN-20260211-HIGHDENSITY.P03 */
   readonly activeTodos?: string;
   /** @plan PLAN-20260211-HIGHDENSITY.P03 */
   readonly transcriptPath?: string;
+  /**
+   * When true, run a verification pass after initial compression to catch
+   * omissions in the summary. Defaults to false — no behavior change for
+   * existing users.
+   */
+  readonly compressionVerification?: boolean;
 }
 
 /**
@@ -158,6 +165,16 @@ export interface CompressionResultMetadata {
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
+
+/**
+ * Well-known error codes for compression failures.
+ */
+export const COMPRESSION_ERROR_CODES = {
+  UNKNOWN_STRATEGY: 'UNKNOWN_STRATEGY',
+  PROMPT_RESOLUTION_FAILED: 'PROMPT_RESOLUTION_FAILED',
+  EXECUTION_FAILED: 'EXECUTION_FAILED',
+  EMPTY_SUMMARY: 'EMPTY_SUMMARY',
+} as const;
 
 export class CompressionStrategyError extends Error {
   readonly code: string;
@@ -228,6 +245,24 @@ export class CompressionExecutionError extends CompressionStrategyError {
   }
 }
 
+/**
+ * Thrown when a compression strategy returns an empty summary.
+ * This is always a permanent (non-retryable) failure — the model returned
+ * nothing deterministically; retrying is unlikely to succeed.
+ *
+ * @plan PLAN-20260211-COMPRESSION.P14
+ */
+export class EmptySummaryError extends CompressionStrategyError {
+  constructor(strategy: string) {
+    super(
+      `Compression strategy "${strategy}" produced an empty summary`,
+      COMPRESSION_ERROR_CODES.EMPTY_SUMMARY,
+      { strategy },
+    );
+    this.name = 'EmptySummaryError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Error classification utilities
 // ---------------------------------------------------------------------------
@@ -249,6 +284,10 @@ export class CompressionExecutionError extends CompressionStrategyError {
  * @requirement REQ-CR-001, REQ-CR-002
  */
 export function isTransientCompressionError(error: unknown): boolean {
+  // EmptySummaryError is always permanent — the model returned nothing deterministically
+  if (error instanceof EmptySummaryError) {
+    return false;
+  }
   // CompressionStrategyError subclasses are always permanent (logic/config failures)
   // unless the error itself explicitly says it's transient
   if (error instanceof CompressionExecutionError) {

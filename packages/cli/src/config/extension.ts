@@ -756,8 +756,12 @@ export async function installOrUpdateExtension(
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();
 
-    // Check for missing settings and warn user
-    if (newExtensionConfig.settings && newExtensionConfig.settings.length > 0) {
+    // Check for missing settings and warn user (only when extensionConfig is enabled)
+    if (
+      newExtensionConfig.settings &&
+      newExtensionConfig.settings.length > 0 &&
+      (settings.experimental?.extensionConfig ?? false)
+    ) {
       const { getMissingSettings } = await import(
         './extensions/settingsIntegration.js'
       );

@@ -22,6 +22,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   MessageBusType,
   type ToolConfirmationResponse,
+  type SerializableConfirmationDetails,
 } from '../confirmation-bus/types.js';
 import { ToolConfirmationOutcome } from '../tools/tools.js';
 import type { ToolCallConfirmationDetails } from '../tools/tools.js';
@@ -58,7 +59,7 @@ export interface StatusMutator {
   setCancelled(callId: string, reason: string): void;
   setAwaitingApproval(
     callId: string,
-    details: ToolCallConfirmationDetails,
+    details: ToolCallConfirmationDetails | SerializableConfirmationDetails,
   ): void;
   setScheduled(callId: string): void;
   setExecuting(callId: string): void;
@@ -85,6 +86,26 @@ export interface EditorCallbacks {
   getPreferredEditor(): EditorType | undefined;
   onEditorClose(): void;
   onEditorOpen?(): void;
+}
+
+function isInteractiveConfirmationDetails(
+  details: ToolCallConfirmationDetails | SerializableConfirmationDetails,
+): details is ToolCallConfirmationDetails {
+  return 'onConfirm' in details;
+}
+
+function getConfirmationCorrelationId(
+  details:
+    | ToolCallConfirmationDetails
+    | SerializableConfirmationDetails
+    | undefined,
+): string | undefined {
+  if (!details || !('correlationId' in details)) {
+    return undefined;
+  }
+
+  const correlationId = details.correlationId;
+  return typeof correlationId === 'string' ? correlationId : undefined;
 }
 
 // ── ConfirmationCoordinator ───────────────────────────────────────────────
@@ -393,6 +414,21 @@ export class ConfirmationCoordinator {
       return;
     }
 
+    if (
+      !isInteractiveConfirmationDetails(waitingToolCall.confirmationDetails)
+    ) {
+      if (logger.enabled) {
+        logger.debug(
+          () =>
+            `Skipping TOOL_CONFIRMATION_RESPONSE for callId=${callId} — confirmation details are not interactive.`,
+        );
+      }
+      this.pendingConfirmations.delete(response.correlationId);
+      this.statusMutator.setOutcome(callId, ToolConfirmationOutcome.Cancel);
+      void this.handleCancellation(callId);
+      return;
+    }
+
     void this.handleConfirmationResponse(
       callId,
       waitingToolCall.confirmationDetails.onConfirm,
@@ -444,8 +480,9 @@ export class ConfirmationCoordinator {
     this.processedConfirmations.add(callId);
 
     const waitingToolCall = this.findWaitingToolCall(callId);
-    const previousCorrelationId =
-      waitingToolCall?.confirmationDetails?.correlationId;
+    const previousCorrelationId = getConfirmationCorrelationId(
+      waitingToolCall?.confirmationDetails,
+    );
 
     await originalOnConfirm(outcome, payload);
 
@@ -592,7 +629,7 @@ export class ConfirmationCoordinator {
     this.statusMutator.setAwaitingApproval(callId, updatedDetails);
 
     this.registerStaleCorrelationId(
-      waitingToolCall.confirmationDetails.correlationId,
+      getConfirmationCorrelationId(waitingToolCall.confirmationDetails),
       newCorrelationId,
     );
   }
@@ -699,6 +736,11 @@ export class ConfirmationCoordinator {
     );
 
     this.statusMutator.setArgs(toolCall.request.callId, updatedParams);
+
+    if (!isInteractiveConfirmationDetails(toolCall.confirmationDetails)) {
+      return;
+    }
+
     this.statusMutator.setAwaitingApproval(toolCall.request.callId, {
       ...toolCall.confirmationDetails,
       fileDiff: updatedDiff,

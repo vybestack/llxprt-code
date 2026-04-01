@@ -169,7 +169,7 @@ describe('Settings Loading and Merging', () => {
       // Schema defaults are now recursively extracted for nested objects
       // Test key nested defaults that demonstrate the fix is working
       expect(settings.merged.accessibility).toEqual({
-        disableLoadingPhrases: false,
+        enableLoadingPhrases: true,
         screenReader: false,
       });
       expect(settings.merged.checkpointing).toEqual({ enabled: false });
@@ -177,7 +177,9 @@ describe('Settings Loading and Merging', () => {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
         enableRecursiveFileSearch: true,
-        disableFuzzySearch: false,
+        enableFuzzySearch: true,
+        maxFileCount: 20000,
+        searchTimeout: 5000,
       });
       expect(settings.merged.security).toEqual({
         disableYoloMode: false,
@@ -206,8 +208,8 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathLike) => p === getSystemSettingsPath(),
       );
       const systemSettingsContent = {
-        disableAutoUpdate: false,
-        disableUpdateNag: true,
+        enableAutoUpdate: true,
+        enableAutoUpdateNotification: false,
       };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
@@ -223,7 +225,8 @@ describe('Settings Loading and Merging', () => {
         getSystemSettingsPath(),
         'utf-8',
       );
-      expect(settings.system.settings).toEqual(systemSettingsContent);
+      // Migration adds enableAutoUpdate/enableAutoUpdateNotification — use toMatchObject
+      expect(settings.system.settings).toMatchObject(systemSettingsContent);
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toMatchObject({
@@ -231,8 +234,8 @@ describe('Settings Loading and Merging', () => {
         chatCompression: {},
         checkpointing: {},
         coreToolSettings: {},
-        disableAutoUpdate: false,
-        disableUpdateNag: false,
+        enableAutoUpdate: true,
+        enableAutoUpdateNotification: false,
         emojifilter: 'auto',
         enablePromptCompletion: false,
         enableTextToolCallParsing: false,
@@ -365,7 +368,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.security?.disableYoloMode).toBe(true); // System setting should be used
+      expect(settings.merged.security.disableYoloMode).toBe(true); // System setting should be used
     });
 
     it('should handle contextFileName correctly when only in user settings', () => {
@@ -487,8 +490,8 @@ describe('Settings Loading and Merging', () => {
 
     it('should default contextFileName to undefined if not in any settings file', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
-      const userSettingsContent = { disableAutoUpdate: false };
-      const workspaceSettingsContent = { disableUpdateNag: true };
+      const userSettingsContent = { enableAutoUpdate: true };
+      const workspaceSettingsContent = { enableAutoUpdateNotification: false };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
@@ -503,11 +506,11 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.contextFileName).toBeUndefined();
     });
 
-    it('should load disableAutoUpdate setting from user settings', () => {
+    it('should load enableAutoUpdate setting from user settings', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === USER_SETTINGS_PATH,
       );
-      const userSettingsContent = { disableAutoUpdate: true };
+      const userSettingsContent = { enableAutoUpdate: false };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
@@ -516,14 +519,14 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.disableAutoUpdate).toBe(true);
+      expect(settings.merged.enableAutoUpdate).toBe(false);
     });
 
-    it('should load disableAutoUpdate setting from workspace settings', () => {
+    it('should load enableAutoUpdate setting from workspace settings', () => {
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === MOCK_WORKSPACE_SETTINGS_PATH,
       );
-      const workspaceSettingsContent = { disableAutoUpdate: false };
+      const workspaceSettingsContent = { enableAutoUpdate: true };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
@@ -532,13 +535,13 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.disableAutoUpdate).toBe(false);
+      expect(settings.merged.enableAutoUpdate).toBe(true);
     });
 
-    it('should prioritize workspace disableAutoUpdate setting over user setting', () => {
+    it('should prioritize workspace enableAutoUpdate setting over user setting', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
-      const userSettingsContent = { disableAutoUpdate: true };
-      const workspaceSettingsContent = { disableAutoUpdate: false };
+      const userSettingsContent = { enableAutoUpdate: false };
+      const workspaceSettingsContent = { enableAutoUpdate: true };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
@@ -549,15 +552,15 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.disableAutoUpdate).toBe(false);
+      expect(settings.merged.enableAutoUpdate).toBe(true);
     });
 
-    it('should have telemetry as undefined if not in any settings file', () => {
+    it('should have telemetry as empty object if not in any settings file', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false); // No settings files exist
       (fs.readFileSync as Mock).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.telemetry).toBeUndefined();
-      expect(settings.merged.ui?.customThemes).toEqual({});
+      expect(settings.merged.telemetry).toEqual({});
+      expect(settings.merged.ui.customThemes).toEqual({});
       expect(settings.merged.mcpServers).toEqual({});
     });
 
@@ -1176,8 +1179,8 @@ describe('Settings Loading and Merging', () => {
           (p: fs.PathLike) => p === MOCK_ENV_SYSTEM_SETTINGS_PATH,
         );
         const systemSettingsContent = {
-          disableAutoUpdate: true,
-          disableUpdateNag: true,
+          enableAutoUpdate: false,
+          enableAutoUpdateNotification: false,
         };
         (fs.readFileSync as Mock).mockImplementation(
           (p: fs.PathOrFileDescriptor) => {
@@ -1194,14 +1197,15 @@ describe('Settings Loading and Merging', () => {
           'utf-8',
         );
         expect(settings.system.path).toBe(MOCK_ENV_SYSTEM_SETTINGS_PATH);
-        expect(settings.system.settings).toEqual(systemSettingsContent);
+        // Migration adds enableAutoUpdate/enableAutoUpdateNotification — use toMatchObject
+        expect(settings.system.settings).toMatchObject(systemSettingsContent);
         expect(settings.merged).toMatchObject({
           accessibility: {},
           chatCompression: {},
           checkpointing: {},
           coreToolSettings: {},
-          disableAutoUpdate: false,
-          disableUpdateNag: false,
+          enableAutoUpdate: false,
+          enableAutoUpdateNotification: false,
           emojifilter: 'auto',
           enablePromptCompletion: false,
           enableTextToolCallParsing: false,
@@ -1328,6 +1332,133 @@ describe('Settings Loading and Merging', () => {
       expect(settings.user.settings.shouldUseNodePtyShell).toBe(false);
       expect(settings.merged.shouldUseNodePtyShell).toBe(false);
     });
+
+    it('should migrate disableUpdateNag to enableAutoUpdateNotification in system and systemDefaults settings', () => {
+      const systemSettingsContent = {
+        disableUpdateNag: true,
+      };
+      const systemDefaultsContent = {
+        disableUpdateNag: false,
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === getSystemSettingsPath()) {
+            return JSON.stringify(systemSettingsContent);
+          }
+          if (p === getSystemDefaultsPath()) {
+            return JSON.stringify(systemDefaultsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify system settings were migrated
+      expect(settings.system.settings).toHaveProperty(
+        'enableAutoUpdateNotification',
+      );
+      expect(
+        (settings.system.settings as Record<string, unknown>)[
+          'enableAutoUpdateNotification'
+        ],
+      ).toBe(false);
+
+      // Verify systemDefaults settings were migrated
+      expect(settings.systemDefaults.settings).toHaveProperty(
+        'enableAutoUpdateNotification',
+      );
+      expect(
+        (settings.systemDefaults.settings as Record<string, unknown>)[
+          'enableAutoUpdateNotification'
+        ],
+      ).toBe(true);
+
+      // Merged reflects system scope (system overrides defaults)
+      expect(settings.merged.enableAutoUpdateNotification).toBe(false);
+    });
+
+    it('should migrate disableAutoUpdate to enableAutoUpdate in user settings', () => {
+      const userSettingsContent = {
+        disableAutoUpdate: true,
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableAutoUpdate=true → enableAutoUpdate=false)
+      expect(
+        (settings.user.settings as Record<string, unknown>)['enableAutoUpdate'],
+      ).toBe(false);
+      expect(settings.merged.enableAutoUpdate).toBe(false);
+    });
+
+    it('should migrate accessibility.disableLoadingPhrases to accessibility.enableLoadingPhrases', () => {
+      const userSettingsContent = {
+        accessibility: {
+          disableLoadingPhrases: true,
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableLoadingPhrases=true → enableLoadingPhrases=false)
+      expect(
+        (settings.user.settings.accessibility as Record<string, unknown>)[
+          'enableLoadingPhrases'
+        ],
+      ).toBe(false);
+      expect(settings.merged.accessibility?.enableLoadingPhrases).toBe(false);
+    });
+
+    it('should migrate fileFiltering.disableFuzzySearch to fileFiltering.enableFuzzySearch', () => {
+      const userSettingsContent = {
+        fileFiltering: {
+          disableFuzzySearch: true,
+        },
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify migrated value (inverted: disableFuzzySearch=true → enableFuzzySearch=false)
+      expect(
+        (settings.user.settings.fileFiltering as Record<string, unknown>)[
+          'enableFuzzySearch'
+        ],
+      ).toBe(false);
+      expect(settings.merged.fileFiltering?.enableFuzzySearch).toBe(false);
+    });
   });
 
   describe('LoadedSettings class', () => {
@@ -1340,7 +1471,7 @@ describe('Settings Loading and Merging', () => {
 
       loadedSettings.setValue(SettingScope.User, 'ui.theme', 'matrix');
       expect(loadedSettings.user.settings.ui?.theme).toBe('matrix');
-      expect(loadedSettings.merged.ui?.theme).toBe('matrix');
+      expect(loadedSettings.merged.ui.theme).toBe('matrix');
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         USER_SETTINGS_PATH,
         JSON.stringify({ ui: { theme: 'matrix' } }, null, 2),
@@ -1355,8 +1486,8 @@ describe('Settings Loading and Merging', () => {
       expect(loadedSettings.workspace.settings.ui?.contextFileName).toBe(
         'MY_AGENTS.md',
       );
-      expect(loadedSettings.merged.ui?.contextFileName).toBe('MY_AGENTS.md');
-      expect(loadedSettings.merged.ui?.theme).toBe('matrix'); // User setting should still be there
+      expect(loadedSettings.merged.ui.contextFileName).toBe('MY_AGENTS.md');
+      expect(loadedSettings.merged.ui.theme).toBe('matrix'); // User setting should still be there
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         MOCK_WORKSPACE_SETTINGS_PATH,
         JSON.stringify({ ui: { contextFileName: 'MY_AGENTS.md' } }, null, 2),
@@ -1367,7 +1498,7 @@ describe('Settings Loading and Merging', () => {
       loadedSettings.setValue(SettingScope.System, 'ui.theme', 'ocean');
 
       expect(loadedSettings.system.settings.ui?.theme).toBe('ocean');
-      expect(loadedSettings.merged.ui?.theme).toBe('matrix');
+      expect(loadedSettings.merged.ui.theme).toBe('matrix');
 
       // SystemDefaults theme is overridden by user, workspace, and system themes
       loadedSettings.setValue(
@@ -1376,7 +1507,7 @@ describe('Settings Loading and Merging', () => {
         'default',
       );
       expect(loadedSettings.systemDefaults.settings.ui?.theme).toBe('default');
-      expect(loadedSettings.merged.ui?.theme).toBe('matrix');
+      expect(loadedSettings.merged.ui.theme).toBe('matrix');
     });
   });
 
@@ -1519,9 +1650,9 @@ describe('Settings Loading and Merging', () => {
   describe('with workspace trust', () => {
     it('should merge workspace settings when workspace is trusted', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
-      const userSettingsContent = { disableAutoUpdate: false };
+      const userSettingsContent = { enableAutoUpdate: true };
       const workspaceSettingsContent = {
-        disableAutoUpdate: true,
+        enableAutoUpdate: false,
         contextFileName: 'WORKSPACE.md',
       };
 
@@ -1537,7 +1668,7 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.merged.disableAutoUpdate).toBe(true);
+      expect(settings.merged.enableAutoUpdate).toBe(false);
       expect(settings.merged.contextFileName).toBe('WORKSPACE.md');
     });
 
@@ -1546,13 +1677,13 @@ describe('Settings Loading and Merging', () => {
       vi.mocked(isFolderTrustEnabled).mockReturnValue(true); // Enable the feature for this test
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
-        disableAutoUpdate: false,
+        enableAutoUpdate: true,
         contextFileName: 'USER.md',
         folderTrustFeature: true, // Enable the feature
         folderTrust: true, // Enable the setting
       };
       const workspaceSettingsContent = {
-        disableAutoUpdate: true,
+        enableAutoUpdate: false,
         contextFileName: 'WORKSPACE.md',
       };
 
@@ -1568,7 +1699,7 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.merged.disableAutoUpdate).toBe(false); // User setting
+      expect(settings.merged.enableAutoUpdate).toBe(true); // User setting
       expect(settings.merged.contextFileName).toBe('USER.md'); // User setting
     });
   });
@@ -1975,6 +2106,124 @@ describe('Settings Loading and Merging', () => {
         'error',
         'There was an error saving your latest settings changes.',
         error,
+      );
+    });
+  });
+
+  describe('hooks split merge behavior', () => {
+    it('hooksConfig merges fields across user and workspace scopes rather than replacing', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userSettingsContent = {
+        hooksConfig: {
+          enabled: true,
+        },
+      };
+      const workspaceSettingsContent = {
+        hooksConfig: {
+          notifications: false,
+        },
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.merged.hooksConfig).toMatchObject({
+        enabled: true,
+        notifications: false,
+      });
+      // Verify both scopes contributed (not replaced wholesale)
+      expect(settings.merged.hooksConfig.enabled).toBe(true);
+      expect(settings.merged.hooksConfig.notifications).toBe(false);
+    });
+
+    it('hooks event-map merges by event key across scopes', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userHooks = {
+        BeforeTool: [
+          {
+            matcher: 'ReadFile',
+            hooks: [{ type: 'command', command: 'user-before.sh' }],
+          },
+        ],
+      };
+      const workspaceHooks = {
+        AfterTool: [
+          {
+            matcher: 'WriteFile',
+            hooks: [{ type: 'command', command: 'workspace-after.sh' }],
+          },
+        ],
+      };
+      const userSettingsContent = { hooks: userHooks };
+      const workspaceSettingsContent = { hooks: workspaceHooks };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Both event keys should be present in merged hooks
+      expect(settings.merged.hooks).toEqual({
+        BeforeTool: userHooks.BeforeTool,
+        AfterTool: workspaceHooks.AfterTool,
+      });
+    });
+
+    it('later scope overrides same event key array in hooks', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const userHooks = {
+        BeforeTool: [
+          {
+            matcher: 'ReadFile',
+            hooks: [{ type: 'command', command: 'user-before.sh' }],
+          },
+        ],
+      };
+      const workspaceHooks = {
+        BeforeTool: [
+          {
+            matcher: 'WriteFile',
+            hooks: [{ type: 'command', command: 'workspace-before.sh' }],
+          },
+        ],
+      };
+      const userSettingsContent = { hooks: userHooks };
+      const workspaceSettingsContent = { hooks: workspaceHooks };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Workspace BeforeTool should replace user BeforeTool
+      expect(settings.merged.hooks.BeforeTool).toEqual(
+        workspaceHooks.BeforeTool,
+      );
+      expect(settings.merged.hooks.BeforeTool).not.toEqual(
+        userHooks.BeforeTool,
       );
     });
   });

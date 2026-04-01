@@ -47,6 +47,7 @@ function createCompletedToolCallResponse(params: {
   error?: Error;
   errorType?: ToolErrorType;
   agentId?: string;
+  suppressDisplay?: boolean;
 }) {
   return {
     status: params.error ? ('error' as const) : ('success' as const),
@@ -65,6 +66,7 @@ function createCompletedToolCallResponse(params: {
       error: params.error,
       errorType: params.errorType,
       agentId: params.agentId ?? 'primary',
+      suppressDisplay: params.suppressDisplay,
     },
   };
 }
@@ -279,6 +281,91 @@ describe('runNonInteractive', () => {
       [{ text: 'Tool response' }],
       expect.any(AbortSignal),
       'prompt-id-2',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should print successful tool resultDisplay output in text mode', async () => {
+    const toolCallEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.ToolCallRequest,
+      value: {
+        callId: 'tool-display-1',
+        name: 'testTool',
+        args: { arg1: 'value1' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-id-display',
+      },
+    };
+
+    mockCoreExecuteToolCall.mockResolvedValue(
+      createCompletedToolCallResponse({
+        callId: 'tool-display-1',
+        responseParts: [{ text: 'Tool response' }],
+        resultDisplay: 'BeforeTool: File operation logged',
+      }),
+    );
+
+    mockGeminiClient.sendMessageStream
+      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
+      .mockReturnValueOnce(
+        createStreamFromEvents([
+          { type: GeminiEventType.Content, value: 'Final answer' },
+        ]),
+      );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use a tool',
+      prompt_id: 'prompt-id-display',
+    });
+
+    expect(processStdoutSpy).toHaveBeenCalledWith(
+      'BeforeTool: File operation logged\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should not print tool resultDisplay when suppressDisplay is true', async () => {
+    const toolCallEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.ToolCallRequest,
+      value: {
+        callId: 'tool-display-2',
+        name: 'testTool',
+        args: { arg1: 'value1' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-id-display-suppress',
+      },
+    };
+
+    mockCoreExecuteToolCall.mockResolvedValue(
+      createCompletedToolCallResponse({
+        callId: 'tool-display-2',
+        responseParts: [{ text: 'Tool response' }],
+        resultDisplay: 'This should not be shown',
+        suppressDisplay: true,
+      }),
+    );
+
+    mockGeminiClient.sendMessageStream
+      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
+      .mockReturnValueOnce(
+        createStreamFromEvents([
+          { type: GeminiEventType.Content, value: 'Final answer' },
+        ]),
+      );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use a tool',
+      prompt_id: 'prompt-id-display-suppress',
+    });
+
+    expect(processStdoutSpy).not.toHaveBeenCalledWith(
+      'This should not be shown\n',
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');

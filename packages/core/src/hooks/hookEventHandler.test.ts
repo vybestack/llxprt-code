@@ -23,16 +23,31 @@ import type { HookExecutionResult } from './types.js';
 import { coreEvents } from '../utils/events.js';
 
 // Mock DebugLogger
-vi.mock('../debug/index.js', () => ({
-  DebugLogger: {
-    getLogger: () => ({
-      debug: vi.fn(),
-      log: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    }),
-  },
-}));
+vi.mock('../debug/index.js', () => {
+  const createLogger = () => ({
+    debug: vi.fn(),
+    log: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  });
+
+  class MockDebugLogger {
+    static getLogger() {
+      return createLogger();
+    }
+
+    constructor(_namespace?: string) {}
+
+    debug = vi.fn();
+    log = vi.fn();
+    warn = vi.fn();
+    error = vi.fn();
+  }
+
+  return {
+    DebugLogger: MockDebugLogger,
+  };
+});
 
 // Mock coreEvents
 vi.mock('../utils/events.js', () => ({
@@ -364,7 +379,7 @@ describe('HookEventHandler', () => {
 
       expect(mockPlanner.createExecutionPlan).toHaveBeenCalledWith(
         'PreCompress',
-        undefined,
+        { trigger: 'manual' },
       );
     });
 

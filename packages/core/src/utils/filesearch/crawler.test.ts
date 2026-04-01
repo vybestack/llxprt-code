@@ -570,4 +570,70 @@ describe('crawler', () => {
       );
     });
   });
+
+  it('should detect truncation when maxFiles is hit', async () => {
+    tmpDir = await createTmpDir({
+      'file1.js': '',
+      'file2.js': '',
+      'file3.js': '',
+    });
+
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: false,
+      ignoreDirs: [],
+    });
+
+    const paths = await crawl({
+      crawlDirectory: tmpDir,
+      cwd: tmpDir,
+      ignore,
+      cache: false,
+      cacheTtl: 0,
+      maxFiles: 2,
+    });
+
+    // fdir returns files and directories.
+    // In our filter, we only increment fileCount for files.
+    // So we should have 2 files + some directories.
+    const files = paths.filter((p) => p !== '.' && !p.endsWith('/'));
+    expect(files.length).toBe(2);
+  });
+
+  it('should NOT write to cache when results are truncated', async () => {
+    tmpDir = await createTmpDir({
+      'file1.js': '',
+      'file2.js': '',
+      'file3.js': '',
+    });
+
+    const ignore = loadIgnoreRules({
+      projectRoot: tmpDir,
+      useGitignore: false,
+      useGeminiignore: false,
+      ignoreDirs: [],
+    });
+
+    const baseOptions = {
+      crawlDirectory: tmpDir,
+      cwd: tmpDir,
+      ignore,
+      cache: true,
+      cacheTtl: 60,
+    };
+
+    // First crawl with maxFiles: 2 — results are truncated, should NOT be cached.
+    const firstResult = await crawl({ ...baseOptions, maxFiles: 2 });
+    const firstFiles = firstResult.filter((p) => p !== '.' && !p.endsWith('/'));
+    expect(firstFiles.length).toBe(2);
+
+    // Second crawl with maxFiles: 3 — if truncated result was cached, we'd still
+    // get only 2 files. Getting 3 proves the cache was skipped.
+    const secondResult = await crawl({ ...baseOptions, maxFiles: 3 });
+    const secondFiles = secondResult.filter(
+      (p) => p !== '.' && !p.endsWith('/'),
+    );
+    expect(secondFiles.length).toBe(3);
+  });
 });

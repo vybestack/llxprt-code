@@ -11,8 +11,9 @@
  */
 
 import type { Transformation } from './buffer-types.js';
-import { unescapePath } from '@vybestack/llxprt-code-core';
+import { LruCache, unescapePath } from '@vybestack/llxprt-code-core';
 import { cpLen, cpSlice } from '../../utils/textUtils.js';
+import { LRU_BUFFER_PERF_CACHE_LIMIT } from '../../constants.js';
 import path from 'node:path';
 
 /**
@@ -63,9 +64,18 @@ export function getTransformedImagePath(filePath: string): string {
  * @param line - The line text to analyze
  * @returns An array of Transformation objects for the line
  */
+const transformationsCache = new LruCache<string, Transformation[]>(
+  LRU_BUFFER_PERF_CACHE_LIMIT,
+);
+
 export function calculateTransformationsForLine(
   line: string,
 ): Transformation[] {
+  const cached = transformationsCache.get(line);
+  if (cached) {
+    return cached;
+  }
+
   const transformations: Transformation[] = [];
   let match: RegExpExecArray | null;
 
@@ -84,6 +94,8 @@ export function calculateTransformationsForLine(
       collapsedText: getTransformedImagePath(logicalText),
     });
   }
+
+  transformationsCache.set(line, transformations);
 
   return transformations;
 }

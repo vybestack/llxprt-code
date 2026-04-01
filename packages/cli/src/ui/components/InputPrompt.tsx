@@ -387,18 +387,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const handleInput = useCallback(
     (key: Key) => {
       /// We want to handle paste even when not focused to support drag and drop.
-      if (!focus && !key.paste) {
+      if (!focus && key.name !== 'paste') {
         return;
       }
 
-      if (isEmbeddedShellFocused) {
-        if (keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key)) {
-          return;
-        }
-        return;
-      }
-
-      if (key.paste) {
+      if (key.name === 'paste') {
         const sanitized = key.sequence.replace(/\r\n?/g, '\n');
         const charCount = cpLen(sanitized);
         const lineCount =
@@ -824,7 +817,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       reverseSearchActive,
       textBeforeReverseSearch,
       cursorPosition,
-      isEmbeddedShellFocused,
     ],
   );
 

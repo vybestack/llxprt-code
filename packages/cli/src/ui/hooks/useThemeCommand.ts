@@ -28,7 +28,7 @@ export const useThemeCommand = (
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
 ): UseThemeCommandReturn => {
   // Determine the effective theme
-  const effectiveTheme = loadedSettings.merged.ui?.theme;
+  const effectiveTheme = loadedSettings.merged.ui.theme;
   const appDispatch = useAppDispatch();
   const isThemeDialogOpen = appState.openDialogs.theme;
 
@@ -130,10 +130,10 @@ export const useThemeCommand = (
           return;
         }
         loadedSettings.setValue(scope, 'ui.theme', themeName); // Update the merged settings
-        if (loadedSettings.merged.ui?.customThemes) {
+        if (loadedSettings.merged.ui.customThemes) {
           themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
         }
-        applyTheme(loadedSettings.merged.ui?.theme); // Apply the current theme
+        applyTheme(loadedSettings.merged.ui.theme); // Apply the current theme
         appDispatch({ type: 'SET_THEME_ERROR', payload: null });
       } finally {
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' }); // Close the dialog

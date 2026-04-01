@@ -12,6 +12,7 @@ import {
   updateSetting,
   ExtensionSettingScope,
 } from '../../config/extensions/settingsIntegration.js';
+import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
 
 interface SetArgs {
@@ -162,6 +163,16 @@ export const setCommand: CommandModule = {
         default: 'user',
       }),
   handler: async (argv) => {
+    const settings = loadSettings(process.cwd()).merged;
+    if (!(settings.experimental?.extensionConfig ?? false)) {
+      console.error(
+        'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
+      );
+      process.exitCode = 1;
+      await exitCli();
+      return;
+    }
+
     await handleSet({
       name: argv['name'] as string,
       setting: argv['setting'] as string,
@@ -187,6 +198,16 @@ export const listCommand: CommandModule = {
         choices: ['user', 'workspace'],
       }),
   handler: async (argv) => {
+    const settings = loadSettings(process.cwd()).merged;
+    if (!(settings.experimental?.extensionConfig ?? false)) {
+      console.error(
+        'Extension configuration is currently disabled. Enable it by setting "experimental.extensionConfig" to true.',
+      );
+      process.exitCode = 1;
+      await exitCli();
+      return;
+    }
+
     await handleList({
       name: argv['name'] as string,
       scope: argv['scope'] as string | undefined,

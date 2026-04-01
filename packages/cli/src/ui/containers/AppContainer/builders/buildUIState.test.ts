@@ -76,7 +76,6 @@ const makeParams = (): UIStateParams => ({
   profileDialogLoading: false,
 
   // Confirmation requests
-  shellConfirmationRequest: null,
   confirmationRequest: null,
   confirmUpdateGeminiCLIExtensionRequests: [],
 

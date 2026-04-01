@@ -18,6 +18,11 @@ import type {
   ToolCall,
   ProviderPerformanceMetrics,
 } from '../providers/types.js';
+import {
+  HookEventName,
+  type HookExecutionResult,
+  type HookInput,
+} from '../hooks/types.js';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',
@@ -165,6 +170,41 @@ export class ToolCallEvent {
         };
       }
     }
+  }
+}
+
+export class HookCallEvent {
+  'event.name': 'hook_call';
+  'event.timestamp': string;
+  hook_event_name: HookEventName;
+  hook_name: string;
+  hook_input: HookInput;
+  hook_output: HookInput | Record<string, unknown>;
+  exit_code: number;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
+  success: boolean;
+  error: string;
+
+  constructor(
+    eventName: HookEventName,
+    input: HookInput,
+    result: HookExecutionResult,
+  ) {
+    this['event.name'] = 'hook_call';
+    this['event.timestamp'] = new Date().toISOString();
+    this.hook_event_name = eventName;
+    this.hook_name = result.hookConfig.command || result.hookConfig.name || '';
+    this.hook_input = input;
+    this.hook_output =
+      (result.output as Record<string, unknown> | undefined) ?? {};
+    this.exit_code = result.exitCode ?? 0;
+    this.stdout = result.stdout ?? '';
+    this.stderr = result.stderr ?? '';
+    this.duration_ms = result.duration;
+    this.success = result.success;
+    this.error = result.error?.message ?? '';
   }
 }
 
@@ -763,6 +803,7 @@ export type TelemetryEvent =
   | EndSessionEvent
   | UserPromptEvent
   | ToolCallEvent
+  | HookCallEvent
   | ApiRequestEvent
   | ApiErrorEvent
   | ApiResponseEvent

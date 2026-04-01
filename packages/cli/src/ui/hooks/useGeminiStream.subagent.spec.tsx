@@ -134,9 +134,11 @@ const MockedGeminiClientClass = vi.hoisted(() =>
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('./useReactToolScheduler.js')>();
+  const { mapToDisplay } = await import('./toolMapping.js');
   return {
     ...original,
     useReactToolScheduler: vi.fn(),
+    mapToDisplay,
   };
 });
 

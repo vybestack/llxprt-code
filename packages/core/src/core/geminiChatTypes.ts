@@ -27,11 +27,13 @@ export type StreamEvent =
       type: StreamEventType.AGENT_EXECUTION_STOPPED;
       reason: string;
       systemMessage?: string;
+      contextCleared?: boolean;
     }
   | {
       type: StreamEventType.AGENT_EXECUTION_BLOCKED;
       reason: string;
       systemMessage?: string;
+      contextCleared?: boolean;
     };
 
 export type UsageMetadataWithCache = GenerateContentResponseUsageMetadata & {

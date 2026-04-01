@@ -293,6 +293,49 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     }
   });
 
+  it('appends before-hook systemMessage text to the successful result content', async () => {
+    const mockTool = new MockTool({
+      name: 'hooked-tool',
+      execute: async () => ({
+        llmContent: 'tool output',
+        returnDisplay: 'tool output',
+      }),
+    });
+    const toolRegistry = createMockToolRegistry(mockTool);
+    const hookSystem = createHookSystem({
+      beforeToolResult: {
+        systemMessage: 'before hook note',
+      },
+    });
+    const config = createMockConfig(toolRegistry, hookSystem);
+
+    scheduler = new CoreToolScheduler({
+      config,
+      messageBus: getTestRuntimeMessageBus(config),
+      toolRegistry: config.getToolRegistry(),
+      onAllToolCallsComplete: async () => {},
+      onToolCallsUpdate: vi.fn(),
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+    });
+
+    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
+      callId: 'before-message-call',
+      name: 'hooked-tool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-1',
+    });
+
+    expect(completedCalls[0].status).toBe('success');
+    if (completedCalls[0].status === 'success') {
+      const responsePart = completedCalls[0].response.responseParts[0];
+      expect(responsePart.functionResponse?.response).toEqual({
+        output: 'tool output\n\nbefore hook note',
+      });
+    }
+  });
+
   it('surfaces an error when an after-hook requests stop', async () => {
     const mockTool = new MockTool({
       name: 'hooked-tool',

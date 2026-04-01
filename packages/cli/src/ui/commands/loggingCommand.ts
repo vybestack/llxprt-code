@@ -94,7 +94,7 @@ async function handleLoggingStatus(
 ): Promise<CommandResult> {
   // Read directly from settings, not from cached Config
   const isLoggingEnabled =
-    context.settings.merged.telemetry?.logConversations ?? false;
+    context.settings.merged.telemetry.logConversations ?? false;
 
   const status = `Conversation Logging: ${isLoggingEnabled ? 'Enabled' : 'Disabled'}`;
 

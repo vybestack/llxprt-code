@@ -11,6 +11,7 @@ import {
   EditorType,
   ThoughtSummary,
   EmojiFilter,
+  MCPDiscoveryState,
   type EmojiFilterMode,
   type ThinkingBlock,
   GitService,
@@ -34,11 +35,11 @@ import { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { useLogger } from '../useLogger.js';
 import {
   useReactToolScheduler,
-  mapToDisplay as mapTrackedToolCallsToDisplay,
   TrackedToolCall,
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from '../useReactToolScheduler.js';
+import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { useSessionStats } from '../../contexts/SessionContext.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import {
@@ -478,6 +479,31 @@ export const useGeminiStream = (
       }
 
       const trimmedStr = typeof query === 'string' ? query.trim() : '';
+
+      // Block non-slash queries while MCP discovery is in progress and servers exist.
+      // Slash commands are always allowed through.
+      const mcpManager = config.getMcpClientManager();
+      const discoveryState = mcpManager?.getDiscoveryState();
+      const configuredMcpServers = mcpManager
+        ? Object.keys(config.getMcpServers() ?? {}).length
+        : 0;
+      if (
+        !options?.isContinuation &&
+        trimmedStr &&
+        !isSlashCommand(trimmedStr) &&
+        configuredMcpServers > 0 &&
+        discoveryState !== MCPDiscoveryState.COMPLETED
+      ) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Waiting for MCP servers to initialize... Slash commands are still available.',
+          },
+          Date.now(),
+        );
+        return;
+      }
+
       if (
         trimmedStr &&
         !options?.isContinuation &&

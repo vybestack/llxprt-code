@@ -11,6 +11,12 @@ import { DebugLogger } from '../debug/index.js';
 import { TrustedHooksManager } from './trustedHooks.js';
 import { coreEvents, CoreEvent } from '../utils/events.js';
 
+/**
+ * Fields in the hooks configuration that are not hook event names.
+ * Only include keys verified in LLxprt's actual hook config schema.
+ */
+const HOOKS_CONFIG_FIELDS = ['disabled', 'enabled', 'notifications'];
+
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:registry');
 
 /**
@@ -203,8 +209,22 @@ export class HookRegistry {
     source: ConfigSource,
   ): void {
     for (const [eventName, definitions] of Object.entries(hooksConfig)) {
+      // Warn about config keys that belong under hooksConfig, not hooks
+      if (HOOKS_CONFIG_FIELDS.includes(eventName)) {
+        coreEvents.emit(CoreEvent.Output, {
+          chunk: `Warning: "${eventName}" is a hooksConfig field, not a hook event. It is ignored under "hooks" — move it to "hooksConfig". Skipping.
+`,
+          isStderr: true,
+        });
+        continue;
+      }
+
       if (!this.isValidEventName(eventName)) {
-        debugLogger.warn(`Invalid hook event name: ${eventName}`);
+        coreEvents.emit(CoreEvent.Output, {
+          chunk: `Warning: Invalid hook event name: "${eventName}" from ${source} config. Skipping.
+`,
+          isStderr: true,
+        });
         continue;
       }
 

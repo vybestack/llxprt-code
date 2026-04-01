@@ -26,6 +26,8 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 
 const debugLogger = new DebugLogger('llxprt:shell-parser');
 
+const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
+
 // Type definitions for tree-sitter query results
 interface QueryCapture {
   name: string;
@@ -105,13 +107,38 @@ export function isParserAvailable(): boolean {
 
 /**
  * Parse a shell command string and return the syntax tree.
- * Returns null if parser is not available.
+ * Returns null if parser is not available or if parsing times out.
  */
-export function parseShellCommand(command: string): Tree | null {
-  if (!parser) {
+export function parseShellCommand(
+  command: string,
+  timeoutMicros: number = PARSE_TIMEOUT_MICROS,
+): Tree | null {
+  if (!parser || !command.trim()) {
     return null;
   }
-  return parser.parse(command);
+
+  const deadline = performance.now() + timeoutMicros / 1000;
+  let timedOut = false;
+
+  try {
+    const tree = parser.parse(command, null, {
+      progressCallback: () => {
+        if (performance.now() > deadline) {
+          timedOut = true;
+          return true as unknown as void; // Returning true cancels parsing
+        }
+      },
+    });
+
+    if (timedOut) {
+      debugLogger.error('Bash command parsing timed out for command:', command);
+      return null;
+    }
+
+    return tree;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -297,7 +324,7 @@ export function parseCommandDetails(
   }
 
   try {
-    const tree = parser.parse(command);
+    const tree = parseShellCommand(command);
     if (!tree) {
       return { details: [], hasError: true };
     }

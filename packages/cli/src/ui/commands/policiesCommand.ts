@@ -111,9 +111,10 @@ function handlePoliciesCommand(
       const argsPattern = rule.argsPattern
         ? ` (pattern: ${rule.argsPattern.source})`
         : '';
+      const source = rule.source ? ` [Source: ${rule.source}]` : '';
 
       lines.push(
-        `  Priority ${priority.toFixed(3)}: ${toolName} → ${decision}${argsPattern}`,
+        `  Priority ${priority.toFixed(3)}: ${toolName} → ${decision}${argsPattern}${source}`,
       );
     }
 

@@ -63,12 +63,18 @@ import { PerformCompressionResult } from './turn.js';
 export class AgentExecutionStoppedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
+  readonly contextCleared?: boolean;
 
-  constructor(reason: string, systemMessage?: string) {
+  constructor(
+    reason: string,
+    systemMessage?: string,
+    contextCleared?: boolean,
+  ) {
     super(`Agent execution stopped: ${systemMessage || reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
+    this.contextCleared = contextCleared;
   }
 }
 
@@ -79,17 +85,20 @@ export class AgentExecutionBlockedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
   readonly syntheticResponse?: GenerateContentResponse;
+  readonly contextCleared?: boolean;
 
   constructor(
     reason: string,
     syntheticResponse?: GenerateContentResponse,
     systemMessage?: string,
+    contextCleared?: boolean,
   ) {
     super(`Agent execution blocked: ${systemMessage || reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
     this.syntheticResponse = syntheticResponse;
+    this.contextCleared = contextCleared;
   }
 }
 
@@ -158,10 +167,15 @@ export class GeminiChat {
       this.historyService,
       this.generationConfig,
       providerResolver,
-      async (_context: CompressionContext) => {
+      async (context: CompressionContext) => {
         const config = view.providerRuntime?.config;
         if (config) {
-          await triggerPreCompressHook(config, PreCompressTrigger.Manual);
+          await triggerPreCompressHook(
+            config,
+            context.trigger === 'auto'
+              ? PreCompressTrigger.Auto
+              : PreCompressTrigger.Manual,
+          );
         }
       },
     );
@@ -455,11 +469,13 @@ export class GeminiChat {
     promptId: string,
     pendingTokens: number,
     source: 'send' | 'stream',
+    trigger: 'manual' | 'auto' = 'auto',
   ): Promise<void> {
     return this.compressionHandler.ensureCompressionBeforeSend(
       promptId,
       pendingTokens,
       source,
+      trigger,
     );
   }
 

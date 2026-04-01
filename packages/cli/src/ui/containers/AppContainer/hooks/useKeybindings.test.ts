@@ -224,7 +224,7 @@ describe('useKeybindings', () => {
         meta: false,
         shift: false,
         paste: false,
-        name: '\\\\',
+        name: '\\',
         sequence: '\x1c',
       } as Key);
     });

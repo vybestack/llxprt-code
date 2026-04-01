@@ -245,11 +245,11 @@ function useLayoutContext(p: AppLayoutParams) {
   }, [consoleMessages, debugMode]);
   const branchName = useGitBranchName(config.getTargetDir());
   const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.ui?.contextFileName;
+    const fromSettings = settings.merged.ui.contextFileName;
     if (fromSettings)
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     return getAllLlxprtMdFilenames();
-  }, [settings.merged.ui?.contextFileName]);
+  }, [settings.merged.ui.contextFileName]);
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   useInitialPromptSubmit({
     initialPrompt,

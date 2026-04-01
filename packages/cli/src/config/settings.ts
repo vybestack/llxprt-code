@@ -23,6 +23,7 @@ import { DefaultDark } from '../ui/themes/default.js';
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import {
   Settings,
+  type MergedSettings,
   MemoryImportFormat,
   SETTINGS_SCHEMA,
   SettingDefinition,
@@ -40,7 +41,23 @@ import {
 
 export { USER_SETTINGS_PATH, USER_SETTINGS_DIR, SETTINGS_DIRECTORY_NAME };
 
-export type { Settings, MemoryImportFormat };
+export type { Settings, MergedSettings, MemoryImportFormat };
+
+/**
+ * Creates a fully-initialized MergedSettings object for tests.
+ * All sub-objects are guaranteed to be non-nullable.
+ */
+export function createTestMergedSettings(
+  overrides: Partial<Settings> = {},
+): MergedSettings {
+  return mergeSettings(
+    {} as Settings,
+    {} as Settings,
+    overrides as Settings,
+    {} as Settings,
+    true,
+  );
+}
 
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
@@ -124,7 +141,7 @@ export interface SummarizeToolOutputSettings {
 }
 
 export interface AccessibilitySettings {
-  disableLoadingPhrases?: boolean;
+  enableLoadingPhrases?: boolean;
   screenReader?: boolean;
 }
 
@@ -200,7 +217,7 @@ function mergeSettings(
   user: Settings,
   workspace: Settings,
   isTrusted: boolean,
-): Settings {
+): MergedSettings {
   const safeWorkspace = isTrusted ? workspace : ({} as Settings);
 
   // Get defaults from schema
@@ -275,6 +292,34 @@ function mergeSettings(
       ...(safeWorkspace.chatCompression || {}),
       ...(system.chatCompression || {}),
     },
+    security: {
+      ...(schemaDefaults.security || {}),
+      ...(systemDefaults.security || {}),
+      ...(user.security || {}),
+      ...(safeWorkspace.security || {}),
+      ...(system.security || {}),
+    },
+    telemetry: {
+      ...(schemaDefaults.telemetry || {}),
+      ...(systemDefaults.telemetry || {}),
+      ...(user.telemetry || {}),
+      ...(safeWorkspace.telemetry || {}),
+      ...(system.telemetry || {}),
+    },
+    mcp: {
+      ...(schemaDefaults.mcp || {}),
+      ...(systemDefaults.mcp || {}),
+      ...(user.mcp || {}),
+      ...(safeWorkspace.mcp || {}),
+      ...(system.mcp || {}),
+    },
+    tools: {
+      ...(schemaDefaults.tools || {}),
+      ...(systemDefaults.tools || {}),
+      ...(user.tools || {}),
+      ...(safeWorkspace.tools || {}),
+      ...(system.tools || {}),
+    },
     extensions: {
       ...(systemDefaults.extensions || {}),
       ...(user.extensions || {}),
@@ -301,6 +346,20 @@ function mergeSettings(
     // It only exists in memory for the UI and manipulates excludeTools/allowedTools
     // But it should have schema defaults for proper UI display
     coreToolSettings: schemaDefaults.coreToolSettings || {},
+    hooksConfig: {
+      ...(schemaDefaults.hooksConfig || {}),
+      ...(systemDefaults.hooksConfig || {}),
+      ...(user.hooksConfig || {}),
+      ...(safeWorkspace.hooksConfig || {}),
+      ...(system.hooksConfig || {}),
+    },
+    hooks: {
+      ...(schemaDefaults.hooks || {}),
+      ...(systemDefaults.hooks || {}),
+      ...(user.hooks || {}),
+      ...(safeWorkspace.hooks || {}),
+      ...(system.hooks || {}),
+    },
   };
 
   const prioritizedTheme =
@@ -313,7 +372,7 @@ function mergeSettings(
     merged.ui.theme = prioritizedTheme;
   }
 
-  return merged;
+  return merged as MergedSettings;
 }
 
 function migrateLegacyInteractiveShellSetting(settings: Settings): void {
@@ -356,6 +415,42 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
   }
 }
 
+/**
+ * Migrates old-style hooks config (hooks.enabled, hooks.disabled, hooks.notifications)
+ * to the new split schema (hooksConfig.enabled, hooksConfig.disabled, hooksConfig.notifications).
+ * Called per-scope before merging, so each scope's settings file is independently migrated.
+ */
+function migrateHooksConfig(settings: Settings): void {
+  if (!settings || typeof settings !== 'object') {
+    return;
+  }
+
+  const hooks = settings.hooks as Record<string, unknown> | undefined;
+  if (!hooks) return;
+
+  const needsMigration =
+    'enabled' in hooks || 'disabled' in hooks || 'notifications' in hooks;
+
+  if (!needsMigration) return;
+
+  const hooksConfig = (settings.hooksConfig as Record<string, unknown>) ?? {};
+  const newHooks: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(hooks)) {
+    if (key === 'enabled' || key === 'disabled' || key === 'notifications') {
+      // Migrate to hooksConfig; do not overwrite if already present
+      if (!(key in hooksConfig)) {
+        hooksConfig[key] = value;
+      }
+    } else {
+      newHooks[key] = value;
+    }
+  }
+
+  (settings as Record<string, unknown>)['hooksConfig'] = hooksConfig;
+  (settings as Record<string, unknown>)['hooks'] = newHooks;
+}
+
 export class LoadedSettings {
   constructor(
     system: SettingsFile,
@@ -380,13 +475,13 @@ export class LoadedSettings {
   readonly isTrusted: boolean;
   readonly errors: SettingsError[] = [];
 
-  private _merged: Settings;
+  private _merged: MergedSettings;
 
-  get merged(): Settings {
+  get merged(): MergedSettings {
     return this._merged;
   }
 
-  private computeMergedSettings(): Settings {
+  private computeMergedSettings(): MergedSettings {
     return mergeSettings(
       this.system.settings,
       this.systemDefaults.settings,
@@ -796,9 +891,10 @@ export function loadSettings(
     workspaceSettings,
   ]) {
     migrateLegacyInteractiveShellSetting(scopeSettings);
+    migrateHooksConfig(scopeSettings);
   }
 
-  return new LoadedSettings(
+  const loadedSettings = new LoadedSettings(
     {
       path: systemSettingsPath,
       settings: systemSettings,
@@ -817,6 +913,11 @@ export function loadSettings(
     },
     isTrusted,
   );
+
+  // Automatically migrate deprecated settings when loading.
+  migrateDeprecatedSettings(loadedSettings);
+
+  return loadedSettings;
 }
 
 function deepMergeWithComments(target: unknown, source: unknown): unknown {
@@ -860,6 +961,207 @@ function deepMergeWithComments(target: unknown, source: unknown): unknown {
   });
 
   return result;
+}
+
+/**
+ * Migrates deprecated settings to their new counterparts.
+ *
+ * TODO: After a couple of weeks (around early Feb 2026), we should start removing
+ * the deprecated settings from the settings files by default.
+ *
+ * @returns true if any changes were made and need to be saved.
+ */
+export function migrateDeprecatedSettings(
+  loadedSettings: LoadedSettings,
+  removeDeprecated = false,
+): boolean {
+  let anyModified = false;
+  const processScope = (scope: SettingScope) => {
+    const rawSettings = loadedSettings.forScope(scope).settings as Record<
+      string,
+      unknown
+    >;
+
+    // Migrate inverted boolean settings (disableX -> enableX)
+    // These settings were renamed and their boolean logic inverted.
+    // In LLxprt's flat schema, disableAutoUpdate and disableUpdateNag are
+    // top-level keys (not nested under 'general').
+    let rootModified = false;
+    const newRoot: Record<string, unknown> = { ...rawSettings };
+
+    if (typeof newRoot['disableAutoUpdate'] === 'boolean') {
+      if (typeof newRoot['enableAutoUpdate'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newRoot['disableAutoUpdate'];
+          rootModified = true;
+        }
+      } else {
+        newRoot['enableAutoUpdate'] = !newRoot['disableAutoUpdate'];
+        if (removeDeprecated) {
+          delete newRoot['disableAutoUpdate'];
+        }
+        rootModified = true;
+      }
+    }
+
+    if (typeof newRoot['disableUpdateNag'] === 'boolean') {
+      if (typeof newRoot['enableAutoUpdateNotification'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newRoot['disableUpdateNag'];
+          rootModified = true;
+        }
+      } else {
+        newRoot['enableAutoUpdateNotification'] = !newRoot['disableUpdateNag'];
+        if (removeDeprecated) {
+          delete newRoot['disableUpdateNag'];
+        }
+        rootModified = true;
+      }
+    }
+
+    if (rootModified) {
+      // Apply new top-level keys
+      if (
+        typeof newRoot['enableAutoUpdate'] === 'boolean' &&
+        newRoot['enableAutoUpdate'] !== rawSettings['enableAutoUpdate']
+      ) {
+        loadedSettings.setValue(
+          scope,
+          'enableAutoUpdate' as keyof Settings,
+          newRoot['enableAutoUpdate'],
+        );
+      }
+      if (
+        typeof newRoot['enableAutoUpdateNotification'] === 'boolean' &&
+        newRoot['enableAutoUpdateNotification'] !==
+          rawSettings['enableAutoUpdateNotification']
+      ) {
+        loadedSettings.setValue(
+          scope,
+          'enableAutoUpdateNotification' as keyof Settings,
+          newRoot['enableAutoUpdateNotification'],
+        );
+      }
+      if (removeDeprecated) {
+        loadedSettings.setValue(
+          scope,
+          'disableAutoUpdate' as keyof Settings,
+          undefined,
+        );
+        loadedSettings.setValue(
+          scope,
+          'disableUpdateNag' as keyof Settings,
+          undefined,
+        );
+      }
+      anyModified = true;
+    }
+
+    // Migrate accessibility.disableLoadingPhrases -> accessibility.enableLoadingPhrases
+    const accessibilitySettings = rawSettings['accessibility'] as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      accessibilitySettings &&
+      typeof accessibilitySettings['disableLoadingPhrases'] === 'boolean'
+    ) {
+      const newAccessibility: Record<string, unknown> = {
+        ...accessibilitySettings,
+      };
+      if (typeof accessibilitySettings['enableLoadingPhrases'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newAccessibility['disableLoadingPhrases'];
+          loadedSettings.setValue(scope, 'accessibility', newAccessibility);
+          anyModified = true;
+        }
+      } else {
+        newAccessibility['enableLoadingPhrases'] =
+          !accessibilitySettings['disableLoadingPhrases'];
+        if (removeDeprecated) {
+          delete newAccessibility['disableLoadingPhrases'];
+        }
+        loadedSettings.setValue(scope, 'accessibility', newAccessibility);
+        anyModified = true;
+      }
+    }
+
+    // Migrate fileFiltering.disableFuzzySearch -> fileFiltering.enableFuzzySearch
+    const fileFilteringSettings = rawSettings['fileFiltering'] as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      fileFilteringSettings &&
+      typeof fileFilteringSettings['disableFuzzySearch'] === 'boolean'
+    ) {
+      const newFileFiltering: Record<string, unknown> = {
+        ...fileFilteringSettings,
+      };
+      if (typeof fileFilteringSettings['enableFuzzySearch'] === 'boolean') {
+        // Both exist, trust the new one
+        if (removeDeprecated) {
+          delete newFileFiltering['disableFuzzySearch'];
+          loadedSettings.setValue(scope, 'fileFiltering', newFileFiltering);
+          anyModified = true;
+        }
+      } else {
+        newFileFiltering['enableFuzzySearch'] =
+          !fileFilteringSettings['disableFuzzySearch'];
+        if (removeDeprecated) {
+          delete newFileFiltering['disableFuzzySearch'];
+        }
+        loadedSettings.setValue(scope, 'fileFiltering', newFileFiltering);
+        anyModified = true;
+      }
+    }
+
+    // Migrate ui.accessibility.disableLoadingPhrases -> ui.accessibility.enableLoadingPhrases
+    const uiSettings = rawSettings['ui'] as Record<string, unknown> | undefined;
+    if (uiSettings) {
+      const uiAccessibility = uiSettings['accessibility'] as
+        | Record<string, unknown>
+        | undefined;
+      if (
+        uiAccessibility &&
+        typeof uiAccessibility['disableLoadingPhrases'] === 'boolean'
+      ) {
+        const newUiAccessibility: Record<string, unknown> = {
+          ...uiAccessibility,
+        };
+        if (typeof uiAccessibility['enableLoadingPhrases'] === 'boolean') {
+          // Both exist, trust the new one
+          if (removeDeprecated) {
+            delete newUiAccessibility['disableLoadingPhrases'];
+            loadedSettings.setValue(scope, 'ui', {
+              ...uiSettings,
+              accessibility: newUiAccessibility,
+            });
+            anyModified = true;
+          }
+        } else {
+          newUiAccessibility['enableLoadingPhrases'] =
+            !uiAccessibility['disableLoadingPhrases'];
+          if (removeDeprecated) {
+            delete newUiAccessibility['disableLoadingPhrases'];
+          }
+          loadedSettings.setValue(scope, 'ui', {
+            ...uiSettings,
+            accessibility: newUiAccessibility,
+          });
+          anyModified = true;
+        }
+      }
+    }
+  };
+
+  processScope(SettingScope.User);
+  processScope(SettingScope.Workspace);
+  processScope(SettingScope.System);
+  processScope(SettingScope.SystemDefaults);
+
+  return anyModified;
 }
 
 export function saveSettings(settingsFile: SettingsFile): void {

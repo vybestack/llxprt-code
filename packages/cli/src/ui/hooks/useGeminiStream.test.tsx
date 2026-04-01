@@ -3043,4 +3043,270 @@ describe('useGeminiStream', () => {
       expect(result.current.streamingState).toBe(StreamingState.Idle);
     });
   });
+
+  describe('MCP discovery gating', () => {
+    let mcpMockConfig: Config;
+    let mcpManagerMock: {
+      getDiscoveryState: Mock;
+    };
+
+    const renderWithMcp = (
+      discoveryState: string,
+      mcpServers?: Record<string, unknown>,
+    ) => {
+      mcpManagerMock = {
+        getDiscoveryState: vi.fn().mockReturnValue(discoveryState),
+      };
+
+      mcpMockConfig = {
+        ...mockConfig,
+        getMcpClientManager: vi.fn().mockReturnValue(mcpManagerMock),
+        getMcpServers: vi
+          .fn()
+          .mockReturnValue(mcpServers ?? { server1: {}, server2: {} }),
+      } as unknown as Config;
+
+      const contentGeneratorConfig = {
+        model: 'test-model',
+        apiKey: 'test-key',
+        vertexai: false,
+      };
+
+      (mcpMockConfig as any).getContentGeneratorConfig = vi
+        .fn()
+        .mockReturnValue(contentGeneratorConfig);
+
+      const client = new MockedGeminiClientClass(mcpMockConfig);
+
+      const initialProps = {
+        client,
+        history: [],
+        addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+        config: mcpMockConfig,
+        onDebugMessage: mockOnDebugMessage,
+        handleSlashCommand: mockHandleSlashCommand as unknown as (
+          cmd: PartListUnion,
+        ) => Promise<SlashCommandProcessorResult | false>,
+        shellModeActive: false,
+        loadedSettings: mockLoadedSettings,
+        toolCalls: [] as TrackedToolCall[],
+      };
+
+      const { result, rerender } = renderHook(
+        (props: typeof initialProps) => {
+          mockUseReactToolScheduler.mockReturnValue([
+            props.toolCalls,
+            mockScheduleToolCalls,
+            mockMarkToolsAsSubmitted,
+            vi.fn(),
+            mockCancelAllToolCalls,
+          ]);
+          return useGeminiStream(
+            props.client,
+            props.history,
+            props.addItem,
+            props.config,
+            props.loadedSettings,
+            props.onDebugMessage,
+            props.handleSlashCommand,
+            props.shellModeActive,
+            () => 'vscode' as EditorType,
+            () => {},
+            () => Promise.resolve(),
+            false,
+            () => {},
+            () => {},
+            () => {},
+            80,
+            24,
+          );
+        },
+        { initialProps },
+      );
+      return { result, rerender };
+    };
+
+    it('blocks non-slash query when MCP discovery is in_progress', async () => {
+      const { result } = renderWithMcp('in_progress');
+
+      await act(async () => {
+        await result.current.submitQuery('hello world');
+      });
+
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).not.toHaveBeenCalled();
+    });
+
+    it('allows non-slash query when MCP discovery is completed', async () => {
+      const { result } = renderWithMcp('completed');
+
+      await act(async () => {
+        await result.current.submitQuery('hello world');
+      });
+
+      expect(mockAddItem).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).toHaveBeenCalled();
+    });
+
+    it('allows non-slash query when no MCP servers are configured', async () => {
+      const { result } = renderWithMcp('in_progress', {});
+
+      await act(async () => {
+        await result.current.submitQuery('hello world');
+      });
+
+      expect(mockAddItem).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).toHaveBeenCalled();
+    });
+
+    it('allows slash commands when MCP discovery is in_progress', async () => {
+      const { result } = renderWithMcp('in_progress');
+
+      await act(async () => {
+        await result.current.submitQuery('/help');
+      });
+
+      expect(mockAddItem).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).toHaveBeenCalled();
+    });
+
+    it('allows non-slash query when no McpClientManager exists', async () => {
+      const noMcpConfig = {
+        ...mockConfig,
+        getMcpClientManager: vi.fn().mockReturnValue(undefined),
+        getMcpServers: vi.fn().mockReturnValue(undefined),
+      } as unknown as Config;
+
+      const contentGeneratorConfig = {
+        model: 'test-model',
+        apiKey: 'test-key',
+        vertexai: false,
+      };
+
+      (noMcpConfig as any).getContentGeneratorConfig = vi
+        .fn()
+        .mockReturnValue(contentGeneratorConfig);
+
+      const client = new MockedGeminiClientClass(noMcpConfig);
+
+      const initialProps = {
+        client,
+        history: [],
+        addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
+        config: noMcpConfig,
+        onDebugMessage: mockOnDebugMessage,
+        handleSlashCommand: mockHandleSlashCommand as unknown as (
+          cmd: PartListUnion,
+        ) => Promise<SlashCommandProcessorResult | false>,
+        shellModeActive: false,
+        loadedSettings: mockLoadedSettings,
+        toolCalls: [] as TrackedToolCall[],
+      };
+
+      const { result } = renderHook(
+        (props: typeof initialProps) => {
+          mockUseReactToolScheduler.mockReturnValue([
+            props.toolCalls,
+            mockScheduleToolCalls,
+            mockMarkToolsAsSubmitted,
+            vi.fn(),
+            mockCancelAllToolCalls,
+          ]);
+          return useGeminiStream(
+            props.client,
+            props.history,
+            props.addItem,
+            props.config,
+            props.loadedSettings,
+            props.onDebugMessage,
+            props.handleSlashCommand,
+            props.shellModeActive,
+            () => 'vscode' as EditorType,
+            () => {},
+            () => Promise.resolve(),
+            false,
+            () => {},
+            () => {},
+            () => {},
+            80,
+            24,
+          );
+        },
+        { initialProps },
+      );
+
+      await act(async () => {
+        await result.current.submitQuery('hello world');
+      });
+
+      expect(mockAddItem).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).toHaveBeenCalled();
+    });
+
+    it('blocks non-slash query when discovery is not_started and servers exist', async () => {
+      const { result } = renderWithMcp('not_started');
+
+      await act(async () => {
+        await result.current.submitQuery('hello world');
+      });
+
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).not.toHaveBeenCalled();
+    });
+
+    it('allows continuation queries regardless of MCP state', async () => {
+      const { result } = renderWithMcp('in_progress');
+
+      await act(async () => {
+        await result.current.submitQuery('continuation query', {
+          isContinuation: true,
+        });
+      });
+
+      expect(mockAddItem).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: expect.stringContaining('Waiting for MCP servers'),
+        }),
+        expect.any(Number),
+      );
+      expect(mockSendMessageStream).toHaveBeenCalled();
+    });
+  });
 });

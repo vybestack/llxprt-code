@@ -7,10 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
-import {
-  useReactToolScheduler,
-  mapToDisplay,
-} from './useReactToolScheduler.js';
+import { useReactToolScheduler } from './useReactToolScheduler.js';
+import { mapToDisplay } from './toolMapping.js';
 import {
   ApprovalMode,
   AnyDeclarativeTool,
@@ -45,6 +43,11 @@ const buildRequest = (
   prompt_id: overrides.prompt_id ?? 'prompt-id',
   agentId: overrides.agentId ?? 'primary',
 });
+
+const hasOnConfirm = (
+  details: WaitingToolCall['confirmationDetails'],
+): details is ToolCallConfirmationDetails =>
+  'onConfirm' in details && typeof details.onConfirm === 'function';
 
 const mockToolRegistry = {
   getTool: vi.fn(),
@@ -848,8 +851,13 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    const onConfirm = waitingCall.confirmationDetails.onConfirm;
-    expect(onConfirm).toBeDefined();
+    const details = waitingCall.confirmationDetails;
+    const hasConfirm = hasOnConfirm(details);
+    expect(hasConfirm).toBe(true);
+    if (!hasConfirm) {
+      throw new Error('Expected confirmationDetails to include onConfirm');
+    }
+    const { onConfirm } = details;
 
     // Approve the confirmation
     await act(async () => {
@@ -923,7 +931,13 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    const onConfirm = waitingCall.confirmationDetails.onConfirm;
+    const details = waitingCall.confirmationDetails;
+    const hasConfirm = hasOnConfirm(details);
+    expect(hasConfirm).toBe(true);
+    if (!hasConfirm) {
+      throw new Error('Expected confirmationDetails to include onConfirm');
+    }
+    const { onConfirm } = details;
 
     // Cancel the confirmation
     await act(async () => {

@@ -49,10 +49,11 @@ priority = 100
 `);
 
       expect(result.rules).toHaveLength(1);
-      expect(result.rules[0]).toEqual({
+      expect(result.rules[0]).toMatchObject({
         toolName: 'glob',
         decision: PolicyDecision.ALLOW,
         priority: 1.1, // tier 1 + 100/1000
+        source: 'Default: test.toml',
       });
       expect(result.errors).toHaveLength(0);
     });

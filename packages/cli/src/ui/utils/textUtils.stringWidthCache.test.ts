@@ -10,8 +10,8 @@ import {
   clearStringWidthCache,
   getCachedStringWidth,
   getStringWidthCacheSize,
-  MAX_STRING_WIDTH_CACHE_ENTRIES,
 } from './textUtils.js';
+import { LRU_BUFFER_PERF_CACHE_LIMIT } from '../constants.js';
 
 describe('textUtils string width cache', () => {
   it('evicts entries after exceeding the max cache size', () => {
@@ -19,20 +19,20 @@ describe('textUtils string width cache', () => {
 
     // Use non-ASCII strings so we actually hit the cache.
     // These are all distinct strings to force growth.
-    for (let i = 0; i < 5000; i++) {
+    for (let i = 0; i < LRU_BUFFER_PERF_CACHE_LIMIT + 1000; i++) {
       getCachedStringWidth(`é${i}`);
     }
 
     expect(getStringWidthCacheSize()).toBeLessThanOrEqual(
-      MAX_STRING_WIDTH_CACHE_ENTRIES,
+      LRU_BUFFER_PERF_CACHE_LIMIT,
     );
   });
 
-  it('does not cache plain ASCII strings (fast path)', () => {
+  it('does not cache single ASCII chars (fast path)', () => {
     clearStringWidthCache();
 
-    getCachedStringWidth('hello');
-    getCachedStringWidth('world');
+    getCachedStringWidth('a');
+    getCachedStringWidth('z');
 
     expect(getStringWidthCacheSize()).toBe(0);
   });

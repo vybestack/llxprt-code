@@ -42,6 +42,11 @@ describe('CommandRegistry', () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.doMock('@vybestack/llxprt-code-core', () => ({
+      debugLogger: {
+        warn: vi.fn(),
+      },
+    }));
     vi.doMock('./extensions.js', () => ({
       ExtensionsCommand: mockExtensionsCommand,
       ListExtensionsCommand: mockListExtensionsCommand,
@@ -116,10 +121,7 @@ describe('CommandRegistry', () => {
   });
 
   it('register() should not enter an infinite loop with a cyclic command', async () => {
-    // Import debugLogger from the same module cache that command-registry will use
-    // (vi.resetModules() in beforeEach clears the cache, so static imports won't match)
     const { debugLogger } = await import('@vybestack/llxprt-code-core');
-    const warnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     const { commandRegistry } = await import('./command-registry.js');
     const mockCommand: Command = {
       name: 'cyclic-command',
@@ -133,10 +135,9 @@ describe('CommandRegistry', () => {
     commandRegistry.register(mockCommand);
 
     expect(commandRegistry.get('cyclic-command')).toBe(mockCommand);
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(debugLogger.warn).toHaveBeenCalledWith(
       'Command cyclic-command already registered. Skipping.',
     );
     // If the test finishes, it means we didn't get into an infinite loop.
-    warnSpy.mockRestore();
   });
 });

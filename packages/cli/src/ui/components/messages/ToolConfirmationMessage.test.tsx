@@ -86,6 +86,7 @@ describe('ToolConfirmationMessage', () => {
       title: 'Confirm Execution',
       command: 'echo "hello"',
       rootCommand: 'echo',
+      rootCommands: ['echo'],
       onConfirm: vi.fn(),
     };
 

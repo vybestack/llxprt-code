@@ -18,6 +18,7 @@ import type { LoopDetectionService } from '../services/loopDetectionService.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
+import type { AfterAgentHookOutput } from '../hooks/types.js';
 import { estimateTextOnlyLength, extractPromptText } from './clientHelpers.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { Todo } from '../tools/todo-schemas.js';
@@ -217,7 +218,7 @@ export class MessageStreamOrchestrator {
       getSessionTurnCount() > config.getMaxSessionTurns()
     ) {
       yield { type: GeminiEventType.MaxSessionTurns };
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
         ctx.prompt_id,
@@ -228,7 +229,7 @@ export class MessageStreamOrchestrator {
 
     const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
     if (!boundedTurns) {
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
         ctx.prompt_id,
@@ -249,7 +250,7 @@ export class MessageStreamOrchestrator {
         type: GeminiEventType.ContextWindowWillOverflow,
         value: { estimatedRequestTokenCount, remainingTokenCount },
       };
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
         ctx.prompt_id,
@@ -353,7 +354,7 @@ export class MessageStreamOrchestrator {
       retryCount = postTurnResult.retryCount;
     }
 
-    await this._fireAfterHook(ctx);
+    yield* this._fireAfterHookAndEmitClearContext(ctx);
     return lastTurn!;
   }
 
@@ -371,7 +372,7 @@ export class MessageStreamOrchestrator {
     const loopDetected = await loopDetector.turnStarted(signal);
     if (loopDetected) {
       yield { type: GeminiEventType.LoopDetected };
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(hadToolCallsPrior);
     }
 
@@ -384,7 +385,7 @@ export class MessageStreamOrchestrator {
     for await (const event of turn.run(iterRequest, signal)) {
       if (loopDetector.addAndCheck(event)) {
         yield { type: GeminiEventType.LoopDetected };
-        await this._fireAfterHook(ctx);
+        yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(hadToolCallsThisTurn, {
           todoPauseSeen,
           hadThinking,
@@ -492,7 +493,7 @@ export class MessageStreamOrchestrator {
       }
 
       for (const d of deferredEvents) yield d;
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
         ...state,
         deferredEvents,
@@ -504,7 +505,7 @@ export class MessageStreamOrchestrator {
       config.getContinueOnFailedApiCall()
     ) {
       if (ctx.isInvalidStreamRetry) {
-        await this._fireAfterHook(ctx);
+        yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(state.hadToolCallsThisTurn, {
           ...state,
           deferredEvents,
@@ -517,7 +518,7 @@ export class MessageStreamOrchestrator {
         boundedTurns - 1,
         true,
       );
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
         ...state,
         deferredEvents,
@@ -630,7 +631,7 @@ export class MessageStreamOrchestrator {
     if (iter.todoPauseSeen) {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return { done: true, retryCount, newBaseRequest: undefined };
     }
 
@@ -641,7 +642,7 @@ export class MessageStreamOrchestrator {
     if (!todosStillPending && !hasPendingReminder) {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
-      const afterOut = await this._fireAfterHook(ctx);
+      const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
       if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
         yield* sendMessageStream(
           [{ text: afterOut.getEffectiveReason() }],
@@ -657,7 +658,7 @@ export class MessageStreamOrchestrator {
     if (newRetry >= MAX_RETRIES) {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return { done: true, retryCount: newRetry, newBaseRequest: undefined };
     }
 
@@ -694,7 +695,7 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolCallReminderLevel = 'none';
     todoContinuationService.toolActivityCount = 0;
 
-    const afterOut = await this._fireAfterHook(ctx);
+    const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
     if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
       yield* sendMessageStream(
         [{ text: afterOut.getEffectiveReason() }],
@@ -832,7 +833,9 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolActivityCount = 0;
   }
 
-  private async _fireAfterHook(ctx: StreamContext) {
+  private async _fireAfterHook(
+    ctx: StreamContext,
+  ): Promise<AfterAgentHookOutput | undefined> {
     const responseText = ctx.responseChunks.join('');
     return this.deps.agentHookManager.fireAfterAgentHookSafe(
       ctx.prompt_id,
@@ -840,5 +843,25 @@ export class MessageStreamOrchestrator {
       responseText,
       false,
     );
+  }
+
+  /**
+   * If the AfterAgent hook requested context clearing, emit an
+   * AgentExecutionStopped event with contextCleared=true so the UI
+   * can react. Returns the hook output for further caller checks.
+   */
+  private async *_fireAfterHookAndEmitClearContext(
+    ctx: StreamContext,
+  ): AsyncGenerator<ServerGeminiStreamEvent, AfterAgentHookOutput | undefined> {
+    const afterOut = await this._fireAfterHook(ctx);
+    if (afterOut?.shouldClearContext()) {
+      yield {
+        type: GeminiEventType.AgentExecutionStopped,
+        reason:
+          afterOut.getEffectiveReason() || 'Context cleared by AfterAgent hook',
+        contextCleared: true,
+      };
+    }
+    return afterOut;
   }
 }

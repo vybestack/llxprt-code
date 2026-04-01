@@ -145,8 +145,10 @@ export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
 export * from './utils/events.js';
 export * from './utils/package.js';
+export * from './utils/version.js';
 export * from './utils/extensionLoader.js';
 export * from './utils/terminalSerializer.js';
+export * from './utils/LruCache.js';
 
 // Export auth system
 export {

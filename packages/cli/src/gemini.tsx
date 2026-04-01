@@ -100,6 +100,8 @@ import {
   SessionEndReason,
   MessageBus,
   debugLogger,
+  shutdownTelemetry,
+  isTelemetrySdkInitialized,
 } from '@vybestack/llxprt-code-core';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -377,10 +379,7 @@ export async function main() {
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
 
-  if (
-    settings.merged.ui?.autoConfigureMaxOldSpaceSize &&
-    !process.env.SANDBOX
-  ) {
+  if (settings.merged.ui.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
     // Only relaunch with a larger heap when the autosizing setting is enabled.
     const debugMode = isDebugMode();
     const memoryArgs = shouldRelaunchForMemory(debugMode);
@@ -665,6 +664,7 @@ export async function main() {
   }
 
   // If a provider is specified, activate it after initialization
+  let initialAuthFailed = false;
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
@@ -748,7 +748,7 @@ export async function main() {
       // CLI arguments have already been applied by applyCliArgumentOverrides() above
     } catch (e) {
       debugLogger.error(chalk.red((e as Error).message));
-      process.exit(1);
+      initialAuthFailed = true;
     }
   } else {
     // No explicit provider specified - ensure default provider (gemini) is activated
@@ -774,7 +774,7 @@ export async function main() {
     // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
     // with Node.js default ~950MB heap.
     let sandboxMemoryArgs: string[] = [];
-    if (settings.merged.ui?.autoConfigureMaxOldSpaceSize) {
+    if (settings.merged.ui.autoConfigureMaxOldSpaceSize) {
       const containerMemoryStr =
         process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
       let containerMemoryMB: number | undefined;
@@ -793,6 +793,10 @@ export async function main() {
     }
     const sandboxConfig = config.getSandbox();
     if (sandboxConfig) {
+      if (initialAuthFailed) {
+        await runExitCleanup();
+        process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
+      }
       // We intentionally omit the list of extensions here because extensions
       // should not impact auth or setting up the sandbox.
       // TODO(jacobr): refactor loadCliConfig so there is a minimal version
@@ -892,6 +896,11 @@ export async function main() {
       process.exit(exitCode);
     }
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
+  }
+
+  if (initialAuthFailed) {
+    await runExitCleanup();
+    process.exit(ExitCodes.FATAL_AUTHENTICATION_ERROR);
   }
 
   // Cleanup sessions after config initialization
@@ -1135,6 +1144,7 @@ export async function main() {
       input,
       prompt_id,
       runtimeMessageBus: sessionMessageBus,
+      deferTelemetryShutdown: true,
     });
 
     // Fire SessionEnd hook on successful completion
@@ -1142,6 +1152,10 @@ export async function main() {
   } catch (error) {
     // Fire SessionEnd hook on error
     await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
+
+    if (isTelemetrySdkInitialized()) {
+      await shutdownTelemetry(nonInteractiveConfig);
+    }
 
     if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();
@@ -1155,20 +1169,25 @@ export async function main() {
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
   }
+
+  if (isTelemetrySdkInitialized()) {
+    await shutdownTelemetry(nonInteractiveConfig);
+  }
+
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
   process.exit(0);
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
-  if (!settings.merged.ui?.hideWindowTitle) {
+  if (!settings.merged.ui.hideWindowTitle) {
     // Initial state before React loop starts
     const windowTitle = computeTerminalTitle({
       streamingState: StreamingState.Idle,
       isConfirming: false,
       folderName: title,
-      showThoughts: !!settings.merged.ui?.showStatusInTitle,
-      useDynamicTitle: settings.merged.ui?.dynamicWindowTitle ?? true,
+      showThoughts: !!settings.merged.ui.showStatusInTitle,
+      useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
     });
     writeToStdout(`\x1b]0;${windowTitle}\x07`);
 

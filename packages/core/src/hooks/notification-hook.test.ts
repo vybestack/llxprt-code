@@ -71,6 +71,7 @@ describe('Notification Hook (ToolPermission)', () => {
         title: 'Run shell command',
         command: 'rm -rf /',
         rootCommand: 'rm',
+        rootCommands: ['rm'],
         onConfirm: async () => {},
       };
 
@@ -97,6 +98,7 @@ describe('Notification Hook (ToolPermission)', () => {
         title: 'Run shell command',
         command: 'ls',
         rootCommand: 'ls',
+        rootCommands: ['ls'],
         onConfirm: async () => {},
       };
 

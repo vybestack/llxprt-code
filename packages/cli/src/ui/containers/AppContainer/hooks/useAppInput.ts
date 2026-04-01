@@ -8,6 +8,8 @@ import { useCallback, useMemo, useRef } from 'react';
 import { useGeminiStream } from '../../../hooks/geminiStream/index.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
+import { useMcpStatus } from '../../../hooks/useMcpStatus.js';
+import { useMessageQueue } from '../../../hooks/useMessageQueue.js';
 import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
 import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
 import { useVimMode } from '../../../contexts/VimModeContext.js';
@@ -107,7 +109,7 @@ function useInputCoreCallbacks(p: AppInputParams) {
     }
   }, []);
   const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.ui?.preferredEditor;
+    const editorType = settings.merged.ui.preferredEditor;
     if (!isEditorAvailable(editorType)) {
       openEditorDialog();
       return;
@@ -378,6 +380,19 @@ function useInputStreamWiring(
     embeddedShellFocused,
     setEmbeddedShellFocused,
   });
+
+  // MCP readiness: derives isMcpReady from discovery state via coreEvents.
+  const { isMcpReady } = useMcpStatus(p.config);
+
+  // Message queue: holds prompts submitted while MCP init or streaming is in
+  // progress. Auto-flushes as a combined submission when all gates open.
+  const { messageQueue, addMessage } = useMessageQueue({
+    isConfigInitialized: true,
+    streamingState: geminiResult.streamingState,
+    submitQuery: geminiResult.submitQuery,
+    isMcpReady,
+  });
+
   const { handleFinalSubmit } = useInputHandling({
     buffer,
     inputHistoryStore,
@@ -386,6 +401,8 @@ function useInputStreamWiring(
     lastSubmittedPromptRef,
     hadToolCallsRef,
     todoContinuationRef,
+    isMcpReady,
+    addMessage,
   });
   const { handleUserInputSubmit } = useTodoPausePreserver({
     controller: todoPauseController,
@@ -403,6 +420,8 @@ function useInputStreamWiring(
     handleUserInputSubmit,
     pendingHistoryItems,
     activeShellPtyId,
+    messageQueue,
+    isMcpReady,
     ...geminiRest,
   };
 }
@@ -461,11 +480,10 @@ function useInputFinish(
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.ui?.wittyPhraseStyle ??
+    settings.merged.ui.wittyPhraseStyle ??
       settings.merged.wittyPhraseStyle ??
       'default',
-    settings.merged.ui?.customWittyPhrases ??
-      settings.merged.customWittyPhrases,
+    settings.merged.ui.customWittyPhrases ?? settings.merged.customWittyPhrases,
     !!stream.activeShellPtyId && !p.embeddedShellFocused,
     stream.lastOutputTime,
   );
