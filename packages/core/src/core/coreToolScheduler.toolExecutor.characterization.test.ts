@@ -318,6 +318,7 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
         .calls[0][0] as ToolCall[];
       const successCall = completedCalls[0];
       expect(successCall.status).toBe('success');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
       if (successCall.status === 'success') {
         expect(successCall.response).toBeDefined();
         expect(successCall.response.responseParts).toBeDefined();

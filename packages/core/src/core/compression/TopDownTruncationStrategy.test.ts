@@ -355,14 +355,14 @@ describe('TopDownTruncationStrategy', () => {
       // No message should be a summary or acknowledgment
       for (const msg of result.newHistory) {
         for (const block of msg.blocks) {
-          if (block.type === 'text' && 'text' in block) {
-            expect((block as { text: string }).text).not.toContain(
-              'state_snapshot',
-            );
-            expect((block as { text: string }).text).not.toContain(
-              'Understood. Continuing with the current task.',
-            );
-          }
+          // Skip non-text blocks
+          if (block.type !== 'text' || !('text' in block)) continue;
+          expect((block as { text: string }).text).not.toContain(
+            'state_snapshot',
+          );
+          expect((block as { text: string }).text).not.toContain(
+            'Understood. Continuing with the current task.',
+          );
         }
       }
     });
@@ -487,29 +487,27 @@ describe('TopDownTruncationStrategy', () => {
       const result = await strategy.compress(ctx);
 
       // Verify no orphaned tool responses: first message should not be a tool response
-      if (result.newHistory.length > 0) {
-        expect(result.newHistory[0].speaker).not.toBe('tool');
-      }
+      expect(result.newHistory.length > 0 ? result.newHistory[0].speaker : '').not.toBe('tool');
 
       // If an AI message with tool calls is in the result, its responses must also be there
       for (let i = 0; i < result.newHistory.length; i++) {
         const msg = result.newHistory[i];
-        if (msg.speaker === 'ai') {
-          const toolCalls = msg.blocks.filter((b) => b.type === 'tool_call');
-          for (const call of toolCalls) {
-            const callId = (call as { id: string }).id;
-            const hasResponse = result.newHistory.some(
-              (m) =>
-                m.speaker === 'tool' &&
-                m.blocks.some(
-                  (b) =>
-                    b.type === 'tool_response' &&
-                    'callId' in b &&
-                    b.callId === callId,
-                ),
-            );
-            expect(hasResponse).toBe(true);
-          }
+        // Skip non-AI messages
+        if (msg.speaker !== 'ai') continue;
+        const toolCalls = msg.blocks.filter((b) => b.type === 'tool_call');
+        for (const call of toolCalls) {
+          const callId = (call as { id: string }).id;
+          const hasResponse = result.newHistory.some(
+            (m) =>
+              m.speaker === 'tool' &&
+              m.blocks.some(
+                (b) =>
+                  b.type === 'tool_response' &&
+                  'callId' in b &&
+                  b.callId === callId,
+              ),
+          );
+          expect(hasResponse).toBe(true);
         }
       }
     });
@@ -549,21 +547,22 @@ describe('TopDownTruncationStrategy', () => {
 
       // No tool responses should appear without their corresponding tool calls
       for (const msg of result.newHistory) {
-        if (msg.speaker === 'tool') {
-          const responseBlock = msg.blocks.find(
-            (b) => b.type === 'tool_response',
+        // Skip non-tool messages
+        if (msg.speaker !== 'tool') continue;
+        const responseBlock = msg.blocks.find(
+          (b) => b.type === 'tool_response',
+        );
+        // eslint-disable-next-line vitest/no-conditional-expect -- Guard to check tool response exists
+        if (responseBlock != null && 'callId' in responseBlock) {
+          const callId = responseBlock.callId;
+          const hasCall = result.newHistory.some(
+            (m) =>
+              m.speaker === 'ai' &&
+              m.blocks.some(
+                (b) => b.type === 'tool_call' && 'id' in b && b.id === callId,
+              ),
           );
-          if (responseBlock != null && 'callId' in responseBlock) {
-            const callId = responseBlock.callId;
-            const hasCall = result.newHistory.some(
-              (m) =>
-                m.speaker === 'ai' &&
-                m.blocks.some(
-                  (b) => b.type === 'tool_call' && 'id' in b && b.id === callId,
-                ),
-            );
-            expect(hasCall).toBe(true);
-          }
+          expect(hasCall).toBe(true);
         }
       }
     });

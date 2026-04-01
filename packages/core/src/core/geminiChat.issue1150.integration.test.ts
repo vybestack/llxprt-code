@@ -127,7 +127,9 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Process thinking chunk
       const content1 = thinkingChunk.candidates?.[0]?.content;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- Accumulation logic for processing stream
       if (content1?.parts != null) {
+        // eslint-disable-next-line vitest/no-conditional-in-test -- Logic path for including thoughts
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...content1.parts);
         } else {
@@ -141,7 +143,9 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Process tool call chunk
       const content2 = toolCallChunk.candidates?.[0]?.content;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- Accumulation logic for processing stream
       if (content2?.parts != null) {
+        // eslint-disable-next-line vitest/no-conditional-in-test -- Logic path for including thoughts
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...content2.parts);
         }
@@ -199,7 +203,9 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       // Process with thoughts filtered
       [thinkingChunk, textChunk].forEach((chunk) => {
         const content = chunk.candidates?.[0]?.content;
+        // eslint-disable-next-line vitest/no-conditional-in-test -- Accumulation logic for processing stream
         if (content?.parts != null) {
+          // eslint-disable-next-line vitest/no-conditional-in-test -- Logic path for including thoughts
           if (includeThoughtsInHistory) {
             modelResponseParts.push(...content.parts);
           } else {

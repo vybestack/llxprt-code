@@ -1433,6 +1433,7 @@ sub memory
       // The test should demonstrate that the infinite loop protection works:
       // - If checkNextSpeaker is called many times (close to MAX_TURNS), it shows the loop was happening
       // - If it's only called once, the recursive behavior might not be triggered
+      // eslint-disable-next-line vitest/no-conditional-in-test -- Guard clause to validate test setup
       if (callCount === 0) {
         throw new Error(
           'checkNextSpeaker was never called - the recursive condition was not met',

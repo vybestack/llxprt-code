@@ -1958,6 +1958,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     // Cancel the edit
     const confirmationDetails = awaitingCall.confirmationDetails;
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to validate confirmation details exist
     if (confirmationDetails) {
       await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
     }

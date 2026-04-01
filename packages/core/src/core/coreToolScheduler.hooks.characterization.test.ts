@@ -155,6 +155,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).not.toHaveBeenCalled();
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
     if (completedCalls[0].status === 'error') {
       expect(completedCalls[0].response.error.message).toBe(
         'blocked by before hook',
@@ -200,6 +201,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).not.toHaveBeenCalled();
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
     if (completedCalls[0].status === 'error') {
       expect(completedCalls[0].response.error.message).toBe(
         'stop requested by before hook',
@@ -285,6 +287,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     });
 
     expect(completedCalls[0].status).toBe('success');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
     if (completedCalls[0].status === 'success') {
       const responsePart = completedCalls[0].response.responseParts[0];
       expect(responsePart.functionResponse?.response).toStrictEqual({
@@ -331,6 +334,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).toHaveBeenCalledTimes(1);
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
     if (completedCalls[0].status === 'error') {
       expect(completedCalls[0].response.error.message).toBe(
         'stop requested by after hook',
@@ -376,6 +380,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(mockTool.executeFn).toHaveBeenCalledTimes(1);
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
     if (completedCalls[0].status === 'error') {
       expect(completedCalls[0].response.error.message).toBe(
         'blocked by after hook',
@@ -418,6 +423,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     });
 
     expect(completedCalls[0].status).toBe('success');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- Type narrowing for discriminated union
     if (completedCalls[0].status === 'success') {
       expect(completedCalls[0].response.suppressDisplay).toBe(true);
     }

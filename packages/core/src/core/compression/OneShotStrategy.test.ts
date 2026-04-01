@@ -422,23 +422,23 @@ describe('OneShotStrategy', () => {
       // The preserved tail should not contain orphaned tool responses
       const tail = result.newHistory.slice(2); // after summary + ack
       for (const msg of tail) {
-        if (msg.speaker === 'tool') {
-          // If there's a tool response in the tail, its corresponding
-          // tool call should also be in the tail
-          const toolCallId = msg.blocks.find((b) => b.type === 'tool_response');
-          if (toolCallId != null && 'callId' in toolCallId) {
-            const hasCall = tail.some(
-              (m) =>
-                m.speaker === 'ai' &&
-                m.blocks.some(
-                  (b) =>
-                    b.type === 'tool_call' &&
-                    'id' in b &&
-                    b.id === toolCallId.callId,
-                ),
-            );
-            expect(hasCall).toBe(true);
-          }
+        // Skip non-tool messages
+        if (msg.speaker !== 'tool') continue;
+        // For tool messages, verify the corresponding tool call exists
+        const toolCallId = msg.blocks.find((b) => b.type === 'tool_response');
+        // eslint-disable-next-line vitest/no-conditional-expect -- Guard to check tool response exists
+        if (toolCallId != null && 'callId' in toolCallId) {
+          const hasCall = tail.some(
+            (m) =>
+              m.speaker === 'ai' &&
+              m.blocks.some(
+                (b) =>
+                  b.type === 'tool_call' &&
+                  'id' in b &&
+                  b.id === toolCallId.callId,
+              ),
+          );
+          expect(hasCall).toBe(true);
         }
       }
     });
@@ -520,12 +520,9 @@ describe('OneShotStrategy', () => {
       await expect(strategy.compress(ctx)).rejects.toThrow(
         CompressionExecutionError,
       );
-      try {
-        await strategy.compress(ctx);
-      } catch (error) {
-        expect(error).toBeInstanceOf(CompressionExecutionError);
-        expect((error as CompressionExecutionError).isTransient).toBe(true);
-      }
+      await expect(strategy.compress(ctx)).rejects.toMatchObject({
+        isTransient: true,
+      });
     });
 
     it('throws a transient CompressionExecutionError when LLM returns whitespace-only summary', async () => {
@@ -543,12 +540,9 @@ describe('OneShotStrategy', () => {
       await expect(strategy.compress(ctx)).rejects.toThrow(
         CompressionExecutionError,
       );
-      try {
-        await strategy.compress(ctx);
-      } catch (error) {
-        expect(error).toBeInstanceOf(CompressionExecutionError);
-        expect((error as CompressionExecutionError).isTransient).toBe(true);
-      }
+      await expect(strategy.compress(ctx)).rejects.toMatchObject({
+        isTransient: true,
+      });
     });
   });
 });

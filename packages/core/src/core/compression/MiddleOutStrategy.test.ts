@@ -315,8 +315,10 @@ describe('MiddleOutStrategy', () => {
       // Check: top messages shouldn't end with an orphaned tool call
       // (i.e., an AI with tool_call whose response isn't also in top)
       const lastTop = topMessages[topMessages.length - 1];
+      // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to check AI message with tool calls
       if (lastTop?.speaker === 'ai') {
         const toolCalls = lastTop.blocks.filter((b) => b.type === 'tool_call');
+        // eslint-disable-next-line vitest/no-conditional-in-test -- Skip when no tool calls
         if (toolCalls.length > 0) {
           // If the last top message has tool calls, their responses
           // must also be in the top portion
@@ -337,6 +339,7 @@ describe('MiddleOutStrategy', () => {
       }
 
       // Bottom messages should not start with an orphaned tool response
+      // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to check non-empty array
       if (bottomMessages.length > 0) {
         const firstBottom = bottomMessages[0];
         expect(firstBottom.speaker).not.toBe('tool');
@@ -850,12 +853,9 @@ describe('MiddleOutStrategy', () => {
       await expect(strategy.compress(ctx)).rejects.toThrow(
         CompressionExecutionError,
       );
-      try {
-        await strategy.compress(ctx);
-      } catch (error) {
-        expect(error).toBeInstanceOf(CompressionExecutionError);
-        expect((error as CompressionExecutionError).isTransient).toBe(true);
-      }
+      await expect(strategy.compress(ctx)).rejects.toMatchObject({
+        isTransient: true,
+      });
     });
 
     it('throws a transient CompressionExecutionError when LLM returns whitespace-only summary', async () => {
@@ -873,12 +873,9 @@ describe('MiddleOutStrategy', () => {
       await expect(strategy.compress(ctx)).rejects.toThrow(
         CompressionExecutionError,
       );
-      try {
-        await strategy.compress(ctx);
-      } catch (error) {
-        expect(error).toBeInstanceOf(CompressionExecutionError);
-        expect((error as CompressionExecutionError).isTransient).toBe(true);
-      }
+      await expect(strategy.compress(ctx)).rejects.toMatchObject({
+        isTransient: true,
+      });
     });
   });
 });
