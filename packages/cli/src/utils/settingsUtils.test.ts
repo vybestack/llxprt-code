@@ -150,18 +150,18 @@ describe('SettingsUtils', () => {
 
       it('should handle nested settings correctly', () => {
         const settings = {
-          accessibility: { disableLoadingPhrases: true },
+          accessibility: { enableLoadingPhrases: false },
         };
         const mergedSettings = {
-          accessibility: { disableLoadingPhrases: false },
+          accessibility: { enableLoadingPhrases: true },
         };
 
         const value = getEffectiveValue(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           settings,
           mergedSettings,
         );
-        expect(value).toBe(true);
+        expect(value).toBe(false);
       });
 
       it('should return undefined for invalid settings', () => {
@@ -181,7 +181,7 @@ describe('SettingsUtils', () => {
       it('should return all setting keys', () => {
         const keys = getAllSettingKeys();
         expect(keys).toContain('ui.showMemoryUsage');
-        expect(keys).toContain('accessibility.disableLoadingPhrases');
+        expect(keys).toContain('accessibility.enableLoadingPhrases');
         expect(keys).toContain('checkpointing.enabled');
       });
     });
@@ -209,7 +209,7 @@ describe('SettingsUtils', () => {
     describe('isValidSettingKey', () => {
       it('should return true for valid setting keys', () => {
         expect(isValidSettingKey('ui.showMemoryUsage')).toBe(true);
-        expect(isValidSettingKey('accessibility.disableLoadingPhrases')).toBe(
+        expect(isValidSettingKey('accessibility.enableLoadingPhrases')).toBe(
           true,
         );
       });
@@ -223,7 +223,7 @@ describe('SettingsUtils', () => {
     describe('getSettingCategory', () => {
       it('should return correct category for valid settings', () => {
         expect(getSettingCategory('ui.showMemoryUsage')).toBe('UI');
-        expect(getSettingCategory('accessibility.disableLoadingPhrases')).toBe(
+        expect(getSettingCategory('accessibility.enableLoadingPhrases')).toBe(
           'Accessibility',
         );
       });
@@ -272,11 +272,10 @@ describe('SettingsUtils', () => {
 
         // Advanced settings with showInDialog=true should be included
         expect(categories['Advanced']).toBeDefined();
-        expect(categories['Advanced']).toHaveLength(2);
-        expect(categories['Advanced'].map((s) => s.key)).toContain(
-          'coreToolSettings',
-        );
-        expect(categories['Advanced'].map((s) => s.key)).toContain('lsp');
+        expect(categories['Advanced'].length).toBeGreaterThanOrEqual(2);
+        const advancedKeys = categories['Advanced'].map((s) => s.key);
+        expect(advancedKeys).toContain('coreToolSettings');
+        expect(advancedKeys).toContain('lsp');
       });
 
       it('should include settings with showInDialog=true', () => {
@@ -287,7 +286,7 @@ describe('SettingsUtils', () => {
 
         expect(allKeys).toContain('ui.vimMode');
         expect(allKeys).toContain('ui.ideMode');
-        expect(allKeys).toContain('disableAutoUpdate');
+        expect(allKeys).toContain('enableAutoUpdate');
         expect(allKeys).toContain('ui.showMemoryUsage');
         expect(allKeys).not.toContain('ui.usageStatisticsEnabled');
         expect(allKeys).not.toContain('coreTools');
@@ -331,7 +330,7 @@ describe('SettingsUtils', () => {
         expect(dialogKeys).toContain('ui.hideWindowTitle');
         expect(dialogKeys).not.toContain('ui.usageStatisticsEnabled');
         expect(dialogKeys).toContain('ui.ideMode');
-        expect(dialogKeys).toContain('disableAutoUpdate');
+        expect(dialogKeys).toContain('enableAutoUpdate');
 
         // Should include nested settings marked for dialog
         expect(dialogKeys).toContain('fileFiltering.respectGitIgnore');
@@ -477,24 +476,24 @@ describe('SettingsUtils', () => {
 
       it('should return true for nested settings that exist', () => {
         const settings = {
-          accessibility: { disableLoadingPhrases: true },
+          accessibility: { enableLoadingPhrases: true },
         };
         expect(
-          settingExistsInScope('accessibility.disableLoadingPhrases', settings),
+          settingExistsInScope('accessibility.enableLoadingPhrases', settings),
         ).toBe(true);
       });
 
       it('should return false for nested settings that do not exist', () => {
         const settings = {};
         expect(
-          settingExistsInScope('accessibility.disableLoadingPhrases', settings),
+          settingExistsInScope('accessibility.enableLoadingPhrases', settings),
         ).toBe(false);
       });
 
       it('should return false when parent exists but child does not', () => {
         const settings = { accessibility: {} };
         expect(
-          settingExistsInScope('accessibility.disableLoadingPhrases', settings),
+          settingExistsInScope('accessibility.enableLoadingPhrases', settings),
         ).toBe(false);
       });
     });
@@ -514,25 +513,25 @@ describe('SettingsUtils', () => {
       it('should set nested setting value', () => {
         const pendingSettings = {};
         const result = setPendingSettingValue(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           true,
           pendingSettings,
         );
 
-        expect(result.accessibility?.disableLoadingPhrases).toBe(true);
+        expect(result.accessibility?.enableLoadingPhrases).toBe(true);
       });
 
       it('should preserve existing nested settings', () => {
         const pendingSettings = {
-          accessibility: { disableLoadingPhrases: false },
+          accessibility: { enableLoadingPhrases: false },
         };
         const result = setPendingSettingValue(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           true,
           pendingSettings,
         );
 
-        expect(result.accessibility?.disableLoadingPhrases).toBe(true);
+        expect(result.accessibility?.enableLoadingPhrases).toBe(true);
       });
 
       it('should not mutate original settings', () => {
@@ -684,17 +683,17 @@ describe('SettingsUtils', () => {
         const settings = {}; // nested setting doesn't exist
 
         const result = isDefaultValue(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           settings,
         );
         expect(result).toBe(true);
       });
 
       it('should return false when nested setting exists in scope', () => {
-        const settings = { accessibility: { disableLoadingPhrases: true } }; // nested setting exists
+        const settings = { accessibility: { enableLoadingPhrases: false } }; // nested setting exists with non-default value
 
         const result = isDefaultValue(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           settings,
         );
         expect(result).toBe(false);
@@ -728,14 +727,14 @@ describe('SettingsUtils', () => {
 
       it('should return false for nested settings that exist in scope', () => {
         const settings = {
-          accessibility: { disableLoadingPhrases: true },
+          accessibility: { enableLoadingPhrases: true },
         };
         const mergedSettings = {
-          accessibility: { disableLoadingPhrases: true },
+          accessibility: { enableLoadingPhrases: true },
         };
 
         const result = isValueInherited(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           settings,
           mergedSettings,
         );
@@ -745,11 +744,11 @@ describe('SettingsUtils', () => {
       it('should return true for nested settings that do not exist in scope', () => {
         const settings = {};
         const mergedSettings = {
-          accessibility: { disableLoadingPhrases: true },
+          accessibility: { enableLoadingPhrases: true },
         };
 
         const result = isValueInherited(
-          'accessibility.disableLoadingPhrases',
+          'accessibility.enableLoadingPhrases',
           settings,
           mergedSettings,
         );

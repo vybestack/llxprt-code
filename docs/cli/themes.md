@@ -64,7 +64,6 @@ Add a `customThemes` block to your user, project, or system `settings.json` file
       "Gray": "#ABB2BF",
       "DiffAdded": "#A6E3A1",
       "DiffRemoved": "#F38BA8",
-      "DiffModified": "#89B4FA",
       "GradientColors": ["#4796E4", "#847ACE", "#C3677F"]
     }
   }
@@ -86,7 +85,6 @@ Add a `customThemes` block to your user, project, or system `settings.json` file
 - `Gray`
 - `DiffAdded` (optional, for added lines in diffs)
 - `DiffRemoved` (optional, for removed lines in diffs)
-- `DiffModified` (optional, for modified lines in diffs)
 
 You can also override individual UI text roles by adding a nested `text` object.
 This object supports the keys `primary`, `secondary`, `link`, `accent`, and
@@ -146,7 +144,6 @@ The theme file must be a valid JSON file that follows the same structure as a cu
   "Gray": "#ABB2BF",
   "DiffAdded": "#A6E3A1",
   "DiffRemoved": "#F38BA8",
-  "DiffModified": "#89B4FA",
   "GradientColors": ["#4796E4", "#847ACE", "#C3677F"]
 }
 ```

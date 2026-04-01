@@ -39,6 +39,7 @@ import {
   isValidNonThoughtTextPart,
   convertIContentToResponse,
 } from './MessageConverter.js';
+import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import {
   InvalidStreamError,
   isSchemaDepthError,
@@ -48,10 +49,6 @@ import {
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import {
-  triggerBeforeModelHook,
-  triggerAfterModelHook,
-} from './geminiChatHookTriggers.js';
-import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './geminiChat.js';
@@ -60,6 +57,15 @@ import {
  * StreamProcessor handles making API calls and processing streaming responses.
  * Extracted from GeminiChat to isolate streaming concerns.
  */
+
+type ToolGroupArray = Array<{
+  functionDeclarations: Array<{
+    name: string;
+    description?: string;
+    parametersJsonSchema?: unknown;
+  }>;
+}>;
+
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
 
@@ -117,6 +123,7 @@ export class StreamProcessor {
 
     const streamResponse = await this._executeStreamApiCall(
       params,
+      promptId,
       userContent,
       provider,
     );
@@ -130,11 +137,12 @@ export class StreamProcessor {
    */
   private async _executeStreamApiCall(
     params: SendMessageParameters,
+    promptId: string,
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const apiCall = () =>
-      this._buildAndSendStreamRequest(params, userContent, provider);
+      this._buildAndSendStreamRequest(params, promptId, userContent, provider);
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () => this._handleBucketFailover(),
@@ -144,12 +152,18 @@ export class StreamProcessor {
 
   private async _buildAndSendStreamRequest(
     params: SendMessageParameters,
+    promptId: string,
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     let requestContents = this._buildRequestContents(userContent);
 
-    const tools = this.generationConfig.tools;
+    const configForHooks = this.runtimeContext.providerRuntime.config;
+    const tools = await this._applyToolSelectionHook(
+      configForHooks,
+      this.generationConfig.tools,
+    );
+
     this.logger.debug(
       () => '[StreamProcessor] Calling provider.generateChatCompletion',
       {
@@ -165,6 +179,68 @@ export class StreamProcessor {
       'StreamProcessor.generateRequest',
       { historyLength: requestContents.length },
     );
+
+    // Trigger BeforeModel hook for streaming path
+    if (configForHooks && configForHooks.getEnableHooks?.()) {
+      const hookSystem = configForHooks.getHookSystem?.();
+      if (hookSystem) {
+        await hookSystem.initialize();
+        const beforeModelResult = await hookSystem.fireBeforeModelEvent({
+          contents: requestContents,
+          tools: tools as ProviderToolset | undefined,
+        });
+
+        if (beforeModelResult?.shouldStopExecution()) {
+          throw new AgentExecutionStoppedError(
+            beforeModelResult.getEffectiveReason() ||
+              'Execution stopped by BeforeModel hook',
+            beforeModelResult.systemMessage,
+          );
+        }
+
+        if (beforeModelResult?.isBlockingDecision()) {
+          let syntheticResponse = beforeModelResult.getSyntheticResponse();
+          if (syntheticResponse) {
+            const candidate = syntheticResponse.candidates?.[0];
+            if (candidate && !candidate.finishReason) {
+              syntheticResponse = {
+                ...syntheticResponse,
+                candidates: [
+                  {
+                    ...candidate,
+                    finishReason: FinishReason.STOP,
+                  },
+                ],
+              } as GenerateContentResponse;
+            }
+          }
+          throw new AgentExecutionBlockedError(
+            beforeModelResult.getEffectiveReason() ||
+              'Request blocked by BeforeModel hook',
+            syntheticResponse,
+          );
+        }
+
+        if (beforeModelResult) {
+          const modifiedRequest =
+            beforeModelResult.applyLLMRequestModifications({
+              model: this.runtimeContext.state.model || '',
+              contents: ContentConverters.toGeminiContents(requestContents),
+            });
+          if (modifiedRequest?.contents) {
+            requestContents = ContentConverters.toIContents(
+              modifiedRequest.contents as Content[],
+            );
+          }
+        }
+      }
+    }
+
+    const requestPayload = {
+      contents: requestContents,
+      tools,
+    };
+
     const runtimeContext = params.config
       ? {
           ...baseRuntimeContext,
@@ -172,76 +248,86 @@ export class StreamProcessor {
         }
       : baseRuntimeContext;
 
-    // Trigger BeforeModel hook for streaming path
-    const configForHooks = this.runtimeContext.providerRuntime.config;
-    if (configForHooks) {
-      const requestForHook = {
-        contents: requestContents,
-        tools: tools as ProviderToolset | undefined,
-      };
-      const beforeModelResult = await triggerBeforeModelHook(
-        configForHooks,
-        requestForHook,
+    const requestContentsForTelemetry = ContentConverters.toGeminiContents(
+      requestPayload.contents,
+    );
+    logApiRequest(
+      this.runtimeContext,
+      this.runtimeContext.state,
+      requestContentsForTelemetry,
+      this.runtimeContext.state.model,
+      promptId,
+    );
+
+    const startTime = Date.now();
+    try {
+      const streamResponse = provider.generateChatCompletion({
+        contents: requestPayload.contents,
+        tools: requestPayload.tools as ProviderToolset | undefined,
+        config: runtimeContext.config,
+        runtime: runtimeContext,
+        settings: runtimeContext.settingsService,
+        metadata: runtimeContext.metadata,
+        userMemory: baseRuntimeContext.config?.getUserMemory?.(),
+      } as GenerateChatOptions);
+
+      return this._convertIContentStream(streamResponse, requestPayload, {
+        promptId,
+        startTime,
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      logApiError(
+        this.runtimeContext,
+        this.runtimeContext.state,
+        this.runtimeContext.state.model,
+        promptId,
+        durationMs,
+        error,
       );
+      throw error;
+    }
+  }
 
-      // Check for stop first
-      if (beforeModelResult?.shouldStopExecution()) {
-        throw new AgentExecutionStoppedError(
-          beforeModelResult.getEffectiveReason() ||
-            'Execution stopped by BeforeModel hook',
-          beforeModelResult.systemMessage,
-        );
-      }
+  private async _applyToolSelectionHook(
+    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+    tools: GenerateContentConfig['tools'],
+  ): Promise<GenerateContentConfig['tools']> {
+    const toolsFromConfig = tools as ToolGroupArray | undefined;
+    if (!toolsFromConfig || !configForHooks?.getEnableHooks?.()) {
+      return tools;
+    }
 
-      // Check for blocking decision with synthetic response
-      if (beforeModelResult?.isBlockingDecision()) {
-        let syntheticResponse = beforeModelResult.getSyntheticResponse();
-        // Ensure synthetic response has finishReason to avoid invalid-stream handling
-        if (syntheticResponse) {
-          const candidate = syntheticResponse.candidates?.[0];
-          if (candidate && !candidate.finishReason) {
-            syntheticResponse = {
-              ...syntheticResponse,
-              candidates: [
-                {
-                  ...candidate,
-                  finishReason: FinishReason.STOP,
-                },
-              ],
-            } as GenerateContentResponse;
-          }
-        }
-        throw new AgentExecutionBlockedError(
-          beforeModelResult.getEffectiveReason() ||
-            'Request blocked by BeforeModel hook',
-          syntheticResponse,
-        );
-      }
+    const hookSystem = configForHooks.getHookSystem?.();
+    if (!hookSystem) {
+      return tools;
+    }
 
-      // Apply request modifications from BeforeModel hook
-      if (beforeModelResult) {
-        const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
-          model: this.runtimeContext.state.model || '',
-          contents: requestContents as unknown as Content[],
-        });
-        // If hook modified contents, update requestContents
-        if (modifiedRequest && modifiedRequest.contents) {
-          requestContents = modifiedRequest.contents as unknown as IContent[];
-        }
+    await hookSystem.initialize();
+    const toolSelectionResult =
+      await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
+    const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
+      tools: toolsFromConfig,
+    });
+
+    if (
+      modifiedConfig?.toolConfig &&
+      'allowedFunctionNames' in modifiedConfig.toolConfig
+    ) {
+      const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
+      if (allowedFunctions?.length) {
+        return toolsFromConfig
+          .map((toolGroup) => ({
+            ...toolGroup,
+            functionDeclarations: toolGroup.functionDeclarations?.filter((fn) =>
+              allowedFunctions.includes(fn.name),
+            ),
+          }))
+          .filter((g) => g.functionDeclarations?.length) as ToolGroupArray;
       }
     }
 
-    const streamResponse = provider.generateChatCompletion({
-      contents: requestContents,
-      tools: tools as ProviderToolset | undefined,
-      config: runtimeContext.config,
-      runtime: runtimeContext,
-      settings: runtimeContext.settingsService,
-      metadata: runtimeContext.metadata,
-      userMemory: baseRuntimeContext.config?.getUserMemory?.(),
-    } as GenerateChatOptions);
-
-    return this._convertIContentStream(streamResponse);
+    return toolsFromConfig;
   }
 
   private _buildRequestContents(userContent: Content | Content[]): IContent[] {
@@ -298,7 +384,11 @@ export class StreamProcessor {
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
+    llmRequest?: Record<string, unknown>,
+    telemetryContext?: { promptId: string; startTime: number },
   ): AsyncGenerator<GenerateContentResponse> {
+    let lastConvertedChunk: GenerateContentResponse | undefined;
+
     for await (const iContent of streamResponse) {
       // Track token counts from IContent metadata (Anthropic/OpenAI format)
       // before conversion to Gemini format
@@ -319,45 +409,63 @@ export class StreamProcessor {
 
       // Convert current chunk to GenerateContentResponse
       const convertedChunk = convertIContentToResponse(iContent);
+      lastConvertedChunk = convertedChunk;
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
-      if (hookConfig) {
-        const afterModelResult = await triggerAfterModelHook(
-          hookConfig,
-          iContent,
-        );
-
-        // Check for stop
-        if (afterModelResult?.shouldStopExecution()) {
-          throw new AgentExecutionStoppedError(
-            afterModelResult.getEffectiveReason() ||
-              'Execution stopped by AfterModel hook',
-            afterModelResult.systemMessage,
+      if (hookConfig && hookConfig.getEnableHooks?.()) {
+        const hookSystem = hookConfig.getHookSystem?.();
+        if (hookSystem) {
+          if (!hookSystem.isInitialized()) {
+            await hookSystem.initialize();
+          }
+          const afterModelResult = await hookSystem.fireAfterModelEvent(
+            llmRequest ?? {},
+            iContent,
           );
-        }
 
-        // Check for blocking decision
-        if (afterModelResult?.isBlockingDecision()) {
-          const modifiedResponse = afterModelResult.getModifiedResponse();
-          const syntheticResponse = modifiedResponse || convertedChunk;
-          throw new AgentExecutionBlockedError(
-            afterModelResult.getEffectiveReason() ||
-              'Execution blocked by AfterModel hook',
-            syntheticResponse,
-            afterModelResult.systemMessage,
-          );
-        }
+          if (afterModelResult?.shouldStopExecution()) {
+            throw new AgentExecutionStoppedError(
+              afterModelResult.getEffectiveReason() ||
+                'Execution stopped by AfterModel hook',
+              afterModelResult.systemMessage,
+            );
+          }
 
-        // Apply modified response if available
-        const modifiedResponse = afterModelResult?.getModifiedResponse();
-        if (modifiedResponse) {
-          yield modifiedResponse;
-          continue;
+          if (afterModelResult?.isBlockingDecision()) {
+            const modifiedResponse = afterModelResult.getModifiedResponse();
+            const syntheticResponse = modifiedResponse || convertedChunk;
+            throw new AgentExecutionBlockedError(
+              afterModelResult.getEffectiveReason() ||
+                'Execution blocked by AfterModel hook',
+              syntheticResponse,
+              afterModelResult.systemMessage,
+            );
+          }
+
+          const modifiedResponse = afterModelResult?.getModifiedResponse();
+          if (modifiedResponse) {
+            lastConvertedChunk = modifiedResponse;
+            yield modifiedResponse;
+            continue;
+          }
         }
       }
 
       yield convertedChunk;
+    }
+
+    if (telemetryContext) {
+      const durationMs = Date.now() - telemetryContext.startTime;
+      logApiResponse(
+        this.runtimeContext,
+        this.runtimeContext.state,
+        this.runtimeContext.state.model,
+        telemetryContext.promptId,
+        durationMs,
+        lastConvertedChunk?.usageMetadata,
+        lastConvertedChunk ? JSON.stringify(lastConvertedChunk) : '{}',
+      );
     }
   }
 

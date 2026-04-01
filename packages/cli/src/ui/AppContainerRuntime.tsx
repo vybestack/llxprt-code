@@ -256,7 +256,6 @@ function buildUIStateParamsExtra(r: HookResults) {
     activeProfileName: d.activeProfileName,
     profileDialogError: d.profileDialogError,
     profileDialogLoading: d.profileDialogLoading,
-    shellConfirmationRequest: i.shellConfirmationRequest,
     confirmationRequest: i.confirmationRequest,
     confirmUpdateGeminiCLIExtensionRequests: d.confirmUpdateExtensionRequests,
     ctrlCPressedOnce: i.ctrlCPressedOnce,

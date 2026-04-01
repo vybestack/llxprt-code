@@ -24,7 +24,7 @@ describe('SettingsSchema', () => {
         'accessibility',
         'checkpointing',
         'fileFiltering',
-        'disableAutoUpdate',
+        'enableAutoUpdate',
         'useExternalAuth',
         'sandbox',
         'coreTools',
@@ -41,7 +41,7 @@ describe('SettingsSchema', () => {
         'summarizeToolOutput',
         'dnsResolutionOrder',
         'excludedProjectEnvVars',
-        'disableUpdateNag',
+        'enableAutoUpdateNotification',
         'includeDirectories',
         'loadMemoryFromIncludeDirectories',
         'model',
@@ -97,10 +97,10 @@ describe('SettingsSchema', () => {
 
     it('should have accessibility nested properties', () => {
       expect(
-        SETTINGS_SCHEMA.accessibility.properties?.disableLoadingPhrases,
+        SETTINGS_SCHEMA.accessibility.properties?.enableLoadingPhrases,
       ).toBeDefined();
       expect(
-        SETTINGS_SCHEMA.accessibility.properties?.disableLoadingPhrases.type,
+        SETTINGS_SCHEMA.accessibility.properties?.enableLoadingPhrases.type,
       ).toBe('boolean');
     });
 
@@ -186,7 +186,7 @@ describe('SettingsSchema', () => {
       );
       expect(SETTINGS_SCHEMA.ui.properties?.vimMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ui.properties?.ideMode.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.disableAutoUpdate.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.enableAutoUpdate.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ui.properties?.hideWindowTitle.showInDialog).toBe(
         true,
       );
@@ -334,21 +334,23 @@ describe('getEnableHooks', () => {
     expect(getEnableHooks({} as Settings)).toBe(false);
   });
 
-  it('returns false when only tools.enableHooks is true (hooks.enabled defaults to false)', () => {
+  it('returns false when only tools.enableHooks is true (hooksConfig.enabled defaults to false)', () => {
     expect(getEnableHooks({ tools: { enableHooks: true } } as Settings)).toBe(
       false,
     );
   });
 
-  it('returns true when hooks.enabled is true and tools.enableHooks is absent (defaults true)', () => {
-    expect(getEnableHooks({ hooks: { enabled: true } } as Settings)).toBe(true);
+  it('returns true when hooksConfig.enabled is true and tools.enableHooks is absent (defaults true)', () => {
+    expect(getEnableHooks({ hooksConfig: { enabled: true } } as Settings)).toBe(
+      true,
+    );
   });
 
   it('returns true when both gates are explicitly true', () => {
     expect(
       getEnableHooks({
         tools: { enableHooks: true },
-        hooks: { enabled: true },
+        hooksConfig: { enabled: true },
       } as Settings),
     ).toBe(true);
   });
@@ -357,16 +359,16 @@ describe('getEnableHooks', () => {
     expect(
       getEnableHooks({
         tools: { enableHooks: false },
-        hooks: { enabled: true },
+        hooksConfig: { enabled: true },
       } as Settings),
     ).toBe(false);
   });
 
-  it('returns false when hooks.enabled is explicitly false', () => {
+  it('returns false when hooksConfig.enabled is explicitly false', () => {
     expect(
       getEnableHooks({
         tools: { enableHooks: true },
-        hooks: { enabled: false },
+        hooksConfig: { enabled: false },
       } as Settings),
     ).toBe(false);
   });

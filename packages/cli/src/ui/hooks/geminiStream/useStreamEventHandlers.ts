@@ -568,6 +568,15 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
               },
               userMessageTimestamp,
             );
+            if (event.contextCleared) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: 'Conversation context has been cleared.',
+                },
+                userMessageTimestamp,
+              );
+            }
             break;
           case ServerGeminiEventType.AgentExecutionBlocked:
             addItem(
@@ -577,6 +586,15 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
               },
               userMessageTimestamp,
             );
+            if (event.contextCleared) {
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: 'Conversation context has been cleared.',
+                },
+                userMessageTimestamp,
+              );
+            }
             break;
           default:
             break;

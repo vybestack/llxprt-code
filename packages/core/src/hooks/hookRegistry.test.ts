@@ -571,6 +571,63 @@ describe('HookRegistry', () => {
         expect.objectContaining({ type: 'invalid-type' }),
       );
     });
+
+    it('should warn on misplaced hooksConfig fields and on invalid event names', async () => {
+      const emitSpy = vi.spyOn(coreEvents, 'emit');
+
+      const configWithExtras = {
+        disabled: [], // hooksConfig field — must produce migration warning
+        enabled: true, // hooksConfig field — must produce migration warning
+        notifications: true, // hooksConfig field — must produce migration warning
+        InvalidEvent: [], // unknown event name — must trigger invalid-event warning
+        BeforeTool: [
+          {
+            hooks: [{ type: 'command', command: './test.sh' }],
+          },
+        ],
+      };
+
+      vi.mocked(mockConfig.getHooks).mockReturnValue(
+        configWithExtras as unknown as {
+          [K in HookEventName]?: HookDefinition[];
+        },
+      );
+
+      await hookRegistry.initialize();
+
+      // Should only load the valid hook (BeforeTool), not InvalidEvent
+      expect(hookRegistry.getAllHooks()).toHaveLength(1);
+
+      // Should have emitted migration-style warnings for each misplaced hooksConfig field
+      for (const field of ['disabled', 'enabled', 'notifications']) {
+        expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {
+          chunk: expect.stringContaining(
+            `"${field}" is a hooksConfig field, not a hook event`,
+          ),
+          isStderr: true,
+        });
+      }
+
+      // Should have emitted exactly one invalid-event warning for InvalidEvent
+      const invalidEventWarnings = emitSpy.mock.calls.filter(
+        ([event, payload]) =>
+          event === CoreEvent.Output &&
+          typeof payload === 'object' &&
+          payload !== null &&
+          'chunk' in payload &&
+          typeof (payload as { chunk: string }).chunk === 'string' &&
+          (payload as { chunk: string }).chunk.includes('InvalidEvent'),
+      );
+      expect(invalidEventWarnings).toHaveLength(1);
+      expect(emitSpy).toHaveBeenCalledWith(CoreEvent.Output, {
+        chunk: expect.stringContaining(
+          'Invalid hook event name: "InvalidEvent" from project config',
+        ),
+        isStderr: true,
+      });
+
+      emitSpy.mockRestore();
+    });
   });
 
   describe('hook name identification', () => {

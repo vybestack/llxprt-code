@@ -24,6 +24,7 @@ import type {
   ToolCallResponseInfo,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
+  SerializableConfirmationDetails,
 } from '../index.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import { ToolConfirmationOutcome } from '../index.js';
@@ -155,7 +156,9 @@ export function buildCancelledTransition(
 
 export function buildAwaitingApprovalTransition(
   ctx: TransitionContext,
-  confirmationDetails: ToolCallConfirmationDetails,
+  confirmationDetails:
+    | ToolCallConfirmationDetails
+    | SerializableConfirmationDetails,
 ): WaitingToolCall {
   return {
     request: ctx.request,
@@ -258,7 +261,9 @@ export function applyTransition(
     case 'awaiting_approval':
       return buildAwaitingApprovalTransition(
         ctx,
-        auxiliaryData as ToolCallConfirmationDetails,
+        auxiliaryData as
+          | ToolCallConfirmationDetails
+          | SerializableConfirmationDetails,
       );
     case 'scheduled':
     case 'validating':

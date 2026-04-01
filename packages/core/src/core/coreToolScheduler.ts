@@ -18,6 +18,7 @@ import {
   ToolErrorType,
 } from '../index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { SerializableConfirmationDetails } from '../confirmation-bus/types.js';
 
 interface QueuedRequest {
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -206,7 +207,9 @@ export class CoreToolScheduler {
   private setStatusInternal(
     targetCallId: string,
     status: 'awaiting_approval',
-    confirmationDetails: ToolCallConfirmationDetails,
+    confirmationDetails:
+      | ToolCallConfirmationDetails
+      | SerializableConfirmationDetails,
   ): void;
   private setStatusInternal(
     targetCallId: string,

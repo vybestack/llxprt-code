@@ -5,7 +5,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { HookEventName, HookType, AfterModelHookOutput } from './types.js';
+import {
+  HookEventName,
+  HookType,
+  AfterModelHookOutput,
+  AfterAgentHookOutput,
+  DefaultHookOutput,
+  BeforeAgentHookOutput,
+} from './types.js';
 import type { LLMResponse } from './types.js';
 
 describe('Hook Types', () => {
@@ -106,6 +113,87 @@ describe('Hook Types', () => {
       const modifiedResponse = hookOutput.getModifiedResponse();
 
       expect(modifiedResponse).toBeUndefined();
+    });
+  });
+
+  describe('DefaultHookOutput.shouldClearContext', () => {
+    it('should return false by default', () => {
+      const hookOutput = new DefaultHookOutput({});
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+
+    it('should return false when hookSpecificOutput is undefined', () => {
+      const hookOutput = new DefaultHookOutput({});
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+
+    it('should return false when hookSpecificOutput has no clearContext', () => {
+      const hookOutput = new DefaultHookOutput({
+        hookSpecificOutput: { additionalContext: 'test' },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+
+    it('should return false when clearContext is explicitly false', () => {
+      const hookOutput = new DefaultHookOutput({
+        hookSpecificOutput: { clearContext: false },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+  });
+
+  describe('AfterAgentHookOutput.shouldClearContext', () => {
+    it('should return true when clearContext is true in hookSpecificOutput', () => {
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: { clearContext: true },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(true);
+    });
+
+    it('should return true when clearContext is true alongside other fields', () => {
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: {
+          hookEventName: 'AfterAgent',
+          additionalContext: 'some context',
+          clearContext: true,
+        },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(true);
+    });
+
+    it('should return false when clearContext is not present', () => {
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: { additionalContext: 'some context' },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+
+    it('should return false when clearContext is false', () => {
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: { clearContext: false },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+
+    it('should return false when hookSpecificOutput is undefined', () => {
+      const hookOutput = new AfterAgentHookOutput({});
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+
+    it('should return false when hookSpecificOutput is empty', () => {
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: {},
+      });
+      expect(hookOutput.shouldClearContext()).toBe(false);
+    });
+  });
+
+  describe('BeforeAgentHookOutput.shouldClearContext', () => {
+    it('should return false (BeforeAgent does not support clearContext)', () => {
+      const hookOutput = new BeforeAgentHookOutput({
+        hookSpecificOutput: { clearContext: true },
+      });
+      expect(hookOutput.shouldClearContext()).toBe(false);
     });
   });
 });

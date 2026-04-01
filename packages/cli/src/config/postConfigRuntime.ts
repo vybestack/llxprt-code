@@ -104,15 +104,19 @@ async function setupRuntimeContext(
     stage: 'post-config',
   };
 
-  // Set disabled hooks from settings if present
-  const hooks = input.profileSettingsWithTools.hooks as
+  // Set disabled hooks from hooksConfig (post-migration target) with
+  // hooks.disabled fallback for unmigrated settings
+  const hooksConfig = input.profileSettingsWithTools.hooksConfig as
     | { disabled?: unknown }
     | undefined;
-  if (hooks && 'disabled' in hooks) {
-    const disabledHooks = hooks.disabled;
-    if (Array.isArray(disabledHooks)) {
-      config.setDisabledHooks(disabledHooks as string[]);
-    }
+  const hooksLegacy = input.profileSettingsWithTools.hooks as
+    | { disabled?: unknown }
+    | undefined;
+  const disabledHooks =
+    (hooksConfig && 'disabled' in hooksConfig ? hooksConfig.disabled : null) ??
+    (hooksLegacy && 'disabled' in hooksLegacy ? hooksLegacy.disabled : null);
+  if (Array.isArray(disabledHooks)) {
+    config.setDisabledHooks(disabledHooks as string[]);
   }
 
   const profileManager = new ProfileManager();

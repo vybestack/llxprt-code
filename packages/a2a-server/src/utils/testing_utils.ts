@@ -128,6 +128,7 @@ export function createMockConfig(
             title: 'Mock confirmation',
             command: 'mock command',
             rootCommand: 'mock',
+            rootCommands: ['mock'],
             onConfirm: vi.fn(),
           };
 

@@ -372,6 +372,7 @@ export async function loadPoliciesFromToml(
                   priority: transformPriority(rule.priority, tier),
                   argsPattern,
                   allowRedirection: rule.allowRedirection,
+                  source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
                 };
 
                 return policyRule;
@@ -491,6 +492,7 @@ export async function loadPolicyFromToml(
           toolName: effectiveToolName,
           decision: rule.decision,
           priority: transformPriority(rule.priority, tier),
+          source: `Policy: ${path.basename(filePath)}`,
         };
 
         // Compile regex pattern

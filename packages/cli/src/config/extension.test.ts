@@ -148,13 +148,16 @@ describe('extension tests', () => {
     vi.mocked(ExtensionUninstallEvent).mockClear();
     vi.mocked(ExtensionDisableEvent).mockClear();
     vi.mocked(ExtensionEnableEvent).mockClear();
-    // Default: extensions are enabled
+    // Default: extensions are enabled with extensionConfig enabled for tests
     mockLoadSettings.mockReturnValue({
       merged: {
         admin: {
           extensions: {
             enabled: true,
           },
+        },
+        experimental: {
+          extensionConfig: true,
         },
       },
     });

@@ -16,6 +16,32 @@ import {
   calculateTransformedLine,
 } from './transformations.js';
 import { toCodePoints, getCachedStringWidth } from '../../utils/textUtils.js';
+import { LruCache } from '@vybestack/llxprt-code-core';
+import { LRU_BUFFER_PERF_CACHE_LIMIT } from '../../constants.js';
+
+interface LineLayoutResult {
+  visualLines: string[];
+  logicalToVisualMap: Array<[number, number]>;
+  visualToLogicalMap: Array<[number, number]>;
+  transformedToLogMap: number[];
+  visualToTransformedMap: number[];
+}
+
+const lineLayoutCache = new LruCache<string, LineLayoutResult>(
+  LRU_BUFFER_PERF_CACHE_LIMIT,
+);
+
+function getLineLayoutCacheKey(
+  line: string,
+  viewportWidth: number,
+  isCursorOnLine: boolean,
+  cursorCol: number,
+): string {
+  if (!isCursorOnLine) {
+    return `${viewportWidth}:N:${line}`;
+  }
+  return `${viewportWidth}:C:${cursorCol}:${line}`;
+}
 
 interface LayoutAccumulator {
   visualLines: string[];
@@ -165,6 +191,34 @@ function appendLogicalLineLayout(
 ): void {
   layout.logicalToVisualMap[logicalLineIndex] = [];
 
+  const isCursorOnLine = logicalLineIndex === logicalCursor[0];
+  const cacheKey = getLineLayoutCacheKey(
+    logicalLine,
+    viewportWidth,
+    isCursorOnLine,
+    logicalCursor[1],
+  );
+  const cached = lineLayoutCache.get(cacheKey);
+
+  if (cached) {
+    const visualLineOffset = layout.visualLines.length;
+    layout.visualLines.push(...cached.visualLines);
+    cached.logicalToVisualMap.forEach(([relVisualIdx, logCol]) => {
+      layout.logicalToVisualMap[logicalLineIndex].push([
+        visualLineOffset + relVisualIdx,
+        logCol,
+      ]);
+    });
+    cached.visualToLogicalMap.forEach(([, logCol]) => {
+      layout.visualToLogicalMap.push([logicalLineIndex, logCol]);
+    });
+    layout.transformedToLogicalMaps[logicalLineIndex] =
+      cached.transformedToLogMap;
+    layout.visualToTransformedMap.push(...cached.visualToTransformedMap);
+    return;
+  }
+
+  // Not in cache, calculate
   const transformations = calculateTransformationsForLine(logicalLine);
   const { transformedLine, transformedToLogMap } = calculateTransformedLine(
     logicalLine,
@@ -174,18 +228,44 @@ function appendLogicalLineLayout(
   );
   layout.transformedToLogicalMaps[logicalLineIndex] = transformedToLogMap;
 
+  const visualLineStart = layout.visualLines.length;
+  const visualToLogicalStart = layout.visualToLogicalMap.length;
+  const visualToTransformedStart = layout.visualToTransformedMap.length;
+
   if (transformedLine.length === 0) {
     appendEmptyLogicalLine(layout, logicalLineIndex);
-    return;
+  } else {
+    appendWrappedTransformedLine(
+      layout,
+      logicalLineIndex,
+      transformedLine,
+      transformedToLogMap,
+      viewportWidth,
+    );
   }
 
-  appendWrappedTransformedLine(
-    layout,
-    logicalLineIndex,
-    transformedLine,
-    transformedToLogMap,
-    viewportWidth,
+  const lineVisualLines = layout.visualLines.slice(visualLineStart);
+  const lineLogicalToVisualMap = layout.logicalToVisualMap[
+    logicalLineIndex
+  ].map(
+    ([visualIdx, logCol]) =>
+      [visualIdx - visualLineStart, logCol] as [number, number],
   );
+  const lineVisualToLogicalMap = layout.visualToLogicalMap
+    .slice(visualToLogicalStart)
+    .map(([, logCol]) => [logicalLineIndex, logCol] as [number, number]);
+  const lineVisualToTransformedMap = layout.visualToTransformedMap.slice(
+    visualToTransformedStart,
+  );
+
+  // Cache the result for this line
+  lineLayoutCache.set(cacheKey, {
+    visualLines: lineVisualLines,
+    logicalToVisualMap: lineLogicalToVisualMap,
+    visualToLogicalMap: lineVisualToLogicalMap,
+    transformedToLogMap,
+    visualToTransformedMap: lineVisualToTransformedMap,
+  });
 }
 
 function ensureLayoutHasVisualLine(

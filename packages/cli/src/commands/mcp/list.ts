@@ -132,9 +132,8 @@ export async function listMcpServers(): Promise<void> {
         );
       }
     } else if (server.url) {
-      // Use server.type falling back to 'http' as default
-      const transportType = server.type || 'http';
-      serverInfo += `${server.url} (${transportType})`;
+      const type = server.type || 'http';
+      serverInfo += `${server.url} (${type})`;
     } else if (server.command) {
       serverInfo += `${server.command} ${server.args?.join(' ') || ''} (stdio)`;
     }

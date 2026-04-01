@@ -24,7 +24,6 @@ import type {
   GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import type { SlashCommand, CommandContext } from '../../../commands/types.js';
-import type { ShellConfirmationRequest } from '../../../components/ShellConfirmationDialog.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type {
   WelcomeState,
@@ -125,7 +124,6 @@ export interface UIStateParams {
   profileDialogLoading: boolean;
 
   // Confirmation requests
-  shellConfirmationRequest: ShellConfirmationRequest | null;
   confirmationRequest: {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
@@ -310,7 +308,6 @@ function buildDialogData(p: UIStateParams) {
 
 function buildConfirmationAndExit(p: UIStateParams) {
   return {
-    shellConfirmationRequest: p.shellConfirmationRequest,
     confirmationRequest: p.confirmationRequest,
     confirmUpdateGeminiCLIExtensionRequests:
       p.confirmUpdateGeminiCLIExtensionRequests,

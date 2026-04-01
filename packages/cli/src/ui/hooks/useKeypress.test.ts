@@ -116,7 +116,7 @@ describe('useKeypress', () => {
     const key = { name: 'return', sequence: '\x1B\r' };
     act(() => stdin.write(key.sequence));
     expect(onKeypress).toHaveBeenCalledWith(
-      expect.objectContaining({ ...key, meta: true, paste: false }),
+      expect.objectContaining({ ...key, meta: true }),
     );
   });
 
@@ -150,12 +150,12 @@ describe('useKeypress', () => {
 
       expect(onKeypress).toHaveBeenCalledTimes(1);
       expect(onKeypress).toHaveBeenCalledWith({
-        name: '',
+        name: 'paste',
         ctrl: false,
         meta: false,
         shift: false,
-        paste: true,
         sequence: pasteText,
+        insertable: true,
       });
     });
 
@@ -166,20 +166,23 @@ describe('useKeypress', () => {
 
       const keyA = { name: 'a', sequence: 'a' };
       act(() => stdin.write('a'));
-      expect(onKeypress).toHaveBeenCalledWith(
-        expect.objectContaining({ ...keyA, paste: false }),
+      expect(onKeypress).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ ...keyA }),
       );
 
       const pasteText = 'pasted';
       act(() => stdin.write(PASTE_START + pasteText + PASTE_END));
-      expect(onKeypress).toHaveBeenCalledWith(
-        expect.objectContaining({ paste: true, sequence: pasteText }),
+      expect(onKeypress).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ name: 'paste', sequence: pasteText }),
       );
 
       const keyB = { name: 'b', sequence: 'b' };
       act(() => stdin.write('b'));
-      expect(onKeypress).toHaveBeenCalledWith(
-        expect.objectContaining({ ...keyB, paste: false }),
+      expect(onKeypress).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({ ...keyB }),
       );
 
       expect(onKeypress).toHaveBeenCalledTimes(3);
@@ -202,12 +205,12 @@ describe('useKeypress', () => {
 
       expect(onKeypress).toHaveBeenCalledTimes(1);
       expect(onKeypress).toHaveBeenCalledWith({
-        name: '',
+        name: 'paste',
         ctrl: false,
         meta: false,
         shift: false,
-        paste: true,
         sequence: pasteText,
+        insertable: false,
       });
     });
   });

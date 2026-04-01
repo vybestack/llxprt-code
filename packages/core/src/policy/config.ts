@@ -186,6 +186,7 @@ export function migrateLegacyApprovalMode(
       // undefined toolName = wildcard (matches all tools)
       decision: PolicyDecision.ALLOW,
       priority: 1.999, // Default tier, highest priority
+      source: 'Legacy (YOLO)',
     });
   }
 
@@ -196,6 +197,7 @@ export function migrateLegacyApprovalMode(
         toolName: tool,
         decision: PolicyDecision.ALLOW,
         priority: 1.015, // Default tier, just above write tools (1.010)
+        source: 'Legacy (AUTO_EDIT)',
       });
     }
   }
@@ -208,6 +210,7 @@ export function migrateLegacyApprovalMode(
         toolName: normalizeToolName(tool),
         decision: PolicyDecision.ALLOW,
         priority: 2.3, // User tier - explicit temporary allows
+        source: 'Legacy (--allowed-tools)',
       });
     }
   }
@@ -367,6 +370,7 @@ export async function createPolicyEngineConfig(
           toolName: `${serverName}__*`,
           decision: PolicyDecision.DENY,
           priority: 2.9,
+          source: 'Settings (MCP Excluded)',
         });
       }
     }
@@ -379,6 +383,7 @@ export async function createPolicyEngineConfig(
           toolName: tool,
           decision: PolicyDecision.DENY,
           priority: 2.4,
+          source: 'Settings (Tools Excluded)',
         });
       }
     }
@@ -405,6 +410,7 @@ export async function createPolicyEngineConfig(
                 argsPattern: pattern,
                 decision: PolicyDecision.ALLOW,
                 priority: 2.3,
+                source: 'Settings (Tools Allowed)',
               });
             }
           } else {
@@ -413,6 +419,7 @@ export async function createPolicyEngineConfig(
               toolName: normalizedName,
               decision: PolicyDecision.ALLOW,
               priority: 2.3,
+              source: 'Settings (Tools Allowed)',
             });
           }
         } else {
@@ -421,6 +428,7 @@ export async function createPolicyEngineConfig(
             toolName: normalizeToolName(tool),
             decision: PolicyDecision.ALLOW,
             priority: 2.3,
+            source: 'Settings (Tools Allowed)',
           });
         }
       }
@@ -439,6 +447,7 @@ export async function createPolicyEngineConfig(
             toolName: `${serverName}__*`,
             decision: PolicyDecision.ALLOW,
             priority: 2.2,
+            source: 'Settings (MCP Trusted)',
           });
         }
       }
@@ -452,6 +461,7 @@ export async function createPolicyEngineConfig(
           toolName: `${serverName}__*`,
           decision: PolicyDecision.ALLOW,
           priority: 2.1,
+          source: 'Settings (MCP Allowed)',
         });
       }
     }
@@ -503,6 +513,7 @@ export function createPolicyUpdater(
             // but still lose to admin policies (3.xxx) and settings excludes (200)
             priority: 2.95,
             argsPattern,
+            source: 'Dynamic (Confirmed)',
           });
         }
       } else {
@@ -518,6 +529,7 @@ export function createPolicyUpdater(
           // but still lose to admin policies (3.xxx) and settings excludes (200)
           priority: 2.95,
           argsPattern,
+          source: 'Dynamic (Confirmed)',
         });
       }
 

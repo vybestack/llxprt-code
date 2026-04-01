@@ -28,6 +28,7 @@ import {
   Settings,
   LoadedSettings,
   USER_SETTINGS_PATH,
+  type MergedSettings,
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
@@ -300,7 +301,8 @@ export function createProviderManager(
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
 
-  const settingsData = loadedSettings?.merged || {};
+  const settingsData =
+    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
   const ephemeralSettings = config?.getEphemeralSettings?.() ?? {};
   const effectiveOpenaiResponsesEnabled: boolean | undefined =
     ephemeralSettings.openaiResponsesEnabled !== undefined

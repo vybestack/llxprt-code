@@ -96,7 +96,8 @@ describe('handleAutoUpdate', () => {
 
     mockSettings = {
       merged: {
-        disableAutoUpdate: false,
+        enableAutoUpdate: true,
+        enableAutoUpdateNotification: true,
       },
     } as LoadedSettings;
 
@@ -132,8 +133,8 @@ describe('handleAutoUpdate', () => {
     expect(mockSpawn).not.toHaveBeenCalled();
   });
 
-  it('should do nothing if update nag is disabled', () => {
-    mockSettings.merged.disableUpdateNag = true;
+  it('should do nothing if update prompts are disabled', () => {
+    mockSettings.merged.enableAutoUpdateNotification = false;
     handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
     expect(mockGetInstallationInfo).not.toHaveBeenCalled();
     expect(mockUpdateEventEmitter.emit).not.toHaveBeenCalled();
@@ -141,7 +142,7 @@ describe('handleAutoUpdate', () => {
   });
 
   it('should emit "update-received" but not update if auto-updates are disabled', () => {
-    mockSettings.merged.disableAutoUpdate = true;
+    mockSettings.merged.enableAutoUpdate = false;
     mockGetInstallationInfo.mockReturnValue({
       updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
       updateMessage: 'Please update manually.',

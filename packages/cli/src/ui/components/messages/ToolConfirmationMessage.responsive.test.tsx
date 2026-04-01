@@ -38,6 +38,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     type: 'exec',
     title: 'Execute Command',
     rootCommand: 'npm',
+    rootCommands: ['npm'],
     command:
       'npm install --save-dev typescript @types/node jest ts-jest @types/jest eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin prettier',
     onConfirm: vi.fn(),
@@ -262,6 +263,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
         type: 'exec',
         title: 'Execute Command',
         rootCommand: 'ls',
+        rootCommands: ['ls'],
         command: 'ls',
         onConfirm: vi.fn(),
       };

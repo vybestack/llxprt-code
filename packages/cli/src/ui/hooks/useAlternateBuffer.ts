@@ -14,5 +14,5 @@ import { useSettings } from '../contexts/SettingsContext.js';
  */
 export function useAlternateBuffer(): boolean {
   const settings = useSettings();
-  return settings.merged.ui?.useAlternateBuffer === true;
+  return settings.merged.ui.useAlternateBuffer === true;
 }

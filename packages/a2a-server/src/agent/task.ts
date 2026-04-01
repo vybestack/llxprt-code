@@ -30,6 +30,7 @@ import type {
   ServerGeminiErrorEvent,
   ServerGeminiStreamEvent,
   ToolCallConfirmationDetails,
+  SerializableConfirmationDetails,
   Config,
   UserTierId,
   AnyDeclarativeTool,
@@ -64,13 +65,22 @@ import type { PartUnion, Part as genAiPart } from '@google/genai';
 
 type UnionKeys<T> = T extends T ? keyof T : never;
 
+function isInteractiveConfirmationDetails(
+  details: ToolCallConfirmationDetails | SerializableConfirmationDetails,
+): details is ToolCallConfirmationDetails {
+  return 'onConfirm' in details;
+}
+
 export class Task {
   id: string;
   contextId: string;
   scheduler: CoreToolScheduler | null;
   config: Config;
   geminiClient: GeminiClient;
-  pendingToolConfirmationDetails: Map<string, ToolCallConfirmationDetails>;
+  pendingToolConfirmationDetails: Map<
+    string,
+    ToolCallConfirmationDetails | SerializableConfirmationDetails
+  >;
   taskState: TaskState;
   eventBus?: ExecutionEventBus;
   completedToolCalls: CompletedToolCall[];
@@ -425,7 +435,11 @@ export class Task {
           'Auto-approving all tool calls.',
       );
       toolCalls.forEach((tc: ToolCall) => {
-        if (tc.status === 'awaiting_approval' && tc.confirmationDetails) {
+        if (
+          tc.status === 'awaiting_approval' &&
+          tc.confirmationDetails &&
+          isInteractiveConfirmationDetails(tc.confirmationDetails)
+        ) {
           void tc.confirmationDetails.onConfirm(
             ToolConfirmationOutcome.ProceedOnce,
           );
@@ -871,6 +885,14 @@ export class Task {
     logger.info(
       `[Task] Handling tool confirmation for callId: ${callId} with outcome: ${outcomeString}`,
     );
+
+    if (!isInteractiveConfirmationDetails(confirmationDetails)) {
+      logger.warn(
+        `[Task] Received non-interactive confirmation details for callId: ${callId}`,
+      );
+      return false;
+    }
+
     try {
       // Temporarily unset GCP environment variables so they do not leak into
       // tool calls.

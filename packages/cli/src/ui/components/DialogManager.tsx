@@ -25,7 +25,7 @@ import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
-import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
+
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
@@ -289,11 +289,6 @@ export const DialogManager = ({
         availableModels={uiState.welcomeAvailableModels}
         triggerAuth={uiActions.triggerWelcomeAuth}
       />
-    );
-  }
-  if (uiState.shellConfirmationRequest) {
-    return (
-      <ShellConfirmationDialog request={uiState.shellConfirmationRequest} />
     );
   }
   // TODO: LoopDetectionConfirmation not yet ported from upstream

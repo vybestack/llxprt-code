@@ -262,7 +262,6 @@ vi.mock('../../hooks/slashCommandProcessor.js', () => ({
     slashCommands: [],
     pendingHistoryItems: [],
     commandContext: {},
-    shellConfirmationRequest: null,
     confirmationRequest: null,
   })),
 }));

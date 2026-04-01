@@ -12,9 +12,13 @@ vi.mock('../../utils/skillUtils.js', () => ({
   installSkill: mockInstallSkill,
 }));
 
-vi.mock('@vybestack/llxprt-code-core', () => ({
-  debugLogger: { log: vi.fn(), error: vi.fn() },
-}));
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as object),
+    debugLogger: { log: vi.fn(), error: vi.fn() },
+  };
+});
 
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import { handleInstall, installCommand } from './install.js';
@@ -51,6 +55,7 @@ describe('skill install command', () => {
       'user',
       undefined,
       expect.any(Function),
+      expect.any(Function),
     );
     expect(debugLogger.log).toHaveBeenCalledWith(
       expect.stringContaining('Successfully installed skill: test-skill'),
@@ -75,6 +80,7 @@ describe('skill install command', () => {
       'https://example.com/repo.git',
       'workspace',
       'my-skills-dir',
+      expect.any(Function),
       expect.any(Function),
     );
   });

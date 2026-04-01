@@ -22,7 +22,7 @@ describe('settings-validation', () => {
     });
 
     it('should accept valid flat boolean setting', () => {
-      const validSettings = { disableAutoUpdate: false };
+      const validSettings = { enableAutoUpdate: false };
       const result = validateSettings(validSettings);
       expect(result.success).toBe(true);
     });
@@ -96,7 +96,7 @@ describe('settings-validation', () => {
 
     it('should accept complex valid settings', () => {
       const validSettings = {
-        disableAutoUpdate: false,
+        enableAutoUpdate: false,
         ui: {
           theme: 'DefaultDark',
           hideWindowTitle: true,
@@ -106,7 +106,7 @@ describe('settings-validation', () => {
           server1: { command: 'node', args: ['index.js'] },
         },
         accessibility: {
-          disableLoadingPhrases: true,
+          enableLoadingPhrases: true,
           screenReader: false,
         },
       };
@@ -117,12 +117,12 @@ describe('settings-validation', () => {
 
   describe('validateSettings - invalid types', () => {
     it('should reject string instead of boolean', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       if (result.error) {
-        expect(result.error.issues[0]?.path).toEqual(['disableAutoUpdate']);
+        expect(result.error.issues[0]?.path).toEqual(['enableAutoUpdate']);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
     });
@@ -228,21 +228,21 @@ describe('settings-validation', () => {
     });
 
     it('should reject null value for required type', () => {
-      const invalidSettings = { disableAutoUpdate: null };
+      const invalidSettings = { enableAutoUpdate: null };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
     });
 
     it('should allow undefined (all fields optional)', () => {
       // This test verifies that undefined is acceptable (not an error)
-      const settingsWithUndefined = { disableAutoUpdate: undefined };
+      const settingsWithUndefined = { enableAutoUpdate: undefined };
       const result = validateSettings(settingsWithUndefined);
       expect(result.success).toBe(true);
     });
 
     it('should reject multiple type errors in one settings object', () => {
       const invalidSettings = {
-        disableAutoUpdate: 'yes',
+        enableAutoUpdate: 'yes',
         ptyScrollbackLimit: 'not-a-number',
         allowedTools: [123, 456],
       };
@@ -497,7 +497,7 @@ describe('settings-validation', () => {
 
   describe('formatValidationError', () => {
     it('should format error with file path and helpful message', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
@@ -508,7 +508,7 @@ describe('settings-validation', () => {
         );
 
         expect(formatted).toContain('/path/to/settings.json');
-        expect(formatted).toContain('disableAutoUpdate');
+        expect(formatted).toContain('enableAutoUpdate');
         expect(formatted).toContain('Expected:');
         expect(formatted).toContain('but received:');
         expect(formatted).toContain(
@@ -561,7 +561,7 @@ describe('settings-validation', () => {
     });
 
     it('should include expected vs received for invalid_type errors', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
@@ -574,7 +574,7 @@ describe('settings-validation', () => {
 
     it('should list all validation errors when multiple exist', () => {
       const invalidSettings = {
-        disableAutoUpdate: 'yes',
+        enableAutoUpdate: 'yes',
         ptyScrollbackLimit: 'not-a-number',
       };
       const result = validateSettings(invalidSettings);
@@ -582,7 +582,7 @@ describe('settings-validation', () => {
 
       if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('disableAutoUpdate');
+        expect(formatted).toContain('enableAutoUpdate');
         expect(formatted).toContain('ptyScrollbackLimit');
       }
     });
@@ -608,7 +608,7 @@ describe('settings-validation', () => {
     });
 
     it('should include documentation link', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
@@ -632,7 +632,7 @@ describe('settings-validation', () => {
     });
 
     it('should use proper formatting for settings file path', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 

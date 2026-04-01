@@ -41,6 +41,7 @@ describe('policy config', () => {
           // toolName undefined = wildcard
           decision: PolicyDecision.ALLOW,
           priority: 1.999,
+          source: 'Legacy (YOLO)',
         });
         expect(rules[0].toolName).toBeUndefined();
       });
@@ -69,6 +70,7 @@ describe('policy config', () => {
           toolName: 'replace',
           decision: PolicyDecision.ALLOW,
           priority: 1.015,
+          source: 'Legacy (AUTO_EDIT)',
         });
       });
 
@@ -108,11 +110,13 @@ describe('policy config', () => {
           toolName: 'edit',
           decision: PolicyDecision.ALLOW,
           priority: 2.3,
+          source: 'Legacy (--allowed-tools)',
         });
         expect(rules[1]).toEqual({
           toolName: 'shell',
           decision: PolicyDecision.ALLOW,
           priority: 2.3,
+          source: 'Legacy (--allowed-tools)',
         });
       });
 

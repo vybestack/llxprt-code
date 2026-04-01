@@ -8,6 +8,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { SlashCommand } from '../commands/types.js';
+import { KEYBOARD_SHORTCUTS_URL } from '../constants.js';
 
 interface Help {
   commands: readonly SlashCommand[];
@@ -173,7 +174,7 @@ export const Help: React.FC<Help> = ({ commands }) => (
     <Text color={Colors.Foreground}>
       For a full list of shortcuts, see{' '}
       <Text bold color={Colors.AccentPurple}>
-        docs/keyboard-shortcuts.md
+        {KEYBOARD_SHORTCUTS_URL}
       </Text>
     </Text>
   </Box>

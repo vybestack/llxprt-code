@@ -241,8 +241,8 @@ describe('HookSystem', () => {
       expect(spy).toHaveBeenCalledTimes(1);
     });
 
-    it('should return result from HookEventHandler wrapper', async () => {
-      // @requirement:HOOK-006 - Wrappers pass through return values
+    it('should return undefined from HookEventHandler wrapper when no hook output', async () => {
+      // @requirement:HOOK-006 - Wrappers return typed output, undefined when no finalOutput
       await hookSystem.initialize();
 
       const eventHandler = hookSystem.getEventHandler();
@@ -257,7 +257,7 @@ describe('HookSystem', () => {
 
       const result = await hookSystem.fireBeforeModelEvent({ model: 'test' });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toBeUndefined();
     });
   });
 

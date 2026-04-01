@@ -464,6 +464,7 @@ describe('consent', () => {
         'This extension will install the following skills:',
         `  * ${chalk.bold('skill1')}: desc1`,
         `    (Location: ${skill1.location}) (2 items in directory)`,
+        '',
         `  * ${chalk.bold('skill2')}: desc2`,
         `    (Location: ${skill2.location}) (1 items in directory)`,
         '',

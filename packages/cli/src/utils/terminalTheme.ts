@@ -36,14 +36,14 @@ export async function setupTerminalAndTheme(
   }
 
   // Load custom themes from settings
-  themeManager.loadCustomThemes(settings.merged.ui?.customThemes);
+  themeManager.loadCustomThemes(settings.merged.ui.customThemes);
 
-  if (settings.merged.ui?.theme) {
-    if (!themeManager.setActiveTheme(settings.merged.ui?.theme)) {
+  if (settings.merged.ui.theme) {
+    if (!themeManager.setActiveTheme(settings.merged.ui.theme)) {
       // If the theme is not found during initial load, log a warning and continue.
       // The useThemeCommand hook in AppContainer.tsx will handle opening the dialog.
       const logger = new DebugLogger('llxprt:terminalTheme');
-      logger.warn(`Warning: Theme "${settings.merged.ui?.theme}" not found.`);
+      logger.warn(`Warning: Theme "${settings.merged.ui.theme}" not found.`);
     }
   } else {
     // If no theme is set, check terminal background color

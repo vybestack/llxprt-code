@@ -17,6 +17,8 @@ import {
   getBuiltinSkillsDir,
 } from './skillLoader.js';
 import type { GeminiCLIExtension } from '../config/config.js';
+import { debugLogger } from '../utils/debugLogger.js';
+import { coreEvents } from '../utils/events.js';
 
 export { type SkillDefinition, type SkillSource };
 
@@ -63,8 +65,8 @@ export class SkillManager {
   }
 
   /**
-   * Discovers skills from built-in, extension, user and project locations.
-   * Precedence: Built-in (lowest) -> Extensions -> User -> Project (highest).
+   * Discovers skills from built-in, extension, user and workspace locations.
+   * Precedence: Built-in (lowest) -> Extensions -> User -> Workspace (highest).
    */
   async discoverSkills(
     storage: Storage,
@@ -100,7 +102,7 @@ export class SkillManager {
     );
     this.addSkillsWithPrecedence(userSkills);
 
-    // 4. Project skills (highest precedence)
+    // 4. Workspace skills (highest precedence)
     const projectSkills = await loadSkillsFromDir(
       storage.getProjectSkillsDir(),
       'project',
@@ -282,10 +284,27 @@ export class SkillManager {
   }
 
   private addSkillsWithPrecedence(newSkills: SkillDefinition[]): void {
-    const skillMap = new Map<string, SkillDefinition>();
-    for (const skill of [...this.skills, ...newSkills]) {
-      skillMap.set(skill.name, skill);
+    const skillMap = new Map<string, SkillDefinition>(
+      this.skills.map((s) => [s.name, s]),
+    );
+
+    for (const newSkill of newSkills) {
+      const existingSkill = skillMap.get(newSkill.name);
+      if (existingSkill && existingSkill.location !== newSkill.location) {
+        if (existingSkill.source === 'builtin') {
+          debugLogger.warn(
+            `Skill "${newSkill.name}" from "${newSkill.location}" is overriding the built-in skill.`,
+          );
+        } else {
+          coreEvents.emitFeedback(
+            'warning',
+            `Skill conflict detected: "${newSkill.name}" from "${newSkill.location}" is overriding the same skill from "${existingSkill.location}".`,
+          );
+        }
+      }
+      skillMap.set(newSkill.name, newSkill);
     }
+
     this.skills = Array.from(skillMap.values());
   }
 

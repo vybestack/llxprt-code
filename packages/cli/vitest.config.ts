@@ -70,8 +70,7 @@ const baseExcludePatterns = [
   '**/ui/utils/**/*.test.tsx',
   // '**/gemini.test.tsx', // Temporarily enabled for terminal mode cleanup (ba88707b1 reimplementation)
   // Exclude UI component tests that may directly import React DOM
-  // Pre-existing failures in text-buffer.test.ts (handleInput key.insertable compat, issue #1577 note)
-  '**/ui/components/shared/text-buffer.test.ts',
+  '**/ui/components/**/*.test.ts',
   // Temporarily suppress remaining React 19 regressions until the hooks are migrated
   // EXCEPT useToolScheduler.test.ts which we're actively working on for issue #1055
   '**/ui/hooks/useEditorSettings.test.ts',
@@ -135,16 +134,6 @@ export default defineConfig({
       'src/ui/components/views/HooksList.test.tsx',
       // NOTE: ui/components/*.test.tsx are all excluded due to React 19/ink-stub incompatibility.
       // StatsDisplay, ModelStatsDisplay, etc. must be run individually outside the suite.
-      // Include text-buffer decomposition tests for issue #1577
-      // text-buffer.test.ts excluded (pre-existing handleInput failures from keyMatchers refactoring)
-      'src/ui/components/shared/buffer-operations.test.ts',
-      'src/ui/components/shared/buffer-reducer.test.ts',
-      'src/ui/components/shared/buffer-types.test.ts',
-      'src/ui/components/shared/golden-snapshot.test.ts',
-      'src/ui/components/shared/position-roundtrip.test.ts',
-      'src/ui/components/shared/transformations.test.ts',
-      'src/ui/components/shared/visual-layout.test.ts',
-      'src/ui/components/shared/word-navigation.test.ts',
     ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',

@@ -8,7 +8,7 @@ import type { RenderOptions } from 'ink';
 
 type MouseEventsEnabledSettings = {
   merged: {
-    ui?: {
+    ui: {
       enableMouseEvents?: boolean;
     };
   };
@@ -19,4 +19,4 @@ export const isMouseEventsEnabled = (
   settings: MouseEventsEnabledSettings,
 ): boolean =>
   renderOptions.alternateBuffer === true &&
-  settings.merged.ui?.enableMouseEvents === true;
+  settings.merged.ui.enableMouseEvents === true;
