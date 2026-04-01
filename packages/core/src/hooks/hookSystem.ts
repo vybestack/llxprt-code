@@ -19,6 +19,11 @@ import { HookEventHandler } from './hookEventHandler.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import {
+  BeforeModelHookOutput,
+  AfterModelHookOutput,
+  BeforeToolSelectionHookOutput,
+} from './types.js';
 import type {
   DefaultHookOutput,
   SessionStartSource,
@@ -26,9 +31,6 @@ import type {
   PreCompressTrigger,
   McpContext,
   NotificationType,
-  BeforeModelHookOutput,
-  AfterModelHookOutput,
-  BeforeToolSelectionHookOutput,
 } from './types.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
