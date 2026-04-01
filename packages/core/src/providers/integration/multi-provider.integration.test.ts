@@ -104,11 +104,10 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should initialize and register OpenAI provider',
       () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test
         if (!manager) return; // Guard for when test is skipped
 
         // Initially no providers
-        expect(manager.listProviders()).toStrictEqual([]);
+        expect(manager.listProviders()).toEqual([]);
         expect(manager.hasActiveProvider()).toBe(false);
 
         // Register OpenAI provider
@@ -116,7 +115,7 @@ describe('Multi-Provider Integration Tests', () => {
         manager.registerProvider(openaiProvider);
 
         // Verify registration
-        expect(manager.listProviders()).toStrictEqual(['openai']);
+        expect(manager.listProviders()).toEqual(['openai']);
         expect(manager.hasActiveProvider()).toBe(false); // Not active yet
 
         // Activate provider
@@ -127,7 +126,6 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should switch between providers and Gemini', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test
       if (!manager) return; // Guard for when test is skipped
 
       // Register OpenAI
@@ -149,7 +147,6 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should handle errors for invalid provider', () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test
       if (!manager) return; // Guard for when test is skipped
 
       // Try to set non-existent provider
@@ -163,7 +160,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should list available models from OpenAI',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test
         if (!manager) return; // Guard for when test is skipped
 
         const openaiProvider = createOpenAIProvider();
@@ -188,7 +184,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should switch between models within provider',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test
         if (!apiKey || skipTests) return; // Guard for when test is skipped
         resetSettingsService();
         const runtime = initializeTestProviderRuntime({
@@ -253,7 +248,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion with default model',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test
         if (!manager || skipTests) return; // Guard for when test is skipped
 
         const openaiProvider = createOpenAIProvider();
@@ -298,7 +292,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion via options signature',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test
         if (!manager || skipTests) return;
 
         const openaiProvider = createOpenAIProvider();
@@ -323,9 +316,10 @@ describe('Multi-Provider Integration Tests', () => {
           'model',
           openaiProvider.getDefaultModel(),
         );
-        baseURL && settingsService.set('base-url', baseURL);
-        baseURL &&
+        if (baseURL) {
+          settingsService.set('base-url', baseURL);
           settingsService.setProviderSetting('openai', 'base-url', baseURL);
+        }
 
         const stream = openaiProvider.generateChatCompletion(
           createProviderCallOptions({
@@ -348,7 +342,6 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.streaming.${Math.random()
@@ -411,9 +404,9 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toMatch(/5/);
     });
 
-    it.skip('should work with a specific model', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test
+    it.skipIf(skipTests)('should work with a specific model', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
+
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.model-specific.${Math.random()
@@ -478,7 +471,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should handle tool calls',
       async () => {
-        // eslint-disable-next-line vitest/no-conditional-in-test
         if (!apiKey || skipTests) return; // Guard for when test is skipped
         const runtime = initializeTestProviderRuntime({
           runtimeId: `multi-provider.integration.tool-calls.${Math.random()
@@ -592,7 +584,6 @@ describe('Multi-Provider Integration Tests', () => {
 
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
-      // eslint-disable-next-line vitest/no-conditional-in-test
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       resetSettingsService();
       const runtime = initializeTestProviderRuntime({

@@ -67,6 +67,7 @@ export interface IndividualToolCallDisplay {
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
   isFocused?: boolean;
+  outputFile?: string;
   ptyId?: number;
 }
 

@@ -22,7 +22,11 @@ import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
 import type { Logger } from '../logger.js';
 import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
-import { CompressionExecutionError } from './types.js';
+import {
+  CompressionExecutionError,
+  EmptySummaryError,
+  isTransientCompressionError,
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — build realistic IContent messages
@@ -192,20 +196,20 @@ function buildContext(
 
   return {
     history: overrides.history ?? [],
+    runtimeContext,
+    runtimeState,
     estimateTokens: async (contents: readonly IContent[]) =>
       contents.length * 100,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
+    resolveProvider,
+    promptResolver,
     promptBaseDir: '/tmp/test-prompts',
     promptContext: {
       provider: overrides.provider ?? 'test-provider',
       model: overrides.model ?? 'test-model',
     },
     promptId: 'test-prompt',
-    runtimeContext,
-    runtimeState,
-    resolveProvider,
-    promptResolver,
   };
 }
 
@@ -252,7 +256,7 @@ describe('OneShotStrategy', () => {
       const strategy = new OneShotStrategy();
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toStrictEqual([]);
+      expect(result.newHistory).toEqual([]);
       expect(result.metadata.llmCallMade).toBe(false);
       expect(result.metadata.strategyUsed).toBe('one-shot');
     });
@@ -302,11 +306,11 @@ describe('OneShotStrategy', () => {
 
       // Result starts with summary + ack, then preserved tail
       expect(result.newHistory[0].speaker).toBe('human');
-      expect(result.newHistory[0].blocks[0]).toStrictEqual(
+      expect(result.newHistory[0].blocks[0]).toEqual(
         expect.objectContaining({ type: 'text', text: KNOWN_SUMMARY }),
       );
       expect(result.newHistory[1].speaker).toBe('ai');
-      expect(result.newHistory[1].blocks[0]).toStrictEqual(
+      expect(result.newHistory[1].blocks[0]).toEqual(
         expect.objectContaining({
           type: 'text',
           text: 'Understood. Continuing with the current task.',
@@ -317,7 +321,7 @@ describe('OneShotStrategy', () => {
       const preservedCount = result.metadata.bottomPreserved!;
       const expectedTail = history.slice(history.length - preservedCount);
       const actualTail = result.newHistory.slice(2);
-      expect(actualTail).toStrictEqual(expectedTail);
+      expect(actualTail).toEqual(expectedTail);
     });
 
     it('does not preserve any top messages (unlike middle-out)', async () => {
@@ -422,23 +426,23 @@ describe('OneShotStrategy', () => {
       // The preserved tail should not contain orphaned tool responses
       const tail = result.newHistory.slice(2); // after summary + ack
       for (const msg of tail) {
-        // Skip non-tool messages
-        if (msg.speaker !== 'tool') continue;
-        // For tool messages, verify the corresponding tool call exists
-        const toolCallId = msg.blocks.find((b) => b.type === 'tool_response');
-        // eslint-disable-next-line vitest/no-conditional-expect -- Guard to check tool response exists
-        if (toolCallId != null && 'callId' in toolCallId) {
-          const hasCall = tail.some(
-            (m) =>
-              m.speaker === 'ai' &&
-              m.blocks.some(
-                (b) =>
-                  b.type === 'tool_call' &&
-                  'id' in b &&
-                  b.id === toolCallId.callId,
-              ),
-          );
-          expect(hasCall).toBe(true);
+        if (msg.speaker === 'tool') {
+          // If there's a tool response in the tail, its corresponding
+          // tool call should also be in the tail
+          const toolCallId = msg.blocks.find((b) => b.type === 'tool_response');
+          if (toolCallId && 'callId' in toolCallId) {
+            const hasCall = tail.some(
+              (m) =>
+                m.speaker === 'ai' &&
+                m.blocks.some(
+                  (b) =>
+                    b.type === 'tool_call' &&
+                    'id' in b &&
+                    b.id === toolCallId.callId,
+                ),
+            );
+            expect(hasCall).toBe(true);
+          }
         }
       }
     });
@@ -449,7 +453,7 @@ describe('OneShotStrategy', () => {
   // -----------------------------------------------------------------------
 
   describe('error handling', () => {
-    it('throws CompressionExecutionError when LLM returns empty', async () => {
+    it('throws EmptySummaryError when LLM returns empty', async () => {
       const history = generateHistory(20);
       const emptyProvider = createEmptyProvider();
 
@@ -459,9 +463,7 @@ describe('OneShotStrategy', () => {
       });
 
       const strategy = new OneShotStrategy();
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
     });
 
     it('throws CompressionExecutionError when provider fails', async () => {
@@ -504,11 +506,11 @@ describe('OneShotStrategy', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Empty summary handling — transient error for retry
+  // Empty summary handling — permanent error (not retryable)
   // -----------------------------------------------------------------------
 
   describe('empty summary handling', () => {
-    it('throws a transient CompressionExecutionError when LLM returns empty summary', async () => {
+    it('throws EmptySummaryError when LLM returns empty summary', async () => {
       const emptyProvider = createFakeProvider('empty-provider', '');
       const history = generateHistory(20);
       const ctx = buildContext({
@@ -517,15 +519,16 @@ describe('OneShotStrategy', () => {
       });
       const strategy = new OneShotStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
-      await expect(strategy.compress(ctx)).rejects.toMatchObject({
-        isTransient: true,
-      });
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      try {
+        await strategy.compress(ctx);
+      } catch (error) {
+        expect(error).toBeInstanceOf(EmptySummaryError);
+        expect(isTransientCompressionError(error)).toBe(false);
+      }
     });
 
-    it('throws a transient CompressionExecutionError when LLM returns whitespace-only summary', async () => {
+    it('throws EmptySummaryError when LLM returns whitespace-only summary', async () => {
       const whitespaceProvider = createFakeProvider(
         'whitespace-provider',
         '   \n  \t  ',
@@ -537,12 +540,13 @@ describe('OneShotStrategy', () => {
       });
       const strategy = new OneShotStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
-      await expect(strategy.compress(ctx)).rejects.toMatchObject({
-        isTransient: true,
-      });
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      try {
+        await strategy.compress(ctx);
+      } catch (error) {
+        expect(error).toBeInstanceOf(EmptySummaryError);
+        expect(isTransientCompressionError(error)).toBe(false);
+      }
     });
   });
 });

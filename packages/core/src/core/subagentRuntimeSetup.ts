@@ -74,14 +74,18 @@ export function convertMetadataToFunctionDeclaration(
   const properties =
     (rawSchema.properties as Record<string, unknown> | undefined) ?? {};
 
+  const parameterType = (rawSchema.type as Type | undefined) ?? Type.OBJECT;
+  const parameterProperties = { ...properties };
+  const parametersJsonSchema: Record<string, unknown> = {
+    ...rawSchema,
+    type: parameterType,
+    properties: parameterProperties,
+  };
+
   return {
     name: metadata.name ?? fallbackName,
     description: metadata.description ?? '',
-    parameters: {
-      ...rawSchema,
-      type: (rawSchema.type as Type | undefined) ?? Type.OBJECT,
-      properties,
-    } as FunctionDeclaration['parameters'],
+    parametersJsonSchema,
   };
 }
 
@@ -296,7 +300,7 @@ export function getScopeLocalFuncDefs(
     name: 'self_emitvalue',
     description: `* This tool emits A SINGLE return value from this execution, such that it can be collected and presented to the calling function.
         * You can only emit ONE VALUE each time you call this tool. You are expected to call this tool MULTIPLE TIMES if you have MULTIPLE OUTPUTS.`,
-    parameters: {
+    parametersJsonSchema: {
       type: Type.OBJECT,
       properties: {
         emit_variable_name: {

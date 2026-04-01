@@ -33,6 +33,8 @@ export interface TokenMetrics {
   tokensPerMinute: number;
   throttleWaitTimeMs: number;
   sessionTokenTotal: number;
+  timeToFirstToken: number | null;
+  tokensPerSecond: number;
 }
 
 interface UseTokenMetricsTrackingOptions {
@@ -182,6 +184,8 @@ function useTokenMetricsPoll(
     tokensPerMinute: 0,
     throttleWaitTimeMs: 0,
     sessionTokenTotal: 0,
+    timeToFirstToken: null,
+    tokensPerSecond: 0,
   });
   const tokenMetricsSnapshotRef = useRef<TokenMetricsSnapshot | null>(null);
 
@@ -207,11 +211,15 @@ function useTokenMetricsPoll(
         tokensPerMinute: snapshot.tokensPerMinute,
         throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
         sessionTokenTotal: snapshot.sessionTokenTotal,
+        timeToFirstToken: snapshot.timeToFirstToken,
+        tokensPerSecond: snapshot.tokensPerSecond,
       });
 
       uiTelemetryService.setTokenTrackingMetrics({
         tokensPerMinute: snapshot.tokensPerMinute,
         throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
+        timeToFirstToken: snapshot.timeToFirstToken,
+        tokensPerSecond: snapshot.tokensPerSecond,
         sessionTokenUsage: usage,
       });
     };

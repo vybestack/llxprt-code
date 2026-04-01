@@ -127,6 +127,7 @@ export class TurnProcessor {
       prompt_id,
       pendingTokens,
       'stream',
+      'auto',
     );
 
     let streamDoneResolver: () => void;
@@ -179,6 +180,7 @@ export class TurnProcessor {
               type: StreamEventType.AGENT_EXECUTION_STOPPED,
               reason: error.reason,
               systemMessage: error.systemMessage,
+              contextCleared: error.contextCleared,
             };
             lastError = null;
             break;
@@ -189,6 +191,7 @@ export class TurnProcessor {
               type: StreamEventType.AGENT_EXECUTION_BLOCKED,
               reason: error.reason,
               systemMessage: error.systemMessage,
+              contextCleared: error.contextCleared,
             };
             // If there's a synthetic response, yield it as a chunk
             if (error.syntheticResponse != null) {
@@ -289,6 +292,7 @@ export class TurnProcessor {
       prompt_id,
       pendingTokens,
       'send',
+      'auto',
     );
 
     const provider = this.providerResolver('sendMessage');

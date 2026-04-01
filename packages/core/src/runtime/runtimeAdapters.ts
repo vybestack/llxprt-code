@@ -31,7 +31,7 @@ import type {
 export function createProviderAdapterFromManager(
   manager?: ProviderManager | IProviderManager,
 ): AgentRuntimeProviderAdapter {
-  if (manager == null) {
+  if (!manager) {
     return {
       getActiveProvider: () => {
         throw new Error(
@@ -113,7 +113,7 @@ export function createTelemetryAdapterFromConfig(
 export function createToolRegistryViewFromRegistry(
   registry?: ToolRegistry,
 ): ToolRegistryView {
-  if (registry == null) {
+  if (!registry) {
     return {
       listToolNames: () => [],
       getToolMetadata: () => undefined,
@@ -124,7 +124,7 @@ export function createToolRegistryViewFromRegistry(
     listToolNames: () => registry.getAllToolNames(),
     getToolMetadata: (name) => {
       const tool = registry.getTool(name);
-      if (tool == null) {
+      if (!tool) {
         return undefined;
       }
       const schema = (tool as unknown as { schema?: Record<string, unknown> })
@@ -135,10 +135,9 @@ export function createToolRegistryViewFromRegistry(
           : typeof (tool as { description?: string }).description === 'string'
             ? (tool as { description: string }).description
             : '';
-      const parameterSchema =
-        (schema as { parameters?: Record<string, unknown> }).parameters ??
-        (schema as { parametersJsonSchema?: Record<string, unknown> })
-          .parametersJsonSchema;
+      const parameterSchema = (
+        schema as { parametersJsonSchema?: Record<string, unknown> }
+      )?.parametersJsonSchema;
 
       return {
         name: (tool as { name?: string }).name ?? name,

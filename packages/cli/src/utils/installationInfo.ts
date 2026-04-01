@@ -33,7 +33,7 @@ export interface InstallationInfo {
 
 export function getInstallationInfo(
   projectRoot: string,
-  isAutoUpdateDisabled: boolean,
+  isAutoUpdateEnabled: boolean,
 ): InstallationInfo {
   const cliPath = process.argv[1];
   if (!cliPath) {
@@ -80,19 +80,25 @@ export function getInstallationInfo(
     // Check for Homebrew
     if (process.platform === 'darwin') {
       try {
-        // The package name in homebrew is llxprt-code
-        childProcess.execSync('brew list -1 | grep -q "^llxprt-code$"', {
-          stdio: 'ignore',
-        });
-        const updateCommand = 'brew upgrade llxprt-code';
-        return {
-          packageManager: PackageManager.HOMEBREW,
-          isGlobal: true,
-          updateMessage: isAutoUpdateDisabled
-            ? `Please run "${updateCommand}" to update`
-            : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
-          updateCommand,
-        };
+        const brewPrefix = childProcess
+          .execSync('brew --prefix llxprt-code', {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+          })
+          .trim();
+        const brewRealPath = fs.realpathSync(brewPrefix);
+
+        if (realPath.startsWith(brewRealPath)) {
+          const updateCommand = 'brew upgrade llxprt-code';
+          return {
+            packageManager: PackageManager.HOMEBREW,
+            isGlobal: true,
+            updateCommand,
+            updateMessage: !isAutoUpdateEnabled
+              ? `Please run "${updateCommand}" to update`
+              : `Installed via Homebrew. Attempting to automatically update via "${updateCommand}"...`,
+          };
+        }
       } catch (_error) {
         // Brew is not installed or llxprt-code is not installed via brew.
         // Continue to the next check.
@@ -118,10 +124,10 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.PNPM,
         isGlobal: true,
-        updateMessage: isAutoUpdateDisabled
+        updateCommand,
+        updateMessage: !isAutoUpdateEnabled
           ? `Please run ${updateCommand} to update`
           : 'Installed with pnpm. Attempting to automatically update now...',
-        updateCommand,
       };
     }
 
@@ -131,10 +137,10 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.YARN,
         isGlobal: true,
-        updateMessage: isAutoUpdateDisabled
+        updateCommand,
+        updateMessage: !isAutoUpdateEnabled
           ? `Please run ${updateCommand} to update`
           : 'Installed with yarn. Attempting to automatically update now...',
-        updateCommand,
       };
     }
 
@@ -151,10 +157,10 @@ export function getInstallationInfo(
       return {
         packageManager: PackageManager.BUN,
         isGlobal: true,
-        updateMessage: isAutoUpdateDisabled
+        updateCommand,
+        updateMessage: !isAutoUpdateEnabled
           ? `Please run ${updateCommand} to update`
           : 'Installed with bun. Attempting to automatically update now...',
-        updateCommand,
       };
     }
 
@@ -184,10 +190,10 @@ export function getInstallationInfo(
     return {
       packageManager: PackageManager.NPM,
       isGlobal: true,
-      updateMessage: isAutoUpdateDisabled
+      updateCommand,
+      updateMessage: !isAutoUpdateEnabled
         ? `Please run ${updateCommand} to update`
         : 'Installed with npm. Attempting to automatically update now...',
-      updateCommand,
     };
   } catch (error) {
     debugLogger.log(String(error));

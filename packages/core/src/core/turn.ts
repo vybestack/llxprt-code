@@ -122,6 +122,7 @@ export interface ToolCallResponseInfo {
   error: Error | undefined;
   errorType: ToolErrorType | undefined;
   agentId?: string;
+  outputFile?: string;
   /**
    * Optional flag to suppress display of this tool result
    * @requirement:HOOK-132 - AfterTool suppressOutput support
@@ -180,13 +181,38 @@ export enum CompressionStatus {
   COMPRESSED = 1,
 
   /** The compression failed due to the compression inflating the token count */
-  COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
+  COMPRESSION_FAILED_INFLATED_TOKEN_COUNT = 2,
 
   /** The compression failed due to an error counting tokens */
-  COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
+  COMPRESSION_FAILED_TOKEN_COUNT_ERROR = 3,
+
+  /** The compression failed because the model returned an empty summary */
+  COMPRESSION_FAILED_EMPTY_SUMMARY,
 
   /** The compression was not necessary and no action was taken */
-  NOOP,
+  NOOP = 4,
+
+  /** Compression ran recently and did not reduce tokens further */
+  ALREADY_COMPRESSED = 5,
+
+  /** Compression was attempted but all strategies failed */
+  COMPRESSION_FAILED = 6,
+}
+
+/**
+ * Explicit result from CompressionHandler.performCompression().
+ * Allows callers to distinguish why compression did (or didn't) modify history,
+ * without relying on side-channel token count inference.
+ */
+export enum PerformCompressionResult {
+  /** History was successfully compressed */
+  COMPRESSED = 'compressed',
+  /** Compression skipped because history is empty */
+  SKIPPED_EMPTY = 'skipped_empty',
+  /** Compression skipped due to cooldown after repeated failures */
+  SKIPPED_COOLDOWN = 'skipped_cooldown',
+  /** Compression was attempted but all strategies failed */
+  FAILED = 'failed',
 }
 
 export interface ChatCompressionInfo {
@@ -244,12 +270,14 @@ export type ServerGeminiAgentExecutionStoppedEvent = {
   type: GeminiEventType.AgentExecutionStopped;
   reason: string;
   systemMessage?: string;
+  contextCleared?: boolean;
 };
 
 export type ServerGeminiAgentExecutionBlockedEvent = {
   type: GeminiEventType.AgentExecutionBlocked;
   reason: string;
   systemMessage?: string;
+  contextCleared?: boolean;
 };
 
 // The original union type, now composed of the individual types
@@ -377,6 +405,7 @@ export class Turn {
             type: GeminiEventType.AgentExecutionStopped,
             reason: streamEvent.reason,
             systemMessage: streamEvent.systemMessage,
+            contextCleared: streamEvent.contextCleared,
           };
           return;
         }
@@ -387,6 +416,7 @@ export class Turn {
             type: GeminiEventType.AgentExecutionBlocked,
             reason: streamEvent.reason,
             systemMessage: streamEvent.systemMessage,
+            contextCleared: streamEvent.contextCleared,
           };
           continue;
         }

@@ -9,7 +9,6 @@ import {
   DebugLogger,
   ProfileManager,
   type Config,
-  type SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
 import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
@@ -31,6 +30,7 @@ import type { CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import type { ProfileLoadResult } from './profileResolution.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
+import type { SettingsService } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 
@@ -104,15 +104,19 @@ async function setupRuntimeContext(
     stage: 'post-config',
   };
 
-  // Set disabled hooks from settings if present
-  const hooks = input.profileSettingsWithTools.hooks as
+  // Set disabled hooks from hooksConfig (post-migration target) with
+  // hooks.disabled fallback for unmigrated settings
+  const hooksConfig = input.profileSettingsWithTools.hooksConfig as
     | { disabled?: unknown }
     | undefined;
-  if (hooks != null && 'disabled' in hooks) {
-    const disabledHooks = hooks.disabled;
-    if (Array.isArray(disabledHooks)) {
-      config.setDisabledHooks(disabledHooks as string[]);
-    }
+  const hooksLegacy = input.profileSettingsWithTools.hooks as
+    | { disabled?: unknown }
+    | undefined;
+  const disabledHooks =
+    (hooksConfig && 'disabled' in hooksConfig ? hooksConfig.disabled : null) ??
+    (hooksLegacy && 'disabled' in hooksLegacy ? hooksLegacy.disabled : null);
+  if (Array.isArray(disabledHooks)) {
+    config.setDisabledHooks(disabledHooks as string[]);
   }
 
   const profileManager = new ProfileManager();
@@ -126,7 +130,7 @@ async function setupRuntimeContext(
   const { registerCliProviderInfrastructure } = await import(
     '../runtime/runtimeSettings.js'
   );
-  if (runtimeState.oauthManager != null) {
+  if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
       runtimeState.oauthManager,
@@ -150,11 +154,11 @@ async function activateProviderAndProfile(
   const profileApplicationResult = await applyProfileToRuntime({
     loadedProfile: profileLoadResult.loadedProfile,
     profileToLoad: profileLoadResult.profileToLoad ?? undefined,
+    bootstrapArgs,
+    argv,
     finalModel: providerModelResult.model,
     finalProvider: providerModelResult.provider,
     profileWarnings: [...profileLoadResult.profileWarnings],
-    bootstrapArgs,
-    argv,
   });
 
   const finalProvider = profileApplicationResult.resolvedFinalProvider;
@@ -164,6 +168,7 @@ async function activateProviderAndProfile(
     runtime: runtimeContext,
     providerManager: input.runtimeState.providerManager,
     oauthManager: input.runtimeState.oauthManager,
+    bootstrapArgs,
     profileApplication: {
       providerName:
         profileApplicationResult.resolvedProviderAfterProfile ?? finalProvider,
@@ -175,7 +180,6 @@ async function activateProviderAndProfile(
         : {}),
       warnings: [...profileApplicationResult.profileWarnings],
     },
-    bootstrapArgs,
   });
 
   // Store bootstrap args on config
@@ -246,8 +250,7 @@ async function reapplyCliOverrides(
     (bootstrapArgs.keyOverride ||
       bootstrapArgs.keyfileOverride ||
       bootstrapArgs.baseurlOverride ||
-      (bootstrapArgs.setOverrides != null &&
-        bootstrapArgs.setOverrides.length > 0))
+      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
   ) {
     const { applyCliArgumentOverrides } = await import(
       '../runtime/runtimeSettings.js'
@@ -272,7 +275,7 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
     input;
 
   const explicitAllowedTools = buildNormalizedToolSet(
-    argv.allowedTools != null && argv.allowedTools.length > 0
+    argv.allowedTools && argv.allowedTools.length > 0
       ? argv.allowedTools
       : (profileSettingsWithTools.allowedTools ?? []),
   );
@@ -342,7 +345,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   } = input;
 
   const settingsService = getSettingsService(input);
-  if (runtimeOverrides.settingsService == null) {
+  if (!runtimeOverrides.settingsService) {
     logger.warn(
       '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
     );
@@ -432,7 +435,7 @@ function finalizeMetadata(input: PostConfigInput): void {
   const { config, profileLoadResult, defaultDisabledTools } = input;
 
   // Store profile model params on config
-  if (profileLoadResult.profileModelParams != null) {
+  if (profileLoadResult.profileModelParams) {
     (
       config as Config & { _profileModelParams?: Record<string, unknown> }
     )._profileModelParams = profileLoadResult.profileModelParams;

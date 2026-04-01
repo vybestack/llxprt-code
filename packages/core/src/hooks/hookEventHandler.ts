@@ -26,7 +26,7 @@ import type {
   HookExecutionResult,
   McpContext,
 } from './types.js';
-import { HookEventName, type NotificationType } from './types.js';
+import { HookEventName, NotificationType } from './types.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
@@ -40,6 +40,8 @@ import {
   validateNotificationInput,
 } from './hookValidators.js';
 import { coreEvents } from '../utils/events.js';
+import { logHookCall } from '../telemetry/loggers.js';
+import { HookCallEvent } from '../telemetry/types.js';
 
 const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
@@ -226,7 +228,7 @@ export class HookEventHandler {
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(HookEventName.BeforeModel, {
-        llmRequest,
+        llm_request: llmRequest,
       });
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeModelEvent', {
@@ -247,8 +249,8 @@ export class HookEventHandler {
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(HookEventName.AfterModel, {
-        llmRequest,
-        llmResponse,
+        llm_request: llmRequest,
+        llm_response: llmResponse,
       });
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireAfterModelEvent', {
@@ -269,7 +271,7 @@ export class HookEventHandler {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.BeforeToolSelection,
-        { llmRequest },
+        { llm_request: llmRequest },
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeToolSelectionEvent', {
@@ -442,16 +444,28 @@ export class HookEventHandler {
     const startTime = Date.now();
 
     // Create execution plan
+    const plannerContext: { toolName?: string; trigger?: string } = {};
+    if (typeof context.tool_name === 'string') {
+      plannerContext.toolName = context.tool_name;
+    }
+    if (typeof context.trigger === 'string') {
+      plannerContext.trigger = context.trigger;
+    } else if (typeof context.source === 'string') {
+      plannerContext.trigger = context.source;
+    } else if (typeof context.reason === 'string') {
+      plannerContext.trigger = context.reason;
+    }
+
     const plan = this.planner.createExecutionPlan(
       eventName,
-      context.tool_name ? { toolName: context.tool_name as string } : undefined,
+      Object.keys(plannerContext).length > 0 ? plannerContext : undefined,
     );
 
     // No matching hooks - return empty success
     // @requirement:HOOK-145
     // @plan PLAN-20250218-HOOKSYSTEM.P12
     // @requirement DELTA-HFAIL-004
-    if (plan == null || plan.hookConfigs.length === 0) {
+    if (!plan || plan.hookConfigs.length === 0) {
       this.debugLogger.debug(
         `No hooks for event ${eventName}, returning empty success`,
       );
@@ -489,7 +503,7 @@ export class HookEventHandler {
     // Emit per-hook logs (P12 stub - P14 will implement)
     // @plan PLAN-20250218-HOOKSYSTEM.P12
     // @requirement DELTA-HTEL-001
-    this.emitPerHookLogs(eventName, results);
+    this.emitPerHookLogs(eventName, results, input);
 
     // Emit batch summary (P12 stub - P14 will implement)
     // @plan PLAN-20250218-HOOKSYSTEM.P12
@@ -624,10 +638,26 @@ export class HookEventHandler {
   private emitPerHookLogs(
     eventName: HookEventName,
     hookResults: readonly HookExecutionResult[],
+    hookInput?: HookInput,
   ): void {
-    if (this.debugLogger == undefined) return;
-
     for (const result of hookResults) {
+      if (hookInput) {
+        try {
+          logHookCall(
+            this.config,
+            new HookCallEvent(eventName, hookInput, result),
+          );
+        } catch (error) {
+          this.debugLogger.warn(
+            `Failed to emit hook telemetry for ${eventName}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+
+      if (this.debugLogger === undefined) continue;
+
       const record = {
         eventName: String(eventName),
         hookIdentity: result.hookConfig?.type ?? 'unknown',
@@ -663,7 +693,7 @@ export class HookEventHandler {
     hookResults: readonly HookExecutionResult[],
     totalDurationMs: number,
   ): void {
-    if (this.debugLogger == undefined) return;
+    if (this.debugLogger === undefined) return;
 
     const hookCount = hookResults.length;
     const successCount = hookResults.filter((r) => r.success).length;

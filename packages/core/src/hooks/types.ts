@@ -124,6 +124,8 @@ export function createHookOutput(
       return new AfterModelHookOutput(data);
     case 'BeforeToolSelection':
       return new BeforeToolSelectionHookOutput(data);
+    case 'AfterAgent':
+      return new AfterAgentHookOutput(data);
     default:
       return new DefaultHookOutput(data);
   }
@@ -209,6 +211,13 @@ export class DefaultHookOutput implements HookOutput {
       return typeof context === 'string' ? context : undefined;
     }
     return undefined;
+  }
+
+  /**
+   * Check if context clearing was requested by hook.
+   */
+  shouldClearContext(): boolean {
+    return false;
   }
 
   /**
@@ -491,6 +500,16 @@ export class AfterAgentHookOutput extends DefaultHookOutput {
   override getAdditionalContext(): string | undefined {
     return super.getAdditionalContext();
   }
+
+  /**
+   * Check if context clearing was requested by hook
+   */
+  override shouldClearContext(): boolean {
+    if (this.hookSpecificOutput && 'clearContext' in this.hookSpecificOutput) {
+      return this.hookSpecificOutput['clearContext'] === true;
+    }
+    return false;
+  }
 }
 
 /**
@@ -599,6 +618,7 @@ export interface AfterAgentOutput extends HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'AfterAgent';
     additionalContext?: string;
+    clearContext?: boolean;
   };
 }
 

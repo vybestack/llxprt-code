@@ -8,6 +8,7 @@ export const SERVICE_NAME = 'llxprt-code';
 
 export const EVENT_USER_PROMPT = 'llxprt_code.user_prompt';
 export const EVENT_TOOL_CALL = 'llxprt_code.tool_call';
+export const EVENT_HOOK_CALL = 'llxprt_code.hook_call';
 export const EVENT_API_REQUEST = 'llxprt_code.api_request';
 export const EVENT_API_ERROR = 'llxprt_code.api_error';
 export const EVENT_API_RESPONSE = 'llxprt_code.api_response';

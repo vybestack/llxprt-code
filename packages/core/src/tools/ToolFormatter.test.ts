@@ -73,7 +73,7 @@ describe('ToolFormatter', () => {
 
       // Check that parameters were converted properly
       expect(tool.function.parameters).toBeDefined();
-      expect(tool.function.parameters).not.toStrictEqual({});
+      expect(tool.function.parameters).not.toEqual({});
 
       // Parameters should have the expected structure
       expect(tool.function.parameters.type).toBe('object');
@@ -96,12 +96,12 @@ describe('ToolFormatter', () => {
       expect(
         tool.function.parameters.properties.todos.items.properties.status,
       ).toBeDefined();
-      expect(tool.function.parameters.required).toStrictEqual(['todos']);
+      expect(tool.function.parameters.required).toEqual(['todos']);
 
       // Check that enums are preserved
       expect(
         tool.function.parameters.properties.todos.items.properties.status.enum,
-      ).toStrictEqual(['pending', 'in_progress', 'completed']);
+      ).toEqual(['pending', 'in_progress', 'completed']);
 
       // Check that minLength was converted from string to number
       expect(
@@ -114,7 +114,7 @@ describe('ToolFormatter', () => {
       ).toBe('number');
     });
 
-    it('should handle tools with undefined parameters', () => {
+    it('should throw when parametersJsonSchema is missing', () => {
       const formatter = new ToolFormatter();
 
       const geminiTools = [
@@ -129,16 +129,12 @@ describe('ToolFormatter', () => {
         },
       ];
 
-      const result = formatter.convertGeminiToOpenAI(geminiTools);
-
-      expect(result).toBeDefined();
-      expect(result).toHaveLength(1);
-
-      const tool = result![0];
-      expect(tool.function.parameters).toStrictEqual({});
+      expect(() => formatter.convertGeminiToOpenAI(geminiTools)).toThrow(
+        'Tool "simple_tool" is missing parametersJsonSchema',
+      );
     });
 
-    it('should handle tools with empty object parameters', () => {
+    it('should throw when parametersJsonSchema is absent even if parameters is present', () => {
       const formatter = new ToolFormatter();
 
       const geminiTools = [
@@ -153,13 +149,9 @@ describe('ToolFormatter', () => {
         },
       ];
 
-      const result = formatter.convertGeminiToOpenAI(geminiTools);
-
-      expect(result).toBeDefined();
-      expect(result).toHaveLength(1);
-
-      const tool = result![0];
-      expect(tool.function.parameters).toStrictEqual({});
+      expect(() => formatter.convertGeminiToOpenAI(geminiTools)).toThrow(
+        'Tool "simple_tool" is missing parametersJsonSchema',
+      );
     });
 
     it('should convert list_directory tool properly', () => {
@@ -209,7 +201,7 @@ describe('ToolFormatter', () => {
       expect(tool.function.parameters.properties.path.type).toBe('string');
       expect(tool.function.parameters.properties.ignore).toBeDefined();
       expect(tool.function.parameters.properties.ignore.type).toBe('array');
-      expect(tool.function.parameters.required).toStrictEqual(['path']);
+      expect(tool.function.parameters.required).toEqual(['path']);
     });
   });
 
@@ -322,11 +314,7 @@ describe('ToolFormatter', () => {
         geminiSchema,
       ) as Record<string, unknown>;
 
-      expect(result.enum).toStrictEqual([
-        'pending',
-        'in_progress',
-        'completed',
-      ]);
+      expect(result.enum).toEqual(['pending', 'in_progress', 'completed']);
     });
 
     it('should return empty object when given empty object', () => {
@@ -337,7 +325,7 @@ describe('ToolFormatter', () => {
         unknown
       >;
 
-      expect(result).toStrictEqual({});
+      expect(result).toEqual({});
     });
 
     it('should return undefined when given undefined', () => {

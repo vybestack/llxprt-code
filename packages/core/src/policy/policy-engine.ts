@@ -4,7 +4,11 @@ import {
   type PolicyRule,
 } from './types.js';
 import { stableStringify } from './stable-stringify.js';
-import { SHELL_TOOL_NAMES, splitCommands } from '../utils/shell-utils.js';
+import {
+  SHELL_TOOL_NAMES,
+  splitCommands,
+  hasRedirection,
+} from '../utils/shell-utils.js';
 
 /**
  * PolicyEngine evaluates tool execution requests against configured rules.
@@ -49,7 +53,7 @@ export class PolicyEngine {
     // Find the highest priority matching rule
     const matchingRule = this.findMatchingRule(toolName, args);
 
-    if (matchingRule != null) {
+    if (matchingRule) {
       const decision = matchingRule.decision;
 
       // Special handling for shell commands: validate sub-commands if ALLOW rule
@@ -58,7 +62,7 @@ export class PolicyEngine {
         SHELL_TOOL_NAMES.includes(toolName) &&
         decision === PolicyDecision.ALLOW
       ) {
-        const command = (args as { command?: string }).command;
+        const command = (args as { command?: string })?.command;
         if (command) {
           const subCommands = splitCommands(command);
 
@@ -102,10 +106,7 @@ export class PolicyEngine {
           }
 
           // Check for redirections in allowed commands
-          if (
-            !(matchingRule.allowRedirection ?? false) &&
-            /[>&|]/.test(command)
-          ) {
+          if (!matchingRule.allowRedirection && hasRedirection(command)) {
             // Downgrade to ASK_USER unless explicitly allowed
             return this.nonInteractive
               ? PolicyDecision.DENY
@@ -134,7 +135,7 @@ export class PolicyEngine {
       SHELL_TOOL_NAMES.includes(toolName) &&
       defaultResult !== PolicyDecision.DENY
     ) {
-      const command = (args as { command?: string }).command;
+      const command = (args as { command?: string })?.command;
       if (command) {
         const subCommands = splitCommands(command);
 

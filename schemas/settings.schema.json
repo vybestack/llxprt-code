@@ -19,11 +19,11 @@
       "default": {},
       "type": "object",
       "properties": {
-        "disableLoadingPhrases": {
-          "title": "Disable Loading Phrases",
-          "description": "Disable loading phrases for accessibility",
-          "markdownDescription": "Disable loading phrases for accessibility\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+        "enableLoadingPhrases": {
+          "title": "Enable Loading Phrases",
+          "description": "Enable loading phrases during operations.",
+          "markdownDescription": "Enable loading phrases during operations.\n\n- Category: `Accessibility`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "screenReader": {
@@ -95,21 +95,35 @@
           "default": true,
           "type": "boolean"
         },
-        "disableFuzzySearch": {
-          "title": "Disable Fuzzy Search",
-          "description": "Disable fuzzy search when searching for files.",
-          "markdownDescription": "Disable fuzzy search when searching for files.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+        "enableFuzzySearch": {
+          "title": "Enable Fuzzy Search",
+          "description": "Enable fuzzy search when searching for files.",
+          "markdownDescription": "Enable fuzzy search when searching for files.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
+        },
+        "maxFileCount": {
+          "title": "Max File Count",
+          "description": "Maximum number of files to index during file search. Prevents OOM on large projects.",
+          "markdownDescription": "Maximum number of files to index during file search. Prevents OOM on large projects.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `20000`",
+          "default": 20000,
+          "type": "number"
+        },
+        "searchTimeout": {
+          "title": "Search Timeout (ms)",
+          "description": "Timeout in milliseconds for file search operations.",
+          "markdownDescription": "Timeout in milliseconds for file search operations.\n\n- Category: `File Filtering`\n- Requires restart: `yes`\n- Default: `5000`",
+          "default": 5000,
+          "type": "number"
         }
       },
       "additionalProperties": false
     },
-    "disableAutoUpdate": {
-      "title": "Disable Auto Update",
-      "description": "Disable automatic updates",
-      "markdownDescription": "Disable automatic updates\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `false`",
-      "default": false,
+    "enableAutoUpdate": {
+      "title": "Enable Auto Update",
+      "description": "Enable automatic updates.",
+      "markdownDescription": "Enable automatic updates.\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `true`",
+      "default": true,
       "type": "boolean"
     },
     "shouldUseNodePtyShell": {
@@ -497,11 +511,11 @@
           "default": true,
           "type": "boolean"
         },
-        "disableLoadingPhrases": {
-          "title": "Disable Loading Phrases",
-          "description": "Disable loading phrases for accessibility.",
-          "markdownDescription": "Disable loading phrases for accessibility.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
-          "default": false,
+        "enableLoadingPhrases": {
+          "title": "Enable Loading Phrases",
+          "description": "Enable loading phrases during operations.",
+          "markdownDescription": "Enable loading phrases during operations.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
           "type": "boolean"
         },
         "screenReader": {
@@ -883,11 +897,11 @@
       "type": "array",
       "items": {}
     },
-    "disableUpdateNag": {
-      "title": "Disable Update Nag",
-      "description": "Disable update notification prompts.",
-      "markdownDescription": "Disable update notification prompts.\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `false`",
-      "default": false,
+    "enableAutoUpdateNotification": {
+      "title": "Enable Auto Update Notification",
+      "description": "Enable update notification prompts.",
+      "markdownDescription": "Enable update notification prompts.\n\n- Category: `Updates`\n- Requires restart: `no`\n- Default: `true`",
+      "default": true,
       "type": "boolean"
     },
     "includeDirectories": {
@@ -946,6 +960,13 @@
       "default": {},
       "type": "object",
       "properties": {
+        "extensionConfig": {
+          "title": "Extension Configuration",
+          "description": "Enable requesting and fetching of extension settings.",
+          "markdownDescription": "Enable requesting and fetching of extension settings.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        },
         "extensionReloading": {
           "title": "Extension Reloading",
           "description": "Enables extension loading/unloading within the CLI session.",
@@ -966,51 +987,6 @@
           "markdownDescription": "Enable skills (experimental).\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `false`",
           "default": false,
           "type": "boolean"
-        },
-        "codebaseInvestigatorSettings": {
-          "title": "Codebase Investigator Settings",
-          "description": "Configuration for Codebase Investigator.",
-          "markdownDescription": "Configuration for Codebase Investigator.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `{}`",
-          "default": {},
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "title": "Enable Codebase Investigator",
-              "description": "Enable the Codebase Investigator agent.",
-              "markdownDescription": "Enable the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `true`",
-              "default": true,
-              "type": "boolean"
-            },
-            "maxNumTurns": {
-              "title": "Codebase Investigator Max Num Turns",
-              "description": "Maximum number of turns for the Codebase Investigator agent.",
-              "markdownDescription": "Maximum number of turns for the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `10`",
-              "default": 10,
-              "type": "number"
-            },
-            "maxTimeMinutes": {
-              "title": "Max Time (Minutes)",
-              "description": "Maximum time for the Codebase Investigator agent (in minutes).",
-              "markdownDescription": "Maximum time for the Codebase Investigator agent (in minutes).\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `3`",
-              "default": 3,
-              "type": "number"
-            },
-            "thinkingBudget": {
-              "title": "Thinking Budget",
-              "description": "The thinking budget for the Codebase Investigator agent.",
-              "markdownDescription": "The thinking budget for the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `8192`",
-              "default": 8192,
-              "type": "number"
-            },
-            "model": {
-              "title": "Model",
-              "description": "The model to use for the Codebase Investigator agent.",
-              "markdownDescription": "The model to use for the Codebase Investigator agent.\n\n- Category: `Experimental`\n- Requires restart: `yes`\n- Default: `auto`",
-              "default": "auto",
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
         },
         "introspectionAgentSettings": {
           "title": "Introspection Agent Settings",
@@ -1257,6 +1233,13 @@
       "default": {},
       "type": "object",
       "properties": {
+        "enabled": {
+          "title": "Enable Agent Skills",
+          "description": "Enable Agent Skills.",
+          "markdownDescription": "Enable Agent Skills.\n\n- Category: `Advanced`\n- Requires restart: `yes`\n- Default: `true`",
+          "default": true,
+          "type": "boolean"
+        },
         "disabled": {
           "title": "Disabled Skills",
           "description": "List of disabled skills.",
@@ -1270,10 +1253,10 @@
       },
       "additionalProperties": false
     },
-    "hooks": {
-      "title": "Hooks",
-      "description": "Hook configurations for intercepting and customizing agent behavior.",
-      "markdownDescription": "Hook configurations for intercepting and customizing agent behavior.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `{}`",
+    "hooksConfig": {
+      "title": "HooksConfig",
+      "description": "Configuration settings for the hooks system.",
+      "markdownDescription": "Configuration settings for the hooks system.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `{}`",
       "default": {},
       "type": "object",
       "properties": {
@@ -1293,14 +1276,22 @@
         },
         "disabled": {
           "title": "Disabled Hooks",
-          "description": "List of hook names to disable",
-          "markdownDescription": "List of hook names to disable\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `[]`",
+          "description": "List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.",
+          "markdownDescription": "List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `[]`",
           "default": [],
           "type": "array",
           "items": {}
         }
       },
       "additionalProperties": false
+    },
+    "hooks": {
+      "title": "Hook Events",
+      "description": "Event-specific hook configurations.",
+      "markdownDescription": "Event-specific hook configurations.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `{}`",
+      "default": {},
+      "type": "object",
+      "additionalProperties": true
     },
     "admin": {
       "title": "Admin",

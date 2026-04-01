@@ -22,6 +22,7 @@ import {
   BeforeToolSelectionHookOutput,
   AfterModelHookOutput,
   AfterToolHookOutput,
+  AfterAgentHookOutput,
 } from './types.js';
 import { HookEventName } from './types.js';
 
@@ -60,21 +61,20 @@ export class HookAggregator {
         hasFailure = true;
       }
 
-      if (result.error != null) {
+      if (result.error) {
         errors.push(result.error);
       }
 
-      if (result.output != null) {
+      if (result.output) {
         allOutputs.push(result.output);
       }
     }
 
     // Merge outputs using event-specific strategy
     const mergedOutput = this.mergeOutputs(allOutputs, eventName);
-    const finalOutput =
-      mergedOutput != null
-        ? this.createSpecificHookOutput(mergedOutput, eventName)
-        : undefined;
+    const finalOutput = mergedOutput
+      ? this.createSpecificHookOutput(mergedOutput, eventName)
+      : undefined;
 
     return {
       success: !hasFailure && errors.length === 0,
@@ -170,12 +170,22 @@ export class HookAggregator {
         merged.suppressOutput = true;
       }
 
-      // Merge hookSpecificOutput - later outputs override earlier ones
-      // This preserves fields like tool_input, additionalContext, etc.
-      if (output.hookSpecificOutput != null) {
+      // Handle clearContext (any true wins) - for AfterAgent hooks
+      if (output.hookSpecificOutput?.['clearContext'] === true) {
         merged.hookSpecificOutput = {
           ...(merged.hookSpecificOutput || {}),
-          ...output.hookSpecificOutput,
+          clearContext: true,
+        };
+      }
+
+      // Merge hookSpecificOutput (excluding clearContext which is handled above)
+      // This preserves fields like tool_input, additionalContext, etc.
+      if (output.hookSpecificOutput) {
+        const { clearContext: _clearContext, ...restSpecificOutput } =
+          output.hookSpecificOutput;
+        merged.hookSpecificOutput = {
+          ...(merged.hookSpecificOutput || {}),
+          ...restSpecificOutput,
         };
       }
 
@@ -257,7 +267,7 @@ export class HookAggregator {
 
     for (const output of outputs) {
       const toolConfig = output.hookSpecificOutput?.toolConfig;
-      if (toolConfig == null) {
+      if (!toolConfig) {
         continue;
       }
 
@@ -269,7 +279,7 @@ export class HookAggregator {
       }
 
       // Collect function names (union of all hooks)
-      if (toolConfig.allowedFunctionNames != null) {
+      if (toolConfig.allowedFunctionNames) {
         for (const name of toolConfig.allowedFunctionNames) {
           allFunctionNames.add(name);
         }
@@ -288,16 +298,12 @@ export class HookAggregator {
       // ANY mode if present (and no NONE)
       finalMode = FunctionCallingConfigMode.ANY;
       // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = Array.from(allFunctionNames).sort((a, b) =>
-        a.localeCompare(b),
-      );
+      finalFunctionNames = Array.from(allFunctionNames).sort();
     } else {
       // Default to AUTO mode
       finalMode = FunctionCallingConfigMode.AUTO;
       // Sort for deterministic output to ensure consistent caching
-      finalFunctionNames = Array.from(allFunctionNames).sort((a, b) =>
-        a.localeCompare(b),
-      );
+      finalFunctionNames = Array.from(allFunctionNames).sort();
     }
 
     merged.hookSpecificOutput = {
@@ -342,6 +348,8 @@ export class HookAggregator {
         return new BeforeToolSelectionHookOutput(output);
       case HookEventName.AfterModel:
         return new AfterModelHookOutput(output);
+      case HookEventName.AfterAgent:
+        return new AfterAgentHookOutput(output);
       default:
         return new DefaultHookOutput(output);
     }
@@ -355,7 +363,7 @@ export class HookAggregator {
     contexts: string[],
   ): void {
     const specific = output.hookSpecificOutput;
-    if (specific == null) {
+    if (!specific) {
       return;
     }
 

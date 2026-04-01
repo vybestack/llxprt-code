@@ -696,18 +696,26 @@ export class LoggingProviderWrapper implements IProvider {
     let latestTokenUsage: UsageStats | undefined;
     let lastFinishReason: string | undefined;
     let streamedText = '';
+    let firstChunkTime: number | null = null;
+    let chunkCount = 0;
 
     try {
       for await (const chunk of stream) {
-        // Extract token usage and finishReason from IContent metadata
+        chunkCount++;
+        if (firstChunkTime === null && this.hasTokenBearingOutput(chunk)) {
+          firstChunkTime = performance.now() - startTime;
+        }
+
+        // Extract token usage and finishReason/stopReason from IContent metadata
+        // (issue #1844): providers may emit either field; honor both.
         if (chunk && typeof chunk === 'object') {
           const content = chunk;
           if (content.metadata?.usage != null) {
             latestTokenUsage = content.metadata.usage;
           }
-          const metaFinishReason = (
-            content.metadata as Record<string, unknown> | undefined
-          )?.finishReason;
+          const metaFinishReason =
+            (content.metadata as Record<string, unknown> | undefined)
+              ?.finishReason ?? content.metadata?.stopReason;
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
@@ -771,12 +779,23 @@ export class LoggingProviderWrapper implements IProvider {
       }
 
       // Always record completion for performance tracking (TPM, latency, request count)
-      const outputTokens = tokenCounts.output_token_count;
-      this.performanceTracker.recordCompletion(duration, null, outputTokens, 0);
+      const totalTokens =
+        tokenCounts.input_token_count + tokenCounts.output_token_count;
+      this.performanceTracker.recordCompletion(
+        duration,
+        firstChunkTime,
+        totalTokens,
+        chunkCount,
+      );
     } catch (error) {
       // Record error in performance tracker
       const duration = performance.now() - startTime;
-      this.performanceTracker.recordError(duration, String(error));
+      this.performanceTracker.recordError(
+        duration,
+        String(error),
+        firstChunkTime,
+        chunkCount,
+      );
 
       // Issue #684: Log API error telemetry
       if (config != null) {
@@ -809,24 +828,32 @@ export class LoggingProviderWrapper implements IProvider {
     let responseComplete = false;
     let latestTokenUsage: UsageStats | undefined;
     let lastFinishReason: string | undefined;
+    let firstChunkTime: number | null = null;
+    let chunkCount = 0;
 
     try {
       for await (const chunk of stream) {
+        chunkCount++;
+        if (firstChunkTime === null && this.hasTokenBearingOutput(chunk)) {
+          firstChunkTime = performance.now() - startTime;
+        }
+
         // Simple content extraction - just try to get text from common chunk formats
         const content = this.extractSimpleContent(chunk);
         if (content) {
           responseContent += content;
         }
 
-        // Extract token usage and finishReason from IContent metadata
+        // Extract token usage and finishReason/stopReason from IContent metadata
+        // (issue #1844): providers may emit either field; honor both.
         if (chunk && typeof chunk === 'object') {
           const content = chunk;
           if (content.metadata?.usage != null) {
             latestTokenUsage = content.metadata.usage;
           }
-          const metaFinishReason = (
-            content.metadata as Record<string, unknown> | undefined
-          )?.finishReason;
+          const metaFinishReason =
+            (content.metadata as Record<string, unknown> | undefined)
+              ?.finishReason ?? content.metadata?.stopReason;
           if (typeof metaFinishReason === 'string') {
             lastFinishReason = metaFinishReason;
           }
@@ -847,6 +874,8 @@ export class LoggingProviderWrapper implements IProvider {
         latestTokenUsage,
         modelName,
         lastFinishReason ? [lastFinishReason] : [],
+        firstChunkTime,
+        chunkCount,
       );
       throw error;
     }
@@ -863,11 +892,36 @@ export class LoggingProviderWrapper implements IProvider {
         latestTokenUsage,
         modelName,
         lastFinishReason ? [lastFinishReason] : [],
+        firstChunkTime,
+        chunkCount,
       );
     }
   }
 
   // Simple content extraction without complex provider-specific logic
+  private hasTokenBearingOutput(chunk: unknown): boolean {
+    if (!chunk || typeof chunk !== 'object') {
+      return false;
+    }
+
+    const contentChunk = chunk as Partial<IContent>;
+    if (Array.isArray(contentChunk.blocks)) {
+      return contentChunk.blocks.some((block) => {
+        if (block.type === 'text') {
+          return typeof block.text === 'string' && block.text.length > 0;
+        }
+        return (
+          block.type === 'thinking' ||
+          block.type === 'code' ||
+          block.type === 'tool_call'
+        );
+      });
+    }
+
+    const extractedContent = this.extractSimpleContent(chunk);
+    return extractedContent.length > 0;
+  }
+
   private extractSimpleContent(chunk: unknown): string {
     if (!chunk || typeof chunk !== 'object') {
       return '';
@@ -899,6 +953,8 @@ export class LoggingProviderWrapper implements IProvider {
     tokenUsage?: UsageStats,
     modelName?: string,
     finishReasons?: string[],
+    timeToFirstToken?: number | null,
+    chunkCount?: number,
   ): Promise<void> {
     try {
       const redactedContent =
@@ -915,9 +971,24 @@ export class LoggingProviderWrapper implements IProvider {
       // Accumulate token usage for session tracking
       this.accumulateTokenUsage(tokenCounts, config);
 
-      // Record performance metrics (TPM tracks output tokens only)
-      const outputTokens = tokenCounts.output_token_count;
-      this.performanceTracker.recordCompletion(duration, null, outputTokens, 0);
+      // Record performance metrics; failed streams are recorded as errors
+      const perfTotalTokens =
+        tokenCounts.input_token_count + tokenCounts.output_token_count;
+      if (success) {
+        this.performanceTracker.recordCompletion(
+          duration,
+          timeToFirstToken ?? null,
+          perfTotalTokens,
+          chunkCount ?? 0,
+        );
+      } else {
+        this.performanceTracker.recordError(
+          duration,
+          error ? String(error) : 'Unknown stream error',
+          timeToFirstToken ?? null,
+          chunkCount ?? 0,
+        );
+      }
 
       // Calculate total for telemetry event
       const totalTokens =
@@ -1317,6 +1388,7 @@ export class LoggingProviderWrapper implements IProvider {
     // Reset conversation logging state
     this.conversationId = this.generateConversationId();
     this.turnNumber = 0;
+    this.performanceTracker.reset();
   }
 
   setConfig?(config: unknown): void {

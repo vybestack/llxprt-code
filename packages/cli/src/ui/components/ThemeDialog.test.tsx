@@ -248,7 +248,6 @@ describe('ThemeDialog', () => {
     activeProfileName: null,
     profileDialogError: null,
     profileDialogLoading: false,
-    shellConfirmationRequest: null,
     confirmationRequest: null,
     confirmUpdateGeminiCLIExtensionRequests: [],
     ctrlCPressedOnce: false,

@@ -21,7 +21,6 @@ import {
   type SummarizeToolOutputSettings,
   type ComplexityAnalyzerSettings,
   type OutputSettings,
-  type CodebaseInvestigatorSettings,
   type IntrospectionAgentSettings,
   type TelemetrySettings,
   type MCPServerConfig,
@@ -194,7 +193,6 @@ export interface ConfigConstructorTarget {
       }>)
     | undefined;
   outputSettings: OutputSettings;
-  codebaseInvestigatorSettings: CodebaseInvestigatorSettings;
   introspectionAgentSettings: IntrospectionAgentSettings;
   useWriteTodos: boolean;
 
@@ -386,9 +384,6 @@ function applyPolicyAndLifecycle(
   config._onReload = params.onReload;
   config.outputSettings = params.outputSettings ?? {
     format: OutputFormat.TEXT,
-  };
-  config.codebaseInvestigatorSettings = params.codebaseInvestigatorSettings ?? {
-    enabled: false,
   };
   config.introspectionAgentSettings = params.introspectionAgentSettings ?? {
     enabled: false,

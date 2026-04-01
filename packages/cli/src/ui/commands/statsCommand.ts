@@ -6,7 +6,7 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P24
  */
 
-import { MessageType, type HistoryItemStats } from '../types.js';
+import { MessageType, HistoryItemStats } from '../types.js';
 import { formatDuration } from '../utils/formatters.js';
 import {
   type CommandContext,
@@ -88,8 +88,8 @@ async function resolveApiKey(
  *
  * Detection strategy (in priority order):
  * 1. Ephemeral base-url setting (most specific, user override)
- * 2. Provider config baseUrl/baseURL (from providerConfig)
- * 3. Base provider config baseURL/baseUrl (from baseProviderConfig)
+ * 2. Provider config base-url (from providerConfig) - uses kebab-case per PR #1491
+ * 3. Base provider config base-url (from baseProviderConfig) - uses kebab-case per PR #1491
  * 4. Provider name detection (least specific, fallback only)
  */
 async function fetchApiKeyProviderQuota(
@@ -115,16 +115,15 @@ async function fetchApiKeyProviderQuota(
     if (providerManager) {
       const providerInstance =
         providerManager.getProviderByName?.(activeProviderName);
-      if (providerInstance != null) {
-        // Try providerConfig.baseUrl/baseURL first
+      if (providerInstance) {
+        // Try providerConfig['base-url'] first (kebab-case per PR #1491)
         const providerConfig = (
           providerInstance as {
-            providerConfig?: { baseUrl?: string; baseURL?: string };
+            providerConfig?: { 'base-url'?: string };
           }
         ).providerConfig;
-        if (providerConfig != null) {
-          const configBaseUrl =
-            providerConfig.baseUrl ?? providerConfig.baseURL;
+        if (providerConfig) {
+          const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
           if (configBaseUrl) {
             provider = detectApiKeyProvider(configBaseUrl);
             baseUrlForFetch = configBaseUrl;
@@ -136,16 +135,16 @@ async function fetchApiKeyProviderQuota(
           }
         }
 
-        // Try baseProviderConfig.baseURL/baseUrl if still not found
+        // Try baseProviderConfig['base-url'] if still not found (kebab-case per PR #1491)
         if (!provider) {
           const baseProviderConfig = (
             providerInstance as {
-              baseProviderConfig?: { baseURL?: string; baseUrl?: string };
+              baseProviderConfig?: { 'base-url'?: string };
             }
           ).baseProviderConfig;
-          if (baseProviderConfig != null) {
+          if (baseProviderConfig) {
             const baseConfigUrl =
-              baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl;
+              baseProviderConfig['base-url']?.trim() || undefined;
             if (baseConfigUrl) {
               provider = detectApiKeyProvider(baseConfigUrl);
               baseUrlForFetch = baseConfigUrl;
@@ -246,7 +245,7 @@ async function fetchAllQuotaInfo(
 
   try {
     // 1. Fetch OAuth provider quotas (Anthropic + Codex + Gemini)
-    if (oauthManager != null) {
+    if (oauthManager) {
       const [anthropicResult, codexResult, geminiResult] =
         await Promise.allSettled([
           oauthManager.getAllAnthropicUsageInfo(),
@@ -389,7 +388,7 @@ async function fetchAllQuotaInfo(
 
     // 2. Fetch API-key provider quota (Z.ai, Synthetic, Chutes, Kimi)
     const apiKeyQuotaResult = await fetchApiKeyProviderQuota(runtimeApi);
-    if (apiKeyQuotaResult != null) {
+    if (apiKeyQuotaResult) {
       if (output.length > 0) {
         output.push('');
       }
@@ -548,7 +547,7 @@ export const statsCommand: SlashCommand = {
       action: async (context: CommandContext, _args: string) => {
         const { oauthManager } = context.services;
 
-        if (oauthManager == null) {
+        if (!oauthManager) {
           context.ui.addItem(
             {
               type: MessageType.INFO,
@@ -578,7 +577,7 @@ export const statsCommand: SlashCommand = {
             for (const bucket of buckets) {
               const stats = await tokenStore.getBucketStats(provider, bucket);
 
-              if (stats != null) {
+              if (stats) {
                 const lastUsedStr = stats.lastUsed
                   ? new Date(stats.lastUsed).toISOString().split('T')[0]
                   : 'Never';

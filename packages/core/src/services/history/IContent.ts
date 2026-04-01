@@ -75,6 +75,9 @@ export interface ContentMetadata {
 
   /** Stop reason from provider (e.g., end_turn, max_tokens) */
   stopReason?: string;
+
+  /** Finish reason from OpenAI-style providers (e.g., stop, length, tool_calls) */
+  finishReason?: string;
 }
 
 export interface UsageStats {

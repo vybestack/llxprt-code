@@ -66,7 +66,6 @@ interface GeminiToolDeclaration {
   name: string;
   description?: string;
   parametersJsonSchema?: unknown;
-  parameters?: unknown;
 }
 
 /**
@@ -257,13 +256,13 @@ export function convertToolsToAnthropic(
     }
 
     for (const decl of toolGroup.functionDeclarations) {
-      // Try parametersJsonSchema first, fall back to parameters
-      const toolParameters =
-        'parametersJsonSchema' in decl
-          ? decl.parametersJsonSchema
-          : decl.parameters;
-
-      const inputSchema = convertSchemaToAnthropic(toolParameters);
+      if (!decl.parametersJsonSchema) {
+        throw new Error(
+          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+        );
+      }
+      const inputSchema = convertSchemaToAnthropic(decl.parametersJsonSchema);
 
       // Prefix tool names for OAuth to avoid conflicts with Claude Code built-in tools
       const toolName = isOAuth ? `${TOOL_PREFIX}${decl.name}` : decl.name;

@@ -23,6 +23,7 @@ import {
   EVENT_API_REQUEST,
   EVENT_API_RESPONSE,
   EVENT_CLI_CONFIG,
+  EVENT_HOOK_CALL,
   EVENT_TOOL_CALL,
   EVENT_USER_PROMPT,
   EVENT_FILE_OPERATION,
@@ -40,6 +41,7 @@ import {
   logCliConfiguration,
   logUserPrompt,
   logToolCall,
+  logHookCall,
   logFileOperation,
   logToolOutputTruncated,
   logMalformedJsonResponse,
@@ -53,6 +55,7 @@ import { ToolCallDecision } from './tool-call-decision.js';
 import {
   ApiRequestEvent,
   ApiResponseEvent,
+  HookCallEvent,
   StartSessionEvent,
   ToolCallEvent,
   UserPromptEvent,
@@ -885,6 +888,57 @@ describe('loggers', () => {
           decision: undefined,
           error: undefined,
           error_type: undefined,
+        },
+      });
+    });
+  });
+
+  describe('logHookCall', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getTelemetryEnabled: () => true,
+      getTelemetryLogPromptsEnabled: () => true,
+    } as unknown as Config;
+
+    it('should log a hook call event', () => {
+      const event = new HookCallEvent(
+        'BeforeTool',
+        {
+          session_id: 'session-1',
+          cwd: '/tmp',
+          hook_event_name: 'BeforeTool',
+          timestamp: '2025-01-01T00:00:00.000Z',
+          transcript_path: '/tmp/transcript.jsonl',
+          tool_name: 'write_file',
+          tool_input: { file_path: 'a.txt', content: 'x' },
+        },
+        {
+          hookConfig: {
+            type: 'command',
+            command: 'node hook.cjs',
+          },
+          eventName: 'BeforeTool',
+          success: true,
+          output: { decision: 'allow' },
+          stdout: '{"decision":"allow"}',
+          stderr: '',
+          exitCode: 0,
+          duration: 12,
+        },
+      );
+
+      logHookCall(mockConfig, event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Hook call: BeforeTool. Success: true. Duration: 12ms.',
+        attributes: {
+          'session.id': 'test-session-id',
+          ...event,
+          'event.name': EVENT_HOOK_CALL,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          hook_input: JSON.stringify(event.hook_input),
+          hook_output: JSON.stringify(event.hook_output),
         },
       });
     });

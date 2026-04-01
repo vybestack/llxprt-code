@@ -259,6 +259,14 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     );
   }
 
+  getFullyQualifiedPrefix(): string {
+    return `${this.serverName}__`;
+  }
+
+  getFullyQualifiedName(): string {
+    return `${this.getFullyQualifiedPrefix()}${generateValidName(this.serverToolName)}`;
+  }
+
   /**
    * @deprecated This method is no longer used as MCP tools now receive unique names during creation.
    * The unique name is formed as generateMcpToolName(serverName, serverToolName) in the discovery process.
@@ -271,7 +279,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       this.description,
       this.parameterSchema,
       this.trust,
-      `${this.serverName}__${this.serverToolName}`,
+      this.getFullyQualifiedName(),
       this.cliConfig,
     );
   }

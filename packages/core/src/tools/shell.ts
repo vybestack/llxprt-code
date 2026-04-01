@@ -207,6 +207,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       title: 'Confirm Shell Command',
       command: this.params.command,
       rootCommand: commandsToConfirm.join(', '),
+      rootCommands: commandsToConfirm,
       onConfirm: async (outcome: ToolConfirmationOutcome, payload) => {
         if (
           outcome === ToolConfirmationOutcome.ProceedAlways ||

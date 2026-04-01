@@ -90,8 +90,14 @@ export class ToolFormatter implements IToolFormatter {
       }
 
       return toolGroup.functionDeclarations.map((decl) => {
+        if (!decl.parametersJsonSchema) {
+          throw new Error(
+            `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+              `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+          );
+        }
         const convertedParams = this.convertGeminiSchemaToStandard(
-          decl.parametersJsonSchema || {},
+          decl.parametersJsonSchema,
         ) as Record<string, unknown>;
 
         return {
@@ -144,8 +150,14 @@ export class ToolFormatter implements IToolFormatter {
 
     const anthropicTools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
+        if (!decl.parametersJsonSchema) {
+          throw new Error(
+            `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+              `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+          );
+        }
         const convertedParams = this.convertGeminiSchemaToStandard(
-          decl.parametersJsonSchema || {},
+          decl.parametersJsonSchema,
         ) as Record<string, unknown>;
 
         // Remove verbose per-tool logging
@@ -226,14 +238,22 @@ export class ToolFormatter implements IToolFormatter {
         return [];
       }
 
-      return toolGroup.functionDeclarations.map((decl) => ({
-        type: 'function' as const,
-        function: {
-          name: decl.name,
-          description: decl.description || '',
-          parameters: decl.parametersJsonSchema || {},
-        },
-      }));
+      return toolGroup.functionDeclarations.map((decl) => {
+        if (!decl.parametersJsonSchema) {
+          throw new Error(
+            `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+              `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+          );
+        }
+        return {
+          type: 'function' as const,
+          function: {
+            name: decl.name,
+            description: decl.description || '',
+            parameters: decl.parametersJsonSchema,
+          },
+        };
+      });
     });
 
     // Convert using the generic toProviderFormat method

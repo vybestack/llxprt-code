@@ -60,7 +60,6 @@ export {
   type SummarizeToolOutputSettings,
   type ComplexityAnalyzerSettings,
   type OutputSettings,
-  type CodebaseInvestigatorSettings,
   type IntrospectionAgentSettings,
   type TelemetrySettings,
   type GeminiCLIExtension,
@@ -90,6 +89,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
+import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
@@ -123,6 +123,7 @@ export class Config extends ConfigBase {
     this.resourceRegistry = new ResourceRegistry();
     this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
+      await getCoreVersion(),
       this.toolRegistry,
       this,
       this.eventEmitter,
@@ -367,6 +368,18 @@ export class Config extends ConfigBase {
       !!seatbeltProfile &&
       seatbeltProfile.startsWith('restrictive-')
     );
+  }
+
+  /**
+   * Refreshes the MCP context, including memory, tools, and system instructions.
+   * Preserved from gmerge branch for compatibility with McpClientManager.
+   */
+  async refreshMcpContext(): Promise<void> {
+    await this.refreshMemory();
+    if (this.geminiClient?.isInitialized()) {
+      await this.geminiClient.setTools();
+      await this.geminiClient.updateSystemInstruction();
+    }
   }
 
   async reloadSkills(): Promise<void> {
@@ -751,7 +764,7 @@ export class Config extends ConfigBase {
    */
   getDisabledHooks(): string[] {
     if (this.disabledHooks.length === 0) {
-      const persisted = this.settingsService.get('hooks.disabled') as
+      const persisted = this.settingsService.get('hooksConfig.disabled') as
         | string[]
         | undefined;
       if (persisted != null && persisted.length > 0) {

@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CompressionStatus } from '@vybestack/llxprt-code-core';
-import { type HistoryItemCompression, MessageType } from '../types.js';
-import { CommandKind, type SlashCommand } from './types.js';
+import {
+  CompressionStatus,
+  PerformCompressionResult,
+} from '@vybestack/llxprt-code-core';
+import { HistoryItemCompression, MessageType } from '../types.js';
+import { CommandKind, SlashCommand } from './types.js';
 
 export const compressCommand: SlashCommand = {
   name: 'compress',
@@ -16,7 +19,7 @@ export const compressCommand: SlashCommand = {
   autoExecute: true,
   action: async (context) => {
     const { ui } = context;
-    if (ui.pendingItem != null) {
+    if (ui.pendingItem) {
       ui.addItem(
         {
           type: MessageType.ERROR,
@@ -41,7 +44,7 @@ export const compressCommand: SlashCommand = {
       ui.setPendingItem(pendingMessage);
       const promptId = `compress-${Date.now()}`;
       const geminiClient = context.services.config?.getGeminiClient();
-      if (!geminiClient?.hasChatInitialized()) {
+      if (!geminiClient || !geminiClient.hasChatInitialized()) {
         ui.addItem(
           {
             type: MessageType.ERROR,
@@ -64,12 +67,34 @@ export const compressCommand: SlashCommand = {
         return;
       }
       const originalTokenCount = historyService.getTotalTokens();
-      await chat.performCompression(promptId);
+      const wasRecentlyCompressedBeforeCommand = chat.wasRecentlyCompressed();
+      const result = await chat.performCompression(promptId);
       const newTokenCount = historyService.getTotalTokens();
-      const compressionStatus =
-        newTokenCount < originalTokenCount
-          ? CompressionStatus.COMPRESSED
-          : CompressionStatus.NOOP;
+
+      let compressionStatus: CompressionStatus;
+      switch (result) {
+        case PerformCompressionResult.FAILED:
+        case PerformCompressionResult.SKIPPED_COOLDOWN:
+          compressionStatus = CompressionStatus.COMPRESSION_FAILED;
+          break;
+        case PerformCompressionResult.SKIPPED_EMPTY:
+          compressionStatus = CompressionStatus.NOOP;
+          break;
+        case PerformCompressionResult.COMPRESSED:
+          if (newTokenCount < originalTokenCount) {
+            compressionStatus = CompressionStatus.COMPRESSED;
+          } else if (newTokenCount > originalTokenCount) {
+            compressionStatus =
+              CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT;
+          } else if (wasRecentlyCompressedBeforeCommand) {
+            compressionStatus = CompressionStatus.ALREADY_COMPRESSED;
+          } else {
+            compressionStatus = CompressionStatus.NOOP;
+          }
+          break;
+        default:
+          compressionStatus = CompressionStatus.NOOP;
+      }
       const compressionResult: HistoryItemCompression = {
         type: MessageType.COMPRESSION,
         compression: {

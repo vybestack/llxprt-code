@@ -7,12 +7,12 @@
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
 // createHash import removed - no longer needed without client caching
 import { DebugLogger } from '../../debug/index.js';
-import type { IModel } from '../IModel.js';
-import type {
-  IContent,
-  ToolCallBlock,
-  ThinkingBlock,
-  MediaBlock,
+import { type IModel } from '../IModel.js';
+import {
+  type IContent,
+  type ToolCallBlock,
+  type ThinkingBlock,
+  type MediaBlock,
 } from '../../services/history/IContent.js';
 import { Config } from '../../config/config.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
@@ -30,7 +30,7 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import type { OAuthManager } from '../../auth/precedence.js';
+import { type OAuthManager } from '../../auth/precedence.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
@@ -142,11 +142,11 @@ export class GeminiProvider extends BaseProvider {
   ) {
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
-      envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-      isOAuthEnabled: !!oauthManager,
-      oauthProvider: oauthManager != null ? 'gemini' : undefined,
       apiKey,
       baseURL,
+      envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      isOAuthEnabled: !!oauthManager,
+      oauthProvider: oauthManager ? 'gemini' : undefined,
       oauthManager,
     };
 
@@ -290,12 +290,12 @@ export class GeminiProvider extends BaseProvider {
    * Updates OAuth configuration based on current OAuth manager state
    */
   private updateOAuthState(): void {
-    if (this.geminiOAuthManager != null) {
+    if (this.geminiOAuthManager) {
       const manager = this.geminiOAuthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
       if (
-        manager.isOAuthEnabled != null &&
+        manager.isOAuthEnabled &&
         typeof manager.isOAuthEnabled === 'function'
       ) {
         const isEnabled = manager.isOAuthEnabled('gemini');
@@ -370,7 +370,7 @@ export class GeminiProvider extends BaseProvider {
     };
 
     if (
-      manager?.isOAuthEnabled != null &&
+      manager?.isOAuthEnabled &&
       typeof manager.isOAuthEnabled === 'function'
     ) {
       return manager.isOAuthEnabled('gemini');
@@ -522,7 +522,7 @@ export class GeminiProvider extends BaseProvider {
               }>;
             };
 
-            if (data.models != null && data.models.length > 0) {
+            if (data.models && data.models.length > 0) {
               return data.models.map((model) => ({
                 id: model.name.replace('models/', ''), // Remove 'models/' prefix
                 name: model.displayName || model.name,
@@ -703,7 +703,7 @@ export class GeminiProvider extends BaseProvider {
       );
       logger.debug(
         () =>
-          `invokeServerTool: globalConfig is ${this.globalConfig != null ? 'set' : 'null/undefined'}`,
+          `invokeServerTool: globalConfig is ${this.globalConfig ? 'set' : 'null/undefined'}`,
       );
 
       // Check for abort before auth determination
@@ -774,7 +774,9 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          return contentGenerator.generateContent(apiKeyRequest);
+          const apiKeyResult =
+            await contentGenerator.generateContent(apiKeyRequest);
+          return apiKeyResult;
         }
 
         case 'vertex-ai': {
@@ -806,7 +808,9 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          return vertexContentGenerator.generateContent(vertexRequest);
+          const vertexResult =
+            await vertexContentGenerator.generateContent(vertexRequest);
+          return vertexResult;
         }
 
         case 'oauth': {
@@ -818,7 +822,7 @@ export class GeminiProvider extends BaseProvider {
             // If globalConfig is not set (e.g., when using non-Gemini provider),
             // create a minimal config for OAuth
             let configForOAuth = this.globalConfig;
-            if (configForOAuth == null) {
+            if (!configForOAuth) {
               logger.debug(
                 () =>
                   `invokeServerTool: globalConfig is null, creating minimal config for OAuth`,
@@ -945,7 +949,9 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          return contentGenerator.generateContent(apiKeyRequest);
+          const apiKeyResult =
+            await contentGenerator.generateContent(apiKeyRequest);
+          return apiKeyResult;
         }
 
         case 'vertex-ai': {
@@ -977,7 +983,9 @@ export class GeminiProvider extends BaseProvider {
           };
 
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
-          return vertexContentGenerator.generateContent(vertexRequest);
+          const vertexResult =
+            await vertexContentGenerator.generateContent(vertexRequest);
+          return vertexResult;
         }
 
         case 'oauth': {
@@ -1003,10 +1011,11 @@ export class GeminiProvider extends BaseProvider {
           };
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
           // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
-          return oauthContentGenerator.generateContent(
+          const result = await oauthContentGenerator.generateContent(
             oauthRequest,
             'google-web-fetch-oauth', // userPromptId for OAuth web fetch
           );
+          return result;
         }
 
         default:
@@ -1100,7 +1109,7 @@ export class GeminiProvider extends BaseProvider {
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         );
-        if (toolResponseBlock == null) {
+        if (!toolResponseBlock) {
           throw new Error('Tool content must have a tool_response block');
         }
 
@@ -1226,32 +1235,35 @@ export class GeminiProvider extends BaseProvider {
     );
 
     // Ensure tools have proper type: 'object' for Gemini
-    const geminiTools =
-      tools != null
-        ? tools.map((toolGroup) => ({
-            functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
-              let parameters = decl.parametersJsonSchema;
-              // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
-              // This ensures compatibility and prevents API errors when using tools.
-              // Ref: https://ai.google.dev/api/caching#Schema
-              parameters = this.cleanGeminiSchema(parameters);
-              if (
-                parameters &&
-                typeof parameters === 'object' &&
-                !('type' in (parameters as Record<string, unknown>))
-              ) {
-                parameters = { type: Type.OBJECT, ...parameters };
-              } else if (!parameters) {
-                parameters = { type: Type.OBJECT, properties: {} };
-              }
-              return {
-                name: decl.name,
-                description: decl.description,
-                parameters: parameters as Schema,
-              };
-            }),
-          }))
-        : undefined;
+    const geminiTools = tools
+      ? tools.map((toolGroup) => ({
+          functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
+            if (!decl.parametersJsonSchema) {
+              throw new Error(
+                `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+                  `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+              );
+            }
+            let parameters = decl.parametersJsonSchema;
+            // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
+            // This ensures compatibility and prevents API errors when using tools.
+            // Ref: https://ai.google.dev/api/caching#Schema
+            parameters = this.cleanGeminiSchema(parameters);
+            if (
+              parameters &&
+              typeof parameters === 'object' &&
+              !('type' in (parameters as Record<string, unknown>))
+            ) {
+              parameters = { type: Type.OBJECT, ...parameters };
+            }
+            return {
+              name: decl.name,
+              description: decl.description,
+              parameters: parameters as Schema,
+            };
+          }),
+        }))
+      : undefined;
 
     const toolNamesForPrompt =
       tools === undefined
@@ -1275,9 +1287,9 @@ export class GeminiProvider extends BaseProvider {
         : undefined;
 
     const serverToolsOverride =
-      directOverrides != null && 'serverTools' in directOverrides
+      directOverrides && 'serverTools' in directOverrides
         ? directOverrides.serverTools
-        : options.config != null &&
+        : options.config &&
             typeof (options.config as { serverTools?: unknown }).serverTools !==
               'undefined'
           ? (options.config as { serverTools?: unknown }).serverTools
@@ -1287,7 +1299,7 @@ export class GeminiProvider extends BaseProvider {
       : ['web_search', 'web_fetch'];
 
     const toolConfigOverride =
-      directOverrides != null && 'toolConfig' in directOverrides
+      directOverrides && 'toolConfig' in directOverrides
         ? directOverrides.toolConfig
         : undefined;
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
@@ -1313,7 +1325,7 @@ export class GeminiProvider extends BaseProvider {
       requestConfig['maxOutputTokens'] = genericMaxOutput;
     }
     requestConfig.serverTools = serverTools;
-    if (geminiTools != null) {
+    if (geminiTools) {
       requestConfig.tools = geminiTools;
     }
     if (toolConfigOverride) {
@@ -1346,8 +1358,8 @@ export class GeminiProvider extends BaseProvider {
     const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
     requestLogger.log(() => '[GeminiProvider] request config overrides', {
       hasDirectOverrides: !!directOverrides,
-      toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
       serverTools,
+      toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
     });
 
     // Debug: Log thinking configuration
@@ -1408,11 +1420,10 @@ export class GeminiProvider extends BaseProvider {
         (part: Part) =>
           (part as Part & { thoughtSignature?: string }).thoughtSignature,
       );
-      const thoughtSignature =
-        firstPartWithSig != null
-          ? (firstPartWithSig as Part & { thoughtSignature?: string })
-              .thoughtSignature
-          : undefined;
+      const thoughtSignature = firstPartWithSig
+        ? (firstPartWithSig as Part & { thoughtSignature?: string })
+            .thoughtSignature
+        : undefined;
 
       const text = nonThoughtTextParts
         .map((part: Part) => (part as { text: string }).text)
@@ -1428,8 +1439,8 @@ export class GeminiProvider extends BaseProvider {
         nonThoughtTextPartsCount: nonThoughtTextParts.length,
         thoughtTextLength: thoughtText.length,
         thoughtTextPreview: thoughtText.substring(0, 200),
-        willYieldThinkingBlock: !!(thoughtText && includeThoughts),
         includeThoughts,
+        willYieldThinkingBlock: !!(thoughtText && includeThoughts),
       });
 
       const functionCalls =
@@ -1466,7 +1477,7 @@ export class GeminiProvider extends BaseProvider {
           blocks: [{ type: 'text', text }],
         };
 
-        if (usageMetadata != null) {
+        if (usageMetadata) {
           textContent.metadata = {
             usage: {
               promptTokens: usageMetadata.promptTokenCount || 0,
@@ -1499,7 +1510,7 @@ export class GeminiProvider extends BaseProvider {
           blocks,
         };
 
-        if (usageMetadata != null) {
+        if (usageMetadata) {
           toolCallContent.metadata = {
             usage: {
               promptTokens: usageMetadata.promptTokenCount || 0,
@@ -1515,7 +1526,7 @@ export class GeminiProvider extends BaseProvider {
         chunks.push(toolCallContent);
       }
 
-      if (usageMetadata != null && !text && functionCalls.length === 0) {
+      if (usageMetadata && !text && functionCalls.length === 0) {
         chunks.push({
           speaker: 'ai',
           blocks: [],
@@ -1532,7 +1543,7 @@ export class GeminiProvider extends BaseProvider {
         } as IContent);
       }
 
-      if (usageMetadata == null && !text && functionCalls.length === 0) {
+      if (!usageMetadata && !text && functionCalls.length === 0) {
         chunks.push({
           speaker: 'ai',
           blocks: [],
@@ -1578,14 +1589,14 @@ export class GeminiProvider extends BaseProvider {
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
+        userMemory,
+        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
         interactionMode: subagentConfig?.isInteractive?.()
           ? 'interactive'
           : 'non-interactive',
-        userMemory,
-        mcpInstructions,
-        includeSubagentDelegation,
       });
 
       const contentsWithSystemPrompt = [
@@ -1604,8 +1615,8 @@ export class GeminiProvider extends BaseProvider {
       const oauthRequest = {
         model: currentModel,
         contents: contentsWithSystemPrompt,
-        config: oauthConfig,
         systemInstruction,
+        config: oauthConfig,
       };
 
       // Use runtime metadata from options for session ID
@@ -1626,7 +1637,7 @@ export class GeminiProvider extends BaseProvider {
         ) => Promise<GenerateContentResponse>;
       };
 
-      if (!streamingEnabled && generatorWithStream.generateContent != null) {
+      if (!streamingEnabled && generatorWithStream.generateContent) {
         try {
           // REQ-RETRY-001: Retry logic is now handled by RetryOrchestrator at a higher level
           const response = await generatorWithStream.generateContent(
@@ -1753,21 +1764,21 @@ export class GeminiProvider extends BaseProvider {
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
+        userMemory,
+        mcpInstructions,
         model: currentModel,
         tools: toolNamesForPrompt,
+        includeSubagentDelegation,
         interactionMode: subagentConfig?.isInteractive?.()
           ? 'interactive'
           : 'non-interactive',
-        userMemory,
-        mcpInstructions,
-        includeSubagentDelegation,
       });
 
       const apiRequest = {
         model: currentModel,
         contents: contentsWithSignatures,
-        config: { ...requestConfig },
         systemInstruction,
+        config: { ...requestConfig },
       };
 
       if (streamingEnabled) {

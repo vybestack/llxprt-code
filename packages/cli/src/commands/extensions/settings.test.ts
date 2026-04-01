@@ -20,6 +20,7 @@ const mockGetEnvContents: Mock<
 const mockGetExtensionAndConfig: Mock<
   typeof utilsModule.getExtensionAndConfig
 > = vi.hoisted(() => vi.fn());
+const mockLoadSettings: Mock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/extensions/settingsIntegration.js', async () => ({
   updateSetting: mockUpdateSetting,
@@ -38,9 +39,22 @@ vi.mock('../utils.js', () => ({
   exitCli: vi.fn(),
 }));
 
+vi.mock('../../config/settings.js', () => ({
+  loadSettings: mockLoadSettings,
+}));
+
 describe('extensions settings set command', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+
+    // Default: extensionConfig enabled so existing tests pass
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: true,
+        },
+      },
+    });
 
     // Default mock setup - extension and config exist
     mockGetExtensionAndConfig.mockResolvedValue({
@@ -130,6 +144,15 @@ describe('extensions settings set command', () => {
 describe('extensions settings list command', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+
+    // Default: extensionConfig enabled so existing tests pass
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: true,
+        },
+      },
+    });
 
     // Default mock setup - extension and config exist
     mockGetExtensionAndConfig.mockResolvedValue({
@@ -223,5 +246,167 @@ describe('extensions settings list command', () => {
 
     // Should not call getEnvContents if extension config is not loaded
     expect(mockGetEnvContents).not.toHaveBeenCalled();
+  });
+});
+
+describe('extensionConfig gate (settings)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should block set when experimental.extensionConfig is false', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: false,
+        },
+      },
+    });
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const parser = yargs([]).command(setCommand).fail(false);
+    await parser.parseAsync('set myext API_KEY');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Extension configuration is currently disabled'),
+    );
+    expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+    expect(mockUpdateSetting).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should block set when experimental.extensionConfig is not set', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {},
+    });
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const originalExitCode = process.exitCode;
+
+    const parser = yargs([]).command(setCommand).fail(false);
+    await parser.parseAsync('set myext API_KEY');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Extension configuration is currently disabled'),
+    );
+    expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = originalExitCode;
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should block list when experimental.extensionConfig is false', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: false,
+        },
+      },
+    });
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const originalExitCode = process.exitCode;
+
+    const parser = yargs([]).command(listCommand).fail(false);
+    await parser.parseAsync('list myext');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Extension configuration is currently disabled'),
+    );
+    expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+    expect(mockGetEnvContents).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = originalExitCode;
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should block list when experimental.extensionConfig is not set', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {},
+    });
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const originalExitCode = process.exitCode;
+
+    const parser = yargs([]).command(listCommand).fail(false);
+    await parser.parseAsync('list myext');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Extension configuration is currently disabled'),
+    );
+    expect(mockGetExtensionAndConfig).not.toHaveBeenCalled();
+    expect(mockGetEnvContents).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = originalExitCode;
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should allow set when experimental.extensionConfig is true', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: true,
+        },
+      },
+    });
+
+    mockGetExtensionAndConfig.mockResolvedValue({
+      extension: {
+        name: 'myext',
+        path: '/path/to/extension',
+      } as GeminiCLIExtension,
+      extensionConfig: {
+        name: 'myext',
+        version: '1.0.0',
+      },
+    });
+    mockUpdateSetting.mockResolvedValue(true);
+
+    const parser = yargs([]).command(setCommand).fail(false);
+    await parser.parseAsync('set myext API_KEY');
+
+    expect(mockGetExtensionAndConfig).toHaveBeenCalledWith('myext');
+    expect(mockUpdateSetting).toHaveBeenCalled();
+  });
+
+  it('should allow list when experimental.extensionConfig is true', async () => {
+    mockLoadSettings.mockReturnValue({
+      merged: {
+        experimental: {
+          extensionConfig: true,
+        },
+      },
+    });
+
+    mockGetExtensionAndConfig.mockResolvedValue({
+      extension: {
+        name: 'myext',
+        path: '/path/to/extension',
+      } as GeminiCLIExtension,
+      extensionConfig: {
+        name: 'myext',
+        version: '1.0.0',
+      },
+    });
+    mockGetEnvContents.mockResolvedValue([]);
+
+    const parser = yargs([]).command(listCommand).fail(false);
+    await parser.parseAsync('list myext');
+
+    expect(mockGetExtensionAndConfig).toHaveBeenCalledWith('myext');
+    expect(mockGetEnvContents).toHaveBeenCalled();
   });
 });

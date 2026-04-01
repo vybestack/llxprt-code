@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PartListUnion, Part, Content } from '@google/genai';
+import { type PartListUnion, type Part, type Content } from '@google/genai';
 import {
   Turn,
   type ServerGeminiStreamEvent,
@@ -18,6 +18,7 @@ import type { LoopDetectionService } from '../services/loopDetectionService.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { IdeContextTracker } from './IdeContextTracker.js';
 import type { AgentHookManager } from './AgentHookManager.js';
+import type { AfterAgentHookOutput } from '../hooks/types.js';
 import { estimateTextOnlyLength, extractPromptText } from './clientHelpers.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { Todo } from '../tools/todo-schemas.js';
@@ -51,6 +52,7 @@ export interface MessageStreamDeps {
     prompt_id: string,
     turns?: number,
     isInvalidStreamRetry?: boolean,
+    is413Retry?: boolean,
   ) => AsyncGenerator<ServerGeminiStreamEvent, Turn>;
 }
 
@@ -61,6 +63,7 @@ interface StreamContext {
   signal: AbortSignal;
   turns: number;
   isInvalidStreamRetry: boolean;
+  is413Retry: boolean;
 }
 
 interface IterationResult {
@@ -90,6 +93,7 @@ export class MessageStreamOrchestrator {
     prompt_id: string,
     turns: number,
     isInvalidStreamRetry: boolean,
+    is413Retry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     this.deps.logger.debug(
       () => 'DEBUG: GeminiClient.sendMessageStream called',
@@ -106,13 +110,14 @@ export class MessageStreamOrchestrator {
       signal,
       turns,
       isInvalidStreamRetry,
+      is413Retry,
     };
 
     const request = yield* this._preflight(initialRequest, ctx);
     if (request instanceof Turn) return request;
 
     const earlyTurn = yield* this._checkSessionLimits(initialRequest, ctx);
-    if (earlyTurn != null) return earlyTurn;
+    if (earlyTurn) return earlyTurn;
 
     await this._injectIdeContext();
     return yield* this._runRetryLoop(request, signal, ctx);
@@ -124,7 +129,7 @@ export class MessageStreamOrchestrator {
     if (hasChat()) return;
 
     const previousHistory = getPreviousHistory();
-    if (previousHistory != null && previousHistory.length > 0) {
+    if (previousHistory && previousHistory.length > 0) {
       logger.debug('Restoring previous history during prompt generation', {
         historyLength: previousHistory.length,
       });
@@ -213,7 +218,7 @@ export class MessageStreamOrchestrator {
       getSessionTurnCount() > config.getMaxSessionTurns()
     ) {
       yield { type: GeminiEventType.MaxSessionTurns };
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
         ctx.prompt_id,
@@ -224,7 +229,7 @@ export class MessageStreamOrchestrator {
 
     const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
     if (!boundedTurns) {
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
         ctx.prompt_id,
@@ -245,7 +250,7 @@ export class MessageStreamOrchestrator {
         type: GeminiEventType.ContextWindowWillOverflow,
         value: { estimatedRequestTokenCount, remainingTokenCount },
       };
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return new Turn(
         getChat(),
         ctx.prompt_id,
@@ -331,6 +336,7 @@ export class MessageStreamOrchestrator {
         turn,
         ctx,
         hadToolCallsThisTurn,
+        initialRequest,
       );
       if (iterResult.earlyReturn) return turn;
       hadToolCallsThisTurn = iterResult.hadToolCallsThisTurn;
@@ -348,7 +354,7 @@ export class MessageStreamOrchestrator {
       retryCount = postTurnResult.retryCount;
     }
 
-    await this._fireAfterHook(ctx);
+    yield* this._fireAfterHookAndEmitClearContext(ctx);
     return lastTurn!;
   }
 
@@ -358,6 +364,7 @@ export class MessageStreamOrchestrator {
     turn: Turn,
     ctx: StreamContext,
     hadToolCallsPrior: boolean,
+    initialRequest: PartListUnion,
   ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult> {
     const { loopDetector, todoContinuationService, updateTelemetryTokenCount } =
       this.deps;
@@ -365,7 +372,7 @@ export class MessageStreamOrchestrator {
     const loopDetected = await loopDetector.turnStarted(signal);
     if (loopDetected) {
       yield { type: GeminiEventType.LoopDetected };
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(hadToolCallsPrior);
     }
 
@@ -378,7 +385,7 @@ export class MessageStreamOrchestrator {
     for await (const event of turn.run(iterRequest, signal)) {
       if (loopDetector.addAndCheck(event)) {
         yield { type: GeminiEventType.LoopDetected };
-        await this._fireAfterHook(ctx);
+        yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(hadToolCallsThisTurn, {
           todoPauseSeen,
           hadThinking,
@@ -418,8 +425,9 @@ export class MessageStreamOrchestrator {
         ctx,
         deferredEvents,
         { hadToolCallsThisTurn, todoPauseSeen, hadThinking, hadContent },
+        initialRequest,
       );
-      if (terminalResult != null) return terminalResult;
+      if (terminalResult) return terminalResult;
     }
 
     return {
@@ -443,13 +451,49 @@ export class MessageStreamOrchestrator {
       hadThinking: boolean;
       hadContent: boolean;
     },
+    initialRequest: PartListUnion,
   ): AsyncGenerator<ServerGeminiStreamEvent, IterationResult | undefined> {
     const { config, sendMessageStream } = this.deps;
     const boundedTurns = Math.min(ctx.turns, MAX_TURNS);
 
     if (event.type === GeminiEventType.Error) {
+      const errorStatus =
+        event.value?.error && typeof event.value.error === 'object'
+          ? (event.value.error as { status?: number }).status
+          : undefined;
+
+      if (errorStatus === 413 && config.getContinueOnFailedApiCall()) {
+        if (ctx.is413Retry) {
+          for (const d of deferredEvents) yield d;
+          await this._fireAfterHook(ctx);
+          return this._earlyIterResult(state.hadToolCallsThisTurn, {
+            ...state,
+            deferredEvents,
+          });
+        }
+        const toolNames = this._extractToolNamesFromRequest(initialRequest);
+        const toolList =
+          toolNames.length > 0
+            ? ` The tools involved were: ${toolNames.join(', ')}.`
+            : '';
+        const message = `System: The previous tool calls produced a response that was too large (HTTP 413).${toolList} Please retry with fewer or more focused queries.`;
+        yield* sendMessageStream(
+          [{ text: message }],
+          signal,
+          ctx.prompt_id,
+          boundedTurns - 1,
+          false,
+          true,
+        );
+        await this._fireAfterHook(ctx);
+        return this._earlyIterResult(state.hadToolCallsThisTurn, {
+          ...state,
+          deferredEvents,
+        });
+      }
+
       for (const d of deferredEvents) yield d;
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
         ...state,
         deferredEvents,
@@ -461,7 +505,7 @@ export class MessageStreamOrchestrator {
       config.getContinueOnFailedApiCall()
     ) {
       if (ctx.isInvalidStreamRetry) {
-        await this._fireAfterHook(ctx);
+        yield* this._fireAfterHookAndEmitClearContext(ctx);
         return this._earlyIterResult(state.hadToolCallsThisTurn, {
           ...state,
           deferredEvents,
@@ -474,7 +518,7 @@ export class MessageStreamOrchestrator {
         boundedTurns - 1,
         true,
       );
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return this._earlyIterResult(state.hadToolCallsThisTurn, {
         ...state,
         deferredEvents,
@@ -482,6 +526,25 @@ export class MessageStreamOrchestrator {
     }
 
     return undefined;
+  }
+
+  private _extractToolNamesFromRequest(request: PartListUnion): string[] {
+    if (!Array.isArray(request)) return [];
+    const names = new Set<string>();
+    for (const part of request) {
+      if (
+        typeof part === 'object' &&
+        part !== null &&
+        'functionResponse' in part
+      ) {
+        const funcResp = (part as { functionResponse: { name?: string } })
+          .functionResponse;
+        if (funcResp?.name) {
+          names.add(funcResp.name);
+        }
+      }
+    }
+    return [...names];
   }
 
   private _earlyIterResult(
@@ -513,7 +576,15 @@ export class MessageStreamOrchestrator {
 
     if (iter.hadThinking && !iter.hadContent && !iter.hadToolCallsThisTurn) {
       const newRetry = retryCount + 1;
+      this.deps.logger.debug(
+        () =>
+          `[stream:thinking-only] detected thinking-only turn; retry=${newRetry}/${MAX_RETRIES}`,
+      );
       if (newRetry >= MAX_RETRIES) {
+        this.deps.logger.debug(
+          () =>
+            `[stream:thinking-only] max retries reached; ending turn without user-visible error`,
+        );
         for (const d of iter.deferredEvents) yield d;
         return { done: true, retryCount: newRetry, newBaseRequest: undefined };
       }
@@ -560,8 +631,8 @@ export class MessageStreamOrchestrator {
     if (iter.todoPauseSeen) {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
-      await this._fireAfterHook(ctx);
-      return { done: true, newBaseRequest: undefined, retryCount };
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
+      return { done: true, retryCount, newBaseRequest: undefined };
     }
 
     const todosStillPending = activeTodos.length > 0;
@@ -571,7 +642,7 @@ export class MessageStreamOrchestrator {
     if (!todosStillPending && !hasPendingReminder) {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
-      const afterOut = await this._fireAfterHook(ctx);
+      const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
       if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
         yield* sendMessageStream(
           [{ text: afterOut.getEffectiveReason() }],
@@ -580,14 +651,14 @@ export class MessageStreamOrchestrator {
           getBoundedTurns() - 1,
         );
       }
-      return { done: true, newBaseRequest: undefined, retryCount };
+      return { done: true, retryCount, newBaseRequest: undefined };
     }
 
     const newRetry = retryCount + 1;
     if (newRetry >= MAX_RETRIES) {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
-      await this._fireAfterHook(ctx);
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
       return { done: true, retryCount: newRetry, newBaseRequest: undefined };
     }
 
@@ -624,7 +695,7 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolCallReminderLevel = 'none';
     todoContinuationService.toolActivityCount = 0;
 
-    const afterOut = await this._fireAfterHook(ctx);
+    const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
     if (afterOut?.isBlockingDecision() || afterOut?.shouldStopExecution()) {
       yield* sendMessageStream(
         [{ text: afterOut.getEffectiveReason() }],
@@ -654,8 +725,8 @@ export class MessageStreamOrchestrator {
     const followUpReminder = (
       await todoContinuationService.getTodoReminderForCurrentState({
         todoSnapshot: latestSnapshot,
-        escalate: snapshotUnchanged,
         activeTodos,
+        escalate: snapshotUnchanged,
       })
     ).reminder;
 
@@ -762,7 +833,9 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolActivityCount = 0;
   }
 
-  private async _fireAfterHook(ctx: StreamContext) {
+  private async _fireAfterHook(
+    ctx: StreamContext,
+  ): Promise<AfterAgentHookOutput | undefined> {
     const responseText = ctx.responseChunks.join('');
     return this.deps.agentHookManager.fireAfterAgentHookSafe(
       ctx.prompt_id,
@@ -770,5 +843,25 @@ export class MessageStreamOrchestrator {
       responseText,
       false,
     );
+  }
+
+  /**
+   * If the AfterAgent hook requested context clearing, emit an
+   * AgentExecutionStopped event with contextCleared=true so the UI
+   * can react. Returns the hook output for further caller checks.
+   */
+  private async *_fireAfterHookAndEmitClearContext(
+    ctx: StreamContext,
+  ): AsyncGenerator<ServerGeminiStreamEvent, AfterAgentHookOutput | undefined> {
+    const afterOut = await this._fireAfterHook(ctx);
+    if (afterOut?.shouldClearContext()) {
+      yield {
+        type: GeminiEventType.AgentExecutionStopped,
+        reason:
+          afterOut.getEffectiveReason() || 'Context cleared by AfterAgent hook',
+        contextCleared: true,
+      };
+    }
+    return afterOut;
   }
 }

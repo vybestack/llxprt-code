@@ -16,6 +16,8 @@ import {
   getBuiltinSkillsDir,
   type SkillDefinition,
 } from './skillLoader.js';
+import { coreEvents } from '../utils/events.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 vi.mock('./skillLoader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./skillLoader.js')>();
@@ -40,9 +42,9 @@ describe('SkillManager', () => {
     vi.restoreAllMocks();
   });
 
-  it('should discover skills from built-in, extensions, user, and project with precedence', async () => {
+  it('should discover skills from built-in, extensions, user, and workspace with precedence', async () => {
     const userDir = path.join(testRootDir, 'user');
-    const projectDir = path.join(testRootDir, 'project');
+    const projectDir = path.join(testRootDir, 'workspace');
     await fs.mkdir(path.join(userDir, 'skill-a'), { recursive: true });
     await fs.mkdir(path.join(projectDir, 'skill-b'), { recursive: true });
 
@@ -97,9 +99,9 @@ description: project-desc
     expect(names).toContain('skill-project');
   });
 
-  it('should respect precedence: Project > User > Extension > Built-in', async () => {
+  it('should respect precedence: Workspace > User > Extension > Built-in', async () => {
     const userDir = path.join(testRootDir, 'user');
-    const projectDir = path.join(testRootDir, 'project');
+    const projectDir = path.join(testRootDir, 'workspace');
     await fs.mkdir(path.join(userDir, 'skill'), { recursive: true });
     await fs.mkdir(path.join(projectDir, 'skill'), { recursive: true });
 
@@ -394,6 +396,109 @@ description: User desc
       expect(testSkill).toBeDefined();
       expect(testSkill!.description).toBe('User desc');
       expect(testSkill!.source).toBe('user');
+    });
+  });
+
+  describe('addSkillsWithPrecedence conflict warnings', () => {
+    it('emits coreEvents.emitFeedback warning when a non-builtin skill is overridden', async () => {
+      const emitFeedbackSpy = vi
+        .spyOn(coreEvents, 'emitFeedback')
+        .mockImplementation(() => {});
+
+      // Extension skill loaded first, then user skill with same name/different location overrides it
+      const mockExtension: GeminiCLIExtension = {
+        name: 'test-ext',
+        version: '1.0.0',
+        isActive: true,
+        path: '/ext',
+        contextFiles: [],
+        id: 'ext-id',
+        skills: [
+          {
+            name: 'conflicting-skill',
+            description: 'ext-desc',
+            location: '/ext/skills/SKILL.md',
+            body: 'body',
+            source: 'extension',
+          },
+        ],
+      };
+
+      const userDir = path.join(testRootDir, 'user-conflict');
+      const skillDir = path.join(userDir, 'conflicting-skill');
+      await fs.mkdir(skillDir, { recursive: true });
+      await fs.writeFile(
+        path.join(skillDir, 'SKILL.md'),
+        `---
+name: conflicting-skill
+description: user-desc
+---
+`,
+      );
+
+      vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
+      const storage = new Storage('/dummy');
+      vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
+      vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
+        '/non-existent',
+      );
+
+      await service.discoverSkills(storage, [mockExtension]);
+
+      expect(emitFeedbackSpy).toHaveBeenCalledWith(
+        'warning',
+        expect.stringContaining('conflicting-skill'),
+      );
+    });
+
+    it('calls debugLogger.warn and does NOT emit feedback warning when a builtin skill is overridden', async () => {
+      const emitFeedbackSpy = vi
+        .spyOn(coreEvents, 'emitFeedback')
+        .mockImplementation(() => {});
+      const debugWarnSpy = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation(() => {});
+
+      const builtinDir = path.join(testRootDir, 'builtin-conflict');
+      const skillDir = path.join(builtinDir, 'builtin-skill');
+      await fs.mkdir(skillDir, { recursive: true });
+      await fs.writeFile(
+        path.join(skillDir, 'config.json'),
+        JSON.stringify({ name: 'builtin-skill', description: 'builtin-desc' }),
+      );
+
+      const userDir = path.join(testRootDir, 'user-conflict2');
+      const userSkillDir = path.join(userDir, 'builtin-skill');
+      await fs.mkdir(userSkillDir, { recursive: true });
+      await fs.writeFile(
+        path.join(userSkillDir, 'SKILL.md'),
+        `---
+name: builtin-skill
+description: user-desc
+---
+`,
+      );
+
+      vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue(userDir);
+      const storage = new Storage('/dummy');
+      vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
+      vi.mocked(getBuiltinSkillsDir).mockReturnValue('/non-existent');
+
+      const service = new SkillManager();
+      vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
+
+      await service.discoverSkills(storage);
+
+      expect(debugWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('builtin-skill'),
+      );
+      expect(emitFeedbackSpy).not.toHaveBeenCalledWith(
+        'warning',
+        expect.any(String),
+      );
     });
   });
 });

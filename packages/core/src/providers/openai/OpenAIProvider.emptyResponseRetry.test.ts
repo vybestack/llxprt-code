@@ -189,7 +189,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
           {
             name: 'FindFiles',
             description: 'Find files matching a pattern',
-            parameters: {
+            parametersJsonSchema: {
               type: 'object',
               properties: {
                 pattern: {
@@ -439,7 +439,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
           {
             name: 'FindFiles',
             description: 'Find files matching a pattern',
-            parameters: {
+            parametersJsonSchema: {
               type: 'object',
               properties: {
                 pattern: {
@@ -598,7 +598,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
           {
             name: 'FindFiles',
             description: 'Find files',
-            parameters: {
+            parametersJsonSchema: {
               type: 'object',
               properties: {
                 pattern: {
@@ -817,7 +817,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
           {
             name: 'FindFiles',
             description: 'Find files matching a pattern',
-            parameters: {
+            parametersJsonSchema: {
               type: 'object',
               properties: {
                 pattern: {
@@ -918,7 +918,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
           {
             name: 'FindFiles',
             description: 'Find files matching a pattern',
-            parameters: {
+            parametersJsonSchema: {
               type: 'object',
               properties: {
                 pattern: {

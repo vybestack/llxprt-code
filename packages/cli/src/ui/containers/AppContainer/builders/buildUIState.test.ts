@@ -58,6 +58,7 @@ const makeParams = (): UIStateParams => ({
   providerOptions: [],
   selectedProvider: '',
   currentModel: '',
+  contextLimit: undefined,
   profiles: [],
   toolsDialogAction: 'enable',
   toolsDialogTools: [],
@@ -75,7 +76,6 @@ const makeParams = (): UIStateParams => ({
   profileDialogLoading: false,
 
   // Confirmation requests
-  shellConfirmationRequest: null,
   confirmationRequest: null,
   confirmUpdateGeminiCLIExtensionRequests: [],
 

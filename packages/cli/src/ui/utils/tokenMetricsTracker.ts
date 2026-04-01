@@ -8,11 +8,15 @@ export interface TokenMetricsSnapshot {
   tokensPerMinute: number;
   throttleWaitTimeMs: number;
   sessionTokenTotal: number;
+  timeToFirstToken: number | null;
+  tokensPerSecond: number;
 }
 
 export interface ProviderMetricsLike {
   tokensPerMinute?: number | null;
   throttleWaitTimeMs?: number | null;
+  timeToFirstToken?: number | null;
+  tokensPerSecond?: number | null;
 }
 
 export interface SessionTokenUsage {
@@ -32,6 +36,8 @@ export function toTokenMetricsSnapshot(
     tokensPerMinute: metrics?.tokensPerMinute ?? 0,
     throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
     sessionTokenTotal: usage?.total ?? 0,
+    timeToFirstToken: metrics?.timeToFirstToken ?? null,
+    tokensPerSecond: metrics?.tokensPerSecond ?? 0,
   };
 }
 
@@ -47,6 +53,8 @@ export function shouldUpdateTokenMetrics(
   return (
     next.tokensPerMinute !== previous.tokensPerMinute ||
     next.throttleWaitTimeMs !== previous.throttleWaitTimeMs ||
-    next.sessionTokenTotal !== previous.sessionTokenTotal
+    next.sessionTokenTotal !== previous.sessionTokenTotal ||
+    next.timeToFirstToken !== previous.timeToFirstToken ||
+    next.tokensPerSecond !== previous.tokensPerSecond
   );
 }

@@ -78,6 +78,7 @@ class MockToolInvocation extends BaseToolInvocation<
         title: `Confirm ${this.tool.displayName}`,
         command: this.tool.name,
         rootCommand: this.tool.name,
+        rootCommands: [this.tool.name],
         onConfirm: async () => {},
       };
     }

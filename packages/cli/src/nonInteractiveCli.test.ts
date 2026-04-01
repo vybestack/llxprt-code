@@ -47,6 +47,7 @@ function createCompletedToolCallResponse(params: {
   error?: Error;
   errorType?: ToolErrorType;
   agentId?: string;
+  suppressDisplay?: boolean;
 }) {
   return {
     status: params.error != null ? ('error' as const) : ('success' as const),
@@ -65,6 +66,7 @@ function createCompletedToolCallResponse(params: {
       error: params.error,
       errorType: params.errorType,
       agentId: params.agentId ?? 'primary',
+      suppressDisplay: params.suppressDisplay,
     },
   };
 }
@@ -279,6 +281,91 @@ describe('runNonInteractive', () => {
       [{ text: 'Tool response' }],
       expect.any(AbortSignal),
       'prompt-id-2',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should print successful tool resultDisplay output in text mode', async () => {
+    const toolCallEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.ToolCallRequest,
+      value: {
+        callId: 'tool-display-1',
+        name: 'testTool',
+        args: { arg1: 'value1' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-id-display',
+      },
+    };
+
+    mockCoreExecuteToolCall.mockResolvedValue(
+      createCompletedToolCallResponse({
+        callId: 'tool-display-1',
+        responseParts: [{ text: 'Tool response' }],
+        resultDisplay: 'BeforeTool: File operation logged',
+      }),
+    );
+
+    mockGeminiClient.sendMessageStream
+      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
+      .mockReturnValueOnce(
+        createStreamFromEvents([
+          { type: GeminiEventType.Content, value: 'Final answer' },
+        ]),
+      );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use a tool',
+      prompt_id: 'prompt-id-display',
+    });
+
+    expect(processStdoutSpy).toHaveBeenCalledWith(
+      'BeforeTool: File operation logged\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should not print tool resultDisplay when suppressDisplay is true', async () => {
+    const toolCallEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.ToolCallRequest,
+      value: {
+        callId: 'tool-display-2',
+        name: 'testTool',
+        args: { arg1: 'value1' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-id-display-suppress',
+      },
+    };
+
+    mockCoreExecuteToolCall.mockResolvedValue(
+      createCompletedToolCallResponse({
+        callId: 'tool-display-2',
+        responseParts: [{ text: 'Tool response' }],
+        resultDisplay: 'This should not be shown',
+        suppressDisplay: true,
+      }),
+    );
+
+    mockGeminiClient.sendMessageStream
+      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
+      .mockReturnValueOnce(
+        createStreamFromEvents([
+          { type: GeminiEventType.Content, value: 'Final answer' },
+        ]),
+      );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use a tool',
+      prompt_id: 'prompt-id-display-suppress',
+    });
+
+    expect(processStdoutSpy).not.toHaveBeenCalledWith(
+      'This should not be shown\n',
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
@@ -823,8 +910,7 @@ describe('runNonInteractive', () => {
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
   });
 
-  // Skipped tests from issue922 branch - thought buffering tests for deduplication
-  it.skip('should accumulate multiple Thought events and flush once on content boundary', async () => {
+  it('should accumulate multiple Thought events and flush once on content boundary', async () => {
     const thoughtEvent1: ServerGeminiStreamEvent = {
       type: GeminiEventType.Thought,
       value: {
@@ -868,13 +954,15 @@ describe('runNonInteractive', () => {
       ([output]: [string]) => output.includes('<think>'),
     );
 
+    // Both thought events should be buffered and flushed as a single <think> block
     expect(thinkingOutputs).toHaveLength(1);
     const thinkingText = thinkingOutputs[0][0];
-    expect(thinkingText).toContain('First thought');
-    expect(thinkingText).toContain('Second thought');
+    // Code formats thoughts as "subject: description" when both present
+    expect(thinkingText).toContain('First: thought');
+    expect(thinkingText).toContain('Second: thought');
   });
 
-  it.skip('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
+  it('should NOT emit pyramid-style repeated prefixes in non-interactive CLI', async () => {
     const thoughtEvent1: ServerGeminiStreamEvent = {
       type: GeminiEventType.Thought,
       value: {
@@ -918,8 +1006,10 @@ describe('runNonInteractive', () => {
       ([output]: [string]) => output.includes('<think>'),
     );
 
+    // All thoughts should be buffered into one <think> block (no pyramid repetition)
     expect(thinkingOutputs).toHaveLength(1);
     const thinkingText = thinkingOutputs[0][0];
+    // "Analyzing" should appear exactly once — not repeated for each subsequent thought
     const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
     expect(thoughtCount).toBe(1);
   });

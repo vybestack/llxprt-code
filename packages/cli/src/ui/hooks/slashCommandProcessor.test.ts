@@ -12,7 +12,7 @@ const reactStub = vi.hoisted(() => {
 
   const notify = (index: number, value: unknown) => {
     const listener = listeners.get(index);
-    if (listener != null) {
+    if (listener) {
       listener(value);
     }
   };
@@ -94,6 +94,7 @@ const coreMocks = vi.hoisted(() => {
     Config: class {},
     GitService: vi.fn(),
     Logger: StubLogger,
+    logSlashCommand,
     SlashCommandEvent: class {
       name: string;
       subcommand?: string;
@@ -110,10 +111,11 @@ const coreMocks = vi.hoisted(() => {
     Storage: class {},
     ProfileManager: class {},
     SubagentManager: class {},
+    uiTelemetryService,
     SessionMetrics: class {},
     ModelMetrics: class {},
     DebugLogger: class {
-      static readonly enabled = false;
+      static enabled = false;
       log = vi.fn();
       debug = vi.fn();
       error = vi.fn();
@@ -124,8 +126,8 @@ const coreMocks = vi.hoisted(() => {
         removeStatusChangeListener: vi.fn(),
       }),
     },
-    logSlashCommand,
-    uiTelemetryService,
+    addMCPStatusChangeListener: vi.fn(),
+    removeMCPStatusChangeListener: vi.fn(),
   };
 });
 
@@ -186,7 +188,7 @@ function createTestCommand(overrides: Partial<SlashCommand>): SlashCommand {
 describe('useSlashCommandProcessor', () => {
   let mockConfig: Config;
   const mockSettings = {
-    merged: {},
+    merged: { ui: {} },
   } as LoadedSettings;
   let addItem: ReturnType<typeof vi.fn>;
   let clearItems: ReturnType<typeof vi.fn>;
@@ -304,6 +306,6 @@ describe('useSlashCommandProcessor', () => {
       ?.value;
     await commandsPromise;
 
-    expect(latestCommands).toStrictEqual([testCommand]);
+    expect(latestCommands).toEqual([testCommand]);
   });
 });

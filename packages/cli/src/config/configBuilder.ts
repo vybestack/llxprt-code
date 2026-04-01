@@ -239,7 +239,9 @@ function buildFeatureArgs(
     enableExtensionReloading:
       profileSettingsWithTools.experimental?.extensionReloading,
     blockedMcpServers: [...blockedMcpServers],
-    skillsSupport: profileSettingsWithTools.experimental?.skills,
+    skillsSupport:
+      profileSettingsWithTools.experimental?.skills === true ||
+      (profileSettingsWithTools.skills?.enabled ?? true),
     disabledSkills: profileSettingsWithTools.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: profileSettingsWithTools.summarizeToolOutput,

@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type React from 'react';
+import React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import type { SlashCommand } from '../commands/types.js';
+import { SlashCommand } from '../commands/types.js';
+import { KEYBOARD_SHORTCUTS_URL } from '../constants.js';
 
 interface Help {
   commands: readonly SlashCommand[];
@@ -75,15 +76,16 @@ export const Help: React.FC<Help> = ({ commands }) => (
             </Text>
             {command.description && ' - ' + command.description}
           </Text>
-          {command.subCommands?.map((subCommand) => (
-            <Text key={subCommand.name} color={Colors.Foreground}>
-              <Text bold color={Colors.AccentPurple}>
-                {'   '}
-                {subCommand.name}
+          {command.subCommands &&
+            command.subCommands.map((subCommand) => (
+              <Text key={subCommand.name} color={Colors.Foreground}>
+                <Text bold color={Colors.AccentPurple}>
+                  {'   '}
+                  {subCommand.name}
+                </Text>
+                {subCommand.description && ' - ' + subCommand.description}
               </Text>
-              {subCommand.description && ' - ' + subCommand.description}
-            </Text>
-          ))}
+            ))}
         </Box>
       ))}
     <Text color={Colors.Foreground}>
@@ -172,7 +174,7 @@ export const Help: React.FC<Help> = ({ commands }) => (
     <Text color={Colors.Foreground}>
       For a full list of shortcuts, see{' '}
       <Text bold color={Colors.AccentPurple}>
-        docs/keyboard-shortcuts.md
+        {KEYBOARD_SHORTCUTS_URL}
       </Text>
     </Text>
   </Box>

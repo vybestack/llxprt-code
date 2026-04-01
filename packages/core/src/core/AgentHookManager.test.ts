@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentHookManager } from './AgentHookManager.js';
+import { AfterAgentHookOutput } from '../hooks/types.js';
 
 vi.mock('./lifecycleHookTriggers.js', () => ({
   triggerBeforeAgentHook: vi.fn(),
@@ -233,6 +234,84 @@ describe('AgentHookManager', () => {
         false,
       );
       expect(result).toStrictEqual({ continued: true });
+    });
+  });
+
+  describe('AfterAgent clearContext propagation', () => {
+    it('returns AfterAgentHookOutput with shouldClearContext()=true when hook sets clearContext', async () => {
+      mockBefore.mockResolvedValue(undefined);
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: { clearContext: true },
+      });
+      mockAfter.mockResolvedValue(hookOutput);
+
+      await manager.fireBeforeAgentHookSafe('p1', 'prompt');
+      const result = await manager.fireAfterAgentHookSafe(
+        'p1',
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toBeInstanceOf(AfterAgentHookOutput);
+      expect(result!.shouldClearContext()).toBe(true);
+    });
+
+    it('returns AfterAgentHookOutput with shouldClearContext()=false when hook does not set clearContext', async () => {
+      mockBefore.mockResolvedValue(undefined);
+      const hookOutput = new AfterAgentHookOutput({
+        hookSpecificOutput: { additionalContext: 'some context' },
+      });
+      mockAfter.mockResolvedValue(hookOutput);
+
+      await manager.fireBeforeAgentHookSafe('p1', 'prompt');
+      const result = await manager.fireAfterAgentHookSafe(
+        'p1',
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeDefined();
+      expect(result!.shouldClearContext()).toBe(false);
+    });
+
+    it('returns undefined when no hook output is produced', async () => {
+      mockBefore.mockResolvedValue(undefined);
+      mockAfter.mockResolvedValue(undefined);
+
+      await manager.fireBeforeAgentHookSafe('p1', 'prompt');
+      const result = await manager.fireAfterAgentHookSafe(
+        'p1',
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('clearContext is preserved alongside blocking decision', async () => {
+      mockBefore.mockResolvedValue(undefined);
+      const hookOutput = new AfterAgentHookOutput({
+        decision: 'block',
+        reason: 'Context cleared',
+        hookSpecificOutput: { clearContext: true },
+      });
+      mockAfter.mockResolvedValue(hookOutput);
+
+      await manager.fireBeforeAgentHookSafe('p1', 'prompt');
+      const result = await manager.fireAfterAgentHookSafe(
+        'p1',
+        'prompt',
+        'response',
+        false,
+      );
+
+      expect(result).toBeDefined();
+      expect(result!.isBlockingDecision()).toBe(true);
+      expect(result!.shouldClearContext()).toBe(true);
     });
   });
 });

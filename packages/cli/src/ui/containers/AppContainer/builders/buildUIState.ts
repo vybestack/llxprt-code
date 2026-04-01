@@ -24,7 +24,6 @@ import type {
   GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import type { SlashCommand, CommandContext } from '../../../commands/types.js';
-import type { ShellConfirmationRequest } from '../../../components/ShellConfirmationDialog.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type {
   WelcomeState,
@@ -86,6 +85,7 @@ export interface UIStateParams {
   providerOptions: string[];
   selectedProvider: string;
   currentModel: string;
+  contextLimit: number | undefined;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: AnyDeclarativeTool[];
@@ -124,7 +124,6 @@ export interface UIStateParams {
   profileDialogLoading: boolean;
 
   // Confirmation requests
-  shellConfirmationRequest: ShellConfirmationRequest | null;
   confirmationRequest: {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
@@ -287,6 +286,7 @@ function buildDialogData(p: UIStateParams) {
     providerOptions: p.providerOptions,
     selectedProvider: p.selectedProvider,
     currentModel: p.currentModel,
+    contextLimit: p.contextLimit,
     profiles: p.profiles,
     toolsDialogAction: p.toolsDialogAction,
     toolsDialogTools: p.toolsDialogTools,
@@ -308,7 +308,6 @@ function buildDialogData(p: UIStateParams) {
 
 function buildConfirmationAndExit(p: UIStateParams) {
   return {
-    shellConfirmationRequest: p.shellConfirmationRequest,
     confirmationRequest: p.confirmationRequest,
     confirmUpdateGeminiCLIExtensionRequests:
       p.confirmUpdateGeminiCLIExtensionRequests,

@@ -291,7 +291,7 @@ export async function loadPoliciesFromToml(
         const parsedRules: PolicyRule[] = validationResult.data.rule
           .filter((rule) => {
             // Filter by mode
-            if (rule.modes == null || rule.modes.length === 0) {
+            if (!rule.modes || rule.modes.length === 0) {
               return true;
             }
             return rule.modes.includes(approvalMode);
@@ -370,15 +370,16 @@ export async function loadPoliciesFromToml(
                   toolName: effectiveToolName,
                   decision: rule.decision,
                   priority: transformPriority(rule.priority, tier),
-                  allowRedirection: rule.allowRedirection,
                   argsPattern,
+                  allowRedirection: rule.allowRedirection,
+                  source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
                 };
 
                 return policyRule;
               });
             });
           })
-          .filter((rule): rule is PolicyRule => rule != null);
+          .filter((rule): rule is PolicyRule => rule !== null);
 
         rules.push(...parsedRules);
       } catch (e) {
@@ -491,6 +492,7 @@ export async function loadPolicyFromToml(
           toolName: effectiveToolName,
           decision: rule.decision,
           priority: transformPriority(rule.priority, tier),
+          source: `Policy: ${path.basename(filePath)}`,
         };
 
         // Compile regex pattern

@@ -144,7 +144,7 @@ function nonKeyboardEventFilter(
 ): KeypressHandler {
   return (key: Key) => {
     if (
-      parseMouseEvent(key.sequence) == null &&
+      !parseMouseEvent(key.sequence) &&
       key.sequence !== FOCUS_IN &&
       key.sequence !== FOCUS_OUT
     ) {
@@ -166,7 +166,10 @@ function bufferFastReturn(keypressHandler: KeypressHandler): KeypressHandler {
     if (key.name === 'return' && now - lastKeyTime <= FAST_RETURN_TIMEOUT) {
       keypressHandler({
         ...key,
-        name: '',
+        name: 'return',
+        shift: true, // to make it a newline, not a submission
+        ctrl: false,
+        meta: false,
         sequence: '\r',
         insertable: true,
       });
@@ -260,11 +263,10 @@ function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
 
       if (buffer.length > 0) {
         keypressHandler({
-          name: '',
+          name: 'paste',
           shift: false,
           meta: false,
           ctrl: false,
-          paste: true,
           sequence: buffer,
           insertable: true,
         });
@@ -360,7 +362,7 @@ function* emitKeys(
         // Check for OSC 52 (Clipboard) response
         // Format: 52;c;<base64> or 52;p;<base64>
         const match = /^52;[cp];(.*)$/.exec(buffer);
-        if (match != null) {
+        if (match) {
           try {
             const base64Data = match[1];
             const decoded = Buffer.from(base64Data, 'base64').toString('utf-8');
@@ -369,7 +371,6 @@ function* emitKeys(
               shift: false,
               meta: false,
               ctrl: false,
-              paste: true,
               sequence: decoded,
               insertable: false,
             });
@@ -586,12 +587,11 @@ function* emitKeys(
       // Emit first escape key here, then continue processing
       keypressHandler({
         name: 'escape',
-        paste: false,
-        sequence: ESC,
-        insertable: false,
         shift,
         meta,
         ctrl,
+        sequence: ESC,
+        insertable: false,
       });
     } else if (escaped) {
       // Escape sequence timeout
@@ -608,7 +608,6 @@ function* emitKeys(
     ) {
       keypressHandler({
         name: name || '',
-        paste: false,
         shift,
         meta,
         ctrl,
@@ -625,7 +624,6 @@ export interface Key {
   ctrl: boolean;
   meta: boolean;
   shift: boolean;
-  paste: boolean;
   sequence: string;
   insertable?: boolean;
 }
@@ -643,7 +641,7 @@ const KeypressContext = createContext<KeypressContextValue | undefined>(
 
 export function useKeypressContext() {
   const context = useContext(KeypressContext);
-  if (context == null) {
+  if (!context) {
     throw new Error(
       'useKeypressContext must be used within a KeypressProvider',
     );
@@ -685,7 +683,7 @@ export function KeypressProvider({
     let draggingTimer: NodeJS.Timeout | null = null;
 
     const clearDraggingTimer = () => {
-      if (draggingTimer != null) {
+      if (draggingTimer) {
         clearTimeout(draggingTimer);
         draggingTimer = null;
       }
@@ -708,8 +706,7 @@ export function KeypressProvider({
           if (seq) {
             broadcast({
               ...key,
-              name: '',
-              paste: true,
+              name: 'paste',
               sequence: seq,
               insertable: false,
             });
@@ -740,11 +737,10 @@ export function KeypressProvider({
       clearDraggingTimer();
       if (dragBuffer) {
         broadcast({
-          name: '',
+          name: 'paste',
           ctrl: false,
           meta: false,
           shift: false,
-          paste: true,
           sequence: dragBuffer,
           insertable: false,
         });

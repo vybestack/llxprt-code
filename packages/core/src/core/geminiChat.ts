@@ -55,6 +55,7 @@ export {
 
 import type { StreamEvent } from './geminiChatTypes.js';
 import type { CompressionContext } from './compression/types.js';
+import { PerformCompressionResult } from './turn.js';
 
 /**
  * Error thrown when agent execution is stopped by a hook.
@@ -62,12 +63,18 @@ import type { CompressionContext } from './compression/types.js';
 export class AgentExecutionStoppedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
+  readonly contextCleared?: boolean;
 
-  constructor(reason: string, systemMessage?: string) {
+  constructor(
+    reason: string,
+    systemMessage?: string,
+    contextCleared?: boolean,
+  ) {
     super(`Agent execution stopped: ${systemMessage || reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
+    this.contextCleared = contextCleared;
   }
 }
 
@@ -78,17 +85,20 @@ export class AgentExecutionBlockedError extends Error {
   readonly reason: string;
   readonly systemMessage?: string;
   readonly syntheticResponse?: GenerateContentResponse;
+  readonly contextCleared?: boolean;
 
   constructor(
     reason: string,
     syntheticResponse?: GenerateContentResponse,
     systemMessage?: string,
+    contextCleared?: boolean,
   ) {
     super(`Agent execution blocked: ${systemMessage || reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
     this.syntheticResponse = syntheticResponse;
+    this.contextCleared = contextCleared;
   }
 }
 
@@ -157,10 +167,15 @@ export class GeminiChat {
       this.historyService,
       this.generationConfig,
       providerResolver,
-      async (_context: CompressionContext) => {
+      async (context: CompressionContext) => {
         const config = view.providerRuntime?.config;
-        if (config != null) {
-          await triggerPreCompressHook(config, PreCompressTrigger.Manual);
+        if (config) {
+          await triggerPreCompressHook(
+            config,
+            context.trigger === 'auto'
+              ? PreCompressTrigger.Auto
+              : PreCompressTrigger.Manual,
+          );
         }
       },
     );
@@ -241,9 +256,9 @@ export class GeminiChat {
           typeof adapter.getProviderByName === 'function'
             ? adapter.getProviderByName(desiredProviderName)
             : undefined;
-        if (candidate != null) {
+        if (candidate) {
           const active = this.getActiveProvider();
-          if (active != null && active.name !== desiredProviderName) {
+          if (active && active.name !== desiredProviderName) {
             this.logger.debug(
               () =>
                 `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
@@ -260,7 +275,7 @@ export class GeminiChat {
     }
 
     let provider = this.getActiveProvider();
-    if (provider == null) {
+    if (!provider) {
       throw new Error('No active provider configured');
     }
 
@@ -288,7 +303,7 @@ export class GeminiChat {
   }
 
   providerSupportsIContent(provider: IProvider | undefined): boolean {
-    if (provider == null) return false;
+    if (!provider) return false;
     return (
       typeof (provider as { generateChatCompletion?: unknown })
         .generateChatCompletion === 'function'
@@ -309,12 +324,12 @@ export class GeminiChat {
 
     return {
       ...baseRuntime,
+      runtimeId,
       metadata: {
         ...(baseRuntime.metadata ?? {}),
         source,
         ...metadata,
       },
-      runtimeId,
     };
   }
 
@@ -393,8 +408,15 @@ export class GeminiChat {
     this.compressionHandler.setActiveTodosProvider(provider);
   }
 
-  async performCompression(prompt_id: string): Promise<void> {
-    return this.compressionHandler.performCompression(prompt_id);
+  async performCompression(
+    prompt_id: string,
+    options?: { bypassCooldown?: boolean },
+  ): Promise<PerformCompressionResult> {
+    return this.compressionHandler.performCompression(prompt_id, options);
+  }
+
+  wasRecentlyCompressed(): boolean {
+    return this.compressionHandler.wasRecentlyCompressed();
   }
 
   getLastPromptTokenCount(): number {
@@ -447,11 +469,13 @@ export class GeminiChat {
     promptId: string,
     pendingTokens: number,
     source: 'send' | 'stream',
+    trigger: 'manual' | 'auto' = 'auto',
   ): Promise<void> {
     return this.compressionHandler.ensureCompressionBeforeSend(
       promptId,
       pendingTokens,
       source,
+      trigger,
     );
   }
 

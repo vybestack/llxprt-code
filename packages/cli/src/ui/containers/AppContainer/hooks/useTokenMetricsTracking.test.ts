@@ -48,6 +48,8 @@ type TokenUsage = {
 type ProviderMetrics = {
   tokensPerMinute: number;
   throttleWaitTimeMs: number;
+  timeToFirstToken?: number | null;
+  tokensPerSecond?: number;
 };
 
 interface HistoryServiceStub {
@@ -141,11 +143,15 @@ describe('useTokenMetricsTracking', () => {
       tokensPerMinute: 42,
       throttleWaitTimeMs: 75,
       sessionTokenTotal: 15,
+      timeToFirstToken: null,
+      tokensPerSecond: 0,
     });
 
     expect(setTokenTrackingMetricsMock).toHaveBeenCalledWith({
       tokensPerMinute: 42,
       throttleWaitTimeMs: 75,
+      timeToFirstToken: null,
+      tokensPerSecond: 0,
       sessionTokenUsage: usage,
     });
   });

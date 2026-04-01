@@ -125,7 +125,6 @@ function makeKey(
     ctrl: opts.ctrl ?? false,
     shift: opts.shift ?? false,
     meta: opts.meta ?? false,
-    paste: false,
     sequence: name,
   };
 }

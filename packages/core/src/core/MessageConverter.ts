@@ -182,7 +182,7 @@ export function isValidContent(content: Content): boolean {
     return false;
   }
   for (const part of content.parts) {
-    if (part == undefined || Object.keys(part).length === 0) {
+    if (part === undefined || Object.keys(part).length === 0) {
       return false;
     }
     if (!part.thought && part.text !== undefined && part.text === '') {
@@ -210,7 +210,7 @@ export function validateHistory(history: Content[]): void {
 export function extractCuratedHistory(
   comprehensiveHistory: Content[],
 ): Content[] {
-  if (comprehensiveHistory == undefined || comprehensiveHistory.length === 0) {
+  if (comprehensiveHistory === undefined || comprehensiveHistory.length === 0) {
     return [];
   }
   const curatedHistory: Content[] = [];
@@ -300,7 +300,7 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
     if (
       typeof part === 'object' &&
       'functionResponse' in part &&
-      part.functionResponse != null
+      part.functionResponse
     ) {
       blocks.push({
         type: 'tool_response',
@@ -341,7 +341,7 @@ function classifyMixedParts(parts: Part[]): {
       hasAIContent = true;
     } else if ('text' in part && part.text !== undefined) {
       blocks.push({ type: 'text', text: part.text });
-    } else if ('functionCall' in part && part.functionCall != null) {
+    } else if ('functionCall' in part && part.functionCall) {
       hasAIContent = true;
       blocks.push({
         type: 'tool_call',
@@ -349,7 +349,7 @@ function classifyMixedParts(parts: Part[]): {
         name: part.functionCall.name || '',
         parameters: (part.functionCall.args as Record<string, unknown>) || {},
       } as ToolCallBlock);
-    } else if ('functionResponse' in part && part.functionResponse != null) {
+    } else if ('functionResponse' in part && part.functionResponse) {
       hasToolContent = true;
       blocks.push({
         type: 'tool_response',
@@ -475,7 +475,7 @@ export function applyResponseMetadata(
   });
 
   // Add usage metadata if present
-  if (input.metadata?.usage != null) {
+  if (input.metadata?.usage) {
     const usageMetadata: UsageMetadataWithCache = {
       promptTokenCount: input.metadata.usage.promptTokens || 0,
       candidatesTokenCount: input.metadata.usage.completionTokens || 0,
@@ -488,9 +488,15 @@ export function applyResponseMetadata(
     response.usageMetadata = usageMetadata;
   }
 
-  // Map stopReason to finishReason
-  if (input.metadata?.stopReason && response.candidates?.[0] != null) {
-    const finishReasonByStopReason: Record<string, FinishReason> = {
+  // Map terminal metadata to Gemini finishReason.
+  // Providers may emit stopReason (Anthropic/Gemini-style) or
+  // finishReason (OpenAI-style); coalesce them to a single lookup path.
+  const terminationReason =
+    input.metadata?.stopReason ?? input.metadata?.finishReason;
+
+  if (terminationReason && response.candidates?.[0]) {
+    const finishReasonByTerminationReason: Record<string, FinishReason> = {
+      // Anthropic/Gemini-style values
       end_turn: FinishReason.STOP,
       max_tokens: FinishReason.MAX_TOKENS,
       stop_sequence: FinishReason.STOP,
@@ -498,10 +504,20 @@ export function applyResponseMetadata(
       pause_turn: FinishReason.STOP,
       refusal: FinishReason.STOP,
       model_context_window_exceeded: FinishReason.MAX_TOKENS,
+      // OpenAI Chat Completions-style values
+      stop: FinishReason.STOP,
+      length: FinishReason.MAX_TOKENS,
+      tool_calls: FinishReason.STOP,
+      function_call: FinishReason.STOP,
+      content_filter: FinishReason.SAFETY,
+      // OpenAI Responses API status values
+      completed: FinishReason.STOP,
+      incomplete: FinishReason.MAX_TOKENS,
+      failed: FinishReason.STOP,
     };
-    const finishReason = finishReasonByStopReason[input.metadata.stopReason];
-    if (finishReason) {
-      response.candidates[0].finishReason = finishReason;
+    const mappedReason = finishReasonByTerminationReason[terminationReason];
+    if (mappedReason) {
+      response.candidates[0].finishReason = mappedReason;
     }
   }
 

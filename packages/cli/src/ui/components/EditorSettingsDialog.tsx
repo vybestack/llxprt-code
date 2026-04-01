@@ -111,7 +111,7 @@ export function EditorSettingsDialog({
 
   let mergedEditorName = 'None';
   if (
-    settings.merged.ui?.preferredEditor &&
+    settings.merged.ui.preferredEditor &&
     isEditorAvailable(settings.merged.ui.preferredEditor)
   ) {
     mergedEditorName =

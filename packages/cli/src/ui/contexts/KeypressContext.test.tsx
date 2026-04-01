@@ -162,6 +162,36 @@ describe('KeypressContext - Kitty Protocol', () => {
         }),
       );
     });
+
+    it('should recognize \n (LF) as ctrl+j', async () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\n'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'j',
+          ctrl: true,
+          meta: false,
+          shift: false,
+        }),
+      );
+    });
+
+    it('should recognize \\x1b\\n as Alt+Enter (return with meta)', async () => {
+      const { keyHandler } = setupKeypressTest();
+
+      act(() => stdin.write('\x1b\n'));
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'return',
+          ctrl: false,
+          meta: true,
+          shift: false,
+        }),
+      );
+    });
   });
 
   describe('Fast return buffering', () => {
@@ -191,9 +221,12 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       expect(keyHandler).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          name: '',
+          name: 'return',
           sequence: '\r',
           insertable: true,
+          shift: true,
+          ctrl: false,
+          meta: false,
         }),
       );
     });
@@ -214,9 +247,12 @@ describe('KeypressContext - Kitty Protocol', () => {
       // Now bufferFastReturn is always applied, so return should be buffered
       expect(keyHandler).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          name: '',
+          name: 'return',
           sequence: '\r',
           insertable: true,
+          shift: true,
+          ctrl: false,
+          meta: false,
         }),
       );
     });
@@ -385,7 +421,7 @@ describe('KeypressContext - Kitty Protocol', () => {
 
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          paste: true,
+          name: 'paste',
           sequence: pastedText,
         }),
       );
@@ -602,8 +638,7 @@ describe('Drag and Drop Handling', () => {
 
       expect(keyHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: '',
-          paste: true,
+          name: 'paste',
           sequence: `${SINGLE_QUOTE}${expectedText}`,
         }),
       );
@@ -675,7 +710,6 @@ describe('Kitty Sequence Parsing', () => {
                 ctrl: false,
                 meta: true,
                 shift: false,
-                paste: false,
               },
             };
           } else if (terminal === 'MacTerminal') {
@@ -691,26 +725,25 @@ describe('Kitty Sequence Parsing', () => {
                 ctrl: false,
                 meta: true,
                 shift: false,
-                paste: false,
+              },
+            };
+          } else {
+            // iTerm2 and VSCode send accented characters (å, ø, µ)
+            // Note: µ (mu) is sent with meta:false on iTerm2/VSCode but
+            // gets converted to m with meta:true
+            return {
+              terminal,
+              key,
+              chunk: accentedChar,
+              expected: {
+                name: key,
+                ctrl: false,
+                meta: true, // Always expect meta:true after conversion
+                shift: false,
+                sequence: accentedChar,
               },
             };
           }
-          // iTerm2 and VSCode send accented characters (å, ø, µ)
-          // Note: µ (mu) is sent with meta:false on iTerm2/VSCode but
-          // gets converted to m with meta:true
-          return {
-            terminal,
-            key,
-            chunk: accentedChar,
-            expected: {
-              name: key,
-              ctrl: false,
-              meta: true, // Always expect meta:true after conversion
-              shift: false,
-              paste: false,
-              sequence: accentedChar,
-            },
-          };
         }),
       ),
     )(
@@ -793,7 +826,6 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
         sequence: '\x1b[m',
-        paste: false,
       }),
     );
   });
@@ -1051,7 +1083,7 @@ describe('Kitty Sequence Parsing', () => {
     // The paste event should be broadcast
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
-        paste: true,
+        name: 'paste',
         sequence: pastedText,
       }),
     );

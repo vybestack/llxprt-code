@@ -26,7 +26,7 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
     const extensions = getWorkspaceExtensions(cwd);
     if (
       extensions.length > 0 &&
-      !settings.merged.extensions?.workspacesWithMigrationNudge?.includes(cwd)
+      !settings.merged.extensions.workspacesWithMigrationNudge?.includes(cwd)
     ) {
       setWorkspaceExtensions(extensions);
       setShowWorkspaceMigrationDialog(true);

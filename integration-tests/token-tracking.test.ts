@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProviderManager } from '../packages/core/src/providers/ProviderManager';
 import { ProviderPerformanceTracker } from '../packages/core/src/providers/logging/ProviderPerformanceTracker';
 import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper';
-import { retryWithBackoff } from '../packages/core/src/utils/retry';
 // import { TelemetryService } from '../packages/core/src/telemetry/TelemetryService'; // Not used in tests
 import type { RedactionConfig } from '../packages/core/src/config/types';
 import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
@@ -176,45 +175,6 @@ describe('Token Tracking Integration Tests', () => {
     expect(finalUsage.output).toBe(170); // 80 + 90
     expect(finalUsage.total).toBe(530); // 235 + 295
   });
-
-  // Test 5: Retry System Throttle Integration (SKIPPED - integration issue)
-  it.skip('should properly track throttle wait times during retries', async () => {
-    const mockCall = vi.fn();
-    let retryCount = 0;
-
-    mockCall.mockImplementation(() => {
-      retryCount++;
-      if (retryCount < 3) {
-        const error = new Error('Rate limited') as Error & {
-          status: number;
-          headers: { 'retry-after': string };
-        };
-        error.status = 429;
-        error.headers = { 'retry-after': '0.1' }; // 0.1 seconds for faster test
-        throw error;
-      }
-      return { success: true };
-    });
-
-    // Reset tracker before test
-    tracker.reset();
-
-    const result = await retryWithBackoff(mockCall, {
-      maxRetries: 5,
-      baseDelay: 100, // Shorter delays for testing
-      backoffMultiplier: 1.5,
-      trackThrottleWaitTime: (waitTime) =>
-        tracker.addThrottleWaitTime(waitTime),
-    });
-
-    expect(result.success).toBe(true);
-    expect(retryCount).toBe(3); // Should succeed on 3rd attempt
-
-    // Check that throttle wait time was tracked
-    const throttleWaitTime = tracker.getLatestMetrics().throttleWaitTimeMs;
-    expect(throttleWaitTime).toBeGreaterThan(0);
-  }, 10000); // 10 second timeout
-
   // Test 6: Logging Provider Wrapper Integration
   it('should create logging wrapper without errors', () => {
     const loggingWrapper = new LoggingProviderWrapper(mockProvider, mockConfig);

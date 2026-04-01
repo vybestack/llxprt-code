@@ -192,6 +192,7 @@ interface GeminiChatInternals {
     promptId: string,
     pendingTokens: number,
     source: 'send' | 'stream',
+    trigger?: 'manual' | 'auto',
   ): Promise<void>;
   enforceContextWindow(
     pendingTokens: number,

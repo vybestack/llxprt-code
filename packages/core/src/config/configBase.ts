@@ -132,8 +132,8 @@ export abstract class ConfigBase extends ConfigBaseCore {
 
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;
-    // Persist to settings service
-    this.settingsService.set('hooks.disabled', hooks);
+    // Persist to settings service under the split-schema key
+    this.settingsService.set('hooksConfig.disabled', hooks);
   }
 
   /**

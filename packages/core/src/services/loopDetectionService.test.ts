@@ -196,7 +196,18 @@ describe('LoopDetectionService', () => {
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
 
-    it.skip('should detect the specific user-provided loop example', () => {
+    it('should detect the specific user-provided loop example', () => {
+      // Use a low threshold so that the longer pattern (>50 chars) is detected
+      // within the maxAllowedDistance window (CONTENT_CHUNK_SIZE * 5 = 250).
+      // With threshold=3, we need 3 matching 50-char chunks; a 143-char repeating
+      // pattern produces average chunk distance ~143 which is <= 250.
+      mockConfig.getEphemeralSetting = vi
+        .fn()
+        .mockImplementation((key: string) => {
+          if (key === 'contentLoopThreshold') return 3;
+          return undefined;
+        });
+      service = new LoopDetectionService(mockConfig);
       service.reset('');
       const userPattern = `I will not output any text.
   I will just end the turn.
@@ -206,8 +217,7 @@ describe('LoopDetectionService', () => {
 `;
 
       let isLoop = false;
-      // Loop enough times to trigger the threshold
-      for (let i = 0; i < DEFAULT_CONTENT_LOOP_THRESHOLD * 10; i++) {
+      for (let i = 0; i < 20; i++) {
         isLoop = service.addAndCheck(createContentEvent(userPattern));
         if (isLoop) break;
       }
@@ -215,14 +225,23 @@ describe('LoopDetectionService', () => {
       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
     });
 
-    it.skip('should detect the second specific user-provided loop example', () => {
+    it('should detect the second specific user-provided loop example', () => {
+      // Use a low threshold so that the longer pattern (~100 chars) is detected
+      // within the maxAllowedDistance window (CONTENT_CHUNK_SIZE * 5 = 250).
+      // With threshold=3, average chunk distance ~103 which is <= 250.
+      mockConfig.getEphemeralSetting = vi
+        .fn()
+        .mockImplementation((key: string) => {
+          if (key === 'contentLoopThreshold') return 3;
+          return undefined;
+        });
+      service = new LoopDetectionService(mockConfig);
       service.reset('');
       const userPattern =
         'I have added all the requested logs and verified the test file. I will now mark the task as complete.\n  ';
 
       let isLoop = false;
-      // Loop enough times to trigger the threshold
-      for (let i = 0; i < DEFAULT_CONTENT_LOOP_THRESHOLD * 10; i++) {
+      for (let i = 0; i < 20; i++) {
         isLoop = service.addAndCheck(createContentEvent(userPattern));
         if (isLoop) break;
       }

@@ -5,12 +5,13 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-import type {
-  ContentBlock,
-  IContent,
+import {
+  type ContentBlock,
+  type IContent,
 } from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
 import { DebugLogger } from '../../debug/index.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
 
 const logger = new DebugLogger('llxprt:providers:openai-responses:sse');
 
@@ -274,7 +275,7 @@ export async function* parseResponsesStream(
                 // Function call arguments chunk
                 if (event.item_id && event.delta) {
                   const call = functionCalls.get(event.item_id);
-                  if (call != null) {
+                  if (call) {
                     call.arguments += event.delta;
                   }
                 }
@@ -292,7 +293,7 @@ export async function* parseResponsesStream(
                       .filter(Boolean)
                       .join(' ') || '';
 
-                  if (!thoughtText && event.item.content != null) {
+                  if (!thoughtText && event.item.content) {
                     thoughtText = event.item.content
                       .map((c: { text?: string }) => c.text)
                       .filter(Boolean)
@@ -374,7 +375,7 @@ export async function* parseResponsesStream(
                   const itemId = event.item?.id || event.item_id;
                   if (itemId) {
                     const call = functionCalls.get(itemId);
-                    if (call != null) {
+                    if (call) {
                       // Use final arguments from event if available, otherwise use accumulated
                       const finalArguments = event.arguments || call.arguments;
 
@@ -466,7 +467,8 @@ export async function* parseResponsesStream(
                 reasoningSummaryText = '';
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
-                if (event.response?.usage != null) {
+                if (event.response?.usage) {
+                  const terminalReason = event.response.status ?? 'completed';
                   yield {
                     speaker: 'ai',
                     blocks: [],
@@ -479,6 +481,10 @@ export async function* parseResponsesStream(
                           event.response.usage.input_tokens_details
                             ?.cached_tokens ?? 0,
                       },
+                      // stopReason is normalized via mapFinishReasonToStopReason;
+                      // finishReason preserves the raw provider value for diagnostics.
+                      stopReason: mapFinishReasonToStopReason(terminalReason),
+                      finishReason: terminalReason,
                     },
                   };
                 }

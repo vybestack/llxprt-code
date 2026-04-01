@@ -81,10 +81,11 @@ function checkHookDecision(
 }
 
 /**
- * Apply after-hook modifications (systemMessage, suppressOutput) to a tool result.
+ * Apply hook output decorations (systemMessage/additionalContext/suppressOutput)
+ * to a tool result so they are visible to downstream model turns.
  */
-function applyAfterHookModifications(
-  afterResult:
+function applyHookOutputModifications(
+  hookResult:
     | {
         systemMessage?: string;
         getAdditionalContext(): string | undefined;
@@ -93,25 +94,29 @@ function applyAfterHookModifications(
     | undefined,
   toolResult: ToolResult,
 ): ToolResult {
-  if (afterResult == null) return toolResult;
+  if (!hookResult) return toolResult;
 
   let finalResult = toolResult;
-  const systemMessage = afterResult.systemMessage;
-  const additionalContext = afterResult.getAdditionalContext();
-  if (systemMessage || additionalContext) {
-    const appendText = systemMessage || additionalContext || '';
+  const systemMessage = hookResult.systemMessage;
+  const additionalContext = hookResult.getAdditionalContext();
+  const appendedTexts = [systemMessage, additionalContext].filter(
+    (text): text is string => !!text,
+  );
+
+  if (appendedTexts.length > 0) {
     const existingContent =
       typeof finalResult.llmContent === 'string'
         ? finalResult.llmContent
         : JSON.stringify(finalResult.llmContent);
+    const appendText = appendedTexts.join('\n\n');
+
     finalResult = {
       ...finalResult,
-      llmContent: `${existingContent}
-
-${appendText}`,
+      llmContent: `${existingContent}\n\n${appendText}`,
     };
   }
-  if (afterResult.suppressOutput) {
+
+  if (hookResult.suppressOutput) {
     finalResult = { ...finalResult, suppressDisplay: true };
   }
   return finalResult;
@@ -141,7 +146,7 @@ export class ToolExecutor {
     checkHookDecision(beforeResult, 'BeforeTool');
 
     const modifiedInput = beforeResult?.getModifiedToolInput();
-    if (modifiedInput != null) {
+    if (modifiedInput) {
       effectiveArgs = modifiedInput;
       try {
         invocation = scheduledCall.tool.build(modifiedInput);
@@ -168,17 +173,25 @@ export class ToolExecutor {
       .then(async (toolResult: ToolResult) => {
         if (signal.aborted) throw new Error('User cancelled tool execution.');
 
+        const beforeDecoratedResult = applyHookOutputModifications(
+          beforeResult,
+          toolResult,
+        );
+
         const afterResult = await triggerAfterToolHook(
           this.config,
           toolName,
           effectiveArgs,
-          toolResult,
+          beforeDecoratedResult,
           mcpContext,
         );
         checkHookDecision(afterResult, 'AfterTool');
 
         return {
-          result: applyAfterHookModifications(afterResult, toolResult),
+          result: applyHookOutputModifications(
+            afterResult,
+            beforeDecoratedResult,
+          ),
           invocation,
           effectiveArgs,
         };

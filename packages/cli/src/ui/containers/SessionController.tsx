@@ -202,7 +202,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         settings.merged,
         config.getExtensions(),
         config.getFolderTrust(),
-        settings.merged.ui?.memoryImportFormat || 'tree',
+        settings.merged.ui.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),
       );
       config.setUserMemory(memoryContent);

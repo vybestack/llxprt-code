@@ -39,7 +39,14 @@ try {
 
 // Continue with the rest of preflight
 run('npm run format');
+
+// Increase heap size for ESLint - matches CI workflow's NODE_OPTIONS setting
+// Without this, ESLint OOMs on the full codebase (~4GB usage)
+const prevNodeOptions = process.env.NODE_OPTIONS || '';
+process.env.NODE_OPTIONS =
+  `${prevNodeOptions} --max-old-space-size=8192`.trim();
 run('npm run lint:ci');
+process.env.NODE_OPTIONS = prevNodeOptions;
 run('npm run build');
 run('npm run typecheck');
 run('npm run test:ci');

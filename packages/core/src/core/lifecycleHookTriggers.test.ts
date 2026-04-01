@@ -54,6 +54,7 @@ describe('Lifecycle Hook Triggers', () => {
     // Create mock hook system with facade methods
     mockHookSystem = {
       initialize: vi.fn().mockResolvedValue(undefined),
+      isInitialized: vi.fn().mockReturnValue(true),
       getEventHandler: vi.fn().mockReturnValue(mockEventHandler),
       fireSessionStartEvent: vi.fn(),
       fireSessionEndEvent: vi.fn(),

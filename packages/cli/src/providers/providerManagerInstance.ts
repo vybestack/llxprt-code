@@ -5,7 +5,7 @@
  */
 
 import {
-  type Config,
+  Config,
   ProviderManager,
   OpenAIProvider,
   OpenAIResponsesProvider,
@@ -15,28 +15,29 @@ import {
   FakeProvider,
   sanitizeForByteString,
   needsSanitization,
-  type SettingsService,
+  SettingsService,
   getSettingsService,
   DebugLogger,
   debugLogger,
-  type MessageBus,
+  MessageBus,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
-import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
+import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import {
-  type Settings,
+  Settings,
   LoadedSettings,
   USER_SETTINGS_PATH,
+  type MergedSettings,
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
-import type { HistoryItemWithoutId } from '../ui/types.js';
+import { HistoryItemWithoutId } from '../ui/types.js';
 
-import type { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
+import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasEntry,
@@ -103,7 +104,7 @@ export function setFileSystem(fs: IFileSystem): void {
  * Get the file system implementation to use.
  */
 function getFileSystem(): IFileSystem {
-  if (fileSystemInstance == null) {
+  if (!fileSystemInstance) {
     fileSystemInstance = new NodeFileSystem();
   }
   return fileSystemInstance;
@@ -113,7 +114,7 @@ function resolveLoadedSettings(
   fs: IFileSystem,
   settings?: LoadedSettings,
 ): LoadedSettings | undefined {
-  if (settings != null) {
+  if (settings) {
     return settings;
   }
 
@@ -127,7 +128,7 @@ function resolveLoadedSettings(
     // Failed to load user settings, ignore and fall back to defaults.
   }
 
-  return userSettings != null
+  return userSettings
     ? new LoadedSettings(
         { path: '', settings: {} },
         { path: '', settings: {} },
@@ -145,7 +146,7 @@ function attachAddItemToOAuthProviders(
     baseTimestamp?: number,
   ) => number,
 ): void {
-  if (addItem == null) {
+  if (!addItem) {
     return;
   }
 
@@ -185,7 +186,7 @@ function resolveAuthOnlyFlag(
   config?: Config,
   loadedSettings?: LoadedSettings,
 ): boolean {
-  if (config != null && typeof config.getEphemeralSettings === 'function') {
+  if (config && typeof config.getEphemeralSettings === 'function') {
     const authOnlyValue = config.getEphemeralSettings().authOnly;
     if (authOnlyValue !== undefined) {
       const coerced = coerceAuthOnly(authOnlyValue);
@@ -195,7 +196,7 @@ function resolveAuthOnlyFlag(
     }
   }
 
-  if (loadedSettings?.merged != null) {
+  if (loadedSettings?.merged) {
     const mergedAuthOnly = (loadedSettings.merged as Record<string, unknown>)
       .authOnly;
     if (mergedAuthOnly !== undefined) {
@@ -270,7 +271,7 @@ export function createProviderManager(
   // bootstrap calls switchActiveProvider().
   const fakeResponsesPath = process.env.LLXPRT_FAKE_RESPONSES;
   if (fakeResponsesPath) {
-    if (config != null) {
+    if (config) {
       manager.setConfig(config);
       config.setProviderManager(manager);
     }
@@ -285,10 +286,10 @@ export function createProviderManager(
 
   logger.debug('createProviderManager config check', {
     hasConfig: !!config,
-    configType: config?.constructor.name,
+    configType: config?.constructor?.name,
   });
 
-  if (config != null) {
+  if (config) {
     manager.setConfig(config);
     config.setProviderManager(manager);
     logger.debug(
@@ -300,8 +301,9 @@ export function createProviderManager(
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
 
-  const settingsData = loadedSettings?.merged || {};
-  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
+  const settingsData =
+    loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
+  const ephemeralSettings = config?.getEphemeralSettings?.() ?? {};
   const effectiveOpenaiResponsesEnabled: boolean | undefined =
     ephemeralSettings.openaiResponsesEnabled !== undefined
       ? Boolean(ephemeralSettings.openaiResponsesEnabled)
@@ -332,7 +334,7 @@ export function createProviderManager(
   let openaiApiKey: string | undefined;
 
   if (
-    Boolean(ephemeralAuthKey) &&
+    ephemeralAuthKey &&
     typeof ephemeralAuthKey === 'string' &&
     ephemeralAuthKey.trim() !== ''
   ) {
@@ -353,7 +355,7 @@ export function createProviderManager(
   const ephemeralBaseUrl = ephemeralSettings['base-url'];
   const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
   const openaiBaseUrl =
-    Boolean(ephemeralBaseUrl) && typeof ephemeralBaseUrl === 'string'
+    ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
       ? ephemeralBaseUrl
       : providerBaseUrl && typeof providerBaseUrl === 'string'
         ? providerBaseUrl
@@ -367,9 +369,10 @@ export function createProviderManager(
     textToolCallModels: settingsData.textToolCallModels,
     providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
     openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
-    getEphemeralSettings:
-      config != null ? () => config.getEphemeralSettings() : undefined,
     allowBrowserEnvironment,
+    getEphemeralSettings: config
+      ? () => config.getEphemeralSettings()
+      : undefined,
   };
 
   // All providers are now registered via alias configs
@@ -452,15 +455,11 @@ export function getProviderManager(
   void config;
   void allowBrowserEnvironment;
   void settings;
-  if (
-    singletonManager != null &&
-    addItem != null &&
-    singletonOAuthManager != null
-  ) {
+  if (singletonManager && addItem && singletonOAuthManager) {
     attachAddItemToOAuthProviders(singletonOAuthManager, addItem);
   }
 
-  if (singletonManager == null) {
+  if (!singletonManager) {
     throw new Error(
       'ProviderManager singleton has not been registered. Initialize provider infrastructure at the composition root before requesting it.',
     );
@@ -480,12 +479,12 @@ export function getOAuthManager(): OAuthManager | null {
 }
 
 export function refreshAliasProviders(): void {
-  if (singletonManager == null) {
+  if (!singletonManager) {
     return;
   }
 
   const context = openAIContexts.get(singletonManager);
-  if (context == null) {
+  if (!context) {
     return;
   }
 
@@ -524,7 +523,7 @@ function registerAliasProviders(
           openaiProviderConfig,
           oauthManager,
         );
-        if (provider != null) {
+        if (provider) {
           providerManagerInstance.registerProvider(provider);
         }
         break;
@@ -537,7 +536,7 @@ function registerAliasProviders(
           openaiProviderConfig,
           oauthManager,
         );
-        if (provider != null) {
+        if (provider) {
           providerManagerInstance.registerProvider(provider);
         }
         break;
@@ -551,14 +550,14 @@ function registerAliasProviders(
           openaiProviderConfig,
           oauthManager,
         );
-        if (provider != null) {
+        if (provider) {
           providerManagerInstance.registerProvider(provider);
         }
         break;
       }
       case 'gemini': {
         const provider = createGeminiAliasProvider(entry, oauthManager, config);
-        if (provider != null) {
+        if (provider) {
           providerManagerInstance.registerProvider(provider);
         }
         break;
@@ -569,7 +568,7 @@ function registerAliasProviders(
           oauthManager,
           authOnlyEnabled,
         );
-        if (provider != null) {
+        if (provider) {
           providerManagerInstance.registerProvider(provider);
         }
         break;
@@ -605,7 +604,7 @@ export function bindOpenAIAliasIdentity(
 }
 
 function bindProviderAliasIdentity(provider: unknown, alias: string): void {
-  const aliasName = alias.trim();
+  const aliasName = alias?.trim();
   if (!aliasName) {
     return;
   }
@@ -618,7 +617,7 @@ function bindProviderAliasIdentity(provider: unknown, alias: string): void {
   });
 
   const aliasAwareProvider = provider as AliasAwareBaseProvider;
-  if (aliasAwareProvider.baseProviderConfig != null) {
+  if (aliasAwareProvider.baseProviderConfig) {
     aliasAwareProvider.baseProviderConfig.name = aliasName;
   }
 
@@ -647,7 +646,7 @@ function createOpenAIAliasProvider(
     baseUrl: resolvedBaseUrl,
   };
 
-  if (entry.config.providerConfig != null) {
+  if (entry.config.providerConfig) {
     Object.assign(aliasProviderConfig, entry.config.providerConfig);
   }
 
@@ -685,10 +684,7 @@ function createOpenAIAliasProvider(
 
   // Override getModels() to return static models if configured
   // This avoids API calls for providers that don't have a /models endpoint
-  if (
-    entry.config.staticModels != null &&
-    entry.config.staticModels.length > 0
-  ) {
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
     const staticModels = entry.config.staticModels.map((m) => ({
       id: m.id,
       name: m.name,
@@ -723,7 +719,7 @@ function createOpenAIResponsesAliasProvider(
     baseUrl: resolvedBaseUrl,
   };
 
-  if (entry.config.providerConfig != null) {
+  if (entry.config.providerConfig) {
     Object.assign(aliasProviderConfig, entry.config.providerConfig);
   }
 
@@ -768,10 +764,7 @@ function createOpenAIResponsesAliasProvider(
   }
 
   // Override getModels() to return static models if configured
-  if (
-    entry.config.staticModels != null &&
-    entry.config.staticModels.length > 0
-  ) {
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
     const staticModels = entry.config.staticModels.map((m) => ({
       id: m.id,
       name: m.name,
@@ -804,7 +797,7 @@ function createOpenAIVercelAliasProvider(
     baseUrl: resolvedBaseUrl,
   };
 
-  if (entry.config.providerConfig != null) {
+  if (entry.config.providerConfig) {
     Object.assign(aliasProviderConfig, entry.config.providerConfig);
   }
 
@@ -841,10 +834,7 @@ function createOpenAIVercelAliasProvider(
   }
 
   // Override getModels() to return static models if configured
-  if (
-    entry.config.staticModels != null &&
-    entry.config.staticModels.length > 0
-  ) {
+  if (entry.config.staticModels && entry.config.staticModels.length > 0) {
     const staticModels = entry.config.staticModels.map((m) => ({
       id: m.id,
       name: m.name,
@@ -881,7 +871,7 @@ function createGeminiAliasProvider(
     oauthManager,
   );
 
-  if (config != null && typeof provider.setConfig === 'function') {
+  if (config && typeof provider.setConfig === 'function') {
     provider.setConfig(config);
   }
 
@@ -907,7 +897,7 @@ function createAnthropicAliasProvider(
 ): AnthropicProvider | null {
   let aliasApiKey: string | undefined;
   // Only use environment variable API key if authOnly is not enabled
-  if (!(authOnlyEnabled ?? false) && entry.config.apiKeyEnv) {
+  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);
@@ -917,7 +907,7 @@ function createAnthropicAliasProvider(
   const resolvedBaseUrl = entry.config['base-url'];
 
   const providerConfig: IProviderConfig = {};
-  if (entry.config.providerConfig != null) {
+  if (entry.config.providerConfig) {
     Object.assign(providerConfig, entry.config.providerConfig);
   }
 

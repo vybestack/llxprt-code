@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import type OpenAI from 'openai';
-import type {
-  IContent,
-  TextBlock,
-  ToolCallBlock,
-  ThinkingBlock,
+import OpenAI from 'openai';
+import {
+  type IContent,
+  type TextBlock,
+  type ToolCallBlock,
+  type ThinkingBlock,
 } from '../../services/history/IContent.js';
-import type { DebugLogger } from '../../debug/index.js';
-import type { ToolCallPipeline } from './ToolCallPipeline.js';
-import type { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
+import { type DebugLogger } from '../../debug/index.js';
+import { type ToolCallPipeline } from './ToolCallPipeline.js';
+import { type GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import { extractThinkTagsAsBlock } from '../utils/thinkingExtraction.js';
 import { sanitizeProviderText } from '../utils/textSanitizer.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
@@ -40,7 +40,8 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import type { ToolFormat } from '../../tools/IToolFormatter.js';
+import { mapFinishReasonToStopReason } from './finishReasonMapping.js';
+import { type ToolFormat } from '../../tools/IToolFormatter.js';
 
 export interface StreamProcessorDeps {
   toolCallPipeline: ToolCallPipeline;
@@ -61,6 +62,7 @@ interface StreamingState {
     total_tokens?: number;
   } | null;
   lastFinishReason: string | null | undefined;
+  hasEmittedTerminalMetadata: boolean;
   cachedPipelineResult: Awaited<
     ReturnType<typeof ToolCallPipeline.prototype.process>
   > | null;
@@ -76,6 +78,7 @@ function createStreamingState(): StreamingState {
     accumulatedReasoningContent: '',
     streamingUsage: null,
     lastFinishReason: null,
+    hasEmittedTerminalMetadata: false,
     cachedPipelineResult: null,
     allChunks: [],
   };
@@ -92,7 +95,7 @@ async function* flushTextBuffer(
 
   // Extract <think> tags
   const tagBasedThinking = extractThinkTagsAsBlock(workingText);
-  if (tagBasedThinking != null) {
+  if (tagBasedThinking) {
     const cleanedThought = cleanThinkingContent(
       tagBasedThinking.thought,
       deps.logger,
@@ -228,30 +231,14 @@ export async function* processStreamingResponse(
   deps.toolCallPipeline.reset();
 
   try {
-    // Collect all chunks first
+    // Process chunks inline as they arrive from the HTTP stream.
+    // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
+    // prevents abort signal checks, and causes indefinite hangs. See #1846.
     for await (const chunk of response) {
       if (abortSignal?.aborted) {
         break;
       }
       state.allChunks.push(chunk);
-    }
-
-    deps.logger.debug(
-      () =>
-        `[Streaming pipeline] Collected ${state.allChunks.length} chunks from stream`,
-      {
-        firstChunkDelta: state.allChunks[0]?.choices?.[0]?.delta,
-        lastChunkFinishReason:
-          state.allChunks[state.allChunks.length - 1]?.choices?.[0]
-            ?.finish_reason,
-      },
-    );
-
-    // Process all collected chunks
-    for (const chunk of state.allChunks) {
-      if (abortSignal?.aborted) {
-        break;
-      }
 
       const chunkRecord = chunk as unknown as Record<string, unknown>;
       let parsedData: Record<string, unknown> | undefined;
@@ -290,7 +277,7 @@ export async function* processStreamingResponse(
       }
 
       // Extract usage information
-      if (chunk.usage != null) {
+      if (chunk.usage) {
         state.streamingUsage = chunk.usage;
       }
 
@@ -300,7 +287,7 @@ export async function* processStreamingResponse(
       // Parse reasoning_content
       const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
         parseStreamingReasoningDelta(choice.delta, deps.logger);
-      if (reasoningBlock != null) {
+      if (reasoningBlock) {
         state.accumulatedReasoningContent += reasoningBlock.thought;
       }
       if (reasoningToolCalls.length > 0) {
@@ -412,9 +399,9 @@ export async function* processStreamingResponse(
 
       // Handle tool calls using pipeline
       const deltaToolCalls = choice.delta?.tool_calls;
-      if (deltaToolCalls != null && deltaToolCalls.length > 0) {
+      if (deltaToolCalls && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
-          if (deltaToolCall.index == undefined) continue;
+          if (deltaToolCall.index === undefined) continue;
 
           deps.toolCallPipeline.addFragment(deltaToolCall.index, {
             id: deltaToolCall.id,
@@ -432,7 +419,7 @@ export async function* processStreamingResponse(
         }
       ).message;
       const messageToolCalls = choiceMessage?.tool_calls;
-      if (messageToolCalls != null && messageToolCalls.length > 0) {
+      if (messageToolCalls && messageToolCalls.length > 0) {
         messageToolCalls.forEach(
           (
             toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
@@ -580,7 +567,9 @@ export async function* processStreamingResponse(
         blocks: combinedBlocks,
       };
 
-      if (state.streamingUsage != null) {
+      const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+
+      if (state.streamingUsage) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
         combinedContent.metadata = {
           usage: {
@@ -594,7 +583,24 @@ export async function* processStreamingResponse(
             cacheCreationTokens: cacheMetrics.cacheCreationTokens,
             cacheMissTokens: cacheMetrics.cacheMissTokens,
           },
+          ...(stopReason && { stopReason }),
         };
+      } else if (stopReason) {
+        combinedContent.metadata = { stopReason };
+      }
+
+      // Propagate terminal metadata so downstream turn handling and telemetry
+      // receive a finish signal (issue #1844).  stopReason stays normalized
+      // (via mapFinishReasonToStopReason above); finishReason preserves the
+      // raw provider value for diagnostics.
+      if (state.lastFinishReason) {
+        if (!combinedContent.metadata) {
+          combinedContent.metadata = {};
+        }
+        // stopReason was already set to the normalized value above; do NOT
+        // overwrite it with the raw provider string.
+        combinedContent.metadata.finishReason = state.lastFinishReason;
+        state.hasEmittedTerminalMetadata = true;
       }
 
       yield combinedContent;
@@ -603,12 +609,13 @@ export async function* processStreamingResponse(
 
   // Emit metadata-only response if needed
   if (
-    state.streamingUsage != null &&
+    state.streamingUsage &&
     state.accumulatedReasoningContent.length === 0 &&
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
     const cacheMetrics = extractCacheMetrics(state.streamingUsage);
-    yield {
+    const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
+    const metaOnlyContent: IContent = {
       speaker: 'ai',
       blocks: [],
       metadata: {
@@ -623,6 +630,38 @@ export async function* processStreamingResponse(
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
         },
+        ...(stopReason && { stopReason }),
+      },
+    };
+
+    // Propagate terminal metadata on usage-only chunk (issue #1844).
+    // stopReason stays normalized; finishReason preserves raw value.
+    if (state.lastFinishReason && metaOnlyContent.metadata) {
+      metaOnlyContent.metadata.finishReason = state.lastFinishReason;
+      state.hasEmittedTerminalMetadata = true;
+    }
+
+    yield metaOnlyContent;
+  }
+
+  // Emit a terminal metadata chunk even when there is no usage, so
+  // downstream turn handling always receives a finish signal (issue #1844).
+  if (
+    state.lastFinishReason &&
+    !state.streamingUsage &&
+    !state.hasEmittedTerminalMetadata &&
+    deps.toolCallPipeline.getStats().collector.totalCalls === 0
+  ) {
+    state.hasEmittedTerminalMetadata = true;
+    const normalizedStopReason = mapFinishReasonToStopReason(
+      state.lastFinishReason,
+    );
+    yield {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        stopReason: normalizedStopReason,
+        finishReason: state.lastFinishReason,
       },
     } as IContent;
   }
@@ -715,11 +754,11 @@ export async function* processStreamingResponse(
       () => `[Streaming pipeline] Stream completed with accumulated content`,
       {
         textLength: state.accumulatedText.length,
+        toolCallCount,
         textBufferLength: state.textBuffer.length,
         reasoningLength: state.accumulatedReasoningContent.length,
         thinkingLength: state.accumulatedThinkingContent.length,
         totalChunksReceived: state.allChunks.length,
-        toolCallCount,
       },
     );
   }

@@ -13,6 +13,20 @@ import {
   defaultKeyBindings,
 } from './keyBindings.js';
 
+function hasNonEmptyBindingTarget(binding: {
+  key?: string;
+  sequence?: string;
+  paste?: boolean;
+}): boolean {
+  if (typeof binding.key === 'string' && binding.key.length > 0) {
+    return true;
+  }
+  if (typeof binding.sequence === 'string' && binding.sequence.length > 0) {
+    return true;
+  }
+  return binding.paste === true;
+}
+
 describe('keyBindings config', () => {
   describe('defaultKeyBindings', () => {
     it('should have bindings for all commands', () => {
@@ -28,12 +42,8 @@ describe('keyBindings config', () => {
     it('should have valid key binding structures', () => {
       for (const [_, bindings] of Object.entries(defaultKeyBindings)) {
         for (const binding of bindings) {
-          // Each binding should have either key or sequence, but not both
-          const hasKey = binding.key !== undefined;
-          const hasSequence = binding.sequence !== undefined;
-
-          expect(hasKey || hasSequence).toBe(true);
-          expect(hasKey && hasSequence).toBe(false);
+          // Each binding must match by key, sequence, or paste semantics.
+          expect(hasNonEmptyBindingTarget(binding)).toBe(true);
 
           // Modifier properties should be boolean or undefined
           expect(
@@ -80,9 +90,27 @@ describe('keyBindings config', () => {
       expect(dialogNavDown).toContainEqual({ key: 'down', shift: false });
       expect(dialogNavDown).toContainEqual({ key: 'j', shift: false });
 
-      // Verify physical home/end keys
-      expect(defaultKeyBindings[Command.HOME]).toContainEqual({ key: 'home' });
-      expect(defaultKeyBindings[Command.END]).toContainEqual({ key: 'end' });
+      // Verify physical home/end keys for cursor movement
+      expect(defaultKeyBindings[Command.HOME]).toContainEqual({
+        key: 'home',
+        ctrl: false,
+        shift: false,
+      });
+      expect(defaultKeyBindings[Command.END]).toContainEqual({
+        key: 'end',
+        ctrl: false,
+        shift: false,
+      });
+
+      // Verify physical home/end keys for scrolling
+      expect(defaultKeyBindings[Command.SCROLL_HOME]).toContainEqual({
+        key: 'home',
+        ctrl: true,
+      });
+      expect(defaultKeyBindings[Command.SCROLL_END]).toContainEqual({
+        key: 'end',
+        ctrl: true,
+      });
     });
   });
 

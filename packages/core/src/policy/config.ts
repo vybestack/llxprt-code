@@ -29,7 +29,7 @@ import {
   MessageBusType,
   type UpdatePolicy,
 } from '../confirmation-bus/types.js';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import { type MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
@@ -186,6 +186,7 @@ export function migrateLegacyApprovalMode(
       // undefined toolName = wildcard (matches all tools)
       decision: PolicyDecision.ALLOW,
       priority: 1.999, // Default tier, highest priority
+      source: 'Legacy (YOLO)',
     });
   }
 
@@ -196,18 +197,20 @@ export function migrateLegacyApprovalMode(
         toolName: tool,
         decision: PolicyDecision.ALLOW,
         priority: 1.015, // Default tier, just above write tools (1.010)
+        source: 'Legacy (AUTO_EDIT)',
       });
     }
   }
 
   // Handle --allowed-tools flag
   const allowedTools = config.getAllowedTools();
-  if (allowedTools != null && allowedTools.length > 0) {
+  if (allowedTools && allowedTools.length > 0) {
     for (const tool of allowedTools) {
       rules.push({
         toolName: normalizeToolName(tool),
         decision: PolicyDecision.ALLOW,
         priority: 2.3, // User tier - explicit temporary allows
+        source: 'Legacy (--allowed-tools)',
       });
     }
   }
@@ -308,158 +311,166 @@ export async function createPolicyEngineConfig(
       defaultDecision: PolicyDecision.ASK_USER,
       nonInteractive,
     };
-  }
-  // Handle PolicySettings interface (production path)
-  const settings = configOrSettings as PolicySettings;
-  const approvalMode = approvalModeParam!;
+  } else {
+    // Handle PolicySettings interface (production path)
+    const settings = configOrSettings as PolicySettings;
+    const approvalMode = approvalModeParam!;
 
-  const policyDirs = getPolicyDirectories(defaultPoliciesDir);
+    const policyDirs = getPolicyDirectories(defaultPoliciesDir);
 
-  // Load policies from TOML files
-  const { rules: tomlRules, errors } = await loadPoliciesFromToml(
-    approvalMode,
-    policyDirs,
-    (dir) => getPolicyTier(dir, defaultPoliciesDir),
-  );
+    // Load policies from TOML files
+    const { rules: tomlRules, errors } = await loadPoliciesFromToml(
+      approvalMode,
+      policyDirs,
+      (dir) => getPolicyTier(dir, defaultPoliciesDir),
+    );
 
-  // Emit any errors encountered during TOML loading to the UI
-  // coreEvents has a buffer that will display these once the UI is ready
-  if (errors.length > 0) {
-    for (const error of errors) {
-      coreEvents.emitFeedback('error', formatPolicyError(error));
+    // Emit any errors encountered during TOML loading to the UI
+    // coreEvents has a buffer that will display these once the UI is ready
+    if (errors.length > 0) {
+      for (const error of errors) {
+        coreEvents.emitFeedback('error', formatPolicyError(error));
+      }
     }
-  }
 
-  const rules: PolicyRule[] = [...tomlRules];
+    const rules: PolicyRule[] = [...tomlRules];
 
-  // Priority system for policy rules:
-  // - Higher priority numbers win over lower priority numbers
-  // - When multiple rules match, the highest priority rule is applied
-  // - Rules are evaluated in order of priority (highest first)
-  //
-  // Priority bands (tiers):
-  // - Default policies (TOML): 1 + priority/1000 (e.g., priority 100 → 1.100)
-  // - User policies (TOML): 2 + priority/1000 (e.g., priority 100 → 2.100)
-  // - Admin policies (TOML): 3 + priority/1000 (e.g., priority 100 → 3.100)
-  //
-  // This ensures Admin > User > Default hierarchy is always preserved,
-  // while allowing user-specified priorities to work within each tier.
-  //
-  // Settings-based and dynamic rules (all in user tier 2.x):
-  //   2.95: Tools that the user has selected as "Always Allow" in the interactive UI
-  //   2.9:  MCP servers excluded list (security: persistent server blocks)
-  //   2.4:  Command line flag --exclude-tools (explicit temporary blocks)
-  //   2.3:  Command line flag --allowed-tools (explicit temporary allows)
-  //   2.2:  MCP servers with trust=true (persistent trusted servers)
-  //   2.1:  MCP servers allowed list (persistent general server allows)
-  //
-  // TOML policy priorities (before transformation):
-  //   10: Write tools default to ASK_USER (becomes 1.010 in default tier)
-  //   15: Auto-edit tool override (becomes 1.015 in default tier)
-  //   50: Read-only tools (becomes 1.050 in default tier)
-  //   999: YOLO mode allow-all (becomes 1.999 in default tier)
+    // Priority system for policy rules:
+    // - Higher priority numbers win over lower priority numbers
+    // - When multiple rules match, the highest priority rule is applied
+    // - Rules are evaluated in order of priority (highest first)
+    //
+    // Priority bands (tiers):
+    // - Default policies (TOML): 1 + priority/1000 (e.g., priority 100 → 1.100)
+    // - User policies (TOML): 2 + priority/1000 (e.g., priority 100 → 2.100)
+    // - Admin policies (TOML): 3 + priority/1000 (e.g., priority 100 → 3.100)
+    //
+    // This ensures Admin > User > Default hierarchy is always preserved,
+    // while allowing user-specified priorities to work within each tier.
+    //
+    // Settings-based and dynamic rules (all in user tier 2.x):
+    //   2.95: Tools that the user has selected as "Always Allow" in the interactive UI
+    //   2.9:  MCP servers excluded list (security: persistent server blocks)
+    //   2.4:  Command line flag --exclude-tools (explicit temporary blocks)
+    //   2.3:  Command line flag --allowed-tools (explicit temporary allows)
+    //   2.2:  MCP servers with trust=true (persistent trusted servers)
+    //   2.1:  MCP servers allowed list (persistent general server allows)
+    //
+    // TOML policy priorities (before transformation):
+    //   10: Write tools default to ASK_USER (becomes 1.010 in default tier)
+    //   15: Auto-edit tool override (becomes 1.015 in default tier)
+    //   50: Read-only tools (becomes 1.050 in default tier)
+    //   999: YOLO mode allow-all (becomes 1.999 in default tier)
 
-  // MCP servers that are explicitly excluded in settings.mcp.excluded
-  // Priority: 2.9 (highest in user tier for security - persistent server blocks)
-  if (settings.mcp?.excluded != null) {
-    for (const serverName of settings.mcp.excluded) {
-      rules.push({
-        toolName: `${serverName}__*`,
-        decision: PolicyDecision.DENY,
-        priority: 2.9,
-      });
+    // MCP servers that are explicitly excluded in settings.mcp.excluded
+    // Priority: 2.9 (highest in user tier for security - persistent server blocks)
+    if (settings.mcp?.excluded) {
+      for (const serverName of settings.mcp.excluded) {
+        rules.push({
+          toolName: `${serverName}__*`,
+          decision: PolicyDecision.DENY,
+          priority: 2.9,
+          source: 'Settings (MCP Excluded)',
+        });
+      }
     }
-  }
 
-  // Tools that are explicitly excluded in the settings.
-  // Priority: 2.4 (user tier - explicit temporary blocks)
-  if (settings.tools?.exclude != null) {
-    for (const tool of settings.tools.exclude) {
-      rules.push({
-        toolName: tool,
-        decision: PolicyDecision.DENY,
-        priority: 2.4,
-      });
+    // Tools that are explicitly excluded in the settings.
+    // Priority: 2.4 (user tier - explicit temporary blocks)
+    if (settings.tools?.exclude) {
+      for (const tool of settings.tools.exclude) {
+        rules.push({
+          toolName: tool,
+          decision: PolicyDecision.DENY,
+          priority: 2.4,
+          source: 'Settings (Tools Excluded)',
+        });
+      }
     }
-  }
 
-  // Tools that are explicitly allowed in the settings.
-  // Priority: 2.3 (user tier - explicit temporary allows)
-  if (settings.tools?.allowed != null) {
-    for (const tool of settings.tools.allowed) {
-      // Check for legacy ShellTool(args) format
-      const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
-      if (match != null) {
-        const [, toolName, argsStr] = match;
+    // Tools that are explicitly allowed in the settings.
+    // Priority: 2.3 (user tier - explicit temporary allows)
+    if (settings.tools?.allowed) {
+      for (const tool of settings.tools.allowed) {
+        // Check for legacy ShellTool(args) format
+        const match = /^([a-zA-Z0-9_-]+)\((.*)\)$/.exec(tool);
+        if (match) {
+          const [, toolName, argsStr] = match;
 
-        // Normalize ShellTool alias
-        const normalizedName =
-          toolName === 'ShellTool' ? 'run_shell_command' : toolName;
+          // Normalize ShellTool alias
+          const normalizedName =
+            toolName === 'ShellTool' ? 'run_shell_command' : toolName;
 
-        // Extract command prefix from args
-        if (SHELL_TOOL_NAMES.includes(normalizedName) && argsStr) {
-          const patterns = buildArgsPatterns(undefined, argsStr);
-          for (const pattern of patterns) {
+          // Extract command prefix from args
+          if (SHELL_TOOL_NAMES.includes(normalizedName) && argsStr) {
+            const patterns = buildArgsPatterns(undefined, argsStr);
+            for (const pattern of patterns) {
+              rules.push({
+                toolName: normalizedName,
+                argsPattern: pattern,
+                decision: PolicyDecision.ALLOW,
+                priority: 2.3,
+                source: 'Settings (Tools Allowed)',
+              });
+            }
+          } else {
+            // Non-shell tool with args - just use the tool name
             rules.push({
               toolName: normalizedName,
-              argsPattern: pattern,
               decision: PolicyDecision.ALLOW,
               priority: 2.3,
+              source: 'Settings (Tools Allowed)',
             });
           }
         } else {
-          // Non-shell tool with args - just use the tool name
+          // Regular tool allowlist
           rules.push({
-            toolName: normalizedName,
+            toolName: normalizeToolName(tool),
             decision: PolicyDecision.ALLOW,
             priority: 2.3,
+            source: 'Settings (Tools Allowed)',
           });
         }
-      } else {
-        // Regular tool allowlist
-        rules.push({
-          toolName: normalizeToolName(tool),
-          decision: PolicyDecision.ALLOW,
-          priority: 2.3,
-        });
       }
     }
-  }
 
-  // MCP servers that are trusted in the settings.
-  // Priority: 2.2 (user tier - persistent trusted servers)
-  if (settings.mcpServers != null) {
-    for (const [serverName, serverConfig] of Object.entries(
-      settings.mcpServers,
-    )) {
-      if (serverConfig.trust ?? false) {
-        // Trust all tools from this MCP server
-        // Using pattern matching for MCP tool names which are formatted as "serverName__toolName"
+    // MCP servers that are trusted in the settings.
+    // Priority: 2.2 (user tier - persistent trusted servers)
+    if (settings.mcpServers) {
+      for (const [serverName, serverConfig] of Object.entries(
+        settings.mcpServers,
+      )) {
+        if (serverConfig.trust) {
+          // Trust all tools from this MCP server
+          // Using pattern matching for MCP tool names which are formatted as "serverName__toolName"
+          rules.push({
+            toolName: `${serverName}__*`,
+            decision: PolicyDecision.ALLOW,
+            priority: 2.2,
+            source: 'Settings (MCP Trusted)',
+          });
+        }
+      }
+    }
+
+    // MCP servers that are explicitly allowed in settings.mcp.allowed
+    // Priority: 2.1 (user tier - persistent general server allows)
+    if (settings.mcp?.allowed) {
+      for (const serverName of settings.mcp.allowed) {
         rules.push({
           toolName: `${serverName}__*`,
           decision: PolicyDecision.ALLOW,
-          priority: 2.2,
+          priority: 2.1,
+          source: 'Settings (MCP Allowed)',
         });
       }
     }
-  }
 
-  // MCP servers that are explicitly allowed in settings.mcp.allowed
-  // Priority: 2.1 (user tier - persistent general server allows)
-  if (settings.mcp?.allowed != null) {
-    for (const serverName of settings.mcp.allowed) {
-      rules.push({
-        toolName: `${serverName}__*`,
-        decision: PolicyDecision.ALLOW,
-        priority: 2.1,
-      });
-    }
+    return {
+      rules,
+      defaultDecision: PolicyDecision.ASK_USER,
+    };
   }
-
-  return {
-    rules,
-    defaultDecision: PolicyDecision.ASK_USER,
-  };
 }
 
 interface TomlRule {
@@ -502,6 +513,7 @@ export function createPolicyUpdater(
             // but still lose to admin policies (3.xxx) and settings excludes (200)
             priority: 2.95,
             argsPattern,
+            source: 'Dynamic (Confirmed)',
           });
         }
       } else {
@@ -517,11 +529,12 @@ export function createPolicyUpdater(
           // but still lose to admin policies (3.xxx) and settings excludes (200)
           priority: 2.95,
           argsPattern,
+          source: 'Dynamic (Confirmed)',
         });
       }
 
       // PERSISTENCE LOGIC - Save to TOML if persist=true
-      if (message.persist ?? false) {
+      if (message.persist) {
         try {
           const userPoliciesDir = Storage.getUserPoliciesDir();
           await fs.mkdir(userPoliciesDir, { recursive: true });
@@ -542,7 +555,7 @@ export function createPolicyUpdater(
           }
 
           // Initialize rule array if needed
-          if (existingData.rule == null) {
+          if (!existingData.rule) {
             existingData.rule = [];
           }
 

@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import picomatch from 'picomatch';
-import { type Ignore, loadIgnoreRules } from './ignore.js';
+import { Ignore, loadIgnoreRules } from './ignore.js';
 import { ResultCache } from './result-cache.js';
 import { crawl } from './crawler.js';
 import { AsyncFzf, type FzfResultItem } from 'fzf';
@@ -20,8 +20,9 @@ export interface FileSearchOptions {
   cache: boolean;
   cacheTtl: number;
   enableRecursiveFileSearch: boolean;
-  disableFuzzySearch: boolean;
+  enableFuzzySearch: boolean;
   maxDepth?: number;
+  maxFiles?: number;
 }
 
 export class AbortError extends Error {
@@ -107,7 +108,9 @@ class RecursiveFileSearch implements FileSearch {
       cache: this.options.cache,
       cacheTtl: this.options.cacheTtl,
       maxDepth: this.options.maxDepth,
+      maxFiles: this.options.maxFiles ?? 20000,
     });
+
     this.buildResultCache();
   }
 
@@ -116,9 +119,9 @@ class RecursiveFileSearch implements FileSearch {
     options: SearchOptions = {},
   ): Promise<string[]> {
     if (
-      this.resultCache == null ||
-      (this.fzf == null && !this.options.disableFuzzySearch) ||
-      this.ignore == null
+      !this.resultCache ||
+      (!this.fzf && this.options.enableFuzzySearch) ||
+      !this.ignore
     ) {
       throw new Error('Engine not initialized. Call initialize() first.');
     }
@@ -134,7 +137,7 @@ class RecursiveFileSearch implements FileSearch {
       filteredCandidates = candidates;
     } else {
       let shouldCache = true;
-      if (pattern.includes('*') || this.fzf == null) {
+      if (pattern.includes('*') || !this.fzf) {
         filteredCandidates = await filter(candidates, pattern, options.signal);
       } else {
         filteredCandidates = await this.fzf
@@ -178,7 +181,7 @@ class RecursiveFileSearch implements FileSearch {
 
   private buildResultCache(): void {
     this.resultCache = new ResultCache(this.allFiles);
-    if (!this.options.disableFuzzySearch) {
+    if (this.options.enableFuzzySearch) {
       // The v1 algorithm is much faster since it only looks at the first
       // occurrence of the pattern. We use it for search spaces that have >20k
       // files, because the v2 algorithm is just too slow in those cases.
@@ -202,7 +205,7 @@ class DirectoryFileSearch implements FileSearch {
     pattern: string,
     options: SearchOptions = {},
   ): Promise<string[]> {
-    if (this.ignore == null) {
+    if (!this.ignore) {
       throw new Error('Engine not initialized. Call initialize() first.');
     }
     pattern = pattern || '*';

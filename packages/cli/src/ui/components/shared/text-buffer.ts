@@ -478,11 +478,12 @@ export function useTextBuffer({
   const handleInput = useCallback(
     (key: Key): void => {
       const { sequence: input } = key;
+      const isPasteKey = key.name === 'paste';
 
-      if (key.paste) {
+      if (isPasteKey) {
         // Do not do any other processing on pastes so ensure we handle them
         // before all other cases.
-        insert(input, { paste: key.paste });
+        insert(input, { paste: true });
         return;
       }
 
@@ -496,8 +497,8 @@ export function useTextBuffer({
         newline();
       else if (keyMatchers[Command.MOVE_LEFT](key)) move('left');
       else if (keyMatchers[Command.MOVE_RIGHT](key)) move('right');
-      else if (key.name === 'up') move('up');
-      else if (key.name === 'down') move('down');
+      else if (keyMatchers[Command.MOVE_UP](key)) move('up');
+      else if (keyMatchers[Command.MOVE_DOWN](key)) move('down');
       else if (keyMatchers[Command.MOVE_WORD_LEFT](key)) move('wordLeft');
       else if (keyMatchers[Command.MOVE_WORD_RIGHT](key)) move('wordRight');
       else if (keyMatchers[Command.HOME](key)) move('home');
@@ -509,7 +510,7 @@ export function useTextBuffer({
       else if (keyMatchers[Command.UNDO](key)) undo();
       else if (keyMatchers[Command.REDO](key)) redo();
       else if (key.insertable) {
-        insert(input, { paste: key.paste });
+        insert(input, { paste: false });
       }
     },
     [

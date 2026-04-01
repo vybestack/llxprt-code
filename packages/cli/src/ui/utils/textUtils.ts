@@ -8,6 +8,8 @@ import stripAnsi from 'strip-ansi';
 import ansiRegex from 'ansi-regex';
 import { stripVTControlCharacters } from 'node:util';
 import stringWidth from 'string-width';
+import { LruCache } from '@vybestack/llxprt-code-core';
+import { LRU_BUFFER_PERF_CACHE_LIMIT } from '../constants.js';
 
 /**
  * Calculates the maximum width of a multi-line ASCII art string.
@@ -28,10 +30,41 @@ export const getAsciiArtWidth = (asciiArt: string): number => {
  *  code units so that surrogate‑pair emoji count as one "column".)
  * ---------------------------------------------------------------------- */
 
+// Cache for code points
+const MAX_STRING_LENGTH_TO_CACHE = 1000;
+const codePointsCache = new LruCache<string, string[]>(
+  LRU_BUFFER_PERF_CACHE_LIMIT,
+);
+
 export function toCodePoints(str: string): string[] {
-  // [...str] or Array.from both iterate by UTF‑32 code point, handling
-  // surrogate pairs correctly.
-  return Array.from(str);
+  // ASCII fast path - check if all chars are ASCII (0-127)
+  let isAscii = true;
+  for (let i = 0; i < str.length; i++) {
+    if (str.charCodeAt(i) > 127) {
+      isAscii = false;
+      break;
+    }
+  }
+  if (isAscii) {
+    return str.split('');
+  }
+
+  // Cache short strings
+  if (str.length <= MAX_STRING_LENGTH_TO_CACHE) {
+    const cached = codePointsCache.get(str);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
+  const result = Array.from(str);
+
+  // Cache result
+  if (str.length <= MAX_STRING_LENGTH_TO_CACHE) {
+    codePointsCache.set(str, result);
+  }
+
+  return result;
 }
 
 export function cpLen(str: string): number {
@@ -90,48 +123,27 @@ export function stripUnsafeCharacters(str: string): string {
     .join('');
 }
 
-// String width caching for performance optimization
-//
-// NOTE: This cache must be bounded. Long-running sessions can produce an
-// unbounded stream of unique strings (especially during streaming rendering),
-// which would otherwise retain memory indefinitely.
-export const MAX_STRING_WIDTH_CACHE_ENTRIES = 2048;
-const stringWidthCache = new Map<string, number>();
+const stringWidthCache = new LruCache<string, number>(
+  LRU_BUFFER_PERF_CACHE_LIMIT,
+);
 
 export const getStringWidthCacheSize = (): number => stringWidthCache.size;
 
-function touchCacheKey(key: string, value: number): void {
-  // Map preserves insertion order; delete+set moves key to the end.
-  stringWidthCache.delete(key);
-  stringWidthCache.set(key, value);
-}
-
-function ensureCacheCapacity(): void {
-  while (stringWidthCache.size > MAX_STRING_WIDTH_CACHE_ENTRIES) {
-    const oldestKey = stringWidthCache.keys().next().value;
-    if (oldestKey === undefined) {
-      return;
-    }
-    stringWidthCache.delete(oldestKey);
-  }
-}
-
 /**
- * Cached version of stringWidth function for better performance.
- *
- * This is intentionally bounded to prevent memory leaks in long-running
- * interactive sessions.
+ * Cached version of stringWidth function for better performance
  */
 export const getCachedStringWidth = (str: string): number => {
-  // ASCII printable chars have width 1 and are extremely common. Avoid caching
-  // them entirely to keep the cache focused on expensive cases.
-  if (/^[\x20-\x7E]*$/.test(str)) {
-    return str.length;
+  // ASCII printable chars (32-126) have width 1.
+  // This is a very frequent path, so we use a fast numeric check.
+  if (str.length === 1) {
+    const code = str.charCodeAt(0);
+    if (code >= 0x20 && code <= 0x7e) {
+      return 1;
+    }
   }
 
   const cached = stringWidthCache.get(str);
   if (cached !== undefined) {
-    touchCacheKey(str, cached);
     return cached;
   }
 
@@ -145,7 +157,6 @@ export const getCachedStringWidth = (str: string): number => {
   }
 
   stringWidthCache.set(str, width);
-  ensureCacheCapacity();
 
   return width;
 };

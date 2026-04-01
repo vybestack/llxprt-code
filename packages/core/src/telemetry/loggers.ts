@@ -16,6 +16,7 @@ import {
   EVENT_API_REQUEST,
   EVENT_API_RESPONSE,
   EVENT_CLI_CONFIG,
+  EVENT_HOOK_CALL,
   EVENT_TOOL_CALL,
   EVENT_USER_PROMPT,
   EVENT_NEXT_SPEAKER_CHECK,
@@ -34,6 +35,7 @@ import type {
   ApiErrorEvent,
   ApiRequestEvent,
   ApiResponseEvent,
+  HookCallEvent,
   StartSessionEvent,
   ToolCallEvent,
   UserPromptEvent,
@@ -195,6 +197,26 @@ export function logToolCall(
     event.decision,
     event.tool_type,
   );
+}
+
+export function logHookCall(config: Config, event: HookCallEvent): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    ...event,
+    'event.name': EVENT_HOOK_CALL,
+    'event.timestamp': new Date().toISOString(),
+    hook_input: safeJsonStringify(event.hook_input),
+    hook_output: safeJsonStringify(event.hook_output),
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Hook call: ${event.hook_event_name}. Success: ${event.success}. Duration: ${event.duration_ms}ms.`,
+    attributes,
+  };
+  logger.emit(logRecord);
 }
 
 export function logToolOutputTruncated(

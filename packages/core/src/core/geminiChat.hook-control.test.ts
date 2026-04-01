@@ -6,7 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
-import type { HookSystem } from '../hooks/HookSystem.js';
+import { HookSystem } from '../hooks/HookSystem.js';
+import { BeforeModelHookOutput, AfterModelHookOutput } from '../hooks/types.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -34,11 +35,10 @@ describe('GeminiChat hook execution control', () => {
     mockHookSystem = {
       trigger: vi.fn(),
       initialize: vi.fn().mockResolvedValue(undefined),
-      fireBeforeModelEvent: vi.fn().mockResolvedValue({ finalOutput: {} }),
-      fireAfterModelEvent: vi.fn().mockResolvedValue({ finalOutput: {} }),
-      fireBeforeToolSelectionEvent: vi
-        .fn()
-        .mockResolvedValue({ finalOutput: {} }),
+      isInitialized: vi.fn().mockReturnValue(true),
+      fireBeforeModelEvent: vi.fn().mockResolvedValue(undefined),
+      fireAfterModelEvent: vi.fn().mockResolvedValue(undefined),
+      fireBeforeToolSelectionEvent: vi.fn().mockResolvedValue(undefined),
     } as unknown as HookSystem;
 
     mockProvider = {
@@ -59,6 +59,7 @@ describe('GeminiChat hook execution control', () => {
 
     const runtimeSetup = createGeminiChatRuntime({
       provider: mockProvider,
+      providerManager,
       configOverrides: {
         getHookSystem: vi.fn(() => mockHookSystem),
         getEnableHooks: vi.fn(() => true),
@@ -70,7 +71,6 @@ describe('GeminiChat hook execution control', () => {
         getEphemeralSetting: vi.fn(),
         getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
-      providerManager,
     });
 
     const mockConfig = runtimeSetup.config;
@@ -127,12 +127,12 @@ describe('GeminiChat hook execution control', () => {
       // Mock BeforeModel hook to return stop
       (
         mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValueOnce({
-        finalOutput: {
+      ).mockResolvedValueOnce(
+        new BeforeModelHookOutput({
           continue: false,
           stopReason: 'BeforeModel stopped execution',
-        },
-      });
+        }),
+      );
 
       const events: Array<{ type: string; reason?: string }> = [];
       const stream = await chat.sendMessageStream(
@@ -148,7 +148,7 @@ describe('GeminiChat hook execution control', () => {
       }
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toStrictEqual({
+      expect(events[0]).toEqual({
         type: StreamEventType.AGENT_EXECUTION_STOPPED,
         reason: 'BeforeModel stopped execution',
       });
@@ -159,8 +159,8 @@ describe('GeminiChat hook execution control', () => {
     it('should emit blocked event then chunk when BeforeModel hook blocks with synthetic response', async () => {
       (
         mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValueOnce({
-        finalOutput: {
+      ).mockResolvedValueOnce(
+        new BeforeModelHookOutput({
           decision: 'block',
           reason: 'BeforeModel blocked execution',
           hookSpecificOutput: {
@@ -176,8 +176,8 @@ describe('GeminiChat hook execution control', () => {
               ],
             },
           },
-        },
-      });
+        }),
+      );
 
       const events: Array<{ type: string; reason?: string; value?: unknown }> =
         [];
@@ -195,7 +195,7 @@ describe('GeminiChat hook execution control', () => {
       }
 
       expect(events).toHaveLength(2);
-      expect(events[0]).toStrictEqual({
+      expect(events[0]).toEqual({
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
         reason: 'BeforeModel blocked execution',
         value: undefined,
@@ -220,12 +220,12 @@ describe('GeminiChat hook execution control', () => {
       // Mock AfterModel hook to return stop
       (
         mockHookSystem.fireAfterModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        finalOutput: {
+      ).mockResolvedValue(
+        new AfterModelHookOutput({
           continue: false,
           stopReason: 'AfterModel stopped execution',
-        },
-      });
+        }),
+      );
 
       const events: Array<{ type: string; reason?: string }> = [];
       const stream = await chat.sendMessageStream(
@@ -262,12 +262,12 @@ describe('GeminiChat hook execution control', () => {
       // Mock AfterModel hook to return block
       (
         mockHookSystem.fireAfterModelEvent as ReturnType<typeof vi.fn>
-      ).mockResolvedValue({
-        finalOutput: {
+      ).mockResolvedValue(
+        new AfterModelHookOutput({
           decision: 'block',
           reason: 'AfterModel blocked execution',
-        },
-      });
+        }),
+      );
 
       const events: Array<{ type: string; reason?: string; value?: unknown }> =
         [];
@@ -303,12 +303,10 @@ describe('GeminiChat hook execution control', () => {
         mockHookSystem.fireBeforeModelEvent as ReturnType<typeof vi.fn>
       ).mockImplementation(async () => {
         triggerCount++;
-        return {
-          finalOutput: {
-            continue: false,
-            stopReason: 'Stop on first attempt',
-          },
-        };
+        return new BeforeModelHookOutput({
+          continue: false,
+          stopReason: 'Stop on first attempt',
+        });
       });
 
       const events: Array<{ type: string }> = [];

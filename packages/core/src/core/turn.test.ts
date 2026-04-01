@@ -771,5 +771,96 @@ describe('Turn', () => {
         'Custom block reason',
       );
     });
+
+    it('should propagate contextCleared=true in AgentExecutionStopped event', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_STOPPED,
+          reason: 'Hook stopped execution',
+          contextCleared: true,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+      expect(events).toHaveLength(1);
+      const stoppedEvent = events[0] as {
+        type: string;
+        reason: string;
+        contextCleared?: boolean;
+      };
+      expect(stoppedEvent.type).toBe(GeminiEventType.AgentExecutionStopped);
+      expect(stoppedEvent.reason).toBe('Hook stopped execution');
+      expect(stoppedEvent.contextCleared).toBe(true);
+    });
+
+    it('should propagate contextCleared=true in AgentExecutionBlocked event', async () => {
+      const resp = {
+        candidates: [
+          {
+            content: { parts: [{ text: 'Response after block' }] },
+            finishReason: 'STOP' as FinishReason,
+          },
+        ],
+      } as GenerateContentResponse;
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_BLOCKED,
+          reason: 'Hook blocked execution',
+          contextCleared: true,
+        };
+        yield { type: StreamEventType.CHUNK, value: resp };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+      const blockedEvent = events.find(
+        (e) => e.type === GeminiEventType.AgentExecutionBlocked,
+      ) as {
+        type: string;
+        reason: string;
+        contextCleared?: boolean;
+      };
+      expect(blockedEvent).toBeDefined();
+      expect(blockedEvent.reason).toBe('Hook blocked execution');
+      expect(blockedEvent.contextCleared).toBe(true);
+    });
+
+    it('should propagate contextCleared=false when not set in AgentExecutionStopped', async () => {
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.AGENT_EXECUTION_STOPPED,
+          reason: 'Hook stopped execution',
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+      const reqParts: Part[] = [{ text: 'test message' }];
+      const events: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+      const stoppedEvent = events[0] as {
+        type: string;
+        reason: string;
+        contextCleared?: boolean;
+      };
+      expect(stoppedEvent.type).toBe(GeminiEventType.AgentExecutionStopped);
+      expect(stoppedEvent.contextCleared).toBeUndefined();
+    });
   });
 });

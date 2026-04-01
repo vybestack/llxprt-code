@@ -6,11 +6,12 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
-  type Config,
-  type GeminiClient,
-  type EditorType,
-  type ThoughtSummary,
+  Config,
+  GeminiClient,
+  EditorType,
+  ThoughtSummary,
   EmojiFilter,
+  MCPDiscoveryState,
   type EmojiFilterMode,
   type ThinkingBlock,
   GitService,
@@ -18,27 +19,27 @@ import {
   type MessageBus,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import type { PartListUnion } from '@google/genai';
-import type { LoadedSettings } from '../../../config/settings.js';
+import { type PartListUnion } from '@google/genai';
+import { LoadedSettings } from '../../../config/settings.js';
 import {
   StreamingState,
-  type HistoryItem,
-  type HistoryItemWithoutId,
+  HistoryItem,
+  HistoryItemWithoutId,
   MessageType,
-  type SlashCommandProcessorResult,
+  SlashCommandProcessorResult,
 } from '../../types.js';
 import { isSlashCommand } from '../../utils/commandUtils.js';
 import { useShellCommandProcessor } from '../shellCommandProcessor.js';
 import { useStateAndRef } from '../useStateAndRef.js';
-import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
+import { UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { useLogger } from '../useLogger.js';
 import {
   useReactToolScheduler,
-  mapToDisplay as mapTrackedToolCallsToDisplay,
-  type TrackedToolCall,
-  type TrackedCompletedToolCall,
-  type TrackedCancelledToolCall,
+  TrackedToolCall,
+  TrackedCompletedToolCall,
+  TrackedCancelledToolCall,
 } from '../useReactToolScheduler.js';
+import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import { useSessionStats } from '../../contexts/SessionContext.js';
 import { useKeypress, type Key } from '../useKeypress.js';
 import {
@@ -146,7 +147,7 @@ export const useGeminiStream = (
 
   const sanitizeContent = useCallback(
     (text: string) => {
-      if (emojiFilter == null) {
+      if (!emojiFilter) {
         return {
           text,
           feedback: undefined as string | undefined,
@@ -178,7 +179,7 @@ export const useGeminiStream = (
   const flushPendingHistoryItem = useCallback(
     (timestamp: number) => {
       const pending = pendingHistoryItemRef.current;
-      if (pending == null) {
+      if (!pending) {
         return;
       }
 
@@ -243,7 +244,7 @@ export const useGeminiStream = (
     cancelAllToolCalls,
     lastToolOutputTime,
   ] = useReactToolScheduler(
-    async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
+    async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) {
         return;
       }
@@ -360,10 +361,10 @@ export const useGeminiStream = (
     }
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
-    if (abortControllerRef.current != null) {
+    if (abortControllerRef.current) {
       cancelAllToolCalls();
     }
-    if (pendingHistoryItemRef.current != null) {
+    if (pendingHistoryItemRef.current) {
       flushPendingHistoryItem(Date.now());
     }
     addItem(
@@ -409,7 +410,7 @@ export const useGeminiStream = (
     }
 
     const next = queuedSubmissionsRef.current.shift();
-    if (next == null) {
+    if (!next) {
       return;
     }
 
@@ -478,6 +479,31 @@ export const useGeminiStream = (
       }
 
       const trimmedStr = typeof query === 'string' ? query.trim() : '';
+
+      // Block non-slash queries while MCP discovery is in progress and servers exist.
+      // Slash commands are always allowed through.
+      const mcpManager = config.getMcpClientManager();
+      const discoveryState = mcpManager?.getDiscoveryState();
+      const configuredMcpServers = mcpManager
+        ? Object.keys(config.getMcpServers() ?? {}).length
+        : 0;
+      if (
+        !options?.isContinuation &&
+        trimmedStr &&
+        !isSlashCommand(trimmedStr) &&
+        configuredMcpServers > 0 &&
+        discoveryState !== MCPDiscoveryState.COMPLETED
+      ) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Waiting for MCP servers to initialize... Slash commands are still available.',
+          },
+          Date.now(),
+        );
+        return;
+      }
+
       if (
         trimmedStr &&
         !options?.isContinuation &&
@@ -519,7 +545,7 @@ export const useGeminiStream = (
           abortSignal,
         );
         if (status === StreamProcessingStatus.UserCancelled) return;
-        if (pendingHistoryItemRef.current != null) {
+        if (pendingHistoryItemRef.current) {
           flushPendingHistoryItem(userMessageTimestamp);
           setPendingHistoryItem(null);
         }

@@ -19,6 +19,8 @@ export class ProviderPerformanceTracker {
     completionTimestamp: number;
     tokenCount: number;
   }>;
+  private totalGenerationTimeMs = 0;
+  private totalTokensWithMeasuredTime = 0;
   private logger: DebugLogger;
 
   constructor(private providerName: string) {
@@ -80,7 +82,10 @@ export class ProviderPerformanceTracker {
     }
 
     if (totalTime > 0) {
-      this.metrics.tokensPerSecond = tokenCount / (totalTime / 1000);
+      this.totalGenerationTimeMs += totalTime;
+      this.totalTokensWithMeasuredTime += tokenCount;
+      this.metrics.tokensPerSecond =
+        this.totalTokensWithMeasuredTime / (this.totalGenerationTimeMs / 1000);
     }
 
     this.metrics.chunksReceived = chunkCount;
@@ -97,7 +102,20 @@ export class ProviderPerformanceTracker {
   /**
    * Record an error that occurred during request
    */
-  recordError(duration: number, error: string): void {
+  recordError(
+    duration: number,
+    error: string,
+    timeToFirstToken?: number | null,
+    chunkCount?: number,
+  ): void {
+    if (timeToFirstToken !== undefined && timeToFirstToken !== null) {
+      this.metrics.timeToFirstToken = timeToFirstToken;
+    }
+
+    if (chunkCount !== undefined) {
+      this.metrics.chunksReceived = chunkCount;
+    }
+
     this.metrics.errors.push({
       timestamp: Date.now(),
       error: error.substring(0, 200),
@@ -133,6 +151,8 @@ export class ProviderPerformanceTracker {
   reset(): void {
     this.metrics = this.initializeMetrics();
     this.tokenTimestamps = [];
+    this.totalGenerationTimeMs = 0;
+    this.totalTokensWithMeasuredTime = 0;
   }
 
   /**

@@ -22,7 +22,7 @@ describe('settings-validation', () => {
     });
 
     it('should accept valid flat boolean setting', () => {
-      const validSettings = { disableAutoUpdate: false };
+      const validSettings = { enableAutoUpdate: false };
       const result = validateSettings(validSettings);
       expect(result.success).toBe(true);
     });
@@ -96,7 +96,7 @@ describe('settings-validation', () => {
 
     it('should accept complex valid settings', () => {
       const validSettings = {
-        disableAutoUpdate: false,
+        enableAutoUpdate: false,
         ui: {
           theme: 'DefaultDark',
           hideWindowTitle: true,
@@ -106,7 +106,7 @@ describe('settings-validation', () => {
           server1: { command: 'node', args: ['index.js'] },
         },
         accessibility: {
-          disableLoadingPhrases: true,
+          enableLoadingPhrases: true,
           screenReader: false,
         },
       };
@@ -117,14 +117,12 @@ describe('settings-validation', () => {
 
   describe('validateSettings - invalid types', () => {
     it('should reject string instead of boolean', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      if (result.error != null) {
-        expect(result.error.issues[0]?.path).toStrictEqual([
-          'disableAutoUpdate',
-        ]);
+      if (result.error) {
+        expect(result.error.issues[0]?.path).toEqual(['enableAutoUpdate']);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
     });
@@ -134,10 +132,8 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
-      if (result.error != null) {
-        expect(result.error.issues[0]?.path).toStrictEqual([
-          'mcpServerCommand',
-        ]);
+      if (result.error) {
+        expect(result.error.issues[0]?.path).toEqual(['mcpServerCommand']);
         expect(result.error.issues[0]?.code).toBe('invalid_type');
       }
     });
@@ -156,7 +152,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
+      if (result.error) {
         expect(result.error.issues[0]?.path).toContain('args');
         expect(result.error.issues[0]?.path).toContain(1);
       }
@@ -176,8 +172,8 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: 'invalid' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
-        expect(result.error.issues[0]?.path).toStrictEqual(['ui']);
+      if (result.error) {
+        expect(result.error.issues[0]?.path).toEqual(['ui']);
       }
     });
 
@@ -185,8 +181,8 @@ describe('settings-validation', () => {
       const invalidSettings = { ui: { theme: 123 } };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
-        expect(result.error.issues[0]?.path).toStrictEqual(['ui', 'theme']);
+      if (result.error) {
+        expect(result.error.issues[0]?.path).toEqual(['ui', 'theme']);
       }
     });
 
@@ -196,8 +192,8 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
-        expect(result.error.issues[0]?.path).toStrictEqual([
+      if (result.error) {
+        expect(result.error.issues[0]?.path).toEqual([
           'ui',
           'footer',
           'hideCWD',
@@ -216,7 +212,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
+      if (result.error) {
         const issue = result.error.issues.find((i) =>
           i.path.includes('command'),
         );
@@ -232,27 +228,27 @@ describe('settings-validation', () => {
     });
 
     it('should reject null value for required type', () => {
-      const invalidSettings = { disableAutoUpdate: null };
+      const invalidSettings = { enableAutoUpdate: null };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
     });
 
     it('should allow undefined (all fields optional)', () => {
       // This test verifies that undefined is acceptable (not an error)
-      const settingsWithUndefined = { disableAutoUpdate: undefined };
+      const settingsWithUndefined = { enableAutoUpdate: undefined };
       const result = validateSettings(settingsWithUndefined);
       expect(result.success).toBe(true);
     });
 
     it('should reject multiple type errors in one settings object', () => {
       const invalidSettings = {
-        disableAutoUpdate: 'yes',
+        enableAutoUpdate: 'yes',
         ptyScrollbackLimit: 'not-a-number',
         allowedTools: [123, 456],
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
+      if (result.error) {
         expect(result.error.issues.length).toBeGreaterThan(1);
       }
     });
@@ -325,7 +321,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
+      if (result.error) {
         const issue = result.error.issues.find(
           (i) => i.code === 'invalid_type' && i.message.includes('Required'),
         );
@@ -345,7 +341,7 @@ describe('settings-validation', () => {
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
-      if (result.error != null) {
+      if (result.error) {
         const issue = result.error.issues.find((i) => i.path.includes('env'));
         expect(issue).toBeDefined();
       }
@@ -501,18 +497,18 @@ describe('settings-validation', () => {
 
   describe('formatValidationError', () => {
     it('should format error with file path and helpful message', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(
           result.error,
           '/path/to/settings.json',
         );
 
         expect(formatted).toContain('/path/to/settings.json');
-        expect(formatted).toContain('disableAutoUpdate');
+        expect(formatted).toContain('enableAutoUpdate');
         expect(formatted).toContain('Expected:');
         expect(formatted).toContain('but received:');
         expect(formatted).toContain(
@@ -526,7 +522,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('ui.theme');
       }
@@ -541,7 +537,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('args');
         expect(formatted).toContain('[1]');
@@ -557,7 +553,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('mcpServers');
         expect(formatted).toContain('command');
@@ -565,11 +561,11 @@ describe('settings-validation', () => {
     });
 
     it('should include expected vs received for invalid_type errors', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('Expected: boolean');
         expect(formatted).toContain('but received: string');
@@ -578,15 +574,15 @@ describe('settings-validation', () => {
 
     it('should list all validation errors when multiple exist', () => {
       const invalidSettings = {
-        disableAutoUpdate: 'yes',
+        enableAutoUpdate: 'yes',
         ptyScrollbackLimit: 'not-a-number',
       };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
-        expect(formatted).toContain('disableAutoUpdate');
+        expect(formatted).toContain('enableAutoUpdate');
         expect(formatted).toContain('ptyScrollbackLimit');
       }
     });
@@ -600,7 +596,7 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('args');
         expect(formatted).toContain('[0]');
@@ -612,11 +608,11 @@ describe('settings-validation', () => {
     });
 
     it('should include documentation link', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('https://');
         expect(formatted).toContain('configuration');
@@ -629,18 +625,18 @@ describe('settings-validation', () => {
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(result.error, 'settings.json');
         expect(formatted).toContain('Error in: ui');
       }
     });
 
     it('should use proper formatting for settings file path', () => {
-      const invalidSettings = { disableAutoUpdate: 'yes' };
+      const invalidSettings = { enableAutoUpdate: 'yes' };
       const result = validateSettings(invalidSettings);
       expect(result.success).toBe(false);
 
-      if (result.error != null) {
+      if (result.error) {
         const formatted = formatValidationError(
           result.error,
           '~/.llxprt/settings.json',

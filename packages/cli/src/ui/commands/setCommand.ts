@@ -126,6 +126,42 @@ const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
 const directSettingLiterals = directSettingSpecs.map(createSettingLiteral);
 const directSettingKeys = new Set(directSettingSpecs.map((spec) => spec.value));
 
+const modelParamSchemaNext: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'param-name',
+    description: 'parameter name',
+    hint: 'parameter name',
+    options: commonParamOptions,
+    completer: async (ctx, partial) => {
+      const enableFuzzy = getFuzzyEnabled(ctx);
+      const modelParams = getRuntimeApi().getActiveModelParams();
+      if (modelParams && Object.keys(modelParams).length > 0) {
+        const paramNames = Object.keys(modelParams);
+        const matches = filterStrings(paramNames, partial, { enableFuzzy });
+        if (matches.length > 0) {
+          return matches.map((name) => ({
+            value: name,
+            description: `Parameter: ${name}`,
+          }));
+        }
+      }
+
+      return filterCompletions(commonParamOptions, partial, {
+        enableFuzzy,
+      });
+    },
+    next: [
+      {
+        kind: 'value',
+        name: 'param-value',
+        description: 'model parameter value',
+        hint: 'value to set for the parameter (number, string, boolean, or JSON)',
+      },
+    ],
+  },
+];
+
 // Stryker disable StringLiteral -- literal descriptions are static UX copy verified via interaction tests.
 const setSchema: CommandArgumentSchema = [
   {
@@ -219,45 +255,7 @@ const setSchema: CommandArgumentSchema = [
     value: 'modelparam',
     description: 'Model parameter option',
     stopPropagation: true,
-    next: [
-      {
-        kind: 'value',
-        name: 'param-name',
-        description: 'parameter name',
-        hint: 'parameter name',
-        // Static options for deep path completion flattening
-        options: commonParamOptions,
-        // Dynamic completer also checks active model params at runtime
-        completer: async (ctx, partial) => {
-          const enableFuzzy = getFuzzyEnabled(ctx);
-          // First check for active model params (dynamic)
-          const modelParams = getRuntimeApi().getActiveModelParams();
-          if (modelParams && Object.keys(modelParams).length > 0) {
-            const paramNames = Object.keys(modelParams);
-            const matches = filterStrings(paramNames, partial, { enableFuzzy });
-            if (matches.length > 0) {
-              return matches.map((name) => ({
-                value: name,
-                description: `Parameter: ${name}`,
-              }));
-            }
-          }
-
-          // Fall back to common params (same as static options)
-          return filterCompletions(commonParamOptions, partial, {
-            enableFuzzy,
-          });
-        },
-        next: [
-          {
-            kind: 'value',
-            name: 'param-value',
-            description: 'model parameter value',
-            hint: 'value to set for the parameter (number, string, boolean, or JSON)',
-          },
-        ],
-      },
-    ],
+    next: modelParamSchemaNext,
   },
   {
     kind: 'literal',
@@ -445,6 +443,7 @@ export const setCommand: SlashCommand = {
 
         try {
           runtime.clearActiveModelParam(subKey);
+          runtime.setEphemeralSetting(subKey, undefined);
         } catch (error) {
           return {
             type: 'message',

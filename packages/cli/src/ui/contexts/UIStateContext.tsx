@@ -25,7 +25,7 @@ import type {
   GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
-import type { ShellConfirmationRequest } from '../components/ShellConfirmationDialog.js';
+
 import type { LoadedSettings } from '../../config/settings.js';
 import type { WelcomeState, ModelInfo } from '../hooks/useWelcomeOnboarding.js';
 import type { SubagentView } from '../components/SubagentManagement/types.js';
@@ -87,6 +87,7 @@ export interface UIState {
   providerOptions: string[];
   selectedProvider: string;
   currentModel: string;
+  contextLimit: number | undefined;
   profiles: string[];
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: AnyDeclarativeTool[];
@@ -127,7 +128,6 @@ export interface UIState {
   profileDialogLoading: boolean;
 
   // Confirmation requests
-  shellConfirmationRequest: ShellConfirmationRequest | null;
   confirmationRequest: {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;

@@ -144,6 +144,117 @@ describe('ProactiveRenewalManager – cross-process refresh safety', () => {
       expect(provider.refreshToken).not.toHaveBeenCalled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // CR-03: Lock timeout with disk-read detection
+  // ---------------------------------------------------------------------------
+
+  describe('lock timeout – disk-read detection', () => {
+    it('reads from disk and reschedules when lock times out and token was refreshed externally', async () => {
+      const originalToken = makeToken('access-A', 'refresh-R1', 600);
+      manager.scheduleProactiveRenewal('anthropic', 'default', originalToken);
+
+      // Lock acquisition times out (another process holds it)
+      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(false);
+
+      // Another process already refreshed the token while holding the lock
+      const externallyRefreshedToken = makeToken(
+        'access-B',
+        'refresh-R2',
+        3600,
+      );
+      vi.mocked(tokenStore.getToken).mockResolvedValue(
+        externallyRefreshedToken,
+      );
+
+      await manager.runProactiveRenewal('anthropic', 'default');
+
+      // Should NOT attempt to refresh — another process did it
+      expect(provider.refreshToken).not.toHaveBeenCalled();
+      // Lock should not have been released (we never acquired it)
+      expect(tokenStore.releaseRefreshLock).not.toHaveBeenCalled();
+      // Token should NOT have been saved (we didn't refresh)
+      expect(tokenStore.saveToken).not.toHaveBeenCalled();
+
+      // Verify rescheduling: a retry would fire within the backoff window
+      // (~30-65s). A fresh schedule based on the new 3600s expiry fires much
+      // later. Advance past the retry backoff window and confirm no refresh
+      // attempt was made (timer was rescheduled for the new token's expiry).
+      vi.advanceTimersByTime(65 * 1000);
+      await vi.runAllTimersAsync();
+
+      // No refreshToken call — the timer hasn't fired yet because it was
+      // rescheduled based on the externally-refreshed token's 3600s expiry
+      expect(provider.refreshToken).not.toHaveBeenCalled();
+    });
+
+    it('schedules retry when lock times out and token unchanged on disk', async () => {
+      const originalToken = makeToken('access-A', 'refresh-R1', 600);
+      manager.scheduleProactiveRenewal('anthropic', 'default', originalToken);
+
+      // Lock acquisition times out
+      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(false);
+
+      // Token on disk is unchanged — no other process refreshed it
+      vi.mocked(tokenStore.getToken).mockResolvedValue(
+        makeToken('access-A', 'refresh-R1', 600),
+      );
+
+      await manager.runProactiveRenewal('anthropic', 'default');
+
+      // Should NOT attempt to refresh (we couldn't acquire the lock)
+      expect(provider.refreshToken).not.toHaveBeenCalled();
+
+      // Now allow lock to succeed on retry to verify the retry was scheduled
+      vi.mocked(tokenStore.acquireRefreshLock).mockResolvedValue(true);
+      const refreshedToken = makeToken('access-B', 'refresh-R2', 3600);
+      vi.mocked(provider.refreshToken).mockResolvedValue(refreshedToken);
+      // Disk still has original token at retry time
+      vi.mocked(tokenStore.getToken).mockResolvedValue(
+        makeToken('access-A', 'refresh-R1', 600),
+      );
+
+      // Advance timers to trigger retry (backoff starts at ~30s)
+      vi.advanceTimersByTime(65 * 1000);
+      await vi.runAllTimersAsync();
+
+      // On retry, lock was acquired and refresh was attempted
+      expect(provider.refreshToken).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // CR-04: No refresh_token fallthrough (proactive renewal path)
+  // ---------------------------------------------------------------------------
+
+  describe('no refresh_token fallthrough', () => {
+    it('skips refresh and clears state when token has no refresh_token', async () => {
+      // scheduleProactiveRenewal should return early — no timer set
+      const tokenNoRefresh: OAuthToken = {
+        access_token: 'access-A',
+        refresh_token: '',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 600,
+      };
+      manager.scheduleProactiveRenewal('anthropic', 'default', tokenNoRefresh);
+
+      // Also test runProactiveRenewal when disk token has no refresh_token:
+      // set up as if a renewal timer fires but disk token lost its refresh_token
+      const tokenWithRefresh = makeToken('access-A', 'refresh-R1', 600);
+      manager.scheduleProactiveRenewal(
+        'anthropic',
+        'default',
+        tokenWithRefresh,
+      );
+
+      const diskTokenNoRefresh = makeExpiredToken('access-A', '');
+      vi.mocked(tokenStore.getToken).mockResolvedValue(diskTokenNoRefresh);
+
+      await manager.runProactiveRenewal('anthropic', 'default');
+
+      expect(provider.refreshToken).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('executeTokenRefresh – refresh_token guard', () => {
@@ -211,5 +322,32 @@ describe('executeTokenRefresh – refresh_token guard', () => {
 
     expect(provider.refreshToken).toHaveBeenCalledTimes(1);
     expect(result?.access_token).toBe('access-B');
+  });
+
+  it('returns null when disk token has no refresh_token', async () => {
+    const originalToken = makeExpiredToken('access-A', 'refresh-R1');
+    const diskTokenNoRefresh: OAuthToken = {
+      access_token: 'access-A',
+      refresh_token: undefined,
+      token_type: 'Bearer',
+      expiry: Math.floor(Date.now() / 1000) - 60,
+    };
+
+    vi.mocked(tokenStore.getToken).mockResolvedValue(diskTokenNoRefresh);
+
+    const result = await executeTokenRefresh(
+      'anthropic',
+      'default',
+      originalToken,
+      Math.floor(Date.now() / 1000) + 30,
+      tokenStore,
+      providerRegistry as ProviderRegistry,
+      renewalManager,
+    );
+
+    // Should NOT call refreshToken (disk token has no refresh_token)
+    expect(provider.refreshToken).not.toHaveBeenCalled();
+    // Should return null
+    expect(result).toBeNull();
   });
 });

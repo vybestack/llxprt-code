@@ -7,7 +7,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseAndFormatApiError } from './errorParsing.js';
 import { isProQuotaExceededError } from './quotaErrorDetection.js';
-import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
 import type { StructuredError } from '../core/turn.js';
 import { STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
@@ -21,50 +20,49 @@ describe('parseAndFormatApiError', () => {
     expect(parseAndFormatApiError(errorMessage)).toBe(expected);
   });
 
-  it('should format a 429 API error with the default message', () => {
+  it('should format a 429 API error with provider-neutral rate limit message', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
     );
-    expect(result).toContain(
-      'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
-    );
+    expect(result).toContain('Rate limit exceeded. Please wait a moment');
+    expect(result).toContain('/model to switch to a different model');
+    expect(result).not.toContain('Switching to the');
+    expect(result).not.toContain('Gemini Code Assist');
+    expect(result).not.toContain('AI Studio');
   });
 
-  it('should format a 429 API error with the personal message', () => {
+  it('should not mention flash model fallback in 429 errors', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
     );
-    expect(result).toContain(
-      'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
-    );
+    expect(result).not.toContain('gemini-2.5-flash');
+    expect(result).not.toContain('Switching to the');
   });
 
-  it('should format a 429 API error with the vertex message', () => {
+  it('should format a 429 API error without fallback model reference', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(errorMessage);
     expect(result).toContain(
       '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
     );
-    expect(result).toContain(
-      'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
-    );
+    expect(result).toContain('Rate limit exceeded. Please wait a moment');
+    expect(result).not.toContain('Switching to the');
+    expect(result).not.toContain('gemini-2.5-flash');
   });
 
   it('should return the original message if it is not a JSON error', () => {
@@ -108,7 +106,8 @@ describe('parseAndFormatApiError', () => {
 
     const result = parseAndFormatApiError(errorMessage);
     expect(result).toContain('Gemini 2.5 Pro Preview');
-    expect(result).toContain('Switching to the gemini-2.5-flash model');
+    expect(result).toContain('Rate limit exceeded. Please wait a moment');
+    expect(result).not.toContain('Switching to the');
   });
 
   it('should format a StructuredError', () => {
@@ -120,16 +119,17 @@ describe('parseAndFormatApiError', () => {
     expect(parseAndFormatApiError(error)).toBe(expected);
   });
 
-  it('should format a 429 StructuredError with the vertex message', () => {
+  it('should format a 429 StructuredError with provider-neutral message', () => {
     const error: StructuredError = {
       message: 'Rate limit exceeded',
       status: 429,
     };
     const result = parseAndFormatApiError(error);
     expect(result).toContain('[API Error: Rate limit exceeded (Status: 429)]');
-    expect(result).toContain(
-      'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
-    );
+    expect(result).toContain('Rate limit exceeded. Please wait a moment');
+    expect(result).not.toContain('Switching to the');
+    expect(result).not.toContain('gemini-2.5-flash');
+    expect(result).not.toContain('Gemini Code Assist');
   });
 
   it('should handle an unknown error type', () => {
@@ -165,7 +165,6 @@ describe('parseAndFormatApiError', () => {
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       "[API Error: Quota exceeded for quota metric 'Gemini 2.5 Pro Requests'",
@@ -176,26 +175,26 @@ describe('parseAndFormatApiError', () => {
     expect(result).toContain(
       'For more information about authentication and quota limits, see',
     );
+    expect(result).not.toContain('Switching to the');
   });
 
-  it('should format a regular 429 API error with standard message for Google auth', () => {
+  it('should format a regular 429 API error with provider-neutral message for non-quota errors', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
     );
-    expect(result).toContain(
-      'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
-    );
+    expect(result).toContain('Rate limit exceeded. Please wait a moment');
+    expect(result).not.toContain('Switching to the');
     expect(result).not.toContain(
       'You have reached your daily gemini-2.5-pro quota limit',
     );
+    expect(result).not.toContain('Gemini Code Assist');
   });
 
   it('should format a 429 API error with generic quota exceeded message for Google auth', () => {
@@ -205,7 +204,6 @@ describe('parseAndFormatApiError', () => {
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       "[API Error: Quota exceeded for quota metric 'GenerationRequests'",
@@ -223,7 +221,6 @@ describe('parseAndFormatApiError', () => {
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       "[API Error: Quota exceeded for quota metric 'Gemini 2.5 Pro Requests'",
@@ -241,7 +238,6 @@ describe('parseAndFormatApiError', () => {
       errorMessage,
       UserTierId.STANDARD,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       "[API Error: Quota exceeded for quota metric 'Gemini 2.5 Pro Requests'",
@@ -255,6 +251,7 @@ describe('parseAndFormatApiError', () => {
     expect(result).not.toContain(
       'upgrade to a Gemini Code Assist Standard or Enterprise plan',
     );
+    expect(result).not.toContain('Switching to the');
   });
 
   it('should format a 429 API error with Pro quota exceeded message for Google auth', () => {
@@ -264,7 +261,6 @@ describe('parseAndFormatApiError', () => {
       errorMessage,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       "[API Error: Quota exceeded for quota metric 'Gemini 2.5 Pro Requests'",
@@ -278,6 +274,7 @@ describe('parseAndFormatApiError', () => {
     expect(result).not.toContain(
       'upgrade to a Gemini Code Assist Standard or Enterprise plan',
     );
+    expect(result).not.toContain('Switching to the');
   });
 
   it('should handle different Gemini 2.5 version strings in Pro quota exceeded errors', () => {
@@ -290,13 +287,11 @@ describe('parseAndFormatApiError', () => {
       errorMessage25,
       undefined,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     const resultPreview = parseAndFormatApiError(
       errorMessagePreview,
       undefined,
       'gemini-2.5-preview-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
 
     expect(result25).toContain(
@@ -311,6 +306,8 @@ describe('parseAndFormatApiError', () => {
     expect(resultPreview).toContain(
       'For more information about authentication and quota limits, see',
     );
+    expect(result25).not.toContain('Switching to the');
+    expect(resultPreview).not.toContain('Switching to the');
   });
 
   it('should not match non-Pro models with similar version strings', () => {
@@ -358,7 +355,6 @@ describe('parseAndFormatApiError', () => {
       errorMessage,
       UserTierId.STANDARD,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       "[API Error: Quota exceeded for quota metric 'GenerationRequests'",
@@ -372,23 +368,19 @@ describe('parseAndFormatApiError', () => {
     );
   });
 
-  it('should format a regular 429 API error with standard message for Google auth (Standard tier)', () => {
+  it('should format a regular 429 API error with provider-neutral message even for Standard tier', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(
       errorMessage,
       UserTierId.STANDARD,
       'gemini-2.5-pro',
-      DEFAULT_GEMINI_FLASH_MODEL,
     );
     expect(result).toContain(
       '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
     );
-    expect(result).toContain(
-      'We appreciate you for choosing Gemini Code Assist and the Gemini CLI',
-    );
-    expect(result).not.toContain(
-      'upgrade to a Gemini Code Assist Standard or Enterprise plan',
-    );
+    expect(result).toContain('Rate limit exceeded. Please wait a moment');
+    expect(result).not.toContain('Gemini Code Assist');
+    expect(result).not.toContain('Switching to the');
   });
 });

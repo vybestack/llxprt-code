@@ -26,6 +26,8 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 
 const debugLogger = new DebugLogger('llxprt:shell-parser');
 
+const PARSE_TIMEOUT_MICROS = 1000 * 1000; // 1 second
+
 // Type definitions for tree-sitter query results
 interface QueryCapture {
   name: string;
@@ -56,7 +58,7 @@ export function getInitializationError(): Error | null {
  * Safe to call multiple times - will return cached result.
  */
 export async function initializeParser(): Promise<boolean> {
-  if (parser != null && bashLanguage != null) {
+  if (parser && bashLanguage) {
     return true;
   }
 
@@ -105,13 +107,38 @@ export function isParserAvailable(): boolean {
 
 /**
  * Parse a shell command string and return the syntax tree.
- * Returns null if parser is not available.
+ * Returns null if parser is not available or if parsing times out.
  */
-export function parseShellCommand(command: string): Tree | null {
-  if (parser == null) {
+export function parseShellCommand(
+  command: string,
+  timeoutMicros: number = PARSE_TIMEOUT_MICROS,
+): Tree | null {
+  if (!parser || !command.trim()) {
     return null;
   }
-  return parser.parse(command);
+
+  const deadline = performance.now() + timeoutMicros / 1000;
+  let timedOut = false;
+
+  try {
+    const tree = parser.parse(command, null, {
+      progressCallback: () => {
+        if (performance.now() > deadline) {
+          timedOut = true;
+          return true as unknown as void; // Returning true cancels parsing
+        }
+      },
+    });
+
+    if (timedOut) {
+      debugLogger.error('Bash command parsing timed out for command:', command);
+      return null;
+    }
+
+    return tree;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -119,7 +146,7 @@ export function parseShellCommand(command: string): Tree | null {
  * This handles pipelines, command lists (&&, ||, ;), and subshells.
  */
 export function extractCommandNames(tree: Tree): string[] {
-  if (bashLanguage == null) {
+  if (!bashLanguage) {
     return [];
   }
 
@@ -187,7 +214,7 @@ function extractNameFromNode(node: Node): string | null {
   switch (node.type) {
     case 'command': {
       const nameNode = node.childForFieldName('name');
-      if (nameNode == null) {
+      if (!nameNode) {
         return null;
       }
       return normalizeCommandName(nameNode.text);
@@ -196,7 +223,7 @@ function extractNameFromNode(node: Node): string | null {
     case 'unset_command':
     case 'test_command': {
       const firstChild = node.child(0);
-      if (firstChild == null) {
+      if (!firstChild) {
         return null;
       }
       return normalizeCommandName(firstChild.text);
@@ -223,7 +250,7 @@ export function collectCommandDetails(
 
   while (stack.length > 0) {
     const current = stack.pop();
-    if (current == null) {
+    if (!current) {
       continue;
     }
 
@@ -238,7 +265,7 @@ export function collectCommandDetails(
     // Push children in reverse order so we process them left-to-right
     for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
       const child = current.namedChild(i);
-      if (child != null) {
+      if (child) {
         stack.push(child);
       }
     }
@@ -256,7 +283,7 @@ function hasPromptCommandTransform(root: Node): boolean {
 
   while (stack.length > 0) {
     const current = stack.pop();
-    if (current == null) {
+    if (!current) {
       continue;
     }
 
@@ -276,7 +303,7 @@ function hasPromptCommandTransform(root: Node): boolean {
 
     for (let i = current.namedChildCount - 1; i >= 0; i -= 1) {
       const child = current.namedChild(i);
-      if (child != null) {
+      if (child) {
         stack.push(child);
       }
     }
@@ -292,13 +319,13 @@ function hasPromptCommandTransform(root: Node): boolean {
 export function parseCommandDetails(
   command: string,
 ): CommandParseResult | null {
-  if (parser == null || bashLanguage == null) {
+  if (!parser || !bashLanguage) {
     return null;
   }
 
   try {
-    const tree = parser.parse(command);
-    if (tree == null) {
+    const tree = parseShellCommand(command);
+    if (!tree) {
       return { details: [], hasError: true };
     }
 
@@ -348,7 +375,7 @@ export function parseCommandDetails(
  * - <() process substitution
  */
 export function hasCommandSubstitution(tree: Tree): boolean {
-  if (bashLanguage == null) {
+  if (!bashLanguage) {
     return false;
   }
 
@@ -399,7 +426,7 @@ export function splitCommandsWithTree(
         if (splitOnPipes) {
           // Recurse into pipeline children to get individual commands
           for (const child of node.children) {
-            if (child != null) extractCommands(child);
+            if (child) extractCommands(child);
           }
         } else {
           // Treat pipeline as atomic for instrumentation
@@ -409,18 +436,18 @@ export function splitCommandsWithTree(
       case 'list':
         // Lists are command chains (&&, ||, ;) - recurse into children
         for (const child of node.children) {
-          if (child != null) extractCommands(child);
+          if (child) extractCommands(child);
         }
         break;
       case 'program':
         for (const child of node.children) {
-          if (child != null) extractCommands(child);
+          if (child) extractCommands(child);
         }
         break;
       default:
         // For other node types, check children
         for (const child of node.children) {
-          if (child != null) extractCommands(child);
+          if (child) extractCommands(child);
         }
     }
   }

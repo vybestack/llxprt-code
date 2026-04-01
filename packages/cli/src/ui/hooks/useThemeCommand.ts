@@ -6,11 +6,11 @@
 
 import { useCallback, useEffect } from 'react';
 import { themeManager } from '../themes/theme-manager.js';
-import type { LoadedSettings, SettingScope } from '../../config/settings.js'; // Import LoadedSettings, AppSettings, MergedSetting
+import { LoadedSettings, SettingScope } from '../../config/settings.js'; // Import LoadedSettings, AppSettings, MergedSetting
 import { type HistoryItem, MessageType } from '../types.js';
 import process from 'node:process';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import type { AppState } from '../reducers/appReducer.js';
+import { AppState } from '../reducers/appReducer.js';
 
 interface UseThemeCommandReturn {
   isThemeDialogOpen: boolean;
@@ -28,7 +28,7 @@ export const useThemeCommand = (
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
 ): UseThemeCommandReturn => {
   // Determine the effective theme
-  const effectiveTheme = loadedSettings.merged.ui?.theme;
+  const effectiveTheme = loadedSettings.merged.ui.theme;
   const appDispatch = useAppDispatch();
   const isThemeDialogOpen = appState.openDialogs.theme;
 
@@ -56,10 +56,7 @@ export const useThemeCommand = (
     }
 
     // Check for invalid theme configuration on startup
-    if (
-      effectiveTheme &&
-      themeManager.findThemeByName(effectiveTheme) == null
-    ) {
+    if (effectiveTheme && !themeManager.findThemeByName(effectiveTheme)) {
       appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
       appDispatch({
         type: 'SET_THEME_ERROR',
@@ -124,7 +121,7 @@ export const useThemeCommand = (
         // Only allow selecting themes available in the merged custom themes or built-in themes
         const isBuiltIn = themeManager.findThemeByName(themeName);
         const isCustom = themeName && mergedCustomThemes[themeName];
-        if (isBuiltIn == null && !isCustom) {
+        if (!isBuiltIn && !isCustom) {
           appDispatch({
             type: 'SET_THEME_ERROR',
             payload: `Theme "${themeName}" not found in selected scope.`,
@@ -133,10 +130,10 @@ export const useThemeCommand = (
           return;
         }
         loadedSettings.setValue(scope, 'ui.theme', themeName); // Update the merged settings
-        if (loadedSettings.merged.ui?.customThemes != null) {
+        if (loadedSettings.merged.ui.customThemes) {
           themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
         }
-        applyTheme(loadedSettings.merged.ui?.theme); // Apply the current theme
+        applyTheme(loadedSettings.merged.ui.theme); // Apply the current theme
         appDispatch({ type: 'SET_THEME_ERROR', payload: null });
       } finally {
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' }); // Close the dialog

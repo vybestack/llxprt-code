@@ -179,6 +179,13 @@ export function createAgentRuntimeContext(
         ? value
         : undefined;
     },
+    compressionVerification: (): boolean => {
+      const value = getLiveSetting<boolean>(
+        'compressionVerification',
+        options.settings.compressionVerification,
+      );
+      return typeof value === 'boolean' ? value : false;
+    },
     /**
      * @plan PLAN-20251202-THINKING.P03b
      * @requirement REQ-THINK-006

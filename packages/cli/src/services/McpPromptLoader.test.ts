@@ -5,9 +5,9 @@
  */
 
 import { McpPromptLoader } from './McpPromptLoader.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import * as cliCore from '@vybestack/llxprt-code-core';
-import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
+import { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommandKind, type CommandContext } from '../ui/commands/types.js';
 
@@ -50,7 +50,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = 'hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ arg1: 'hello', arg2: 'world' });
+      expect(result).toEqual({ arg1: 'hello', arg2: 'world' });
     });
 
     it('should handle quoted multi-word positional arguments', () => {
@@ -61,7 +61,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = '"hello world" foo';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ arg1: 'hello world', arg2: 'foo' });
+      expect(result).toEqual({ arg1: 'hello world', arg2: 'foo' });
     });
 
     it('should handle a single positional argument with multiple words', () => {
@@ -69,7 +69,7 @@ describe('McpPromptLoader', () => {
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = 'hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ arg1: 'hello world' });
+      expect(result).toEqual({ arg1: 'hello world' });
     });
 
     it('should handle escaped quotes in positional arguments', () => {
@@ -77,7 +77,7 @@ describe('McpPromptLoader', () => {
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = '"hello \\"world\\""';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ arg1: 'hello "world"' });
+      expect(result).toEqual({ arg1: 'hello "world"' });
     });
 
     it('should handle escaped backslashes in positional arguments', () => {
@@ -85,7 +85,7 @@ describe('McpPromptLoader', () => {
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = '"hello\\\\world"';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ arg1: 'hello\\world' });
+      expect(result).toEqual({ arg1: 'hello\\world' });
     });
 
     it('should handle named args followed by positional args', () => {
@@ -96,7 +96,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = '--named="value" positional';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ named: 'value', pos: 'positional' });
+      expect(result).toEqual({ named: 'value', pos: 'positional' });
     });
 
     it('should handle positional args followed by named args', () => {
@@ -107,7 +107,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = 'positional --named="value"';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ pos: 'positional', named: 'value' });
+      expect(result).toEqual({ pos: 'positional', named: 'value' });
     });
 
     it('should handle positional args interspersed with named args', () => {
@@ -119,7 +119,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = 'p1 --named="value" p2';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ pos1: 'p1', named: 'value', pos2: 'p2' });
+      expect(result).toEqual({ pos1: 'p1', named: 'value', pos2: 'p2' });
     });
 
     it('should treat an escaped quote at the start as a literal', () => {
@@ -130,7 +130,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = '\\"hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({ arg1: '"hello', arg2: 'world' });
+      expect(result).toEqual({ arg1: '"hello', arg2: 'world' });
     });
 
     it('should handle a complex mix of args', () => {
@@ -145,7 +145,7 @@ describe('McpPromptLoader', () => {
       const userArgs =
         'p1 --named1="value 1" "p2 has spaces" --named2=value2 "p3 \\"with quotes\\""';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toStrictEqual({
+      expect(result).toEqual({
         pos1: 'p1',
         named1: 'value 1',
         pos2: 'p2 has spaces',
@@ -221,7 +221,7 @@ describe('McpPromptLoader', () => {
         age: '123',
         species: 'tiger',
       });
-      expect(result).toStrictEqual({
+      expect(result).toEqual({
         type: 'submit_prompt',
         content: JSON.stringify('Hello, world!'),
       });
@@ -233,7 +233,7 @@ describe('McpPromptLoader', () => {
       const action = commands[0].action!;
       const context = {} as CommandContext;
       const result = await action(context, 'test-name');
-      expect(result).toStrictEqual({
+      expect(result).toEqual({
         type: 'message',
         messageType: 'error',
         content: 'Missing required argument(s): --age, --species',
@@ -249,7 +249,7 @@ describe('McpPromptLoader', () => {
       const action = commands[0].action!;
       const context = {} as CommandContext;
       const result = await action(context, 'test-name 123 tiger');
-      expect(result).toStrictEqual({
+      expect(result).toEqual({
         type: 'message',
         messageType: 'error',
         content: 'Error: Invocation failed!',
@@ -259,7 +259,7 @@ describe('McpPromptLoader', () => {
     it('should return an empty array if config is not available', async () => {
       const loader = new McpPromptLoader(null);
       const commands = await loader.loadCommands(new AbortController().signal);
-      expect(commands).toStrictEqual([]);
+      expect(commands).toEqual([]);
     });
 
     describe('autoExecute', () => {
@@ -311,179 +311,6 @@ describe('McpPromptLoader', () => {
           new AbortController().signal,
         );
         expect(commands[0].autoExecute).toBe(false);
-      });
-    });
-
-    // Completion tests disabled: schema-based argument completion was removed from McpPromptLoader
-    // (see TODO in McpPromptLoader.ts). Re-enable when SlashCommand interface supports it again.
-    describe.skip('completion', () => {
-      it('should suggest no arguments when using positional arguments', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {} as CommandContext;
-        const suggestions = await completion(context, 'test-name 6 tiger');
-        expect(suggestions).toStrictEqual([]);
-      });
-
-      it('should suggest all arguments when none are present', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find ',
-            name: 'find',
-            args: '',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '');
-        expect(suggestions).toStrictEqual([
-          '--name="',
-          '--age="',
-          '--species="',
-          '--enclosure="',
-          '--trail="',
-        ]);
-      });
-
-      it('should suggest remaining arguments when some are present', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find --name="test-name" --age="6" ',
-            name: 'find',
-            args: '--name="test-name" --age="6"',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '');
-        expect(suggestions).toStrictEqual([
-          '--species="',
-          '--enclosure="',
-          '--trail="',
-        ]);
-      });
-
-      it('should suggest no arguments when all are present', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {} as CommandContext;
-        const suggestions = await completion(
-          context,
-          '--name="test-name" --age="6" --species="tiger" --enclosure="Tiger Den" --trail="Jungle"',
-        );
-        expect(suggestions).toStrictEqual([]);
-      });
-
-      it('should suggest nothing for prompts with no arguments', async () => {
-        // Temporarily override the mock to return a prompt with no args
-        vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
-          { ...mockPrompt, arguments: [] },
-        ]);
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {} as CommandContext;
-        const suggestions = await completion(context, '');
-        expect(suggestions).toStrictEqual([]);
-      });
-
-      it('should suggest arguments matching a partial argument', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find --s',
-            name: 'find',
-            args: '--s',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '--s');
-        expect(suggestions).toStrictEqual(['--species="']);
-      });
-
-      it('should suggest arguments even when a partial argument is parsed as a value', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find --name="test" --a',
-            name: 'find',
-            args: '--name="test" --a',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '--a');
-        expect(suggestions).toStrictEqual(['--age="']);
-      });
-
-      it('should auto-close the quote for a named argument value', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find --name="test',
-            name: 'find',
-            args: '--name="test',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '--name="test');
-        expect(suggestions).toStrictEqual(['--name="test"']);
-      });
-
-      it('should auto-close the quote for an empty named argument value', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find --name="',
-            name: 'find',
-            args: '--name="',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '--name="');
-        expect(suggestions).toStrictEqual(['--name=""']);
-      });
-
-      it('should not add a quote if already present', async () => {
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
-        const commands = await loader.loadCommands(
-          new AbortController().signal,
-        );
-        const completion = commands[0].completion!;
-        const context = {
-          invocation: {
-            raw: '/find --name="test"',
-            name: 'find',
-            args: '--name="test"',
-          },
-        } as CommandContext;
-        const suggestions = await completion(context, '--name="test"');
-        expect(suggestions).toStrictEqual([]);
       });
     });
   });

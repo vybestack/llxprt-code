@@ -83,7 +83,6 @@ function hasActiveDialog(uiState: UIState): boolean {
     uiState.isFolderTrustDialogOpen ||
     uiState.isWelcomeDialogOpen ||
     uiState.isPermissionsDialogOpen ||
-    Boolean(uiState.shellConfirmationRequest) ||
     Boolean(uiState.confirmationRequest) ||
     uiState.isThemeDialogOpen ||
     uiState.isSettingsDialogOpen ||
@@ -156,6 +155,7 @@ export const DefaultAppLayout = ({
     vimMode,
     tokenMetrics,
     currentModel,
+    contextLimit,
     availableTerminalHeight: uiAvailableTerminalHeight,
     activeShellPtyId,
     embeddedShellFocused,
@@ -167,14 +167,13 @@ export const DefaultAppLayout = ({
     ? uiAvailableTerminalHeight
     : availableTerminalHeight;
 
-  const showTodoPanelSetting = settings.merged.ui?.showTodoPanel ?? true;
-  const hideContextSummary = settings.merged.ui?.hideContextSummary ?? false;
+  const showTodoPanelSetting = settings.merged.ui.showTodoPanel ?? true;
+  const hideContextSummary = settings.merged.ui.hideContextSummary ?? false;
   const currentThemeName = themeManager.getActiveTheme().name;
   const { isNarrow } = uiState;
 
   const useAlternateBuffer =
-    settings.merged.ui?.useAlternateBuffer === true &&
-    !config.getScreenReader();
+    settings.merged.ui.useAlternateBuffer === true && !config.getScreenReader();
 
   const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
@@ -522,7 +521,7 @@ export const DefaultAppLayout = ({
               </>
             )}
 
-            {!settings.merged.ui?.hideFooter && (
+            {!settings.merged.ui.hideFooter && (
               <Footer
                 model={currentModel}
                 targetDir={config.getTargetDir()}
@@ -533,17 +532,13 @@ export const DefaultAppLayout = ({
                 showErrorDetails={showErrorDetails}
                 showMemoryUsage={
                   config.getDebugMode() ||
-                  settings.merged.ui?.showMemoryUsage ||
+                  settings.merged.ui.showMemoryUsage ||
                   false
                 }
                 historyTokenCount={historyTokenCount}
                 nightly={nightly}
                 vimMode={vimModeEnabled ? vimMode : undefined}
-                contextLimit={
-                  config.getEphemeralSetting('context-limit') as
-                    | number
-                    | undefined
-                }
+                contextLimit={contextLimit}
                 isTrustedFolder={config.isTrustedFolder()}
                 tokensPerMinute={tokenMetrics.tokensPerMinute}
                 throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
@@ -694,7 +689,7 @@ export const DefaultAppLayout = ({
             </>
           )}
 
-          {!settings.merged.ui?.hideFooter && (
+          {!settings.merged.ui.hideFooter && (
             <Footer
               model={currentModel}
               targetDir={config.getTargetDir()}
@@ -705,17 +700,13 @@ export const DefaultAppLayout = ({
               showErrorDetails={showErrorDetails}
               showMemoryUsage={
                 config.getDebugMode() ||
-                settings.merged.ui?.showMemoryUsage ||
+                settings.merged.ui.showMemoryUsage ||
                 false
               }
               historyTokenCount={historyTokenCount}
               nightly={nightly}
               vimMode={vimModeEnabled ? vimMode : undefined}
-              contextLimit={
-                config.getEphemeralSetting('context-limit') as
-                  | number
-                  | undefined
-              }
+              contextLimit={contextLimit}
               isTrustedFolder={config.isTrustedFolder()}
               tokensPerMinute={tokenMetrics.tokensPerMinute}
               throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}

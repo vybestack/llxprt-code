@@ -40,6 +40,7 @@ describe('skillUtils', () => {
       'workspace',
       undefined,
       () => {},
+      async () => true,
     );
     expect(skills.length).toBeGreaterThan(0);
     expect(skills[0].name).toBe('weather-skill');
@@ -70,6 +71,7 @@ describe('skillUtils', () => {
       'workspace',
       undefined,
       () => {},
+      async () => true,
     );
     expect(skills.length).toBe(1);
     expect(skills[0].name).toBe('test-skill');

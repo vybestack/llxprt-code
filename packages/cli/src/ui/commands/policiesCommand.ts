@@ -36,8 +36,9 @@ function getTierBand(priority: number): string {
     return 'Tier 2 (User-defined)';
   } else if (priority >= 1.0) {
     return 'Tier 1 (Defaults)';
+  } else {
+    return 'Tier 0 (System)';
   }
-  return 'Tier 0 (System)';
 }
 
 /**
@@ -49,7 +50,7 @@ function handlePoliciesCommand(
 ): MessageActionReturn {
   const config = context.services.config;
 
-  if (config == null) {
+  if (!config) {
     return {
       type: 'message',
       messageType: 'error',
@@ -97,7 +98,7 @@ function handlePoliciesCommand(
 
   for (const tier of tierOrder) {
     const tierRules = tierBands.get(tier);
-    if (tierRules == null || tierRules.length === 0) {
+    if (!tierRules || tierRules.length === 0) {
       continue;
     }
 
@@ -107,13 +108,13 @@ function handlePoliciesCommand(
       const toolName = rule.toolName ?? '*';
       const decision = formatDecision(rule.decision);
       const priority = rule.priority ?? 0;
-      const argsPattern =
-        rule.argsPattern != null
-          ? ` (pattern: ${rule.argsPattern.source})`
-          : '';
+      const argsPattern = rule.argsPattern
+        ? ` (pattern: ${rule.argsPattern.source})`
+        : '';
+      const source = rule.source ? ` [Source: ${rule.source}]` : '';
 
       lines.push(
-        `  Priority ${priority.toFixed(3)}: ${toolName} → ${decision}${argsPattern}`,
+        `  Priority ${priority.toFixed(3)}: ${toolName} → ${decision}${argsPattern}${source}`,
       );
     }
 

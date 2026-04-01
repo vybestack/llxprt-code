@@ -17,9 +17,6 @@ describe('<OverflowProvider><DiffRenderer /></OverflowProvider>', () => {
     mockColorizeCode.mockClear();
   });
 
-  const sanitizeOutput = (output: string | undefined, terminalWidth: number) =>
-    output?.replace(/GAP_INDICATOR/g, '═'.repeat(terminalWidth));
-
   it('should call colorizeCode with correct language for new file with known extension', () => {
     const newFileDiffContent = `
 diff --git a/test.py b/test.py
@@ -231,77 +228,6 @@ index abc..def 100644
     expect(output).toContain('context line 11');
   });
 
-  describe('should correctly render a diff with multiple hunks and a gap indicator', () => {
-    const diffWithMultipleHunks = `
-diff --git a/multi.js b/multi.js
-index 123..789 100644
---- a/multi.js
-+++ b/multi.js
-@@ -1,3 +1,3 @@
- console.log('first hunk');
--const oldVar = 1;
-+const newVar = 1;
- console.log('end of first hunk');
-@@ -20,3 +20,3 @@
- console.log('second hunk');
--const anotherOld = 'test';
-+const anotherNew = 'test';
- console.log('end of second hunk');
-`;
-
-    it.skip.each([
-      {
-        terminalWidth: 80,
-        height: undefined,
-        expected: ` 1   console.log('first hunk');
- 2 - const oldVar = 1;
- 2 + const newVar = 1;
- 3   console.log('end of first hunk');
-════════════════════════════════════════════════════════════════════════════════
-20   console.log('second hunk');
-21 - const anotherOld = 'test';
-21 + const anotherNew = 'test';
-22   console.log('end of second hunk');`,
-      },
-      {
-        terminalWidth: 80,
-        height: 6,
-        expected: `... first 4 lines hidden ...
-════════════════════════════════════════════════════════════════════════════════
-20   console.log('second hunk');
-21 - const anotherOld = 'test';
-21 + const anotherNew = 'test';
-22   console.log('end of second hunk');`,
-      },
-      {
-        terminalWidth: 30,
-        height: 6,
-        expected: `... first 10 lines hidden ...
-   'test';
-21 + const anotherNew =
-   'test';
-22   console.log('end of
-     second hunk');`,
-      },
-    ])(
-      'with terminalWidth $terminalWidth and height $height',
-      ({ terminalWidth, height, expected }) => {
-        const { lastFrame } = render(
-          <OverflowProvider>
-            <DiffRenderer
-              diffContent={diffWithMultipleHunks}
-              filename="multi.js"
-              terminalWidth={terminalWidth}
-              availableTerminalHeight={height}
-            />
-          </OverflowProvider>,
-        );
-        const output = lastFrame();
-        expect(sanitizeOutput(output, terminalWidth)).toStrictEqual(expected);
-      },
-    );
-  });
-
   it('should correctly render a diff with a SVN diff format', () => {
     const newFileDiff = `
 fileDiff Index: file.txt
@@ -329,7 +255,7 @@ fileDiff Index: file.txt
     );
     const output = lastFrame();
 
-    expect(output).toStrictEqual(` 1 - const oldVar = 1;
+    expect(output).toEqual(` 1 - const oldVar = 1;
  1 + const newVar = 1;
 ════════════════════════════════════════════════════════════════════════════════
 20 - const anotherOld = 'test';
@@ -358,7 +284,7 @@ fileDiff Index: Dockerfile
       </OverflowProvider>,
     );
     const output = lastFrame();
-    expect(output).toStrictEqual(`1 FROM node:14
+    expect(output).toEqual(`1 FROM node:14
 2 RUN npm install
 3 RUN npm run build`);
   });

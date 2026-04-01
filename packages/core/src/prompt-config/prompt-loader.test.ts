@@ -3,7 +3,7 @@
  * These tests verify actual file I/O, compression, and environment detection behavior
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -494,12 +494,17 @@ describe('PromptLoader', () => {
         'utf8',
       );
 
-      // Wait for event processing
-      await new Promise((resolve) => setTimeout(resolve, 150));
-
-      // Should have received at least one event
-      expect(events.length).toBeGreaterThan(0);
-      expect(events.some((e) => e.path === testFile)).toBe(true);
+      // Poll for up to 2s to avoid CI/macOS filesystem watcher flakiness.
+      await vi.waitFor(
+        () => {
+          expect(events.length).toBeGreaterThan(0);
+          expect(events.some((e) => e.path === testFile)).toBe(true);
+        },
+        {
+          timeout: 2000,
+          interval: 50,
+        },
+      );
 
       // Clean up
       watcher?.stop();

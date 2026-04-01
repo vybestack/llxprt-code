@@ -123,6 +123,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -194,6 +195,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -236,6 +238,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await expect(client.discover({} as Config)).rejects.toThrow(
@@ -279,6 +282,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await expect(client.discover({} as Config)).rejects.toThrow(
@@ -329,6 +333,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -393,6 +398,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -467,6 +473,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -550,6 +557,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -623,6 +631,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await client.connect();
@@ -662,6 +671,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await expect(
@@ -735,6 +745,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -811,6 +822,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
       await client.connect();
       await client.discover({} as Config);
@@ -870,6 +882,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await client.connect();
@@ -906,6 +919,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await client.connect();
@@ -942,6 +956,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await client.connect();
@@ -1000,6 +1015,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
         onToolsUpdatedSpy,
       );
 
@@ -1070,6 +1086,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await client.connect();
@@ -1140,6 +1157,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
         onToolsUpdatedSpy,
       );
 
@@ -1152,6 +1170,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
         onToolsUpdatedSpy,
       );
 
@@ -1234,6 +1253,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await client.connect();
@@ -1298,6 +1318,7 @@ describe('mcp-client', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
         onToolsUpdatedSpy,
       );
 
@@ -1711,6 +1732,7 @@ describe('connectToMcpServer with OAuth', () => {
     );
 
     const client = await connectToMcpServer(
+      '0.0.1',
       'test-server',
       { httpUrl: serverUrl },
       false,
@@ -1740,6 +1762,7 @@ describe('connectToMcpServer with OAuth', () => {
 
     await expect(
       connectToMcpServer(
+        '0.0.1',
         'test-server',
         { httpUrl: serverUrl },
         false,
@@ -1774,6 +1797,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { httpUrl: serverUrl },
         false,
@@ -1803,6 +1827,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { url: serverUrl },
         false,
@@ -1832,6 +1857,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { url: serverUrl, type: 'http' },
         false,
@@ -1860,6 +1886,7 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { url: serverUrl, type: 'sse' },
         false,
@@ -1879,6 +1906,7 @@ describe('connectToMcpServer with OAuth', () => {
       // WILL FAIL: current code returns null and continues, should throw
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { command: 'test-command' }, // No URL transport
           false,
@@ -1914,6 +1942,7 @@ describe('connectToMcpServer with OAuth', () => {
       ).mockReturnValue(mockTransport.close());
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { url: serverUrl },
         false,
@@ -1936,6 +1965,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: serverUrl },
           false,
@@ -1957,6 +1987,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: serverUrl, type: 'http' },
           false,
@@ -1983,6 +2014,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { httpUrl: 'http://test-server.com' },
           false,
@@ -2001,6 +2033,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { httpUrl: 'http://test-server.com' },
           false,
@@ -2022,6 +2055,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
@@ -2039,6 +2073,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
@@ -2066,6 +2101,7 @@ describe('connectToMcpServer with OAuth', () => {
       // Should fail with 404, NOT attempt SSE fallback
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: serverUrl, type: 'http' }, // Explicit HTTP type
           false,
@@ -2092,6 +2128,7 @@ describe('connectToMcpServer with OAuth', () => {
         .mockResolvedValueOnce(undefined); // SSE fallback succeeds
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { url: 'http://test-server.com/mcp' },
         false,
@@ -2115,6 +2152,7 @@ describe('connectToMcpServer with OAuth', () => {
         .mockResolvedValueOnce(undefined); // SSE fallback succeeds
 
       await connectToMcpServer(
+        '0.0.1',
         'test-server',
         { url: 'http://test-server.com/mcp' },
         false,
@@ -2139,6 +2177,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
@@ -2158,6 +2197,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
@@ -2175,6 +2215,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectToMcpServer(
+          '0.0.1',
           'test-server',
           { url: 'http://test-server.com/mcp' },
           false,
@@ -2215,6 +2256,7 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await mcpClient.connect();
@@ -2249,6 +2291,7 @@ describe('connectToMcpServer with OAuth', () => {
         workspaceContext,
         {} as Config,
         false,
+        '0.0.1',
       );
 
       await mcpClient.connect();

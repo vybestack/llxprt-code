@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { IContent } from '../../services/history/IContent.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -21,126 +22,125 @@ function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('parseResponsesStream', () => {
-  it.skip('should parse content chunks correctly', async () => {
-    // SKIPPING: Test data uses OpenAI chat completion format but parser expects Responses API format
+  it('should parse content chunks correctly', async () => {
     const chunks = [
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello"}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" world"}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.output_text.delta","delta":" world"}\n\n',
       'data: [DONE]\n\n',
     ];
 
     const stream = createSSEStream(chunks);
-    const messages = [];
+    const messages: IContent[] = [];
 
     for await (const message of parseResponsesStream(stream)) {
       messages.push(message);
     }
 
     expect(messages).toHaveLength(2);
-    expect(messages[0]).toStrictEqual({
+    expect(messages[0]).toEqual({
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello' }],
     });
-    expect(messages[1]).toStrictEqual({
+    expect(messages[1]).toEqual({
       speaker: 'ai',
       blocks: [{ type: 'text', text: ' world' }],
     });
   });
 
-  it.skip('should parse tool calls correctly', async () => {
-    // SKIPPING: Test data uses OpenAI chat completion format but parser expects Responses API format
+  it('should parse tool calls correctly', async () => {
     const chunks = [
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"search","arguments":"{\\"q"}}]}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"uery\\": \\"test\\"}"}}]}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      'data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"id":"fc_123","type":"function_call","status":"in_progress","arguments":"","call_id":"call_123","name":"search"}}\n\n',
+      'data: {"type":"response.function_call_arguments.delta","sequence_number":2,"item_id":"fc_123","output_index":0,"delta":"{\\"query\\":\\"test\\"}"}\n\n',
+      'data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"id":"fc_123","type":"function_call","status":"completed","arguments":"{\\"query\\":\\"test\\"}","call_id":"call_123","name":"search"}}\n\n',
       'data: [DONE]\n\n',
     ];
 
     const stream = createSSEStream(chunks);
-    const messages = [];
+    const messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    const toolCallMessage = messages.find((m) =>
+      m.blocks.some((block) => block.type === 'tool_call'),
+    );
+    expect(toolCallMessage).toBeDefined();
+    const toolCallBlock = toolCallMessage!.blocks.find(
+      (b) => b.type === 'tool_call',
+    );
+    expect(toolCallBlock).toEqual({
+      type: 'tool_call',
+      id: 'call_123',
+      name: 'search',
+      parameters: { query: 'test' },
+    });
+  });
+
+  it('should parse usage data correctly', async () => {
+    const chunks = [
+      'data: {"type":"response.output_text.delta","delta":"Test response"}\n\n',
+      'data: {"type":"response.completed","response":{"id":"resp-123","object":"response","model":"gpt-4o","status":"completed","usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages: IContent[] = [];
+
+    for await (const message of parseResponsesStream(stream)) {
+      messages.push(message);
+    }
+
+    expect(messages.length).toBeGreaterThanOrEqual(2);
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage).toBeDefined();
+    expect(usageMessage?.metadata?.usage).toEqual({
+      promptTokens: 10,
+      completionTokens: 2,
+      totalTokens: 12,
+      cachedTokens: 0,
+    });
+  });
+
+  it('should handle split chunks correctly', async () => {
+    const chunks = [
+      'data: {"type":"response.output_text.delta","delt',
+      'a":"Hello world"}\n\ndata: [DONE]\n\n',
+    ];
+
+    const stream = createSSEStream(chunks);
+    const messages: IContent[] = [];
 
     for await (const message of parseResponsesStream(stream)) {
       messages.push(message);
     }
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]).toStrictEqual({
-      role: ContentGeneratorRole.ASSISTANT,
-      content: '',
-      tool_calls: [
-        {
-          id: 'call_123',
-          type: 'function',
-          function: {
-            name: 'search',
-            arguments: '{"query": "test"}',
-          },
-        },
-      ],
-    });
+    const textBlock = messages[0].blocks.find((b) => b.type === 'text');
+    expect(textBlock).toBeDefined();
+    expect((textBlock as { type: 'text'; text: string }).text).toBe(
+      'Hello world',
+    );
   });
 
-  it.skip('should parse usage data correctly', async () => {
-    // SKIPPING: Test data uses OpenAI chat completion format but parser expects Responses API format
-    const chunks = [
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Test response"}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}\n\n',
-      'data: [DONE]\n\n',
-    ];
-
-    const stream = createSSEStream(chunks);
-    const messages = [];
-
-    for await (const message of parseResponsesStream(stream)) {
-      messages.push(message);
-    }
-
-    // Should have content message and final message with usage
-    expect(messages.length).toBeGreaterThanOrEqual(2);
-    const lastMessage = messages[messages.length - 1];
-    expect(lastMessage.usage).toStrictEqual({
-      prompt_tokens: 10,
-      completion_tokens: 2,
-      total_tokens: 12,
-    });
-  });
-
-  it.skip('should handle split chunks correctly', async () => {
-    // SKIPPING: Test data uses OpenAI chat completion format but parser expects Responses API format
-    const chunks = [
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta"',
-      ':{"content":"Hello world"}}]}\n\ndata: [DONE]\n\n',
-    ];
-
-    const stream = createSSEStream(chunks);
-    const messages = [];
-
-    for await (const message of parseResponsesStream(stream)) {
-      messages.push(message);
-    }
-
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages.some((m) => m.content === 'Hello world')).toBe(true);
-  });
-
-  it.skip('should skip invalid JSON chunks', async () => {
-    // SKIPPING: Test data uses OpenAI chat completion format but parser expects Responses API format
+  it('should skip invalid JSON chunks', async () => {
     const chunks = [
       'data: invalid json\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Valid"}}]}\n\n',
+      'data: {"type":"response.output_text.delta","delta":"Valid"}\n\n',
       'data: [DONE]\n\n',
     ];
 
     const stream = createSSEStream(chunks);
-    const messages = [];
+    const messages: IContent[] = [];
 
     for await (const message of parseResponsesStream(stream)) {
       messages.push(message);
     }
 
     expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe('Valid');
+    const textBlock = messages[0].blocks.find((b) => b.type === 'text');
+    expect(textBlock).toBeDefined();
+    expect((textBlock as { type: 'text'; text: string }).text).toBe('Valid');
   });
 });
 
@@ -219,7 +219,7 @@ describe('parseErrorResponse', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toStrictEqual({
+    expect(usageMessage?.metadata?.usage).toEqual({
       promptTokens: 100,
       completionTokens: 20,
       totalTokens: 120,
@@ -244,7 +244,7 @@ describe('parseErrorResponse', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toStrictEqual({
+    expect(usageMessage?.metadata?.usage).toEqual({
       promptTokens: 100,
       completionTokens: 20,
       totalTokens: 120,

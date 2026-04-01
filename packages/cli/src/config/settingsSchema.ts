@@ -96,6 +96,7 @@ export interface SettingDefinition {
   key?: string;
   properties?: SettingsSchema;
   showInDialog?: boolean;
+  ignoreInDocs?: boolean;
   mergeStrategy?: MergeStrategy;
   /** Enum type options  */
   options?: readonly SettingEnumOption[];
@@ -146,8 +147,6 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
   >,
 };
 
-const GEMINI_MODEL_ALIAS_AUTO = 'auto';
-
 /**
  * The canonical schema for all settings.
  * The structure of this object defines the structure of the `Settings` type.
@@ -167,13 +166,13 @@ export const SETTINGS_SCHEMA = {
     description: 'Accessibility settings.',
     showInDialog: false,
     properties: {
-      disableLoadingPhrases: {
+      enableLoadingPhrases: {
         type: 'boolean',
-        label: 'Disable Loading Phrases',
+        label: 'Enable Loading Phrases',
         category: 'Accessibility',
         requiresRestart: true,
-        default: false,
-        description: 'Disable loading phrases for accessibility',
+        default: true,
+        description: 'Enable loading phrases during operations.',
         showInDialog: true,
       },
       screenReader: {
@@ -265,25 +264,44 @@ export const SETTINGS_SCHEMA = {
         description: 'Enable recursive file search functionality',
         showInDialog: true,
       },
-      disableFuzzySearch: {
+      enableFuzzySearch: {
         type: 'boolean',
-        label: 'Disable Fuzzy Search',
+        label: 'Enable Fuzzy Search',
         category: 'File Filtering',
         requiresRestart: true,
-        default: false,
-        description: 'Disable fuzzy search when searching for files.',
+        default: true,
+        description: 'Enable fuzzy search when searching for files.',
+        showInDialog: true,
+      },
+      maxFileCount: {
+        type: 'number',
+        label: 'Max File Count',
+        category: 'File Filtering',
+        requiresRestart: true,
+        default: 20000,
+        description:
+          'Maximum number of files to index during file search. Prevents OOM on large projects.',
+        showInDialog: true,
+      },
+      searchTimeout: {
+        type: 'number',
+        label: 'Search Timeout (ms)',
+        category: 'File Filtering',
+        requiresRestart: true,
+        default: 5000,
+        description: 'Timeout in milliseconds for file search operations.',
         showInDialog: true,
       },
     },
   },
 
-  disableAutoUpdate: {
+  enableAutoUpdate: {
     type: 'boolean',
-    label: 'Disable Auto Update',
+    label: 'Enable Auto Update',
     category: 'Updates',
     requiresRestart: false,
-    default: false,
-    description: 'Disable automatic updates',
+    default: true,
+    description: 'Enable automatic updates.',
     showInDialog: true,
   },
 
@@ -821,13 +839,13 @@ export const SETTINGS_SCHEMA = {
         description: 'Use the entire width of the terminal for output.',
         showInDialog: true,
       },
-      disableLoadingPhrases: {
+      enableLoadingPhrases: {
         type: 'boolean',
-        label: 'Disable Loading Phrases',
+        label: 'Enable Loading Phrases',
         category: 'UI',
         requiresRestart: true,
-        default: false,
-        description: 'Disable loading phrases for accessibility.',
+        default: true,
+        description: 'Enable loading phrases during operations.',
         showInDialog: true,
       },
       screenReader: {
@@ -1345,13 +1363,13 @@ export const SETTINGS_SCHEMA = {
     description: 'Environment variables to exclude from project context.',
     showInDialog: false,
   },
-  disableUpdateNag: {
+  enableAutoUpdateNotification: {
     type: 'boolean',
-    label: 'Disable Update Nag',
+    label: 'Enable Auto Update Notification',
     category: 'Updates',
     requiresRestart: false,
-    default: false,
-    description: 'Disable update notification prompts.',
+    default: true,
+    description: 'Enable update notification prompts.',
     showInDialog: false,
   },
   includeDirectories: {
@@ -1428,6 +1446,15 @@ export const SETTINGS_SCHEMA = {
     description: 'Experimental features.',
     showInDialog: false,
     properties: {
+      extensionConfig: {
+        type: 'boolean',
+        label: 'Extension Configuration',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: false,
+        description: 'Enable requesting and fetching of extension settings.',
+        showInDialog: false,
+      },
       extensionReloading: {
         type: 'boolean',
         label: 'Extension Reloading',
@@ -1456,66 +1483,6 @@ export const SETTINGS_SCHEMA = {
         default: false,
         description: 'Enable skills (experimental).',
         showInDialog: true,
-      },
-      codebaseInvestigatorSettings: {
-        type: 'object',
-        label: 'Codebase Investigator Settings',
-        category: 'Experimental',
-        requiresRestart: true,
-        default: {},
-        description: 'Configuration for Codebase Investigator.',
-        showInDialog: false,
-        properties: {
-          enabled: {
-            type: 'boolean',
-            label: 'Enable Codebase Investigator',
-            category: 'Experimental',
-            requiresRestart: true,
-            default: true,
-            description: 'Enable the Codebase Investigator agent.',
-            showInDialog: true,
-          },
-          maxNumTurns: {
-            type: 'number',
-            label: 'Codebase Investigator Max Num Turns',
-            category: 'Experimental',
-            requiresRestart: true,
-            default: 10,
-            description:
-              'Maximum number of turns for the Codebase Investigator agent.',
-            showInDialog: true,
-          },
-          maxTimeMinutes: {
-            type: 'number',
-            label: 'Max Time (Minutes)',
-            category: 'Experimental',
-            requiresRestart: true,
-            default: 3,
-            description:
-              'Maximum time for the Codebase Investigator agent (in minutes).',
-            showInDialog: false,
-          },
-          thinkingBudget: {
-            type: 'number',
-            label: 'Thinking Budget',
-            category: 'Experimental',
-            requiresRestart: true,
-            default: 8192,
-            description:
-              'The thinking budget for the Codebase Investigator agent.',
-            showInDialog: false,
-          },
-          model: {
-            type: 'string',
-            label: 'Model',
-            category: 'Experimental',
-            requiresRestart: true,
-            default: GEMINI_MODEL_ALIAS_AUTO,
-            description:
-              'The model to use for the Codebase Investigator agent.',
-            showInDialog: false,
-          },
-        },
       },
       introspectionAgentSettings: {
         type: 'object',
@@ -1841,6 +1808,16 @@ export const SETTINGS_SCHEMA = {
     description: 'Settings for skills.',
     showInDialog: false,
     properties: {
+      enabled: {
+        type: 'boolean',
+        label: 'Enable Agent Skills',
+        category: 'Advanced',
+        requiresRestart: true,
+        default: true,
+        description: 'Enable Agent Skills.',
+        showInDialog: true,
+        ignoreInDocs: true,
+      },
       disabled: {
         type: 'array',
         label: 'Disabled Skills',
@@ -1855,20 +1832,14 @@ export const SETTINGS_SCHEMA = {
     },
   },
 
-  hooks: {
+  hooksConfig: {
     type: 'object',
-    label: 'Hooks',
+    label: 'HooksConfig',
     category: 'Advanced',
     requiresRestart: false,
-    default: {} as { [K in HookEventName]?: HookDefinition[] } & {
-      enabled?: boolean;
-      disabled?: string[];
-      notifications?: boolean;
-    },
-    description:
-      'Hook configurations for intercepting and customizing agent behavior.',
+    default: {},
+    description: 'Configuration settings for the hooks system.',
     showInDialog: false,
-    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
     properties: {
       enabled: {
         type: 'boolean',
@@ -1886,7 +1857,7 @@ export const SETTINGS_SCHEMA = {
         default: true,
         category: 'Advanced',
         description: 'Show visual indicators when hooks are executing.',
-        showInDialog: false,
+        showInDialog: true,
         requiresRestart: false,
       },
       disabled: {
@@ -1895,10 +1866,22 @@ export const SETTINGS_SCHEMA = {
         category: 'Advanced',
         requiresRestart: false,
         default: [] as string[],
-        description: 'List of hook names to disable',
+        description:
+          'List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.',
         showInDialog: false,
       },
     },
+  },
+
+  hooks: {
+    type: 'object',
+    label: 'Hook Events',
+    category: 'Advanced',
+    requiresRestart: false,
+    default: {} as { [K in HookEventName]?: HookDefinition[] },
+    description: 'Event-specific hook configurations.',
+    showInDialog: false,
+    mergeStrategy: MergeStrategy.SHALLOW_MERGE,
   },
   admin: {
     type: 'object',
@@ -2354,10 +2337,10 @@ export function getEnableHooksUI(settings: Settings): boolean {
 
 /**
  * Determines if hooks should be enabled based on both experimental flag and user setting.
- * Both tools.enableHooks (experimental gate) and hooks.enabled (user toggle) must be true.
+ * Both tools.enableHooks (experimental gate) and hooksConfig.enabled (user toggle) must be true.
  */
 export function getEnableHooks(settings: Settings): boolean {
-  return getEnableHooksUI(settings) && (settings.hooks?.enabled ?? false);
+  return getEnableHooksUI(settings) && (settings.hooksConfig?.enabled ?? false);
 }
 
 type InferSettings<T extends SettingsSchema> = {
@@ -2373,6 +2356,20 @@ type InferSettings<T extends SettingsSchema> = {
 };
 
 export type Settings = InferSettings<SettingsSchemaType>;
+
+/**
+ * Settings type for the merged settings object. Sub-objects that are
+ * always populated by mergeSettings() are marked as required.
+ */
+export type MergedSettings = Settings & {
+  ui: NonNullable<Settings['ui']>;
+  security: NonNullable<Settings['security']>;
+  telemetry: NonNullable<Settings['telemetry']>;
+  extensions: NonNullable<Settings['extensions']>;
+  mcp: NonNullable<Settings['mcp']>;
+  tools: NonNullable<Settings['tools']>;
+  chatCompression: NonNullable<Settings['chatCompression']>;
+};
 
 export interface FooterSettings {
   hideCWD?: boolean;

@@ -180,7 +180,7 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     if (!authToken) {
-      authToken = await this.getAuthToken();
+      authToken = await this.getAuthTokenForPrompt();
     }
 
     if (!authToken) {
@@ -476,7 +476,6 @@ export class AnthropicProvider extends BaseProvider {
       | Array<{
           functionDeclarations: Array<{
             name: string;
-            parameters?: unknown;
             parametersJsonSchema?: unknown;
           }>;
         }>
@@ -495,8 +494,7 @@ export class AnthropicProvider extends BaseProvider {
           ? this.unprefixToolName(decl.name, true)
           : decl.name;
         if (declName === toolName) {
-          // Return parametersJsonSchema if available, otherwise parameters
-          return decl.parametersJsonSchema ?? decl.parameters;
+          return decl.parametersJsonSchema;
         }
       }
     }

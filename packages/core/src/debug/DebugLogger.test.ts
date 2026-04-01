@@ -525,23 +525,6 @@ describe('DebugLogger', () => {
    * @requirement REQ-006
    * @scenario Property: Performance is consistent regardless of message content
    */
-  it.skip('should maintain consistent performance across different message types @plan:PLAN-20250120-DEBUGLOGGING.P04', () => {
-    fc.assert(
-      fc.property(
-        fc.oneof(fc.string(), fc.integer(), fc.boolean(), fc.object()),
-        (message) => {
-          const logger = new DebugLogger('test');
-          logger.enabled = false;
-
-          const start = performance.now();
-          logger.log(message);
-          const duration = performance.now() - start;
-
-          expect(duration).toBeLessThan(0.1); // Should be very fast when disabled
-        },
-      ),
-    );
-  });
 
   /**
    * @requirement REQ-001

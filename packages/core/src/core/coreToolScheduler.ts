@@ -9,15 +9,16 @@ import {
   type ToolCallResponseInfo,
   ToolConfirmationOutcome,
   type ToolCallConfirmationDetails,
-  type ToolRegistry,
+  ToolRegistry,
   type EditorType,
-  type Config,
+  Config,
   logToolCall,
   ToolCallEvent,
   type ToolConfirmationPayload,
   ToolErrorType,
 } from '../index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { SerializableConfirmationDetails } from '../confirmation-bus/types.js';
 
 interface QueuedRequest {
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -206,7 +207,9 @@ export class CoreToolScheduler {
   private setStatusInternal(
     targetCallId: string,
     status: 'awaiting_approval',
-    confirmationDetails: ToolCallConfirmationDetails,
+    confirmationDetails:
+      | ToolCallConfirmationDetails
+      | SerializableConfirmationDetails,
   ): void;
   private setStatusInternal(
     targetCallId: string,
@@ -500,10 +503,18 @@ export class CoreToolScheduler {
     return this.toolExecutor
       .execute({
         call: scheduledCall,
+        signal,
         onLiveOutput: scheduledCall.tool.canUpdateOutput
           ? (id: string, chunk: string | AnsiOutput) => {
-              if (this.outputUpdateHandler != null) {
-                this.outputUpdateHandler(id, chunk);
+              if (this.outputUpdateHandler) {
+                try {
+                  this.outputUpdateHandler(id, chunk);
+                } catch (error) {
+                  toolSchedulerLogger.debug(
+                    () =>
+                      `Error in outputUpdateHandler for ${id}: ${error instanceof Error ? error.message : String(error)}`,
+                  );
+                }
               }
               this.toolCalls = this.toolCalls.map((tc) =>
                 tc.request.callId === id && tc.status === 'executing'
@@ -516,7 +527,6 @@ export class CoreToolScheduler {
         onPid: (id: string, pid: number) => {
           this.setPidInternal(id, pid);
         },
-        signal,
       })
       .then(async (executionResult) => {
         this.resultAggregator.bufferResult(
@@ -563,7 +573,7 @@ export class CoreToolScheduler {
           (tc) => tc.request.callId === callId,
         );
         if (
-          toolCall != null &&
+          toolCall &&
           toolCall.status !== 'success' &&
           toolCall.status !== 'error' &&
           toolCall.status !== 'cancelled'
@@ -655,7 +665,7 @@ export class CoreToolScheduler {
         logToolCall(this.config, new ToolCallEvent(call));
       }
 
-      if (this.onAllToolCallsComplete != null) {
+      if (this.onAllToolCallsComplete) {
         this.isFinalizingToolCalls = true;
         try {
           await this.onAllToolCallsComplete(completedCalls);
@@ -669,7 +679,7 @@ export class CoreToolScheduler {
   }
 
   private notifyToolCallsUpdate(): void {
-    if (this.onToolCallsUpdate != null) {
+    if (this.onToolCallsUpdate) {
       this.onToolCallsUpdate([...this.toolCalls]);
     }
   }
@@ -694,7 +704,7 @@ export class CoreToolScheduler {
     // 1. Cancel all queued requests
     while (this.requestQueue.length > 0) {
       const item = this.requestQueue.shift();
-      if (item != null) {
+      if (item) {
         item.reject(new Error('Tool call cancelled by user.'));
       }
     }

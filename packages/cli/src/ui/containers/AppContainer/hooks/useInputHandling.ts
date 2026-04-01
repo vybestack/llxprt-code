@@ -9,11 +9,12 @@ import type { TextBuffer } from '../../../components/shared/text-buffer.js';
 import type { UseInputHistoryStoreReturn } from '../../../hooks/useInputHistoryStore.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import { ToolCallStatus } from '../../../types.js';
+import { isSlashCommand } from '../../../utils/commandUtils.js';
 
 /**
  * @hook useInputHandling
- * @description Cancel handler and final submit logic
- * @inputs buffer, inputHistoryStore, submitQuery, pendingHistoryItems, lastSubmittedPromptRef, hadToolCallsRef, todoContinuationRef
+ * @description Cancel handler and final submit logic with MCP-readiness gating
+ * @inputs buffer, inputHistoryStore, submitQuery, pendingHistoryItems, lastSubmittedPromptRef, hadToolCallsRef, todoContinuationRef, isMcpReady, addMessage
  * @outputs handleUserCancel, handleFinalSubmit, cancelHandlerRef
  * @sideEffects None (callbacks only)
  * @cleanup N/A
@@ -31,6 +32,10 @@ export interface UseInputHandlingParams {
   todoContinuationRef: React.MutableRefObject<{
     clearPause: () => void;
   } | null>;
+  /** Whether MCP discovery has completed (or no MCP servers configured). */
+  isMcpReady: boolean;
+  /** Enqueue a message when gates are closed. From useMessageQueue. */
+  addMessage: (message: string) => void;
 }
 
 export interface UseInputHandlingResult {
@@ -63,6 +68,8 @@ export function useInputHandling({
   lastSubmittedPromptRef,
   hadToolCallsRef,
   todoContinuationRef,
+  isMcpReady,
+  addMessage,
 }: UseInputHandlingParams): UseInputHandlingResult {
   const cancelHandlerRef = useRef<
     ((shouldRestorePrompt?: boolean) => void) | null
@@ -118,6 +125,14 @@ export function useInputHandling({
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
+        // Slash commands always pass through regardless of MCP readiness.
+        if (!isSlashCommand(trimmedValue) && !isMcpReady) {
+          addMessage(trimmedValue);
+          inputHistoryStore.addInput(trimmedValue);
+          lastSubmittedPromptRef.current = trimmedValue;
+          return;
+        }
+
         /**
          * @plan PLAN-20260129-TODOPERSIST.P12
          * Reset continuation attempt counter when user submits a new prompt.
@@ -141,6 +156,8 @@ export function useInputHandling({
       hadToolCallsRef,
       todoContinuationRef,
       lastSubmittedPromptRef,
+      isMcpReady,
+      addMessage,
     ],
   );
 

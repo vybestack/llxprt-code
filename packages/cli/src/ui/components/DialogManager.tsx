@@ -25,7 +25,7 @@ import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
-import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
+
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
@@ -54,7 +54,7 @@ import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // TODO: Not yet ported from upstream
 
 interface DialogManagerProps {
@@ -187,7 +187,7 @@ export const DialogManager = ({
       const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
 
       // Guard: recording infrastructure required
-      if (recordingSwapCallbacks == null) {
+      if (!recordingSwapCallbacks) {
         dialogManagerLogger.warn(
           'Cannot resume session: recording infrastructure not available.',
         );
@@ -291,11 +291,6 @@ export const DialogManager = ({
       />
     );
   }
-  if (uiState.shellConfirmationRequest != null) {
-    return (
-      <ShellConfirmationDialog request={uiState.shellConfirmationRequest} />
-    );
-  }
   // TODO: LoopDetectionConfirmation not yet ported from upstream
   // if (uiState.loopDetectionConfirmationRequest) {
   //   return (
@@ -304,7 +299,7 @@ export const DialogManager = ({
   //     />
   //   );
   // }
-  if (uiState.confirmationRequest != null) {
+  if (uiState.confirmationRequest) {
     return (
       <ConsentPrompt
         prompt={uiState.confirmationRequest.prompt}

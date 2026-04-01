@@ -20,7 +20,7 @@
 import { describe, it, expect } from 'vitest';
 import type { IContent } from '../../services/history/IContent.js';
 import type { CompressionContext } from './types.js';
-import { CompressionExecutionError } from './types.js';
+import { EmptySummaryError, isTransientCompressionError } from './types.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '../../runtime/AgentRuntimeState.js';
@@ -166,20 +166,20 @@ function buildContext(
 
   return {
     history: overrides.history ?? [],
+    runtimeContext,
+    runtimeState,
     estimateTokens: async (contents: readonly IContent[]) =>
       contents.length * 100,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
+    resolveProvider,
+    promptResolver,
     promptBaseDir: '/tmp/test-prompts',
     promptContext: {
       provider: overrides.provider ?? 'test-provider',
       model: overrides.model ?? 'test-model',
     },
     promptId: 'test-prompt',
-    runtimeContext,
-    runtimeState,
-    resolveProvider,
-    promptResolver,
   };
 }
 
@@ -315,10 +315,8 @@ describe('MiddleOutStrategy', () => {
       // Check: top messages shouldn't end with an orphaned tool call
       // (i.e., an AI with tool_call whose response isn't also in top)
       const lastTop = topMessages[topMessages.length - 1];
-      // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to check AI message with tool calls
       if (lastTop?.speaker === 'ai') {
         const toolCalls = lastTop.blocks.filter((b) => b.type === 'tool_call');
-        // eslint-disable-next-line vitest/no-conditional-in-test -- Skip when no tool calls
         if (toolCalls.length > 0) {
           // If the last top message has tool calls, their responses
           // must also be in the top portion
@@ -339,7 +337,6 @@ describe('MiddleOutStrategy', () => {
       }
 
       // Bottom messages should not start with an orphaned tool response
-      // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to check non-empty array
       if (bottomMessages.length > 0) {
         const firstBottom = bottomMessages[0];
         expect(firstBottom.speaker).not.toBe('tool');
@@ -841,7 +838,7 @@ describe('MiddleOutStrategy', () => {
   // -----------------------------------------------------------------------
 
   describe('empty summary handling', () => {
-    it('throws a transient CompressionExecutionError when LLM returns empty summary', async () => {
+    it('throws EmptySummaryError when LLM returns empty summary', async () => {
       const emptyProvider = createFakeProvider('empty-provider', '');
       const history = generateHistory(20);
       const ctx = buildContext({
@@ -850,15 +847,16 @@ describe('MiddleOutStrategy', () => {
       });
       const strategy = new MiddleOutStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
-      await expect(strategy.compress(ctx)).rejects.toMatchObject({
-        isTransient: true,
-      });
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      try {
+        await strategy.compress(ctx);
+      } catch (error) {
+        expect(error).toBeInstanceOf(EmptySummaryError);
+        expect(isTransientCompressionError(error)).toBe(false);
+      }
     });
 
-    it('throws a transient CompressionExecutionError when LLM returns whitespace-only summary', async () => {
+    it('throws EmptySummaryError when LLM returns whitespace-only summary', async () => {
       const whitespaceProvider = createFakeProvider(
         'whitespace-provider',
         '   \n  \t  ',
@@ -870,12 +868,13 @@ describe('MiddleOutStrategy', () => {
       });
       const strategy = new MiddleOutStrategy();
 
-      await expect(strategy.compress(ctx)).rejects.toThrow(
-        CompressionExecutionError,
-      );
-      await expect(strategy.compress(ctx)).rejects.toMatchObject({
-        isTransient: true,
-      });
+      await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
+      try {
+        await strategy.compress(ctx);
+      } catch (error) {
+        expect(error).toBeInstanceOf(EmptySummaryError);
+        expect(isTransientCompressionError(error)).toBe(false);
+      }
     });
   });
 });

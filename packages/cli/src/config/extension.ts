@@ -5,8 +5,8 @@
  */
 
 import {
-  type MCPServerConfig,
-  type GeminiCLIExtension,
+  MCPServerConfig,
+  GeminiCLIExtension,
   Storage,
   getErrorMessage,
   type SkillDefinition,
@@ -308,7 +308,7 @@ export function loadExtension(
 
     config = resolveEnvVarsInObject(config);
 
-    if (config.mcpServers != null) {
+    if (config.mcpServers) {
       config.mcpServers = Object.fromEntries(
         Object.entries(config.mcpServers).map(([key, value]) => [
           key,
@@ -369,17 +369,17 @@ export function loadExtension(
       name: config.name,
       version: config.version,
       path: effectiveExtensionPath,
+      contextFiles,
+      installMetadata,
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
-      isActive: true,
+      skills,
+      subagents,
+      isActive: true, // Barring any other signals extensions should be considered Active.
       settings: config.settings as Array<Record<string, unknown>> | undefined,
       resolvedSettings: resolvedSettings as unknown as Array<
         Record<string, unknown>
       >,
-      contextFiles,
-      installMetadata,
-      skills,
-      subagents,
     };
   } catch (e) {
     console.error(
@@ -446,9 +446,9 @@ export async function resolveExtensionSettingsWithSource(
     return {
       name: setting.name,
       envVar: setting.envVar,
+      value,
       description: setting.description,
       sensitive: setting.sensitive ?? false,
-      value,
       source,
     };
   });
@@ -469,10 +469,7 @@ export function loadExtensionByName(
       continue;
     }
     const extension = loadExtension({ extensionDir, workspaceDir });
-    if (
-      extension != null &&
-      extension.name.toLowerCase() === name.toLowerCase()
-    ) {
+    if (extension && extension.name.toLowerCase() === name.toLowerCase()) {
       return extension;
     }
   }
@@ -492,7 +489,8 @@ export function loadInstallMetadata(
   const metadataFilePath = path.join(extensionDir, INSTALL_METADATA_FILENAME);
   try {
     const configContent = fs.readFileSync(metadataFilePath, 'utf-8');
-    return JSON.parse(configContent) as ExtensionInstallMetadata;
+    const metadata = JSON.parse(configContent) as ExtensionInstallMetadata;
+    return metadata;
   } catch (_e) {
     return undefined;
   }
@@ -551,7 +549,10 @@ export async function requestConsentNonInteractive(
   consentDescription: string,
 ): Promise<boolean> {
   console.info(consentDescription);
-  return promptForConsentNonInteractive('Do you want to continue? [Y/n]: ');
+  const result = await promptForConsentNonInteractive(
+    'Do you want to continue? [Y/n]: ',
+  );
+  return result;
 }
 
 /**
@@ -744,7 +745,7 @@ export async function installOrUpdateExtension(
       extensionDir: localSourcePath,
       workspaceDir: cwd,
     });
-    if (newExtensionConfig == null) {
+    if (!newExtensionConfig) {
       throw new Error(
         `Invalid extension at ${installMetadata.source}. Please make sure it has a valid ${EXTENSIONS_CONFIG_FILENAME} or ${EXTENSIONS_CONFIG_FILENAME_FALLBACK} file.`,
       );
@@ -755,10 +756,11 @@ export async function installOrUpdateExtension(
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();
 
-    // Check for missing settings and warn user
+    // Check for missing settings and warn user (only when extensionConfig is enabled)
     if (
-      newExtensionConfig.settings != null &&
-      newExtensionConfig.settings.length > 0
+      newExtensionConfig.settings &&
+      newExtensionConfig.settings.length > 0 &&
+      (settings.experimental?.extensionConfig ?? false)
     ) {
       const { getMissingSettings } = await import(
         './extensions/settingsIntegration.js'
@@ -850,14 +852,11 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
       const isLocal = !!mcpServer.command;
       const source =
         mcpServer.httpUrl ??
-        `${mcpServer.command || ''}${mcpServer.args != null ? ' ' + mcpServer.args.join(' ') : ''}`;
+        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (
-    sanitizedConfig.hooks != null &&
-    Object.keys(sanitizedConfig.hooks).length > 0
-  ) {
+  if (sanitizedConfig.hooks && Object.keys(sanitizedConfig.hooks).length > 0) {
     output.push(
       `This extension will register hooks: ${Object.keys(sanitizedConfig.hooks).join(', ')}`,
     );
@@ -870,7 +869,7 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
       `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
   }
-  if (sanitizedConfig.excludeTools != null) {
+  if (sanitizedConfig.excludeTools) {
     output.push(
       `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
     );
@@ -902,7 +901,7 @@ async function maybeRequestConsentOrFail(
   previousExtensionConfig?: ExtensionConfig,
 ) {
   const extensionConsent = extensionConsentString(extensionConfig);
-  if (previousExtensionConfig != null) {
+  if (previousExtensionConfig) {
     const previousExtensionConsent = extensionConsentString(
       previousExtensionConfig,
     );
@@ -1024,7 +1023,7 @@ export async function uninstallExtension(
       installed.installMetadata?.source.toLowerCase() ===
         extensionIdentifier.toLowerCase(),
   );
-  if (extension == null) {
+  if (!extension) {
     throw new Error(
       `Extension "${extensionIdentifier}" not found. Run llxprt extensions list to see available extensions.`,
     );
@@ -1062,7 +1061,7 @@ export function toOutputString(
   const status = workspaceEnabled ? chalk.green('✓') : chalk.red('✗');
   let output = `${status} ${extension.name} (${extension.version})`;
   output += `\n Path: ${extension.path}`;
-  if (extension.installMetadata != null) {
+  if (extension.installMetadata) {
     output += `\n Source: ${extension.installMetadata.source} (Type: ${extension.installMetadata.type})`;
   }
   output += `\n Enabled (User): ${userEnabled}`;
@@ -1073,13 +1072,13 @@ export function toOutputString(
       output += `\n  ${contextFile}`;
     });
   }
-  if (extension.mcpServers != null) {
+  if (extension.mcpServers) {
     output += `\n MCP servers:`;
     Object.keys(extension.mcpServers).forEach((key) => {
       output += `\n  ${key}`;
     });
   }
-  if (extension.excludeTools != null) {
+  if (extension.excludeTools) {
     output += `\n Excluded tools:`;
     extension.excludeTools.forEach((tool) => {
       output += `\n  ${tool}`;
@@ -1097,7 +1096,7 @@ export function disableExtension(
     throw new Error('System and SystemDefaults scopes are not supported.');
   }
   const extension = loadExtensionByName(name, cwd);
-  if (extension == null) {
+  if (!extension) {
     throw new Error(`Extension with name ${name} does not exist.`);
   }
 
@@ -1117,7 +1116,7 @@ export function enableExtension(
     throw new Error('System and SystemDefaults scopes are not supported.');
   }
   const extension = loadExtensionByName(name, cwd);
-  if (extension == null) {
+  if (!extension) {
     throw new Error(`Extension with name ${name} does not exist.`);
   }
   const manager = new ExtensionEnablementManager(

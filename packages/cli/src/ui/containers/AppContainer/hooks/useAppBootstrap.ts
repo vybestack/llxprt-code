@@ -127,15 +127,15 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   const historyLimits = useMemo(
     () => ({
       maxItems:
-        typeof settings.merged.ui?.historyMaxItems === 'number'
+        typeof settings.merged.ui.historyMaxItems === 'number'
           ? settings.merged.ui.historyMaxItems
           : DEFAULT_HISTORY_MAX_ITEMS,
       maxBytes:
-        typeof settings.merged.ui?.historyMaxBytes === 'number'
+        typeof settings.merged.ui.historyMaxBytes === 'number'
           ? settings.merged.ui.historyMaxBytes
           : DEFAULT_HISTORY_MAX_BYTES,
     }),
-    [settings.merged.ui?.historyMaxItems, settings.merged.ui?.historyMaxBytes],
+    [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);

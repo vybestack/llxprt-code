@@ -27,6 +27,7 @@ import type { ContentGenerator } from '../contentGenerator.js';
 import type { CompressionContext } from '../compression/types.js';
 import { triggerPreCompressHook } from '../lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '../../hooks/types.js';
+import { PerformCompressionResult } from '../turn.js';
 
 // Mock the lifecycle hook triggers
 vi.mock('../lifecycleHookTriggers.js', () => ({
@@ -530,17 +531,17 @@ describe('Compression Dispatcher Integration (P13)', () => {
       );
 
       // Compression should still succeed despite hook failure
-      await expect(
-        chat.performCompression('test-prompt-id'),
-      ).resolves.toBeUndefined();
+      await expect(chat.performCompression('test-prompt-id')).resolves.toBe(
+        PerformCompressionResult.COMPRESSED,
+      );
 
       // Verify compression still ran (provider was called to generate summary)
       expect(localMockProvider.generateChatCompletion).toHaveBeenCalled();
     });
 
-    it('should not call PreCompress hook when compression is skipped (empty history)', async () => {
+    it('should call PreCompress hook when compression is attempted on empty history', async () => {
       const historyService = new HistoryService(8000);
-      // Empty history - compression should be skipped
+      // Empty history - compression will be skipped after PreCompress hook
 
       const mockContentGenerator: ContentGenerator = vi.fn();
 
@@ -550,12 +551,15 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
 
-      await chat.performCompression('test-prompt-id');
+      const result = await chat.performCompression('test-prompt-id');
 
-      // Assert: triggerPreCompressHook was NOT called when compression is skipped
-      // Note: This test may already pass if there's no hook call at all
-      // but it documents the expected behavior
-      expect(triggerPreCompressHook).not.toHaveBeenCalled();
+      expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);
+      expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
+      expect(triggerPreCompressHook).toHaveBeenCalledWith(
+        expect.anything(),
+        PreCompressTrigger.Manual,
+      );
+      expect(mockContentGenerator).not.toHaveBeenCalled();
     });
   });
 });

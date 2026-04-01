@@ -143,6 +143,7 @@ export class MockTool extends BaseDeclarativeTool<
           title: `Confirm ${this.displayName}`,
           command: this.name,
           rootCommand: this.name,
+          rootCommands: [this.name],
           onConfirm: async () => {},
         };
       };

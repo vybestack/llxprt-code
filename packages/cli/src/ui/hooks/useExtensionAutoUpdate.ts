@@ -18,7 +18,7 @@ export function useExtensionAutoUpdate({
   settings,
   onConsoleMessage,
 }: UseExtensionAutoUpdateOptions): void {
-  const autoUpdateSettings = settings.merged.extensions?.autoUpdate;
+  const autoUpdateSettings = settings.merged.extensions.autoUpdate;
   const perExtensionSignature = useMemo(
     () => JSON.stringify(autoUpdateSettings?.perExtension ?? {}),
     [autoUpdateSettings?.perExtension],

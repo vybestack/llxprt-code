@@ -68,7 +68,7 @@ describe('getInstallationInfo', () => {
 
   it('should return UNKNOWN when cliPath is not available', () => {
     process.argv[1] = '';
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
   });
 
@@ -79,7 +79,7 @@ describe('getInstallationInfo', () => {
       throw error;
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
     expect(mockDebugLogger.log).toHaveBeenCalledWith(String(error));
@@ -92,7 +92,7 @@ describe('getInstallationInfo', () => {
     );
     mockedIsGitRepository.mockReturnValue(true);
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.UNKNOWN);
     expect(info.isGlobal).toBe(false);
@@ -106,7 +106,7 @@ describe('getInstallationInfo', () => {
     process.argv[1] = npxPath;
     mockedRealPathSync.mockReturnValue(npxPath);
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.NPX);
     expect(info.isGlobal).toBe(false);
@@ -118,7 +118,7 @@ describe('getInstallationInfo', () => {
     process.argv[1] = pnpxPath;
     mockedRealPathSync.mockReturnValue(pnpxPath);
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.PNPX);
     expect(info.isGlobal).toBe(false);
@@ -133,7 +133,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.BUNX);
     expect(info.isGlobal).toBe(false);
@@ -144,16 +144,33 @@ describe('getInstallationInfo', () => {
     Object.defineProperty(process, 'platform', {
       value: 'darwin',
     });
-    const cliPath = '/usr/local/bin/gemini';
+    // Use a path that matches what brew would resolve to
+    const cliPath = '/opt/homebrew/Cellar/llxprt-code/1.0.0/bin/llxprt';
     process.argv[1] = cliPath;
-    mockedRealPathSync.mockReturnValue(cliPath);
-    mockedExecSync.mockReturnValue(Buffer.from('gemini-cli')); // Simulate successful command
 
-    const info = getInstallationInfo(projectRoot, false);
+    mockedExecSync.mockImplementation((cmd) => {
+      if (
+        typeof cmd === 'string' &&
+        cmd.includes('brew --prefix llxprt-code')
+      ) {
+        return '/opt/homebrew/opt/llxprt-code';
+      }
+      throw new Error(`Command failed: ${cmd}`);
+    });
+
+    mockedRealPathSync.mockImplementation((p) => {
+      if (p === cliPath) return cliPath;
+      if (p === '/opt/homebrew/opt/llxprt-code') {
+        return '/opt/homebrew/Cellar/llxprt-code/1.0.0';
+      }
+      return String(p);
+    });
+
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
-      'brew list -1 | grep -q "^llxprt-code$"',
-      { stdio: 'ignore' },
+      expect.stringContaining('brew --prefix llxprt-code'),
+      expect.anything(),
     );
     expect(info.packageManager).toBe(PackageManager.HOMEBREW);
     expect(info.isGlobal).toBe(true);
@@ -164,18 +181,18 @@ describe('getInstallationInfo', () => {
     Object.defineProperty(process, 'platform', {
       value: 'darwin',
     });
-    const cliPath = '/usr/local/bin/gemini';
+    const cliPath = '/usr/local/bin/llxprt';
     process.argv[1] = cliPath;
     mockedRealPathSync.mockReturnValue(cliPath);
     mockedExecSync.mockImplementation(() => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
-      'brew list -1 | grep -q "^llxprt-code$"',
-      { stdio: 'ignore' },
+      expect.stringContaining('brew --prefix llxprt-code'),
+      expect.anything(),
     );
     // Should fall back to default global npm
     expect(info.packageManager).toBe(PackageManager.NPM);
@@ -190,7 +207,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.PNPM);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
@@ -198,7 +215,7 @@ describe('getInstallationInfo', () => {
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run pnpm add');
   });
 
@@ -210,7 +227,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.YARN);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
@@ -218,7 +235,7 @@ describe('getInstallationInfo', () => {
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run yarn global add');
   });
 
@@ -230,13 +247,13 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.BUN);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe('bun add -g @vybestack/llxprt-code@latest');
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run bun add');
   });
 
@@ -251,7 +268,7 @@ describe('getInstallationInfo', () => {
       (p) => p === path.join(projectRoot, 'yarn.lock'),
     );
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.YARN);
     expect(info.isGlobal).toBe(false);
@@ -269,7 +286,7 @@ describe('getInstallationInfo', () => {
       (p) => p === path.join(projectRoot, 'pnpm-lock.yaml'),
     );
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.PNPM);
     expect(info.isGlobal).toBe(false);
@@ -286,7 +303,7 @@ describe('getInstallationInfo', () => {
       (p) => p === path.join(projectRoot, 'bun.lockb'),
     );
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.BUN);
     expect(info.isGlobal).toBe(false);
@@ -301,7 +318,7 @@ describe('getInstallationInfo', () => {
     });
     mockedExistsSync.mockReturnValue(false); // No lockfiles
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
 
     expect(info.packageManager).toBe(PackageManager.NPM);
     expect(info.isGlobal).toBe(false);
@@ -315,7 +332,7 @@ describe('getInstallationInfo', () => {
       throw new Error('Command failed');
     });
 
-    const info = getInstallationInfo(projectRoot, false);
+    const info = getInstallationInfo(projectRoot, true);
     expect(info.packageManager).toBe(PackageManager.NPM);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
@@ -323,7 +340,7 @@ describe('getInstallationInfo', () => {
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
-    const infoDisabled = getInstallationInfo(projectRoot, true);
+    const infoDisabled = getInstallationInfo(projectRoot, false);
     expect(infoDisabled.updateMessage).toContain('Please run npm install');
   });
 
@@ -339,7 +356,7 @@ describe('getInstallationInfo', () => {
         throw new Error('brew not found');
       });
 
-      const info = getInstallationInfo(projectRoot, false);
+      const info = getInstallationInfo(projectRoot, true);
 
       expect(info.packageManager).toBe(PackageManager.NPM);
       expect(info.isGlobal).toBe(true);
@@ -359,7 +376,7 @@ describe('getInstallationInfo', () => {
         throw new Error('Command failed');
       });
 
-      const info = getInstallationInfo(projectRoot, false);
+      const info = getInstallationInfo(projectRoot, true);
 
       // Should still detect Homebrew npm even if brew command fails
       expect(info.packageManager).toBe(PackageManager.NPM);
@@ -367,5 +384,39 @@ describe('getInstallationInfo', () => {
       expect(info.updateCommand).toBeUndefined();
       expect(info.updateMessage).toContain('Homebrew-managed npm');
     });
+  });
+
+  it('should NOT detect Homebrew if llxprt-code is installed in brew but running from npm location', () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+    });
+    // Path looks like standard global NPM
+    const cliPath =
+      '/usr/local/lib/node_modules/@vybestack/llxprt-code/dist/index.js';
+    process.argv[1] = cliPath;
+
+    // Brew prefix succeeds but path doesn't match
+    mockedExecSync.mockImplementation((cmd) => {
+      if (
+        typeof cmd === 'string' &&
+        cmd.includes('brew --prefix llxprt-code')
+      ) {
+        return '/opt/homebrew/opt/llxprt-code';
+      }
+      throw new Error(`Command failed: ${cmd}`);
+    });
+
+    mockedRealPathSync.mockImplementation((p) => {
+      if (p === cliPath) return cliPath;
+      if (p === '/opt/homebrew/opt/llxprt-code') {
+        return '/opt/homebrew/Cellar/llxprt-code/1.0.0';
+      }
+      return String(p);
+    });
+
+    const info = getInstallationInfo(projectRoot, false);
+
+    expect(info.packageManager).not.toBe(PackageManager.HOMEBREW);
+    expect(info.packageManager).toBe(PackageManager.NPM);
   });
 });

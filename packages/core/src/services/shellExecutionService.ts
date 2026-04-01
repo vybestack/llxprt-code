@@ -17,6 +17,7 @@ import { isBinary } from '../utils/textUtils.js';
 import pkg from '@xterm/headless';
 import {
   serializeTerminalToObject,
+  type AnsiLine,
   type AnsiOutput,
 } from '../utils/terminalSerializer.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
@@ -742,20 +743,22 @@ export class ShellExecutionService {
           if (shellExecutionConfig.showColor) {
             newOutput = serializeTerminalToObject(headlessTerminal);
           } else {
-            newOutput = (serializeTerminalToObject(headlessTerminal) || []).map(
-              (line) =>
+            newOutput = (serializeTerminalToObject(headlessTerminal) || [])
+              .filter((line): line is AnsiLine => Array.isArray(line))
+              .map((line) =>
                 line.map((token) => {
                   token.fg = '';
                   token.bg = '';
                   return token;
                 }),
-            );
+              );
           }
 
           let lastNonEmptyLine = -1;
           for (let i = newOutput.length - 1; i >= 0; i--) {
             const line = newOutput[i];
             if (
+              Array.isArray(line) &&
               line
                 .map((segment) => segment.text)
                 .join('')

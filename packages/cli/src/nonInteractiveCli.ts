@@ -42,6 +42,7 @@ interface RunNonInteractiveParams {
   input: string;
   prompt_id: string;
   runtimeMessageBus?: MessageBus;
+  deferTelemetryShutdown?: boolean;
 }
 
 export async function runNonInteractive({
@@ -50,6 +51,7 @@ export async function runNonInteractive({
   input,
   prompt_id,
   runtimeMessageBus,
+  deferTelemetryShutdown = false,
 }: RunNonInteractiveParams): Promise<void> {
   const outputFormat =
     typeof config.getOutputFormat === 'function'
@@ -535,6 +537,15 @@ export async function runNonInteractive({
                 `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
               );
             }
+          } else if (
+            !jsonOutput &&
+            !streamJsonOutput &&
+            !toolResponse.suppressDisplay &&
+            typeof toolResponse.resultDisplay === 'string' &&
+            toolResponse.resultDisplay.length > 0
+          ) {
+            process.stdout.write(`${toolResponse.resultDisplay}
+`);
           }
 
           if (toolResponse.responseParts) {
@@ -581,7 +592,7 @@ export async function runNonInteractive({
 
     consolePatcher.cleanup();
     coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
-    if (isTelemetrySdkInitialized()) {
+    if (!deferTelemetryShutdown && isTelemetrySdkInitialized()) {
       await shutdownTelemetry(config);
     }
   }

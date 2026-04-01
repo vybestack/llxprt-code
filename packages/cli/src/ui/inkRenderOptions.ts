@@ -13,7 +13,7 @@ type InkRenderOptionsConfig = {
 
 type InkRenderOptionsSettings = {
   merged: {
-    ui?: {
+    ui: {
       useAlternateBuffer?: boolean;
       incrementalRendering?: boolean;
     };
@@ -33,9 +33,9 @@ export const inkRenderOptions = (
 ): RenderOptions => {
   const isScreenReaderEnabled = config.getScreenReader();
   const useAlternateBuffer =
-    settings.merged.ui?.useAlternateBuffer === true && !isScreenReaderEnabled;
+    settings.merged.ui.useAlternateBuffer === true && !isScreenReaderEnabled;
   const incrementalRendering =
-    useAlternateBuffer && settings.merged.ui?.incrementalRendering !== false;
+    useAlternateBuffer && settings.merged.ui.incrementalRendering !== false;
 
   return {
     stdout: sharedStdio.stdout,

@@ -316,7 +316,7 @@ describe('loadCliConfig memory discovery', () => {
       loadMemoryFromIncludeDirectories: false,
       folderTrust: false,
       telemetry: { enabled: false },
-      accessibility: { screenReader: false, disableLoadingPhrases: false },
+      accessibility: { screenReader: false, enableLoadingPhrases: true },
       ui: {
         contextFileName,
         memoryDiscoveryMaxDirs: 200,

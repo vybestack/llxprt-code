@@ -29,6 +29,7 @@ import {
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
+import { getCliVersion } from './utils/version.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -267,6 +268,58 @@ describe('gemini.tsx main function', () => {
     }
 
     expect(parseArgumentsMock).toHaveBeenCalledWith({});
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('should print version and exit when --version is passed', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'llxprt', '--version'];
+
+    const getCliVersionMock = vi.mocked(getCliVersion);
+    getCliVersionMock.mockResolvedValue('1.2.3');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+
+    mockWriteToStdout.mockClear();
+
+    try {
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(mockWriteToStdout).toHaveBeenCalledWith(`1.2.3
+`);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    }
+
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('should print version and exit when -v is passed', async () => {
+    const originalArgv = process.argv;
+    process.argv = ['node', 'llxprt', '-v'];
+
+    const getCliVersionMock = vi.mocked(getCliVersion);
+    getCliVersionMock.mockResolvedValue('1.2.3');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new MockProcessExitError(code);
+    });
+
+    mockWriteToStdout.mockClear();
+
+    try {
+      await expect(main()).rejects.toThrow(MockProcessExitError);
+      expect(mockWriteToStdout).toHaveBeenCalledWith(`1.2.3
+`);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    } finally {
+      process.argv = originalArgv;
+      exitSpy.mockRestore();
+    }
+
     expect(loadSettingsMock).not.toHaveBeenCalled();
   });
 
