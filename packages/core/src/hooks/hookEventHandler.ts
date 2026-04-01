@@ -642,10 +642,18 @@ export class HookEventHandler {
   ): void {
     for (const result of hookResults) {
       if (hookInput) {
-        logHookCall(
-          this.config,
-          new HookCallEvent(eventName, hookInput, result),
-        );
+        try {
+          logHookCall(
+            this.config,
+            new HookCallEvent(eventName, hookInput, result),
+          );
+        } catch (error) {
+          this.debugLogger.warn(
+            `Failed to emit hook telemetry for ${eventName}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
       }
 
       if (this.debugLogger === undefined) continue;

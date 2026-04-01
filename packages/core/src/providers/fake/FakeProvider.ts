@@ -182,6 +182,7 @@ function normalizeLegacyResponseLine(
 
 function normalizeTurn(rawTurn: unknown): FakeResponseTurn {
   if (isObject(rawTurn) && Array.isArray(rawTurn.chunks)) {
+    // Fixtures are authored in-repo; we trust chunk element shape to match IContent.
     return { chunks: rawTurn.chunks as IContent[] };
   }
 

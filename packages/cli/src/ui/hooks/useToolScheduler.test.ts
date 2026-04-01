@@ -44,6 +44,11 @@ const buildRequest = (
   agentId: overrides.agentId ?? 'primary',
 });
 
+const hasOnConfirm = (
+  details: WaitingToolCall['confirmationDetails'],
+): details is ToolCallConfirmationDetails =>
+  'onConfirm' in details && typeof details.onConfirm === 'function';
+
 const mockToolRegistry = {
   getTool: vi.fn(),
   getAllToolNames: vi.fn(() => ['mockTool', 'anotherTool']),
@@ -846,12 +851,11 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    const details = waitingCall.confirmationDetails as Extract<
-      typeof waitingCall.confirmationDetails,
-      { onConfirm: unknown }
-    >;
-    const onConfirm = details.onConfirm;
-    expect(onConfirm).toBeDefined();
+    expect(hasOnConfirm(waitingCall.confirmationDetails)).toBe(true);
+    if (!hasOnConfirm(waitingCall.confirmationDetails)) {
+      throw new Error('Expected confirmationDetails to include onConfirm');
+    }
+    const { onConfirm } = waitingCall.confirmationDetails;
 
     // Approve the confirmation
     await act(async () => {
@@ -925,11 +929,11 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    const details = waitingCall.confirmationDetails as Extract<
-      typeof waitingCall.confirmationDetails,
-      { onConfirm: unknown }
-    >;
-    const onConfirm = details.onConfirm;
+    expect(hasOnConfirm(waitingCall.confirmationDetails)).toBe(true);
+    if (!hasOnConfirm(waitingCall.confirmationDetails)) {
+      throw new Error('Expected confirmationDetails to include onConfirm');
+    }
+    const { onConfirm } = waitingCall.confirmationDetails;
 
     // Cancel the confirmation
     await act(async () => {

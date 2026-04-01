@@ -513,7 +513,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
 
 - **`tools.enableHooks`** (boolean):
-  - **Description:** Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.
+  - **Description:** Experimental gate for hooks features/UI. Hook execution still also requires `hooksConfig.enabled: true`.
   - **Default:** `true`
   - **Requires restart:** Yes
 
@@ -801,8 +801,9 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 #### `hooksConfig`
 
 - **`hooksConfig.enabled`** (boolean):
-  - **Description:** Canonical toggle for the hooks system. When disabled, no hooks will be executed.
+  - **Description:** Canonical runtime toggle for hook execution. Hooks run only when this is `true`.
   - **Default:** `false`
+  - **Interaction with `tools.enableHooks`:** Runtime hook execution requires both `tools.enableHooks` and `hooksConfig.enabled` to be `true`. `tools.enableHooks` is the experimental gate for hooks features; `hooksConfig.enabled` is the explicit execution switch.
 
 - **`hooksConfig.notifications`** (boolean):
   - **Description:** Show visual indicators when hooks are executing.
@@ -859,17 +860,19 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`fileFiltering`** (object):
   - **Description:** Controls git-aware file filtering behavior for @ commands and file discovery tools.
-  - **Default:** `"respectGitIgnore": true, "enableRecursiveFileSearch": true`
+  - **Default:** `"respectGitIgnore": true, "respectLlxprtIgnore": true, "enableRecursiveFileSearch": true, "enableFuzzySearch": true`
   - **Properties:**
     - **`respectGitIgnore`** (boolean): Whether to respect .gitignore patterns when discovering files. When set to `true`, git-ignored files (like `node_modules/`, `dist/`, `.env`) are automatically excluded from @ commands and file listing operations.
+    - **`respectLlxprtIgnore`** (boolean): Whether to respect .llxprtignore patterns when discovering files.
     - **`enableRecursiveFileSearch`** (boolean): Whether to enable searching recursively for filenames under the current tree when completing @ prefixes in the prompt.
-    - **`disableFuzzySearch`** (boolean): When `true`, disables the fuzzy search capabilities when searching for files, which can improve performance on projects with a large number of files.
+    - **`enableFuzzySearch`** (boolean): When `false`, disables fuzzy search capabilities when searching for files, which can improve performance on projects with a large number of files.
   - **Example:**
     ```json
     "fileFiltering": {
       "respectGitIgnore": true,
+      "respectLlxprtIgnore": true,
       "enableRecursiveFileSearch": false,
-      "disableFuzzySearch": true
+      "enableFuzzySearch": false
     }
     ```
 
@@ -877,9 +880,9 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 If you are experiencing performance issues with file searching (e.g., with `@` completions), especially in projects with a very large number of files, here are a few things you can try in order of recommendation:
 
-1.  **Use `.geminiignore`:** Create a `.geminiignore` file in your project root to exclude directories that contain a large number of files that you don't need to reference (e.g., build artifacts, logs, `node_modules`). Reducing the total number of files crawled is the most effective way to improve performance.
+1.  **Use `.llxprtignore`:** Create a `.llxprtignore` file in your project root to exclude directories that contain a large number of files that you don't need to reference (e.g., build artifacts, logs, `node_modules`). Reducing the total number of files crawled is the most effective way to improve performance.
 
-2.  **Disable Fuzzy Search:** If ignoring files is not enough, you can disable fuzzy search by setting `disableFuzzySearch` to `true` in your `settings.json` file. This will use a simpler, non-fuzzy matching algorithm, which can be faster.
+2.  **Disable Fuzzy Search:** If ignoring files is not enough, you can disable fuzzy search by setting `enableFuzzySearch` to `false` in your `settings.json` file. This will use a simpler, non-fuzzy matching algorithm, which can be faster.
 
 3.  **Disable Recursive File Search:** As a last resort, you can disable recursive file search entirely by setting `enableRecursiveFileSearch` to `false`. This will be the fastest option as it avoids a recursive crawl of your project. However, it means you will need to type the full path to files when using `@` completions.
 
@@ -1056,8 +1059,8 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Description:** Respect .gitignore files when searching.
   - **Default:** `true`
 
-- **`context.fileFiltering.respectGeminiIgnore`** (boolean):
-  - **Description:** Respect .geminiignore files when searching.
+- **`context.fileFiltering.respectLlxprtIgnore`** (boolean):
+  - **Description:** Respect .llxprtignore files when searching.
   - **Default:** `true`
 
 - **`context.fileFiltering.enableRecursiveFileSearch`** (boolean):
@@ -1368,13 +1371,13 @@ The following settings remain at the top level of the `settings.json` file.
   - **Description:** Configures accessibility features for the CLI.
   - **Properties:**
     - **`screenReader`** (boolean): Enables screen reader mode, which adjusts the TUI for better compatibility with screen readers. This can also be enabled with the `--screen-reader` command-line flag, which will take precedence over the setting.
-    - **`disableLoadingPhrases`** (boolean): Disables the display of loading phrases during operations.
-  - **Default:** `{"screenReader": false, "disableLoadingPhrases": false}`
+    - **`enableLoadingPhrases`** (boolean): Enables the display of loading phrases during operations.
+  - **Default:** `{"screenReader": false, "enableLoadingPhrases": true}`
   - **Example:**
     ```json
     "accessibility": {
       "screenReader": true,
-      "disableLoadingPhrases": true
+      "enableLoadingPhrases": false
     }
     ```
 
@@ -1382,9 +1385,9 @@ The following settings remain at the top level of the `settings.json` file.
 
 The following settings are available in the `/settings` dialog:
 
-- **`disableAutoUpdate`** (boolean):
-  - **Description:** Disable automatic updates of LLxprt Code. When enabled, you will need to manually update the application.
-  - **Default:** `false`
+- **`enableAutoUpdateNotification`** (boolean):
+  - **Description:** Enable update notification prompts.
+  - **Default:** `true`
 
 - **`enablePromptCompletion`** (boolean):
   - **Description:** Enable AI-powered prompt completion suggestions while typing. Provides intelligent autocomplete based on context and command history.

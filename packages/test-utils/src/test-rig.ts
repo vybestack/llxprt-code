@@ -1226,49 +1226,105 @@ export class TestRig {
       };
     }[] = [];
 
-    // The console output from Podman is JavaScript object notation, not JSON
-    // Look for tool call events in the output
-    // Updated regex to handle tool names with hyphens and underscores
-    // Uses [^']* instead of .*? to avoid polynomial backtracking (CodeQL CWE-1333)
-    const toolCallPattern =
-      /body:\s*'Tool call:\s*([\w-]+)\.[^']*Success:\s*(\w+)\.[^']*Duration:\s*(\d+)ms\.'/g;
-    const matches = [...stdout.matchAll(toolCallPattern)];
+    // The console output from Podman is JavaScript object notation, not JSON.
+    // Parse line-by-line to avoid broad regexes on uncontrolled data (CodeQL CWE-1333).
+    const lines = stdout.split(os.EOL);
 
-    for (const match of matches) {
-      const toolName = match[1];
-      const success = match[2] === 'true';
-      const duration = parseInt(match[3], 10);
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      const bodyMarker = "body: 'Tool call:";
+      const bodyStartIndex = line.indexOf(bodyMarker);
 
-      // Try to find function_args nearby
-      const matchIndex = match.index || 0;
-      const contextStart = Math.max(0, matchIndex - 500);
-      const contextEnd = Math.min(stdout.length, matchIndex + 500);
-      const context = stdout.substring(contextStart, contextEnd);
+      if (bodyStartIndex < 0) {
+        continue;
+      }
 
-      // Look for function_args in the context
+      const bodyEndIndex = line.lastIndexOf("'");
+      if (bodyEndIndex <= bodyStartIndex + bodyMarker.length) {
+        continue;
+      }
+
+      const bodyText = line
+        .slice(bodyStartIndex + "body: '".length, bodyEndIndex)
+        .trim();
+      const toolPrefix = 'Tool call:';
+      if (!bodyText.startsWith(toolPrefix)) {
+        continue;
+      }
+
+      const dotAfterToolName = bodyText.indexOf('.', toolPrefix.length);
+      if (dotAfterToolName < 0) {
+        continue;
+      }
+
+      const extractedToolName = bodyText
+        .slice(toolPrefix.length, dotAfterToolName)
+        .trim();
+      if (!extractedToolName) {
+        continue;
+      }
+
+      const successLabel = 'Success:';
+      const durationLabel = 'Duration:';
+      const successLabelIndex = bodyText.indexOf(
+        successLabel,
+        dotAfterToolName,
+      );
+      const durationLabelIndex = bodyText.indexOf(
+        durationLabel,
+        dotAfterToolName,
+      );
+      if (successLabelIndex < 0 || durationLabelIndex < 0) {
+        continue;
+      }
+
+      const successText = bodyText
+        .slice(successLabelIndex + successLabel.length, durationLabelIndex)
+        .replace(/\./g, '')
+        .trim()
+        .toLowerCase();
+      const success = successText === 'true';
+
+      const durationValueStart = durationLabelIndex + durationLabel.length;
+      const durationMsSuffix = bodyText.indexOf('ms', durationValueStart);
+      if (durationMsSuffix < 0) {
+        continue;
+      }
+      const durationText = bodyText
+        .slice(durationValueStart, durationMsSuffix)
+        .replace(/\./g, '')
+        .trim();
+      const duration = Number.parseInt(durationText, 10);
+      if (Number.isNaN(duration)) {
+        continue;
+      }
+
+      // Capture nearby lines for function attributes.
+      const contextStart = Math.max(0, lineIndex - 10);
+      const contextEnd = Math.min(lines.length, lineIndex + 10);
+      const context = lines.slice(contextStart, contextEnd).join('\n');
+
       let args = '{}';
       const argsMatch = context.match(/function_args:\s*'([^']+)'/);
       if (argsMatch) {
         args = argsMatch[1];
       }
 
-      // Also try to find function_name to double-check
-      // Updated regex to handle tool names with hyphens and underscores
       const nameMatch = context.match(/function_name:\s*'([\w-]+)'/);
-      const actualToolName = nameMatch ? nameMatch[1] : toolName;
+      const actualToolName = nameMatch ? nameMatch[1] : extractedToolName;
 
       logs.push({
         timestamp: Date.now(),
         toolRequest: {
           name: actualToolName,
-          args: args,
-          success: success,
+          args,
+          success,
           duration_ms: duration,
         },
       });
     }
 
-    // If no matches found with the simple pattern, try the JSON parsing approach
+    // If no matches found with the simple parsing, try the JSON parsing approach
     // in case the format changes
     if (logs.length === 0) {
       const lines = stdout.split(os.EOL);
@@ -1617,8 +1673,30 @@ export class TestRig {
 
     const run = new InteractiveRun(ptyProcess);
     this._interactiveRuns.push(run);
-    // Wait for the app to be ready
-    await run.expectText('  Type your message or @path/to/file', 30000);
+
+    const promptReadyText = '  Type your message or @path/to/file';
+    const tipsReadyText = 'Tips for getting started:';
+
+    // Wait for the app to be ready. In some CI PTY/render paths the composer
+    // placeholder may not be emitted immediately even though the interactive
+    // session has already reached the main screen.
+    const isReady = await poll(
+      () => {
+        const normalizedOutput = stripAnsi(run.output).toLowerCase();
+        return (
+          normalizedOutput.includes(promptReadyText.toLowerCase()) ||
+          normalizedOutput.includes(tipsReadyText.toLowerCase())
+        );
+      },
+      30000,
+      200,
+    );
+
+    expect(
+      isReady,
+      `Expected interactive startup output to contain either "${promptReadyText}" or "${tipsReadyText}".`,
+    ).toBe(true);
+
     return run;
   }
 
