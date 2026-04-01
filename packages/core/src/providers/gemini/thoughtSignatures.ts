@@ -56,7 +56,9 @@ export function ensureActiveLoopHasThoughtSignatures(
     const content = requestContents[i];
     if (
       content.role === 'user' &&
-      content.parts?.some((part) => 'text' in part && part.text)
+      content.parts.some(
+        (part) => 'text' in part && (part as { text?: string }).text !== '',
+      )
     ) {
       activeLoopStartIndex = i;
       break;
@@ -74,7 +76,7 @@ export function ensureActiveLoopHasThoughtSignatures(
   // Check if we need to modify anything
   for (let i = activeLoopStartIndex; i < requestContents.length; i++) {
     const content = requestContents[i];
-    if (content.role === 'model' && content.parts) {
+    if (content.role === 'model') {
       for (const part of content.parts) {
         if ('functionCall' in part && part.functionCall != null) {
           const partWithSig = part as PartWithThoughtSignature;
@@ -100,7 +102,7 @@ export function ensureActiveLoopHasThoughtSignatures(
 
   for (let i = activeLoopStartIndex; i < newContents.length; i++) {
     const content = newContents[i];
-    if (content.role === 'model' && content.parts) {
+    if (content.role === 'model') {
       const newParts = content.parts.slice();
       let modified = false;
 
@@ -176,7 +178,7 @@ export function stripThoughtsFromHistory(
   // Check if we need to modify anything
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
-    if (content.role !== 'model' || !content.parts) continue;
+    if (content.role !== 'model') continue;
 
     // Skip last model turn if policy is 'allButLast'
     if (policy === 'allButLast' && i === lastModelTurnIndex) continue;
@@ -184,7 +186,10 @@ export function stripThoughtsFromHistory(
     for (const part of content.parts) {
       const partWithThought = part as PartWithThought;
       const partWithSig = part as PartWithThoughtSignature;
-      if (partWithThought.thought || partWithSig.thoughtSignature) {
+      if (
+        partWithThought.thought === true ||
+        partWithSig.thoughtSignature != null
+      ) {
         needsModification = true;
         break;
       }
@@ -202,7 +207,7 @@ export function stripThoughtsFromHistory(
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
 
-    if (content.role !== 'model' || !content.parts) {
+    if (content.role !== 'model') {
       newContents.push(content);
       continue;
     }
@@ -217,11 +222,11 @@ export function stripThoughtsFromHistory(
     const filteredParts = content.parts
       .filter((part) => {
         const partWithThought = part as PartWithThought;
-        return !partWithThought.thought;
+        return partWithThought.thought !== true;
       })
       .map((part) => {
         const partWithSig = part as PartWithThoughtSignature;
-        if (partWithSig.thoughtSignature) {
+        if (partWithSig.thoughtSignature != null) {
           const { thoughtSignature: _, ...restPart } = partWithSig;
           return restPart as Part;
         }

@@ -44,6 +44,7 @@ import {
 import type { DumpMode } from '../utils/dumpContext.js';
 
 import { isGemini3Model } from '../../config/models.js';
+import type { createCodeAssistContentGenerator } from '../../code_assist/codeAssist.js';
 
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -80,10 +81,8 @@ interface GeminiResponseWithUsage {
   usageMetadata?: GeminiUsageMetadata;
 }
 
-type CodeAssistGeneratorFactory =
-  (typeof import('../../code_assist/codeAssist.js'))['createCodeAssistContentGenerator'];
 type CodeAssistContentGenerator = Awaited<
-  ReturnType<CodeAssistGeneratorFactory>
+  ReturnType<typeof createCodeAssistContentGenerator>
 >;
 
 type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -260,7 +259,7 @@ export class GeminiProvider extends BaseProvider {
     _options: NormalizedGenerateChatOptions,
   ): boolean {
     const streamingSetting =
-      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+      this.providerConfig?.getEphemeralSettings?.()['streaming'];
     return streamingSetting !== 'disabled';
   }
 
@@ -340,15 +339,17 @@ export class GeminiProvider extends BaseProvider {
 
     // 3. CHECK IF OAUTH IS ENABLED (for compatibility with downstream code)
     //    Use the EXACT pattern from current GeminiProvider.ts lines 305-320:
-    const manager = this.geminiOAuthManager as OAuthManager & {
-      isOAuthEnabled?(provider: string): boolean;
-    };
+    const manager = this.geminiOAuthManager as
+      | (OAuthManager & {
+          isOAuthEnabled?(provider: string): boolean;
+        })
+      | undefined;
     const isOAuthEnabled =
-      manager?.isOAuthEnabled &&
+      manager != null &&
       typeof manager.isOAuthEnabled === 'function' &&
       manager.isOAuthEnabled('gemini');
 
-    if (isOAuthEnabled) {
+    if (isOAuthEnabled === true) {
       return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
     }
 
@@ -365,14 +366,13 @@ export class GeminiProvider extends BaseProvider {
    */
   protected supportsOAuth(): boolean {
     // Check if OAuth is actually enabled for Gemini in the OAuth manager
-    const manager = this.geminiOAuthManager as OAuthManager & {
-      isOAuthEnabled?(provider: string): boolean;
-    };
+    const manager = this.geminiOAuthManager as
+      | (OAuthManager & {
+          isOAuthEnabled?(provider: string): boolean;
+        })
+      | undefined;
 
-    if (
-      manager?.isOAuthEnabled &&
-      typeof manager.isOAuthEnabled === 'function'
-    ) {
+    if (manager != null && typeof manager.isOAuthEnabled === 'function') {
       return manager.isOAuthEnabled('gemini');
     }
 
@@ -409,7 +409,7 @@ export class GeminiProvider extends BaseProvider {
     const customHeaders = this.getCustomHeaders();
     return {
       headers: {
-        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION ?? process.version} (${process.platform}; ${process.arch})`,
         ...(customHeaders ?? {}),
       },
     };
@@ -525,7 +525,7 @@ export class GeminiProvider extends BaseProvider {
             if (data.models && data.models.length > 0) {
               return data.models.map((model) => ({
                 id: model.name.replace('models/', ''), // Remove 'models/' prefix
-                name: model.displayName || model.name,
+                name: model.displayName ?? model.name,
                 provider: this.name,
                 supportedToolFormats: [],
               }));
@@ -570,7 +570,7 @@ export class GeminiProvider extends BaseProvider {
     try {
       const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
-      if (providerSettings.model) {
+      if (providerSettings.model != null) {
         return providerSettings.model as string;
       }
     } catch (error) {
@@ -615,13 +615,11 @@ export class GeminiProvider extends BaseProvider {
       ]);
 
       const params: Record<string, unknown> = {};
-      if (providerSettings) {
-        for (const [key, value] of Object.entries(providerSettings)) {
-          if (reservedKeys.has(key) || value === undefined || value === null) {
-            continue;
-          }
-          params[key] = value;
+      for (const [key, value] of Object.entries(providerSettings)) {
+        if (reservedKeys.has(key) || value === undefined || value === null) {
+          continue;
         }
+        params[key] = value;
       }
 
       return Object.keys(params).length > 0 ? params : undefined;
@@ -707,7 +705,7 @@ export class GeminiProvider extends BaseProvider {
       );
 
       // Check for abort before auth determination
-      if (_signal?.aborted) {
+      if (_signal?.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -725,8 +723,9 @@ export class GeminiProvider extends BaseProvider {
       logger.debug(() => `invokeServerTool: about to call determineBestAuth()`);
       const { authMode, token: authToken } = await this.determineBestAuth();
 
-      // Check for abort after auth determination
-      if (_signal?.aborted) {
+      // Check for abort after auth determination (aborted is mutable after await)
+      // @ts-expect-error -- TS narrows aborted to false after prior check, but it can change asynchronously
+      if (_signal?.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -888,12 +887,13 @@ export class GeminiProvider extends BaseProvider {
           }
         }
 
+        case 'none':
         default:
           throw new Error(`Web search not supported in auth mode: ${authMode}`);
       }
     } else if (toolName === 'web_fetch') {
       // Check for abort before auth determination
-      if (_signal?.aborted) {
+      if (_signal?.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -913,8 +913,9 @@ export class GeminiProvider extends BaseProvider {
       // Get authentication token and mode lazily per call
       const { authMode, token: authToken } = await this.determineBestAuth();
 
-      // Check for abort after auth determination
-      if (_signal?.aborted) {
+      // Check for abort after auth determination (aborted is mutable after await)
+      // @ts-expect-error -- TS narrows aborted to false after prior check, but it can change asynchronously
+      if (_signal?.aborted === true) {
         const error = new Error('Operation was aborted');
         error.name = 'AbortError';
         throw error;
@@ -1018,6 +1019,7 @@ export class GeminiProvider extends BaseProvider {
           return result;
         }
 
+        case 'none':
         default:
           throw new Error(`Web fetch not supported in auth mode: ${authMode}`);
       }
@@ -1105,7 +1107,7 @@ export class GeminiProvider extends BaseProvider {
         if (parts.length > 0) {
           contents.push({ role: 'model', parts });
         }
-      } else if (c.speaker === 'tool') {
+      } else {
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         );
@@ -1161,7 +1163,7 @@ export class GeminiProvider extends BaseProvider {
 
     // Extract reasoning ephemerals for Gemini 3.x thinking support
     // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
-    const earlyEphemerals = options.invocation?.ephemerals ?? {};
+    const earlyEphemerals = options.invocation.ephemerals;
 
     // Get dump mode from ephemeral settings
     const dumpMode = earlyEphemerals.dumpcontext as DumpMode | undefined;
@@ -1174,12 +1176,12 @@ export class GeminiProvider extends BaseProvider {
       'reasoning'
     ] as Record<string, unknown> | undefined;
     const reasoningEnabled =
-      options.invocation?.getModelBehavior<boolean>('reasoning.enabled') ??
+      options.invocation.getModelBehavior<boolean>('reasoning.enabled') ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
         true ||
         reasoningObj?.enabled === true);
     const reasoningIncludeInResponse =
-      options.invocation?.getCliSetting<boolean>(
+      options.invocation.getCliSetting<boolean>(
         'reasoning.includeInResponse',
       ) ??
       ((earlyEphemerals as Record<string, unknown>)[
@@ -1187,16 +1189,20 @@ export class GeminiProvider extends BaseProvider {
       ] !== false &&
         reasoningObj?.includeInResponse !== false);
     const reasoningStripFromContext =
-      options.invocation?.getCliSetting<'all' | 'allButLast' | 'none'>(
+      options.invocation.getCliSetting<'all' | 'allButLast' | 'none'>(
         'reasoning.stripFromContext',
       ) ??
       ((earlyEphemerals as Record<string, unknown>)[
         'reasoning.stripFromContext'
-      ] as 'all' | 'allButLast' | 'none') ??
-      (reasoningObj?.stripFromContext as 'all' | 'allButLast' | 'none') ??
+      ] as 'all' | 'allButLast' | 'none' | undefined) ??
+      (reasoningObj?.stripFromContext as
+        | 'all'
+        | 'allButLast'
+        | 'none'
+        | undefined) ??
       'all';
     const reasoningEffort =
-      options.invocation?.getModelBehavior<
+      options.invocation.getModelBehavior<
         'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
       >('reasoning.effort') ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.effort'] as
@@ -1214,7 +1220,7 @@ export class GeminiProvider extends BaseProvider {
         | 'xhigh'
         | undefined);
     const reasoningMaxTokens =
-      options.invocation?.getModelBehavior<number>('reasoning.maxTokens') ??
+      options.invocation.getModelBehavior<number>('reasoning.maxTokens') ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.maxTokens'] as
         | number
         | undefined) ??
@@ -1238,7 +1244,7 @@ export class GeminiProvider extends BaseProvider {
     const geminiTools = tools
       ? tools.map((toolGroup) => ({
           functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
-            if (!decl.parametersJsonSchema) {
+            if (decl.parametersJsonSchema == null) {
               throw new Error(
                 `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
                   `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -1250,7 +1256,6 @@ export class GeminiProvider extends BaseProvider {
             // Ref: https://ai.google.dev/api/caching#Schema
             parameters = this.cleanGeminiSchema(parameters);
             if (
-              parameters &&
               typeof parameters === 'object' &&
               !('type' in (parameters as Record<string, unknown>))
             ) {
@@ -1280,9 +1285,9 @@ export class GeminiProvider extends BaseProvider {
 
     const directOverridesRaw = (
       options.metadata as { geminiDirectOverrides?: unknown }
-    )?.geminiDirectOverrides;
+    ).geminiDirectOverrides;
     const directOverrides =
-      directOverridesRaw && typeof directOverridesRaw === 'object'
+      directOverridesRaw != null && typeof directOverridesRaw === 'object'
         ? (directOverridesRaw as Record<string, unknown>)
         : undefined;
 
@@ -1305,13 +1310,13 @@ export class GeminiProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
     // Get pre-separated model params from invocation context
-    const modelParams = options.invocation?.modelParams ?? {};
+    const modelParams = options.invocation.modelParams;
     const requestConfig: Record<string, unknown> = {
       ...modelParams,
     };
 
     // Translate generic maxOutputTokens ephemeral to Gemini's maxOutputTokens
-    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const rawMaxOutput = options.settings.get('maxOutputTokens');
     const genericMaxOutput =
       typeof rawMaxOutput === 'number' &&
       Number.isFinite(rawMaxOutput) &&
@@ -1328,7 +1333,7 @@ export class GeminiProvider extends BaseProvider {
     if (geminiTools) {
       requestConfig.tools = geminiTools;
     }
-    if (toolConfigOverride) {
+    if (toolConfigOverride != null) {
       requestConfig.toolConfig = toolConfigOverride;
     }
 
@@ -1357,8 +1362,8 @@ export class GeminiProvider extends BaseProvider {
 
     const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
     requestLogger.log(() => '[GeminiProvider] request config overrides', {
-      hasDirectOverrides: !!directOverrides,
-      toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
+      hasDirectOverrides: directOverrides != null,
+      toolConfigOverride: toolConfigOverride != null ? 'present' : 'absent',
       serverTools,
     });
 
@@ -1386,7 +1391,7 @@ export class GeminiProvider extends BaseProvider {
       includeThoughts = true,
     ): IContent[] => {
       const chunks: IContent[] = [];
-      const parts = response.candidates?.[0]?.content?.parts || [];
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
 
       // Debug: Log all parts with their thought property for debugging
       thinkingLogger.log(
@@ -1408,17 +1413,20 @@ export class GeminiProvider extends BaseProvider {
       // Gemini returns thought content with `thought: true` on parts
       const thoughtParts = parts.filter(
         (part: Part) =>
-          'text' in part && (part as Part & { thought?: boolean }).thought,
+          'text' in part &&
+          (part as Part & { thought?: boolean }).thought === true,
       );
       const nonThoughtTextParts = parts.filter(
         (part: Part) =>
-          'text' in part && !(part as Part & { thought?: boolean }).thought,
+          'text' in part &&
+          (part as Part & { thought?: boolean }).thought !== true,
       );
 
       // Extract thoughtSignature from the first part that has one (for Gemini 3.x)
       const firstPartWithSig = parts.find(
         (part: Part) =>
-          (part as Part & { thoughtSignature?: string }).thoughtSignature,
+          (part as Part & { thoughtSignature?: string }).thoughtSignature !=
+          null,
       );
       const thoughtSignature = firstPartWithSig
         ? (firstPartWithSig as Part & { thoughtSignature?: string })
@@ -1443,13 +1451,11 @@ export class GeminiProvider extends BaseProvider {
         includeThoughts,
       });
 
-      const functionCalls =
-        parts
-          ?.filter((part: Part) => 'functionCall' in part)
-          ?.map(
-            (part: Part) =>
-              (part as { functionCall: FunctionCall }).functionCall,
-          ) || [];
+      const functionCalls = parts
+        .filter((part: Part) => 'functionCall' in part)
+        .map(
+          (part: Part) => (part as { functionCall: FunctionCall }).functionCall,
+        );
 
       const usageMetadata = (response as GeminiResponseWithUsage).usageMetadata;
 
@@ -1480,12 +1486,12 @@ export class GeminiProvider extends BaseProvider {
         if (usageMetadata) {
           textContent.metadata = {
             usage: {
-              promptTokens: usageMetadata.promptTokenCount || 0,
-              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              promptTokens: usageMetadata.promptTokenCount ?? 0,
+              completionTokens: usageMetadata.candidatesTokenCount ?? 0,
               totalTokens:
-                usageMetadata.totalTokenCount ||
-                (usageMetadata.promptTokenCount || 0) +
-                  (usageMetadata.candidatesTokenCount || 0),
+                usageMetadata.totalTokenCount ??
+                (usageMetadata.promptTokenCount ?? 0) +
+                  (usageMetadata.candidatesTokenCount ?? 0),
             },
           };
         }
@@ -1498,10 +1504,10 @@ export class GeminiProvider extends BaseProvider {
           (call: FunctionCall) => ({
             type: 'tool_call',
             id:
-              call.id ||
+              call.id ??
               `call_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-            name: call.name || 'unknown_function',
-            parameters: call.args || {},
+            name: call.name ?? 'unknown_function',
+            parameters: call.args ?? {},
           }),
         );
 
@@ -1513,12 +1519,12 @@ export class GeminiProvider extends BaseProvider {
         if (usageMetadata) {
           toolCallContent.metadata = {
             usage: {
-              promptTokens: usageMetadata.promptTokenCount || 0,
-              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              promptTokens: usageMetadata.promptTokenCount ?? 0,
+              completionTokens: usageMetadata.candidatesTokenCount ?? 0,
               totalTokens:
-                usageMetadata.totalTokenCount ||
-                (usageMetadata.promptTokenCount || 0) +
-                  (usageMetadata.candidatesTokenCount || 0),
+                usageMetadata.totalTokenCount ??
+                (usageMetadata.promptTokenCount ?? 0) +
+                  (usageMetadata.candidatesTokenCount ?? 0),
             },
           };
         }
@@ -1532,12 +1538,12 @@ export class GeminiProvider extends BaseProvider {
           blocks: [],
           metadata: {
             usage: {
-              promptTokens: usageMetadata.promptTokenCount || 0,
-              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              promptTokens: usageMetadata.promptTokenCount ?? 0,
+              completionTokens: usageMetadata.candidatesTokenCount ?? 0,
               totalTokens:
-                usageMetadata.totalTokenCount ||
-                (usageMetadata.promptTokenCount || 0) +
-                  (usageMetadata.candidatesTokenCount || 0),
+                usageMetadata.totalTokenCount ??
+                (usageMetadata.promptTokenCount ?? 0) +
+                  (usageMetadata.candidatesTokenCount ?? 0),
             },
           },
         } as IContent);
@@ -1559,7 +1565,7 @@ export class GeminiProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
     // No caching - create client per call based on resolved authMode
     if (authMode === 'oauth') {
-      const configForOAuth = this.globalConfig || {
+      const configForOAuth = this.globalConfig ?? {
         getProxy: () => undefined,
         isBrowserLaunchSuppressed: () => false,
         getNoBrowser: () => false,
@@ -1577,7 +1583,7 @@ export class GeminiProvider extends BaseProvider {
       // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
       const userMemory = await resolveUserMemory(
         options.userMemory,
-        () => options.invocation?.userMemory,
+        () => options.invocation.userMemory,
       );
       const subagentConfig =
         options.config ?? options.runtime?.config ?? this.globalConfig;
@@ -1591,9 +1597,10 @@ export class GeminiProvider extends BaseProvider {
       const systemInstruction = await getCoreSystemPromptAsync({
         model: currentModel,
         tools: toolNamesForPrompt,
-        interactionMode: subagentConfig?.isInteractive?.()
-          ? 'interactive'
-          : 'non-interactive',
+        interactionMode:
+          subagentConfig?.isInteractive?.() === true
+            ? 'interactive'
+            : 'non-interactive',
         userMemory,
         mcpInstructions,
         includeSubagentDelegation,
@@ -1620,7 +1627,7 @@ export class GeminiProvider extends BaseProvider {
       };
 
       // Use runtime metadata from options for session ID
-      const runtimeId = options.runtime?.runtimeId || 'default';
+      const runtimeId = options.runtime?.runtimeId ?? 'default';
       const sessionId = `oauth-session:${runtimeId}:${Math.random()
         .toString(36)
         .slice(2)}`;
@@ -1653,7 +1660,7 @@ export class GeminiProvider extends BaseProvider {
               oauthRequest,
               response,
               false,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
 
@@ -1680,7 +1687,7 @@ export class GeminiProvider extends BaseProvider {
               oauthRequest,
               { error: errorMessage },
               true,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
           throw error;
@@ -1702,7 +1709,7 @@ export class GeminiProvider extends BaseProvider {
             oauthRequest,
             { streaming: true },
             false,
-            baseURL || 'https://generativelanguage.googleapis.com',
+            baseURL ?? 'https://generativelanguage.googleapis.com',
           );
         }
 
@@ -1730,7 +1737,7 @@ export class GeminiProvider extends BaseProvider {
             oauthRequest,
             { error: errorMessage },
             true,
-            baseURL || 'https://generativelanguage.googleapis.com',
+            baseURL ?? 'https://generativelanguage.googleapis.com',
           );
         }
         throw error;
@@ -1752,7 +1759,7 @@ export class GeminiProvider extends BaseProvider {
       // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
       const userMemory = await resolveUserMemory(
         options.userMemory,
-        () => options.invocation?.userMemory,
+        () => options.invocation.userMemory,
       );
       const subagentConfig =
         options.config ?? options.runtime?.config ?? this.globalConfig;
@@ -1766,9 +1773,10 @@ export class GeminiProvider extends BaseProvider {
       const systemInstruction = await getCoreSystemPromptAsync({
         model: currentModel,
         tools: toolNamesForPrompt,
-        interactionMode: subagentConfig?.isInteractive?.()
-          ? 'interactive'
-          : 'non-interactive',
+        interactionMode:
+          subagentConfig?.isInteractive?.() === true
+            ? 'interactive'
+            : 'non-interactive',
         userMemory,
         mcpInstructions,
         includeSubagentDelegation,
@@ -1794,7 +1802,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               { streaming: true },
               false,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
         } catch (error) {
@@ -1808,7 +1816,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               { error: errorMessage },
               true,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
           throw error;
@@ -1826,7 +1834,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               response,
               false,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
 
@@ -1853,7 +1861,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               { error: errorMessage },
               true,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
           throw error;
@@ -1861,24 +1869,20 @@ export class GeminiProvider extends BaseProvider {
       }
     }
 
-    if (stream) {
-      const iterator: AsyncIterator<GenerateContentResponse> =
-        typeof stream[Symbol.asyncIterator] === 'function'
-          ? stream[Symbol.asyncIterator]()
-          : (stream as unknown as AsyncIterator<GenerateContentResponse>);
-      while (true) {
-        const { value, done } = await iterator.next();
-        if (done) {
-          break;
-        }
-        const mapped = mapResponseToChunks(value, reasoningIncludeInResponse);
-        if (mapped.length === 0) {
-          continue;
-        }
-        emitted = true;
-        for (const chunk of mapped) {
-          yield chunk;
-        }
+    const iterator: AsyncIterator<GenerateContentResponse> =
+      stream[Symbol.asyncIterator]();
+    for (;;) {
+      const { value, done } = await iterator.next();
+      if (done === true) {
+        break;
+      }
+      const mapped = mapResponseToChunks(value, reasoningIncludeInResponse);
+      if (mapped.length === 0) {
+        continue;
+      }
+      emitted = true;
+      for (const chunk of mapped) {
+        yield chunk;
       }
     }
 
