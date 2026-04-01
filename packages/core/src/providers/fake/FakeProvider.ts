@@ -61,7 +61,7 @@ function substituteCwd<T>(value: T, cwd: string): T {
   if (Array.isArray(value)) {
     return value.map((item) => substituteCwd(item, cwd)) as T;
   }
-  if (value && typeof value === 'object') {
+  if (value != null && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([k, v]) => [
         k,
@@ -149,7 +149,7 @@ function convertLegacyResponseChunk(chunk: unknown): IContent[] {
 
   const convertedCandidates = candidates
     .map((candidate) => {
-      if (!candidate?.content) {
+      if (!candidate.content) {
         return undefined;
       }
 
@@ -160,7 +160,7 @@ function convertLegacyResponseChunk(chunk: unknown): IContent[] {
     .filter((content): content is IContent => !!content);
 
   const fallbackStopReason = candidates
-    .map((candidate) => normalizeStopReason(candidate?.finishReason))
+    .map((candidate) => normalizeStopReason(candidate.finishReason))
     .find((reason): reason is string => !!reason);
 
   if (convertedCandidates.length === 0 && (usage || fallbackStopReason)) {
@@ -263,8 +263,8 @@ export class FakeProvider implements IProvider {
     _optionsOrContent: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const turnIndex = this.callCounter++;
-    const turn = this.turns[turnIndex];
-    if (!turn) {
+    const turn = this.turns[turnIndex] as FakeResponseTurn | undefined;
+    if (turn == null) {
       throw new Error(
         `FakeProvider: no more canned responses (call #${turnIndex + 1}, only ${this.turns.length} turn(s) available)`,
       );
