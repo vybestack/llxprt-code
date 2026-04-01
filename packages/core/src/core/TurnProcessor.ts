@@ -127,6 +127,7 @@ export class TurnProcessor {
       prompt_id,
       pendingTokens,
       'stream',
+      'auto',
     );
 
     let streamDoneResolver: () => void;
@@ -291,6 +292,7 @@ export class TurnProcessor {
       prompt_id,
       pendingTokens,
       'send',
+      'auto',
     );
 
     const provider = this.providerResolver('sendMessage');

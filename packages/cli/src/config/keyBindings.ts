@@ -92,13 +92,17 @@ export enum Command {
  */
 export interface KeyBinding {
   /** The key name (e.g., 'a', 'return', 'tab', 'escape') */
-  key: string;
+  key?: string;
+  /** The key sequence (e.g., '\x18' for Ctrl+X) - alternative to key name */
+  sequence?: string;
   /** Control key requirement: true=must be pressed, false=must not be pressed, undefined=ignore */
   ctrl?: boolean;
   /** Shift key requirement: true=must be pressed, false=must not be pressed, undefined=ignore */
   shift?: boolean;
   /** Command/meta key requirement: true=must be pressed, false=must not be pressed, undefined=ignore */
   command?: boolean;
+  /** Paste operation requirement: true=must be paste, false=must not be paste, undefined=ignore */
+  paste?: boolean;
 }
 
 /**

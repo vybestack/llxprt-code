@@ -17,7 +17,18 @@ import {
  * Pure data-driven matching logic
  */
 function matchKeyBinding(keyBinding: KeyBinding, key: Key): boolean {
-  if (keyBinding.key !== key.name) {
+  if (
+    keyBinding.sequence !== undefined &&
+    key.sequence !== keyBinding.sequence
+  ) {
+    return false;
+  }
+
+  if (keyBinding.key !== undefined && keyBinding.key !== key.name) {
+    return false;
+  }
+
+  if (keyBinding.key === undefined && keyBinding.sequence === undefined) {
     return false;
   }
 

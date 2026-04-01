@@ -49,9 +49,9 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 #### `accessibility`
 
-- **`accessibility.disableLoadingPhrases`** (boolean):
-  - **Description:** Disable loading phrases for accessibility
-  - **Default:** `false`
+- **`accessibility.enableLoadingPhrases`** (boolean):
+  - **Description:** Enable loading phrases during operations.
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 - **`accessibility.screenReader`** (boolean):
@@ -96,16 +96,26 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `true`
   - **Requires restart:** Yes
 
-- **`fileFiltering.disableFuzzySearch`** (boolean):
-  - **Description:** Disable fuzzy search when searching for files.
-  - **Default:** `false`
+- **`fileFiltering.enableFuzzySearch`** (boolean):
+  - **Description:** Enable fuzzy search when searching for files.
+  - **Default:** `true`
   - **Requires restart:** Yes
 
-#### `disableAutoUpdate`
+- **`fileFiltering.maxFileCount`** (number):
+  - **Description:** Maximum number of files to index during file search. Prevents OOM on large projects.
+  - **Default:** `20000`
+  - **Requires restart:** Yes
 
-- **`disableAutoUpdate`** (boolean):
-  - **Description:** Disable automatic updates
-  - **Default:** `false`
+- **`fileFiltering.searchTimeout`** (number):
+  - **Description:** Timeout in milliseconds for file search operations.
+  - **Default:** `5000`
+  - **Requires restart:** Yes
+
+#### `enableAutoUpdate`
+
+- **`enableAutoUpdate`** (boolean):
+  - **Description:** Enable automatic updates.
+  - **Default:** `true`
 
 #### `shouldUseNodePtyShell`
 
@@ -365,9 +375,9 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** Use the entire width of the terminal for output.
   - **Default:** `true`
 
-- **`ui.disableLoadingPhrases`** (boolean):
-  - **Description:** Disable loading phrases for accessibility.
-  - **Default:** `false`
+- **`ui.enableLoadingPhrases`** (boolean):
+  - **Description:** Enable loading phrases during operations.
+  - **Default:** `true`
   - **Requires restart:** Yes
 
 - **`ui.screenReader`** (boolean):
@@ -592,11 +602,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     ["DEBUG", "DEBUG_MODE"]
     ```
 
-#### `disableUpdateNag`
+#### `enableAutoUpdateNotification`
 
-- **`disableUpdateNag`** (boolean):
-  - **Description:** Disable update notification prompts.
-  - **Default:** `false`
+- **`enableAutoUpdateNotification`** (boolean):
+  - **Description:** Enable update notification prompts.
+  - **Default:** `true`
 
 #### `includeDirectories`
 
@@ -643,6 +653,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
 
 #### `experimental`
+
+- **`experimental.extensionConfig`** (boolean):
+  - **Description:** Enable requesting and fetching of extension settings.
+  - **Default:** `false`
+  - **Requires restart:** Yes
 
 - **`experimental.extensionReloading`** (boolean):
   - **Description:** Enables extension loading/unloading within the CLI session.
@@ -783,19 +798,25 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `[]`
   - **Requires restart:** Yes
 
-#### `hooks`
+#### `hooksConfig`
 
-- **`hooks.enabled`** (boolean):
+- **`hooksConfig.enabled`** (boolean):
   - **Description:** Canonical toggle for the hooks system. When disabled, no hooks will be executed.
   - **Default:** `false`
 
-- **`hooks.notifications`** (boolean):
+- **`hooksConfig.notifications`** (boolean):
   - **Description:** Show visual indicators when hooks are executing.
   - **Default:** `true`
 
-- **`hooks.disabled`** (array):
-  - **Description:** List of hook names to disable
+- **`hooksConfig.disabled`** (array):
+  - **Description:** List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.
   - **Default:** `[]`
+
+#### `hooks`
+
+- **`hooks`** (object):
+  - **Description:** Event-specific hook configurations.
+  - **Default:** `{}`
 
 #### `admin`
 

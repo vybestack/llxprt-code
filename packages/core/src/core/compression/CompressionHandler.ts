@@ -276,6 +276,7 @@ export class CompressionHandler {
     prompt_id: string,
     pendingTokens: number,
     source: 'send' | 'stream',
+    trigger: 'manual' | 'auto' = 'auto',
   ): Promise<void> {
     if (this.compressionPromise) {
       this.logger.debug('Waiting for ongoing compression to complete');
@@ -301,7 +302,9 @@ export class CompressionHandler {
         pendingTokens,
         historyTokens: this.historyService.getTotalTokens(),
       });
-      this.compressionPromise = this.performCompression(prompt_id);
+      this.compressionPromise = this.performCompression(prompt_id, {
+        trigger,
+      });
       try {
         await this.compressionPromise;
       } finally {
@@ -402,7 +405,10 @@ export class CompressionHandler {
 
     const preCompressionProjected = postOptProjected;
 
-    await this.performCompression(promptId, { bypassCooldown: true });
+    await this.performCompression(promptId, {
+      bypassCooldown: true,
+      trigger: 'auto',
+    });
     await this.historyService.waitForTokenUpdates();
 
     let recomputed = this.computeProjectedTokens(
@@ -532,7 +538,7 @@ export class CompressionHandler {
    */
   async performCompression(
     prompt_id: string,
-    options?: { bypassCooldown?: boolean },
+    options?: { bypassCooldown?: boolean; trigger?: 'manual' | 'auto' },
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
@@ -547,6 +553,19 @@ export class CompressionHandler {
       return PerformCompressionResult.SKIPPED_COOLDOWN;
     }
 
+    // Trigger PreCompress hook (fail-open) before checking history.
+    // This ensures automatic/manual compression attempts emit PreCompress hooks
+    // even when the attempt is later skipped due to empty history.
+    const context = await this.buildCompressionContext(prompt_id);
+    try {
+      await this.hookTrigger({
+        ...context,
+        trigger: options?.trigger ?? 'manual',
+      });
+    } catch {
+      // Hooks are fail-open - continue even if hook fails
+    }
+
     // Skip compression if history is empty
     const currentHistory = this.historyService.getCurated();
     if (currentHistory.length === 0) {
@@ -555,14 +574,6 @@ export class CompressionHandler {
     }
 
     this.logger.debug('Starting compression');
-
-    // Trigger PreCompress hook (fail-open)
-    const context = await this.buildCompressionContext(prompt_id);
-    try {
-      await this.hookTrigger(context);
-    } catch {
-      // Hooks are fail-open - continue even if hook fails
-    }
 
     const preCompressionCount =
       this.historyService.getStatistics().totalMessages;

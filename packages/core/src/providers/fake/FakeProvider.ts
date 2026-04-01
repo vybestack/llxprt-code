@@ -15,9 +15,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import type { Content } from '@google/genai';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
-import type { IContent } from '../../services/history/IContent.js';
+import type { IContent, UsageStats } from '../../services/history/IContent.js';
+import { ContentConverters } from '../../services/history/ContentConverters.js';
 
 /**
  * Each line in a .responses file is a JSON object representing one model turn.
@@ -27,6 +29,25 @@ import type { IContent } from '../../services/history/IContent.js';
 export interface FakeResponseTurn {
   chunks: IContent[];
 }
+
+type LegacyResponseLine = {
+  method?: string;
+  response?: unknown;
+};
+
+type LegacyGenerateContentResponse = {
+  candidates?: Array<{
+    content?: Content;
+    finishReason?: unknown;
+  }>;
+  usageMetadata?: {
+    promptTokenCount?: unknown;
+    candidatesTokenCount?: unknown;
+    totalTokenCount?: unknown;
+    cache_read_input_tokens?: unknown;
+    cache_creation_input_tokens?: unknown;
+  };
+};
 
 /**
  * Recursively replace `{{CWD}}` in all string values of a parsed object.
@@ -49,6 +70,134 @@ function substituteCwd<T>(value: T, cwd: string): T {
     ) as T;
   }
   return value;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function normalizeInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function mapUsageMetadata(
+  usageMetadata: LegacyGenerateContentResponse['usageMetadata'] | undefined,
+): UsageStats | undefined {
+  if (!usageMetadata || !isObject(usageMetadata)) {
+    return undefined;
+  }
+
+  const promptTokens = normalizeInteger(usageMetadata.promptTokenCount);
+  const completionTokens = normalizeInteger(usageMetadata.candidatesTokenCount);
+  const totalTokenCount = normalizeInteger(usageMetadata.totalTokenCount);
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens:
+      totalTokenCount > 0 ? totalTokenCount : promptTokens + completionTokens,
+    cache_read_input_tokens: normalizeInteger(
+      usageMetadata.cache_read_input_tokens,
+    ),
+    cache_creation_input_tokens: normalizeInteger(
+      usageMetadata.cache_creation_input_tokens,
+    ),
+  };
+}
+
+function normalizeStopReason(finishReason: unknown): string | undefined {
+  if (typeof finishReason !== 'string') {
+    return undefined;
+  }
+
+  const normalized = finishReason.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function appendMetadata(
+  content: IContent,
+  usage: UsageStats | undefined,
+  stopReason: string | undefined,
+): IContent {
+  if (!usage && !stopReason) {
+    return content;
+  }
+
+  return {
+    ...content,
+    metadata: {
+      ...(content.metadata ?? {}),
+      ...(usage ? { usage } : {}),
+      ...(stopReason ? { stopReason } : {}),
+    },
+  };
+}
+
+function convertLegacyResponseChunk(chunk: unknown): IContent[] {
+  if (!isObject(chunk)) {
+    return [];
+  }
+
+  const responseChunk = chunk as LegacyGenerateContentResponse;
+  const usage = mapUsageMetadata(responseChunk.usageMetadata);
+  const candidates = Array.isArray(responseChunk.candidates)
+    ? responseChunk.candidates
+    : [];
+
+  const convertedCandidates = candidates
+    .map((candidate) => {
+      if (!candidate?.content) {
+        return undefined;
+      }
+
+      const iContent = ContentConverters.toIContent(candidate.content);
+      const stopReason = normalizeStopReason(candidate.finishReason);
+      return appendMetadata(iContent, usage, stopReason);
+    })
+    .filter((content): content is IContent => !!content);
+
+  if (convertedCandidates.length === 0 && usage) {
+    return [{ speaker: 'ai', blocks: [], metadata: { usage } }];
+  }
+
+  return convertedCandidates;
+}
+
+function normalizeLegacyResponseLine(
+  line: LegacyResponseLine,
+): FakeResponseTurn {
+  const responseChunks = Array.isArray(line.response)
+    ? line.response
+    : line.response
+      ? [line.response]
+      : [];
+
+  return {
+    chunks: responseChunks.flatMap(convertLegacyResponseChunk),
+  };
+}
+
+function normalizeTurn(rawTurn: unknown): FakeResponseTurn {
+  if (isObject(rawTurn) && Array.isArray(rawTurn.chunks)) {
+    return { chunks: rawTurn.chunks as IContent[] };
+  }
+
+  if (!isObject(rawTurn)) {
+    throw new Error(
+      'FakeProvider: invalid fixture line. Expected JSON object with chunks or { method, response } shape.',
+    );
+  }
+
+  if (!('response' in rawTurn)) {
+    throw new Error(
+      'FakeProvider: invalid fixture line. Missing response field for legacy fixture format.',
+    );
+  }
+
+  return normalizeLegacyResponseLine(rawTurn as LegacyResponseLine);
 }
 
 /**
@@ -81,8 +230,9 @@ export class FakeProvider implements IProvider {
       .split('\n')
       .filter((line) => line.trim() !== '')
       .map((line) => {
-        const turn = JSON.parse(line) as FakeResponseTurn;
-        return cwd ? substituteCwd(turn, cwd) : turn;
+        const parsed = JSON.parse(line) as unknown;
+        const withSubstitutions = cwd ? substituteCwd(parsed, cwd) : parsed;
+        return normalizeTurn(withSubstitutions);
       });
   }
 

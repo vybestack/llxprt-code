@@ -167,10 +167,15 @@ export class GeminiChat {
       this.historyService,
       this.generationConfig,
       providerResolver,
-      async (_context: CompressionContext) => {
+      async (context: CompressionContext) => {
         const config = view.providerRuntime?.config;
         if (config) {
-          await triggerPreCompressHook(config, PreCompressTrigger.Manual);
+          await triggerPreCompressHook(
+            config,
+            context.trigger === 'auto'
+              ? PreCompressTrigger.Auto
+              : PreCompressTrigger.Manual,
+          );
         }
       },
     );
@@ -464,11 +469,13 @@ export class GeminiChat {
     promptId: string,
     pendingTokens: number,
     source: 'send' | 'stream',
+    trigger: 'manual' | 'auto' = 'auto',
   ): Promise<void> {
     return this.compressionHandler.ensureCompressionBeforeSend(
       promptId,
       pendingTokens,
       source,
+      trigger,
     );
   }
 

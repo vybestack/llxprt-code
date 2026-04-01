@@ -1495,10 +1495,63 @@ export class TestRig {
     args?: string | string[];
     yolo?: boolean;
   }): Promise<InteractiveRun> {
+    const provider = env['LLXPRT_DEFAULT_PROVIDER'];
+    const model = env['LLXPRT_DEFAULT_MODEL'];
+    const baseUrl = env['OPENAI_BASE_URL'];
+    const apiKey = env['OPENAI_API_KEY'];
+    const keyFile =
+      env['OPENAI_API_KEYFILE'] ?? env['LLXPRT_TEST_PROFILE_KEYFILE'];
+
+    // Fail fast if required configuration is missing (unless using fake responses)
+    if (!this.fakeResponsesPath) {
+      if (!provider) {
+        throw new Error(
+          'LLXPRT_DEFAULT_PROVIDER environment variable is required but not set',
+        );
+      }
+      if (!model) {
+        throw new Error(
+          'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
+        );
+      }
+      if (!apiKey && !keyFile) {
+        throw new Error(
+          'Either OPENAI_API_KEY or OPENAI_API_KEYFILE/LLXPRT_TEST_PROFILE_KEYFILE environment variable is required but not set',
+        );
+      }
+    }
+
     const yolo = options?.yolo !== false;
-    const { command, initialArgs } = this._getCommandAndArgs(
-      yolo ? ['--yolo'] : [],
-    );
+    const extraArgs: string[] = [
+      ...(yolo ? ['--yolo'] : []),
+      '--ide-mode',
+      'disable',
+    ];
+
+    // When using fake responses, FakeProvider is activated via LLXPRT_FAKE_RESPONSES
+    // env var in the child process. Pass --provider fake so the bootstrap's
+    // switchActiveProvider('fake') is a no-op (provider already active).
+    // No --key is needed since FakeProvider doesn't require authentication.
+    if (this.fakeResponsesPath) {
+      extraArgs.push('--provider', 'fake', '--model', 'fake-model');
+    } else {
+      extraArgs.push('--provider', provider!);
+      extraArgs.push('--model', model!);
+
+      // Add baseurl if using openai provider
+      if (provider === 'openai' && baseUrl) {
+        extraArgs.push('--baseurl', baseUrl);
+      }
+
+      // Add API key if available
+      if (apiKey) {
+        extraArgs.push('--key', apiKey);
+      } else if (keyFile) {
+        extraArgs.push('--keyfile', keyFile);
+      }
+    }
+
+    const { command, initialArgs } = this._getCommandAndArgs(extraArgs);
     const commandArgs = [...initialArgs];
 
     if (options?.args) {
@@ -1529,7 +1582,18 @@ export class TestRig {
       cols: 80,
       rows: 80,
       cwd: this.testDir!,
-      env: filteredEnv,
+      env: {
+        ...filteredEnv,
+        // Ensure browser launch is suppressed in tests
+        NO_BROWSER: 'true',
+        LLXPRT_NO_BROWSER_AUTH: 'true',
+        CI: 'true',
+        LLXPRT_SANDBOX: 'false',
+        // When fakeResponsesPath is set, tell CLI to use FakeProvider
+        ...(this.fakeResponsesPath
+          ? { LLXPRT_FAKE_RESPONSES: this.fakeResponsesPath }
+          : {}),
+      },
     };
 
     const executable = command === 'node' ? process.execPath : command;

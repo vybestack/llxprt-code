@@ -14,17 +14,21 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## Basic Controls
 
-| Action                                       | Keys    |
-| -------------------------------------------- | ------- |
-| Confirm the current selection or choice.     | `Enter` |
-| Dismiss dialogs or cancel the current focus. | `Esc`   |
+| Action                                                          | Keys       |
+| --------------------------------------------------------------- | ---------- |
+| Confirm the current selection or choice.                        | `Enter`    |
+| Dismiss dialogs or cancel the current focus.                    | `Esc`      |
+| Cancel the current request or quit the CLI when input is empty. | `Ctrl + C` |
+| Exit the CLI when the input buffer is empty.                    | `Ctrl + D` |
 
 ## Cursor Movement
 
 | Action                                      | Keys                                                         |
 | ------------------------------------------- | ------------------------------------------------------------ |
-| Move the cursor to the start of the line.   | `Ctrl + A`<br />`Home`                                       |
-| Move the cursor to the end of the line.     | `Ctrl + E`<br />`End`                                        |
+| Move the cursor to the start of the line.   | `Ctrl + A`<br />`Home (no Ctrl, no Shift)`                   |
+| Move the cursor to the end of the line.     | `Ctrl + E`<br />`End (no Ctrl, no Shift)`                    |
+| Move the cursor up one line.                | `Up Arrow (no Ctrl, no Cmd)`                                 |
+| Move the cursor down one line.              | `Down Arrow (no Ctrl, no Cmd)`                               |
 | Move the cursor one character to the left.  | `Left Arrow (no Ctrl, no Cmd)`<br />`Ctrl + B`               |
 | Move the cursor one character to the right. | `Right Arrow (no Ctrl, no Cmd)`<br />`Ctrl + F`              |
 | Move the cursor one word to the left.       | `Ctrl + Left Arrow`<br />`Cmd + Left Arrow`<br />`Cmd + B`   |
@@ -32,35 +36,28 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## Editing
 
-| Action                                                                | Keys                                                                                         |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Delete from the cursor to the end of the line.                        | `Ctrl + K`                                                                                   |
-| Delete from the cursor to the start of the line.                      | `Ctrl + U`                                                                                   |
-| Clear all text in the input field (when the input prompt is focused). | `Ctrl + C`                                                                                   |
-| Delete the previous word.                                             | `Ctrl + Backspace`<br />`Cmd + Backspace`<br />`Ctrl + ""`<br />`Cmd + ""`<br />`Ctrl + W` |
-| Delete the next word.                                                 | `Ctrl + Delete`<br />`Cmd + Delete`                                                          |
-| Delete the character to the left.                                     | `Backspace`<br />`""`<br />`Ctrl + H`                                                       |
-| Delete the character to the right.                                    | `Delete`<br />`Ctrl + D`                                                                     |
-| Undo the most recent text edit.                                       | `Ctrl + Z (no Shift)`                                                                        |
-| Redo the most recent undone text edit.                                | `Ctrl + Shift + Z`                                                                           |
-
-## Screen Control
-
-| Action                                       | Keys               |
-| -------------------------------------------- | ------------------ |
-| Clear the terminal screen and redraw the UI. | `Ctrl + L`         |
-| Refresh keypress handling.                   | `Ctrl + Shift + R` |
+| Action                                           | Keys                                                      |
+| ------------------------------------------------ | --------------------------------------------------------- |
+| Delete from the cursor to the end of the line.   | `Ctrl + K`                                                |
+| Delete from the cursor to the start of the line. | `Ctrl + U`                                                |
+| Clear all text in the input field.               | `Ctrl + C`                                                |
+| Delete the previous word.                        | `Ctrl + Backspace`<br />`Cmd + Backspace`<br />`Ctrl + W` |
+| Delete the next word.                            | `Ctrl + Delete`<br />`Cmd + Delete`                       |
+| Delete the character to the left.                | `Backspace`<br />`Ctrl + H`                               |
+| Delete the character to the right.               | `Delete`<br />`Ctrl + D`                                  |
+| Undo the most recent text edit.                  | `Ctrl + Z (no Shift)`                                     |
+| Redo the most recent undone text edit.           | `Ctrl + Shift + Z`                                        |
 
 ## Scrolling
 
-| Action                   | Keys                 |
-| ------------------------ | -------------------- |
-| Scroll up one line.      | `Shift + Up Arrow`   |
-| Scroll down one line.    | `Shift + Down Arrow` |
-| Scroll to the beginning. | `Home`               |
-| Scroll to the end.       | `End`                |
-| Scroll up one page.      | `Page Up`            |
-| Scroll down one page.    | `Page Down`          |
+| Action                   | Keys                              |
+| ------------------------ | --------------------------------- |
+| Scroll content up.       | `Shift + Up Arrow`                |
+| Scroll content down.     | `Shift + Down Arrow`              |
+| Scroll to the top.       | `Ctrl + Home`<br />`Shift + Home` |
+| Scroll to the bottom.    | `Ctrl + End`<br />`Shift + End`   |
+| Scroll up by one page.   | `Page Up`                         |
+| Scroll down by one page. | `Page Down`                       |
 
 ## History & Search
 
@@ -69,7 +66,7 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 | Show the previous entry in history.          | `Ctrl + P (no Shift)` |
 | Show the next entry in history.              | `Ctrl + N (no Shift)` |
 | Start reverse search through history.        | `Ctrl + R`            |
-| Insert the selected reverse-search match.    | `Enter (no Ctrl)`     |
+| Submit the selected reverse-search match.    | `Enter (no Ctrl)`     |
 | Accept a suggestion while reverse searching. | `Tab`                 |
 
 ## Navigation
@@ -83,49 +80,39 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## Suggestions & Completions
 
-| Action                                                           | Keys                                               |
-| ---------------------------------------------------------------- | -------------------------------------------------- |
-| Accept the inline suggestion.                                    | `Tab`<br />`Enter (no Ctrl)`                       |
-| Move to the previous completion option.                          | `Up Arrow (no Shift)`<br />`Ctrl + P (no Shift)`   |
-| Move to the next completion option.                              | `Down Arrow (no Shift)`<br />`Ctrl + N (no Shift)` |
-| Expand an inline suggestion when suggestion text is available.   | `Right Arrow`                                      |
-| Collapse an inline suggestion when suggestion text is available. | `Left Arrow`                                       |
+| Action                                  | Keys                                               |
+| --------------------------------------- | -------------------------------------------------- |
+| Accept the inline suggestion.           | `Tab`<br />`Enter (no Ctrl)`                       |
+| Move to the previous completion option. | `Up Arrow (no Shift)`<br />`Ctrl + P (no Shift)`   |
+| Move to the next completion option.     | `Down Arrow (no Shift)`<br />`Ctrl + N (no Shift)` |
+| Expand an inline suggestion.            | `Right Arrow`                                      |
+| Collapse an inline suggestion.          | `Left Arrow`                                       |
 
 ## Text Input
 
-| Action                               | Keys                                                                                        |
-| ------------------------------------ | ------------------------------------------------------------------------------------------- |
-| Submit the current prompt.           | `Enter (no Ctrl, no Shift, no Cmd, not Paste)`                                              |
-| Insert a newline without submitting. | `Ctrl + Enter`<br />`Cmd + Enter`<br />`Paste + Enter`<br />`Shift + Enter`<br />`Ctrl + J` |
-
-## External Tools
-
-| Action                                                          | Keys                      |
-| --------------------------------------------------------------- | ------------------------- |
-| Open the current prompt in an external editor.                  | `Ctrl + X`                |
-| Paste from the clipboard (image preferred, falls back to text). | `Ctrl + V`<br />`Cmd + V` |
+| Action                                                          | Keys                                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Submit the current prompt.                                      | `Enter (no Ctrl, no Shift, no Cmd)`                                    |
+| Insert a newline without submitting.                            | `Ctrl + Enter`<br />`Cmd + Enter`<br />`Shift + Enter`<br />`Ctrl + J` |
+| Open the current prompt in an external editor.                  | `Ctrl + X`                                                             |
+| Paste from the clipboard (image preferred, falls back to text). | `Ctrl + V`<br />`Cmd + V`                                              |
 
 ## App Controls
 
-| Action                                                                                 | Keys                                |
-| -------------------------------------------------------------------------------------- | ----------------------------------- |
-| Toggle detailed error information.                                                     | `Ctrl + O`                          |
-| Toggle IDE context details.                                                            | `Ctrl + G`                          |
-| Toggle Markdown rendering.                                                             | `Cmd + M`                           |
-| Toggle copy mode when the terminal is using the alternate buffer.                      | `Ctrl + S`                          |
-| Toggle YOLO (auto-approval) mode for tool calls.                                       | `Ctrl + Y`                          |
-| Toggle Auto Edit (auto-accept edits) mode.                                             | `Shift + Tab`                       |
-| Expand a height-constrained response to show additional lines.                         | `Ctrl + S`                          |
-| Toggle focus between the shell and LLxprt input when an interactive shell is attached. | `Ctrl + F`                          |
-| Toggle focus into the interactive shell from LLxprt input.                             | `Tab (no Shift)`                    |
-| Toggle focus out of the interactive shell and into LLxprt input.                       | `Tab (no Shift)`<br />`Shift + Tab` |
-
-## Session Control
-
-| Action                                                            | Keys       |
-| ----------------------------------------------------------------- | ---------- |
-| Cancel the current request or quit the CLI (global app shortcut). | `Ctrl + C` |
-| Exit the CLI when the input buffer is empty.                      | `Ctrl + D` |
+| Action                                                                                           | Keys                                |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| Toggle detailed error information.                                                               | `Ctrl + O`                          |
+| Show IDE context details.                                                                        | `Ctrl + G`                          |
+| Toggle Markdown rendering.                                                                       | `Cmd + M`                           |
+| Toggle copy mode when in alternate buffer mode.                                                  | `Ctrl + S`                          |
+| Toggle YOLO (auto-approval) mode for tool calls.                                                 | `Ctrl + Y`                          |
+| Toggle Auto Edit (auto-accept edits) mode.                                                       | `Shift + Tab`                       |
+| Expand a height-constrained response to show additional lines when not in alternate buffer mode. | `Ctrl + S`                          |
+| Toggle focus between the shell and LLxprt input when an interactive shell is attached.           | `Ctrl + F`                          |
+| Toggle focus into the interactive shell from LLxprt input.                                       | `Tab (no Shift)`                    |
+| Toggle focus out of the interactive shell and into LLxprt input.                                 | `Tab (no Shift)`<br />`Shift + Tab` |
+| Clear the terminal screen and redraw the UI.                                                     | `Ctrl + L`                          |
+| Refresh keypress handling.                                                                       | `Ctrl + Shift + R`                  |
 
 ## Todo Dialog
 
@@ -136,9 +123,9 @@ Default keyboard shortcuts for editing, navigation, and UI control.
 
 ## Mouse
 
-| Action                       | Keys                        |
-| ---------------------------- | --------------------------- |
-| Toggle mouse event tracking. | `Ctrl + \`<br />`FS (0x1C)` |
+| Action                       | Keys       |
+| ---------------------------- | ---------- |
+| Toggle mouse event tracking. | `Ctrl + \` |
 
 <!-- KEYBINDINGS-AUTOGEN:END -->
 

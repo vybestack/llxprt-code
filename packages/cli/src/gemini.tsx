@@ -100,6 +100,8 @@ import {
   SessionEndReason,
   MessageBus,
   debugLogger,
+  shutdownTelemetry,
+  isTelemetrySdkInitialized,
 } from '@vybestack/llxprt-code-core';
 import { theme } from './ui/colors.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -1142,6 +1144,7 @@ export async function main() {
       input,
       prompt_id,
       runtimeMessageBus: sessionMessageBus,
+      deferTelemetryShutdown: true,
     });
 
     // Fire SessionEnd hook on successful completion
@@ -1149,6 +1152,10 @@ export async function main() {
   } catch (error) {
     // Fire SessionEnd hook on error
     await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
+
+    if (isTelemetrySdkInitialized()) {
+      await shutdownTelemetry(nonInteractiveConfig);
+    }
 
     if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();
@@ -1162,6 +1169,11 @@ export async function main() {
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
   }
+
+  if (isTelemetrySdkInitialized()) {
+    await shutdownTelemetry(nonInteractiveConfig);
+  }
+
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
   process.exit(0);

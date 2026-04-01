@@ -13,6 +13,20 @@ import {
   defaultKeyBindings,
 } from './keyBindings.js';
 
+function hasNonEmptyBindingTarget(binding: {
+  key?: string;
+  sequence?: string;
+  paste?: boolean;
+}): boolean {
+  if (typeof binding.key === 'string' && binding.key.length > 0) {
+    return true;
+  }
+  if (typeof binding.sequence === 'string' && binding.sequence.length > 0) {
+    return true;
+  }
+  return binding.paste === true;
+}
+
 describe('keyBindings config', () => {
   describe('defaultKeyBindings', () => {
     it('should have bindings for all commands', () => {
@@ -28,9 +42,8 @@ describe('keyBindings config', () => {
     it('should have valid key binding structures', () => {
       for (const [_, bindings] of Object.entries(defaultKeyBindings)) {
         for (const binding of bindings) {
-          // Each binding must have a key name
-          expect(typeof binding.key).toBe('string');
-          expect(binding.key.length).toBeGreaterThan(0);
+          // Each binding must match by key, sequence, or paste semantics.
+          expect(hasNonEmptyBindingTarget(binding)).toBe(true);
 
           // Modifier properties should be boolean or undefined
           expect(
@@ -42,6 +55,9 @@ describe('keyBindings config', () => {
           expect(
             binding.command === undefined ||
               typeof binding.command === 'boolean',
+          ).toBe(true);
+          expect(
+            binding.paste === undefined || typeof binding.paste === 'boolean',
           ).toBe(true);
         }
       }

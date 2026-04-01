@@ -119,6 +119,7 @@ export interface CompressionContext {
   readonly promptBaseDir: string;
   readonly promptContext: Readonly<Partial<PromptContext>>;
   readonly promptId: string;
+  readonly trigger?: 'manual' | 'auto';
   /** @plan PLAN-20260211-HIGHDENSITY.P03 */
   readonly activeTodos?: string;
   /** @plan PLAN-20260211-HIGHDENSITY.P03 */

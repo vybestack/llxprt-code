@@ -3048,17 +3048,14 @@ describe('useGeminiStream', () => {
     let mcpMockConfig: Config;
     let mcpManagerMock: {
       getDiscoveryState: Mock;
-      getMcpServerCount: Mock;
     };
 
     const renderWithMcp = (
       discoveryState: string,
-      serverCount: number,
       mcpServers?: Record<string, unknown>,
     ) => {
       mcpManagerMock = {
         getDiscoveryState: vi.fn().mockReturnValue(discoveryState),
-        getMcpServerCount: vi.fn().mockReturnValue(serverCount),
       };
 
       mcpMockConfig = {
@@ -3130,7 +3127,7 @@ describe('useGeminiStream', () => {
     };
 
     it('blocks non-slash query when MCP discovery is in_progress', async () => {
-      const { result } = renderWithMcp('in_progress', 2);
+      const { result } = renderWithMcp('in_progress');
 
       await act(async () => {
         await result.current.submitQuery('hello world');
@@ -3147,7 +3144,7 @@ describe('useGeminiStream', () => {
     });
 
     it('allows non-slash query when MCP discovery is completed', async () => {
-      const { result } = renderWithMcp('completed', 2);
+      const { result } = renderWithMcp('completed');
 
       await act(async () => {
         await result.current.submitQuery('hello world');
@@ -3164,7 +3161,7 @@ describe('useGeminiStream', () => {
     });
 
     it('allows non-slash query when no MCP servers are configured', async () => {
-      const { result } = renderWithMcp('in_progress', 0, {});
+      const { result } = renderWithMcp('in_progress', {});
 
       await act(async () => {
         await result.current.submitQuery('hello world');
@@ -3181,7 +3178,7 @@ describe('useGeminiStream', () => {
     });
 
     it('allows slash commands when MCP discovery is in_progress', async () => {
-      const { result } = renderWithMcp('in_progress', 2);
+      const { result } = renderWithMcp('in_progress');
 
       await act(async () => {
         await result.current.submitQuery('/help');
@@ -3194,6 +3191,7 @@ describe('useGeminiStream', () => {
         }),
         expect.any(Number),
       );
+      expect(mockSendMessageStream).toHaveBeenCalled();
     });
 
     it('allows non-slash query when no McpClientManager exists', async () => {
@@ -3276,7 +3274,7 @@ describe('useGeminiStream', () => {
     });
 
     it('blocks non-slash query when discovery is not_started and servers exist', async () => {
-      const { result } = renderWithMcp('not_started', 2);
+      const { result } = renderWithMcp('not_started');
 
       await act(async () => {
         await result.current.submitQuery('hello world');
@@ -3293,7 +3291,7 @@ describe('useGeminiStream', () => {
     });
 
     it('allows continuation queries regardless of MCP state', async () => {
-      const { result } = renderWithMcp('in_progress', 2);
+      const { result } = renderWithMcp('in_progress');
 
       await act(async () => {
         await result.current.submitQuery('continuation query', {
@@ -3308,6 +3306,7 @@ describe('useGeminiStream', () => {
         }),
         expect.any(Number),
       );
+      expect(mockSendMessageStream).toHaveBeenCalled();
     });
   });
 });

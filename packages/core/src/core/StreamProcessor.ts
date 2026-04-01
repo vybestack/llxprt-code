@@ -39,6 +39,7 @@ import {
   isValidNonThoughtTextPart,
   convertIContentToResponse,
 } from './MessageConverter.js';
+import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import {
   InvalidStreamError,
   isSchemaDepthError,
@@ -56,6 +57,15 @@ import {
  * StreamProcessor handles making API calls and processing streaming responses.
  * Extracted from GeminiChat to isolate streaming concerns.
  */
+
+type ToolGroupArray = Array<{
+  functionDeclarations: Array<{
+    name: string;
+    description?: string;
+    parametersJsonSchema?: unknown;
+  }>;
+}>;
+
 export class StreamProcessor {
   private logger = new DebugLogger('llxprt:gemini:stream-processor');
 
@@ -113,6 +123,7 @@ export class StreamProcessor {
 
     const streamResponse = await this._executeStreamApiCall(
       params,
+      promptId,
       userContent,
       provider,
     );
@@ -126,11 +137,12 @@ export class StreamProcessor {
    */
   private async _executeStreamApiCall(
     params: SendMessageParameters,
+    promptId: string,
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const apiCall = () =>
-      this._buildAndSendStreamRequest(params, userContent, provider);
+      this._buildAndSendStreamRequest(params, promptId, userContent, provider);
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () => this._handleBucketFailover(),
@@ -140,12 +152,18 @@ export class StreamProcessor {
 
   private async _buildAndSendStreamRequest(
     params: SendMessageParameters,
+    promptId: string,
     userContent: Content | Content[],
     provider: IProvider,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     let requestContents = this._buildRequestContents(userContent);
 
-    const tools = this.generationConfig.tools;
+    const configForHooks = this.runtimeContext.providerRuntime.config;
+    const tools = await this._applyToolSelectionHook(
+      configForHooks,
+      this.generationConfig.tools,
+    );
+
     this.logger.debug(
       () => '[StreamProcessor] Calling provider.generateChatCompletion',
       {
@@ -161,15 +179,8 @@ export class StreamProcessor {
       'StreamProcessor.generateRequest',
       { historyLength: requestContents.length },
     );
-    const runtimeContext = params.config
-      ? {
-          ...baseRuntimeContext,
-          config: { ...baseRuntimeContext.config, ...params.config },
-        }
-      : baseRuntimeContext;
 
     // Trigger BeforeModel hook for streaming path
-    const configForHooks = this.runtimeContext.providerRuntime.config;
     if (configForHooks && configForHooks.getEnableHooks?.()) {
       const hookSystem = configForHooks.getHookSystem?.();
       if (hookSystem) {
@@ -214,29 +225,109 @@ export class StreamProcessor {
           const modifiedRequest =
             beforeModelResult.applyLLMRequestModifications({
               model: this.runtimeContext.state.model || '',
-              contents: requestContents as unknown as Content[],
+              contents: ContentConverters.toGeminiContents(requestContents),
             });
-          if (modifiedRequest && modifiedRequest.contents) {
-            requestContents = modifiedRequest.contents as unknown as IContent[];
+          if (modifiedRequest?.contents) {
+            requestContents = ContentConverters.toIContents(
+              modifiedRequest.contents as Content[],
+            );
           }
         }
       }
     }
 
-    const streamResponse = provider.generateChatCompletion({
-      contents: requestContents,
-      tools: tools as ProviderToolset | undefined,
-      config: runtimeContext.config,
-      runtime: runtimeContext,
-      settings: runtimeContext.settingsService,
-      metadata: runtimeContext.metadata,
-      userMemory: baseRuntimeContext.config?.getUserMemory?.(),
-    } as GenerateChatOptions);
-
-    return this._convertIContentStream(streamResponse, {
+    const requestPayload = {
       contents: requestContents,
       tools,
+    };
+
+    const runtimeContext = params.config
+      ? {
+          ...baseRuntimeContext,
+          config: { ...baseRuntimeContext.config, ...params.config },
+        }
+      : baseRuntimeContext;
+
+    const requestContentsForTelemetry = ContentConverters.toGeminiContents(
+      requestPayload.contents,
+    );
+    logApiRequest(
+      this.runtimeContext,
+      this.runtimeContext.state,
+      requestContentsForTelemetry,
+      this.runtimeContext.state.model,
+      promptId,
+    );
+
+    const startTime = Date.now();
+    try {
+      const streamResponse = provider.generateChatCompletion({
+        contents: requestPayload.contents,
+        tools: requestPayload.tools as ProviderToolset | undefined,
+        config: runtimeContext.config,
+        runtime: runtimeContext,
+        settings: runtimeContext.settingsService,
+        metadata: runtimeContext.metadata,
+        userMemory: baseRuntimeContext.config?.getUserMemory?.(),
+      } as GenerateChatOptions);
+
+      return this._convertIContentStream(streamResponse, requestPayload, {
+        promptId,
+        startTime,
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      logApiError(
+        this.runtimeContext,
+        this.runtimeContext.state,
+        this.runtimeContext.state.model,
+        promptId,
+        durationMs,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  private async _applyToolSelectionHook(
+    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
+    tools: GenerateContentConfig['tools'],
+  ): Promise<GenerateContentConfig['tools']> {
+    const toolsFromConfig = tools as ToolGroupArray | undefined;
+    if (!toolsFromConfig || !configForHooks?.getEnableHooks?.()) {
+      return tools;
+    }
+
+    const hookSystem = configForHooks.getHookSystem?.();
+    if (!hookSystem) {
+      return tools;
+    }
+
+    await hookSystem.initialize();
+    const toolSelectionResult =
+      await hookSystem.fireBeforeToolSelectionEvent(toolsFromConfig);
+    const modifiedConfig = toolSelectionResult?.applyToolConfigModifications({
+      tools: toolsFromConfig,
     });
+
+    if (
+      modifiedConfig?.toolConfig &&
+      'allowedFunctionNames' in modifiedConfig.toolConfig
+    ) {
+      const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
+      if (allowedFunctions?.length) {
+        return toolsFromConfig
+          .map((toolGroup) => ({
+            ...toolGroup,
+            functionDeclarations: toolGroup.functionDeclarations?.filter((fn) =>
+              allowedFunctions.includes(fn.name),
+            ),
+          }))
+          .filter((g) => g.functionDeclarations?.length) as ToolGroupArray;
+      }
+    }
+
+    return toolsFromConfig;
   }
 
   private _buildRequestContents(userContent: Content | Content[]): IContent[] {
@@ -294,7 +385,10 @@ export class StreamProcessor {
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
     llmRequest?: Record<string, unknown>,
+    telemetryContext?: { promptId: string; startTime: number },
   ): AsyncGenerator<GenerateContentResponse> {
+    let lastConvertedChunk: GenerateContentResponse | undefined;
+
     for await (const iContent of streamResponse) {
       // Track token counts from IContent metadata (Anthropic/OpenAI format)
       // before conversion to Gemini format
@@ -315,6 +409,7 @@ export class StreamProcessor {
 
       // Convert current chunk to GenerateContentResponse
       const convertedChunk = convertIContentToResponse(iContent);
+      lastConvertedChunk = convertedChunk;
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
@@ -350,6 +445,7 @@ export class StreamProcessor {
 
           const modifiedResponse = afterModelResult?.getModifiedResponse();
           if (modifiedResponse) {
+            lastConvertedChunk = modifiedResponse;
             yield modifiedResponse;
             continue;
           }
@@ -357,6 +453,19 @@ export class StreamProcessor {
       }
 
       yield convertedChunk;
+    }
+
+    if (telemetryContext) {
+      const durationMs = Date.now() - telemetryContext.startTime;
+      logApiResponse(
+        this.runtimeContext,
+        this.runtimeContext.state,
+        this.runtimeContext.state.model,
+        telemetryContext.promptId,
+        durationMs,
+        lastConvertedChunk?.usageMetadata,
+        lastConvertedChunk ? JSON.stringify(lastConvertedChunk) : '{}',
+      );
     }
   }
 

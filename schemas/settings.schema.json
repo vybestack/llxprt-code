@@ -1253,10 +1253,10 @@
       },
       "additionalProperties": false
     },
-    "hooks": {
-      "title": "Hooks",
-      "description": "Hook configurations for intercepting and customizing agent behavior.",
-      "markdownDescription": "Hook configurations for intercepting and customizing agent behavior.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `{}`",
+    "hooksConfig": {
+      "title": "HooksConfig",
+      "description": "Configuration settings for the hooks system.",
+      "markdownDescription": "Configuration settings for the hooks system.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `{}`",
       "default": {},
       "type": "object",
       "properties": {
@@ -1276,14 +1276,22 @@
         },
         "disabled": {
           "title": "Disabled Hooks",
-          "description": "List of hook names to disable",
-          "markdownDescription": "List of hook names to disable\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `[]`",
+          "description": "List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.",
+          "markdownDescription": "List of hook names (commands) that should be disabled. Hooks in this list will not execute even if configured.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `[]`",
           "default": [],
           "type": "array",
           "items": {}
         }
       },
       "additionalProperties": false
+    },
+    "hooks": {
+      "title": "Hook Events",
+      "description": "Event-specific hook configurations.",
+      "markdownDescription": "Event-specific hook configurations.\n\n- Category: `Advanced`\n- Requires restart: `no`\n- Default: `{}`",
+      "default": {},
+      "type": "object",
+      "additionalProperties": true
     },
     "admin": {
       "title": "Admin",
