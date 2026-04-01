@@ -158,7 +158,6 @@ export class AnthropicProvider extends BaseProvider {
     ) {
       authToken = runtimeAuthToken;
     } else if (
-      runtimeAuthToken &&
       typeof runtimeAuthToken === 'object' &&
       'provide' in runtimeAuthToken &&
       typeof runtimeAuthToken.provide === 'function'
@@ -179,9 +178,7 @@ export class AnthropicProvider extends BaseProvider {
       }
     }
 
-    if (!authToken) {
-      authToken = await this.getAuthTokenForPrompt();
-    }
+    authToken ??= await this.getAuthTokenForPrompt();
 
     if (!authToken) {
       authLogger.debug(
@@ -267,10 +264,11 @@ export class AnthropicProvider extends BaseProvider {
       // Add "latest" aliases for Claude 4 tiers (opus, sonnet). We pick the newest
       // version of each tier based on the sorted order created above.
       const addLatestAlias = (tier: 'opus' | 'sonnet') => {
-        const latest = models
+        const sorted = models
           .filter((m) => m.id.startsWith(`claude-${tier}-4-`))
-          .sort((a, b) => b.id.localeCompare(a.id))[0];
-        if (latest) {
+          .sort((a, b) => b.id.localeCompare(a.id));
+        if (sorted.length > 0) {
+          const latest = sorted[0];
           models.push({
             ...latest,
             id: `claude-${tier}-4-latest`,
@@ -406,8 +404,8 @@ export class AnthropicProvider extends BaseProvider {
       // First check SettingsService for toolFormat override in provider settings
       // Note: This is synchronous access to cached settings, not async
       const currentSettings = settingsService['settings'];
-      const providerSettings = currentSettings?.providers?.[this.name];
-      const toolFormatOverride = providerSettings?.toolFormat as
+      const providerSettings = currentSettings.providers[this.name];
+      const toolFormatOverride = providerSettings.toolFormat as
         | ToolFormat
         | 'auto'
         | undefined;
@@ -537,7 +535,7 @@ export class AnthropicProvider extends BaseProvider {
 
     // Build custom headers
     const customHeaders = buildAnthropicCustomHeaders({
-      baseHeaders: this.getCustomHeaders() || {},
+      baseHeaders: this.getCustomHeaders() ?? {},
       wantCaching: requestContext.wantCaching,
       ttl: requestContext.ttl,
       cacheLogger: requestContext.cacheLogger,
@@ -551,15 +549,17 @@ export class AnthropicProvider extends BaseProvider {
     const rateLimitLogger = this.getRateLimitLogger();
     const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
       throttleEnabled:
-        (requestContext.configEphemerals['rate-limit-throttle'] as string) ??
-        'on',
+        (requestContext.configEphemerals['rate-limit-throttle'] as
+          | string
+          | undefined) ?? 'on',
       thresholdPercentage:
-        (requestContext.configEphemerals[
-          'rate-limit-throttle-threshold'
-        ] as number) ?? 5,
+        (requestContext.configEphemerals['rate-limit-throttle-threshold'] as
+          | number
+          | undefined) ?? 5,
       maxWaitMs:
-        (requestContext.configEphemerals['rate-limit-max-wait'] as number) ??
-        60000,
+        (requestContext.configEphemerals['rate-limit-max-wait'] as
+          | number
+          | undefined) ?? 60000,
     });
     if (waitDecision.shouldWait) {
       rateLimitLogger.debug(() => waitDecision.reason);
@@ -574,12 +574,12 @@ export class AnthropicProvider extends BaseProvider {
     );
 
     // Execute API call with dump context handling
-    const dumpMode = options.invocation?.ephemerals?.dumpcontext as
+    const dumpMode = options.invocation.ephemerals.dumpcontext as
       | DumpMode
       | undefined;
     const baseURL =
-      options.resolved.baseURL ||
-      this.getBaseURL() ||
+      options.resolved.baseURL ??
+      this.getBaseURL() ??
       'https://api.anthropic.com';
 
     const { response, rateLimitInfo } = await executeAnthropicApiCall({

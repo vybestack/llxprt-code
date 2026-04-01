@@ -212,10 +212,6 @@ export function calculateWaitTime(
     now?: number;
   },
 ): WaitDecision {
-  if (!info) {
-    return { shouldWait: false, waitMs: 0, reason: 'No rate limit data' };
-  }
-
   if (options.throttleEnabled === 'off') {
     return { shouldWait: false, waitMs: 0, reason: 'Throttling disabled' };
   }
@@ -252,7 +248,7 @@ export function calculateWaitTime(
   ];
 
   // Prefer any bucket that requires waiting over warning-only decisions
-  const waitDecision = decisions.find((d) => d?.shouldWait);
+  const waitDecision = decisions.find((d) => d?.shouldWait === true);
   if (waitDecision != null) {
     return waitDecision;
   }

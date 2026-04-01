@@ -257,8 +257,10 @@ function removeCollectedResults(
   messages: AnthropicMessage[],
   pendingRemovals: Array<{ msgIndex: number; blockIndex: number }>,
 ): void {
-  for (const removal of pendingRemovals.sort(
-    (a, b) => b.msgIndex - a.msgIndex || b.blockIndex - a.blockIndex,
+  for (const removal of pendingRemovals.sort((a, b) =>
+    b.msgIndex - a.msgIndex !== 0
+      ? b.msgIndex - a.msgIndex
+      : b.blockIndex - a.blockIndex,
   )) {
     const laterMsg = messages[removal.msgIndex];
     if (Array.isArray(laterMsg.content)) {

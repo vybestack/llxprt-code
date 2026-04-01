@@ -348,8 +348,8 @@ function completeToolCall(
 
   const toolSchema = findToolSchema(tools, currentToolCall.name, isOAuth);
   if (
-    toolSchema &&
-    processedParameters &&
+    toolSchema != null &&
+    processedParameters != null &&
     typeof processedParameters === 'object' &&
     typeof toolSchema === 'object'
   ) {
@@ -490,7 +490,7 @@ function* handleMessageDelta(
 
   logger.debug(
     () =>
-      `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, stopReason=${String(stopReason)}`,
+      `Received usage metadata from message_delta: promptTokens=${usage.input_tokens}, completionTokens=${usage.output_tokens}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, stopReason=${String(stopReason)}`,
   );
 
   yield {
@@ -498,9 +498,9 @@ function* handleMessageDelta(
     blocks: [],
     metadata: {
       usage: {
-        promptTokens: usage.input_tokens || 0,
-        completionTokens: usage.output_tokens || 0,
-        totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0),
+        promptTokens: usage.input_tokens,
+        completionTokens: usage.output_tokens,
+        totalTokens: usage.input_tokens + usage.output_tokens,
         cache_read_input_tokens: cacheRead,
         cache_creation_input_tokens: cacheCreation,
       },

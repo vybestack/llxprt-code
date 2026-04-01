@@ -100,7 +100,7 @@ export function mediaBlockToAnthropicImage(
     type: 'image',
     source: {
       type: 'base64',
-      media_type: media.mimeType || 'image/png',
+      media_type: media.mimeType,
       data: rawData,
     },
   };
@@ -126,7 +126,7 @@ export function mediaBlockToAnthropicDocument(
     type: 'document',
     source: {
       type: 'base64',
-      media_type: media.mimeType || 'application/pdf',
+      media_type: media.mimeType,
       data: rawData,
     },
     ...(media.filename ? { title: media.filename } : {}),
@@ -297,7 +297,7 @@ function blocksToText(blocks: ContentBlock[]): string {
     if (block.type === 'text') {
       combined += block.text;
     } else if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       combined += `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`;
     }
   }
@@ -332,9 +332,8 @@ function buildToolResults(
     );
   }
 
-  const toolTextContent = toolResponseBlocks.length
-    ? blocksToText(nonToolResponseBlocks)
-    : '';
+  const toolTextContent =
+    toolResponseBlocks.length > 0 ? blocksToText(nonToolResponseBlocks) : '';
   const mediaBlocks = c.blocks.filter(
     (b): b is MediaBlock => b.type === 'media',
   );
@@ -486,15 +485,14 @@ function convertContentToMessages(
     } else if (c.speaker === 'ai') {
       flushToolResults();
       convertAIMessage(c, contentIndex, redactedIndices, messages, options);
-    } else if (c.speaker === 'tool') {
+    } else {
+      // c.speaker === 'tool' (only remaining option in the discriminated union)
       if (toolResponseBlocks.length === 0) {
         throw new Error('Tool content must have a tool_response block');
       }
       if (onlyToolResponseContent) {
         continue;
       }
-    } else {
-      throw new Error(`Unknown speaker type: ${c.speaker}`);
     }
   }
 
@@ -508,7 +506,7 @@ function concatenateTextAndCodeBlocks(blocks: ContentBlock[]): string {
     if (block.type === 'text' && block.text) {
       segments.push(block.text);
     } else if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       segments.push(`\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`);
     }
   }
@@ -530,7 +528,7 @@ function convertHumanMessageWithMedia(
     if (block.type === 'text' && block.text) {
       parts.push({ type: 'text', text: block.text });
     } else if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       parts.push({
         type: 'text',
         text: `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`,
@@ -623,11 +621,7 @@ function convertThinkingBlockToAnthropic(
     };
   }
 
-  const shouldRedact =
-    shouldRedactThinkingBase &&
-    block.sourceField === 'thinking' &&
-    block.signature;
-  if (shouldRedact) {
+  if (shouldRedactThinkingBase) {
     return {
       type: 'redacted_thinking',
       data: block.signature,
@@ -684,7 +678,7 @@ function buildAIMessageContent(
     }
 
     if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       const codeText = `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`;
       contentArray.push({ type: 'text', text: codeText });
       continue;
