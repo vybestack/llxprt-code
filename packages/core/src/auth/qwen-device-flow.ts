@@ -50,7 +50,7 @@ export class QwenDeviceFlow {
     });
 
     // Only add scope if it's not empty
-    if (this.config.scopes && this.config.scopes.length > 0) {
+    if (this.config.scopes.length > 0) {
       params.append('scope', this.config.scopes.join(' '));
     }
 
@@ -110,14 +110,14 @@ export class QwenDeviceFlow {
 
           // Calculate expiry timestamp
           const now = Math.floor(Date.now() / 1000);
-          const expiresIn = validatedResponse.expires_in || 3600; // Default to 1 hour if not provided
+          const expiresIn = validatedResponse.expires_in ?? 3600; // Default to 1 hour if not provided
           const expiry = now + expiresIn;
 
           return {
             access_token: validatedResponse.access_token,
             token_type: 'Bearer',
             refresh_token: validatedResponse.refresh_token,
-            scope: validatedResponse.scope || undefined,
+            scope: validatedResponse.scope ?? undefined,
             resource_url: validatedResponse.resource_url,
             expiry,
           };
@@ -191,14 +191,14 @@ export class QwenDeviceFlow {
 
     // Calculate expiry timestamp with 30-second buffer
     const now = Math.floor(Date.now() / 1000);
-    const expiresIn = validatedResponse.expires_in || 3600; // Default to 1 hour if not provided
+    const expiresIn = validatedResponse.expires_in ?? 3600; // Default to 1 hour if not provided
     const expiry = now + expiresIn - 30; // 30-second buffer
 
     return {
       access_token: validatedResponse.access_token,
       token_type: 'Bearer',
-      refresh_token: validatedResponse.refresh_token || refreshToken,
-      scope: validatedResponse.scope || undefined,
+      refresh_token: validatedResponse.refresh_token ?? refreshToken,
+      scope: validatedResponse.scope ?? undefined,
       resource_url: validatedResponse.resource_url,
       expiry,
     };

@@ -207,7 +207,7 @@ export class ResultAggregator {
             break; // Gap — wait for the missing result to arrive
           }
 
-          if (!nextBuffered.isCancelled) {
+          if (nextBuffered.isCancelled !== true) {
             await this.publishResult(nextBuffered, signal);
           }
 
@@ -216,7 +216,7 @@ export class ResultAggregator {
         }
 
         this.resetBatchIfComplete();
-      } while (this.pendingPublishRequest);
+      } while (this.pendingPublishRequest as boolean);
     } finally {
       this.isPublishingBufferedResults = false;
       this.scheduleFollowUpIfNeeded(signal);
@@ -350,7 +350,7 @@ export class ResultAggregator {
       };
 
       logger.debug(
-        `callId=${callId}, toolName=${toolName}, returnDisplay type=${typeof result.returnDisplay}, hasValue=${!!result.returnDisplay}`,
+        `callId=${callId}, toolName=${toolName}, returnDisplay type=${typeof result.returnDisplay}, hasValue=true`,
       );
 
       this.callbacks.setSuccess(callId, successResponse);
@@ -407,7 +407,7 @@ export class ResultAggregator {
         getEphemeralSettings: () => ({
           ...ephemeral,
           'tool-output-max-tokens': perToolBudget,
-          ...(!ephemeral['tool-output-truncate-mode']
+          ...(ephemeral['tool-output-truncate-mode'] == null
             ? { 'tool-output-truncate-mode': 'truncate' }
             : {}),
         }),

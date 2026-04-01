@@ -231,7 +231,7 @@ export function createAgentRuntimeState(
 
   // Generate sessionId if not provided (line 101)
   const sessionId =
-    params.sessionId ||
+    params.sessionId ??
     `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
   // Create frozen state object (lines 92-103)

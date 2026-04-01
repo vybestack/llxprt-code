@@ -95,13 +95,11 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
   // Lines 40-54: Provider-specific methods - direct manipulation of settings.providers
   getProviderSettings(provider: string): Record<string, unknown> {
-    return this.settings.providers[provider] || {};
+    return this.settings.providers[provider] ?? {};
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
-    if (!this.settings.providers[provider]) {
-      this.settings.providers[provider] = {};
-    }
+    this.settings.providers[provider] ??= {};
 
     const oldValue = this.settings.providers[provider][key];
     this.settings.providers[provider][key] = value;
@@ -151,7 +149,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     let current = obj as Record<string, unknown>;
 
     for (const k of keys) {
-      if (current && typeof current === 'object' && k in current) {
+      if (typeof current === 'object' && k in current) {
         current = current[k] as Record<string, unknown>;
       } else {
         return undefined;
@@ -180,7 +178,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
     for (let i = 0; i < keys.length - 1; i++) {
       const k = keys[i];
-      if (!current[k] || typeof current[k] !== 'object') {
+      if (current[k] == null || typeof current[k] !== 'object') {
         current[k] = {};
       }
       current = current[k] as Record<string, unknown>;
@@ -244,7 +242,10 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       for (const [key, value] of Object.entries(changes)) {
         this.setProviderSetting(providerOrChanges, key, value);
       }
-    } else if (providerOrChanges && typeof providerOrChanges === 'object') {
+    } else if (
+      providerOrChanges != null &&
+      typeof providerOrChanges === 'object'
+    ) {
       // Global update
       for (const [key, value] of Object.entries(providerOrChanges)) {
         this.set(key, value);
@@ -261,8 +262,8 @@ export class SettingsService extends EventEmitter implements ISettingsService {
   exportForProfile() {
     // Get activeProvider from global settings first, then fallback to direct field or default
     const activeProvider =
-      (this.settings.global.activeProvider as string) ||
-      this.settings.activeProvider ||
+      (this.settings.global.activeProvider as string | undefined) ??
+      this.settings.activeProvider ??
       'openai';
 
     const allowedValue = this.get('tools.allowed');
@@ -313,7 +314,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       // Import provider settings
       if (data.providers != null) {
         for (const [provider, settings] of Object.entries(data.providers)) {
-          if (settings && typeof settings === 'object') {
+          if (typeof settings === 'object') {
             for (const [key, value] of Object.entries(settings)) {
               this.setProviderSetting(provider, key, value);
             }
@@ -354,8 +355,8 @@ export class SettingsService extends EventEmitter implements ISettingsService {
   getDiagnosticsData(): Promise<DiagnosticsInfo> {
     // Get activeProvider from global settings (set via set() method) or fallback to direct field or default
     const activeProvider =
-      (this.settings.global.activeProvider as string) ||
-      this.settings.activeProvider ||
+      (this.settings.global.activeProvider as string | undefined) ??
+      this.settings.activeProvider ??
       'openai';
     const providerSettings = this.getProviderSettings(
       activeProvider,

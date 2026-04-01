@@ -260,12 +260,12 @@ export class ConfirmationCoordinator {
     // PolicyDecision.ASK — check shouldConfirmExecute
     const confirmationDetails = await invocation.shouldConfirmExecute(signal);
 
-    if (!confirmationDetails) {
+    if (confirmationDetails === false) {
       this.approveInternal(reqInfo.callId);
       return;
     }
 
-    const allowedTools = this.config.getAllowedTools() || [];
+    const allowedTools = this.config.getAllowedTools() ?? [];
     if (
       this.config.getApprovalMode() === ApprovalMode.YOLO ||
       doesToolInvocationMatch(toolCall.tool, invocation, allowedTools)
@@ -278,7 +278,7 @@ export class ConfirmationCoordinator {
       toolCall,
       signal,
       confirmationDetails,
-      evaluation.context ?? getPolicyContextFromInvocation(invocation, reqInfo),
+      evaluation.context,
     );
   }
 
@@ -685,7 +685,7 @@ export class ConfirmationCoordinator {
         const stillNeedsConfirmation =
           await pendingTool.invocation.shouldConfirmExecute(signal);
 
-        if (!stillNeedsConfirmation) {
+        if (stillNeedsConfirmation === false) {
           this.statusMutator.setOutcome(
             pendingTool.request.callId,
             ToolConfirmationOutcome.ProceedAlways,

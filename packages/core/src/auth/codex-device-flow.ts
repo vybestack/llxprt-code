@@ -186,7 +186,7 @@ export class CodexDeviceFlow {
 
     // Build validated Codex token - use Unix timestamp in SECONDS (not milliseconds)
     const now = Math.floor(Date.now() / 1000);
-    const expiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
+    const expiresIn = tokenResponse.expires_in ?? 3600; // Default 1 hour
     const expiry = now + expiresIn;
 
     this.logger.debug(
@@ -255,7 +255,7 @@ export class CodexDeviceFlow {
 
     // Use Unix timestamp in SECONDS
     const now = Math.floor(Date.now() / 1000);
-    const expiresIn = tokenResponse.expires_in || 3600;
+    const expiresIn = tokenResponse.expires_in ?? 3600;
     const expiry = now + expiresIn;
 
     return CodexOAuthTokenSchema.parse({
@@ -291,8 +291,8 @@ export class CodexDeviceFlow {
 
     // Extract account_id from OpenAI-specific claim or root
     const accountId =
-      validated['https://api.openai.com/auth']?.chatgpt_account_id ||
-      validated['https://api.openai.com/auth']?.account_id ||
+      validated['https://api.openai.com/auth']?.chatgpt_account_id ??
+      validated['https://api.openai.com/auth']?.account_id ??
       validated.account_id;
 
     if (!accountId) {
@@ -406,7 +406,7 @@ export class CodexDeviceFlow {
     const startTime = Date.now();
     const intervalMs = intervalSeconds * 1000;
 
-    while (true) {
+    for (;;) {
       if (Date.now() - startTime >= maxWaitMs) {
         throw new Error('Device authorization timed out after 15 minutes');
       }
@@ -560,9 +560,7 @@ export class CodexDeviceFlow {
     // Build and return the CodexOAuthToken
     const now = Date.now();
     const expiresIn = tokenResponse.expires_in ?? 3600; // Default to 1 hour if not provided
-    const tokenType = (tokenResponse.token_type ?? 'Bearer') as
-      | 'Bearer'
-      | 'bearer';
+    const tokenType = tokenResponse.token_type as 'Bearer' | 'bearer';
     const token: CodexOAuthToken = {
       access_token: tokenResponse.access_token,
       refresh_token: tokenResponse.refresh_token,

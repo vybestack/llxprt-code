@@ -114,7 +114,7 @@ export class MCPOAuthProvider {
     redirectPort: number,
   ): Promise<OAuthClientRegistrationResponse> {
     const redirectUri =
-      config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
+      config.redirectUri ?? `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const registrationRequest: OAuthClientRegistrationRequest = {
       client_name: 'LLxprt Code MCP Client',
@@ -122,7 +122,7 @@ export class MCPOAuthProvider {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none', // Public client
-      scope: config.scopes?.join(' ') || '',
+      scope: config.scopes?.join(' ') ?? '',
     };
 
     const response = await fetch(registrationUrl, {
@@ -197,7 +197,7 @@ export class MCPOAuthProvider {
       const lastSegment = segments[segments.length - 1];
       if (lastSegment && versionSegmentPattern.test(lastSegment)) {
         const withoutVersionPath = segments.slice(0, -1);
-        if (withoutVersionPath.length) {
+        if (withoutVersionPath.length > 0) {
           issuerCandidates.add(
             `${authUrl.origin}/${withoutVersionPath.join('/')}`,
           );
@@ -304,7 +304,7 @@ export class MCPOAuthProvider {
                 <body>
                   <h1>Authentication Failed</h1>
                   <p>Error: ${error.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
-                  <p>${(url.searchParams.get('error_description') || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+                  <p>${(url.searchParams.get('error_description') ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
                   <p>You can close this window.</p>
                 </body>
               </html>
@@ -439,7 +439,7 @@ export class MCPOAuthProvider {
     mcpServerUrl?: string,
   ): string {
     const redirectUri =
-      config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
+      config.redirectUri ?? `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const params = new URLSearchParams({
       client_id: config.clientId!,
@@ -498,7 +498,7 @@ export class MCPOAuthProvider {
     mcpServerUrl?: string,
   ): Promise<OAuthTokenResponse> {
     const redirectUri =
-      config.redirectUri || `http://localhost:${redirectPort}${REDIRECT_PATH}`;
+      config.redirectUri ?? `http://localhost:${redirectPort}${REDIRECT_PATH}`;
 
     const params = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -542,7 +542,7 @@ export class MCPOAuthProvider {
     });
 
     const responseText = await response.text();
-    const contentType = response.headers.get('content-type') || '';
+    const contentType = response.headers.get('content-type') ?? '';
 
     if (!response.ok) {
       // Try to parse error from form-urlencoded response
@@ -552,13 +552,13 @@ export class MCPOAuthProvider {
         const error = errorParams.get('error');
         const errorDescription = errorParams.get('error_description');
         if (error) {
-          errorMessage = `Token exchange failed: ${error} - ${errorDescription || 'No description'}`;
+          errorMessage = `Token exchange failed: ${error} - ${errorDescription ?? 'No description'}`;
         }
       } catch {
         // Fall back to raw error
       }
       throw new Error(
-        errorMessage ||
+        errorMessage ??
           `Token exchange failed: ${response.status} - ${responseText}`,
       );
     }
@@ -582,7 +582,7 @@ export class MCPOAuthProvider {
       // Parse form-urlencoded response
       const tokenParams = new URLSearchParams(responseText);
       const accessToken = tokenParams.get('access_token');
-      const tokenType = tokenParams.get('token_type') || 'Bearer';
+      const tokenType = tokenParams.get('token_type') ?? 'Bearer';
       const expiresIn = tokenParams.get('expires_in');
       const refreshToken = tokenParams.get('refresh_token');
       const scope = tokenParams.get('scope');
@@ -592,7 +592,7 @@ export class MCPOAuthProvider {
         const error = tokenParams.get('error');
         const errorDescription = tokenParams.get('error_description');
         throw new Error(
-          `Token exchange failed: ${error || 'no_access_token'} - ${errorDescription || responseText}`,
+          `Token exchange failed: ${error ?? 'no_access_token'} - ${errorDescription ?? responseText}`,
         );
       }
 
@@ -600,8 +600,8 @@ export class MCPOAuthProvider {
         access_token: accessToken,
         token_type: tokenType,
         expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
-        refresh_token: refreshToken || undefined,
-        scope: scope || undefined,
+        refresh_token: refreshToken ?? undefined,
+        scope: scope ?? undefined,
       } as OAuthTokenResponse;
     }
   }
@@ -664,7 +664,7 @@ export class MCPOAuthProvider {
     });
 
     const responseText = await response.text();
-    const contentType = response.headers.get('content-type') || '';
+    const contentType = response.headers.get('content-type') ?? '';
 
     if (!response.ok) {
       // Try to parse error from form-urlencoded response
@@ -674,13 +674,13 @@ export class MCPOAuthProvider {
         const error = errorParams.get('error');
         const errorDescription = errorParams.get('error_description');
         if (error) {
-          errorMessage = `Token refresh failed: ${error} - ${errorDescription || 'No description'}`;
+          errorMessage = `Token refresh failed: ${error} - ${errorDescription ?? 'No description'}`;
         }
       } catch {
         // Fall back to raw error
       }
       throw new Error(
-        errorMessage ||
+        errorMessage ??
           `Token refresh failed: ${response.status} - ${responseText}`,
       );
     }
@@ -704,7 +704,7 @@ export class MCPOAuthProvider {
       // Parse form-urlencoded response
       const tokenParams = new URLSearchParams(responseText);
       const accessToken = tokenParams.get('access_token');
-      const tokenType = tokenParams.get('token_type') || 'Bearer';
+      const tokenType = tokenParams.get('token_type') ?? 'Bearer';
       const expiresIn = tokenParams.get('expires_in');
       const refreshToken = tokenParams.get('refresh_token');
       const scope = tokenParams.get('scope');
@@ -714,7 +714,7 @@ export class MCPOAuthProvider {
         const error = tokenParams.get('error');
         const errorDescription = tokenParams.get('error_description');
         throw new Error(
-          `Token refresh failed: ${error || 'unknown_error'} - ${errorDescription || responseText}`,
+          `Token refresh failed: ${error ?? 'unknown_error'} - ${errorDescription ?? responseText}`,
         );
       }
 
@@ -722,8 +722,8 @@ export class MCPOAuthProvider {
         access_token: accessToken,
         token_type: tokenType,
         expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
-        refresh_token: refreshToken || undefined,
-        scope: scope || undefined,
+        refresh_token: refreshToken ?? undefined,
+        scope: scope ?? undefined,
       } as OAuthTokenResponse;
     }
   }
@@ -781,7 +781,7 @@ export class MCPOAuthProvider {
                 ...config,
                 authorizationUrl: discoveredConfig.authorizationUrl,
                 tokenUrl: discoveredConfig.tokenUrl,
-                scopes: config.scopes || discoveredConfig.scopes || [],
+                scopes: config.scopes ?? discoveredConfig.scopes ?? [],
                 // Preserve existing client credentials
                 clientId: config.clientId,
                 clientSecret: config.clientSecret,
@@ -810,7 +810,7 @@ export class MCPOAuthProvider {
             ...config,
             authorizationUrl: discoveredConfig.authorizationUrl,
             tokenUrl: discoveredConfig.tokenUrl,
-            scopes: config.scopes || discoveredConfig.scopes || [],
+            scopes: config.scopes ?? discoveredConfig.scopes ?? [],
             registrationUrl: discoveredConfig.registrationUrl,
             // Preserve existing client credentials
             clientId: config.clientId,
@@ -940,12 +940,12 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
 
     const token: MCPOAuthToken = {
       accessToken: tokenResponse.access_token,
-      tokenType: tokenResponse.token_type || 'Bearer',
+      tokenType: tokenResponse.token_type,
       refreshToken: tokenResponse.refresh_token,
       scope: tokenResponse.scope,
     };
 
-    if (tokenResponse.expires_in) {
+    if (tokenResponse.expires_in != null) {
       token.expiresAt = Date.now() + tokenResponse.expires_in * 1000;
     }
 
@@ -964,7 +964,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
 
       // Verify token was saved
       const savedToken = await tokenStorage.getCredentials(serverName);
-      if (savedToken?.token?.accessToken) {
+      if (savedToken?.token.accessToken) {
         debugLogger.debug('[OK] Token verification successful');
       } else {
         debugLogger.error(
@@ -1028,11 +1028,11 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         const newToken: MCPOAuthToken = {
           accessToken: newTokenResponse.access_token,
           tokenType: newTokenResponse.token_type,
-          refreshToken: newTokenResponse.refresh_token || token.refreshToken,
-          scope: newTokenResponse.scope || token.scope,
+          refreshToken: newTokenResponse.refresh_token ?? token.refreshToken,
+          scope: newTokenResponse.scope ?? token.scope,
         };
 
-        if (newTokenResponse.expires_in) {
+        if (newTokenResponse.expires_in != null) {
           newToken.expiresAt = Date.now() + newTokenResponse.expires_in * 1000;
         }
 

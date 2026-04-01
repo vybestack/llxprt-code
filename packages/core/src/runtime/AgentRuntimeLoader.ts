@@ -88,22 +88,22 @@ function buildToolGovernance(
   profile: AgentRuntimeProfileSnapshot,
 ): ToolGovernance {
   const allowedRaw = Array.isArray(profile.settings.tools?.allowed)
-    ? profile.settings.tools?.allowed
+    ? profile.settings.tools.allowed
     : undefined;
   const disabledRaw = Array.isArray(profile.settings.tools?.disabled)
-    ? profile.settings.tools?.disabled
+    ? profile.settings.tools.disabled
     : undefined;
-  const excludedRaw = profile.config.getExcludeTools?.() ?? [];
+  const excludedRaw = profile.config.getExcludeTools() ?? [];
 
   return {
     allowed: new Set(
-      (allowedRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
+      (allowedRaw ?? []).map((tool) => normalizeToolName(tool) ?? tool),
     ),
     disabled: new Set(
-      (disabledRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
+      (disabledRaw ?? []).map((tool) => normalizeToolName(tool) ?? tool),
     ),
     excluded: new Set(
-      excludedRaw.map((tool) => normalizeToolName(tool) || tool),
+      excludedRaw.map((tool) => normalizeToolName(tool) ?? tool),
     ),
   };
 }
@@ -112,7 +112,7 @@ function isToolPermitted(
   toolName: string,
   governance: ToolGovernance,
 ): boolean {
-  const canonical = normalizeToolName(toolName) || toolName;
+  const canonical = normalizeToolName(toolName) ?? toolName;
   if (governance.excluded.has(canonical)) {
     return false;
   }
@@ -162,7 +162,7 @@ function createFilteredToolRegistryView(
             : '';
       const parameterSchema = (
         schema as { parametersJsonSchema?: Record<string, unknown> }
-      )?.parametersJsonSchema;
+      ).parametersJsonSchema;
 
       return {
         name: (tool as { name?: string }).name ?? name,
@@ -181,7 +181,7 @@ export async function loadAgentRuntime(
     throw new Error('AgentRuntimeLoader requires a profile option.');
   }
 
-  if (signal?.aborted) {
+  if (signal?.aborted === true) {
     const error = new Error('Runtime load aborted');
     error.name = 'AbortError';
     throw error;
@@ -192,7 +192,7 @@ export async function loadAgentRuntime(
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
     createProviderAdapterFromManager(
-      profile.providerManager ?? profile.config.getProviderManager?.(),
+      profile.providerManager ?? profile.config.getProviderManager(),
     );
 
   const telemetryAdapter: AgentRuntimeTelemetryAdapter =
@@ -203,7 +203,7 @@ export async function loadAgentRuntime(
   const toolsView: ToolRegistryView =
     overrides.toolsView ??
     createFilteredToolRegistryView(
-      profile.toolRegistry ?? profile.config.getToolRegistry?.(),
+      profile.toolRegistry ?? profile.config.getToolRegistry(),
       governance,
     );
 
