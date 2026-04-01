@@ -17,8 +17,8 @@ function makeOAuthItem(
   Omit<HistoryItemWithoutId, 'id'> {
   return {
     type: 'oauth_url',
-    text,
     url: `https://example.com/${text}`,
+    text,
   };
 }
 

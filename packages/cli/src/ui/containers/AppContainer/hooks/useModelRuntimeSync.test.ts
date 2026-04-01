@@ -34,9 +34,9 @@ describe('useModelRuntimeSync', () => {
       useModelRuntimeSync({
         config: config as never,
         currentModel: 'stale-model',
+        contextLimit: undefined,
         setCurrentModel,
         getActiveModelName,
-        contextLimit: undefined,
         setContextLimit,
       }),
     );
@@ -60,9 +60,9 @@ describe('useModelRuntimeSync', () => {
       useModelRuntimeSync({
         config: config as never,
         currentModel: 'old-model',
+        contextLimit: undefined,
         setCurrentModel,
         getActiveModelName,
-        contextLimit: undefined,
         setContextLimit,
       }),
     );
@@ -86,9 +86,9 @@ describe('useModelRuntimeSync', () => {
       useModelRuntimeSync({
         config: config as never,
         currentModel: 'provider-model',
+        contextLimit: undefined,
         setCurrentModel,
         getActiveModelName,
-        contextLimit: undefined,
         setContextLimit,
       }),
     );
@@ -116,9 +116,9 @@ describe('useModelRuntimeSync', () => {
       useModelRuntimeSync({
         config: config as never,
         currentModel: 'none',
+        contextLimit: undefined,
         setCurrentModel,
         getActiveModelName,
-        contextLimit: undefined,
         setContextLimit,
       }),
     );
@@ -156,9 +156,9 @@ describe('useModelRuntimeSync', () => {
         useModelRuntimeSync({
           config: config as never,
           currentModel: 'same-model',
+          contextLimit: undefined,
           setCurrentModel,
           getActiveModelName,
-          contextLimit: undefined,
           setContextLimit,
         }),
       );
@@ -186,9 +186,9 @@ describe('useModelRuntimeSync', () => {
         useModelRuntimeSync({
           config: config as never,
           currentModel: 'same-model',
+          contextLimit: 200000,
           setCurrentModel,
           getActiveModelName,
-          contextLimit: 200000,
           setContextLimit,
         }),
       );
@@ -223,9 +223,9 @@ describe('useModelRuntimeSync', () => {
         useModelRuntimeSync({
           config: config as never,
           currentModel: 'old-model',
+          contextLimit: undefined,
           setCurrentModel,
           getActiveModelName,
-          contextLimit: undefined,
           setContextLimit,
         }),
       );

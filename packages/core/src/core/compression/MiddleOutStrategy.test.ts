@@ -166,20 +166,20 @@ function buildContext(
 
   return {
     history: overrides.history ?? [],
-    runtimeContext,
-    runtimeState,
     estimateTokens: async (contents: readonly IContent[]) =>
       contents.length * 100,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
-    resolveProvider,
-    promptResolver,
     promptBaseDir: '/tmp/test-prompts',
     promptContext: {
       provider: overrides.provider ?? 'test-provider',
       model: overrides.model ?? 'test-model',
     },
     promptId: 'test-prompt',
+    runtimeContext,
+    runtimeState,
+    resolveProvider,
+    promptResolver,
   };
 }
 

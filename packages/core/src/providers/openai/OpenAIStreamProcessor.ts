@@ -401,7 +401,7 @@ export async function* processStreamingResponse(
       const deltaToolCalls = choice.delta?.tool_calls;
       if (deltaToolCalls && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
-          if (deltaToolCall.index === undefined) continue;
+          if (deltaToolCall.index == undefined) continue;
 
           deps.toolCallPipeline.addFragment(deltaToolCall.index, {
             id: deltaToolCall.id,
@@ -754,11 +754,11 @@ export async function* processStreamingResponse(
       () => `[Streaming pipeline] Stream completed with accumulated content`,
       {
         textLength: state.accumulatedText.length,
-        toolCallCount,
         textBufferLength: state.textBuffer.length,
         reasoningLength: state.accumulatedReasoningContent.length,
         thinkingLength: state.accumulatedThinkingContent.length,
         totalChunksReceived: state.allChunks.length,
+        toolCallCount,
       },
     );
   }

@@ -529,8 +529,8 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
               {
                 type: 'thinking',
                 thought: 'Let me think about this...',
-                encryptedContent,
                 sourceField: 'reasoning_content',
+                encryptedContent,
               },
               { type: 'text', text: 'Here is my answer' },
             ],
@@ -624,8 +624,8 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
               {
                 type: 'thinking',
                 thought: 'Let me think about this...',
-                encryptedContent,
                 sourceField: 'reasoning_content',
+                encryptedContent,
               },
               { type: 'text', text: 'Here is my answer' },
             ],

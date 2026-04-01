@@ -587,10 +587,10 @@ describe('crawler', () => {
     const paths = await crawl({
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: false,
       cacheTtl: 0,
       maxFiles: 2,
+      ignore,
     });
 
     // fdir returns files and directories.
@@ -617,9 +617,9 @@ describe('crawler', () => {
     const baseOptions = {
       crawlDirectory: tmpDir,
       cwd: tmpDir,
-      ignore,
       cache: true,
       cacheTtl: 60,
+      ignore,
     };
 
     // First crawl with maxFiles: 2 — results are truncated, should NOT be cached.

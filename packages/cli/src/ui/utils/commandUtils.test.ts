@@ -61,11 +61,11 @@ const makeWritable = (opts?: { isTTY?: boolean; writeReturn?: boolean }) => {
     write: vi.fn().mockReturnValue(writeReturn),
     end: vi.fn(),
     destroy: vi.fn(),
-    isTTY,
     once: EventEmitter.prototype.once,
     on: EventEmitter.prototype.on,
     off: EventEmitter.prototype.off,
     removeAllListeners: EventEmitter.prototype.removeAllListeners,
+    isTTY,
   }) as unknown as EventEmitter & {
     write: Mock;
     end: Mock;

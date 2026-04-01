@@ -1140,11 +1140,11 @@ export async function main() {
   try {
     await runNonInteractive({
       config: nonInteractiveConfig,
+      runtimeMessageBus: sessionMessageBus,
+      deferTelemetryShutdown: true,
       settings,
       input,
       prompt_id,
-      runtimeMessageBus: sessionMessageBus,
-      deferTelemetryShutdown: true,
     });
 
     // Fire SessionEnd hook on successful completion

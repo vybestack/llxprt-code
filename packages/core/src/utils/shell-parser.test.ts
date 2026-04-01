@@ -135,7 +135,7 @@ describe('shell-parser', () => {
       const command = 'ls -la';
       const result = parseCommandDetails(command);
       // When parseShellCommand times out, parseCommandDetails returns hasError: true
-      expect(result).toEqual({ details: [], hasError: true });
+      expect(result).toStrictEqual({ details: [], hasError: true });
     });
   });
 

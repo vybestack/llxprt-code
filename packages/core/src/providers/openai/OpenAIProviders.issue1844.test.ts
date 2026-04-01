@@ -29,8 +29,8 @@ function createMockCompletion(finishReason: string, content: string) {
         index: 0,
         message: {
           role: 'assistant' as const,
-          content,
           refusal: null,
+          content,
         },
         finish_reason: finishReason,
       },

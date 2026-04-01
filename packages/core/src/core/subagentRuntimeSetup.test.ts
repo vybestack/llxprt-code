@@ -75,7 +75,7 @@ describe('subagentRuntimeSetup', () => {
       };
       const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
       expect(decl.parametersJsonSchema).toBeDefined();
-      expect(decl.parametersJsonSchema).toEqual(
+      expect(decl.parametersJsonSchema).toStrictEqual(
         expect.objectContaining({
           properties: expect.objectContaining({
             foo: expect.anything(),

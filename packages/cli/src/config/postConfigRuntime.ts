@@ -154,11 +154,11 @@ async function activateProviderAndProfile(
   const profileApplicationResult = await applyProfileToRuntime({
     loadedProfile: profileLoadResult.loadedProfile,
     profileToLoad: profileLoadResult.profileToLoad ?? undefined,
-    bootstrapArgs,
-    argv,
     finalModel: providerModelResult.model,
     finalProvider: providerModelResult.provider,
     profileWarnings: [...profileLoadResult.profileWarnings],
+    bootstrapArgs,
+    argv,
   });
 
   const finalProvider = profileApplicationResult.resolvedFinalProvider;
@@ -168,7 +168,6 @@ async function activateProviderAndProfile(
     runtime: runtimeContext,
     providerManager: input.runtimeState.providerManager,
     oauthManager: input.runtimeState.oauthManager,
-    bootstrapArgs,
     profileApplication: {
       providerName:
         profileApplicationResult.resolvedProviderAfterProfile ?? finalProvider,
@@ -180,6 +179,7 @@ async function activateProviderAndProfile(
         : {}),
       warnings: [...profileApplicationResult.profileWarnings],
     },
+    bootstrapArgs,
   });
 
   // Store bootstrap args on config

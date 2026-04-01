@@ -263,8 +263,8 @@ function appendLogicalLineLayout(
     visualLines: lineVisualLines,
     logicalToVisualMap: lineLogicalToVisualMap,
     visualToLogicalMap: lineVisualToLogicalMap,
-    transformedToLogMap,
     visualToTransformedMap: lineVisualToTransformedMap,
+    transformedToLogMap,
   });
 }
 

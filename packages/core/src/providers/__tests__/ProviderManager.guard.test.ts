@@ -298,9 +298,9 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
         settings: settingsService,
         runtime: {
           runtimeId: 'test-runtime',
+          metadata: { source: 'test' },
           settingsService,
           config,
-          metadata: { source: 'test' },
         },
         config,
       },
@@ -576,9 +576,9 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
         settings: settingsService,
         runtime: {
           runtimeId: 'test-runtime',
+          metadata: { runtimeSource: 'test', injected: true },
           settingsService,
           config,
-          metadata: { runtimeSource: 'test', injected: true },
         },
         metadata: { explicitField: 'value' },
         config,

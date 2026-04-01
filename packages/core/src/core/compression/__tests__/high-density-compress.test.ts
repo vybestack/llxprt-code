@@ -387,8 +387,6 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           }
         }
       }
-        }
-      }
     });
 
     /**

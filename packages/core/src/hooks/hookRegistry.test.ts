@@ -613,7 +613,7 @@ describe('HookRegistry', () => {
         ([event, payload]) =>
           event === CoreEvent.Output &&
           typeof payload === 'object' &&
-          payload !== null &&
+          payload != null &&
           'chunk' in payload &&
           typeof (payload as { chunk: string }).chunk === 'string' &&
           (payload as { chunk: string }).chunk.includes('InvalidEvent'),

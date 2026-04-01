@@ -487,7 +487,9 @@ describe('TopDownTruncationStrategy', () => {
       const result = await strategy.compress(ctx);
 
       // Verify no orphaned tool responses: first message should not be a tool response
-      expect(result.newHistory.length > 0 ? result.newHistory[0].speaker : '').not.toBe('tool');
+      expect(
+        result.newHistory.length > 0 ? result.newHistory[0].speaker : '',
+      ).not.toBe('tool');
 
       // If an AI message with tool calls is in the result, its responses must also be there
       for (let i = 0; i < result.newHistory.length; i++) {

@@ -370,16 +370,16 @@ export async function loadPoliciesFromToml(
                   toolName: effectiveToolName,
                   decision: rule.decision,
                   priority: transformPriority(rule.priority, tier),
-                  argsPattern,
                   allowRedirection: rule.allowRedirection,
                   source: `${tierName.charAt(0).toUpperCase() + tierName.slice(1)}: ${file}`,
+                  argsPattern,
                 };
 
                 return policyRule;
               });
             });
           })
-          .filter((rule): rule is PolicyRule => rule !== null);
+          .filter((rule): rule is PolicyRule => rule != null);
 
         rules.push(...parsedRules);
       } catch (e) {

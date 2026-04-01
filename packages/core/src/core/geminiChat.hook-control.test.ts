@@ -59,7 +59,6 @@ describe('GeminiChat hook execution control', () => {
 
     const runtimeSetup = createGeminiChatRuntime({
       provider: mockProvider,
-      providerManager,
       configOverrides: {
         getHookSystem: vi.fn(() => mockHookSystem),
         getEnableHooks: vi.fn(() => true),
@@ -71,6 +70,7 @@ describe('GeminiChat hook execution control', () => {
         getEphemeralSetting: vi.fn(),
         getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
+      providerManager,
     });
 
     const mockConfig = runtimeSetup.config;
@@ -148,7 +148,7 @@ describe('GeminiChat hook execution control', () => {
       }
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toEqual({
+      expect(events[0]).toStrictEqual({
         type: StreamEventType.AGENT_EXECUTION_STOPPED,
         reason: 'BeforeModel stopped execution',
       });
@@ -195,7 +195,7 @@ describe('GeminiChat hook execution control', () => {
       }
 
       expect(events).toHaveLength(2);
-      expect(events[0]).toEqual({
+      expect(events[0]).toStrictEqual({
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
         reason: 'BeforeModel blocked execution',
         value: undefined,

@@ -506,14 +506,11 @@ export function createPolicyUpdater(
           );
 
           policyEngine.addRule({
-            toolName,
             decision: PolicyDecision.ALLOW,
-            // User tier (2) + high priority (950/1000) = 2.95
-            // This ensures user "always allow" selections are high priority
-            // but still lose to admin policies (3.xxx) and settings excludes (200)
             priority: 2.95,
-            argsPattern,
             source: 'Dynamic (Confirmed)',
+            toolName,
+            argsPattern,
           });
         }
       } else {
@@ -522,14 +519,11 @@ export function createPolicyUpdater(
           : undefined;
 
         policyEngine.addRule({
-          toolName,
           decision: PolicyDecision.ALLOW,
-          // User tier (2) + high priority (950/1000) = 2.95
-          // This ensures user "always allow" selections are high priority
-          // but still lose to admin policies (3.xxx) and settings excludes (200)
           priority: 2.95,
-          argsPattern,
           source: 'Dynamic (Confirmed)',
+          toolName,
+          argsPattern,
         });
       }
 

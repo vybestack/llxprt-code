@@ -503,7 +503,6 @@ export class CoreToolScheduler {
     return this.toolExecutor
       .execute({
         call: scheduledCall,
-        signal,
         onLiveOutput: scheduledCall.tool.canUpdateOutput
           ? (id: string, chunk: string | AnsiOutput) => {
               if (this.outputUpdateHandler) {
@@ -527,6 +526,7 @@ export class CoreToolScheduler {
         onPid: (id: string, pid: number) => {
           this.setPidInternal(id, pid);
         },
+        signal,
       })
       .then(async (executionResult) => {
         this.resultAggregator.bufferResult(

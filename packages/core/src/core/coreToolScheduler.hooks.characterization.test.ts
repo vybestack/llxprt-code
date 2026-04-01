@@ -333,7 +333,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(completedCalls[0].status).toBe('success');
     if (completedCalls[0].status === 'success') {
       const responsePart = completedCalls[0].response.responseParts[0];
-      expect(responsePart.functionResponse?.response).toEqual({
+      expect(responsePart.functionResponse?.response).toStrictEqual({
         output: 'tool output\n\nbefore hook note',
       });
     }

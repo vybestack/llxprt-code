@@ -416,11 +416,10 @@ const buildMockScheduler = (
         config: nextConfig,
       };
     }),
-
     toolCalls: [],
+    toolRegistry: mockToolRegistry as unknown as ToolRegistry,
     callbacks,
     config,
-    toolRegistry: mockToolRegistry as unknown as ToolRegistry,
   };
   return scheduler;
 };
@@ -1370,8 +1369,8 @@ describe('mapToDisplay', () => {
       it(`should map ToolCall with status '${status}' (${testName}) correctly`, () => {
         const toolCall: ToolCall = {
           request: baseRequest,
-          status,
           ...(extraProps || {}),
+          status,
         } as ToolCall;
 
         const display = mapToDisplay(toolCall);

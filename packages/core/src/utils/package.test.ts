@@ -29,7 +29,7 @@ describe('getPackageJson', () => {
     });
 
     const result = await getPackageJson('/some/path');
-    expect(result).toEqual(expectedPackageJsonResult);
+    expect(result).toStrictEqual(expectedPackageJsonResult);
     expect(readPackageUp).toHaveBeenCalledWith({
       cwd: '/some/path',
       normalize: false,
@@ -60,6 +60,6 @@ describe('getPackageJson', () => {
   ])('should handle $description', async ({ setup, expected }) => {
     setup();
     const result = await getPackageJson('/some/path');
-    expect(result).toEqual(expected);
+    expect(result).toStrictEqual(expected);
   });
 });

@@ -589,7 +589,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual(['end_turn']);
+      expect(call[1].finish_reasons).toStrictEqual(['end_turn']);
     });
 
     it('should populate finish_reasons from metadata.stopReason via processStreamForMetrics path', async () => {
@@ -650,7 +650,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual(['completed']);
+      expect(call[1].finish_reasons).toStrictEqual(['completed']);
     });
   });
 

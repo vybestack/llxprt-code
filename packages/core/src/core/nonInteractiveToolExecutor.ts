@@ -156,8 +156,6 @@ function createErrorCompletedToolCall(
     response: {
       callId: request.callId,
       agentId: request.agentId ?? DEFAULT_AGENT_ID,
-      error,
-      errorType,
       resultDisplay: error.message,
       responseParts: [
         // Only functionResponse — the functionCall is already recorded in
@@ -170,6 +168,8 @@ function createErrorCompletedToolCall(
           },
         },
       ] as Part[],
+      error,
+      errorType,
     },
     request,
     durationMs,

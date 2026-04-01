@@ -587,11 +587,11 @@ function* emitKeys(
       // Emit first escape key here, then continue processing
       keypressHandler({
         name: 'escape',
+        sequence: ESC,
+        insertable: false,
         shift,
         meta,
         ctrl,
-        sequence: ESC,
-        insertable: false,
       });
     } else if (escaped) {
       // Escape sequence timeout

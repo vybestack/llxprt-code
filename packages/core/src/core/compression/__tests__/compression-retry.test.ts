@@ -808,12 +808,12 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       history: historyService,
       settings: {
         compressionThreshold: 0.5,
-        contextLimit,
         preserveThreshold: 0.2,
         telemetry: {
           enabled: false,
           target: null,
         },
+        contextLimit,
       },
       provider: createProviderAdapterFromManager(
         runtimeSetup.config.getProviderManager?.(),

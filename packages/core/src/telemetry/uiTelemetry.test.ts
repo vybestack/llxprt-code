@@ -53,8 +53,8 @@ const createFakeCompletedToolCall = (
           {
             functionResponse: {
               id: request.callId,
-              name,
               response: { output: 'Success!' },
+              name,
             },
           },
         ],
@@ -77,8 +77,8 @@ const createFakeCompletedToolCall = (
         {
           functionResponse: {
             id: request.callId,
-            name,
             response: { error: 'Tool failed' },
+            name,
           },
         },
       ],

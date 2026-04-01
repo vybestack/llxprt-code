@@ -369,17 +369,17 @@ export function loadExtension(
       name: config.name,
       version: config.version,
       path: effectiveExtensionPath,
-      contextFiles,
-      installMetadata,
       mcpServers: config.mcpServers,
       excludeTools: config.excludeTools,
-      skills,
-      subagents,
-      isActive: true, // Barring any other signals extensions should be considered Active.
+      isActive: true,
       settings: config.settings as Array<Record<string, unknown>> | undefined,
       resolvedSettings: resolvedSettings as unknown as Array<
         Record<string, unknown>
       >,
+      contextFiles,
+      installMetadata,
+      skills,
+      subagents,
     };
   } catch (e) {
     console.error(
@@ -446,9 +446,9 @@ export async function resolveExtensionSettingsWithSource(
     return {
       name: setting.name,
       envVar: setting.envVar,
-      value,
       description: setting.description,
       sensitive: setting.sensitive ?? false,
+      value,
       source,
     };
   });

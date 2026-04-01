@@ -1288,8 +1288,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'abc\ndef\nghi',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       // Start at [0,0], move down twice then up
@@ -1331,8 +1331,8 @@ describe('useTextBuffer', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
           initialText: 'abc\ndef',
-          viewport,
           isValidPath: () => false,
+          viewport,
         }),
       );
       // Move to line 1
@@ -2684,8 +2684,8 @@ describe('Transformation Utilities', () => {
         const { result } = renderHookWithProviders(() =>
           useTextBuffer({
             initialText: 'original line',
-            viewport,
             isValidPath: () => true,
+            viewport,
           }),
         );
 
@@ -2728,8 +2728,8 @@ describe('Transformation Utilities', () => {
       const { result } = renderHookWithProviders(() =>
         useTextBuffer({
           initialText: text,
-          viewport,
           isValidPath: () => true,
+          viewport,
         }),
       );
 

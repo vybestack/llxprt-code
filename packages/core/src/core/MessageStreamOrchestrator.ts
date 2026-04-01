@@ -534,7 +534,7 @@ export class MessageStreamOrchestrator {
     for (const part of request) {
       if (
         typeof part === 'object' &&
-        part !== null &&
+        part != null &&
         'functionResponse' in part
       ) {
         const funcResp = (part as { functionResponse: { name?: string } })
@@ -632,7 +632,7 @@ export class MessageStreamOrchestrator {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
       yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return { done: true, retryCount, newBaseRequest: undefined };
+      return { done: true, newBaseRequest: undefined, retryCount };
     }
 
     const todosStillPending = activeTodos.length > 0;
@@ -651,7 +651,7 @@ export class MessageStreamOrchestrator {
           getBoundedTurns() - 1,
         );
       }
-      return { done: true, retryCount, newBaseRequest: undefined };
+      return { done: true, newBaseRequest: undefined, retryCount };
     }
 
     const newRetry = retryCount + 1;
@@ -725,8 +725,8 @@ export class MessageStreamOrchestrator {
     const followUpReminder = (
       await todoContinuationService.getTodoReminderForCurrentState({
         todoSnapshot: latestSnapshot,
-        activeTodos,
         escalate: snapshotUnchanged,
+        activeTodos,
       })
     ).reminder;
 
