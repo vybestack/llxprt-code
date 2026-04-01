@@ -164,9 +164,9 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         name: 'web_search_exa',
         arguments: {
           query: this.params.query,
-          type: this.params.type || 'auto',
-          numResults: this.params.numResults || API_CONFIG.DEFAULT_NUM_RESULTS,
-          livecrawl: this.params.livecrawl || 'fallback',
+          type: this.params.type ?? 'auto',
+          numResults: this.params.numResults ?? API_CONFIG.DEFAULT_NUM_RESULTS,
+          livecrawl: this.params.livecrawl ?? 'fallback',
           contextMaxCharacters: this.params.contextMaxCharacters ?? 10000,
         },
       },
@@ -200,7 +200,7 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         if (line.startsWith('data: ')) {
           try {
             const data: McpSearchResponse = JSON.parse(line.substring(6));
-            if (data.result?.content && data.result.content.length > 0) {
+            if (data.result.content.length > 0) {
               const content = ensureJsonSafe(data.result.content[0].text);
               return {
                 llmContent: content,

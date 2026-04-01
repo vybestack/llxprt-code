@@ -225,10 +225,10 @@ function tryMultipleParsingStrategies(
     if (detection.isDoubleEscaped) {
       logger.error(
         () =>
-          `[${format || 'auto'}] Fixed double-escaped parameters for ${toolName}`,
+          `[${format ?? 'auto'}] Fixed double-escaped parameters for ${toolName}`,
         {
           tool: toolName,
-          format: format || 'auto',
+          format: format ?? 'auto',
           originalLength: parametersString.length,
           fixed: true,
         },
@@ -245,10 +245,10 @@ function tryMultipleParsingStrategies(
   // Strategy 3: Return original string (last resort)
   if (detection.detectionDetails.error) {
     logger.error(
-      () => `[${format || 'auto'}] Failed to parse parameters for ${toolName}`,
+      () => `[${format ?? 'auto'}] Failed to parse parameters for ${toolName}`,
       {
         tool: toolName,
-        format: format || 'auto',
+        format: format ?? 'auto',
         error: detection.detectionDetails.error,
       },
     );

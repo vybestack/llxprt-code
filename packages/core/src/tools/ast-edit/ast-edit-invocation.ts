@@ -54,7 +54,7 @@ export class ASTEditToolInvocation
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
     // For preview mode, return false to let execute method handle it
-    if (!this.params.force) {
+    if (this.params.force !== true) {
       return false;
     }
 
@@ -125,7 +125,8 @@ export class ASTEditToolInvocation
       return `No file changes to ${shortenPath(relativePath)}`;
     }
 
-    const forceIndicator = this.params.force ? ' [EXECUTE] ' : ' [PREVIEW] ';
+    const forceIndicator =
+      this.params.force === true ? ' [EXECUTE] ' : ' [PREVIEW] ';
     return `${forceIndicator}${shortenPath(relativePath)}: ${oldStringSnippet} => ${newStringSnippet}`;
   }
 
@@ -137,7 +138,7 @@ export class ASTEditToolInvocation
     _setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     // Step 1: Preview mode (force: false or unset)
-    if (!this.params.force) {
+    if (this.params.force !== true) {
       return this.executePreview(signal);
     }
 
@@ -165,8 +166,8 @@ export class ASTEditToolInvocation
 
       // Freshness Check (must run first to prevent stale edits in concurrent scenarios)
       if (
-        this.params.last_modified &&
-        currentMtime &&
+        this.params.last_modified != null &&
+        currentMtime != null &&
         currentMtime > this.params.last_modified
       ) {
         const errorMessage = `File ${this.params.file_path} mismatch. Expected mtime <= ${this.params.last_modified}, but found ${currentMtime}.`;
@@ -210,7 +211,7 @@ export class ASTEditToolInvocation
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
         fileName,
-        currentContent ?? '',
+        currentContent,
         newContent,
         'Current',
         'Proposed',
@@ -243,18 +244,17 @@ export class ASTEditToolInvocation
                   return [
                     `- ${relPath}:`,
                     ...file.declarations.map(
-                      (d) =>
-                        `  - ${d.type}: ${d.name}${d.signature ? d.signature : ''}`,
+                      (d) => `  - ${d.type}: ${d.name}${d.signature ?? ''}`,
                     ),
                   ];
                 })
                 .flat(),
             ]
           : [],
-        astValidation && !astValidation.valid
+        !astValidation.valid
           ? `- AST errors: ${astValidation.errors.join(', ')}`
           : '',
-        currentMtime ? `- Timestamp: ${currentMtime}` : '',
+        currentMtime != null ? `- Timestamp: ${currentMtime}` : '',
         '',
         'ENHANCED CONTEXT ANALYSIS:',
         ...enhancedContext.declarations.map(
@@ -367,7 +367,7 @@ export class ASTEditToolInvocation
       const llmSuccessMessageParts: string[] = [
         `Successfully applied edit to: ${this.params.file_path}`,
         `- Changes: ${editData.occurrences} replacement(s) applied`,
-        `- AST validation: ${editData.astValidation?.valid ? 'PASSED' : 'FAILED'}`,
+        `- AST validation: ${editData.astValidation?.valid === true ? 'PASSED' : 'FAILED'}`,
       ];
 
       // @plan PLAN-20250212-LSP.P31

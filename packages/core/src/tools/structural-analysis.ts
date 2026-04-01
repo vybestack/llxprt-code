@@ -120,7 +120,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
     // Resolve search path
     const targetDir = this.config.getTargetDir();
-    let searchPath = this.params.path || target || targetDir;
+    let searchPath = this.params.path ?? target ?? targetDir;
     if (!path.isAbsolute(searchPath)) {
       searchPath = path.resolve(targetDir, searchPath);
     }
@@ -207,7 +207,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
             searchPath,
             resolvedLang,
             targetDir,
-            !!reverse,
+            reverse === true,
             signal,
           );
           break;
@@ -234,7 +234,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
     lang: string | Lang,
   ): Promise<string[]> {
     const stat = await fs.stat(searchPath).catch(() => null);
-    if (stat?.isFile()) {
+    if (stat?.isFile() === true) {
       return [searchPath];
     }
     const extensions = this.getExtensionsForLanguage(lang);
@@ -587,6 +587,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       const callers: CallerEntry[] = [];
 
       for (const file of files) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- signal.aborted changes asynchronously
         if (signal.aborted || nodesVisited >= maxNodes) break;
         const parsed = await this.parseFile(file, lang);
         if (parsed == null) continue;
@@ -752,6 +753,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       const callees: CalleeEntry[] = [];
 
       for (const file of files) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- signal.aborted changes asynchronously
         if (signal.aborted) break;
         const parsed = await this.parseFile(file, lang);
         if (parsed == null) continue;
@@ -786,7 +788,10 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
               (
                 a: { start: number; end: number },
                 b: { start: number; end: number },
-              ) => a.start - b.start || b.end - a.end,
+              ) => {
+                const cmp = a.start - b.start;
+                return cmp !== 0 ? cmp : b.end - a.end;
+              },
             );
 
             const outermost: typeof ranges = [];

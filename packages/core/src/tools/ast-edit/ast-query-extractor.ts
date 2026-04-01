@@ -22,7 +22,7 @@ export class ASTQueryExtractor {
     filePath: string,
     content: string,
   ): Promise<EnhancedDeclaration[]> {
-    const extension = (filePath.split('.').pop() || '').toLowerCase();
+    const extension = (filePath.split('.').pop() ?? '').toLowerCase();
     const lang = LANGUAGE_MAP[extension];
     if (!lang) {
       return this.fallbackExtraction(content, 'unknown');

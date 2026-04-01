@@ -171,7 +171,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         );
       }
       const rawContent = await response.text();
-      const contentType = response.headers.get('content-type') || '';
+      const contentType = response.headers.get('content-type') ?? '';
       let textContent: string;
 
       // Only use html-to-text if content type is HTML, or if no content type is provided (assume HTML)
@@ -349,7 +349,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       );
 
       let responseText =
-        getResponseText(response as GenerateContentResponse) || '';
+        getResponseText(response as GenerateContentResponse) ?? '';
       const typedResponse = response as GenerateContentResponse;
       const urlContextMeta = typedResponse.candidates?.[0]?.urlContextMetadata;
       const groundingMetadata =
@@ -374,7 +374,10 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         if (allStatuses.every((s) => s != 'URL_RETRIEVAL_STATUS_SUCCESS')) {
           processingError = true;
         }
-      } else if (!responseText.trim() && !sources?.length) {
+      } else if (
+        !responseText.trim() &&
+        (sources == null || sources.length === 0)
+      ) {
         // No URL metadata and no content/sources
         processingError = true;
       }
@@ -389,21 +392,17 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       }
 
       if (processingError) {
-        // If it's not a private IP, don't fallback - just return no content found
-        if (!isPrivate) {
-          return {
-            llmContent: 'No content found or URL retrieval failed.',
-            returnDisplay: 'No content found.',
-          };
-        }
-        return await this.executeFallback(signal);
+        return {
+          llmContent: 'No content found or URL retrieval failed.',
+          returnDisplay: 'No content found.',
+        };
       }
 
       const sourceListFormatted: string[] = [];
       if (sources != null && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
-          const title = source.web?.title || 'Untitled';
-          const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
+          const title = source.web?.title ?? 'Untitled';
+          const uri = source.web?.uri ?? 'Unknown URI';
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });
 

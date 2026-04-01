@@ -143,7 +143,7 @@ export class CrossFileRelationshipAnalyzer {
                 matcher: { rule: { pattern: symbolName } },
               },
               (err, matches) => {
-                if (err != null || !matches) {
+                if (err != null) {
                   resolve();
                   return;
                 }
@@ -207,7 +207,7 @@ export class CrossFileRelationshipAnalyzer {
                   matcher: { rule: { pattern: symbolName } },
                 },
                 (err, matches) => {
-                  if (err != null || !matches) {
+                  if (err != null) {
                     resolve();
                     return;
                   }
@@ -237,18 +237,19 @@ export class CrossFileRelationshipAnalyzer {
 
       await withTimeout(queryPromise, ASTConfig.FIND_RELATED_TIMEOUT_MS);
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside async closure
       if (workspaceTooLarge) return [];
       if (references.length > 0) return references;
     } catch (error) {
       logger.warn(
-        `findRelatedSymbols failed or timed out for symbol '${symbolName}' in workspace '${workspacePath}' (lang: ${lang || 'mixed'})`,
+        `findRelatedSymbols failed or timed out for symbol '${symbolName}' in workspace '${workspacePath}' (lang: ${lang ?? 'mixed'})`,
         error,
       );
     }
 
     // Fallback to in-memory symbol index only if explicitly enabled
     if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
-      return this.symbolIndex.get(symbolName) || [];
+      return this.symbolIndex.get(symbolName) ?? [];
     }
     return [];
   }

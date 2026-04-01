@@ -92,7 +92,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
 
     // Resolve search path
     const targetDir = this.config.getTargetDir();
-    let searchPath = this.params.path || targetDir;
+    let searchPath = this.params.path ?? targetDir;
 
     // Handle relative paths
     if (!path.isAbsolute(searchPath)) {
@@ -287,7 +287,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
       // Extract single metavariables ($NAME patterns, excluding $$$ multi-vars)
       if (pattern) {
         const metaVarNames =
-          pattern.match(/(?<!\$)\$(?!\$)([A-Z_][A-Z0-9_]*)/g) || [];
+          pattern.match(/(?<!\$)\$(?!\$)([A-Z_][A-Z0-9_]*)/g) ?? [];
         for (const raw of metaVarNames) {
           const name = raw.slice(1); // remove $
           const match = node.getMatch(name);
@@ -296,11 +296,11 @@ class AstGrepToolInvocation extends BaseToolInvocation<
           }
         }
         // Extract multi metavariables ($$$NAME patterns)
-        const multiVarNames = pattern.match(/\$\$\$([A-Z_][A-Z0-9_]*)/g) || [];
+        const multiVarNames = pattern.match(/\$\$\$([A-Z_][A-Z0-9_]*)/g) ?? [];
         for (const raw of multiVarNames) {
           const name = raw.slice(3); // remove $$$
           const matches = node.getMultipleMatches(name);
-          if (matches && matches.length > 0) {
+          if (matches.length > 0) {
             metaVariables[name] = matches
               .map((m: SgNode) => m.text())
               .join(', ');

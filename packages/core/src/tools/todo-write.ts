@@ -127,7 +127,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const todos = result.data;
 
     // Get session and agent IDs from context
-    const sessionId = this.context?.sessionId || 'default';
+    const sessionId = this.context?.sessionId ?? 'default';
     const agentId = this.context?.agentId;
 
     const store = new TodoStore(sessionId, agentId);
@@ -151,7 +151,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     }
 
     // Determine if we're in interactive mode
-    const isInteractive = this.context?.interactiveMode || false;
+    const isInteractive = this.context?.interactiveMode ?? false;
 
     // Set active todo ID if there's an in_progress todo
     if (isInteractive) {
@@ -197,26 +197,25 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   }
 
   private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
-    const normalized = rawTodos.map((todo, index) => {
-      const normalizedId =
-        todo?.id != undefined && todo?.id != null && `${todo.id}`.trim() !== ''
-          ? String(todo.id)
-          : String(index + 1);
+    const hasValue = (v: string | null | undefined): boolean =>
+      v != null && String(v).trim() !== '';
 
-      const normalizedSubtasks = Array.isArray(todo?.subtasks)
+    const normalized = rawTodos.map((todo, index) => {
+      const normalizedId = hasValue(todo.id)
+        ? String(todo.id)
+        : String(index + 1);
+
+      const normalizedSubtasks = Array.isArray(todo.subtasks)
         ? todo.subtasks.map((subtask, subIndex) => {
-            const subtaskId =
-              subtask?.id != undefined &&
-              subtask?.id != null &&
-              `${subtask.id}`.trim() !== ''
-                ? String(subtask.id)
-                : `${normalizedId}-${subIndex + 1}`;
+            const subtaskId = hasValue(subtask.id)
+              ? String(subtask.id)
+              : `${normalizedId}-${subIndex + 1}`;
             return {
               ...subtask,
               id: subtaskId,
             };
           })
-        : todo?.subtasks;
+        : todo.subtasks;
 
       return {
         ...todo,

@@ -176,7 +176,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
         if (line.startsWith('data: ')) {
           try {
             const data: McpCodeResponse = JSON.parse(line.substring(6));
-            if (data.result?.content && data.result.content.length > 0) {
+            if (data.result.content.length > 0) {
               const content = ensureJsonSafe(data.result.content[0].text);
               return {
                 llmContent: content,

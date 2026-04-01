@@ -115,7 +115,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
-    return this.params.absolute_path || this.params.file_path || '';
+    return this.params.absolute_path ?? this.params.file_path ?? '';
   }
 
   override toolLocations(): ToolLocation[] {
@@ -329,7 +329,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
 
       const fileName = path.basename(filePath);
       const originallyProposedContent =
-        this.params.ai_proposed_content || newContent;
+        this.params.ai_proposed_content ?? newContent;
       const diffStat = getDiffStat(
         fileName,
         currentContent,
@@ -360,7 +360,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
           : `Successfully created file from patch: ${filePath}.`,
       ];
 
-      if (this.params.modified_by_user) {
+      if (this.params.modified_by_user === true) {
         llmSuccessMessageParts.push(`User modified the patch content.`);
       }
 
@@ -369,7 +369,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       // Append LSP diagnostics after successful patch for content-write files
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient?.isAlive()) {
+        if (lspClient?.isAlive() === true) {
           // Only check files that had content writes (triggers LSP analysis)
           for (const contentFile of classification.contentWriteFiles) {
             const absoluteFilePath = path.resolve(
@@ -477,7 +477,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
     params: ApplyPatchToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = params.absolute_path ?? params.file_path ?? '';
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
