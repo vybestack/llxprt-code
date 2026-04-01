@@ -36,7 +36,7 @@ export function enhanceToolNameExtraction(
   isComplete: boolean,
 ): { name: string; isFallback: boolean } {
   // If we already have a valid name, keep it
-  if (currentName?.trim()) {
+  if (currentName.trim() !== '') {
     return { name: currentName.trim(), isFallback: false };
   }
 
@@ -77,7 +77,7 @@ export function validateToolName(
   toolName: string,
   availableToolNames: string[] = [],
 ): { isValid: boolean; correctedName?: string; reason?: string } {
-  if (!toolName?.trim()) {
+  if (toolName.trim() === '') {
     return {
       isValid: false,
       reason: 'Tool name is empty or missing',
@@ -169,7 +169,7 @@ export function processFinalToolName(
   });
 
   // Use a more descriptive fallback that includes debugging information
-  return toolName?.trim()
+  return toolName.trim() !== ''
     ? `tool_name_not_found_${toolName.replace(/[^a-zA-Z0-9]/g, '_')}`
     : 'missing_tool_name';
 }
@@ -200,7 +200,7 @@ export function safeExtractToolName(
 
   // Standard OpenAI format
   if (
-    delta?.function &&
+    delta.function != null &&
     typeof delta.function === 'object' &&
     'name' in delta.function
   ) {
@@ -216,8 +216,8 @@ export function safeExtractToolName(
 
   // Check if this is a completion signal
   if (
-    delta?.finish_reason === 'tool_calls' ||
-    (currentIndex >= 0 && delta?.index !== undefined)
+    delta.finish_reason === 'tool_calls' ||
+    (currentIndex >= 0 && delta.index !== undefined)
   ) {
     isComplete = true;
   }
@@ -227,13 +227,13 @@ export function safeExtractToolName(
     const validation = validateToolName(extractedName, availableToolNames);
 
     if (!validation.isValid) {
-      warnings.push(validation.reason || 'Unknown validation error');
+      warnings.push(validation.reason ?? 'Unknown validation error');
       extractedName = processFinalToolName(extractedName, availableToolNames);
     } else if (
       validation.correctedName &&
       validation.correctedName !== extractedName
     ) {
-      warnings.push(validation.reason || 'Name was corrected');
+      warnings.push(validation.reason ?? 'Name was corrected');
       extractedName = validation.correctedName;
     }
   }
