@@ -69,7 +69,7 @@ function appendReasoningDelta(current: string, delta: string): string {
     return delta;
   }
   const lastChar = current[current.length - 1] ?? '';
-  const nextChar = delta[0] ?? '';
+  const nextChar = delta[0];
   const needsSpace =
     /[\w)]/.test(lastChar) && /[\w(]/.test(nextChar) && !/\s/.test(nextChar);
   return needsSpace ? `${current} ${delta}` : `${current}${delta}`;
@@ -115,7 +115,7 @@ export async function* parseResponsesStream(
   let lastLoggedType: string | undefined;
 
   try {
-    while (true) {
+    for (;;) {
       const { done, value } = await reader.read();
 
       if (done) break;
@@ -125,7 +125,7 @@ export async function* parseResponsesStream(
 
       // Process complete lines
       const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+      buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {
@@ -203,7 +203,7 @@ export async function* parseResponsesStream(
                 // Yield accumulated reasoning as a single block (if not already emitted)
                 // When includeThinkingInResponse is false, still emit but with isHidden: true
                 // This preserves encrypted content for round-trip while hiding UI display
-                const thoughtContent = (event.text || reasoningText).trim();
+                const thoughtContent = (event.text ?? reasoningText).trim();
                 if (
                   thoughtContent &&
                   !emittedThoughts.has(thoughtContent) &&
@@ -233,7 +233,7 @@ export async function* parseResponsesStream(
                 // When includeThinkingInResponse is false, still emit but with isHidden: true
                 // This preserves encrypted content for round-trip while hiding UI display
                 const summaryContent = (
-                  event.text || reasoningSummaryText
+                  event.text ?? reasoningSummaryText
                 ).trim();
                 if (
                   summaryContent &&
@@ -265,8 +265,8 @@ export async function* parseResponsesStream(
                   functionCalls.set(event.item.id, {
                     id: event.item.id,
                     call_id: event.item.call_id,
-                    name: event.item.name || '',
-                    arguments: event.item.arguments || '',
+                    name: event.item.name ?? '',
+                    arguments: event.item.arguments ?? '',
                   });
                 }
                 break;
@@ -291,7 +291,7 @@ export async function* parseResponsesStream(
                     event.item.summary
                       ?.map((s: { text?: string }) => s.text)
                       .filter(Boolean)
-                      .join(' ') || '';
+                      .join(' ') ?? '';
 
                   if (!thoughtText && event.item.content) {
                     thoughtText = event.item.content
@@ -317,7 +317,7 @@ export async function* parseResponsesStream(
 
                   const finalThought = thoughtText.trim();
                   const hasEncryptedContent = Boolean(
-                    event.item?.encrypted_content,
+                    event.item.encrypted_content,
                   );
                   const prior = emittedThoughts.get(finalThought);
 
@@ -326,7 +326,7 @@ export async function* parseResponsesStream(
                   // 2. Previously emitted WITHOUT encrypted_content, but now we have it
                   //    (reasoning_text.done arrived before output_item.done)
                   const shouldEmit =
-                    finalThought &&
+                    finalThought !== '' &&
                     (!prior || (hasEncryptedContent && !prior.hasEncrypted));
 
                   if (shouldEmit) {
@@ -347,7 +347,7 @@ export async function* parseResponsesStream(
                     const reasoningBlock: ContentBlock = hasEncryptedContent
                       ? {
                           ...baseReasoningBlock,
-                          encryptedContent: event.item?.encrypted_content,
+                          encryptedContent: event.item.encrypted_content,
                         }
                       : baseReasoningBlock;
 
@@ -372,12 +372,12 @@ export async function* parseResponsesStream(
 
                 // Function call completed
                 if (event.item?.type === 'function_call' || event.item_id) {
-                  const itemId = event.item?.id || event.item_id;
+                  const itemId = event.item?.id ?? event.item_id;
                   if (itemId) {
                     const call = functionCalls.get(itemId);
                     if (call) {
                       // Use final arguments from event if available, otherwise use accumulated
-                      const finalArguments = event.arguments || call.arguments;
+                      const finalArguments = event.arguments ?? call.arguments;
 
                       let parsedArguments: unknown = {};
                       if (finalArguments) {
@@ -400,7 +400,7 @@ export async function* parseResponsesStream(
                         blocks: [
                           {
                             type: 'tool_call',
-                            id: call.call_id || call.id,
+                            id: call.call_id ?? call.id,
                             name: call.name,
                             parameters: parsedArguments,
                           },
@@ -468,7 +468,7 @@ export async function* parseResponsesStream(
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
-                  const terminalReason = event.response.status ?? 'completed';
+                  const terminalReason = event.response.status;
                   yield {
                     speaker: 'ai',
                     blocks: [],
@@ -518,13 +518,13 @@ export function parseErrorResponse(
 
     // Handle various error response formats
     let message = 'Unknown error';
-    if (errorData.error?.message) {
+    if (errorData.error?.message != null) {
       message = errorData.error.message;
-    } else if (errorData.error?.description) {
+    } else if (errorData.error?.description != null) {
       message = errorData.error.description;
-    } else if (errorData.message) {
+    } else if (errorData.message != null) {
       message = errorData.message;
-    } else if (errorData.description) {
+    } else if (errorData.description != null) {
       message = errorData.description;
     } else if (typeof errorData === 'string') {
       message = errorData;
@@ -544,7 +544,7 @@ export function parseErrorResponse(
         const teapotError = new Error(message);
         (teapotError as { status?: number }).status = status;
         (teapotError as { code?: string }).code =
-          errorData.error?.code || errorData.code;
+          errorData.error?.code ?? errorData.code;
         return teapotError;
       }
       case 429:
@@ -560,7 +560,7 @@ export function parseErrorResponse(
 
     const error = new Error(`${errorPrefix}: ${message}`);
     (error as { status?: number }).status = status;
-    (error as { code?: string }).code = errorData.error?.code || errorData.code;
+    (error as { code?: string }).code = errorData.error?.code ?? errorData.code;
     return error;
   } catch {
     // For invalid JSON, use a consistent format

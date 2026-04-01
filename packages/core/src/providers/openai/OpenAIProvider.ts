@@ -139,10 +139,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Resolve settings for HTTP agents from invocation or provider config
-    const agentSettings =
-      options.invocation?.ephemerals ??
-      this.providerConfig?.getEphemeralSettings?.() ??
-      {};
+    const agentSettings = options.invocation.ephemerals;
     const agents = createHttpAgents(agentSettings);
 
     // Apply invocation/provider header overrides at client construction time.
@@ -158,10 +155,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
-    const providerConfig = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
-    if (providerConfig?.forceQwenOAuth) {
+    const providerConfig = this.providerConfig as
+      | (IProviderConfig & { forceQwenOAuth?: boolean })
+      | undefined;
+    if (providerConfig?.forceQwenOAuth === true) {
       return true;
     }
     // CRITICAL FIX: Check provider name first for cases where base URL is changed by profiles
@@ -279,9 +276,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       baseURL &&
       (baseURL.includes('qwen') || baseURL.includes('dashscope'))
     ) {
-      return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
+      return process.env.LLXPRT_DEFAULT_MODEL ?? 'qwen3-coder-plus';
     }
-    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
+    return process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-5';
   }
 
   /**
@@ -305,9 +302,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Override isAuthenticated for qwen provider to check OAuth directly
    */
   override async isAuthenticated(): Promise<boolean> {
-    const config = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
+    const config = this.providerConfig as
+      | (IProviderConfig & { forceQwenOAuth?: boolean })
+      | undefined;
 
     const directApiKey = this.baseProviderConfig.apiKey;
     if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
@@ -331,7 +328,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
     }
 
-    if (this.name === 'qwen' && config?.forceQwenOAuth) {
+    if (this.name === 'qwen' && config?.forceQwenOAuth === true) {
       try {
         const token = await this.authResolver.resolveAuthentication({
           settingsService: this.resolveSettingsService(),
@@ -456,13 +453,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ]);
 
       const params: Record<string, unknown> = {};
-      if (providerSettings) {
-        for (const [key, value] of Object.entries(providerSettings)) {
-          if (reservedKeys.has(key) || value === undefined || value === null) {
-            continue;
-          }
-          params[key] = value;
+      for (const [key, value] of Object.entries(providerSettings)) {
+        if (reservedKeys.has(key) || value === undefined || value === null) {
+          continue;
         }
+        params[key] = value;
       }
 
       return Object.keys(params).length > 0 ? params : undefined;
@@ -488,8 +483,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
   ): AsyncGenerator<IContent, void, unknown> {
     const { metadata } = options;
-    const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
-    const ephemeralSettings = options.invocation?.ephemerals ?? {};
+    const abortSignal = metadata.abortSignal as AbortSignal | undefined;
+    const ephemeralSettings = options.invocation.ephemerals;
 
     // Import the extracted modules
     const { prepareRequest } = await import('./OpenAIRequestPreparation.js');
@@ -530,7 +525,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         authTokenPresent: Boolean(resolved.authToken),
         messageCount: options.contents.length,
         toolCount: options.tools?.length ?? 0,
-        metadataKeys: Object.keys(metadata ?? {}),
+        metadataKeys: Object.keys(metadata),
         model,
       });
 
@@ -543,13 +538,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         streamingEnabled,
       });
 
-      if ('tools' in requestBody) {
+      if ('tools' in requestBody && requestBody.tools != null) {
+        const tools = requestBody.tools;
         logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
-          toolCount: requestBody.tools?.length,
-          toolNames: requestBody.tools?.map((t) =>
-            'function' in t ? t.function?.name : undefined,
+          toolCount: tools.length,
+          toolNames: tools.map((t) =>
+            'function' in t ? t.function.name : undefined,
           ),
-          firstTool: requestBody.tools?.[0],
+          firstTool: tools[0],
         });
       }
     }
@@ -702,15 +698,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Process the continuation response
       for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
-        if (abortSignal?.aborted) {
+        if (abortSignal?.aborted === true) {
           break;
         }
 
-        const choice = chunk.choices?.[0];
-        if (!choice) continue;
+        const choice = chunk.choices[0];
 
         const deltaContent = coerceMessageContentToString(
-          choice.delta?.content as unknown,
+          choice.delta.content as unknown,
         );
         if (deltaContent) {
           const sanitized = sanitizeProviderText(deltaContent);
