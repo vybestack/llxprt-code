@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import {
   type IContent,
   type TextBlock,
@@ -235,29 +235,29 @@ export async function* processStreamingResponse(
     // CRITICAL: Do NOT collect all chunks first — that blocks the entire pipeline,
     // prevents abort signal checks, and causes indefinite hangs. See #1846.
     for await (const chunk of response) {
-      if (abortSignal?.aborted) {
+      if (abortSignal?.aborted === true) {
         break;
       }
       state.allChunks.push(chunk);
 
       const chunkRecord = chunk as unknown as Record<string, unknown>;
       let parsedData: Record<string, unknown> | undefined;
-      const rawData = chunkRecord?.data;
+      const rawData = chunkRecord.data;
       if (typeof rawData === 'string') {
         try {
           parsedData = JSON.parse(rawData) as Record<string, unknown>;
         } catch {
           parsedData = undefined;
         }
-      } else if (rawData && typeof rawData === 'object') {
+      } else if (rawData != null && typeof rawData === 'object') {
         parsedData = rawData as Record<string, unknown>;
       }
 
       const streamingError =
-        chunkRecord?.error ??
+        chunkRecord.error ??
         parsedData?.error ??
         (parsedData?.data as { error?: unknown } | undefined)?.error;
-      const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
+      const streamingEvent = (chunkRecord.event ?? parsedData?.event) as
         | string
         | undefined;
       const streamingErrorMessage =
@@ -266,7 +266,7 @@ export async function* processStreamingResponse(
         (parsedData as { message?: string } | undefined)?.message;
       if (
         streamingEvent === 'error' ||
-        (streamingError && typeof streamingError === 'object')
+        (streamingError != null && typeof streamingError === 'object')
       ) {
         const errorMessage =
           streamingErrorMessage ??
@@ -281,8 +281,10 @@ export async function* processStreamingResponse(
         state.streamingUsage = chunk.usage;
       }
 
-      const choice = chunk.choices?.[0];
-      if (!choice) continue;
+      const choice = chunk.choices[0] as
+        | OpenAI.Chat.Completions.ChatCompletionChunk.Choice
+        | undefined;
+      if (choice == null) continue;
 
       // Parse reasoning_content
       const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
@@ -305,7 +307,7 @@ export async function* processStreamingResponse(
       }
 
       // Check for finish_reason
-      if (choice.finish_reason) {
+      if (choice.finish_reason != null) {
         state.lastFinishReason = choice.finish_reason;
         deps.logger.debug(
           () =>
@@ -329,7 +331,7 @@ export async function* processStreamingResponse(
 
       // Handle text content
       const rawDeltaContent = coerceMessageContentToString(
-        choice.delta?.content as unknown,
+        choice.delta.content as unknown,
       );
       if (rawDeltaContent) {
         let deltaContent: string;
@@ -359,10 +361,10 @@ export async function* processStreamingResponse(
           state.textBuffer += deltaContent;
 
           const kimiBeginCount = (
-            state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []
+            state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) ?? []
           ).length;
           const kimiEndCount = (
-            state.textBuffer.match(/<\|tool_calls_section_end\|>/g) || []
+            state.textBuffer.match(/<\|tool_calls_section_end\|>/g) ?? []
           ).length;
           const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
 
@@ -398,11 +400,9 @@ export async function* processStreamingResponse(
       }
 
       // Handle tool calls using pipeline
-      const deltaToolCalls = choice.delta?.tool_calls;
-      if (deltaToolCalls && deltaToolCalls.length > 0) {
+      const deltaToolCalls = choice.delta.tool_calls;
+      if (deltaToolCalls != null && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
-          if (deltaToolCall.index == undefined) continue;
-
           deps.toolCallPipeline.addFragment(deltaToolCall.index, {
             id: deltaToolCall.id,
             name: deltaToolCall.function?.name,
@@ -419,20 +419,20 @@ export async function* processStreamingResponse(
         }
       ).message;
       const messageToolCalls = choiceMessage?.tool_calls;
-      if (messageToolCalls && messageToolCalls.length > 0) {
+      if (messageToolCalls != null && messageToolCalls.length > 0) {
         messageToolCalls.forEach(
           (
             toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
             index: number,
           ) => {
-            if (!toolCall || toolCall.type !== 'function') {
+            if (toolCall.type !== 'function') {
               return;
             }
 
             deps.toolCallPipeline.addFragment(index, {
               id: toolCall.id,
-              name: toolCall.function?.name,
-              args: toolCall.function?.arguments,
+              name: toolCall.function.name,
+              args: toolCall.function.arguments,
             });
           },
         );
@@ -440,8 +440,8 @@ export async function* processStreamingResponse(
     }
   } catch (error) {
     if (
-      abortSignal?.aborted ||
-      (error &&
+      abortSignal?.aborted === true ||
+      (error != null &&
         typeof error === 'object' &&
         'name' in error &&
         error.name === 'AbortError')
@@ -457,7 +457,7 @@ export async function* processStreamingResponse(
       if (
         errorMessage.includes('Tool is not present in the tools list') &&
         (model.toLowerCase().includes('qwen') ||
-          deps.getBaseURL()?.includes('cerebras'))
+          deps.getBaseURL()?.includes('cerebras') === true)
       ) {
         deps.logger.error(
           'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
@@ -534,7 +534,7 @@ export async function* processStreamingResponse(
         pipelineToolCallBlocks.push({
           type: 'tool_call',
           id: normalizeToHistoryToolId(
-            normalizedCall.id || `call_${normalizedCall.index}`,
+            normalizedCall.id ?? `call_${normalizedCall.index}`,
           ),
           name: normalizedCall.name,
           parameters: processedParameters,
@@ -569,16 +569,16 @@ export async function* processStreamingResponse(
 
       const stopReason = mapFinishReasonToStopReason(state.lastFinishReason);
 
-      if (state.streamingUsage) {
+      if (state.streamingUsage != null) {
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
         combinedContent.metadata = {
           usage: {
-            promptTokens: state.streamingUsage.prompt_tokens || 0,
-            completionTokens: state.streamingUsage.completion_tokens || 0,
+            promptTokens: state.streamingUsage.prompt_tokens ?? 0,
+            completionTokens: state.streamingUsage.completion_tokens ?? 0,
             totalTokens:
-              state.streamingUsage.total_tokens ||
-              (state.streamingUsage.prompt_tokens || 0) +
-                (state.streamingUsage.completion_tokens || 0),
+              state.streamingUsage.total_tokens ??
+              (state.streamingUsage.prompt_tokens ?? 0) +
+                (state.streamingUsage.completion_tokens ?? 0),
             cachedTokens: cacheMetrics.cachedTokens,
             cacheCreationTokens: cacheMetrics.cacheCreationTokens,
             cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -593,10 +593,9 @@ export async function* processStreamingResponse(
       // receive a finish signal (issue #1844).  stopReason stays normalized
       // (via mapFinishReasonToStopReason above); finishReason preserves the
       // raw provider value for diagnostics.
-      if (state.lastFinishReason) {
-        if (!combinedContent.metadata) {
-          combinedContent.metadata = {};
-        }
+      if (state.lastFinishReason != null) {
+        combinedContent.metadata ??= {};
+
         // stopReason was already set to the normalized value above; do NOT
         // overwrite it with the raw provider string.
         combinedContent.metadata.finishReason = state.lastFinishReason;
@@ -609,7 +608,7 @@ export async function* processStreamingResponse(
 
   // Emit metadata-only response if needed
   if (
-    state.streamingUsage &&
+    state.streamingUsage != null &&
     state.accumulatedReasoningContent.length === 0 &&
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
@@ -620,12 +619,13 @@ export async function* processStreamingResponse(
       blocks: [],
       metadata: {
         usage: {
-          promptTokens: state.streamingUsage.prompt_tokens || 0,
-          completionTokens: state.streamingUsage.completion_tokens || 0,
+          promptTokens: state.streamingUsage.prompt_tokens ?? 0,
+          completionTokens: state.streamingUsage.completion_tokens ?? 0,
           totalTokens:
-            state.streamingUsage.total_tokens ||
-            (state.streamingUsage.prompt_tokens || 0) +
-              (state.streamingUsage.completion_tokens || 0),
+            state.streamingUsage.total_tokens ??
+            (state.streamingUsage.prompt_tokens ?? 0) +
+              (state.streamingUsage.completion_tokens ?? 0),
+
           cachedTokens: cacheMetrics.cachedTokens,
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -636,7 +636,7 @@ export async function* processStreamingResponse(
 
     // Propagate terminal metadata on usage-only chunk (issue #1844).
     // stopReason stays normalized; finishReason preserves raw value.
-    if (state.lastFinishReason && metaOnlyContent.metadata) {
+    if (state.lastFinishReason != null && metaOnlyContent.metadata != null) {
       metaOnlyContent.metadata.finishReason = state.lastFinishReason;
       state.hasEmittedTerminalMetadata = true;
     }
@@ -647,8 +647,8 @@ export async function* processStreamingResponse(
   // Emit a terminal metadata chunk even when there is no usage, so
   // downstream turn handling always receives a finish signal (issue #1844).
   if (
-    state.lastFinishReason &&
-    !state.streamingUsage &&
+    state.lastFinishReason != null &&
+    state.streamingUsage == null &&
     !state.hasEmittedTerminalMetadata &&
     deps.toolCallPipeline.getStats().collector.totalCalls === 0
   ) {
@@ -668,8 +668,8 @@ export async function* processStreamingResponse(
 
   // Handle empty streaming responses after tool calls
   const toolCallCount =
-    (state.cachedPipelineResult?.normalized.length ?? 0) +
-    (state.cachedPipelineResult?.failed.length ?? 0);
+    state.cachedPipelineResult.normalized.length +
+    state.cachedPipelineResult.failed.length;
   const hasToolsButNoText =
     state.lastFinishReason === 'stop' &&
     toolCallCount > 0 &&
@@ -689,11 +689,6 @@ export async function* processStreamingResponse(
       },
     );
 
-    if (!state.cachedPipelineResult) {
-      throw new Error(
-        'Pipeline result not cached - this should not happen in pipeline mode',
-      );
-    }
     const toolCallsForHistory = state.cachedPipelineResult.normalized.map(
       (normalizedCall, index) => ({
         id:

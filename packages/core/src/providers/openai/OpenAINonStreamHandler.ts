@@ -51,42 +51,42 @@ export async function* handleNonStreamingResponse(
   deps: NonStreamHandlerDeps,
 ): AsyncGenerator<IContent, void, unknown> {
   const completion = response;
-  const choice = completion.choices?.[0];
+  const choice = completion.choices[0] as
+    | OpenAI.Chat.Completions.ChatCompletion.Choice
+    | undefined;
 
-  if (!choice) {
+  if (choice == null) {
     throw new Error('No choices in completion response');
   }
 
   // Log finish reason
-  if (choice.finish_reason) {
-    deps.logger.debug(
-      () => `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
-      {
-        model,
-        finishReason: choice.finish_reason,
-        hasContent: !!choice.message?.content,
-        hasToolCalls: !!(
-          choice.message?.tool_calls && choice.message.tool_calls.length > 0
-        ),
-        contentLength: choice.message?.content?.length || 0,
-        toolCallCount: choice.message?.tool_calls?.length || 0,
-        detectedFormat,
-      },
-    );
+  deps.logger.debug(
+    () => `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
+    {
+      model,
+      finishReason: choice.finish_reason,
+      hasContent: choice.message.content != null,
+      hasToolCalls:
+        choice.message.tool_calls != null &&
+        choice.message.tool_calls.length > 0,
+      contentLength: choice.message.content?.length ?? 0,
+      toolCallCount: choice.message.tool_calls?.length ?? 0,
+      detectedFormat,
+    },
+  );
 
-    if (choice.finish_reason === 'length') {
-      deps.logger.warn(
-        () =>
-          `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
-      );
-    }
+  if (choice.finish_reason === 'length') {
+    deps.logger.warn(
+      () =>
+        `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
+    );
   }
 
   const blocks: Array<TextBlock | ToolCallBlock> = [];
 
   // Handle text content and Kimi tool sections
   const pipelineRawMessageContent = coerceMessageContentToString(
-    choice.message?.content as unknown,
+    choice.message.content as unknown,
   );
   let pipelineKimiCleanContent: string | undefined;
   let pipelineKimiToolBlocks: ToolCallBlock[] = [];
@@ -109,7 +109,7 @@ export async function* handleNonStreamingResponse(
 
   // Handle tool calls
   if (
-    choice.message?.tool_calls != null &&
+    choice.message.tool_calls != null &&
     choice.message.tool_calls.length > 0
   ) {
     for (const toolCall of choice.message.tool_calls) {
@@ -201,12 +201,23 @@ export async function* handleNonStreamingResponse(
       const cacheMetrics = extractCacheMetrics(completion.usage);
       responseContent.metadata = {
         usage: {
-          promptTokens: completion.usage.prompt_tokens || 0,
-          completionTokens: completion.usage.completion_tokens || 0,
+          promptTokens:
+            completion.usage.prompt_tokens > 0
+              ? completion.usage.prompt_tokens
+              : 0,
+          completionTokens:
+            completion.usage.completion_tokens > 0
+              ? completion.usage.completion_tokens
+              : 0,
           totalTokens:
-            completion.usage.total_tokens ||
-            (completion.usage.prompt_tokens || 0) +
-              (completion.usage.completion_tokens || 0),
+            completion.usage.total_tokens > 0
+              ? completion.usage.total_tokens
+              : (completion.usage.prompt_tokens > 0
+                  ? completion.usage.prompt_tokens
+                  : 0) +
+                (completion.usage.completion_tokens > 0
+                  ? completion.usage.completion_tokens
+                  : 0),
           cachedTokens: cacheMetrics.cachedTokens,
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -221,14 +232,10 @@ export async function* handleNonStreamingResponse(
     // receive a finish signal (issue #1844).  stopReason stays normalized
     // (via mapFinishReasonToStopReason above); finishReason preserves the
     // raw provider value for diagnostics.
-    if (choice.finish_reason) {
-      if (!responseContent.metadata) {
-        responseContent.metadata = {};
-      }
-      // stopReason was already set to the normalized value above; do NOT
-      // overwrite it with the raw provider string.
-      responseContent.metadata.finishReason = choice.finish_reason;
-    }
+    responseContent.metadata ??= {};
+    // stopReason was already set to the normalized value above; do NOT
+    // overwrite it with the raw provider string.
+    responseContent.metadata.finishReason = choice.finish_reason;
 
     yield responseContent;
   } else if (completion.usage != null) {
@@ -239,12 +246,23 @@ export async function* handleNonStreamingResponse(
       blocks: [],
       metadata: {
         usage: {
-          promptTokens: completion.usage.prompt_tokens || 0,
-          completionTokens: completion.usage.completion_tokens || 0,
+          promptTokens:
+            completion.usage.prompt_tokens > 0
+              ? completion.usage.prompt_tokens
+              : 0,
+          completionTokens:
+            completion.usage.completion_tokens > 0
+              ? completion.usage.completion_tokens
+              : 0,
           totalTokens:
-            completion.usage.total_tokens ||
-            (completion.usage.prompt_tokens || 0) +
-              (completion.usage.completion_tokens || 0),
+            completion.usage.total_tokens > 0
+              ? completion.usage.total_tokens
+              : (completion.usage.prompt_tokens > 0
+                  ? completion.usage.prompt_tokens
+                  : 0) +
+                (completion.usage.completion_tokens > 0
+                  ? completion.usage.completion_tokens
+                  : 0),
           cachedTokens: cacheMetrics.cachedTokens,
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -254,12 +272,10 @@ export async function* handleNonStreamingResponse(
     };
 
     // Propagate terminal metadata on usage-only responses too (issue #1844).
-    if (choice.finish_reason && metadataOnly.metadata) {
-      metadataOnly.metadata.finishReason = choice.finish_reason;
-    }
+    metadataOnly.metadata!.finishReason = choice.finish_reason;
 
     yield metadataOnly;
-  } else if (choice.finish_reason) {
+  } else {
     // Emit a metadata-only chunk even without usage so downstream receives
     // the terminal finish signal (issue #1844).  stopReason is normalized.
     yield {
@@ -269,12 +285,6 @@ export async function* handleNonStreamingResponse(
         stopReason,
         finishReason: choice.finish_reason,
       },
-    } as IContent;
-  } else if (stopReason) {
-    yield {
-      speaker: 'ai',
-      blocks: [],
-      metadata: { stopReason },
     } as IContent;
   }
 }
