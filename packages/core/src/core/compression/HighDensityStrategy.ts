@@ -293,8 +293,8 @@ export class HighDensityStrategy implements CompressionStrategy {
       if (entry.speaker === 'human' || entry.speaker === 'ai') {
         // Preserve human and AI entries intact (REQ-HD-008.4)
         newHistory.push(entry);
-      } else if (entry.speaker === 'tool') {
-        // Summarize tool response blocks (REQ-HD-008.3)
+      } else {
+        // speaker === 'tool': Summarize tool response blocks (REQ-HD-008.3)
         const summarized = this.summarizeToolResponseBlocks(entry, history);
         newHistory.push(summarized);
       }
@@ -805,10 +805,10 @@ export class HighDensityStrategy implements CompressionStrategy {
         continue;
       }
 
-      entries.sort(
-        (a, b) =>
-          b.messageIndex - a.messageIndex || b.startOffset - a.startOffset,
-      );
+      entries.sort((a, b) => {
+        const idxDiff = b.messageIndex - a.messageIndex;
+        return idxDiff !== 0 ? idxDiff : b.startOffset - a.startOffset;
+      });
 
       // entries[0] is the latest — preserve. Strip entries[1..n]
       for (let i = 1; i < entries.length; i++) {

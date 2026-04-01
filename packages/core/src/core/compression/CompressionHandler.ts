@@ -151,7 +151,7 @@ export class CompressionHandler {
       const strategy = getCompressionStrategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
-      if (!strategy.optimize || strategy.trigger?.mode !== 'continuous') {
+      if (!strategy.optimize || strategy.trigger.mode !== 'continuous') {
         return;
       }
 
@@ -231,7 +231,7 @@ export class CompressionHandler {
         this.generationConfig,
         this.runtimeContext.state.model,
         undefined,
-        this.runtimeContext.providerRuntime?.settingsService,
+        this.runtimeContext.providerRuntime.settingsService,
       ),
     );
     const effectiveLimit = Math.max(0, contextLimit - completionBudget);
@@ -356,7 +356,7 @@ export class CompressionHandler {
         this.generationConfig,
         this.runtimeContext.state.model,
         provider,
-        this.runtimeContext.providerRuntime?.settingsService,
+        this.runtimeContext.providerRuntime.settingsService,
       ),
     );
     const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
@@ -542,7 +542,7 @@ export class CompressionHandler {
   ): Promise<PerformCompressionResult> {
     // Cooldown: skip compression if we have too many recent failures
     // When bypassCooldown is true (called from enforceContextWindow), skip this check
-    if (!options?.bypassCooldown && this.isCompressionInCooldown()) {
+    if (options?.bypassCooldown !== true && this.isCompressionInCooldown()) {
       this.logger.debug(
         'Skipping compression — in cooldown after repeated failures',
         {
@@ -608,6 +608,7 @@ export class CompressionHandler {
     }
 
     await this.historyService.waitForTokenUpdates();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated in callback
     if (didCompress && compressionSucceeded) {
       this.lastSuccessfulCompressionTime = Date.now();
       return PerformCompressionResult.COMPRESSED;
@@ -782,7 +783,7 @@ export class CompressionHandler {
       },
       ...(activeTodos ? { activeTodos } : {}),
       compressionVerification:
-        this.runtimeContext.ephemerals.compressionVerification?.() ?? false,
+        this.runtimeContext.ephemerals.compressionVerification(),
       promptResolver,
       promptBaseDir,
       promptId,

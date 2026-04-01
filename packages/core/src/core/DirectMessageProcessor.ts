@@ -67,9 +67,6 @@ export class DirectMessageProcessor {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     const provider = this.providerResolver('DirectMessageProcessor');
-    if (!provider) {
-      throw new Error('No active provider configured');
-    }
 
     const userIContents = this._convertUserInput(params.message);
     const requestContents = ContentConverters.toGeminiContents(userIContents);
@@ -194,7 +191,7 @@ export class DirectMessageProcessor {
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
-        toolCount: effectiveToolsFromConfig?.length ?? 0,
+        toolCount: effectiveToolsFromConfig.length,
         baseUrl: baseUrlForCall,
       },
     );
@@ -202,7 +199,7 @@ export class DirectMessageProcessor {
     const runtimeContext = this.providerRuntimeBuilder(
       'DirectMessageProcessor.generateDirectMessage',
       {
-        toolCount: effectiveToolsFromConfig?.length ?? 0,
+        toolCount: effectiveToolsFromConfig.length,
         ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
       },
     );
@@ -218,14 +215,14 @@ export class DirectMessageProcessor {
     const streamResponse = provider.generateChatCompletion({
       contents: contentsForApi,
       tools:
-        effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+        effectiveToolsFromConfig.length > 0
           ? (effectiveToolsFromConfig as ProviderToolset)
           : undefined,
       config: runtimeContext.config,
       runtime: runtimeContext,
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
-      userMemory: runtimeContext.config?.getUserMemory?.(),
+      userMemory: runtimeContext.config?.getUserMemory(),
     });
 
     let lastResponse: IContent | undefined;
@@ -234,7 +231,7 @@ export class DirectMessageProcessor {
     for await (const iContent of streamResponse) {
       lastResponse = iContent;
       const result = aggregateTextWithSpacing(
-        iContent.blocks ?? [],
+        iContent.blocks,
         aggregatedText,
         lastBlockWasNonText,
       );
@@ -253,7 +250,7 @@ export class DirectMessageProcessor {
       {
         contents: contentsForApi,
         tools:
-          effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
+          effectiveToolsFromConfig.length > 0
             ? effectiveToolsFromConfig
             : undefined,
       },
@@ -292,7 +289,7 @@ export class DirectMessageProcessor {
       );
       if (hookResult.syntheticResponse) {
         return {
-          effectiveToolsFromConfig: effectiveToolsFromConfig || [],
+          effectiveToolsFromConfig: effectiveToolsFromConfig ?? [],
           syntheticResponse: hookResult.syntheticResponse,
           contentsForApi,
         };
@@ -303,7 +300,7 @@ export class DirectMessageProcessor {
     }
 
     return {
-      effectiveToolsFromConfig: effectiveToolsFromConfig || [],
+      effectiveToolsFromConfig: effectiveToolsFromConfig ?? [],
       syntheticResponse: undefined,
       contentsForApi,
     };
@@ -313,8 +310,8 @@ export class DirectMessageProcessor {
     configForHooks: Config,
     toolsFromConfig: ToolGroupArray,
   ): Promise<ToolGroupArray> {
-    if (!configForHooks.getEnableHooks?.()) return toolsFromConfig;
-    const hookSystem = configForHooks.getHookSystem?.();
+    if (!configForHooks.getEnableHooks()) return toolsFromConfig;
+    const hookSystem = configForHooks.getHookSystem();
     if (!hookSystem) return toolsFromConfig;
     await hookSystem.initialize();
     const toolSelectionResult =
@@ -327,15 +324,15 @@ export class DirectMessageProcessor {
       'allowedFunctionNames' in modifiedConfig.toolConfig
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (allowedFunctions?.length) {
+      if (allowedFunctions != null && allowedFunctions.length > 0) {
         return toolsFromConfig
           .map((toolGroup) => ({
             ...toolGroup,
-            functionDeclarations: toolGroup.functionDeclarations?.filter((fn) =>
+            functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
               allowedFunctions.includes(fn.name),
             ),
           }))
-          .filter((g) => g.functionDeclarations?.length) as ToolGroupArray;
+          .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
       }
     }
     return toolsFromConfig;
@@ -369,8 +366,8 @@ export class DirectMessageProcessor {
     };
 
     let beforeModelResult = undefined;
-    if (configForHooks.getEnableHooks?.()) {
-      const hookSystem = configForHooks.getHookSystem?.();
+    if (configForHooks.getEnableHooks()) {
+      const hookSystem = configForHooks.getHookSystem();
       if (hookSystem) {
         await hookSystem.initialize();
         beforeModelResult =
@@ -378,7 +375,7 @@ export class DirectMessageProcessor {
       }
     }
 
-    if (beforeModelResult?.isBlockingDecision()) {
+    if (beforeModelResult?.isBlockingDecision() === true) {
       const syntheticResponse = beforeModelResult.getSyntheticResponse();
       return {
         syntheticResponse:
@@ -390,9 +387,7 @@ export class DirectMessageProcessor {
                   role: 'model',
                   parts: [
                     {
-                      text:
-                        beforeModelResult.getEffectiveReason() ||
-                        'Request blocked by BeforeModel hook',
+                      text: beforeModelResult.getEffectiveReason(),
                     },
                   ],
                 },
@@ -409,16 +404,14 @@ export class DirectMessageProcessor {
 
     if (beforeModelResult) {
       const modifiedRequest = beforeModelResult.applyLLMRequestModifications({
-        model: this.runtimeContext.state.model || '',
+        model: this.runtimeContext.state.model,
         contents: ContentConverters.toGeminiContents(userIContents),
       });
-      if (modifiedRequest?.contents) {
-        return {
-          modifiedContents: ContentConverters.toIContents(
-            modifiedRequest.contents as Content[],
-          ),
-        };
-      }
+      return {
+        modifiedContents: ContentConverters.toIContents(
+          modifiedRequest.contents as Content[],
+        ),
+      };
     }
 
     return {};
@@ -437,8 +430,8 @@ export class DirectMessageProcessor {
     let directResponse = convertIContentToResponse(lastResponse);
 
     // Trigger AfterModel hook
-    if (config && config.getEnableHooks?.()) {
-      const hookSystem = config.getHookSystem?.();
+    if (config?.getEnableHooks() === true) {
+      const hookSystem = config.getHookSystem();
       if (hookSystem) {
         await hookSystem.initialize();
         const afterModelResult = await hookSystem.fireAfterModelEvent(
@@ -460,15 +453,18 @@ export class DirectMessageProcessor {
       if (candidate) {
         const parts = candidate.content?.parts ?? [];
         const hasText = parts.some(
-          (part) => 'text' in part && part.text?.trim(),
+          (part) =>
+            'text' in part &&
+            typeof part.text === 'string' &&
+            part.text.trim().length > 0,
         );
         if (!hasText) {
-          candidate.content = candidate.content || {
+          candidate.content = candidate.content ?? {
             role: 'model',
             parts: [],
           };
           candidate.content.parts = [
-            ...(candidate.content.parts || []),
+            ...(candidate.content.parts ?? []),
             { text: aggregatedText },
           ];
         }

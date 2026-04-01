@@ -299,7 +299,7 @@ export async function createChatSession(
     profile: {
       state: runtimeState,
       contentGeneratorConfig: config.getContentGeneratorConfig(),
-      providerManager: config.getProviderManager?.(),
+      providerManager: config.getProviderManager(),
       config,
       settings,
       providerRuntime,

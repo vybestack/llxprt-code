@@ -235,7 +235,7 @@ export class Logger {
   async getPreviousUserMessages(): Promise<string[]> {
     if (!this.initialized) return [];
     return this.logs
-      .filter((entry) => entry.type === MessageSenderType.USER)
+      .filter((entry) => (entry.type as string) === MessageSenderType.USER)
       .sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();
         const dateB = new Date(b.timestamp).getTime();
@@ -275,7 +275,7 @@ export class Logger {
   }
 
   private _checkpointPath(tag: string): string {
-    if (!tag.length) {
+    if (tag.length === 0) {
       throw new Error('No checkpoint tag specified.');
     }
     if (!this.llxprtDir) {
