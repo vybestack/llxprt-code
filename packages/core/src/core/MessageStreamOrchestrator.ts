@@ -573,6 +573,13 @@ export class MessageStreamOrchestrator {
           deferredEvents,
         });
       }
+
+      for (const d of deferredEvents) yield d;
+      yield* this._fireAfterHookAndEmitClearContext(ctx);
+      return this._earlyIterResult(state.hadToolCallsThisTurn, {
+        ...state,
+        deferredEvents,
+      });
     }
 
     return undefined;
