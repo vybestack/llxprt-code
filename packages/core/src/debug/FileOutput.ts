@@ -53,6 +53,12 @@ export class FileOutput {
     return FileOutput.instance;
   }
 
+  static async disposeInstance(): Promise<void> {
+    if (FileOutput.instance) {
+      await FileOutput.instance.dispose();
+    }
+  }
+
   async write(entry: LogEntry): Promise<void> {
     if (this.disposed) {
       return;
@@ -87,8 +93,19 @@ export class FileOutput {
       this.flushTimeout = null;
     }
 
-    // Flush any remaining entries
-    await this.flushQueue();
+    while (this.isWriting) {
+      await this.waitForWriteTurn();
+    }
+
+    let previousQueueLength = Number.POSITIVE_INFINITY;
+    while (
+      this.writeQueue.length > 0 &&
+      this.writeQueue.length < previousQueueLength
+    ) {
+      previousQueueLength = this.writeQueue.length;
+      await this.flushQueue({ allowDisposed: true });
+    }
+
     if (FileOutput.instance === this) {
       FileOutput.instance = undefined;
     }
@@ -120,8 +137,14 @@ export class FileOutput {
     }, this.flushInterval);
   }
 
-  private async flushQueue(): Promise<void> {
-    if (this.isWriting || this.writeQueue.length === 0 || this.disposed) {
+  private async flushQueue(
+    options: { allowDisposed?: boolean } = {},
+  ): Promise<void> {
+    if (
+      this.isWriting ||
+      this.writeQueue.length === 0 ||
+      (this.disposed && !options.allowDisposed)
+    ) {
       return;
     }
 
@@ -160,6 +183,10 @@ export class FileOutput {
     } finally {
       this.isWriting = false;
     }
+  }
+
+  private async waitForWriteTurn(): Promise<void> {
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
 
   private async ensureDirectoryExists(): Promise<void> {

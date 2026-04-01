@@ -24,11 +24,14 @@ import type {
   ToolResponseBlock,
   ThinkingBlock,
 } from '../services/history/IContent.js';
+import { DebugLogger } from '../debug/index.js';
 import {
   type ThoughtPart,
   isThoughtPart,
   type UsageMetadataWithCache,
 } from './geminiChatTypes.js';
+
+const logger = new DebugLogger('llxprt:core:message-converter');
 
 /**
  * Aggregates text from content blocks while preserving spacing around non-text blocks.
@@ -518,7 +521,42 @@ export function applyResponseMetadata(
     const mappedReason = finishReasonByTerminationReason[terminationReason];
     if (mappedReason) {
       response.candidates[0].finishReason = mappedReason;
+      logger.debug(
+        () => `[stream:message-converter] applied terminal metadata`,
+        {
+          speaker: input.speaker,
+          blockCount: input.blocks.length,
+          stopReason: input.metadata?.stopReason,
+          finishReason: input.metadata?.finishReason,
+          terminationReason,
+          mappedFinishReason: mappedReason,
+        },
+      );
+    } else {
+      logger.warn(
+        () =>
+          `[stream:message-converter] terminal metadata did not map to Gemini finishReason`,
+        {
+          speaker: input.speaker,
+          blockCount: input.blocks.length,
+          stopReason: input.metadata?.stopReason,
+          finishReason: input.metadata?.finishReason,
+          terminationReason,
+        },
+      );
     }
+  } else if (input.metadata?.stopReason || input.metadata?.finishReason) {
+    logger.warn(
+      () =>
+        `[stream:message-converter] terminal metadata present but response candidate missing`,
+      {
+        speaker: input.speaker,
+        blockCount: input.blocks.length,
+        stopReason: input.metadata?.stopReason,
+        finishReason: input.metadata?.finishReason,
+        hasCandidate: Boolean(response.candidates?.[0]),
+      },
+    );
   }
 
   return response;

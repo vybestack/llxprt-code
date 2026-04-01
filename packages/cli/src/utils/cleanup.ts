@@ -6,7 +6,15 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { Storage, ShellExecutionService } from '@vybestack/llxprt-code-core';
+import {
+  FileOutput,
+  Storage,
+  ShellExecutionService,
+} from '@vybestack/llxprt-code-core';
+
+type FileOutputWithOptionalDisposeInstance = typeof FileOutput & {
+  disposeInstance?: () => Promise<void>;
+};
 
 const cleanupFunctions: Array<(() => void) | (() => Promise<void>)> = [];
 const syncCleanupFunctions: Array<() => void> = [];
@@ -50,6 +58,20 @@ export async function runExitCleanup() {
     }
   }
   cleanupFunctions.length = 0; // Clear the array
+
+  try {
+    const disposeInstance = (
+      FileOutput as FileOutputWithOptionalDisposeInstance
+    ).disposeInstance;
+    if (disposeInstance) {
+      await disposeInstance.call(FileOutput);
+    } else {
+      const instance = FileOutput.getInstance();
+      await instance.dispose();
+    }
+  } catch (_) {
+    // Ignore errors during cleanup.
+  }
 }
 
 /**

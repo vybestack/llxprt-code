@@ -5,12 +5,12 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileOutput, ShellExecutionService } from '@vybestack/llxprt-code-core';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
   runExitCleanup,
 } from './cleanup';
-import { ShellExecutionService } from '@vybestack/llxprt-code-core';
 
 describe('cleanup', () => {
   beforeEach(() => {
@@ -155,5 +155,25 @@ describe('cleanup', () => {
     expect(destroyAllSpy).toHaveBeenCalledOnce();
     expect(cleanupRan).toBe(true);
     destroyAllSpy.mockRestore();
+  });
+
+  it('should dispose FileOutput after running registered cleanup handlers', async () => {
+    const executionOrder: string[] = [];
+    FileOutput.getInstance();
+    const disposeSpy = vi
+      .spyOn(FileOutput.prototype, 'dispose')
+      .mockImplementation(async () => {
+        executionOrder.push('file-output');
+      });
+
+    registerCleanup(() => {
+      executionOrder.push('cleanup');
+    });
+
+    await runExitCleanup();
+
+    expect(executionOrder).toEqual(['cleanup', 'file-output']);
+    expect(disposeSpy).toHaveBeenCalledOnce();
+    disposeSpy.mockRestore();
   });
 });

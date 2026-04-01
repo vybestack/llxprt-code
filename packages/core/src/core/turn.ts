@@ -466,6 +466,14 @@ export class Turn {
 
         // This is the key change: Only yield 'Finished' if there is a finishReason.
         if (finishReason) {
+          this.logger.debug(() => `[stream:turn] emitting Finished event`, {
+            finishReason,
+            traceId,
+            partCount: allParts.length,
+            toolCallCount: functionCalls.length,
+            textLength: text?.length ?? 0,
+            hasUsageMetadata: Boolean(resp.usageMetadata),
+          });
           this.finishReason = finishReason;
           yield {
             type: GeminiEventType.Finished,
@@ -474,6 +482,14 @@ export class Turn {
               usageMetadata: resp.usageMetadata,
             },
           };
+        } else {
+          this.logger.debug(() => `[stream:turn] chunk had no finishReason`, {
+            traceId,
+            partCount: allParts.length,
+            toolCallCount: functionCalls.length,
+            textLength: text?.length ?? 0,
+            hasUsageMetadata: Boolean(resp.usageMetadata),
+          });
         }
       }
     } catch (e) {

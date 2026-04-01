@@ -415,6 +415,15 @@ export class StreamProcessor {
         }
       }
 
+      const chunkText = typeof chunk.text === 'string' ? chunk.text : '';
+      this.logger.debug(() => `[stream:terminal] observed converted chunk`, {
+        chunkFinishReason: candidateWithReason?.finishReason,
+        partCount: chunk.candidates?.[0]?.content?.parts?.length ?? 0,
+        toolCallCount: chunk.functionCalls?.length ?? 0,
+        textLength: chunkText.length,
+        hasUsageMetadata: Boolean(chunk.usageMetadata),
+      });
+
       // Track token usage
       if (chunk.usageMetadata?.promptTokenCount !== undefined) {
         const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
@@ -437,6 +446,18 @@ export class StreamProcessor {
       this.logger.debug(
         () =>
           `[stream:terminal] stream ended without finishReason (hasToolCall=${String(hasToolCall)}, hasTextResponse=${String(hasTextResponse)}, hasThinkingResponse=${String(hasThinkingResponse)}, responseTextLength=${responseText.length})`,
+      );
+    } else {
+      this.logger.debug(
+        () => `[stream:terminal] finalized stream with finishReason`,
+        {
+          finishReason,
+          hasToolCall,
+          hasTextResponse,
+          hasThinkingResponse,
+          responseTextLength: responseText.length,
+          chunkCount: allChunks.length,
+        },
       );
     }
 
@@ -498,6 +519,18 @@ export class StreamProcessor {
       ? userInput.some(isFunctionResponse)
       : isFunctionResponse(userInput);
 
+    this.logger.debug(
+      () => `[stream:terminal] validating converted stream completion`,
+      {
+        hasToolCall,
+        hasTextResponse,
+        hasThinkingResponse,
+        finishReason,
+        responseTextLength: responseText.length,
+        isToolContinuationInput,
+      },
+    );
+
     // Enhanced stream validation logic: A stream is considered successful if:
     // 1. There's a tool call (tool calls can end without explicit finish reasons), OR
     // 2. There's a finish reason AND we have non-empty response text, OR
@@ -515,11 +548,34 @@ export class StreamProcessor {
       ((!finishReason && !hasTextResponse) || !responseText)
     ) {
       if (!finishReason && !hasTextResponse) {
+        this.logger.warn(
+          () =>
+            `[stream:terminal] validation failed: missing finishReason and text`,
+          {
+            hasToolCall,
+            hasTextResponse,
+            hasThinkingResponse,
+            finishReason,
+            responseTextLength: responseText.length,
+            isToolContinuationInput,
+          },
+        );
         throw new InvalidStreamError(
           'Model stream ended without a finish reason and no text response.',
           'NO_FINISH_REASON_NO_TEXT',
         );
       } else {
+        this.logger.warn(
+          () => `[stream:terminal] validation failed: empty response text`,
+          {
+            hasToolCall,
+            hasTextResponse,
+            hasThinkingResponse,
+            finishReason,
+            responseTextLength: responseText.length,
+            isToolContinuationInput,
+          },
+        );
         throw new InvalidStreamError(
           'Model stream ended with empty response text.',
           'NO_RESPONSE_TEXT',
@@ -529,6 +585,18 @@ export class StreamProcessor {
 
     // Handle MALFORMED_FUNCTION_CALL finish reason - should trigger retry
     if (finishReason === FinishReason.MALFORMED_FUNCTION_CALL) {
+      this.logger.warn(
+        () =>
+          `[stream:terminal] validation failed: malformed function call finishReason`,
+        {
+          hasToolCall,
+          hasTextResponse,
+          hasThinkingResponse,
+          finishReason,
+          responseTextLength: responseText.length,
+          isToolContinuationInput,
+        },
+      );
       throw new InvalidStreamError(
         'Model stream ended with malformed function call.',
         'MALFORMED_FUNCTION_CALL',
