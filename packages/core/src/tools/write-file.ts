@@ -50,7 +50,8 @@ function getEmojiFilter(config: Config): EmojiFilter {
       | 'allowed'
       | 'auto'
       | 'warn'
-      | 'error') || 'auto';
+      | 'error'
+      | undefined) ?? 'auto';
 
   // Map auto to warn for file operations (we want warnings when filtering files)
   let filterMode: 'allowed' | 'warn' | 'error';
@@ -178,7 +179,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
-    return this.params.absolute_path || this.params.file_path || '';
+    return this.params.absolute_path ?? this.params.file_path ?? '';
   }
 
   override toolLocations(): ToolLocation[] {
@@ -305,12 +306,12 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     if (filterResult.blocked) {
       return {
         llmContent:
-          filterResult.error || 'File write blocked due to emoji content',
+          filterResult.error ?? 'File write blocked due to emoji content',
         returnDisplay:
-          filterResult.error || 'File write blocked due to emoji content',
+          filterResult.error ?? 'File write blocked due to emoji content',
         error: {
           message:
-            filterResult.error || 'File write blocked due to emoji content',
+            filterResult.error ?? 'File write blocked due to emoji content',
           type: ToolErrorType.INVALID_TOOL_PARAMS,
         },
       };
@@ -352,10 +353,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     } = correctedContentResult;
     // fileExists is true if the file existed (and was readable or unreadable but caught by readError).
     // fileExists is false if the file did not exist (ENOENT).
-    const isNewFile =
-      !fileExists ||
-      (correctedContentResult.error !== undefined &&
-        !correctedContentResult.fileExists);
+    const isNewFile = !fileExists;
 
     try {
       const dirName = path.dirname(filePath);
@@ -390,9 +388,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       // If there was a readError, originalContent in correctedContentResult is '',
       // but for the diff, we want to show the original content as it was before the write if possible.
       // However, if it was unreadable, currentContentForDiff will be empty.
-      const currentContentForDiff = correctedContentResult.error
-        ? '' // Or some indicator of unreadable content
-        : originalContent;
+      const currentContentForDiff = originalContent;
 
       const fileDiff = Diff.createPatch(
         fileName,
@@ -404,7 +400,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       );
 
       const originallyProposedContent =
-        filteredParams.ai_proposed_content || filteredParams.content;
+        filteredParams.ai_proposed_content ?? filteredParams.content;
       const diffStat = getDiffStat(
         fileName,
         currentContentForDiff,
@@ -413,13 +409,13 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       );
 
       const displayPath =
-        filteredParams.absolute_path || filteredParams.file_path || '';
+        filteredParams.absolute_path ?? filteredParams.file_path ?? '';
       const llmSuccessMessageParts = [
         isNewFile
           ? `Successfully created and wrote to new file: ${displayPath}.`
           : `Successfully overwrote file: ${displayPath}.`,
       ];
-      if (filteredParams.modified_by_user) {
+      if (filteredParams.modified_by_user === true) {
         llmSuccessMessageParts.push(
           `User modified the \`content\` to be: ${filteredParams.content}`,
         );
@@ -443,7 +439,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
        */
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient?.isAlive()) {
+        if (lspClient?.isAlive() === true) {
           // Check the written file to trigger diagnostics
           await lspClient.checkFile(filePath);
 
@@ -479,16 +475,16 @@ class WriteFileToolInvocation extends BaseToolInvocation<
               break;
             }
 
-            const fileDiagnostics = allDiagnostics[file] || [];
+            const fileDiagnostics = allDiagnostics[file];
             // Filter by severity
             const filtered = fileDiagnostics.filter((d) =>
               includeSeverities.includes(d.severity),
             );
             // Sort by line, then column
-            const sorted = filtered.sort(
-              (a, b) =>
-                (a.line ?? 0) - (b.line ?? 0) ||
-                (a.column ?? 0) - (b.column ?? 0),
+            const sorted = filtered.sort((a, b) =>
+              (a.line ?? 0) - (b.line ?? 0) !== 0
+                ? (a.line ?? 0) - (b.line ?? 0)
+                : (a.column ?? 0) - (b.column ?? 0),
             );
 
             if (sorted.length === 0) {
@@ -681,7 +677,7 @@ export class WriteFileTool
     params: WriteFileToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = params.absolute_path ?? params.file_path ?? '';
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
@@ -740,9 +736,9 @@ export class WriteFileTool
   ): ModifyContext<WriteFileToolParams> {
     return {
       getFilePath: (params: WriteFileToolParams) =>
-        params.absolute_path || params.file_path || '',
+        params.absolute_path ?? params.file_path ?? '',
       getCurrentContent: async (params: WriteFileToolParams) => {
-        const filePath = params.absolute_path || params.file_path || '';
+        const filePath = params.absolute_path ?? params.file_path ?? '';
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,
@@ -752,7 +748,7 @@ export class WriteFileTool
         return correctedContentResult.originalContent;
       },
       getProposedContent: async (params: WriteFileToolParams) => {
-        const filePath = params.absolute_path || params.file_path || '';
+        const filePath = params.absolute_path ?? params.file_path ?? '';
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
           params.content,

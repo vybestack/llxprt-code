@@ -131,7 +131,7 @@ class GrepToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
-    return this.params.dir_path || this.params.path;
+    return this.params.dir_path ?? this.params.path;
   }
 
   private resolveTarget(relativePath?: string): ResolvedSearchTarget {
@@ -178,7 +178,7 @@ class GrepToolInvocation extends BaseToolInvocation<
       const workspaceContext = this.config.getWorkspaceContext();
       const dirPath = this.getDirPath();
       const resolved = this.resolveTarget(dirPath);
-      const searchDirDisplay = dirPath || '.';
+      const searchDirDisplay = dirPath ?? '.';
 
       // Get limits from parameters or ephemeral settings
       const ephemeralSettings = this.config.getEphemeralSettings();
@@ -270,7 +270,7 @@ File: ${resolved.basename}
         });
 
         // Track if we hit limits
-        if (matches.wasLimited) {
+        if (matches.wasLimited === true) {
           wasLimited = true;
         }
 
@@ -324,9 +324,7 @@ File: ${resolved.basename}
       const matchesByFile = limitedMatches.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
-          if (!acc[fileKey]) {
-            acc[fileKey] = [];
-          }
+          acc[fileKey] ??= [];
           if (acc[fileKey].length < maxPerFile) {
             acc[fileKey].push(match);
           }
@@ -398,6 +396,7 @@ File: ${resolved.basename}
 
       if (isAbortError) {
         // Check if it was a timeout (our controller aborted but user's didn't)
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- race-condition guard: signal.aborted can change asynchronously
         if (timeoutController.signal.aborted && !signal.aborted) {
           const timeoutMessage =
             `Search operation timed out after ${timeoutMs}ms. To resolve this, you can either:
@@ -677,7 +676,7 @@ File: ${resolved.basename}
       // --- Strategy 1: git grep ---
       // Skip git grep if include pattern has brace expansion (e.g., *.{ts,tsx})
       // because git grep pathspecs don't support shell-style brace expansion.
-      const hasBracePattern = include && hasBraceExpansion(include);
+      const hasBracePattern = include != null && hasBraceExpansion(include);
       const isGit = !hasBracePattern && isGitRepository(absolutePath);
       const gitAvailable = isGit && (await this.isCommandAvailable('git'));
 
@@ -866,7 +865,7 @@ File: ${resolved.basename}
         'GrepLogic: Falling back to JavaScript grep implementation.',
       );
       strategyUsed = 'javascript fallback';
-      const globPattern = include ? include : '**/*';
+      const globPattern = include ?? '**/*';
       const ignorePatterns = this.fileExclusions.getGlobExcludes();
 
       const filesStream = globStream(globPattern, {
@@ -1025,7 +1024,7 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
       return `Invalid regular expression pattern provided: ${params.pattern}. Error: ${getErrorMessage(error)}`;
     }
 
-    const dirPath = params.dir_path || params.path;
+    const dirPath = params.dir_path ?? params.path;
     if (dirPath) {
       try {
         resolveTextSearchTarget(

@@ -16,11 +16,7 @@ import {
   type SubagentLaunchRequest,
 } from '../core/subagentOrchestrator.js';
 import type { SubAgentScope } from '../core/subagent.js';
-import {
-  ContextState,
-  SubagentTerminateMode,
-  type OutputObject,
-} from '../core/subagentTypes.js';
+import { ContextState, type OutputObject } from '../core/subagentTypes.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '../config/profileManager.js';
@@ -100,7 +96,7 @@ function formatSuccessDisplay(
   agentId: string,
   output: OutputObject,
 ): string {
-  const emittedVars = Object.entries(output.emitted_vars ?? {});
+  const emittedVars = Object.entries(output.emitted_vars);
   const finalMessageSection = output.final_message
     ? `Final message:\n${output.final_message}`
     : 'Final message: _(none)_';
@@ -125,7 +121,7 @@ function formatSuccessContent(agentId: string, output: OutputObject): string {
   const payload: Record<string, unknown> = {
     agent_id: agentId,
     terminate_reason: output.terminate_reason,
-    emitted_vars: output.emitted_vars ?? {},
+    emitted_vars: output.emitted_vars,
   };
 
   if (output.final_message !== undefined) {
@@ -348,12 +344,12 @@ class TaskToolInvocation extends BaseToolInvocation<
     let launchResult:
       | Awaited<ReturnType<SubagentOrchestrator['launch']>>
       | undefined;
-    let aborted = false;
+    const abortState = { aborted: false };
     const abortHandler = () => {
-      if (aborted) {
+      if (abortState.aborted) {
         return;
       }
-      aborted = true;
+      abortState.aborted = true;
       taskLogger.warn(
         () => `Cancellation requested for subagent '${launchRequest.name}'`,
       );
@@ -373,6 +369,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       signal.removeEventListener('abort', abortHandler);
     };
     signal.addEventListener('abort', abortHandler, { once: true });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- race-condition guard: signal/abort state can change asynchronously
     if (signal.aborted) {
       abortHandler();
       removeAbortHandler();
@@ -399,10 +396,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       if (this.isTimeoutError(signal, timeoutController, error)) {
         return this.createTimeoutResult(
           timeoutSeconds,
-          launchResult?.scope?.output,
+          launchResult?.scope.output,
         );
       }
-      if (this.isAbortError(error) || aborted || signal.aborted) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- race-condition guard: signal/abort state can change asynchronously
+      if (this.isAbortError(error) || abortState.aborted || signal.aborted) {
         return this.createCancelledResult('Task aborted during launch.');
       }
       taskLogger.warn(
@@ -434,7 +432,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       }
     };
 
-    if (signal.aborted || aborted) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- race-condition guard: signal/abort state can change asynchronously
+    if (signal.aborted || abortState.aborted) {
       await teardown();
       return this.createCancelledResult(
         'Task aborted during launch.',
@@ -493,7 +492,8 @@ class TaskToolInvocation extends BaseToolInvocation<
       } else {
         await scope.runNonInteractive(contextState);
       }
-      if (aborted) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- race-condition guard: signal/abort state can change asynchronously
+      if (abortState.aborted) {
         await teardown();
         taskLogger.warn(
           () => `Subagent '${launchRequest.name}' aborted before completion`,
@@ -508,13 +508,10 @@ class TaskToolInvocation extends BaseToolInvocation<
         await teardown();
         return this.createTimeoutResult(timeoutSeconds, scope.output);
       }
-      const output = scope.output ?? {
-        terminate_reason: SubagentTerminateMode.ERROR,
-        emitted_vars: {},
-      };
+      const output = scope.output;
       taskLogger.debug(
         () =>
-          `Subagent '${launchRequest.name}' finished with reason=${output.terminate_reason} emittedKeys=${Object.keys(output.emitted_vars ?? {}).join(', ')}`,
+          `Subagent '${launchRequest.name}' finished with reason=${output.terminate_reason} emittedKeys=${Object.keys(output.emitted_vars).join(', ')}`,
       );
       const llmContent = formatSuccessContent(agentId, output);
       const returnDisplay = formatSuccessDisplay(
@@ -529,7 +526,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         metadata: {
           agentId,
           terminateReason: output.terminate_reason,
-          emittedVars: output.emitted_vars ?? {},
+          emittedVars: output.emitted_vars,
           ...(output.final_message
             ? { finalMessage: output.final_message }
             : {}),
@@ -540,7 +537,8 @@ class TaskToolInvocation extends BaseToolInvocation<
         await teardown();
         return this.createTimeoutResult(timeoutSeconds, scope.output, agentId);
       }
-      if (this.isAbortError(error) || aborted || signal.aborted) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- race-condition guard: signal/abort state can change asynchronously
+      if (this.isAbortError(error) || abortState.aborted || signal.aborted) {
         await teardown();
         return this.createCancelledResult(
           'Task execution aborted before completion.',
@@ -565,7 +563,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private isAbortError(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
+    if (error == null || typeof error !== 'object') {
       return false;
     }
     return (error as { name?: string }).name === 'AbortError';
@@ -653,6 +651,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutId: ReturnType<typeof setTimeout> | null;
     onUserAbort: () => void;
   } {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tests use partial Config mocks
     const settings = this.config.getEphemeralSettings?.() ?? {};
     const defaultTimeoutSeconds =
       (settings['task-default-timeout-seconds'] as number | undefined) ??
@@ -722,7 +721,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (!timeoutController.signal.aborted || signal.aborted) {
       return false;
     }
-    if (!error) {
+    if (error == null) {
       return true;
     }
     return this.isAbortError(error);
@@ -766,7 +765,9 @@ class TaskToolInvocation extends BaseToolInvocation<
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     // Check global async setting (from /settings)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tests use partial Config mocks
     const settingsService = this.config.getSettingsService?.();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tests use partial Config mocks
     const globalSettings = settingsService?.getAllGlobalSettings?.() ?? {};
     const subagentsSettings = globalSettings['subagents'] as
       | { asyncEnabled?: boolean; maxAsync?: number }
@@ -785,6 +786,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     // Check profile async setting (from ephemeralSettings)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tests use partial Config mocks
     const ephemeralSettings = this.config.getEphemeralSettings?.() ?? {};
     const profileAsyncEnabled =
       ephemeralSettings['subagents.async.enabled'] !== false;
@@ -868,6 +870,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       contextState = this.buildContextState();
 
       // Set up timeout for async task (but don't wire to parent signal)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- tests use partial Config mocks
       const settings = this.config.getEphemeralSettings?.() ?? {};
       const defaultTimeoutSeconds =
         (settings['task-default-timeout-seconds'] as number | undefined) ??
@@ -1037,10 +1040,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         }
 
         // Get output
-        const output = scope.output ?? {
-          terminate_reason: SubagentTerminateMode.ERROR,
-          emitted_vars: {},
-        };
+        const output = scope.output;
 
         // Update AsyncTaskManager
         asyncTaskManager.completeTask(agentId, output);
@@ -1201,12 +1201,12 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
         params.behaviorPrompts ??
         []),
     ]
-      .map((prompt) => prompt?.trim())
+      .map((prompt) => prompt.trim())
       .filter((prompt): prompt is string => Boolean(prompt))
       .filter((prompt, index, array) => array.indexOf(prompt) === index);
 
     const toolWhitelist = (params.tool_whitelist ?? params.toolWhitelist ?? [])
-      .map((tool) => tool?.trim())
+      .map((tool) => tool.trim())
       .filter((tool): tool is string => Boolean(tool));
 
     const outputSpec = params.output_spec ?? params.outputSpec ?? undefined;
@@ -1230,17 +1230,10 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       return this.dependencies.orchestratorFactory();
     }
 
-    const configWithManagers = this.config as Config & {
-      getProfileManager?: () => ProfileManager | undefined;
-      getSubagentManager?: () => SubagentManager | undefined;
-    };
-
     const profileManager =
-      this.dependencies.profileManager ??
-      configWithManagers.getProfileManager?.();
+      this.dependencies.profileManager ?? this.config.getProfileManager();
     const subagentManager =
-      this.dependencies.subagentManager ??
-      configWithManagers.getSubagentManager?.();
+      this.dependencies.subagentManager ?? this.config.getSubagentManager();
 
     if (profileManager == null || subagentManager == null) {
       throw new Error(

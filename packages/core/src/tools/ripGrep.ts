@@ -87,7 +87,7 @@ class GrepToolInvocation extends BaseToolInvocation<
     try {
       const workspaceContext = this.config.getWorkspaceContext();
       const resolved = this.resolveTarget(this.params.path);
-      const searchDirDisplay = this.params.path || '.';
+      const searchDirDisplay = this.params.path ?? '.';
 
       if (resolved.kind === 'file') {
         const fileResult = await this.performSingleFileSearch(
@@ -188,9 +188,7 @@ File: ${resolved.basename}
       const matchesByFile = allMatches.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
-          if (!acc[fileKey]) {
-            acc[fileKey] = [];
-          }
+          acc[fileKey] ??= [];
           acc[fileKey].push(match);
           acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
           return acc;

@@ -52,7 +52,8 @@ function getEmojiFilter(config: Config): EmojiFilter {
       | 'allowed'
       | 'auto'
       | 'warn'
-      | 'error') || 'auto';
+      | 'error'
+      | undefined) ?? 'auto';
 
   // Map auto to warn for file operations (we want warnings when filtering files)
   let filterMode: 'allowed' | 'warn' | 'error';
@@ -84,7 +85,7 @@ export function applyReplacement(
 
   const preserveTrailingNewline = currentContent.endsWith('\n');
   // If oldString is empty and it's not a new file, do not modify the content.
-  if (oldString === '' && !isNewFile) {
+  if (oldString === '') {
     return currentContent;
   }
 
@@ -242,7 +243,7 @@ class EditToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
-    return this.params.absolute_path || this.params.file_path || '';
+    return this.params.absolute_path ?? this.params.file_path ?? '';
   }
 
   override toolLocations(): ToolLocation[] {
@@ -297,7 +298,7 @@ class EditToolInvocation extends BaseToolInvocation<
       | { display: string; raw: string; type: ToolErrorType }
       | undefined = undefined;
 
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = params.absolute_path ?? params.file_path ?? '';
 
     try {
       currentContent = await this.config
@@ -334,7 +335,7 @@ class EditToolInvocation extends BaseToolInvocation<
       } else {
         const replaceLine = filteredParams.replaceBeginLineNumber;
 
-        if (replaceLine && replaceLine > 0) {
+        if (replaceLine != null && replaceLine > 0) {
           // Restrict search to the specified line only
           const lines = currentContent.split('\n');
           if (replaceLine > lines.length) {
@@ -402,7 +403,7 @@ class EditToolInvocation extends BaseToolInvocation<
       } else if (occurrences === 0) {
         const replaceLine = filteredParams.replaceBeginLineNumber;
 
-        if (replaceLine && replaceLine > 0 && currentContent != null) {
+        if (replaceLine != null && replaceLine > 0) {
           const lines = currentContent.split('\n');
 
           if (replaceLine > lines.length) {
@@ -466,7 +467,7 @@ class EditToolInvocation extends BaseToolInvocation<
       const replaceLine = filteredParams.replaceBeginLineNumber;
       if (
         fileExists &&
-        replaceLine &&
+        replaceLine != null &&
         replaceLine > 0 &&
         currentContent !== null
       ) {
@@ -511,7 +512,7 @@ class EditToolInvocation extends BaseToolInvocation<
     }
 
     if (error == null && fileExists && currentContent === newContent) {
-      const filePath = params.absolute_path || params.file_path || '';
+      const filePath = params.absolute_path ?? params.file_path ?? '';
       error = {
         display:
           'No changes to apply. The new content is identical to the current content.',
@@ -713,7 +714,7 @@ class EditToolInvocation extends BaseToolInvocation<
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,
-              editData.currentContent || '',
+              editData.currentContent ?? '',
               editData.newContent,
             );
           } catch (error) {
@@ -726,7 +727,7 @@ class EditToolInvocation extends BaseToolInvocation<
       // Always return diff stats as per upstream
       const fileName = path.basename(filePath);
       const originallyProposedContent =
-        this.params.ai_proposed_content || editData.newContent;
+        this.params.ai_proposed_content ?? editData.newContent;
       const diffStat = getDiffStat(
         fileName,
         editData.currentContent ?? '',
@@ -757,7 +758,7 @@ class EditToolInvocation extends BaseToolInvocation<
           ? `Created new file: ${filePath} with provided content.`
           : `Successfully modified file: ${filePath} (${editData.occurrences} replacements).`,
       ];
-      if (this.params.modified_by_user) {
+      if (this.params.modified_by_user === true) {
         llmSuccessMessageParts.push(
           `User modified the \`new_string\` content to be: ${this.params.new_string}.`,
         );
@@ -897,7 +898,7 @@ Expectation for required parameters:
     params: EditToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
-    const filePath = params.absolute_path || params.file_path || '';
+    const filePath = params.absolute_path ?? params.file_path ?? '';
 
     if (filePath.trim() === '') {
       return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
@@ -956,9 +957,9 @@ Expectation for required parameters:
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {
     return {
       getFilePath: (params: EditToolParams) =>
-        params.absolute_path || params.file_path || '',
+        params.absolute_path ?? params.file_path ?? '',
       getCurrentContent: async (params: EditToolParams): Promise<string> => {
-        const filePath = params.absolute_path || params.file_path || '';
+        const filePath = params.absolute_path ?? params.file_path ?? '';
         try {
           return await this.config
             .getFileSystemService()
@@ -969,7 +970,7 @@ Expectation for required parameters:
         }
       },
       getProposedContent: async (params: EditToolParams): Promise<string> => {
-        const filePath = params.absolute_path || params.file_path || '';
+        const filePath = params.absolute_path ?? params.file_path ?? '';
         try {
           const currentContent = await this.config
             .getFileSystemService()
