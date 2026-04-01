@@ -85,7 +85,8 @@ export async function bfsFileSearch(
         return { currentDir: dir, depth, entries };
       } catch (error) {
         // Warn user that a directory could not be read, as this affects search results.
-        const message = (error as Error)?.message ?? 'Unknown error';
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
         debugLogger.warn(
           `[WARN] Skipping unreadable directory: ${dir} (${message})`,
         );
@@ -106,7 +107,7 @@ export async function bfsFileSearch(
             respectGitIgnore: options.fileFilteringOptions?.respectGitIgnore,
             respectLlxprtIgnore:
               options.fileFilteringOptions?.respectLlxprtIgnore,
-          })
+          }) === true
         ) {
           continue;
         }

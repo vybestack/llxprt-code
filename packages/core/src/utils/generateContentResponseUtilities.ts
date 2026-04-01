@@ -35,7 +35,7 @@ export function getResponseText(
   // not be duplicated in Content events. Model context path handles thinking separately
   // via IContent blocks and reasoning ephemerals. (fixes #721 duplicate thinking)
   const textSegments = parts
-    .filter((part) => !(part as { thought?: boolean }).thought)
+    .filter((part) => (part as { thought?: boolean }).thought !== true)
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
@@ -46,12 +46,9 @@ export function getResponseText(
 }
 
 export function getResponseTextFromParts(parts: Part[]): string | undefined {
-  if (!parts) {
-    return undefined;
-  }
   // Filter out thought parts - same as getResponseText (fixes #721)
   const textSegments = parts
-    .filter((part) => !(part as { thought?: boolean }).thought)
+    .filter((part) => (part as { thought?: boolean }).thought !== true)
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
@@ -77,9 +74,6 @@ export function getFunctionCalls(
 export function getFunctionCallsFromParts(
   parts: Part[],
 ): FunctionCall[] | undefined {
-  if (!parts) {
-    return undefined;
-  }
   const functionCallParts = parts
     .filter((part) => !!part.functionCall)
     .map((part) => part.functionCall as FunctionCall);
@@ -219,7 +213,8 @@ export function toParts(input: PartListUnion): Part[] {
   for (const part of Array.isArray(input) ? input : [input]) {
     if (typeof part === 'string') {
       parts.push({ text: part });
-    } else if (part) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive: callers may pass null at runtime
+    } else if (part != null) {
       parts.push(part);
     }
   }

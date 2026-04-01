@@ -458,15 +458,15 @@ export function checkCommandPermissions(
   isHardDenial?: boolean;
 } {
   // Check shell replacement mode via ephemeral setting or config
-  const ephemeralValue = config.getEphemeralSetting?.('shell-replacement') as
+  const ephemeralValue = config.getEphemeralSetting('shell-replacement') as
     | 'allowlist'
     | 'all'
     | 'none'
     | boolean
     | undefined;
-  const configValue = config.getShellReplacement?.();
+  const configValue = config.getShellReplacement();
   const shellReplacementMode = normalizeShellReplacement(
-    ephemeralValue ?? configValue ?? 'allowlist',
+    ephemeralValue ?? configValue,
   );
 
   // Debug logging when VERBOSE is set
@@ -512,7 +512,7 @@ export function checkCommandPermissions(
       commandsToValidate = parseResult.details
         .map((detail) => normalize(detail.text))
         .filter(Boolean);
-    } else if (parseResult?.hasError) {
+    } else if (parseResult?.hasError === true) {
       // Tree-sitter detected a syntax error - reject for safety
       return {
         allAllowed: false,
@@ -535,7 +535,7 @@ export function checkCommandPermissions(
   } as AnyToolInvocation & { params: { command: string } };
 
   // 1. Blocklist Check (Highest Priority)
-  const excludeTools = config.getExcludeTools() || [];
+  const excludeTools = config.getExcludeTools() ?? [];
   const isWildcardBlocked = SHELL_TOOL_NAMES.some((name) =>
     excludeTools.includes(name),
   );
@@ -563,7 +563,7 @@ export function checkCommandPermissions(
     }
   }
 
-  const coreTools = config.getCoreTools() || [];
+  const coreTools = config.getCoreTools() ?? [];
   const isWildcardAllowed = SHELL_TOOL_NAMES.some((name) =>
     coreTools.includes(name),
   );

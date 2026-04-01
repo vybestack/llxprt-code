@@ -75,7 +75,8 @@ async function readFirstLineFromFile(
 
     const parsed = JSON.parse(firstLine) as Record<string, unknown>;
     if (parsed.type !== 'session_start') return null;
-    if (!parsed.payload || typeof parsed.payload !== 'object') return null;
+    if (parsed.payload == null || typeof parsed.payload !== 'object')
+      return null;
     return parsed.payload as SessionStartPayload;
   } catch {
     return null;

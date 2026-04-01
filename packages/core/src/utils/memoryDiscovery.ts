@@ -43,6 +43,7 @@ interface GeminiFileContent {
 
 async function findProjectRoot(startDir: string): Promise<string | null> {
   let currentDir = path.resolve(startDir);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with internal break
   while (true) {
     const gitPath = path.join(currentDir, '.git');
     try {
@@ -62,7 +63,7 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
       // Only log unexpected errors in non-test environments
       // process.env['NODE_ENV'] === 'test' or VITEST are common test indicators
       const isTestEnv =
-        process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
+        process.env['NODE_ENV'] === 'test' || process.env['VITEST'] != null;
 
       if (!isENOENT && !isTestEnv) {
         if (typeof error === 'object' && error !== null && 'code' in error) {
@@ -292,7 +293,7 @@ async function readGeminiMdFiles(
           return { filePath, content: processedResult.content };
         } catch (error: unknown) {
           const isTestEnv =
-            process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
+            process.env['NODE_ENV'] === 'test' || process.env['VITEST'] != null;
           if (!isTestEnv) {
             const message =
               error instanceof Error ? error.message : String(error);
@@ -408,6 +409,7 @@ async function findUpwardGeminiFiles(
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with internal break
   while (true) {
     if (currentDir === globalGeminiDir) {
       break;
@@ -493,7 +495,7 @@ export async function loadEnvironmentMemory(
   const extensionPaths = extensionLoader
     .getExtensions()
     .filter((ext: GeminiCLIExtension) => ext.isActive)
-    .flatMap((ext: GeminiCLIExtension) => ext.contextFiles ?? []);
+    .flatMap((ext: GeminiCLIExtension) => ext.contextFiles);
   extensionPaths.forEach((p: string) => allPaths.add(p));
 
   const sortedPaths = Array.from(allPaths).sort((a, b) => a.localeCompare(b));
@@ -559,7 +561,7 @@ export async function loadCoreMemory(
       results.push({ path: filePath, content });
     } catch (error: unknown) {
       const isTestEnv =
-        process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
+        process.env['NODE_ENV'] === 'test' || process.env['VITEST'] != null;
       if (!isTestEnv) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn(
@@ -612,7 +614,7 @@ export async function loadServerHierarchicalMemory(
     debugMode,
     fileService,
     folderTrust,
-    fileFilteringOptions || DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+    fileFilteringOptions ?? DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
     maxDirs,
     maxDepth,
   );

@@ -181,7 +181,7 @@ export function limitOutputTokens(
   const encodedContent = encodeText(content);
   const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
 
-  if (!maxTokens || tokens <= effectiveLimit) {
+  if (maxTokens === 0 || tokens <= effectiveLimit) {
     return {
       content,
       wasTruncated: false,
