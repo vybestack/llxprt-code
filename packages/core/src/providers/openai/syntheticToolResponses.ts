@@ -47,7 +47,7 @@ export class SyntheticToolResponseHandler {
         {
           type: 'tool_response',
           callId: tool.toolCallId,
-          toolName: tool.toolName || 'unknown',
+          toolName: tool.toolName ?? 'unknown',
           result: 'Tool execution cancelled by user',
           error: 'Cancelled by user',
         } as ToolResponseBlock,
@@ -94,7 +94,7 @@ export class SyntheticToolResponseHandler {
 
             // Track synthetic responses separately for debugging
             if (
-              msg.metadata?.synthetic ||
+              msg.metadata?.synthetic === true ||
               toolResponseBlock.result === 'Tool execution cancelled by user'
             ) {
               syntheticResponseIds.add(toolResponseBlock.callId);

@@ -51,7 +51,11 @@ export function createHttpAgents(
   }
 
   // Socket configuration with defaults for when settings ARE configured
-  const socketTimeout = (settings['socket-timeout'] as number) || 60000; // 60 seconds default
+  const socketTimeout =
+    typeof settings['socket-timeout'] === 'number' &&
+    settings['socket-timeout'] > 0
+      ? settings['socket-timeout']
+      : 60000; // 60 seconds default
   const socketKeepAlive = settings['socket-keepalive'] !== false; // true by default
   const socketNoDelay = settings['socket-nodelay'] !== false; // true by default
 
@@ -105,10 +109,10 @@ export function createHttpAgents(
 export function extractModelParamsFromOptions(
   options: NormalizedGenerateChatOptions,
 ): Record<string, unknown> | undefined {
-  const modelParams = { ...(options.invocation?.modelParams ?? {}) };
+  const modelParams = { ...options.invocation.modelParams };
 
   // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
-  const rawMaxOutput = options.settings?.get('maxOutputTokens');
+  const rawMaxOutput = options.settings.get('maxOutputTokens');
   const genericMaxOutput =
     typeof rawMaxOutput === 'number' &&
     Number.isFinite(rawMaxOutput) &&
@@ -137,7 +141,7 @@ export function resolveRuntimeKey(
     return options.runtime.runtimeId;
   }
 
-  const metadataRuntimeId = options.metadata?.runtimeId;
+  const metadataRuntimeId = options.metadata.runtimeId;
   if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
     return metadataRuntimeId.trim();
   }
@@ -201,13 +205,15 @@ export function mergeInvocationHeaders(
   const invocationHeadersRaw =
     options.invocation.getEphemeral('custom-headers');
   const invocationHeaders =
-    invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
+    invocationHeadersRaw != null && typeof invocationHeadersRaw === 'object'
       ? (invocationHeadersRaw as Record<string, string>)
       : undefined;
 
   const invocationUserAgent = options.invocation.getEphemeral('user-agent');
 
-  return baseHeaders != null || invocationHeaders != null || invocationUserAgent
+  return baseHeaders != null ||
+    invocationHeaders != null ||
+    invocationUserAgent != null
     ? {
         ...(baseHeaders ?? {}),
         ...(invocationHeaders ?? {}),

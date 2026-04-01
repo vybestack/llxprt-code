@@ -89,7 +89,7 @@ export class ToolCallPipeline {
     logger.debug('Starting simplified tool call pipeline processing');
 
     // Check for cancellation at the start
-    if (abortSignal?.aborted) {
+    if (abortSignal?.aborted === true) {
       throw this.createAbortError();
     }
 
@@ -104,6 +104,7 @@ export class ToolCallPipeline {
     try {
       for (const candidate of candidates) {
         // Check for cancellation in processing loop
+        // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unnecessary-condition -- abortSignal?.aborted type does not reflect runtime reality
         if (abortSignal?.aborted) {
           throw this.createAbortError();
         }
@@ -112,8 +113,8 @@ export class ToolCallPipeline {
           const mockValidatedCall = {
             index: candidate.index,
             id: candidate.id,
-            name: candidate.name || '',
-            args: candidate.args || '',
+            name: candidate.name ?? '',
+            args: candidate.args ?? '',
             isValid: true,
             validationErrors: [],
           };
@@ -173,14 +174,14 @@ export class ToolCallPipeline {
   normalizeToolName(name: string, args?: string): string {
     const mockValidatedCall = {
       index: 0,
-      name: name || '',
-      args: args || '',
+      name: name,
+      args: args ?? '',
       isValid: true,
       validationErrors: [],
     };
 
     const normalized = this.normalizer.normalize(mockValidatedCall);
-    return normalized?.name || name || '';
+    return normalized?.name ?? name;
   }
 
   /**

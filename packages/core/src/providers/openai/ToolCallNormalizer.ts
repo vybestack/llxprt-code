@@ -147,7 +147,7 @@ export class ToolCallNormalizer {
       return false;
     }
 
-    if (!call.args || typeof call.args !== 'object') {
+    if (typeof call.args !== 'object') {
       return false;
     }
 

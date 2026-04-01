@@ -211,7 +211,9 @@ export function buildResponsesRequest(
   if (processedMessages != null) {
     // First, extract function calls from assistant messages and function call outputs from tool messages
     processedMessages
-      .filter((msg): msg is IContent => msg != undefined && msg != null)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety: callers may pass arrays with undefined
+      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
+
       .forEach((msg) => {
         // Extract function calls from AI messages
         // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
@@ -271,7 +273,9 @@ export function buildResponsesRequest(
 
     // Then, create the regular messages array (excluding tool messages)
     transformedMessages = processedMessages
-      .filter((msg): msg is IContent => msg != undefined && msg != null)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety: callers may pass arrays with undefined
+      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
+
       .filter((msg) => msg.speaker !== 'tool') // Exclude tool messages
       .map((msg) => {
         // Extract text content from blocks
@@ -321,10 +325,7 @@ export function buildResponsesRequest(
         }
 
         return result as ResponsesMessage;
-      })
-      .filter(
-        (msg): msg is NonNullable<typeof msg> => msg != null,
-      ) as ResponsesMessage[];
+      });
   }
 
   // Build the request object with conditional fields
@@ -374,7 +375,7 @@ export function buildResponsesRequest(
   // Add tools if provided
   if (tools != null && tools.length > 0) {
     request.tools = tools as ResponsesTool[];
-    if (tool_choice) {
+    if (tool_choice != null) {
       request.tool_choice = tool_choice;
     }
   }

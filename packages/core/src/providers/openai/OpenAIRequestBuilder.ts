@@ -66,7 +66,11 @@ export function normalizeToolCallArguments(parameters: unknown): string {
     }
     try {
       const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (
+        parsed != null &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+      ) {
         return JSON.stringify(parsed);
       }
       return JSON.stringify({ value: parsed });
@@ -311,11 +315,11 @@ export function buildMessagesWithReasoning(
   toolFormat: ToolFormat | undefined,
   config: Config | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
-  const stripPolicy =
-    (options.settings.get('reasoning.stripFromContext') as StripPolicy) ??
-    'none';
-  const includeInContext =
-    (options.settings.get('reasoning.includeInContext') as boolean) ?? false;
+  const stripPolicy = (options.settings.get('reasoning.stripFromContext') ??
+    'none') as StripPolicy;
+  const includeInContext = (options.settings.get(
+    'reasoning.includeInContext',
+  ) ?? false) as boolean;
 
   const filteredContents = filterThinkingForContext(contents, stripPolicy);
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
@@ -382,6 +386,7 @@ export function buildMessagesWithReasoning(
       if (assistantMessage != null) {
         messages.push(assistantMessage);
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for unexpected speaker values
     } else if (content.speaker === 'tool') {
       const toolMessages = processToolResponses(
         content,

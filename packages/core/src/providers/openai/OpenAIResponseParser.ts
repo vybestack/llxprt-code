@@ -39,7 +39,7 @@ export function coerceMessageContentToString(
   if (Array.isArray(content)) {
     const parts: string[] = [];
     for (const part of content) {
-      if (!part) continue;
+      if (part == null) continue;
       if (typeof part === 'string') {
         parts.push(part);
       } else if (
@@ -51,7 +51,7 @@ export function coerceMessageContentToString(
         parts.push((part as { text: string }).text);
       }
     }
-    return parts.length ? parts.join('') : undefined;
+    return parts.length > 0 ? parts.join('') : undefined;
   }
   return undefined;
 }
@@ -103,7 +103,7 @@ export function sanitizeToolArgumentsString(
     }
   }
 
-  return text.length ? text : '{}';
+  return text.length > 0 ? text : '{}';
 }
 
 /**
@@ -151,7 +151,7 @@ export function extractKimiToolCallsFromText(
             // Infer tool name from ID.
             let toolName = '';
             const match =
-              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
+              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ??
               /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
             if (match != null) {
               toolName = match[1];
@@ -244,7 +244,7 @@ export function parseStreamingReasoningDelta(
     .reasoning_content;
 
   // Handle absent, null, or non-string
-  if (!reasoningContent || typeof reasoningContent !== 'string') {
+  if (reasoningContent == null || typeof reasoningContent !== 'string') {
     return { thinking: null, toolCalls: [] };
   }
 
