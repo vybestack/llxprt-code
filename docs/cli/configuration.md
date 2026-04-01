@@ -513,7 +513,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `undefined`
 
 - **`tools.enableHooks`** (boolean):
-  - **Description:** Experimental gate for hooks features/UI. Hook execution still also requires `hooksConfig.enabled: true`.
+  - **Description:** Enables the hooks system experiment. When disabled, the hooks system is completely deactivated regardless of other settings.
   - **Default:** `true`
   - **Requires restart:** Yes
 
@@ -801,9 +801,8 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 #### `hooksConfig`
 
 - **`hooksConfig.enabled`** (boolean):
-  - **Description:** Canonical runtime toggle for hook execution. Hooks run only when this is `true`.
+  - **Description:** Canonical toggle for the hooks system. When disabled, no hooks will be executed.
   - **Default:** `false`
-  - **Interaction with `tools.enableHooks`:** Runtime hook execution requires both `tools.enableHooks` and `hooksConfig.enabled` to be `true`. `tools.enableHooks` is the experimental gate for hooks features; `hooksConfig.enabled` is the explicit execution switch.
 
 - **`hooksConfig.notifications`** (boolean):
   - **Description:** Show visual indicators when hooks are executing.
@@ -837,6 +836,10 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Description:** If false, disallows agent skills from being used.
   - **Default:** `true`
   <!-- SETTINGS-AUTOGEN:END -->
+
+- **Hook execution precedence:** Hook execution requires both `tools.enableHooks` and `hooksConfig.enabled` to be `true`.
+  - `tools.enableHooks` is the experimental hooks gate.
+  - `hooksConfig.enabled` is the canonical runtime execution toggle.
 
 - **`contextFileName`** (string or array of strings):
   - **Description:** Specifies the filename(s) for context files that contain project instructions and context for the AI. Can be a single filename string or an array of accepted filenames. These files are loaded hierarchically from various locations (global, project root, ancestors, and subdirectories) to provide instructional context to the AI.
