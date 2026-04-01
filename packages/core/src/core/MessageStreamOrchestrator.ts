@@ -575,7 +575,15 @@ export class MessageStreamOrchestrator {
 
     if (iter.hadThinking && !iter.hadContent && !iter.hadToolCallsThisTurn) {
       const newRetry = retryCount + 1;
+      this.deps.logger.debug(
+        () =>
+          `[stream:thinking-only] detected thinking-only turn; retry=${newRetry}/${MAX_RETRIES}`,
+      );
       if (newRetry >= MAX_RETRIES) {
+        this.deps.logger.debug(
+          () =>
+            `[stream:thinking-only] max retries reached; ending turn without user-visible error`,
+        );
         for (const d of iter.deferredEvents) yield d;
         return { done: true, retryCount: newRetry, newBaseRequest: undefined };
       }

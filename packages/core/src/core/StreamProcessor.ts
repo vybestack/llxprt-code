@@ -433,6 +433,13 @@ export class StreamProcessor {
     const consolidatedParts = this._consolidateTextParts(modelResponseParts);
     const responseText = this._extractResponseText(consolidatedParts);
 
+    if (!finishReason) {
+      this.logger.debug(
+        () =>
+          `[stream:terminal] stream ended without finishReason (hasToolCall=${String(hasToolCall)}, hasTextResponse=${String(hasTextResponse)}, hasThinkingResponse=${String(hasThinkingResponse)}, responseTextLength=${responseText.length})`,
+      );
+    }
+
     this._validateStreamCompletion(
       userInput,
       hasToolCall,
