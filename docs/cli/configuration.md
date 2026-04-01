@@ -870,6 +870,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     - **`enableRecursiveFileSearch`** (boolean): Whether to enable searching recursively for filenames under the current tree when completing @ prefixes in the prompt.
     - **`enableFuzzySearch`** (boolean): When `false`, disables fuzzy search capabilities when searching for files, which can improve performance on projects with a large number of files.
   - **Example:**
+
     ```json
     "fileFiltering": {
       "respectGitIgnore": true,
@@ -1376,6 +1377,7 @@ The following settings remain at the top level of the `settings.json` file.
     - **`screenReader`** (boolean): Enables screen reader mode, which adjusts the TUI for better compatibility with screen readers. This can also be enabled with the `--screen-reader` command-line flag, which will take precedence over the setting.
     - **`enableLoadingPhrases`** (boolean): Enables the display of loading phrases during operations.
   - **Default:** `{"screenReader": false, "enableLoadingPhrases": true}`
+
   - **Example:**
     ```json
     "accessibility": {

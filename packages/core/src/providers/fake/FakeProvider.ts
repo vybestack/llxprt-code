@@ -159,8 +159,21 @@ function convertLegacyResponseChunk(chunk: unknown): IContent[] {
     })
     .filter((content): content is IContent => !!content);
 
-  if (convertedCandidates.length === 0 && usage) {
-    return [{ speaker: 'ai', blocks: [], metadata: { usage } }];
+  const fallbackStopReason = candidates
+    .map((candidate) => normalizeStopReason(candidate?.finishReason))
+    .find((reason): reason is string => !!reason);
+
+  if (convertedCandidates.length === 0 && (usage || fallbackStopReason)) {
+    return [
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          ...(usage ? { usage } : {}),
+          ...(fallbackStopReason ? { stopReason: fallbackStopReason } : {}),
+        },
+      },
+    ];
   }
 
   return convertedCandidates;
@@ -169,11 +182,20 @@ function convertLegacyResponseChunk(chunk: unknown): IContent[] {
 function normalizeLegacyResponseLine(
   line: LegacyResponseLine,
 ): FakeResponseTurn {
+  if (
+    line.response == null ||
+    (!Array.isArray(line.response) && !isObject(line.response))
+  ) {
+    throw new Error(
+      `FakeProvider: invalid legacy fixture line. response must be an object or array of objects. Received: ${JSON.stringify(
+        line.response,
+      )}`,
+    );
+  }
+
   const responseChunks = Array.isArray(line.response)
     ? line.response
-    : line.response
-      ? [line.response]
-      : [];
+    : [line.response];
 
   return {
     chunks: responseChunks.flatMap(convertLegacyResponseChunk),

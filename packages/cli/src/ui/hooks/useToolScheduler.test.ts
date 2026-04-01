@@ -851,11 +851,13 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    expect(hasOnConfirm(waitingCall.confirmationDetails)).toBe(true);
-    if (!hasOnConfirm(waitingCall.confirmationDetails)) {
+    const details = waitingCall.confirmationDetails;
+    const hasConfirm = hasOnConfirm(details);
+    expect(hasConfirm).toBe(true);
+    if (!hasConfirm) {
       throw new Error('Expected confirmationDetails to include onConfirm');
     }
-    const { onConfirm } = waitingCall.confirmationDetails;
+    const { onConfirm } = details;
 
     // Approve the confirmation
     await act(async () => {
@@ -929,11 +931,13 @@ describe('useReactToolScheduler', () => {
     const waitingCall = result.current[0].find(
       (c) => c.status === 'awaiting_approval',
     ) as WaitingToolCall;
-    expect(hasOnConfirm(waitingCall.confirmationDetails)).toBe(true);
-    if (!hasOnConfirm(waitingCall.confirmationDetails)) {
+    const details = waitingCall.confirmationDetails;
+    const hasConfirm = hasOnConfirm(details);
+    expect(hasConfirm).toBe(true);
+    if (!hasConfirm) {
       throw new Error('Expected confirmationDetails to include onConfirm');
     }
-    const { onConfirm } = waitingCall.confirmationDetails;
+    const { onConfirm } = details;
 
     // Cancel the confirmation
     await act(async () => {

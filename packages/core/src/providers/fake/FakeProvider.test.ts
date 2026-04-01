@@ -192,4 +192,53 @@ describe('FakeProvider', () => {
     expect(first.metadata?.stopReason).toBe('stop');
     expect(first.metadata?.usage?.totalTokens).toBe(8);
   });
+
+  it('preserves stopReason for metadata-only legacy candidates', async () => {
+    const filePath = join(tempDir, 'legacy-stop-only.responses.jsonl');
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        method: 'generateContentStream',
+        response: {
+          candidates: [
+            {
+              finishReason: 'STOP',
+            },
+          ],
+        },
+      }),
+      'utf-8',
+    );
+
+    const provider = new FakeProvider(filePath);
+
+    const chunks: unknown[] = [];
+    for await (const chunk of provider.generateChatCompletion([])) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks).toHaveLength(1);
+    const first = chunks[0] as {
+      blocks: unknown[];
+      metadata?: { stopReason?: string };
+    };
+    expect(first.blocks).toEqual([]);
+    expect(first.metadata?.stopReason).toBe('stop');
+  });
+
+  it('throws on invalid legacy response payloads', () => {
+    const filePath = join(tempDir, 'legacy-invalid.responses.jsonl');
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        method: 'generateContentStream',
+        response: true,
+      }),
+      'utf-8',
+    );
+
+    expect(() => new FakeProvider(filePath)).toThrow(
+      /invalid legacy fixture line/i,
+    );
+  });
 });
