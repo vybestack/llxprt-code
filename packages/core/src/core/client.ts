@@ -152,7 +152,7 @@ export class GeminiClient {
     }
 
     const embeddingModel = config.getEmbeddingModel();
-    this.embeddingModel = embeddingModel || runtimeState.model;
+    this.embeddingModel = embeddingModel ?? runtimeState.model;
     this.loopDetector = new LoopDetectionService(config);
     this.lastPromptId = runtimeState.sessionId;
 
@@ -234,7 +234,7 @@ export class GeminiClient {
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
     // Preserve chat history before resetting, but only if we don't already have stored history
     // (e.g., from storeHistoryForLaterUse called before initialize)
-    const previousHistory = this._previousHistory || this.chat?.getHistory();
+    const previousHistory = this._previousHistory ?? this.chat?.getHistory();
 
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
@@ -253,7 +253,7 @@ export class GeminiClient {
     }
     // Use pending config if available (from initialize() call), otherwise fall back to current config
     const contentGenConfig =
-      this._pendingConfig || this.config.getContentGeneratorConfig();
+      this._pendingConfig ?? this.config.getContentGeneratorConfig();
     if (contentGenConfig == null) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -289,9 +289,7 @@ export class GeminiClient {
    * This is lazily initialized to avoid creating it when not needed.
    */
   private getBaseLlmClient(): BaseLLMClient {
-    if (this._baseLlmClient == null) {
-      this._baseLlmClient = new BaseLLMClient(this.getContentGenerator());
-    }
+    this._baseLlmClient ??= new BaseLLMClient(this.getContentGenerator());
     return this._baseLlmClient;
   }
 
@@ -396,11 +394,7 @@ export class GeminiClient {
           const newContent = { ...content };
           if (newContent.parts != null) {
             newContent.parts = newContent.parts.map((part) => {
-              if (
-                part &&
-                typeof part === 'object' &&
-                'thoughtSignature' in part
-              ) {
+              if (typeof part === 'object' && 'thoughtSignature' in part) {
                 const newPart = { ...part };
                 delete (newPart as { thoughtSignature?: string })
                   .thoughtSignature;
@@ -444,16 +438,13 @@ export class GeminiClient {
    */
   storeHistoryServiceForReuse(historyService: HistoryService): void {
     this.logger.debug('Storing HistoryService for reuse', {
-      hasHistoryService: !!historyService,
+      hasHistoryService: true,
     });
     this._storedHistoryService = historyService;
   }
 
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
-    if (!toolRegistry) {
-      return;
-    }
 
     const toolsView =
       typeof this.chat?.getToolsView === 'function'
@@ -513,13 +504,7 @@ export class GeminiClient {
     // If chat exists, clear its history service
     if (this.chat != null) {
       const historyService = this.chat.getHistoryService();
-      if (historyService) {
-        // Clear the history service directly
-        historyService.clear();
-      } else {
-        // Fallback to chat's clearHistory if no history service
-        this.chat.clearHistory();
-      }
+      historyService.clear();
       // Reset the chat's internal state
       this.ideContextTracker.resetContext();
     } else {
@@ -629,9 +614,7 @@ export class GeminiClient {
     promptId: string,
   ): Promise<GenerateContentResponse> {
     await this.lazyInitialize();
-    if (this.chat == null) {
-      this.chat = await this.startChat([]);
-    }
+    this.chat ??= await this.startChat([]);
     return this.getChat().generateDirectMessage(params, promptId);
   }
 
@@ -701,7 +684,7 @@ export class GeminiClient {
       abortSignal,
       model,
       { ...this.generateContentConfig, ...config },
-      this.lastPromptId || this.config.getSessionId(),
+      this.lastPromptId ?? this.config.getSessionId(),
     );
   }
 
@@ -719,7 +702,7 @@ export class GeminiClient {
       generationConfig,
       abortSignal,
       model,
-      this.lastPromptId || this.config.getSessionId(),
+      this.lastPromptId ?? this.config.getSessionId(),
       this.generateContentConfig,
     );
   }

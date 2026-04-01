@@ -39,19 +39,17 @@ let promptServiceInitPromise: Promise<void> | null = null;
  * Initialize the PromptService singleton
  */
 async function initializePromptService(): Promise<void> {
-  if (promptServiceInitPromise == null) {
-    promptServiceInitPromise = (async () => {
-      const baseDir =
-        process.env.LLXPRT_PROMPTS_DIR ||
-        path.join(os.homedir(), '.llxprt', 'prompts');
-      promptService = new PromptService({
-        baseDir,
-        debugMode: process.env.DEBUG === 'true',
-      });
-      await promptService.initialize();
-      promptServiceInitialized = true;
-    })();
-  }
+  promptServiceInitPromise ??= (async () => {
+    const baseDir =
+      process.env.LLXPRT_PROMPTS_DIR ??
+      path.join(os.homedir(), '.llxprt', 'prompts');
+    promptService = new PromptService({
+      baseDir,
+      debugMode: process.env.DEBUG === 'true',
+    });
+    await promptService.initialize();
+    promptServiceInitialized = true;
+  })();
   return promptServiceInitPromise;
 }
 
@@ -349,7 +347,7 @@ async function buildPromptContext(
   }
 
   // Use provider if explicitly passed, otherwise get from settings or default to gemini
-  let resolvedProvider = provider || 'gemini';
+  let resolvedProvider = provider ?? 'gemini';
 
   // If provider wasn't explicitly passed, try to get it from settings
   if (!provider) {
@@ -396,7 +394,7 @@ async function buildPromptContext(
 
   return {
     provider: resolvedProvider,
-    model: model || 'gemini-1.5-pro',
+    model: model ?? 'gemini-1.5-pro',
     enabledTools,
     environment,
     enableToolPrompts,
@@ -434,7 +432,7 @@ export async function getCoreSystemPromptAsync(
 
   let mcpInstructions: string | undefined = undefined;
 
-  if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions != null) {
+  if (typeof userMemoryOrOptions === 'object') {
     // Options object mode
     const opts = userMemoryOrOptions;
     userMemory = opts.userMemory;
@@ -474,7 +472,7 @@ export async function getCoreSystemPromptAsync(
     const allMemoriesAreCore = settingsService.get(
       'model.allMemoriesAreCore',
     ) as boolean | undefined;
-    if (allMemoriesAreCore) {
+    if (allMemoriesAreCore === true) {
       // Merge user memory into core memory; leave user memory empty
       const parts = [effectiveCoreMemory, effectiveUserMemory].filter((p) =>
         p?.trim(),

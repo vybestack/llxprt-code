@@ -9,9 +9,9 @@ import {
   type ToolCallResponseInfo,
   ToolConfirmationOutcome,
   type ToolCallConfirmationDetails,
-  ToolRegistry,
+  type ToolRegistry,
   type EditorType,
-  Config,
+  type Config,
   logToolCall,
   ToolCallEvent,
   type ToolConfirmationPayload,
@@ -357,9 +357,7 @@ export class CoreToolScheduler {
     const requestsToProcess = (
       Array.isArray(request) ? request : [request]
     ).map((req) => {
-      if (!req.agentId) {
-        req.agentId = DEFAULT_AGENT_ID;
-      }
+      req.agentId ??= DEFAULT_AGENT_ID;
       return req;
     });
 
@@ -623,19 +621,17 @@ export class CoreToolScheduler {
       // Execute all tools in parallel and wait for all to complete
       // @requirement:HOOK-134 - Hook results are now awaited, so we wait for all executions
       await Promise.all(
-        callsToExecute
-          .filter((toolCall) => toolCall.status === 'scheduled')
-          .map((toolCall) => {
-            const scheduledCall = toolCall;
-            const executionIndex = executionIndices.get(
-              scheduledCall.request.callId,
-            )!;
-            return this.launchToolExecution(
-              scheduledCall,
-              executionIndex,
-              signal,
-            );
-          }),
+        callsToExecute.map((toolCall) => {
+          const scheduledCall = toolCall;
+          const executionIndex = executionIndices.get(
+            scheduledCall.request.callId,
+          )!;
+          return this.launchToolExecution(
+            scheduledCall,
+            executionIndex,
+            signal,
+          );
+        }),
       );
     }
   }

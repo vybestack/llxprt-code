@@ -333,7 +333,7 @@ export class Turn {
         getSettingsService(): { get(key: string): unknown } | undefined;
       };
 
-      const settingsService = config?.getSettingsService();
+      const settingsService = config.getSettingsService();
       if (settingsService != null) {
         const enabled = settingsService.get('ui.showCitations');
         if (enabled !== undefined) {
@@ -388,7 +388,7 @@ export class Turn {
       );
 
       for await (const streamEvent of responseStream) {
-        if (signal?.aborted) {
+        if (signal.aborted) {
           yield { type: GeminiEventType.UserCancelled };
           return;
         }
@@ -423,7 +423,6 @@ export class Turn {
 
         // Narrow to CHUNK — the only other variant in the discriminated union
         const resp = streamEvent.value;
-        if (!resp) continue; // Skip if there's no response body
 
         this.debugResponses.push(resp);
 
@@ -434,7 +433,7 @@ export class Turn {
         // @plan PLAN-20251202-THINKING.P16
         const allParts = resp.candidates?.[0]?.content?.parts ?? [];
         for (const part of allParts) {
-          if ((part as unknown as { thought?: boolean }).thought) {
+          if ((part as unknown as { thought?: boolean }).thought === true) {
             const thought = parseThought(
               (part as unknown as { text?: string }).text ?? '',
             );
@@ -473,7 +472,7 @@ export class Turn {
         const finishReason = resp.candidates?.[0]?.finishReason;
 
         // This is the key change: Only yield 'Finished' if there is a finishReason.
-        if (finishReason) {
+        if (finishReason != null) {
           this.finishReason = finishReason;
           yield {
             type: GeminiEventType.Finished,
@@ -547,13 +546,13 @@ export class Turn {
       }
     }
 
-    const args = fnCall.args || {};
+    const args = fnCall.args ?? {};
 
     const toolCallRequest: ToolCallRequestInfo = {
       name: name || 'undefined_tool_name',
       isClientInitiated: false,
       prompt_id: this.prompt_id,
-      agentId: this.agentId ?? DEFAULT_AGENT_ID,
+      agentId: this.agentId,
       callId,
       args,
     };

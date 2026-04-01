@@ -55,7 +55,7 @@ export {
 
 import type { StreamEvent } from './geminiChatTypes.js';
 import type { CompressionContext } from './compression/types.js';
-import { PerformCompressionResult } from './turn.js';
+import type { PerformCompressionResult } from './turn.js';
 
 /**
  * Error thrown when agent execution is stopped by a hook.
@@ -70,7 +70,7 @@ export class AgentExecutionStoppedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
-    super(`Agent execution stopped: ${systemMessage || reason}`);
+    super(`Agent execution stopped: ${systemMessage ?? reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
@@ -93,7 +93,7 @@ export class AgentExecutionBlockedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
-    super(`Agent execution blocked: ${systemMessage || reason}`);
+    super(`Agent execution blocked: ${systemMessage ?? reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;
     this.systemMessage = systemMessage;
@@ -131,10 +131,6 @@ export class GeminiChat {
     generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
   ) {
-    if (!view) {
-      throw new Error('AgentRuntimeContext is required for GeminiChat');
-    }
-
     this.runtimeContext = view;
     this.runtimeState = view.state;
     this.historyService = view.history;
@@ -168,8 +164,8 @@ export class GeminiChat {
       this.generationConfig,
       providerResolver,
       async (context: CompressionContext) => {
-        const config = view.providerRuntime?.config;
-        if (config) {
+        const config = view.providerRuntime.config;
+        if (config != null) {
           await triggerPreCompressHook(
             config,
             context.trigger === 'auto'
@@ -226,11 +222,11 @@ export class GeminiChat {
   private _installDensityWrapper(): void {
     if (typeof this.historyService.add !== 'function') return;
     const hs = this.historyService as unknown as Record<symbol, unknown>;
-    if (hs[GeminiChat.DENSITY_WRAPPED]) return;
+    if (hs[GeminiChat.DENSITY_WRAPPED] != null) return;
     const originalAdd = this.historyService.add.bind(this.historyService);
     this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
       const result = originalAdd(...args);
-      this.compressionHandler?.markDensityDirty();
+      this.compressionHandler.markDensityDirty();
       return result;
     };
     hs[GeminiChat.DENSITY_WRAPPED] = true;
@@ -247,7 +243,7 @@ export class GeminiChat {
   }
 
   resolveProviderForRuntime(contextLabel: string): IProvider {
-    const desiredProviderName = this.runtimeState.provider?.trim();
+    const desiredProviderName = this.runtimeState.provider.trim();
     const adapter = this.runtimeContext.provider;
 
     if (desiredProviderName) {
@@ -283,10 +279,7 @@ export class GeminiChat {
       const previousProviderName = provider.name;
       try {
         adapter.setActiveProvider(desiredProviderName);
-        const updatedProvider = adapter.getActiveProvider();
-        if (updatedProvider) {
-          provider = updatedProvider;
-        }
+        provider = adapter.getActiveProvider();
         this.logger.debug(
           () =>
             `[GeminiChat] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}') [${contextLabel}]`,
@@ -319,8 +312,7 @@ export class GeminiChat {
     metadata: Record<string, unknown> = {},
   ): ProviderRuntimeContext {
     const baseRuntime = this.runtimeContext.providerRuntime;
-    const runtimeId =
-      baseRuntime.runtimeId ?? this.runtimeState.runtimeId ?? 'geminiChat';
+    const runtimeId = baseRuntime.runtimeId ?? this.runtimeState.runtimeId;
 
     return {
       ...baseRuntime,

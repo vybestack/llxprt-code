@@ -189,17 +189,15 @@ export class SubagentOrchestrator {
         }
 
         // 2. Then clean up the history service
-        const history = runtimeResult.history ?? scope.runtimeContext.history;
-        if (history) {
-          const disposable = (history as { dispose?: () => void }).dispose;
-          if (typeof disposable === 'function') {
-            disposable();
-          } else if (typeof history.clear === 'function') {
-            history.clear();
-            (
-              history as { removeAllListeners?: () => void }
-            ).removeAllListeners?.();
-          }
+        const history = runtimeResult.history;
+        const disposable = (history as { dispose?: () => void }).dispose;
+        if (typeof disposable === 'function') {
+          disposable();
+        } else if (typeof history.clear === 'function') {
+          history.clear();
+          (
+            history as { removeAllListeners?: () => void }
+          ).removeAllListeners?.();
         }
       },
       agentId,
@@ -209,13 +207,13 @@ export class SubagentOrchestrator {
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string) {
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw createAbortError(message);
     }
   }
 
   private async loadSubagentConfig(name: string): Promise<SubagentConfig> {
-    if (!name?.trim()) {
+    if (!name.trim()) {
       throw new Error('Subagent name is required.');
     }
     try {
@@ -238,10 +236,10 @@ export class SubagentOrchestrator {
     basePrompt: string,
     additions?: string[],
   ): PromptConfig {
-    const trimmedBase = basePrompt?.trim();
+    const trimmedBase = basePrompt.trim();
     const trimmedAdditions = (additions ?? [])
-      .map((part) => part?.trim())
-      .filter((part) => part && part.length > 0);
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
 
     const promptSections: string[] = [];
 
