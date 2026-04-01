@@ -1137,6 +1137,8 @@ describe('AnthropicProvider', () => {
 
     it('should not retry after stopReason-only message_delta if a transient stream error follows', async () => {
       settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+      const retryModule = await import('../../utils/retry.js');
+      vi.mocked(retryModule.isNetworkTransientError).mockReturnValueOnce(true);
 
       const mockStream = {
         async *[Symbol.asyncIterator]() {
