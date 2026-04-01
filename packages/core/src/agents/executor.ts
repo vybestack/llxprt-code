@@ -177,10 +177,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         : 'Get Started!';
       let currentMessage: Content = { role: 'user', parts: [{ text: query }] };
 
-      while (true) {
+      for (;;) {
         // Check for termination conditions like max turns or timeout.
         const reason = this.checkTermination(startTime, turnCounter);
-        if (reason) {
+        if (reason != null) {
           terminateReason = reason;
           break;
         }
@@ -199,7 +199,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           promptId,
         );
 
-        if (signal.aborted) {
+        // Re-check after async call; TypeScript narrows the earlier check
+        if ((signal as AbortSignal).aborted) {
           terminateReason = AgentTerminateMode.ABORTED;
           break;
         }
@@ -229,14 +230,14 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       if (terminateReason === AgentTerminateMode.GOAL) {
         return {
-          result: finalResult || 'Task completed.',
+          result: finalResult ?? 'Task completed.',
           terminate_reason: terminateReason,
         };
       }
 
       return {
         result:
-          finalResult || 'Agent execution was terminated before completion.',
+          finalResult ?? 'Agent execution was terminated before completion.',
         terminate_reason: terminateReason,
       };
     } catch (error) {
@@ -258,7 +259,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     promptId: string,
   ): Promise<{ functionCalls: FunctionCall[]; textResponse: string }> {
     const messageParams = {
-      message: message.parts || [],
+      message: message.parts ?? [],
       config: {
         abortSignal: signal,
         tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined,
@@ -282,7 +283,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
         // Extract and emit any subject "thought" content from the model.
         const { subject } = parseThought(
-          parts?.find((p) => p.thought)?.text || '',
+          parts?.find((p) => p.thought === true)?.text ?? '',
         );
         if (subject) {
           this.emitActivity('THOUGHT_CHUNK', { text: subject });
@@ -296,9 +297,9 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         // Handle text response (non-thought text)
         const text =
           parts
-            ?.filter((p) => !p.thought && p.text)
+            ?.filter((p) => p.thought !== true && p.text != null)
             .map((p) => p.text)
-            .join('') || '';
+            .join('') ?? '';
 
         if (text) {
           textResponse += text;
@@ -396,7 +397,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           contentGeneratorConfig:
             this.runtimeContext.getContentGeneratorConfig(),
           toolRegistry: this.toolRegistry,
-          providerManager: this.runtimeContext.getProviderManager?.(),
+          providerManager: this.runtimeContext.getProviderManager(),
           settings,
           providerRuntime,
         },
@@ -404,8 +405,8 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           contentGenerator: (() => {
             try {
               return this.runtimeContext
-                .getGeminiClient?.()
-                ?.getContentGenerator();
+                .getGeminiClient()
+                .getContentGenerator();
             } catch {
               return void 0;
             }
@@ -812,7 +813,7 @@ Important Rules:
   ): AgentTerminateMode | null {
     const { runConfig } = this.definition;
 
-    if (runConfig.max_turns && turnCounter >= runConfig.max_turns) {
+    if (runConfig.max_turns != null && turnCounter >= runConfig.max_turns) {
       return AgentTerminateMode.MAX_TURNS;
     }
 

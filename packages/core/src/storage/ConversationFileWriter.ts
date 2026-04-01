@@ -15,7 +15,7 @@ export class ConversationFileWriter {
 
   constructor(logPath?: string) {
     this.logPath =
-      logPath || path.join(os.homedir(), '.llxprt', 'conversations');
+      logPath ?? path.join(os.homedir(), '.llxprt', 'conversations');
     this.currentLogFile = path.join(
       this.logPath,
       `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
@@ -88,8 +88,6 @@ let fileWriter: ConversationFileWriter | null = null;
 export function getConversationFileWriter(
   logPath?: string,
 ): ConversationFileWriter {
-  if (fileWriter == null) {
-    fileWriter = new ConversationFileWriter(logPath);
-  }
+  fileWriter ??= new ConversationFileWriter(logPath);
   return fileWriter;
 }

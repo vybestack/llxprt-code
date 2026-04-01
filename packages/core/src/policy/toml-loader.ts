@@ -328,7 +328,7 @@ export async function loadPoliciesFromToml(
             } catch (e) {
               const error = e as Error;
               const patternStr =
-                rule.commandRegex || rule.commandPrefix || 'unknown';
+                rule.commandRegex ?? rule.commandPrefix ?? 'unknown';
               errors.push({
                 filePath,
                 fileName: file,
@@ -348,19 +348,20 @@ export async function loadPoliciesFromToml(
 
             // For each argsPattern, expand toolName arrays
             return argsPatterns.flatMap((argsPattern) => {
-              const toolNames: Array<string | undefined> = rule.toolName
-                ? Array.isArray(rule.toolName)
-                  ? rule.toolName
-                  : [rule.toolName]
-                : [undefined];
+              const toolNames: Array<string | undefined> =
+                rule.toolName != null
+                  ? Array.isArray(rule.toolName)
+                    ? rule.toolName
+                    : [rule.toolName]
+                  : [undefined];
 
               // Create a policy rule for each tool name
               return toolNames.map((toolName) => {
                 // Transform mcpName field to composite toolName format
                 let effectiveToolName: string | undefined;
-                if (rule.mcpName && toolName) {
+                if (rule.mcpName != null && toolName != null) {
                   effectiveToolName = `${rule.mcpName}__${toolName}`;
-                } else if (rule.mcpName) {
+                } else if (rule.mcpName != null) {
                   effectiveToolName = `${rule.mcpName}__*`;
                 } else {
                   effectiveToolName = toolName;
@@ -378,8 +379,7 @@ export async function loadPoliciesFromToml(
                 return policyRule;
               });
             });
-          })
-          .filter((rule): rule is PolicyRule => rule != null);
+          });
 
         rules.push(...parsedRules);
       } catch (e) {
@@ -450,12 +450,12 @@ export async function loadPolicyFromToml(
     let effectiveArgsPattern = rule.argsPattern;
     const commandPrefixes: string[] = [];
 
-    if (rule.commandPrefix) {
+    if (rule.commandPrefix != null) {
       const prefixes = Array.isArray(rule.commandPrefix)
         ? rule.commandPrefix
         : [rule.commandPrefix];
       commandPrefixes.push(...prefixes);
-    } else if (rule.commandRegex) {
+    } else if (rule.commandRegex != null) {
       effectiveArgsPattern = `"command":"${rule.commandRegex}`;
     }
 
@@ -470,19 +470,20 @@ export async function loadPolicyFromToml(
 
     // For each argsPattern, expand toolName arrays
     return argsPatterns.flatMap((argsPattern) => {
-      const toolNames: Array<string | undefined> = rule.toolName
-        ? Array.isArray(rule.toolName)
-          ? rule.toolName
-          : [rule.toolName]
-        : [undefined];
+      const toolNames: Array<string | undefined> =
+        rule.toolName != null
+          ? Array.isArray(rule.toolName)
+            ? rule.toolName
+            : [rule.toolName]
+          : [undefined];
 
       // Create a policy rule for each tool name
       return toolNames.map((toolName) => {
         // Transform mcpName field to composite toolName format
         let effectiveToolName: string | undefined;
-        if (rule.mcpName && toolName) {
+        if (rule.mcpName != null && toolName != null) {
           effectiveToolName = `${rule.mcpName}__${toolName}`;
-        } else if (rule.mcpName) {
+        } else if (rule.mcpName != null) {
           effectiveToolName = `${rule.mcpName}__*`;
         } else {
           effectiveToolName = toolName;

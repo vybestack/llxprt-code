@@ -185,19 +185,19 @@ export class SkillManager {
       const config: BuiltinSkillConfig = JSON.parse(content);
 
       // Validate required fields
-      if (!config || typeof config !== 'object') {
+      if (typeof config !== 'object') {
         return null;
       }
 
       // Skill name can come from config or use directory name
-      const skillName = config.name || name;
+      const skillName = config.name ?? name;
 
       // Look for skill instruction file (SKILL.md or similar)
       const body = await this.loadSkillBody(skillPath);
 
       return {
         name: skillName,
-        description: config.description || '',
+        description: config.description ?? '',
         location: skillPath,
         source: 'builtin',
         disabled: config.disabled,

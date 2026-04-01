@@ -35,7 +35,7 @@ export function shouldRetryOnStatus(
   const logger = options?.logger;
 
   if (
-    error &&
+    error != null &&
     typeof error === 'object' &&
     'status' in error &&
     (error as { status?: number }).status === 200
@@ -45,11 +45,16 @@ export function shouldRetryOnStatus(
 
   let status: number | undefined;
 
-  if (error && typeof error === 'object' && 'status' in error) {
+  if (error != null && typeof error === 'object' && 'status' in error) {
     status = (error as { status?: number }).status;
   }
 
-  if (!status && error && typeof error === 'object' && 'response' in error) {
+  if (
+    status == null &&
+    error != null &&
+    typeof error === 'object' &&
+    'response' in error
+  ) {
     const response = (error as { response?: { status?: number } }).response;
     if (
       response != null &&
@@ -60,19 +65,20 @@ export function shouldRetryOnStatus(
     }
   }
 
-  if (!status && error instanceof Error) {
+  if (status == null && error instanceof Error) {
     if (error.message.includes('429')) {
       status = 429;
     }
   }
 
   logger?.debug(() => `shouldRetryOnStatus checking error:`, {
-    hasError: !!error,
+    hasError: error != null,
     errorType: error?.constructor?.name,
     errorMessage: error instanceof Error ? error.message : String(error),
-    errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
+    errorKeys:
+      error != null && typeof error === 'object' ? Object.keys(error) : [],
     errorData:
-      error && typeof error === 'object' && 'error' in error
+      error != null && typeof error === 'object' && 'error' in error
         ? (error as { error?: unknown }).error
         : undefined,
     status,
@@ -82,7 +88,7 @@ export function shouldRetryOnStatus(
     status === 429 || (status !== undefined && status >= 500 && status < 600),
   );
 
-  if (!shouldRetry && options?.checkNetworkTransient?.(error)) {
+  if (!shouldRetry && options?.checkNetworkTransient?.(error) === true) {
     logger?.debug(
       () =>
         `Will retry request due to network transient error: ${error instanceof Error ? error.message : String(error)}`,

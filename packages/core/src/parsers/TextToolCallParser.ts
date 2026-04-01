@@ -275,8 +275,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       const parsed = JSON.parse(innerContent);
       if (typeof parsed === 'object' && parsed !== null && 'name' in parsed) {
         // Hermes format validation
-        const toolName = String(parsed.name || '');
-        const args = parsed.arguments || {};
+        const toolName = String(parsed.name ?? '');
+        const args = parsed.arguments ?? {};
         return {
           start,
           end,
@@ -547,7 +547,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const merged: Array<{ start: number; end: number }> = [];
     for (const range of sorted) {
       const last = merged[merged.length - 1];
-      if (last && range.start <= last.end) {
+      if (last != null && range.start <= last.end) {
         last.end = Math.max(last.end, range.end);
       } else {
         merged.push({ ...range });
@@ -636,10 +636,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     args: Record<string, unknown>,
     toolName: string,
   ): Record<string, unknown> {
-    if (!args) {
-      return args;
-    }
-    const normalizedTool = toolName?.trim().toLowerCase();
+    const normalizedTool = toolName.trim().toLowerCase();
     if (normalizedTool === 'todo_write') {
       const todos = args['todos'];
       if (Array.isArray(todos)) {
@@ -656,7 +653,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     index: number,
   ): Record<string, unknown> {
     const normalized =
-      todo && typeof todo === 'object'
+      todo != null && typeof todo === 'object'
         ? { ...(todo as Record<string, unknown>) }
         : {};
 
@@ -820,7 +817,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     attributeText: string,
   ): Record<string, unknown> {
     const args: Record<string, unknown> = {};
-    const text = attributeText ?? '';
+    const text = attributeText;
     const length = text.length;
     let index = 0;
 
