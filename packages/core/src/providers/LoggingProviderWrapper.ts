@@ -87,17 +87,15 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
 
     const redactedTool = { ...tool };
 
-    if (redactedTool.function.parameters && tool.function.name) {
-      const redactedParams = this.redactContent(
-        JSON.stringify(redactedTool.function.parameters),
-        'global',
-      );
-      try {
-        redactedTool.function.parameters = JSON.parse(redactedParams);
-      } catch {
-        // If parsing fails, keep original parameters
-        redactedTool.function.parameters = tool.function.parameters;
-      }
+    const redactedParams = this.redactContent(
+      JSON.stringify(redactedTool.function.parameters),
+      'global',
+    );
+    try {
+      redactedTool.function.parameters = JSON.parse(redactedParams);
+    } catch {
+      // If parsing fails, keep original parameters
+      redactedTool.function.parameters = tool.function.parameters;
     }
 
     return redactedTool;
@@ -386,7 +384,7 @@ export class LoggingProviderWrapper implements IProvider {
 
     if (injectedRuntime == null && this.statelessRuntimeMetadata != null) {
       normalizedOptions.metadata = {
-        ...(this.statelessRuntimeMetadata ?? {}),
+        ...this.statelessRuntimeMetadata,
         ...(normalizedOptions.metadata ?? {}),
       };
     }
@@ -405,8 +403,7 @@ export class LoggingProviderWrapper implements IProvider {
         `Checking runtime context: runtimeId=${runtimeId}, hasRuntime=${!!normalizedOptions.runtime}, hasSettings=${!!normalizedOptions.runtime?.settingsService}, hasConfig=${!!normalizedOptions.runtime?.config}`,
     );
     this.debug.log(
-      () =>
-        `Contents length at entry: ${normalizedOptions.contents?.length ?? 'undefined'}`,
+      () => `Contents length at entry: ${normalizedOptions.contents.length}`,
     );
 
     if (normalizedOptions.runtime?.settingsService == null) {
@@ -426,7 +423,7 @@ export class LoggingProviderWrapper implements IProvider {
       });
     }
 
-    if (normalizedOptions.runtime?.config == null) {
+    if (normalizedOptions.runtime.config == null) {
       this.debug.error(
         () => `Missing config in runtime context for runtimeId=${runtimeId}`,
       );
@@ -444,62 +441,60 @@ export class LoggingProviderWrapper implements IProvider {
 
     // Resolve config from runtime or legacy fallback
     normalizedOptions.config =
-      normalizedOptions.config ?? normalizedOptions.runtime?.config;
+      normalizedOptions.config ?? normalizedOptions.runtime.config;
     const activeConfig = normalizedOptions.config;
     this.debug.log(
       () =>
-        `After config resolution: hasConfig=${!!activeConfig}, configType=${activeConfig?.constructor?.name}, hasMethod=${typeof activeConfig?.getConversationLoggingEnabled}`,
+        `After config resolution: hasConfig=${true}, configType=${activeConfig.constructor.name}, hasMethod=${typeof activeConfig.getConversationLoggingEnabled}`,
     );
 
     // REQ-SP4-004: Validate that config is a proper Config instance with required methods
     // FAST FAIL: Throw immediately if config is a plain object instead of a Config instance
-    if (activeConfig) {
-      let configHasLoggingMethod =
+    let configHasLoggingMethod =
+      typeof activeConfig.getConversationLoggingEnabled === 'function';
+
+    if (!configHasLoggingMethod) {
+      // Gather diagnostic info about the config object
+      const configKeys = Object.keys(activeConfig);
+      const prototypeChain: string[] = [];
+      let proto = Object.getPrototypeOf(activeConfig);
+      while (proto != null && proto !== Object.prototype) {
+        prototypeChain.push(proto.constructor?.name ?? 'unknown');
+        proto = Object.getPrototypeOf(proto);
+      }
+
+      this.debug.warn(
+        () =>
+          `Config instance missing getConversationLoggingEnabled() (type=${activeConfig.constructor.name}, frozen=${Object.isFrozen(activeConfig)}, proto=${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object'}). Attempting to restore prototype.`,
+      );
+
+      try {
+        Object.setPrototypeOf(activeConfig, Config.prototype);
+      } catch (error) {
+        this.debug.error(
+          () =>
+            `Failed to restore Config prototype: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      configHasLoggingMethod =
         typeof activeConfig.getConversationLoggingEnabled === 'function';
 
       if (!configHasLoggingMethod) {
-        // Gather diagnostic info about the config object
-        const configKeys = Object.keys(activeConfig);
-        const prototypeChain: string[] = [];
-        let proto = Object.getPrototypeOf(activeConfig);
-        while (proto && proto !== Object.prototype) {
-          prototypeChain.push(proto.constructor?.name || 'unknown');
-          proto = Object.getPrototypeOf(proto);
-        }
-
-        this.debug.warn(
-          () =>
-            `Config instance missing getConversationLoggingEnabled() (type=${activeConfig?.constructor?.name ?? 'unknown'}, frozen=${Object.isFrozen(activeConfig)}, proto=${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object'}). Attempting to restore prototype.`,
+        throw new Error(
+          `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
+            `Config appears to be a plain object instead of a Config class instance.\n` +
+            `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
+            `Diagnostics:\n` +
+            `- Type: ${activeConfig.constructor.name}\n` +
+            `- Has method: ${typeof activeConfig.getConversationLoggingEnabled}\n` +
+            `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
+            `- Property count: ${configKeys.length}\n` +
+            `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
+            `- From runtime: ${true}\n` +
+            `- Runtime ID: ${normalizedOptions.runtime.runtimeId ?? 'unknown'}\n` +
+            `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
         );
-
-        try {
-          Object.setPrototypeOf(activeConfig, Config.prototype);
-        } catch (error) {
-          this.debug.error(
-            () =>
-              `Failed to restore Config prototype: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-
-        configHasLoggingMethod =
-          typeof activeConfig.getConversationLoggingEnabled === 'function';
-
-        if (!configHasLoggingMethod) {
-          throw new Error(
-            `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
-              `Config appears to be a plain object instead of a Config class instance.\n` +
-              `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
-              `Diagnostics:\n` +
-              `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
-              `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
-              `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
-              `- Property count: ${configKeys.length}\n` +
-              `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
-              `- From runtime: ${!!normalizedOptions.runtime}\n` +
-              `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
-              `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
-          );
-        }
       }
     }
 
@@ -510,9 +505,9 @@ export class LoggingProviderWrapper implements IProvider {
       this.redactor = new ConfigBasedRedactor({
         ...invocation.redaction,
       });
-    } else if (this.redactor == null && activeConfig) {
+    } else {
       // REQ-SP4-004: Create per-call redactor if not already set
-      this.redactor = new ConfigBasedRedactor(
+      this.redactor ??= new ConfigBasedRedactor(
         activeConfig.getRedactionConfig(),
       );
     }
@@ -531,8 +526,7 @@ export class LoggingProviderWrapper implements IProvider {
     let conversationLoggingEnabled = false;
     try {
       this.debug.log(() => `About to call getConversationLoggingEnabled()`);
-      conversationLoggingEnabled =
-        activeConfig?.getConversationLoggingEnabled() ?? false;
+      conversationLoggingEnabled = activeConfig.getConversationLoggingEnabled();
       this.debug.log(
         () =>
           `getConversationLoggingEnabled() returned: ${conversationLoggingEnabled}`,
@@ -546,14 +540,14 @@ export class LoggingProviderWrapper implements IProvider {
     }
     this.debug.log(
       () =>
-        `Conversation logging check: enabled=${conversationLoggingEnabled}, contents length=${normalizedOptions.contents?.length}`,
+        `Conversation logging check: enabled=${conversationLoggingEnabled}, contents length=${normalizedOptions.contents.length}`,
     );
 
     if (conversationLoggingEnabled) {
       try {
         this.debug.log(
           () =>
-            `Before logRequest: contents length = ${normalizedOptions.contents?.length}`,
+            `Before logRequest: contents length = ${normalizedOptions.contents.length}`,
         );
         await this.logRequest(
           activeConfig,
@@ -563,7 +557,7 @@ export class LoggingProviderWrapper implements IProvider {
         );
         this.debug.log(
           () =>
-            `After logRequest: contents length = ${normalizedOptions.contents?.length}`,
+            `After logRequest: contents length = ${normalizedOptions.contents.length}`,
         );
       } catch (error) {
         this.debug.error(
@@ -577,35 +571,31 @@ export class LoggingProviderWrapper implements IProvider {
     this.debug.log(() => `Before API request telemetry section`);
 
     // Log API request telemetry event
-    if (activeConfig) {
-      this.debug.log(
-        () =>
-          `Before JSON.stringify: contents length=${normalizedOptions.contents?.length}`,
-      );
-      const requestText = JSON.stringify(normalizedOptions.contents);
-      this.debug.log(
-        () => `After JSON.stringify: requestText length=${requestText.length}`,
-      );
-      const modelName =
-        normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
-      this.debug.log(
-        () => `Logging API request: model=${modelName}, promptId=${promptId}`,
-      );
-      logApiRequest(
-        activeConfig,
-        new ApiRequestEvent(modelName, promptId, requestText),
-      );
-      this.debug.log(
-        () =>
-          `After API request logged: contents length=${normalizedOptions.contents?.length}`,
-      );
-    } else {
-      this.debug.error(() => `Cannot log API request: activeConfig is null`);
-    }
+    this.debug.log(
+      () =>
+        `Before JSON.stringify: contents length=${normalizedOptions.contents.length}`,
+    );
+    const requestText = JSON.stringify(normalizedOptions.contents);
+    this.debug.log(
+      () => `After JSON.stringify: requestText length=${requestText.length}`,
+    );
+    const modelName =
+      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
+    this.debug.log(
+      () => `Logging API request: model=${modelName}, promptId=${promptId}`,
+    );
+    logApiRequest(
+      activeConfig,
+      new ApiRequestEvent(modelName, promptId, requestText),
+    );
+    this.debug.log(
+      () =>
+        `After API request logged: contents length=${normalizedOptions.contents.length}`,
+    );
 
     this.debug.log(
       () =>
-        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents?.length}`,
+        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents.length}`,
     );
 
     // Get stream from wrapped provider using normalized options object
@@ -617,8 +607,8 @@ export class LoggingProviderWrapper implements IProvider {
     // If logging not enabled, process for metrics only
     // Resolve the model name for telemetry - use resolved model, not provider default
     const resolvedModelName =
-      normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
-    if (!activeConfig?.getConversationLoggingEnabled()) {
+      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
+    if (!activeConfig.getConversationLoggingEnabled()) {
       yield* this.processStreamForMetrics(
         activeConfig,
         stream,
@@ -657,7 +647,7 @@ export class LoggingProviderWrapper implements IProvider {
         this.wrapped.name,
         this.conversationId,
         this.turnNumber,
-        promptId || this.generatePromptId(),
+        promptId ?? this.generatePromptId(),
         redactedContent,
         redactedTools,
         'default', // toolFormat is no longer passed in
@@ -672,7 +662,7 @@ export class LoggingProviderWrapper implements IProvider {
       fileWriter.writeRequest(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        promptId: promptId || this.generatePromptId(),
+        promptId: promptId ?? this.generatePromptId(),
         tools: redactedTools,
         toolFormat: 'default',
       });
@@ -708,24 +698,21 @@ export class LoggingProviderWrapper implements IProvider {
 
         // Extract token usage and finishReason/stopReason from IContent metadata
         // (issue #1844): providers may emit either field; honor both.
-        if (chunk && typeof chunk === 'object') {
-          const content = chunk;
-          if (content.metadata?.usage != null) {
-            latestTokenUsage = content.metadata.usage;
-          }
-          const metaFinishReason =
-            (content.metadata as Record<string, unknown> | undefined)
-              ?.finishReason ?? content.metadata?.stopReason;
-          if (typeof metaFinishReason === 'string') {
-            lastFinishReason = metaFinishReason;
-          }
+        if (chunk.metadata?.usage != null) {
+          latestTokenUsage = chunk.metadata.usage;
+        }
+        const metaFinishReason =
+          (chunk.metadata as Record<string, unknown> | undefined)
+            ?.finishReason ?? chunk.metadata?.stopReason;
+        if (typeof metaFinishReason === 'string') {
+          lastFinishReason = metaFinishReason;
+        }
 
-          // Accumulate text content for token estimation fallback (only when no real usage yet)
-          if (latestTokenUsage == null && content.blocks) {
-            for (const block of content.blocks) {
-              if (block.type === 'text') {
-                streamedText += block.text;
-              }
+        // Accumulate text content for token estimation fallback (only when no real usage yet)
+        if (latestTokenUsage == null) {
+          for (const block of chunk.blocks) {
+            if (block.type === 'text') {
+              streamedText += block.text;
             }
           }
         }
@@ -825,7 +812,6 @@ export class LoggingProviderWrapper implements IProvider {
   ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
     let responseContent = '';
-    let responseComplete = false;
     let latestTokenUsage: UsageStats | undefined;
     let lastFinishReason: string | undefined;
     let firstChunkTime: number | null = null;
@@ -840,28 +826,24 @@ export class LoggingProviderWrapper implements IProvider {
 
         // Simple content extraction - just try to get text from common chunk formats
         const content = this.extractSimpleContent(chunk);
-        if (content) {
+        if (content.length > 0) {
           responseContent += content;
         }
 
         // Extract token usage and finishReason/stopReason from IContent metadata
         // (issue #1844): providers may emit either field; honor both.
-        if (chunk && typeof chunk === 'object') {
-          const content = chunk;
-          if (content.metadata?.usage != null) {
-            latestTokenUsage = content.metadata.usage;
-          }
-          const metaFinishReason =
-            (content.metadata as Record<string, unknown> | undefined)
-              ?.finishReason ?? content.metadata?.stopReason;
-          if (typeof metaFinishReason === 'string') {
-            lastFinishReason = metaFinishReason;
-          }
+        if (chunk.metadata?.usage != null) {
+          latestTokenUsage = chunk.metadata.usage;
+        }
+        const metaFinishReason =
+          (chunk.metadata as Record<string, unknown> | undefined)
+            ?.finishReason ?? chunk.metadata?.stopReason;
+        if (typeof metaFinishReason === 'string') {
+          lastFinishReason = metaFinishReason;
         }
 
         yield chunk;
       }
-      responseComplete = true;
     } catch (error) {
       const errorTime = performance.now();
       await this.logResponse(
@@ -880,27 +862,25 @@ export class LoggingProviderWrapper implements IProvider {
       throw error;
     }
 
-    if (responseComplete) {
-      const totalTime = performance.now() - startTime;
-      await this.logResponse(
-        config,
-        responseContent,
-        promptId,
-        totalTime,
-        true,
-        undefined,
-        latestTokenUsage,
-        modelName,
-        lastFinishReason ? [lastFinishReason] : [],
-        firstChunkTime,
-        chunkCount,
-      );
-    }
+    const totalTime = performance.now() - startTime;
+    await this.logResponse(
+      config,
+      responseContent,
+      promptId,
+      totalTime,
+      true,
+      undefined,
+      latestTokenUsage,
+      modelName,
+      lastFinishReason ? [lastFinishReason] : [],
+      firstChunkTime,
+      chunkCount,
+    );
   }
 
   // Simple content extraction without complex provider-specific logic
   private hasTokenBearingOutput(chunk: unknown): boolean {
-    if (!chunk || typeof chunk !== 'object') {
+    if (chunk == null || typeof chunk !== 'object') {
       return false;
     }
 
@@ -923,16 +903,16 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private extractSimpleContent(chunk: unknown): string {
-    if (!chunk || typeof chunk !== 'object') {
+    if (chunk == null || typeof chunk !== 'object') {
       return '';
     }
 
     const obj = chunk as Record<string, unknown>;
 
     // Try common content paths
-    if (obj.choices && Array.isArray(obj.choices)) {
+    if (obj.choices != null && Array.isArray(obj.choices)) {
       const choice = obj.choices[0] as Record<string, unknown>;
-      if (choice?.delta && typeof choice.delta === 'object') {
+      if (choice.delta != null && typeof choice.delta === 'object') {
         const delta = choice.delta as Record<string, unknown>;
         if (typeof delta.content === 'string') {
           return delta.content;
@@ -984,7 +964,7 @@ export class LoggingProviderWrapper implements IProvider {
       } else {
         this.performanceTracker.recordError(
           duration,
-          error ? String(error) : 'Unknown stream error',
+          error != null ? String(error) : 'Unknown stream error',
           timeToFirstToken ?? null,
           chunkCount ?? 0,
         );
@@ -1031,7 +1011,7 @@ export class LoggingProviderWrapper implements IProvider {
       apiResponseEvent.thoughts_token_count = tokenCounts.thoughts_token_count;
       apiResponseEvent.tool_token_count = tokenCounts.tool_token_count;
       apiResponseEvent.total_token_count = totalTokens;
-      if (!success && error) {
+      if (!success && error != null) {
         apiResponseEvent.error = String(error);
       }
       logApiResponse(config, apiResponseEvent);
@@ -1044,7 +1024,7 @@ export class LoggingProviderWrapper implements IProvider {
         redactedContent,
         duration,
         success,
-        error ? String(error) : undefined,
+        error != null ? String(error) : undefined,
       );
 
       logConversationResponse(config, event);
@@ -1056,7 +1036,7 @@ export class LoggingProviderWrapper implements IProvider {
       fileWriter.writeResponse(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        error: error ? String(error) : undefined,
+        error: error != null ? String(error) : undefined,
         promptId,
         duration,
         success,
@@ -1086,11 +1066,15 @@ export class LoggingProviderWrapper implements IProvider {
     cache_read_input_tokens: number;
     cache_creation_input_tokens: number | null;
   } {
+    const rawCachedTokens = Number(tokenUsage.cachedTokens);
+    const rawCacheReadTokens = Number(tokenUsage.cache_read_input_tokens);
     const cacheReads = Math.max(
       0,
-      Number(tokenUsage.cachedTokens) ||
-        Number(tokenUsage.cache_read_input_tokens) ||
-        0,
+      !isNaN(rawCachedTokens) && rawCachedTokens !== 0
+        ? rawCachedTokens
+        : !isNaN(rawCacheReadTokens) && rawCacheReadTokens !== 0
+          ? rawCacheReadTokens
+          : 0,
     );
 
     // Check if cache writes are actually reported by the provider
@@ -1098,14 +1082,21 @@ export class LoggingProviderWrapper implements IProvider {
       tokenUsage.cacheCreationTokens !== undefined ||
       tokenUsage.cache_creation_input_tokens !== undefined;
 
-    const cacheWrites = hasCacheWriteData
-      ? Math.max(
-          0,
-          Number(tokenUsage.cacheCreationTokens) ||
-            Number(tokenUsage.cache_creation_input_tokens) ||
-            0,
-        )
-      : null;
+    let cacheWrites: number | null = null;
+    if (hasCacheWriteData) {
+      const rawCreationTokens = Number(tokenUsage.cacheCreationTokens);
+      const rawCreationInputTokens = Number(
+        tokenUsage.cache_creation_input_tokens,
+      );
+      cacheWrites = Math.max(
+        0,
+        !isNaN(rawCreationTokens) && rawCreationTokens !== 0
+          ? rawCreationTokens
+          : !isNaN(rawCreationInputTokens) && rawCreationInputTokens !== 0
+            ? rawCreationInputTokens
+            : 0,
+      );
+    }
 
     this.debug.debug(
       () =>
@@ -1113,8 +1104,12 @@ export class LoggingProviderWrapper implements IProvider {
     );
 
     return {
-      input_token_count: Number(tokenUsage.promptTokens) || 0,
-      output_token_count: Number(tokenUsage.completionTokens) || 0,
+      input_token_count: !isNaN(Number(tokenUsage.promptTokens))
+        ? Number(tokenUsage.promptTokens)
+        : 0,
+      output_token_count: !isNaN(Number(tokenUsage.completionTokens))
+        ? Number(tokenUsage.completionTokens)
+        : 0,
       // Use cacheReads for cached_content_token_count so it flows to UI telemetry
       cached_content_token_count: cacheReads,
       thoughts_token_count: 0, // Not available in basic UsageStats
@@ -1150,35 +1145,71 @@ export class LoggingProviderWrapper implements IProvider {
       if (typeof response === 'string') {
         const parsed = JSON.parse(response);
         // Extract token usage from response object
-        if (parsed.usage) {
-          input_token_count = Number(parsed.usage.prompt_tokens) || 0;
-          output_token_count = Number(parsed.usage.completion_tokens) || 0;
-          cached_content_token_count =
-            Number(parsed.usage.cached_content_tokens) || 0;
-          thoughts_token_count = Number(parsed.usage.thoughts_tokens) || 0;
-          tool_token_count = Number(parsed.usage.tool_tokens) || 0;
-          cache_read_input_tokens =
-            Number(parsed.usage.cache_read_input_tokens) || 0;
-          cache_creation_input_tokens =
-            Number(parsed.usage.cache_creation_input_tokens) || 0;
+        if (parsed.usage != null) {
+          input_token_count = !isNaN(Number(parsed.usage.prompt_tokens))
+            ? Number(parsed.usage.prompt_tokens)
+            : 0;
+          output_token_count = !isNaN(Number(parsed.usage.completion_tokens))
+            ? Number(parsed.usage.completion_tokens)
+            : 0;
+          cached_content_token_count = !isNaN(
+            Number(parsed.usage.cached_content_tokens),
+          )
+            ? Number(parsed.usage.cached_content_tokens)
+            : 0;
+          thoughts_token_count = !isNaN(Number(parsed.usage.thoughts_tokens))
+            ? Number(parsed.usage.thoughts_tokens)
+            : 0;
+          tool_token_count = !isNaN(Number(parsed.usage.tool_tokens))
+            ? Number(parsed.usage.tool_tokens)
+            : 0;
+          cache_read_input_tokens = !isNaN(
+            Number(parsed.usage.cache_read_input_tokens),
+          )
+            ? Number(parsed.usage.cache_read_input_tokens)
+            : 0;
+          cache_creation_input_tokens = !isNaN(
+            Number(parsed.usage.cache_creation_input_tokens),
+          )
+            ? Number(parsed.usage.cache_creation_input_tokens)
+            : 0;
         }
-      } else if (response && typeof response === 'object') {
+      } else if (response != null && typeof response === 'object') {
         // Extract token usage from response object
         const obj = response as Record<string, unknown>;
-        if (obj.usage && typeof obj.usage === 'object') {
+        if (obj.usage != null && typeof obj.usage === 'object') {
           const usage = obj.usage as Record<string, unknown>;
-          input_token_count = Number(usage.prompt_tokens) || 0;
-          output_token_count = Number(usage.completion_tokens) || 0;
-          cached_content_token_count = Number(usage.cached_content_tokens) || 0;
-          thoughts_token_count = Number(usage.thoughts_tokens) || 0;
-          tool_token_count = Number(usage.tool_tokens) || 0;
-          cache_read_input_tokens = Number(usage.cache_read_input_tokens) || 0;
-          cache_creation_input_tokens =
-            Number(usage.cache_creation_input_tokens) || 0;
+          input_token_count = !isNaN(Number(usage.prompt_tokens))
+            ? Number(usage.prompt_tokens)
+            : 0;
+          output_token_count = !isNaN(Number(usage.completion_tokens))
+            ? Number(usage.completion_tokens)
+            : 0;
+          cached_content_token_count = !isNaN(
+            Number(usage.cached_content_tokens),
+          )
+            ? Number(usage.cached_content_tokens)
+            : 0;
+          thoughts_token_count = !isNaN(Number(usage.thoughts_tokens))
+            ? Number(usage.thoughts_tokens)
+            : 0;
+          tool_token_count = !isNaN(Number(usage.tool_tokens))
+            ? Number(usage.tool_tokens)
+            : 0;
+          cache_read_input_tokens = !isNaN(
+            Number(usage.cache_read_input_tokens),
+          )
+            ? Number(usage.cache_read_input_tokens)
+            : 0;
+          cache_creation_input_tokens = !isNaN(
+            Number(usage.cache_creation_input_tokens),
+          )
+            ? Number(usage.cache_creation_input_tokens)
+            : 0;
         }
 
         // Check for anthropic-style headers
-        if (obj.headers && typeof obj.headers === 'object') {
+        if (obj.headers != null && typeof obj.headers === 'object') {
           const headers = obj.headers as Record<string, string>;
           if (headers['anthropic-input-tokens']) {
             const parsedValue = parseInt(headers['anthropic-input-tokens'], 10);
@@ -1250,12 +1281,12 @@ export class LoggingProviderWrapper implements IProvider {
       cacheReads: number;
       cacheWrites: number | null;
     } = {
-      input: tokenCounts.input_token_count || 0,
-      output: tokenCounts.output_token_count || 0,
-      cache: tokenCounts.cached_content_token_count || 0,
-      thought: tokenCounts.thoughts_token_count || 0,
-      tool: tokenCounts.tool_token_count || 0,
-      cacheReads: tokenCounts.cache_read_input_tokens || 0,
+      input: tokenCounts.input_token_count,
+      output: tokenCounts.output_token_count,
+      cache: tokenCounts.cached_content_token_count,
+      thought: tokenCounts.thoughts_token_count,
+      tool: tokenCounts.tool_token_count,
+      cacheReads: tokenCounts.cache_read_input_tokens ?? 0,
       cacheWrites:
         tokenCounts.cache_creation_input_tokens === undefined
           ? null
@@ -1289,7 +1320,7 @@ export class LoggingProviderWrapper implements IProvider {
 
   private resolveLoggingConfig(candidate?: unknown): Config | undefined {
     if (
-      candidate &&
+      candidate != null &&
       typeof candidate === 'object' &&
       'getConversationLoggingEnabled' in candidate &&
       typeof (candidate as { getConversationLoggingEnabled?: unknown })
@@ -1318,10 +1349,14 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Extract git stats from result metadata if available
       let gitStats = null;
-      if (result && typeof result === 'object' && 'metadata' in result) {
+      if (
+        result != null &&
+        typeof result === 'object' &&
+        'metadata' in result
+      ) {
         const metadata = (result as { metadata?: { gitStats?: unknown } })
           .metadata;
-        if (metadata?.gitStats) {
+        if (metadata?.gitStats != null) {
           gitStats = metadata.gitStats;
         }
       }
@@ -1343,7 +1378,7 @@ export class LoggingProviderWrapper implements IProvider {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
         params: redactedParams,
-        error: error ? String(error) : undefined,
+        error: error != null ? String(error) : undefined,
         result,
         duration,
         success,
@@ -1420,7 +1455,7 @@ export class LoggingProviderWrapper implements IProvider {
       );
 
       // Log tool call if logging is enabled and result has metadata
-      if (loggingConfig?.getConversationLoggingEnabled()) {
+      if (loggingConfig?.getConversationLoggingEnabled() === true) {
         await this.logToolCall(
           loggingConfig,
           toolName,
@@ -1434,7 +1469,7 @@ export class LoggingProviderWrapper implements IProvider {
       return result;
     } catch (error) {
       // Log failed tool call if logging is enabled
-      if (loggingConfig?.getConversationLoggingEnabled()) {
+      if (loggingConfig?.getConversationLoggingEnabled() === true) {
         await this.logToolCall(
           loggingConfig,
           toolName,
