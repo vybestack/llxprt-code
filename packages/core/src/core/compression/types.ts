@@ -24,6 +24,7 @@ import type { DebugLogger } from '../../debug/DebugLogger.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import type { PromptContext } from '../../prompt-config/types.js';
+import type { Config } from '../../config/config.js';
 
 // ---------------------------------------------------------------------------
 // Strategy trigger
@@ -130,6 +131,11 @@ export interface CompressionContext {
    * existing users.
    */
   readonly compressionVerification?: boolean;
+  /**
+   * Config object for bucket failover handling during compression LLM calls.
+   * Enables RetryOrchestrator to access getBucketFailoverHandler().
+   */
+  readonly config?: Config;
 }
 
 /**

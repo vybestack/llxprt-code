@@ -130,6 +130,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const { text: summary, usage: capturedUsage } = await this.callProvider(
       provider,
       compressionRequest,
+      context.config,
     );
 
     if (!summary.trim()) {
@@ -139,7 +140,11 @@ export class MiddleOutStrategy implements CompressionStrategy {
     // Optional verification pass — gated by compressionVerification flag (default off)
     let finalSummary = summary;
     if (context.compressionVerification) {
-      finalSummary = await runVerificationPass(provider, summary);
+      finalSummary = await runVerificationPass(
+        provider,
+        summary,
+        context.config,
+      );
     }
 
     // Assemble result
@@ -231,11 +236,13 @@ export class MiddleOutStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
+    config?: import('./types.js').CompressionContext['config'],
   ): Promise<{ text: string; usage?: UsageStats }> {
     try {
       const stream = provider.generateChatCompletion({
         contents: request,
         tools: undefined,
+        config,
       });
 
       let summary = '';

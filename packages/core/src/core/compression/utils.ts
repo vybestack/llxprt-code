@@ -265,10 +265,12 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
  *
  * @param provider - the provider to use for the verification call
  * @param initialSummary - the summary produced by the initial compression call
+ * @param config - optional config for bucket failover handling during verification
  */
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
+  config?: import('./types.js').CompressionContext['config'],
 ): Promise<string> {
   const verificationRequest: IContent[] = [
     COMPRESSION_SECURITY_PREAMBLE,
@@ -300,6 +302,7 @@ export async function runVerificationPass(
     const stream = provider.generateChatCompletion({
       contents: verificationRequest,
       tools: undefined,
+      config,
     });
 
     let verifiedText = '';
