@@ -884,36 +884,148 @@ included directory memory
       expect(result.files[0].content).toBe('Extension content');
     });
 
-    it('should NOT traverse upward beyond trusted root (even with .git)', async () => {
-      // Setup: /temp/parent/repo/.git
+    it('should traverse upward to project root when workspace is inside a git repo (same project)', async () => {
+      // Setup: /temp/parent/repo/.git (project root)
+      //         /temp/parent/repo/src/ as the trusted workspace (subdirectory)
       const parentDir = await createEmptyDir(path.join(testRootDir, 'parent'));
       const repoDir = await createEmptyDir(path.join(parentDir, 'repo'));
       await createEmptyDir(path.join(repoDir, '.git'));
       const srcDir = await createEmptyDir(path.join(repoDir, 'src'));
 
+      // Memory outside the git repo - should NOT be found
       await createTestFile(
         path.join(parentDir, DEFAULT_CONTEXT_FILENAME),
         'Parent content',
       );
-      await createTestFile(
+      // Memory at repo level (project root) - SHOULD be found via upward traversal
+      const repoFile = await createTestFile(
         path.join(repoDir, DEFAULT_CONTEXT_FILENAME),
         'Repo content',
       );
+      // Memory at src level - SHOULD be found
       const srcFile = await createTestFile(
         path.join(srcDir, DEFAULT_CONTEXT_FILENAME),
         'Src content',
       );
 
-      // Trust srcDir. Should ONLY load srcFile.
-      // Repo and Parent are NOT trusted.
+      // Trust srcDir. Should load srcFile AND repoFile (same project via upward traversal)
+      // Parent is outside the git repo and should NOT be loaded.
       const result = await loadEnvironmentMemory(
         [srcDir],
         new SimpleExtensionLoader([]),
       );
 
-      expect(result.files).toHaveLength(1);
-      expect(result.files[0].path).toBe(srcFile);
-      expect(result.files[0].content).toBe('Src content');
+      // Should find both src and repo memories (repo is project root via .git)
+      expect(result.files).toHaveLength(2);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(srcFile);
+      expect(paths).toContain(repoFile);
+      // Parent should NOT be included (outside git boundary)
+      expect(paths).not.toContain(
+        path.join(parentDir, DEFAULT_CONTEXT_FILENAME),
+      );
+    });
+
+    it('should traverse upward to project root when workspace is a subdirectory of a git repo', async () => {
+      // Setup: /temp/repo/.git with memory at repo level
+      //         /temp/repo/src/ as the trusted workspace (subdirectory)
+      const repoDir = await createEmptyDir(path.join(testRootDir, 'repo'));
+      await createEmptyDir(path.join(repoDir, '.git')); // Marks project root
+      const srcDir = await createEmptyDir(path.join(repoDir, 'src'));
+
+      // Memory file at git root level
+      const repoFile = await createTestFile(
+        path.join(repoDir, DEFAULT_CONTEXT_FILENAME),
+        'Repo root memory',
+      );
+      // Memory file at workspace (src) level
+      const srcFile = await createTestFile(
+        path.join(srcDir, DEFAULT_CONTEXT_FILENAME),
+        'Src directory memory',
+      );
+
+      // Trust the srcDir (subdirectory), but should also find repo memory via upward traversal
+      const result = await loadEnvironmentMemory(
+        [srcDir],
+        new SimpleExtensionLoader([]),
+      );
+
+      // Should find BOTH the src memory AND the repo root memory (via upward traversal)
+      expect(result.files).toHaveLength(2);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(repoFile);
+      expect(paths).toContain(srcFile);
+    });
+
+    it('should traverse upward to project root discovering .llxprt/ subdirectory memory files', async () => {
+      // Setup: /temp/repo/.git with .llxprt/LLXPRT.md at repo level
+      //         /temp/repo/packages/app/ as the trusted workspace
+      const repoDir = await createEmptyDir(path.join(testRootDir, 'repo'));
+      await createEmptyDir(path.join(repoDir, '.git'));
+      const packagesDir = await createEmptyDir(path.join(repoDir, 'packages'));
+      const appDir = await createEmptyDir(path.join(packagesDir, 'app'));
+
+      // Memory file at git root level in .llxprt/ subdirectory
+      const repoLlxprtFile = await createTestFile(
+        path.join(repoDir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Repo .llxprt memory',
+      );
+      // Memory file at app level
+      const appFile = await createTestFile(
+        path.join(appDir, DEFAULT_CONTEXT_FILENAME),
+        'App directory memory',
+      );
+
+      // Trust the appDir (deep subdirectory), should find both memories via upward traversal
+      const result = await loadEnvironmentMemory(
+        [appDir],
+        new SimpleExtensionLoader([]),
+      );
+
+      expect(result.files).toHaveLength(2);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(repoLlxprtFile);
+      expect(paths).toContain(appFile);
+    });
+
+    it('should stop traversal at project root (.git boundary) and not go beyond', async () => {
+      // Setup: /temp/parent/ (no .git)
+      //         /temp/parent/repo/.git (project root)
+      //         /temp/parent/repo/src/ as the trusted workspace
+      const parentDir = await createEmptyDir(path.join(testRootDir, 'parent'));
+      const repoDir = await createEmptyDir(path.join(parentDir, 'repo'));
+      await createEmptyDir(path.join(repoDir, '.git'));
+      const srcDir = await createEmptyDir(path.join(repoDir, 'src'));
+
+      // Memory at parent level (outside git repo) - should NOT be found
+      await createTestFile(
+        path.join(parentDir, DEFAULT_CONTEXT_FILENAME),
+        'Parent memory',
+      );
+      // Memory at repo level - should be found
+      const repoFile = await createTestFile(
+        path.join(repoDir, DEFAULT_CONTEXT_FILENAME),
+        'Repo memory',
+      );
+      // Memory at src level - should be found
+      const srcFile = await createTestFile(
+        path.join(srcDir, DEFAULT_CONTEXT_FILENAME),
+        'Src memory',
+      );
+
+      const result = await loadEnvironmentMemory(
+        [srcDir],
+        new SimpleExtensionLoader([]),
+      );
+
+      // Should only find repo and src memories, NOT parent memory
+      expect(result.files).toHaveLength(2);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(repoFile);
+      expect(paths).toContain(srcFile);
+      expect(paths).not.toContain(
+        path.join(parentDir, DEFAULT_CONTEXT_FILENAME),
+      );
     });
 
     it('should NOT traverse upward beyond trusted root (no .git)', async () => {
