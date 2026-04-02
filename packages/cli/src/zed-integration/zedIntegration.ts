@@ -8,6 +8,7 @@ import {
   type Config,
   type ContentGeneratorConfig,
   type GeminiChat,
+  type GeminiClient,
   logToolCall,
   type ToolResult,
   convertToFunctionResponse,
@@ -109,7 +110,9 @@ export async function runZedIntegration(
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
-    await connection.closed.finally(runExitCleanup);
+    await connection.closed.finally(() => {
+      void runExitCleanup();
+    });
   } catch (e) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
     throw e;
@@ -242,16 +245,19 @@ export class GeminiAgent {
       }
 
       // Try to get the client and check if it's properly initialized
-      let geminiClient = sessionConfig.getGeminiClient();
+      // getGeminiClient() uses definite-assignment assertion (`!:`) so the
+      // field may actually be undefined at runtime before authentication.
+      let geminiClient: GeminiClient | undefined =
+        sessionConfig.getGeminiClient() as GeminiClient | undefined;
       const hasContentGeneratorConfig =
         sessionConfig.getContentGeneratorConfig() !== undefined;
 
       this.logger.debug(
         () =>
-          `GeminiClient exists: ${!!geminiClient}, ContentGeneratorConfig exists: ${hasContentGeneratorConfig}`,
+          `GeminiClient exists: ${geminiClient != null}, ContentGeneratorConfig exists: ${hasContentGeneratorConfig}`,
       );
 
-      if (!geminiClient || !hasContentGeneratorConfig) {
+      if (geminiClient == null || !hasContentGeneratorConfig) {
         this.logger.debug(
           () => 'GeminiClient not available - attempting auto-authentication',
         );
@@ -261,13 +267,14 @@ export class GeminiAgent {
 
         // Debug provider state
         if (providerManager != null) {
+          const pm = providerManager;
           this.logger.debug(
             () =>
-              `ProviderManager exists: ${providerManager?.hasActiveProvider?.() ? 'has active provider' : 'no active provider'}`,
+              `ProviderManager exists: ${pm.hasActiveProvider() === true ? 'has active provider' : 'no active provider'}`,
           );
           this.logger.debug(
             () =>
-              `Active provider name: ${providerManager?.getActiveProviderName?.() || 'none'}`,
+              `Active provider name: ${pm.getActiveProviderName() ?? 'none'}`,
           );
         } else {
           this.logger.debug(() => 'No ProviderManager available');
@@ -275,7 +282,7 @@ export class GeminiAgent {
 
         // Check for provider from config (loaded from profile or CLI)
         const configProvider = sessionConfig.getProvider();
-        let hasActiveProvider = providerManager?.hasActiveProvider?.() ?? false;
+        let hasActiveProvider = providerManager?.hasActiveProvider() ?? false;
 
         if (configProvider) {
           this.logger.debug(() => `Config has provider: ${configProvider}`);
@@ -290,7 +297,7 @@ export class GeminiAgent {
             const result = await switchActiveProvider(configProvider);
             providerManager = sessionConfig.getProviderManager();
             hasActiveProvider =
-              providerManager?.hasActiveProvider?.() ?? result.changed;
+              providerManager?.hasActiveProvider() ?? result.changed;
             if (result.infoMessages.length > 0) {
               for (const info of result.infoMessages) {
                 this.logger.debug(() => `[zed-integration] ${info}`);
@@ -304,7 +311,10 @@ export class GeminiAgent {
           }
         }
 
-        if (!hasActiveProvider && providerManager?.hasActiveProvider?.()) {
+        if (
+          !hasActiveProvider &&
+          providerManager?.hasActiveProvider() === true
+        ) {
           hasActiveProvider = true;
         }
 
@@ -350,8 +360,8 @@ export class GeminiAgent {
               }
 
               const mergedModelParams = {
-                ...(configWithProfile._profileModelParams || {}),
-                ...(configWithProfile._cliModelParams || {}),
+                ...configWithProfile._profileModelParams,
+                ...(configWithProfile._cliModelParams ?? {}),
               };
               const existingParams = getActiveModelParams();
 
@@ -368,7 +378,7 @@ export class GeminiAgent {
           }
         }
 
-        if (providerManager?.hasActiveProvider()) {
+        if (providerManager?.hasActiveProvider() === true) {
           // Use provider-based auth if a provider is configured
           this.logger.debug(
             () =>
@@ -420,8 +430,10 @@ export class GeminiAgent {
           await sessionConfig.refreshAuth('oauth');
         }
 
-        geminiClient = sessionConfig.getGeminiClient();
-        if (!geminiClient) {
+        geminiClient = sessionConfig.getGeminiClient() as
+          | GeminiClient
+          | undefined;
+        if (geminiClient == null) {
           throw new Error(
             'Failed to authenticate. Please ensure valid credentials are available.',
           );
@@ -440,7 +452,7 @@ export class GeminiAgent {
         if (contentGenConfig != null) {
           this.logger.debug(
             () =>
-              `ContentGeneratorConfig has providerManager: ${!!(contentGenConfig as Record<string, unknown>).providerManager}`,
+              `ContentGeneratorConfig has providerManager: ${(contentGenConfig as Record<string, unknown>).providerManager != null}`,
           );
         }
       } catch (error) {
@@ -474,7 +486,7 @@ export class GeminiAgent {
           );
 
           const providerManager = sessionConfig.getProviderManager();
-          if (providerManager?.hasActiveProvider()) {
+          if (providerManager?.hasActiveProvider() === true) {
             await sessionConfig.refreshAuth('provider');
           } else {
             await sessionConfig.refreshAuth('oauth');
@@ -552,7 +564,8 @@ export class Session {
         | 'allowed'
         | 'auto'
         | 'warn'
-        | 'error') || 'auto';
+        | 'error'
+        | undefined) ?? 'auto';
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
 
@@ -607,7 +620,7 @@ export class Session {
       try {
         const responseStream = await chat.sendMessageStream(
           {
-            message: nextMessage?.parts ?? [],
+            message: nextMessage.parts ?? [],
             config: {
               abortSignal: pendingSend.signal,
             },
@@ -650,9 +663,7 @@ export class Session {
         };
 
         const scheduleBatchFlush = () => {
-          if (batchTimer === null) {
-            batchTimer = setTimeout(flushBatch, BATCH_INTERVAL_MS);
-          }
+          batchTimer ??= setTimeout(flushBatch, BATCH_INTERVAL_MS);
         };
 
         for await (const resp of responseStream) {
@@ -698,7 +709,7 @@ export class Session {
                 continue;
               }
 
-              if (part.thought) {
+              if (part.thought === true) {
                 pendingThought += filteredText;
               } else {
                 pendingText += filteredText;
@@ -745,6 +756,7 @@ export class Session {
 
         for (const fc of functionCalls) {
           // Check for cancellation before each tool execution
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- aborted is a live getter that changes between await points
           if (pendingSend.signal.aborted) {
             // Return cancellation without polluting conversation history
             // Tool execution cancellation should be handled by the tool execution system
@@ -892,7 +904,7 @@ export class Session {
       const confirmationDetails =
         await invocation.shouldConfirmExecute(abortSignal);
 
-      if (confirmationDetails) {
+      if (confirmationDetails !== false) {
         const content: acp.ToolCallContent[] = [];
 
         if (confirmationDetails.type === 'edit') {
@@ -928,7 +940,7 @@ export class Session {
             .nativeEnum(ToolConfirmationOutcome)
             .parse(output.outcome.optionId);
           const editedCommand = output.outcome.payload?.editedCommand?.trim();
-          if (editedCommand) {
+          if (editedCommand != null && editedCommand !== '') {
             payload = { editedCommand };
           }
         }
@@ -1058,7 +1070,7 @@ export class Session {
   private extractTextFromPartList(
     llmContent: PartListUnion | undefined,
   ): string | null {
-    if (!llmContent) {
+    if (llmContent == null) {
       return null;
     }
 
