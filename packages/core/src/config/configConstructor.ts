@@ -79,6 +79,7 @@ export interface ConfigConstructorTarget {
 
   // Core identity and workspace
   sessionId: string;
+  cliVersion: string | undefined;
   embeddingModel: string | undefined;
   fileSystemService: FileSystemService;
   sandbox: SandboxConfig | undefined;
@@ -224,6 +225,7 @@ function applyCoreIdentity(
   params: ConfigParameters,
 ): void {
   config.sessionId = params.sessionId;
+  config.cliVersion = params.cliVersion;
   config.embeddingModel = params.embeddingModel;
   config.fileSystemService = new StandardFileSystemService();
   config.sandbox = params.sandbox;

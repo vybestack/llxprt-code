@@ -51,7 +51,7 @@ export enum ApprovalMode {
 }
 
 export interface AccessibilitySettings {
-  disableLoadingPhrases?: boolean;
+  enableLoadingPhrases?: boolean;
   screenReader?: boolean;
 }
 
@@ -310,6 +310,11 @@ export interface BucketFailoverHandler {
 
 export interface ConfigParameters {
   sessionId: string;
+  /**
+   * Optional CLI version string. When provided, this will be passed to
+   * McpClientManager for client identification with MCP servers.
+   */
+  cliVersion?: string;
   embeddingModel?: string;
   sandbox?: SandboxConfig;
   targetDir: string;

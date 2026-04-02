@@ -38,6 +38,7 @@ import { resolveProviderAndModel } from './providerModelResolver.js';
 import { buildConfig } from './configBuilder.js';
 import { finalizeConfig } from './postConfigRuntime.js';
 import { resolveIntermediateConfig } from './intermediateConfig.js';
+import { getCliVersion } from '../utils/version.js';
 
 import type { ContextResolutionResult } from './interactiveContext.js';
 
@@ -170,6 +171,7 @@ export async function loadCliConfig(
 
   const config = buildConfig({
     sessionId,
+    cliVersion: await getCliVersion(),
     cwd,
     argv,
     profileSettingsWithTools: intermediate.profileSettingsWithTools,

@@ -123,7 +123,7 @@ export class Config extends ConfigBase {
     this.resourceRegistry = new ResourceRegistry();
     this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
     this.mcpClientManager = new McpClientManager(
-      await getCoreVersion(),
+      this.cliVersion ?? (await getCoreVersion()),
       this.toolRegistry,
       this,
       this.eventEmitter,

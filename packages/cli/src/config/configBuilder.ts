@@ -27,6 +27,7 @@ import type { ProviderModelResult } from './providerModelResolver.js';
 
 export interface ConfigBuildInput {
   readonly sessionId: string;
+  readonly cliVersion?: string;
   readonly cwd: string;
   readonly argv: CliArgs;
   readonly profileSettingsWithTools: Settings;

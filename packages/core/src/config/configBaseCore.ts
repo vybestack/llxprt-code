@@ -76,6 +76,7 @@ export abstract class ConfigBaseCore {
   protected fileSystemService!: FileSystemService;
   protected contentGeneratorConfig!: ContentGeneratorConfig;
   protected readonly embeddingModel: string | undefined;
+  protected readonly cliVersion: string | undefined;
   protected readonly sandbox: SandboxConfig | undefined;
   protected readonly targetDir!: string;
   protected workspaceContext!: WorkspaceContext;
