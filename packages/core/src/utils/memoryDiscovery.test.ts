@@ -1028,6 +1028,42 @@ included directory memory
       );
     });
 
+    it('should traverse upward when .git is a file (worktree/submodule)', async () => {
+      // Setup: /temp/repo/.git as a file (like git worktree or submodule)
+      //         /temp/repo/src/ as the trusted workspace
+      const repoDir = await createEmptyDir(
+        path.join(testRootDir, 'worktree-repo'),
+      );
+      // Create .git as a file (not directory) - simulates worktree/submodule
+      await createTestFile(
+        path.join(repoDir, '.git'),
+        'gitdir: /path/to/main/repo/.git/worktrees/foo',
+      );
+      const srcDir = await createEmptyDir(path.join(repoDir, 'src'));
+
+      // Memory at repo level - SHOULD be found even though .git is a file
+      const repoFile = await createTestFile(
+        path.join(repoDir, DEFAULT_CONTEXT_FILENAME),
+        'Worktree repo memory',
+      );
+      // Memory at src level - SHOULD be found
+      const srcFile = await createTestFile(
+        path.join(srcDir, DEFAULT_CONTEXT_FILENAME),
+        'Src memory',
+      );
+
+      const result = await loadEnvironmentMemory(
+        [srcDir],
+        new SimpleExtensionLoader([]),
+      );
+
+      // Should find both src and repo memories (repo is project root via .git file)
+      expect(result.files).toHaveLength(2);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(repoFile);
+      expect(paths).toContain(srcFile);
+    });
+
     it('should NOT traverse upward beyond trusted root (no .git)', async () => {
       // Setup: /homedir/docs/notes (no .git anywhere)
       const docsDir = await createEmptyDir(path.join(homedir, 'docs'));
