@@ -133,7 +133,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
-    return this.params.dir_path || this.params.directory;
+    return this.params.dir_path ?? this.params.directory;
   }
 
   override getDescription(): string {
@@ -240,10 +240,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
     setPidCallback?: (pid: number) => void,
   ): Promise<ToolResult> {
     // Validate filtering parameters
-    if (this.params.head_lines) {
+    if (this.params.head_lines != null) {
       validatePositiveInteger(this.params.head_lines, 'head_lines');
     }
-    if (this.params.tail_lines) {
+    if (this.params.tail_lines != null) {
       validatePositiveInteger(this.params.tail_lines, 'tail_lines');
     }
     if (this.params.grep_pattern) {
@@ -320,7 +320,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       const cwd = path.resolve(
         this.config.getTargetDir(),
-        this.getDirPath() || '',
+        this.getDirPath() ?? '',
       );
 
       let cumulativeOutput: string | AnsiOutput = '';
@@ -384,7 +384,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       // offer Ctrl+F interactive shell focus while the process is running.
       const pid = executionResult.pid;
       if (
-        pid &&
+        pid != null &&
         setPidCallback != null &&
         this.config.getShouldUseNodePtyShell() &&
         ShellExecutionService.isActivePty(pid)
@@ -396,7 +396,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       const backgroundPIDs: number[] = [];
       let pgid: number | null = null;
-      if (os.platform() !== 'win32' && result) {
+      if (os.platform() !== 'win32') {
         if (fs.existsSync(tempFilePath)) {
           const pgrepLines = fs
             .readFileSync(tempFilePath, 'utf8')
@@ -408,7 +408,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
               continue;
             }
             const pid = Number(line);
-            if (result.pid && pid !== result.pid) {
+            if (result.pid != null && pid !== result.pid) {
               backgroundPIDs.push(pid);
             }
           }
@@ -433,24 +433,19 @@ export class ShellToolInvocation extends BaseToolInvocation<
         }
       }
 
-      const rawOutput = result?.output ?? '';
+      const rawOutput = result.output;
       const filterInfo = applyOutputFilters(rawOutput, this.params);
       const filteredOutput = filterInfo.content;
 
       let llmContent = '';
       let returnDisplayMessage = '';
 
-      if (!result) {
-        llmContent = 'Command failed to execute.';
-        if (this.config.getDebugMode()) {
-          returnDisplayMessage = llmContent;
-        }
-      } else if (result.aborted) {
+      if (result.aborted) {
         const timeoutTriggered =
           timeoutController.signal.aborted && !signal.aborted;
         if (timeoutTriggered) {
           llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
-          if (rawOutput?.trim()) {
+          if (rawOutput.trim() !== '') {
             llmContent += ` Partial output:\n${rawOutput}`;
           } else {
             llmContent += ' There was no output before timeout.';
@@ -460,7 +455,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent =
             'Command was cancelled by user before it could complete.';
-          if (rawOutput?.trim()) {
+          if (rawOutput.trim() !== '') {
             llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
           } else {
             llmContent += ' There was no output before it was cancelled.';

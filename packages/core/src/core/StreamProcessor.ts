@@ -101,7 +101,7 @@ export class StreamProcessor {
       () => '[StreamProcessor] Active provider snapshot before stream request',
       {
         providerName: provider.name,
-        providerDefaultModel: provider.getDefaultModel?.(),
+        providerDefaultModel: provider.getDefaultModel(),
         configModel: this.runtimeContext.state.model,
         baseUrl: providerBaseUrl,
       },
@@ -181,8 +181,8 @@ export class StreamProcessor {
     );
 
     // Trigger BeforeModel hook for streaming path
-    if (configForHooks?.getEnableHooks?.()) {
-      const hookSystem = configForHooks.getHookSystem?.();
+    if (configForHooks?.getEnableHooks() === true) {
+      const hookSystem = configForHooks.getHookSystem();
       if (hookSystem) {
         await hookSystem.initialize();
         const beforeModelResult = await hookSystem.fireBeforeModelEvent({
@@ -190,7 +190,7 @@ export class StreamProcessor {
           tools: tools as ProviderToolset | undefined,
         });
 
-        if (beforeModelResult?.shouldStopExecution()) {
+        if (beforeModelResult?.shouldStopExecution() === true) {
           throw new AgentExecutionStoppedError(
             beforeModelResult.getEffectiveReason() ||
               'Execution stopped by BeforeModel hook',
@@ -198,11 +198,11 @@ export class StreamProcessor {
           );
         }
 
-        if (beforeModelResult?.isBlockingDecision()) {
+        if (beforeModelResult?.isBlockingDecision() === true) {
           let syntheticResponse = beforeModelResult.getSyntheticResponse();
           if (syntheticResponse) {
             const candidate = syntheticResponse.candidates?.[0];
-            if (candidate && !candidate.finishReason) {
+            if (candidate !== undefined && candidate.finishReason == null) {
               syntheticResponse = {
                 ...syntheticResponse,
                 candidates: [
@@ -227,7 +227,10 @@ export class StreamProcessor {
               model: this.runtimeContext.state.model || '',
               contents: ContentConverters.toGeminiContents(requestContents),
             });
-          if (modifiedRequest?.contents) {
+          if (
+            Array.isArray(modifiedRequest.contents) &&
+            modifiedRequest.contents.length > 0
+          ) {
             requestContents = ContentConverters.toIContents(
               modifiedRequest.contents as Content[],
             );
@@ -268,7 +271,7 @@ export class StreamProcessor {
         runtime: runtimeContext,
         settings: runtimeContext.settingsService,
         metadata: runtimeContext.metadata,
-        userMemory: baseRuntimeContext.config?.getUserMemory?.(),
+        userMemory: baseRuntimeContext.config?.getUserMemory(),
       } as GenerateChatOptions);
 
       return this._convertIContentStream(streamResponse, requestPayload, {
@@ -294,11 +297,11 @@ export class StreamProcessor {
     tools: GenerateContentConfig['tools'],
   ): Promise<GenerateContentConfig['tools']> {
     const toolsFromConfig = tools as ToolGroupArray | undefined;
-    if (!toolsFromConfig || !configForHooks?.getEnableHooks?.()) {
+    if (toolsFromConfig == null || configForHooks?.getEnableHooks() !== true) {
       return tools;
     }
 
-    const hookSystem = configForHooks.getHookSystem?.();
+    const hookSystem = configForHooks.getHookSystem();
     if (!hookSystem) {
       return tools;
     }
@@ -315,15 +318,15 @@ export class StreamProcessor {
       'allowedFunctionNames' in modifiedConfig.toolConfig
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
-      if (allowedFunctions?.length) {
+      if (allowedFunctions != null && allowedFunctions.length > 0) {
         return toolsFromConfig
           .map((toolGroup) => ({
             ...toolGroup,
-            functionDeclarations: toolGroup.functionDeclarations?.filter((fn) =>
+            functionDeclarations: toolGroup.functionDeclarations.filter((fn) =>
               allowedFunctions.includes(fn.name),
             ),
           }))
-          .filter((g) => g.functionDeclarations?.length) as ToolGroupArray;
+          .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
       }
     }
 
@@ -354,7 +357,7 @@ export class StreamProcessor {
   private async _handleBucketFailover(): Promise<boolean | null> {
     const failoverHandler =
       this.runtimeContext.providerRuntime.config?.getBucketFailoverHandler();
-    if (!failoverHandler?.isEnabled()) return null;
+    if (failoverHandler?.isEnabled() !== true) return null;
 
     this.logger.debug(() => 'Attempting bucket failover on persistent 429');
     const success = await failoverHandler.tryFailover();
@@ -396,9 +399,9 @@ export class StreamProcessor {
       const promptTokens = iContent.metadata?.usage?.promptTokens;
       if (promptTokens !== undefined) {
         const cacheReads =
-          iContent.metadata?.usage?.cache_read_input_tokens || 0;
+          iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
         const cacheWrites =
-          iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+          iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
         const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
         this.logger.debug(
           () =>
@@ -413,8 +416,8 @@ export class StreamProcessor {
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
-      if (hookConfig?.getEnableHooks?.()) {
-        const hookSystem = hookConfig.getHookSystem?.();
+      if (hookConfig?.getEnableHooks() === true) {
+        const hookSystem = hookConfig.getHookSystem();
         if (hookSystem) {
           if (!hookSystem.isInitialized()) {
             await hookSystem.initialize();
@@ -424,7 +427,7 @@ export class StreamProcessor {
             iContent,
           );
 
-          if (afterModelResult?.shouldStopExecution()) {
+          if (afterModelResult?.shouldStopExecution() === true) {
             throw new AgentExecutionStoppedError(
               afterModelResult.getEffectiveReason() ||
                 'Execution stopped by AfterModel hook',
@@ -432,9 +435,9 @@ export class StreamProcessor {
             );
           }
 
-          if (afterModelResult?.isBlockingDecision()) {
+          if (afterModelResult?.isBlockingDecision() === true) {
             const modifiedResponse = afterModelResult.getModifiedResponse();
-            const syntheticResponse = modifiedResponse || convertedChunk;
+            const syntheticResponse = modifiedResponse ?? convertedChunk;
             throw new AgentExecutionBlockedError(
               afterModelResult.getEffectiveReason() ||
                 'Execution blocked by AfterModel hook',
@@ -495,8 +498,8 @@ export class StreamProcessor {
 
     for await (const chunk of streamResponse) {
       // Track finish reason
-      const candidateWithReason = chunk?.candidates?.find(
-        (c) => c.finishReason,
+      const candidateWithReason = chunk.candidates?.find(
+        (c) => c.finishReason != null,
       );
       if (candidateWithReason)
         finishReason = candidateWithReason.finishReason as FinishReason;
@@ -509,7 +512,7 @@ export class StreamProcessor {
           if (
             parts.some(
               (p) =>
-                p.text &&
+                p.text !== undefined &&
                 typeof p.text === 'string' &&
                 p.text.trim() !== '' &&
                 !isThoughtPart(p),
@@ -518,7 +521,9 @@ export class StreamProcessor {
             hasTextResponse = true;
           if (parts.some((p) => isThoughtPart(p))) hasThinkingResponse = true;
           modelResponseParts.push(
-            ...(includeThoughts ? parts : parts.filter((p) => !p.thought)),
+            ...(includeThoughts
+              ? parts
+              : parts.filter((p) => p.thought !== true)),
           );
         }
       }
@@ -528,8 +533,8 @@ export class StreamProcessor {
         const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
         this.compressionHandler.lastPromptTokenCount =
           chunk.usageMetadata.promptTokenCount +
-          (chunkUsage.cache_read_input_tokens || 0) +
-          (chunkUsage.cache_creation_input_tokens || 0);
+          (chunkUsage.cache_read_input_tokens ?? 0) +
+          (chunkUsage.cache_creation_input_tokens ?? 0);
       }
       allChunks.push(chunk);
 
@@ -541,7 +546,7 @@ export class StreamProcessor {
     const consolidatedParts = this._consolidateTextParts(modelResponseParts);
     const responseText = this._extractResponseText(consolidatedParts);
 
-    if (!finishReason) {
+    if (finishReason == null) {
       this.logger.debug(
         () =>
           `[stream:terminal] stream ended without finishReason (hasToolCall=${String(hasToolCall)}, hasTextResponse=${String(hasTextResponse)}, hasThinkingResponse=${String(hasThinkingResponse)}, responseTextLength=${responseText.length})`,
@@ -568,7 +573,7 @@ export class StreamProcessor {
     for (const part of modelResponseParts) {
       const lastPart = consolidatedParts[consolidatedParts.length - 1];
       if (
-        lastPart?.text &&
+        lastPart.text !== undefined &&
         isValidNonThoughtTextPart(lastPart) &&
         isValidNonThoughtTextPart(part)
       ) {
@@ -620,9 +625,9 @@ export class StreamProcessor {
       !hasToolCall &&
       !isToolContinuationInput &&
       !hasThinkingResponse &&
-      ((!finishReason && !hasTextResponse) || !responseText)
+      ((finishReason == null && !hasTextResponse) || !responseText)
     ) {
-      if (!finishReason && !hasTextResponse) {
+      if (finishReason == null && !hasTextResponse) {
         throw new InvalidStreamError(
           'Model stream ended without a finish reason and no text response.',
           'NO_FINISH_REASON_NO_TEXT',
@@ -667,15 +672,15 @@ export class StreamProcessor {
       .find((chunk) => chunk.usageMetadata);
     if (lastChunkWithMetadata?.usageMetadata) {
       streamingUsageMetadata = {
-        promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount || 0,
+        promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount ?? 0,
         completionTokens:
-          lastChunkWithMetadata.usageMetadata.candidatesTokenCount || 0,
-        totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount || 0,
+          lastChunkWithMetadata.usageMetadata.candidatesTokenCount ?? 0,
+        totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount ?? 0,
       };
       const usageMetadata =
         lastChunkWithMetadata.usageMetadata as UsageMetadataWithCache;
-      const cacheReads = usageMetadata.cache_read_input_tokens || 0;
-      const cacheWrites = usageMetadata.cache_creation_input_tokens || 0;
+      const cacheReads = usageMetadata.cache_read_input_tokens ?? 0;
+      const cacheWrites = usageMetadata.cache_creation_input_tokens ?? 0;
       actualPromptTokens =
         streamingUsageMetadata.promptTokens + cacheReads + cacheWrites;
     }
@@ -693,7 +698,7 @@ export class StreamProcessor {
 
     // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
     // Use explicit check for undefined to allow 0 values
-    if (actualPromptTokens !== null && actualPromptTokens != undefined) {
+    if (actualPromptTokens !== null) {
       if (actualPromptTokens > 0) {
         this.logger.debug(
           () =>

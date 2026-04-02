@@ -70,27 +70,16 @@ export class ToolFormatter implements IToolFormatter {
     if (this.logger.enabled) {
       this.logger.debug(() => `convertGeminiToOpenAI input:`, {
         toolGroupCount: geminiTools.length,
-        hasFirstGroup: !!geminiTools[0],
+        hasFirstGroup: geminiTools.length > 0,
         firstGroupFunctionCount:
-          geminiTools[0]?.functionDeclarations?.length || 0,
+          geminiTools[0]?.functionDeclarations?.length ?? 0,
       });
     }
 
     const openAITools = geminiTools.flatMap((toolGroup) => {
       // Add safety check for malformed tool groups
-      if (
-        !toolGroup?.functionDeclarations ||
-        !Array.isArray(toolGroup.functionDeclarations)
-      ) {
-        this.logger.warn(
-          () => `convertGeminiToOpenAI: Skipping malformed tool group`,
-          { toolGroup },
-        );
-        return [];
-      }
-
       return toolGroup.functionDeclarations.map((decl) => {
-        if (!decl.parametersJsonSchema) {
+        if (decl.parametersJsonSchema == null) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -104,7 +93,7 @@ export class ToolFormatter implements IToolFormatter {
           type: 'function' as const,
           function: {
             name: decl.name,
-            description: decl.description || '',
+            description: decl.description ?? '',
             parameters: convertedParams,
           },
         };
@@ -117,8 +106,8 @@ export class ToolFormatter implements IToolFormatter {
           `Converted ${openAITools.length} tools from Gemini to OpenAI format`,
         {
           toolNames: openAITools.map((t) => t.function.name),
-          hasFirstTool: !!openAITools[0],
-          firstToolName: openAITools[0]?.function?.name,
+          hasFirstTool: openAITools.length > 0,
+          firstToolName: openAITools[0]?.function.name,
         },
       );
     }
@@ -150,7 +139,7 @@ export class ToolFormatter implements IToolFormatter {
 
     const anthropicTools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
-        if (!decl.parametersJsonSchema) {
+        if (decl.parametersJsonSchema == null) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -164,7 +153,7 @@ export class ToolFormatter implements IToolFormatter {
 
         return {
           name: decl.name,
-          description: decl.description || '',
+          description: decl.description ?? '',
           input_schema: {
             type: 'object' as const,
             ...convertedParams,
@@ -179,7 +168,7 @@ export class ToolFormatter implements IToolFormatter {
           `Converted ${anthropicTools.length} tools from Gemini to Anthropic format`,
         {
           toolNames: anthropicTools.map((t) => t.name),
-          hasFirstTool: !!anthropicTools[0],
+          hasFirstTool: anthropicTools.length > 0,
         },
       );
     }
@@ -231,15 +220,8 @@ export class ToolFormatter implements IToolFormatter {
 
     // For other formats, convert to ITool first then use toProviderFormat
     const itools = geminiTools.flatMap((toolGroup) => {
-      if (
-        !toolGroup?.functionDeclarations ||
-        !Array.isArray(toolGroup.functionDeclarations)
-      ) {
-        return [];
-      }
-
       return toolGroup.functionDeclarations.map((decl) => {
-        if (!decl.parametersJsonSchema) {
+        if (decl.parametersJsonSchema == null) {
           throw new Error(
             `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
               `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
@@ -249,7 +231,7 @@ export class ToolFormatter implements IToolFormatter {
           type: 'function' as const,
           function: {
             name: decl.name,
-            description: decl.description || '',
+            description: decl.description ?? '',
             parameters: decl.parametersJsonSchema,
           },
         };
@@ -264,14 +246,17 @@ export class ToolFormatter implements IToolFormatter {
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
   convertGeminiSchemaToStandard(schema: unknown): unknown {
-    if (!schema || typeof schema !== 'object') {
+    if (schema == null || typeof schema !== 'object') {
       return schema;
     }
 
     const newSchema: Record<string, unknown> = { ...schema };
 
     // Handle properties
-    if (newSchema.properties && typeof newSchema.properties === 'object') {
+    if (
+      newSchema.properties != null &&
+      typeof newSchema.properties === 'object'
+    ) {
       const newProperties: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(newSchema.properties)) {
         newProperties[key] = this.convertGeminiSchemaToStandard(value);
@@ -280,7 +265,7 @@ export class ToolFormatter implements IToolFormatter {
     }
 
     // Handle items
-    if (newSchema.items) {
+    if (newSchema.items != null) {
       if (Array.isArray(newSchema.items)) {
         newSchema.items = newSchema.items.map((item) =>
           this.convertGeminiSchemaToStandard(item),
@@ -291,25 +276,28 @@ export class ToolFormatter implements IToolFormatter {
     }
 
     // Convert type from UPPERCASE enum to lowercase string
-    if (newSchema.type) {
+    if (newSchema.type != null) {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
 
     // Ensure required is always present for object types
     // This is critical for some models like K2 to use structured function calls
     // instead of falling back to text-based tool call format
-    if (newSchema.type === 'object' && !newSchema.required) {
+    if (newSchema.type === 'object' && newSchema.required == null) {
       newSchema.required = [];
     }
 
     // Convert enum values if present (they should remain as-is)
     // But ensure they're arrays of strings, not some other type
-    if (newSchema.enum && Array.isArray(newSchema.enum)) {
+    if (newSchema.enum != null && Array.isArray(newSchema.enum)) {
       newSchema.enum = newSchema.enum.map((v) => String(v));
     }
 
     // Convert minLength from string to number if present
-    if (newSchema.minLength && typeof newSchema.minLength === 'string') {
+    if (
+      newSchema.minLength != null &&
+      typeof newSchema.minLength === 'string'
+    ) {
       const minLengthNum = parseInt(newSchema.minLength, 10);
       if (!isNaN(minLengthNum)) {
         newSchema.minLength = minLengthNum;
@@ -319,7 +307,10 @@ export class ToolFormatter implements IToolFormatter {
     }
 
     // Convert maxLength from string to number if present
-    if (newSchema.maxLength && typeof newSchema.maxLength === 'string') {
+    if (
+      newSchema.maxLength != null &&
+      typeof newSchema.maxLength === 'string'
+    ) {
       const maxLengthNum = parseInt(newSchema.maxLength, 10);
       if (!isNaN(maxLengthNum)) {
         newSchema.maxLength = maxLengthNum;
@@ -339,6 +330,8 @@ export class ToolFormatter implements IToolFormatter {
       case 'deepseek': // DeepSeek uses same format as OpenAI for now
       case 'qwen': // Qwen uses same format as OpenAI for now
       case 'kimi': // Kimi K2 uses same format as OpenAI
+      case 'mistral': // Mistral uses same format as OpenAI
+      case 'llama': // Llama uses same format as OpenAI
         // Guard verbose conversion logging
         if (this.logger.enabled) {
           this.logger.debug(
@@ -362,7 +355,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'anthropic':
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           input_schema: {
             type: 'object' as const,
             ...tool.function.parameters,
@@ -373,7 +366,7 @@ export class ToolFormatter implements IToolFormatter {
         // Return a text description of tools for the system prompt
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           parameters: tool.function.parameters,
         }));
       case 'xml':
@@ -381,7 +374,7 @@ export class ToolFormatter implements IToolFormatter {
         // Tools are typically described in the system prompt
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           parameters: tool.function.parameters,
         }));
       case 'gemma':
@@ -410,6 +403,8 @@ export class ToolFormatter implements IToolFormatter {
       case 'deepseek':
       case 'qwen':
       case 'kimi':
+      case 'mistral':
+      case 'llama':
       case 'gemma': {
         const openAiToolCall = rawToolCall as {
           id: string;
@@ -418,7 +413,7 @@ export class ToolFormatter implements IToolFormatter {
         };
 
         if (
-          !openAiToolCall?.function?.name ||
+          !openAiToolCall.function.name ||
           !openAiToolCall.function.arguments
         ) {
           throw new Error(`Invalid ${format} tool call format`);
@@ -461,7 +456,7 @@ export class ToolFormatter implements IToolFormatter {
           input?: unknown;
         };
 
-        if (!anthropicToolCall?.id || !anthropicToolCall.name) {
+        if (!anthropicToolCall.id || !anthropicToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
@@ -470,7 +465,7 @@ export class ToolFormatter implements IToolFormatter {
             type: 'tool_call' as const,
             id: anthropicToolCall.id,
             name: anthropicToolCall.name,
-            parameters: anthropicToolCall.input || {},
+            parameters: anthropicToolCall.input ?? {},
           },
         ];
       }
@@ -481,7 +476,7 @@ export class ToolFormatter implements IToolFormatter {
           arguments: Record<string, unknown>;
         };
 
-        if (!hermesToolCall?.name) {
+        if (!hermesToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
@@ -490,7 +485,7 @@ export class ToolFormatter implements IToolFormatter {
             type: 'tool_call' as const,
             id: `hermes_${Date.now()}_${Math.random().toString(36).substring(7)}`,
             name: hermesToolCall.name,
-            parameters: hermesToolCall.arguments || {},
+            parameters: hermesToolCall.arguments,
           },
         ];
       }
@@ -501,7 +496,7 @@ export class ToolFormatter implements IToolFormatter {
           arguments: Record<string, unknown>;
         };
 
-        if (!xmlToolCall?.name) {
+        if (!xmlToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
@@ -510,7 +505,7 @@ export class ToolFormatter implements IToolFormatter {
             type: 'tool_call' as const,
             id: `xml_${Date.now()}_${Math.random().toString(36).substring(7)}`,
             name: xmlToolCall.name,
-            parameters: xmlToolCall.arguments || {},
+            parameters: xmlToolCall.arguments,
           },
         ];
       }
@@ -541,17 +536,16 @@ export class ToolFormatter implements IToolFormatter {
       case 'deepseek':
       case 'qwen':
       case 'kimi':
+      case 'mistral':
       case 'gemma':
         // All use same accumulation logic for now
         if (deltaToolCall.index !== undefined) {
-          if (!accumulatedToolCalls[deltaToolCall.index]) {
-            accumulatedToolCalls[deltaToolCall.index] = {
-              type: 'tool_call',
-              id: deltaToolCall.id || '',
-              name: '',
-              parameters: {},
-            };
-          }
+          accumulatedToolCalls[deltaToolCall.index] ??= {
+            type: 'tool_call',
+            id: deltaToolCall.id ?? '',
+            name: '',
+            parameters: {},
+          };
           const tc = accumulatedToolCalls[deltaToolCall.index];
           if (deltaToolCall.id) tc.id = deltaToolCall.id;
           if (deltaToolCall.function?.name)
@@ -611,10 +605,11 @@ export class ToolFormatter implements IToolFormatter {
           }
         }
         break;
+      case 'anthropic':
       case 'hermes':
       case 'xml':
       case 'llama':
-        // For text-based toolcalls, streaming accumulation isn't required (they arrive parsed)
+        // For non-streaming or text-based toolcalls, streaming accumulation isn't required
         // NO-OP (future implementation can extend if needed)
         break;
       default:
@@ -632,12 +627,10 @@ export class ToolFormatter implements IToolFormatter {
     return tools.map((tool) => ({
       type: 'function' as const,
       name: tool.function.name,
-      description: tool.function.description || null,
-      parameters:
-        (this.convertGeminiSchemaToStandard(tool.function.parameters) as Record<
-          string,
-          unknown
-        >) || null,
+      description: tool.function.description ?? null,
+      parameters: this.convertGeminiSchemaToStandard(
+        tool.function.parameters,
+      ) as Record<string, unknown>,
       strict: null,
     }));
   }
