@@ -692,14 +692,22 @@ describe('git extension helpers', () => {
         downloadFile('https://example.com/file.tar.gz', destPath),
       ).rejects.toThrow('Stream error');
 
-      // Allow async cleanup (fs.unlink) to settle — CI runners need more headroom
-      await new Promise((r) => setTimeout(r, 200));
+      // Allow cleanup to complete under heavy CI load.
+      const deadline = Date.now() + 5000;
+      let fileExists = true;
+      while (Date.now() < deadline) {
+        fileExists = await fs
+          .access(destPath)
+          .then(() => true)
+          .catch(() => false);
 
-      // Verify that the partial file was deleted
-      const fileExists = await fs
-        .access(destPath)
-        .then(() => true)
-        .catch(() => false);
+        if (!fileExists) {
+          break;
+        }
+
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
       expect(fileExists).toBe(false);
     });
   });
