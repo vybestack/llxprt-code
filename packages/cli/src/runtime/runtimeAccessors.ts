@@ -17,15 +17,15 @@
  * @plan:PLAN-20260320-ISSUE1575.P02 - Extracted from runtimeSettings.ts
  */
 
-import type {
-  SettingsService,
-  type Config,
+import {
   DebugLogger,
-  type ProviderManager,
-  type ProfileManager,
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   getProviderConfigKeys,
+  type SettingsService,
+  type Config,
+  type ProviderManager,
+  type ProfileManager,
   type HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/oauth-manager.js';

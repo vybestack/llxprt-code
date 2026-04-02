@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  MCPServerConfig,
-  BugCommandSettings,
-  TelemetrySettings,
-  type ChatCompressionSettings,
+import {
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  type MCPServerConfig,
+  type BugCommandSettings,
+  type TelemetrySettings,
+  type ChatCompressionSettings,
   type HookDefinition,
   type HookEventName,
 } from '@vybestack/llxprt-code-core';

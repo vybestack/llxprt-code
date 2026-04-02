@@ -92,7 +92,7 @@ async function statusAction(
   }
 
   const lspConfig = config.getLspConfig?.();
-  if (lspConfig == null) {
+  if (lspConfig == null || lspConfig === false) {
     return {
       type: 'message',
       messageType: 'info',

@@ -261,10 +261,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
               'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
             );
           }
-          if (
-            argv['yolo'] !== undefined &&
-            argv['approvalMode'] !== undefined
-          ) {
+          if (argv['yolo'] === true && argv['approvalMode'] !== undefined) {
             throw new Error(
               'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
             );

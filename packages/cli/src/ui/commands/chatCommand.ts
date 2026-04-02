@@ -37,7 +37,7 @@ const getSavedChatTags = async (
   mtSortDesc: boolean,
 ): Promise<ChatDetail[]> => {
   const cfg = context.services.config;
-  const geminiDir = cfg?.storage.getProjectTempDir();
+  const geminiDir = cfg?.storage?.getProjectTempDir();
   if (!geminiDir) {
     return [];
   }
@@ -540,7 +540,7 @@ const debugCommand: SlashCommand = {
     }
 
     // Checkpoint directory information
-    const checkpointDir = config?.storage.getProjectTempDir();
+    const checkpointDir = config?.storage?.getProjectTempDir();
     if (checkpointDir) {
       debugInfo.push(`Checkpoint directory: ${checkpointDir}`);
     } else {

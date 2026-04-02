@@ -416,7 +416,7 @@ export class ExtensionAutoUpdater {
       );
 
       if (info == null) {
-        throw new Error('Update returned undefined');
+        throw new Error('Update returned null or undefined');
       }
 
       entry.lastUpdate = this.now();
