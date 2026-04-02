@@ -111,19 +111,26 @@ interface SubagentSuggestionCandidate {
 function buildResourceCandidates(
   config?: Config,
 ): ResourceSuggestionCandidate[] {
-  const registry = (
-    config as Config & {
-      getResourceRegistry?: () => {
-        getAllResources: () => Array<{
-          serverName: string;
-          uri: string;
-          name?: string;
-        }>;
-      };
-    }
-  )?.getResourceRegistry?.();
+  if (config == null) {
+    return [];
+  }
 
-  if (!registry) {
+  const configWithRegistry = config as Config & {
+    getResourceRegistry?: () => {
+      getAllResources: () => Array<{
+        serverName: string;
+        uri: string;
+        name?: string;
+      }>;
+    };
+  };
+
+  const registry =
+    typeof configWithRegistry.getResourceRegistry === 'function'
+      ? configWithRegistry.getResourceRegistry()
+      : undefined;
+
+  if (registry == null) {
     return [];
   }
 
@@ -133,7 +140,9 @@ function buildResourceCandidates(
     .map((resource) => {
       const prefixedUri = `${resource.serverName}:${resource.uri}`;
       return {
-        searchKey: `${prefixedUri} ${resource.name ?? ''}`.toLowerCase(),
+        searchKey:
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- name is optional
+          `${prefixedUri} ${resource.name ?? ''}`.toLowerCase(),
         suggestion: {
           label: prefixedUri,
           value: prefixedUri,
@@ -145,7 +154,7 @@ function buildResourceCandidates(
 async function buildSubagentCandidates(
   config?: Config,
 ): Promise<SubagentSuggestionCandidate[]> {
-  const subagentManager = config?.getSubagentManager?.();
+  const subagentManager = config?.getSubagentManager();
   if (subagentManager == null) {
     return [];
   }
@@ -266,6 +275,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
       }
       return;
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive runtime guard
     if (pattern === null) {
       dispatch({ type: 'RESET' });
       return;
@@ -290,9 +300,9 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           projectRoot: cwd,
           ignoreDirs: [],
           useGitignore:
-            config?.getFileFilteringOptions()?.respectGitIgnore ?? true,
+            config?.getFileFilteringOptions().respectGitIgnore ?? true,
           useGeminiignore:
-            config?.getFileFilteringOptions()?.respectGitIgnore ?? true,
+            config?.getFileFilteringOptions().respectGitIgnore ?? true,
           cache: true,
           cacheTtl: 30, // 30 seconds
           enableRecursiveFileSearch:
@@ -300,7 +310,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           enableFuzzySearch: !(
             config?.getFileFilteringDisableFuzzySearch() ?? false
           ),
-          maxFiles: config?.getFileFilteringOptions()?.maxFileCount,
+          maxFiles: config?.getFileFilteringOptions().maxFileCount,
         });
         await searcher.initialize();
         fileSearch.current = searcher;
@@ -330,7 +340,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
       }, 200);
 
       const timeoutMs =
-        config?.getFileFilteringOptions()?.searchTimeout ??
+        config?.getFileFilteringOptions().searchTimeout ??
         DEFAULT_SEARCH_TIMEOUT_MS;
 
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -351,6 +361,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           maxResults: MAX_SUGGESTIONS_TO_SHOW * 3,
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- defensive: ref may be cleared across await
         if (slowSearchTimer.current) {
           clearTimeout(slowSearchTimer.current);
         }
@@ -366,13 +377,13 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
 
         const resourceCandidates = buildResourceCandidates(config);
         const resourceSuggestions = await searchResourceCandidates(
-          state.pattern ?? '',
+          state.pattern,
           resourceCandidates,
         );
 
         const subagentCandidates = await buildSubagentCandidates(config);
         const subagentSuggestions = await searchSubagentCandidates(
-          state.pattern ?? '',
+          state.pattern,
           subagentCandidates,
         );
 

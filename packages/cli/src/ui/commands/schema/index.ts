@@ -135,7 +135,11 @@ function normalizeCompletionContext(
 
   if (!explicitCompleted) {
     completedArgs = [...argsFromTokens];
-    if (!hasTrailingSpace && tokenInfo.partialToken && argsFromTokens.length) {
+    if (
+      !hasTrailingSpace &&
+      tokenInfo.partialToken.length > 0 &&
+      argsFromTokens.length > 0
+    ) {
       completedArgs = argsFromTokens.slice(0, -1);
     }
   }
@@ -266,10 +270,10 @@ async function suggestForValue(
       }));
     }
 
-    if (node.options?.length) {
+    if (node.options != null && node.options.length > 0) {
       // Get the fuzzy filtering setting from context
       // Default to true if setting is not defined
-      const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+      const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
       const enableFuzzy = settingValue ?? true;
 
       // Use filterCompletions for both fuzzy and exact prefix matching
@@ -341,7 +345,7 @@ function suggestForLiterals(
 
   // Get the fuzzy filtering setting from context
   // Default to true if setting is not defined
-  const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+  const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
   const enableFuzzy = settingValue ?? true;
 
   // Filter single-level options
@@ -398,7 +402,7 @@ async function computeHintForValue(
   tokenInfo: TokenInfo,
 ): Promise<string> {
   try {
-    if (node.hint) {
+    if (node.hint != null) {
       if (typeof node.hint === 'function') {
         return await node.hint(ctx, tokenInfo);
       }
@@ -498,7 +502,7 @@ export function tokenize(fullLine: string): TokenInfo {
 
   const firstToken = tokens[0];
   const prefixChars = new Set<string>(['/', '@']);
-  const prefixChar = firstToken?.[0];
+  const prefixChar = firstToken[0];
   // Stryker disable next-line BooleanLiteral
   const hasPrefixChar =
     typeof prefixChar === 'string' && prefixChars.has(prefixChar);
