@@ -51,7 +51,7 @@ function findPrevWordBoundary(line: string, cursorCol: number): number {
   for (const seg of segmenter.segment(line)) {
     if (seg.index >= cursorIdx) break;
 
-    if (seg.isWordLike) {
+    if (seg.isWordLike === true) {
       targetIdx = seg.index;
     }
   }
@@ -70,7 +70,7 @@ function findNextWordBoundary(line: string, cursorCol: number): number {
     const segEnd = seg.index + seg.segment.length;
 
     if (segEnd > cursorIdx) {
-      if (seg.isWordLike) {
+      if (seg.isWordLike === true) {
         targetIdx = segEnd;
         break;
       }
@@ -133,7 +133,7 @@ function handleInsertAction(
   options: TextBufferOptions,
 ): TextBufferState {
   let payload = rawPayload;
-  if (options.singleLine) {
+  if (options.singleLine === true) {
     payload = payload.replace(/[\r\n]/g, '');
   }
   if (options.inputFilter != null) {
@@ -302,7 +302,7 @@ function handleVisualMove(
     visualLines,
   );
 
-  if (visualToLogicalMap[pos.row]) {
+  if (visualToLogicalMap[pos.row] != null) {
     const [logRow, logStartCol] = visualToLogicalMap[pos.row];
     return {
       ...state,
@@ -409,7 +409,7 @@ function handleDeleteWordLeftAction(state: TextBufferState): TextBufferState {
   if (newCursorCol > 0) {
     const lineContent = lines[cursorRow] ?? '';
     const prevWordStart = findPrevWordStartInLine(lineContent, newCursorCol);
-    const start = prevWordStart === null ? 0 : prevWordStart;
+    const start = prevWordStart ?? 0;
     newLines[newCursorRow] =
       cpSlice(lineContent, 0, start) + cpSlice(lineContent, newCursorCol);
     newCursorCol = start;
@@ -448,7 +448,7 @@ function handleDeleteWordRightAction(state: TextBufferState): TextBufferState {
     newLines.splice(cursorRow + 1, 1);
   } else {
     const nextWordStart = findNextWordStartInLine(lineContent, cursorCol);
-    const end = nextWordStart === null ? lineLen : nextWordStart;
+    const end = nextWordStart ?? lineLen;
     newLines[cursorRow] =
       cpSlice(lineContent, 0, cursorCol) + cpSlice(lineContent, end);
   }
@@ -495,7 +495,7 @@ function handleKillLineLeftAction(state: TextBufferState): TextBufferState {
 
 function handleUndoAction(state: TextBufferState): TextBufferState {
   const stateToRestore = state.undoStack[state.undoStack.length - 1];
-  if (!stateToRestore) return state;
+  if (state.undoStack.length === 0) return state;
 
   const currentSnapshot = {
     lines: [...state.lines],
@@ -512,7 +512,7 @@ function handleUndoAction(state: TextBufferState): TextBufferState {
 
 function handleRedoAction(state: TextBufferState): TextBufferState {
   const stateToRestore = state.redoStack[state.redoStack.length - 1];
-  if (!stateToRestore) return state;
+  if (state.redoStack.length === 0) return state;
 
   const currentSnapshot = {
     lines: [...state.lines],

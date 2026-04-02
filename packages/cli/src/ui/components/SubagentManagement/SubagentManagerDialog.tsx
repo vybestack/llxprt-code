@@ -30,8 +30,8 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
 }) => {
   const uiState = useUIState();
   const { commandContext } = uiState;
-  const subagentManager = commandContext?.services?.subagentManager;
-  const profileManager = commandContext?.services?.profileManager;
+  const subagentManager = commandContext.services.subagentManager;
+  const profileManager = commandContext.services.profileManager;
   const activeProfileName = uiState.activeProfileName;
 
   const [state, setState] = useState<SubagentManagerState>({
@@ -237,7 +237,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       let finalPrompt = systemPrompt;
 
       if (mode === 'auto') {
-        const config = commandContext?.services?.config;
+        const config = commandContext.services.config;
         if (config == null) {
           throw new Error(
             'Configuration service unavailable. Set up the CLI before using auto mode.',

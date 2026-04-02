@@ -189,7 +189,7 @@ function bufferBackslashEnter(
   keypressHandler: KeypressHandler,
 ): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
-    while (true) {
+    for (;;) {
       const key = yield;
 
       if (key == null) {
@@ -235,7 +235,7 @@ function bufferBackslashEnter(
  */
 function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
-    while (true) {
+    for (;;) {
       let key = yield;
 
       if (key === null) {
@@ -246,7 +246,7 @@ function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
       }
 
       let buffer = '';
-      while (true) {
+      for (;;) {
         const timeoutId = setTimeout(() => bufferer.next(null), PASTE_TIMEOUT);
         key = yield;
         clearTimeout(timeoutId);
@@ -309,7 +309,7 @@ function createDataListener(keypressHandler: KeypressHandler) {
 function* emitKeys(
   keypressHandler: KeypressHandler,
 ): Generator<void, void, string> {
-  while (true) {
+  for (;;) {
     let ch = yield;
     let sequence = ch;
     let escaped = false;
@@ -344,7 +344,7 @@ function* emitKeys(
         let buffer = '';
 
         // Read until BEL, `ESC \`, or timeout (empty string)
-        while (true) {
+        for (;;) {
           const next = yield;
           if (next === '' || next === '\u0007') {
             break;
@@ -393,7 +393,7 @@ function* emitKeys(
         }
 
         code += ch;
-      } else if (ch === '[') {
+      } else {
         // ESC [ letter
         // ESC [ modifier letter
         // ESC [ [ modifier letter
@@ -483,10 +483,10 @@ function* emitKeys(
          * and modifier from it
          */
         const cmd = sequence.slice(cmdStart);
-        let match;
+        let match: RegExpExecArray | null;
 
         if ((match = /^(\d+)(?:;(\d+))?(?:;(\d+))?([~^$u])$/.exec(cmd))) {
-          if (match[1] === '27' && match[3] && match[4] === '~') {
+          if (match[1] === '27' && match[3] != null && match[4] === '~') {
             // modifyOtherKeys format: CSI 27 ; modifier ; key ~
             // Treat as CSI u: key + 'u'
             code += match[3] + 'u';
@@ -498,24 +498,30 @@ function* emitKeys(
           }
         } else if ((match = /^(\d+)?(?:;(\d+))?([A-Za-z])$/.exec(cmd))) {
           code += match[3];
-          modifier = parseInt(match[2] ?? match[1] ?? '1', 10) - 1;
+          modifier =
+            parseInt(
+              (match[2] as string | undefined) ??
+                (match[1] as string | undefined) ??
+                '1',
+              10,
+            ) - 1;
         } else {
           code += cmd;
         }
       }
 
       // Parse the key modifier
-      shift = !!(modifier & 1);
-      meta = !!(modifier & 2);
-      ctrl = !!(modifier & 4);
+      shift = (modifier & 1) !== 0;
+      meta = (modifier & 2) !== 0;
+      ctrl = (modifier & 4) !== 0;
 
       const keyInfo = KEY_INFO_MAP[code];
-      if (keyInfo) {
+      if (keyInfo != null) {
         name = keyInfo.name;
-        if (keyInfo.shift) {
+        if (keyInfo.shift === true) {
           shift = true;
         }
-        if (keyInfo.ctrl) {
+        if (keyInfo.ctrl === true) {
           ctrl = true;
         }
         if (name === 'space' && !ctrl && !meta) {
@@ -595,7 +601,7 @@ function* emitKeys(
       });
     } else if (escaped) {
       // Escape sequence timeout
-      name = ch.length ? undefined : 'escape';
+      name = ch.length > 0 ? undefined : 'escape';
       meta = true;
     } else {
       // Any other character is considered printable.
@@ -607,7 +613,7 @@ function* emitKeys(
       charLengthAt(sequence, 0) === sequence.length
     ) {
       keypressHandler({
-        name: name || '',
+        name: name ?? '',
         shift,
         meta,
         ctrl,

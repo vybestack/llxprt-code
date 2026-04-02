@@ -287,7 +287,7 @@ function useInputBuffer(
   );
   const handleUserCancel = useCallback(
     (shouldRestorePrompt?: boolean) => {
-      if (shouldRestorePrompt) {
+      if (shouldRestorePrompt === true) {
         const last = lastSubmittedPromptRef.current;
         if (last) buffer.setText(last);
       } else buffer.setText('');
@@ -344,8 +344,8 @@ function useInputStreamSetup(
     refreshStatic,
     handleUserCancel,
     setEmbeddedShellFocused,
-    stdout?.columns,
-    stdout?.rows,
+    stdout.columns,
+    stdout.rows,
     registerTodoPause,
     handleExternalEditorOpen,
     recordingIntegration,
@@ -487,7 +487,7 @@ function useInputFinish(
       settings.merged.wittyPhraseStyle ??
       'default',
     settings.merged.ui.customWittyPhrases ?? settings.merged.customWittyPhrases,
-    !!stream.activeShellPtyId && !p.embeddedShellFocused,
+    stream.activeShellPtyId != null && !p.embeddedShellFocused,
     stream.lastOutputTime,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({

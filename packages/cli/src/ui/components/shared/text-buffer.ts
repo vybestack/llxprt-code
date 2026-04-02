@@ -196,9 +196,10 @@ function resolveVisualToLogical(
     Math.min(visRow, layout.visualLines.length - 1),
   );
   const visualLine = layout.visualLines[clampedVisRow] || '';
-  const mapping = layout.visualToLogicalMap[clampedVisRow];
+  const mapping: [number, number] | undefined =
+    layout.visualToLogicalMap[clampedVisRow];
 
-  if (!mapping) return null;
+  if (mapping == null) return null;
 
   const [logRow, logStartCol] = mapping;
   const codePoints = toCodePoints(visualLine);
@@ -248,7 +249,7 @@ async function runExternalEditor(params: {
   const args = [filePath];
 
   const preferredEditorType = getPrefEditor?.();
-  if (!command && preferredEditorType) {
+  if (preferredEditorType != null) {
     command = getEditorCommand(preferredEditorType);
     if (isGuiEditor(preferredEditorType)) {
       args.unshift('--wait');
@@ -509,7 +510,7 @@ export function useTextBuffer({
       else if (keyMatchers[Command.DELETE_CHAR_RIGHT](key)) del();
       else if (keyMatchers[Command.UNDO](key)) undo();
       else if (keyMatchers[Command.REDO](key)) redo();
-      else if (key.insertable) {
+      else if (key.insertable === true) {
         insert(input, { paste: false });
       }
     },
