@@ -39,9 +39,9 @@ export interface WelcomeState {
 export interface WelcomeActions {
   startSetup: () => void;
   selectProvider: (providerId: string) => void;
-  selectModel: (modelId: string) => void;
+  selectModel: (modelId: string) => Promise<void>;
   selectAuthMethod: (method: 'oauth' | 'api_key') => void;
-  onAuthComplete: () => void;
+  onAuthComplete: () => Promise<void>;
   onAuthError: (error: string) => void;
   skipSetup: () => void;
   goBack: () => void;
@@ -252,6 +252,9 @@ export const useWelcomeOnboarding = (
           return { ...prev, step: 'auth_method', selectedModel: undefined };
         case 'provider':
           return { ...prev, step: 'welcome' };
+        case 'welcome':
+        case 'completion':
+        case 'skipped':
         default:
           return prev;
       }
