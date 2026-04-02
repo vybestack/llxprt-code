@@ -37,22 +37,36 @@ export function useMemoryRefreshAction({
     );
 
     try {
-      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        config.getWorkingDir(),
-        settings.merged.loadMemoryFromIncludeDirectories
-          ? config.getWorkspaceContext().getDirectories()
-          : [],
-        config.getDebugMode(),
-        config.getFileService(),
-        settings.merged,
-        config.getExtensions(),
-        config.getFolderTrust(),
-        settings.merged.ui.memoryImportFormat || 'tree',
-        config.getFileFilteringOptions(),
-      );
+      let memoryContent = '';
+      let fileCount = 0;
 
-      config.setUserMemory(memoryContent);
-      config.setLlxprtMdFileCount(fileCount);
+      if (config.isJitContextEnabled()) {
+        const result = await config.refreshMemory();
+        memoryContent = result.memoryContent;
+        fileCount = result.fileCount;
+      } else {
+        const result = await loadHierarchicalLlxprtMemory(
+          config.getWorkingDir(),
+          settings.merged.loadMemoryFromIncludeDirectories
+            ? config.getWorkspaceContext().getDirectories()
+            : [],
+          config.getDebugMode(),
+          config.getFileService(),
+          settings.merged,
+          config.getExtensions(),
+          config.getFolderTrust(),
+          settings.merged.ui.memoryImportFormat || 'tree',
+          config.getFileFilteringOptions(),
+        );
+
+        memoryContent = result.memoryContent;
+        fileCount = result.fileCount;
+
+        config.setUserMemory(memoryContent);
+        config.setLlxprtMdFileCount(fileCount);
+        config.setLlxprtMdFilePaths(result.filePaths);
+      }
+
       setLlxprtMdFileCount(fileCount);
 
       addItem(
