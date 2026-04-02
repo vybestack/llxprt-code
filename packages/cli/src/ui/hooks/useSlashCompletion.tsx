@@ -31,15 +31,6 @@ import { useCompletion } from './useCompletion.js';
 import { createCompletionHandler } from '../commands/schema/index.js';
 
 /**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P08
- * @requirement:REQ-002
- * @requirement:REQ-003
- * @requirement:REQ-004
- * Feature flag enabled for hint display integration
- */
-const SHOW_ARGUMENT_HINTS = true;
-
-/**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P05
  * @requirement:REQ-001
  * @requirement:REQ-002
@@ -252,7 +243,7 @@ export function useSlashCompletion(
           break;
         }
         const found = currentLevel.find(
-          (cmd) => cmd.name === part || cmd.altNames?.includes(part),
+          (cmd) => cmd.name === part || cmd.altNames?.includes(part) === true,
         );
         if (found == null) {
           break;
@@ -290,8 +281,9 @@ export function useSlashCompletion(
         if (candidate) {
           exactMatchAsParent = currentLevel.find(
             (cmd) =>
-              (cmd.name === candidate || cmd.altNames?.includes(candidate)) &&
-              cmd.subCommands,
+              (cmd.name === candidate ||
+                cmd.altNames?.includes(candidate) === true) &&
+              cmd.subCommands !== undefined,
           );
 
           if (exactMatchAsParent != null) {
@@ -303,7 +295,7 @@ export function useSlashCompletion(
                 (cmd.name.toLowerCase().startsWith(candidate.toLowerCase()) ||
                   cmd.altNames?.some((alt) =>
                     alt.toLowerCase().startsWith(candidate.toLowerCase()),
-                  )),
+                  ) === true),
             );
 
             if (otherMatches.length === 0) {
@@ -335,8 +327,8 @@ export function useSlashCompletion(
           const perfectMatch = currentLevel.find(
             (cmd) =>
               (cmd.name === commandPartial ||
-                cmd.altNames?.includes(commandPartial)) &&
-              cmd.action,
+                cmd.altNames?.includes(commandPartial) === true) &&
+              cmd.action !== undefined,
           );
           if (perfectMatch != null) {
             setIsPerfectMatch(true);
@@ -426,11 +418,7 @@ export function useSlashCompletion(
               setShowSuggestions(finalSuggestions.length > 0);
               setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
 
-              if (SHOW_ARGUMENT_HINTS) {
-                setActiveHint(completionResult.hint || '');
-              } else {
-                setActiveHint('');
-              }
+              setActiveHint(completionResult.hint);
 
               setIsLoadingSuggestions(false);
             })
@@ -452,7 +440,7 @@ export function useSlashCompletion(
       }
 
       // Command/Sub-command Completion
-      const commandsToSearch = currentLevel || [];
+      const commandsToSearch = currentLevel ?? [];
       debugLogger.debug(
         () =>
           `Commands to search: ${commandsToSearch.length}, Partial: "${commandPartial}"`,
@@ -467,10 +455,10 @@ export function useSlashCompletion(
           // Filter extension commands: must have extensionName AND be enabled
           if (cmd.kind === 'extension') {
             // Extension commands without extensionName are treated as invalid/disabled
-            if (!cmd.extensionName) {
+            if (cmd.extensionName === undefined || cmd.extensionName === '') {
               return false;
             }
-            const config = commandContext.services?.config;
+            const config = commandContext.services.config;
             if (
               config != null &&
               typeof config.isExtensionEnabled === 'function'
@@ -482,9 +470,10 @@ export function useSlashCompletion(
           }
           // Match by name or altNames
           return (
-            cmd.description &&
+            cmd.description.length > 0 &&
             (cmd.name.startsWith(commandPartial) ||
-              cmd.altNames?.some((alt) => alt.startsWith(commandPartial)))
+              cmd.altNames?.some((alt) => alt.startsWith(commandPartial)) ===
+                true)
           );
         });
         debugLogger.debug(
@@ -494,9 +483,11 @@ export function useSlashCompletion(
         // Sort potentialSuggestions so that exact match (by name or altName) comes first
         const sortedSuggestions = [...potentialSuggestions].sort((a, b) => {
           const aIsExact =
-            a.name === commandPartial || a.altNames?.includes(commandPartial);
+            a.name === commandPartial ||
+            a.altNames?.includes(commandPartial) === true;
           const bIsExact =
-            b.name === commandPartial || b.altNames?.includes(commandPartial);
+            b.name === commandPartial ||
+            b.altNames?.includes(commandPartial) === true;
           if (aIsExact && !bIsExact) return -1;
           if (!aIsExact && bIsExact) return 1;
           return 0;
@@ -601,7 +592,10 @@ export function useSlashCompletion(
 
           // Check if this entry should be ignored by filtering options
           if (
-            fileDiscovery?.shouldIgnoreFile(entryPathFromRoot, filterOptions)
+            fileDiscovery?.shouldIgnoreFile(
+              entryPathFromRoot,
+              filterOptions,
+            ) === true
           ) {
             continue;
           }
@@ -659,12 +653,9 @@ export function useSlashCompletion(
       });
 
       const suggestions: Suggestion[] = files
-        .filter((file) => {
-          if (fileDiscoveryService) {
-            return !fileDiscoveryService.shouldIgnoreFile(file, filterOptions);
-          }
-          return true;
-        })
+        .filter(
+          (file) => !fileDiscoveryService.shouldIgnoreFile(file, filterOptions),
+        )
         .map((file: string) => {
           const absolutePath = path.resolve(searchDir, file);
           const label = path.relative(cwd, absolutePath);
@@ -745,7 +736,7 @@ export function useSlashCompletion(
                 fileDiscoveryService?.shouldIgnoreFile(
                   relativePath,
                   filterOptions,
-                )
+                ) === true
               ) {
                 continue;
               }
@@ -785,8 +776,8 @@ export function useSlashCompletion(
 
         // Sort by depth, then directories first, then alphabetically
         fetchedSuggestions.sort((a, b) => {
-          const depthA = (a.label.match(/\//g) || []).length;
-          const depthB = (b.label.match(/\//g) || []).length;
+          const depthA = (a.label.match(/\//g) ?? []).length;
+          const depthB = (b.label.match(/\//g) ?? []).length;
 
           if (depthA !== depthB) {
             return depthA - depthB;
@@ -807,9 +798,10 @@ export function useSlashCompletion(
             b.label.length - path.extname(b.label).length,
           );
 
-          return (
-            filenameA.localeCompare(filenameB) || a.label.localeCompare(b.label)
-          );
+          const nameCompare = filenameA.localeCompare(filenameB);
+          return nameCompare !== 0
+            ? nameCompare
+            : a.label.localeCompare(b.label);
         });
 
         if (isMounted) {
@@ -838,9 +830,7 @@ export function useSlashCompletion(
       }
 
       // Clear the loading timer if it hasn't fired yet
-      if (loadingTimer) {
-        clearTimeout(loadingTimer);
-      }
+      clearTimeout(loadingTimer);
 
       if (isMounted) {
         setIsLoadingSuggestions(false);
@@ -852,7 +842,9 @@ export function useSlashCompletion(
     let debounceTimeout: NodeJS.Timeout | undefined;
     if (codePoints[commandIndex] === '@') {
       // File operations are expensive and benefit from debouncing
-      debounceTimeout = setTimeout(fetchSuggestions, 100);
+      debounceTimeout = setTimeout(() => {
+        void fetchSuggestions();
+      }, 100);
     }
 
     return () => {
@@ -872,7 +864,7 @@ export function useSlashCompletion(
     cwd,
     slashCommands,
     commandContext,
-    commandContext.services?.config, // Add explicit dependency on config to catch changes
+    commandContext.services.config, // Add explicit dependency on config to catch changes
     config,
     // These are the setters - they're stable references
     resetCompletionState,
@@ -890,7 +882,7 @@ export function useSlashCompletion(
         return null;
       }
       const suggestion = suggestions[suggestionIndex];
-      return suggestionCommandMapRef.current.get(suggestion.value) || null;
+      return suggestionCommandMapRef.current.get(suggestion.value) ?? null;
     },
     [suggestions],
   );
