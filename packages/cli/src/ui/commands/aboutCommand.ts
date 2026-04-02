@@ -22,7 +22,7 @@ export const aboutCommand: SlashCommand = {
       sandboxEnv = process.env.SANDBOX;
     } else if (process.env.SANDBOX === 'sandbox-exec') {
       sandboxEnv = `sandbox-exec (${
-        process.env.SEATBELT_PROFILE || 'unknown'
+        process.env.SEATBELT_PROFILE ?? 'unknown'
       })`;
     }
     // Determine the currently selected model/provider using runtime diagnostics
@@ -47,7 +47,7 @@ export const aboutCommand: SlashCommand = {
           provider = snapshot.providerName;
         }
 
-        const activeProviderName = runtimeApi.getActiveProviderName?.();
+        const activeProviderName = runtimeApi.getActiveProviderName();
         if (
           activeProviderName &&
           snapshot.modelName &&
@@ -56,49 +56,45 @@ export const aboutCommand: SlashCommand = {
           modelVersion = `${activeProviderName}:${snapshot.modelName}`;
         }
 
-        const providerManager = runtimeApi.getCliProviderManager?.();
-        if (
-          providerManager &&
-          typeof providerManager.getActiveProvider === 'function'
-        ) {
+        const providerManager = runtimeApi.getCliProviderManager();
+        if (typeof providerManager.getActiveProvider === 'function') {
           const activeProvider = providerManager.getActiveProvider();
-          if (activeProvider) {
-            provider = activeProvider.name ?? provider;
-            let finalProvider: unknown = activeProvider;
-            if (
-              'wrappedProvider' in activeProvider &&
-              activeProvider.wrappedProvider
-            ) {
-              finalProvider = activeProvider.wrappedProvider;
-            }
-            const providerWithGetBaseURL = finalProvider as {
-              getBaseURL?: () => string | undefined;
-            };
-            if (typeof providerWithGetBaseURL.getBaseURL === 'function') {
-              baseURL = providerWithGetBaseURL.getBaseURL?.() ?? '';
-            }
+          provider = activeProvider.name;
+          let finalProvider: unknown = activeProvider;
+          if (
+            'wrappedProvider' in activeProvider &&
+            (activeProvider as Record<string, unknown>).wrappedProvider != null
+          ) {
+            finalProvider = (activeProvider as Record<string, unknown>)
+              .wrappedProvider;
+          }
+          const providerWithGetBaseURL = finalProvider as {
+            getBaseURL?: () => string | undefined;
+          };
+          if (typeof providerWithGetBaseURL.getBaseURL === 'function') {
+            baseURL = providerWithGetBaseURL.getBaseURL() ?? '';
           }
         }
 
         if (!baseURL) {
-          const runtimeBaseUrl = runtimeApi.getEphemeralSetting?.('base-url');
+          const runtimeBaseUrl = runtimeApi.getEphemeralSetting('base-url');
           if (typeof runtimeBaseUrl === 'string') {
             baseURL = runtimeBaseUrl;
           }
         }
       } catch {
-        modelVersion = context.services.config?.getModel() || modelVersion;
+        modelVersion = context.services.config?.getModel() ?? modelVersion;
       }
 
       if (modelVersion === 'Unknown') {
-        modelVersion = context.services.config?.getModel() || modelVersion;
+        modelVersion = context.services.config?.getModel() ?? modelVersion;
       }
     } else {
-      modelVersion = context.services.config?.getModel() || modelVersion;
+      modelVersion = context.services.config?.getModel() ?? modelVersion;
     }
 
     if (!baseURL) {
-      const fallbackBaseUrl = context.services.config?.getEphemeralSetting?.(
+      const fallbackBaseUrl = context.services.config?.getEphemeralSetting(
         'base-url',
       ) as string | undefined;
       if (fallbackBaseUrl) {
@@ -108,17 +104,17 @@ export const aboutCommand: SlashCommand = {
 
     if (provider === 'Unknown') {
       const fallbackProvider =
-        context.services.config?.getProvider?.() ?? undefined;
+        context.services.config?.getProvider() ?? undefined;
       if (fallbackProvider) {
         provider = fallbackProvider;
       }
     }
 
     const cliVersion = await getCliVersion();
-    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || '';
+    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT ?? '';
     const ideClient =
-      (context.services.config?.getIdeMode() &&
-        context.services.config?.getIdeClient()?.getDetectedIdeDisplayName()) ||
+      (context.services.config?.getIdeMode() === true &&
+        context.services.config.getIdeClient()?.getDetectedIdeDisplayName()) ||
       '';
 
     // Determine keyfile path and key status for the active provider (if any)
@@ -132,7 +128,7 @@ export const aboutCommand: SlashCommand = {
       const providerName = providerManager.getActiveProviderName();
       if (providerName) {
         keyfilePath =
-          context.services.settings.getProviderKeyfile?.(providerName) || '';
+          context.services.settings.getProviderKeyfile(providerName) ?? '';
         // We don't check for API keys anymore - they're only in profiles
       }
     } catch {
