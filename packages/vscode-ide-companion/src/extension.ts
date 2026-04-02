@@ -30,8 +30,8 @@ const MANAGED_EXTENSION_SURFACES: ReadonlySet<IdeInfo['name']> = new Set([
   IDE_DEFINITIONS.cloudshell.name,
 ]);
 
-let ideServer: IDEServer;
-let logger: vscode.OutputChannel;
+let ideServer: IDEServer | undefined;
+let logger: vscode.OutputChannel | undefined;
 
 let log: (message: string) => void = () => {};
 
@@ -104,7 +104,7 @@ async function checkForUpdates(
 
     if (
       !isManagedExtensionSurface &&
-      latestVersion &&
+      latestVersion != null &&
       semver.gt(latestVersion, currentVersion)
     ) {
       const selection = await vscode.window.showInformationMessage(
@@ -180,7 +180,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   if (
-    !context.globalState.get(INFO_MESSAGE_SHOWN_KEY) &&
+    context.globalState.get(INFO_MESSAGE_SHOWN_KEY) == null &&
     !isManagedExtensionSurface
   ) {
     void vscode.window.showInformationMessage(
@@ -238,14 +238,14 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate(): Promise<void> {
   log('Extension deactivated');
   try {
-    if (ideServer) {
+    if (ideServer != null) {
       await ideServer.stop();
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`Failed to stop IDE server during deactivation: ${message}`);
   } finally {
-    if (logger) {
+    if (logger != null) {
       logger.dispose();
     }
   }

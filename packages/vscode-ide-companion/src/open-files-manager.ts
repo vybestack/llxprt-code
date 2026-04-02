@@ -91,7 +91,7 @@ export class OpenFilesManager {
 
   private addOrMoveToFront(editor: vscode.TextEditor) {
     // Deactivate previous active file
-    const currentActive = this.openFiles.find((f) => f.isActive);
+    const currentActive = this.openFiles.find((f) => f.isActive === true);
     if (currentActive != null) {
       currentActive.isActive = false;
       currentActive.cursor = undefined;
@@ -139,16 +139,14 @@ export class OpenFilesManager {
     const file = this.openFiles.find(
       (f) => f.path === editor.document.uri.fsPath,
     );
-    if (!file?.isActive) {
+    if (file == null || file.isActive !== true) {
       return;
     }
 
-    file.cursor = editor.selection.active
-      ? {
-          line: editor.selection.active.line + 1,
-          character: editor.selection.active.character + 1,
-        }
-      : undefined;
+    file.cursor = {
+      line: editor.selection.active.line + 1,
+      character: editor.selection.active.character + 1,
+    };
 
     let selectedText: string | undefined =
       editor.document.getText(editor.selection) || undefined;

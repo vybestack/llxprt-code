@@ -114,8 +114,9 @@ export class IDEServer {
   private portFile: string | undefined;
   private port: number | undefined;
   private authToken: string | undefined;
-  private transports: { [sessionId: string]: StreamableHTTPServerTransport } =
-    {};
+  private transports: {
+    [sessionId: string]: StreamableHTTPServerTransport | undefined;
+  } = {};
   private openFilesManager: OpenFilesManager | undefined;
   diffManager: DiffManager;
 
@@ -149,7 +150,7 @@ export class IDEServer {
       );
 
       app.use((req, res, next) => {
-        const host = req.headers.host || '';
+        const host = req.headers.host ?? '';
         const allowedHosts = [
           `localhost:${this.port}`,
           `127.0.0.1:${this.port}`,
@@ -343,34 +344,39 @@ export class IDEServer {
         },
       );
 
-      this.server = app.listen(0, '127.0.0.1', async () => {
+      this.server = app.listen(0, '127.0.0.1', () => {
         const address = (this.server as HTTPServer).address();
-        if (address && typeof address !== 'string') {
+        if (address != null && typeof address !== 'string') {
           this.port = address.port;
           this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
-          let portFile: string | undefined;
-          try {
-            const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
-            await fs.mkdir(portDir, { recursive: true });
-            portFile = path.join(
-              portDir,
-              `llxprt-ide-server-${process.ppid}-${this.port}.json`,
-            );
-            this.portFile = portFile;
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            this.log(`Failed to create IDE port file: ${message}`);
-          }
 
-          await writePortAndWorkspace({
-            context,
-            port: this.port,
-            portFile: this.portFile,
-            authToken: this.authToken ?? '',
-            log: this.log,
-          });
+          void (async () => {
+            let portFile: string | undefined;
+            try {
+              const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
+              await fs.mkdir(portDir, { recursive: true });
+              portFile = path.join(
+                portDir,
+                `llxprt-ide-server-${process.ppid}-${this.port}.json`,
+              );
+              this.portFile = portFile;
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              this.log(`Failed to create IDE port file: ${message}`);
+            }
+
+            await writePortAndWorkspace({
+              context,
+              port: this.port!,
+              portFile: this.portFile,
+              authToken: this.authToken ?? '',
+              log: this.log,
+            });
+            resolve();
+          })();
+        } else {
+          resolve();
         }
-        resolve();
       });
 
       this.server.on('close', () => {
@@ -400,8 +406,8 @@ export class IDEServer {
     if (
       this.context != null &&
       this.server != null &&
-      this.port &&
-      this.authToken
+      this.port != null &&
+      this.authToken != null
     ) {
       await writePortAndWorkspace({
         context: this.context,
