@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fc from 'fast-check';
+import { fileURLToPath } from 'node:url';
 
 import { createLspClient } from '../src/service/lsp-client';
 import type { LspServerConfig } from '../src/types';
 
 const WORKSPACE_ROOT = '/workspace';
-const FIXTURE_PATH = new URL('./fixtures/fake-lsp-server.ts', import.meta.url)
-  .pathname;
+const FIXTURE_PATH = fileURLToPath(
+  new URL('./fixtures/fake-lsp-server.ts', import.meta.url),
+);
 
 function createConfig(args: string[] = []): { config: LspServerConfig } {
   return {
@@ -393,10 +395,9 @@ describe('LspClient unit TDD edge cases and internal behaviors', () => {
   });
 });
 
-const CONTENT_LENGTH_FIXTURE_PATH = new URL(
-  './fixtures/fake-lsp-server-content-length.ts',
-  import.meta.url,
-).pathname;
+const CONTENT_LENGTH_FIXTURE_PATH = fileURLToPath(
+  new URL('./fixtures/fake-lsp-server-content-length.ts', import.meta.url),
+);
 
 function createContentLengthConfig(): { config: LspServerConfig } {
   return {
