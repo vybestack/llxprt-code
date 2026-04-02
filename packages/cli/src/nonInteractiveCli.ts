@@ -72,10 +72,10 @@ export async function runNonInteractive({
     const prefix = payload.severity.toUpperCase();
     process.stderr.write(`[${prefix}] ${payload.message}
 `);
-    if (payload.error && config.getDebugMode()) {
+    if (payload.error != null && config.getDebugMode()) {
       const errorToLog =
         payload.error instanceof Error
-          ? payload.error.stack || payload.error.message
+          ? (payload.error.stack ?? payload.error.message)
           : String(payload.error);
       process.stderr.write(`${errorToLog}
 `);
@@ -118,7 +118,7 @@ export async function runNonInteractive({
       key: { name?: string; ctrl?: boolean },
     ) => {
       // Detect Ctrl+C: either ctrl+c key combo or raw character code 3
-      if ((key && key.ctrl && key.name === 'c') || str === '\u0003') {
+      if ((key.ctrl === true && key.name === 'c') || str === '\u0003') {
         // Only handle once
         if (isAborting) {
           return;
@@ -180,7 +180,7 @@ export async function runNonInteractive({
     const geminiClient = config.getGeminiClient();
     setActiveProviderRuntimeContext({
       settingsService: config.getSettingsService(),
-      runtimeId: config.getSessionId?.(),
+      runtimeId: config.getSessionId(),
       metadata: { source: 'nonInteractiveCli' },
       config,
     });
@@ -197,10 +197,7 @@ export async function runNonInteractive({
 
     // Initialize emoji filter for non-interactive mode
     const emojiFilterMode =
-      typeof config.getEphemeralSetting === 'function'
-        ? (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) ||
-          'auto'
-        : 'auto';
+      (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) ?? 'auto';
     const emojiFilter =
       emojiFilterMode !== 'allowed'
         ? new EmojiFilter({ mode: emojiFilterMode })
@@ -221,7 +218,7 @@ export async function runNonInteractive({
       // If a slash command is found and returns a prompt, use it.
       // Otherwise, slashCommandResult falls through to the default prompt
       // handling.
-      if (slashCommandResult) {
+      if (slashCommandResult != null) {
         query = slashCommandResult as Part[];
       }
     }
@@ -236,11 +233,11 @@ export async function runNonInteractive({
         config,
       });
 
-      if (error || !processedQuery) {
+      if (error != null || processedQuery == null) {
         // An error occurred during @include processing (e.g., file not found).
         // The error message is already logged by handleAtCommand.
         throw new FatalInputError(
-          error || 'Exiting due to an error processing the @ command.',
+          error ?? 'Exiting due to an error processing the @ command.',
         );
       }
       query = processedQuery as Part[];
@@ -261,6 +258,7 @@ export async function runNonInteractive({
     let jsonResponseText = '';
 
     let turnCount = 0;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     while (true) {
       turnCount++;
       if (
@@ -306,7 +304,7 @@ export async function runNonInteractive({
         if (firstEventInTurn && !jsonOutput && streamFormatter == null) {
           const activeProfileName = config
             .getSettingsService()
-            .getCurrentProfileName?.();
+            .getCurrentProfileName();
           if (activeProfileName) {
             process.stdout.write(`[${activeProfileName}]
 `);
@@ -401,10 +399,8 @@ export async function runNonInteractive({
               type: JsonStreamEventType.TOOL_USE,
               timestamp: new Date().toISOString(),
               tool_name: toolCallRequest.name,
-              tool_id:
-                toolCallRequest.callId ??
-                `${toolCallRequest.name}-${Date.now()}`,
-              parameters: toolCallRequest.args ?? {},
+              tool_id: toolCallRequest.callId,
+              parameters: toolCallRequest.args,
             });
           }
           const normalizedRequest: ToolCallRequestInfo = {
@@ -433,12 +429,12 @@ export async function runNonInteractive({
         } else if (event.type === GeminiEventType.Error) {
           throw event.value.error;
         } else if (event.type === GeminiEventType.AgentExecutionStopped) {
-          const stopMessage = `Agent execution stopped: ${event.systemMessage?.trim() || event.reason}`;
+          const stopMessage = `Agent execution stopped: ${event.systemMessage?.trim() ?? event.reason}`;
           process.stderr.write(`${stopMessage}
 `);
           return;
         } else if (event.type === GeminiEventType.AgentExecutionBlocked) {
-          const blockMessage = `Agent execution blocked: ${event.systemMessage?.trim() || event.reason}`;
+          const blockMessage = `Agent execution blocked: ${event.systemMessage?.trim() ?? event.reason}`;
           process.stderr.write(`[WARNING] ${blockMessage}
 `);
         }
@@ -446,7 +442,7 @@ export async function runNonInteractive({
 
       flushThoughtBuffer();
 
-      const remainingBuffered = emojiFilter?.flushBuffer?.();
+      const remainingBuffered = emojiFilter?.flushBuffer();
       if (remainingBuffered) {
         if (jsonOutput) {
           jsonResponseText += remainingBuffered;
@@ -459,15 +455,14 @@ export async function runNonInteractive({
         const toolResponseParts: Part[] = [];
 
         for (const requestFromModel of functionCalls) {
-          const callId =
-            requestFromModel.callId ?? `${requestFromModel.name}-${Date.now()}`;
-          const rawArgs = requestFromModel.args ?? {};
+          const callId = requestFromModel.callId;
+          const rawArgs = requestFromModel.args;
           let normalizedArgs: Record<string, unknown>;
           if (typeof rawArgs === 'string') {
             try {
               const parsed = JSON.parse(rawArgs);
               normalizedArgs =
-                parsed && typeof parsed === 'object'
+                parsed != null && typeof parsed === 'object'
                   ? (parsed as Record<string, unknown>)
                   : {};
             } catch (error) {
@@ -481,10 +476,8 @@ export async function runNonInteractive({
               `Unexpected array arguments for tool ${requestFromModel.name}; coercing to empty object.`,
             );
             normalizedArgs = {};
-          } else if (rawArgs && typeof rawArgs === 'object') {
-            normalizedArgs = rawArgs;
           } else {
-            normalizedArgs = {};
+            normalizedArgs = rawArgs;
           }
 
           const requestInfo: ToolCallRequestInfo = {
@@ -492,7 +485,7 @@ export async function runNonInteractive({
             name: requestFromModel.name,
             args: normalizedArgs,
             isClientInitiated: false,
-            prompt_id: requestFromModel.prompt_id ?? prompt_id,
+            prompt_id: requestFromModel.prompt_id,
             agentId: requestFromModel.agentId ?? 'primary',
           };
 
