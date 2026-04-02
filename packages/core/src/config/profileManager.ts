@@ -29,7 +29,7 @@ export class ProfileManager {
    */
   constructor(profilesDir?: string) {
     this.profilesDir =
-      profilesDir ?? path.join(os.homedir(), '.llxprt', 'profiles');
+      profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
   }
 
   /**
@@ -49,12 +49,10 @@ export class ProfileManager {
     name: string,
     profile: LoadBalancerProfile,
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for untrusted JSON data
     if (profile.version !== 1) {
       throw new Error('unsupported profile version');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for untrusted JSON data
     if (!profile.profiles || profile.profiles.length === 0) {
       throw new Error(
         `LoadBalancer profile '${name}' must reference at least one profile`,
@@ -108,12 +106,10 @@ export class ProfileManager {
       const profile = JSON.parse(content) as Profile;
 
       if (isLoadBalancerProfile(profile)) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for untrusted JSON data
         if (profile.version !== 1) {
           throw new Error('unsupported profile version');
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for untrusted JSON data
         if (!profile.profiles || profile.profiles.length === 0) {
           throw new Error(
             `LoadBalancer profile '${profileName}' must reference at least one profile`,
@@ -151,7 +147,6 @@ export class ProfileManager {
         return profile;
       }
 
-      /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for untrusted JSON data */
       if (
         !profile.version ||
         !profile.provider ||
@@ -161,9 +156,7 @@ export class ProfileManager {
       ) {
         throw new Error('missing required fields');
       }
-      /* eslint-enable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions */
 
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for untrusted JSON data
       if (profile.version !== 1) {
         throw new Error('unsupported profile version');
       }
@@ -260,7 +253,6 @@ export class ProfileManager {
     settingsService: SettingsService,
   ): Promise<void> {
     // Use SettingsService to export current settings
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for interface compatibility
     if (!settingsService.exportForProfile) {
       throw new Error('SettingsService does not support profile export');
     }
@@ -274,25 +266,25 @@ export class ProfileManager {
     const profile: Profile = {
       version: 1,
       provider: defaultProvider,
-      model: providerSettings.model ?? 'default',
+      model: providerSettings?.model || 'default',
       modelParams: {
-        temperature: providerSettings.temperature,
-        max_tokens: providerSettings.maxTokens,
+        temperature: providerSettings?.temperature,
+        max_tokens: providerSettings?.maxTokens,
       },
       ephemeralSettings: {
-        'base-url': providerSettings['base-url'],
-        'auth-key': providerSettings.apiKey,
-        'prompt-caching': providerSettings['prompt-caching'],
+        'base-url': providerSettings?.['base-url'],
+        'auth-key': providerSettings?.apiKey,
+        'prompt-caching': providerSettings?.['prompt-caching'],
         'include-folder-structure':
-          providerSettings['include-folder-structure'],
-        'tool-format': providerSettings.toolFormat,
+          providerSettings?.['include-folder-structure'],
+        'tool-format': providerSettings?.toolFormat,
       },
     };
 
-    const toolsAllowed = Array.isArray(settingsData.tools.allowed)
+    const toolsAllowed = Array.isArray(settingsData.tools?.allowed)
       ? [...settingsData.tools.allowed]
       : [];
-    const toolsDisabled = Array.isArray(settingsData.tools.disabled)
+    const toolsDisabled = Array.isArray(settingsData.tools?.disabled)
       ? [...settingsData.tools.disabled]
       : [];
 
@@ -301,7 +293,6 @@ export class ProfileManager {
     profile.ephemeralSettings['disabled-tools'] = toolsDisabled;
 
     // Update current profile name in SettingsService
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for interface compatibility
     if (settingsService.setCurrentProfileName) {
       settingsService.setCurrentProfileName(profileName);
     }
@@ -357,19 +348,16 @@ export class ProfileManager {
     };
 
     // Update current profile name first
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for interface compatibility
     if (settingsService.setCurrentProfileName) {
       settingsService.setCurrentProfileName(profileName);
     }
 
     // Apply through SettingsService
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard for interface compatibility
     if (!settingsService.importFromProfile) {
       throw new Error('SettingsService does not support profile import');
     }
     await settingsService.importFromProfile(settingsData);
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- always defined in current implementation
     if (settingsData.tools) {
       const allowedList = Array.isArray(settingsData.tools.allowed)
         ? settingsData.tools.allowed

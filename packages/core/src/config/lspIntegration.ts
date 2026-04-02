@@ -8,21 +8,15 @@
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { CallableTool, Tool, Part, FunctionCall } from '@google/genai';
 import type { Config } from './config.js';
-import type { LspConfig } from '../lsp/types.js';
-import type { LspServiceClient } from '../lsp/lsp-service-client.js';
-import type { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
-import type { Readable, Writable } from 'node:stream';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 
 export interface LspState {
-  lspConfig?: LspConfig;
-  lspServiceClient?: LspServiceClient;
-  lspMcpClient?: McpClient;
-  lspMcpTransport?: Transport;
+  lspConfig?: import('../lsp/types.js').LspConfig;
+  lspServiceClient?: import('../lsp/lsp-service-client.js').LspServiceClient;
+  lspMcpClient?: import('@modelcontextprotocol/sdk/client/index.js').Client;
+  lspMcpTransport?: import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
 }
 
 /** Narrow interface for LSP integration — avoids full Config dependency */
@@ -53,7 +47,7 @@ export async function initializeLsp(
 
     if (!state.lspServiceClient.isAlive()) {
       const reason = state.lspServiceClient.getUnavailableReason();
-      if (reason?.includes('not found') === true) {
+      if (reason?.includes('not found')) {
         debugLogger.error(
           'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
         );
@@ -100,15 +94,15 @@ export async function initializeLsp(
  * Returns undefined if disabled, LspConfig if enabled.
  */
 export function parseLspConfig(
-  lsp: boolean | LspConfig | undefined,
-): LspConfig | undefined {
+  lsp: boolean | import('../lsp/types.js').LspConfig | undefined,
+): import('../lsp/types.js').LspConfig | undefined {
   if (lsp === false || lsp === undefined) {
     return undefined;
   }
   if (lsp === true) {
     return { servers: [] };
   }
-  return lsp;
+  return lsp.servers == undefined ? { ...lsp, servers: [] } : lsp;
 }
 
 /**
@@ -118,10 +112,15 @@ async function registerMcpNavigationTools(
   state: LspState,
   host: LspHost,
   streams: {
-    readable: Readable;
-    writable: Writable;
+    readable: import('node:stream').Readable;
+    writable: import('node:stream').Writable;
   },
 ): Promise<void> {
+  type JSONRPCMessage =
+    import('@modelcontextprotocol/sdk/types.js').JSONRPCMessage;
+  type Transport =
+    import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
+
   const registry = host.getToolRegistry();
 
   const cleanup = async () => {
@@ -169,7 +168,7 @@ async function registerMcpNavigationTools(
             typeof chunk === 'string' ? chunk : chunk.toString('utf8');
           readBuffer += text;
 
-          for (;;) {
+          while (true) {
             const newlineIndex = readBuffer.indexOf('\n');
             if (newlineIndex === -1) {
               break;

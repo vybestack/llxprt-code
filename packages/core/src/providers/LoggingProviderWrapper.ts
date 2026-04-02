@@ -710,7 +710,7 @@ export class LoggingProviderWrapper implements IProvider {
 
         // Accumulate text content for token estimation fallback (only when no real usage yet)
         if (latestTokenUsage == null) {
-          for (const block of chunk.blocks) {
+          for (const block of chunk.blocks ?? []) {
             if (block.type === 'text') {
               streamedText += block.text;
             }
