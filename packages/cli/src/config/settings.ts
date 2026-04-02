@@ -24,10 +24,11 @@ import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import type {
   Settings,
   MemoryImportFormat,
-  type MergedSettings,
-  SETTINGS_SCHEMA,
-  type SettingDefinition,
+  MergedSettings,
+  SettingDefinition,
 } from './settingsSchema.js';
+import { SETTINGS_SCHEMA } from './settingsSchema.js';
+
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import {
   SETTINGS_DIRECTORY_NAME,
@@ -194,9 +195,7 @@ function getSchemaDefaults(): Partial<Settings> {
         schemaEntry.properties != null
       ) {
         // Initialize nested object if it doesn't exist
-        if (!target[key]) {
-          target[key] = {};
-        }
+        target[key] ??= {};
         extractDefaults(
           schemaEntry.properties as Record<string, SettingDefinition>,
           target[key] as Record<string, unknown>,
@@ -255,109 +254,109 @@ function mergeSettings(
     ...safeWorkspace,
     ...system,
     ui: {
-      ...(schemaDefaults.ui || {}),
+      ...(schemaDefaults.ui ?? {}),
       // Migrate legacy top-level UI settings to ui.* namespace for backwards compatibility
       // This ensures users with old settings.json files don't lose their preferences
       ...extractLegacyUiKeys(systemDefaults),
-      ...(systemDefaults.ui || {}),
+      ...(systemDefaults.ui ?? {}),
       ...extractLegacyUiKeys(user),
-      ...(user.ui || {}),
+      ...(user.ui ?? {}),
       ...extractLegacyUiKeys(safeWorkspace),
-      ...(safeWorkspace.ui || {}),
+      ...(safeWorkspace.ui ?? {}),
       ...extractLegacyUiKeys(system),
-      ...(system.ui || {}),
+      ...(system.ui ?? {}),
       customThemes: {
-        ...(systemDefaults.ui?.customThemes || {}),
-        ...(user.ui?.customThemes || {}),
-        ...(safeWorkspace.ui?.customThemes || {}),
-        ...(system.ui?.customThemes || {}),
+        ...(systemDefaults.ui?.customThemes ?? {}),
+        ...(user.ui?.customThemes ?? {}),
+        ...(safeWorkspace.ui?.customThemes ?? {}),
+        ...(system.ui?.customThemes ?? {}),
       },
     },
     mcpServers: {
-      ...(systemDefaults.mcpServers || {}),
-      ...(user.mcpServers || {}),
-      ...(safeWorkspace.mcpServers || {}),
-      ...(system.mcpServers || {}),
+      ...(systemDefaults.mcpServers ?? {}),
+      ...(user.mcpServers ?? {}),
+      ...(safeWorkspace.mcpServers ?? {}),
+      ...(system.mcpServers ?? {}),
     },
     includeDirectories: [
-      ...(systemDefaults.includeDirectories || []),
-      ...(user.includeDirectories || []),
-      ...(safeWorkspace.includeDirectories || []),
-      ...(system.includeDirectories || []),
+      ...(systemDefaults.includeDirectories ?? []),
+      ...(user.includeDirectories ?? []),
+      ...(safeWorkspace.includeDirectories ?? []),
+      ...(system.includeDirectories ?? []),
     ],
     chatCompression: {
-      ...(systemDefaults.chatCompression || {}),
-      ...(user.chatCompression || {}),
-      ...(safeWorkspace.chatCompression || {}),
-      ...(system.chatCompression || {}),
+      ...(systemDefaults.chatCompression ?? {}),
+      ...(user.chatCompression ?? {}),
+      ...(safeWorkspace.chatCompression ?? {}),
+      ...(system.chatCompression ?? {}),
     },
     security: {
-      ...(schemaDefaults.security || {}),
-      ...(systemDefaults.security || {}),
-      ...(user.security || {}),
-      ...(safeWorkspace.security || {}),
-      ...(system.security || {}),
+      ...(schemaDefaults.security ?? {}),
+      ...(systemDefaults.security ?? {}),
+      ...(user.security ?? {}),
+      ...(safeWorkspace.security ?? {}),
+      ...(system.security ?? {}),
     },
     telemetry: {
-      ...(schemaDefaults.telemetry || {}),
-      ...(systemDefaults.telemetry || {}),
-      ...(user.telemetry || {}),
-      ...(safeWorkspace.telemetry || {}),
-      ...(system.telemetry || {}),
+      ...(schemaDefaults.telemetry ?? {}),
+      ...(systemDefaults.telemetry ?? {}),
+      ...(user.telemetry ?? {}),
+      ...(safeWorkspace.telemetry ?? {}),
+      ...(system.telemetry ?? {}),
     },
     mcp: {
-      ...(schemaDefaults.mcp || {}),
-      ...(systemDefaults.mcp || {}),
-      ...(user.mcp || {}),
-      ...(safeWorkspace.mcp || {}),
-      ...(system.mcp || {}),
+      ...(schemaDefaults.mcp ?? {}),
+      ...(systemDefaults.mcp ?? {}),
+      ...(user.mcp ?? {}),
+      ...(safeWorkspace.mcp ?? {}),
+      ...(system.mcp ?? {}),
     },
     tools: {
-      ...(schemaDefaults.tools || {}),
-      ...(systemDefaults.tools || {}),
-      ...(user.tools || {}),
-      ...(safeWorkspace.tools || {}),
-      ...(system.tools || {}),
+      ...(schemaDefaults.tools ?? {}),
+      ...(systemDefaults.tools ?? {}),
+      ...(user.tools ?? {}),
+      ...(safeWorkspace.tools ?? {}),
+      ...(system.tools ?? {}),
     },
     extensions: {
-      ...(systemDefaults.extensions || {}),
-      ...(user.extensions || {}),
-      ...(safeWorkspace.extensions || {}),
-      ...(system.extensions || {}),
+      ...(systemDefaults.extensions ?? {}),
+      ...(user.extensions ?? {}),
+      ...(safeWorkspace.extensions ?? {}),
+      ...(system.extensions ?? {}),
       disabled: [
         ...new Set([
-          ...(systemDefaults.extensions?.disabled || []),
-          ...(user.extensions?.disabled || []),
-          ...(safeWorkspace.extensions?.disabled || []),
-          ...(system.extensions?.disabled || []),
+          ...(systemDefaults.extensions?.disabled ?? []),
+          ...(user.extensions?.disabled ?? []),
+          ...(safeWorkspace.extensions?.disabled ?? []),
+          ...(system.extensions?.disabled ?? []),
         ]),
       ],
       workspacesWithMigrationNudge: [
         ...new Set([
-          ...(systemDefaults.extensions?.workspacesWithMigrationNudge || []),
-          ...(user.extensions?.workspacesWithMigrationNudge || []),
-          ...(safeWorkspace.extensions?.workspacesWithMigrationNudge || []),
-          ...(system.extensions?.workspacesWithMigrationNudge || []),
+          ...(systemDefaults.extensions?.workspacesWithMigrationNudge ?? []),
+          ...(user.extensions?.workspacesWithMigrationNudge ?? []),
+          ...(safeWorkspace.extensions?.workspacesWithMigrationNudge ?? []),
+          ...(system.extensions?.workspacesWithMigrationNudge ?? []),
         ]),
       ],
     },
     // coreToolSettings is UI-only and should not be merged from settings files
     // It only exists in memory for the UI and manipulates excludeTools/allowedTools
     // But it should have schema defaults for proper UI display
-    coreToolSettings: schemaDefaults.coreToolSettings || {},
+    coreToolSettings: schemaDefaults.coreToolSettings ?? {},
     hooksConfig: {
-      ...(schemaDefaults.hooksConfig || {}),
-      ...(systemDefaults.hooksConfig || {}),
-      ...(user.hooksConfig || {}),
-      ...(safeWorkspace.hooksConfig || {}),
-      ...(system.hooksConfig || {}),
+      ...(schemaDefaults.hooksConfig ?? {}),
+      ...(systemDefaults.hooksConfig ?? {}),
+      ...(user.hooksConfig ?? {}),
+      ...(safeWorkspace.hooksConfig ?? {}),
+      ...(system.hooksConfig ?? {}),
     },
     hooks: {
-      ...(schemaDefaults.hooks || {}),
-      ...(systemDefaults.hooks || {}),
-      ...(user.hooks || {}),
-      ...(safeWorkspace.hooks || {}),
-      ...(system.hooks || {}),
+      ...(schemaDefaults.hooks ?? {}),
+      ...(systemDefaults.hooks ?? {}),
+      ...(user.hooks ?? {}),
+      ...(safeWorkspace.hooks ?? {}),
+      ...(system.hooks ?? {}),
     },
   };
 
@@ -367,18 +366,12 @@ function mergeSettings(
     system.ui?.theme ??
     systemDefaults.ui?.theme ??
     schemaDefaults.ui?.theme;
-  if (merged.ui) {
-    merged.ui.theme = prioritizedTheme;
-  }
+  merged.ui.theme = prioritizedTheme;
 
   return merged as MergedSettings;
 }
 
 function migrateLegacyInteractiveShellSetting(settings: Settings): void {
-  if (!settings || typeof settings !== 'object') {
-    return;
-  }
-
   const tools = settings.tools;
   if (tools == null || typeof tools !== 'object') {
     return;
@@ -394,7 +387,7 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
   }
 
   const legacyShell = toolSettings['shell'];
-  if (legacyShell && typeof legacyShell === 'object') {
+  if (legacyShell != null && typeof legacyShell === 'object') {
     const shellSettings = legacyShell as Record<string, unknown>;
     const shellFlag = shellSettings['enableInteractiveShell'];
     if (typeof shellFlag === 'boolean') {
@@ -420,10 +413,6 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
  * Called per-scope before merging, so each scope's settings file is independently migrated.
  */
 function migrateHooksConfig(settings: Settings): void {
-  if (!settings || typeof settings !== 'object') {
-    return;
-  }
-
   const hooks = settings.hooks as Record<string, unknown> | undefined;
   if (!hooks) return;
 
@@ -432,7 +421,8 @@ function migrateHooksConfig(settings: Settings): void {
 
   if (!needsMigration) return;
 
-  const hooksConfig = (settings.hooksConfig as Record<string, unknown>) ?? {};
+  const hooksConfig: Record<string, unknown> =
+    (settings.hooksConfig as Record<string, unknown> | undefined) ?? {};
   const newHooks: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(hooks)) {
@@ -500,6 +490,7 @@ export class LoadedSettings {
         return this.system;
       case SettingScope.SystemDefaults:
         return this.systemDefaults;
+      case SettingScope.Session:
       default:
         throw new Error(`Invalid scope: ${scope}`);
     }
@@ -519,7 +510,7 @@ export class LoadedSettings {
       const nested = parts.slice(1).join('.');
 
       // Ensure the top-level object exists
-      if (!settingsFile.settings[topLevel]) {
+      if (settingsFile.settings[topLevel] == null) {
         (settingsFile.settings as Record<string, unknown>)[topLevel] = {};
       }
 
@@ -527,9 +518,7 @@ export class LoadedSettings {
       let current = settingsFile.settings[topLevel] as Record<string, unknown>;
       const nestedParts = nested.split('.');
       for (let i = 0; i < nestedParts.length - 1; i++) {
-        if (!current[nestedParts[i]]) {
-          current[nestedParts[i]] = {};
-        }
+        current[nestedParts[i]] ??= {};
         current = current[nestedParts[i]] as Record<string, unknown>;
       }
       current[nestedParts[nestedParts.length - 1]] = value;
@@ -544,25 +533,25 @@ export class LoadedSettings {
 
   // Provider keyfile methods for llxprt multi-provider support
   getProviderKeyfile(providerName: string): string | undefined {
-    const keyfiles = this.merged.providerKeyfiles || {};
+    const keyfiles = this.merged.providerKeyfiles ?? {};
     return keyfiles[providerName];
   }
 
   setProviderKeyfile(providerName: string, keyfilePath: string): void {
-    const keyfiles = this.merged.providerKeyfiles || {};
+    const keyfiles = this.merged.providerKeyfiles ?? {};
     keyfiles[providerName] = keyfilePath;
     this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
   }
 
   removeProviderKeyfile(providerName: string): void {
-    const keyfiles = this.merged.providerKeyfiles || {};
+    const keyfiles = this.merged.providerKeyfiles ?? {};
     delete keyfiles[providerName];
     this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
   }
 
   // OAuth enablement methods
   getOAuthEnabledProviders(): Record<string, boolean> {
-    return this.merged.oauthEnabledProviders || {};
+    return this.merged.oauthEnabledProviders ?? {};
   }
 
   // Note: setRemoteAdminSettings from upstream omitted - not applicable to LLxprt (no Google admin integration)
@@ -585,7 +574,7 @@ export class LoadedSettings {
 
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
-  while (true) {
+  for (;;) {
     // prefer gemini-specific .env under LLXPRT_DIR
     const geminiEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
     if (fs.existsSync(geminiEnvPath)) {
@@ -596,7 +585,7 @@ function findEnvFile(startDir: string): string | null {
       return envPath;
     }
     const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir || !parentDir) {
+    if (parentDir === currentDir) {
       // check .env under home as fallback, again preferring gemini-specific .env
       const homeGeminiEnvPath = path.join(homedir(), LLXPRT_DIR, '.env');
       if (fs.existsSync(homeGeminiEnvPath)) {
@@ -659,7 +648,7 @@ export function loadEnvironment(settings: Settings): void {
       const parsedEnv = dotenv.parse(envFileContent);
 
       const excludedVars =
-        settings?.excludedProjectEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
+        settings.excludedProjectEnvVars ?? DEFAULT_EXCLUDED_ENV_VARS;
       const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {
