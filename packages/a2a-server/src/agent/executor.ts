@@ -101,7 +101,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     sdkTask: SDKTask,
     eventBus?: ExecutionEventBus,
   ): Promise<TaskWrapper> {
-    const metadata = sdkTask.metadata || {};
+    const metadata = sdkTask.metadata ?? {};
     const persistedState = getPersistedState(metadata);
 
     if (persistedState == null) {
@@ -139,7 +139,7 @@ export class CoderAgentExecutor implements AgentExecutor {
     agentSettingsInput?: AgentSettings,
     eventBus?: ExecutionEventBus,
   ): Promise<TaskWrapper> {
-    const agentSettings = agentSettingsInput || ({} as AgentSettings);
+    const agentSettings = agentSettingsInput ?? ({} as AgentSettings);
     const config = await this.getConfig(agentSettings, taskId);
     const runtimeTask = await Task.create(
       taskId,
@@ -289,11 +289,11 @@ export class CoderAgentExecutor implements AgentExecutor {
     const userMessage = requestContext.userMessage;
     const sdkTask = requestContext.task;
 
-    const taskId = sdkTask?.id || userMessage.taskId || uuidv4();
+    const taskId = sdkTask?.id ?? userMessage.taskId ?? uuidv4();
     const contextId =
-      userMessage.contextId ||
-      sdkTask?.contextId ||
-      sdkTask?.metadata?.['_contextId'] ||
+      userMessage.contextId ??
+      sdkTask?.contextId ??
+      (sdkTask?.metadata?.['_contextId'] as string | undefined) ??
       uuidv4();
 
     logger.info(
@@ -415,13 +415,6 @@ export class CoderAgentExecutor implements AgentExecutor {
       }
     }
 
-    if (!wrapper) {
-      logger.error(
-        `[CoderAgentExecutor] Task ${taskId} is unexpectedly undefined after load/create.`,
-      );
-      return;
-    }
-
     const currentTask = wrapper.task;
 
     if (['canceled', 'failed', 'completed'].includes(currentTask.taskState)) {
@@ -496,6 +489,8 @@ export class CoderAgentExecutor implements AgentExecutor {
         logger.info(
           `[CoderAgentExecutor] Task ${taskId}: All pending tools completed or none were pending.`,
         );
+
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- signal may change asynchronously during waitForPendingTools
 
         if (abortSignal.aborted) throw new Error('Execution aborted');
 

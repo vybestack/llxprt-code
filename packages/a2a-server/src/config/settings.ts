@@ -118,7 +118,7 @@ function resolveEnvVarsInString(value: string): string {
   const envVarRegex = /\$(?:(\w+)|{([^}]+)})/g; // Find $VAR_NAME or ${VAR_NAME}
   return value.replace(envVarRegex, (match, varName1, varName2) => {
     const varName = Boolean(varName1) || varName2;
-    if (process.env && typeof process.env[varName] === 'string') {
+    if (typeof process.env[varName] === 'string') {
       return process.env[varName];
     }
     return match;

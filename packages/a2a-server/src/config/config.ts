@@ -45,8 +45,8 @@ export async function loadConfig(
     targetDir: workspaceDir,
     debugMode: process.env['DEBUG'] === 'true' || false,
     question: '',
-    coreTools: settings.coreTools || undefined,
-    excludeTools: settings.excludeTools || undefined,
+    coreTools: settings.coreTools ?? undefined,
+    excludeTools: settings.excludeTools ?? undefined,
     showMemoryUsage: (settings.showMemoryUsage ?? false) || false,
     approvalMode:
       process.env['GEMINI_YOLO_MODE'] === 'true'
@@ -138,10 +138,10 @@ export function mergeMcpServers(
   settings: Settings,
   extensions: GeminiCLIExtension[],
 ) {
-  const mcpServers = { ...(settings.mcpServers || {}) };
+  const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {
-    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
-      if (mcpServers[key]) {
+    Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
+      if (mcpServers[key] != null) {
         debugLogger.warn(
           `Skipping extension MCP config for server with key "${key}" as it already exists.`,
         );
@@ -190,6 +190,8 @@ export function loadEnvironment(): void {
 
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with break
+
   while (true) {
     // prefer gemini-specific .env under GEMINI_DIR
     const geminiEnvPath = path.join(currentDir, GEMINI_CONFIG_DIR, '.env');
