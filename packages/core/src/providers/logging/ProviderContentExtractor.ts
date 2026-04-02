@@ -15,7 +15,7 @@ export class ProviderContentExtractor {
    * Extract text content from a streaming chunk based on provider format
    */
   extractContentFromChunk(chunk: unknown): string {
-    if (!chunk || typeof chunk !== 'object') {
+    if (chunk == null || typeof chunk !== 'object') {
       return '';
     }
 
@@ -53,7 +53,7 @@ export class ProviderContentExtractor {
    * Extract tool calls from a streaming chunk based on provider format
    */
   extractToolCallsFromChunk(chunk: unknown): ToolCall[] {
-    if (!chunk || typeof chunk !== 'object') {
+    if (chunk == null || typeof chunk !== 'object') {
       return [];
     }
 
@@ -82,15 +82,18 @@ export class ProviderContentExtractor {
 
   private extractGeminiContent(chunk: Record<string, unknown>): string {
     const candidates = chunk.candidates as Array<Record<string, unknown>>;
-    const candidate = candidates?.[0];
-    if (!candidate) return '';
+    const candidate = candidates[0] as Record<string, unknown> | undefined;
+    if (candidate == null) return '';
 
     // Handle text content
-    const content = candidate.content as Record<string, unknown>;
-    const parts = content?.parts as Array<Record<string, unknown>>;
-    if (parts) {
+    const content = candidate.content as Record<string, unknown> | undefined;
+    const parts = content?.parts as Array<Record<string, unknown>> | undefined;
+    if (parts != null) {
       const textParts = parts
-        .filter((part: Record<string, unknown>) => part.text)
+        .filter(
+          (part: Record<string, unknown>) =>
+            part.text != null && part.text !== '',
+        )
         .map((part: Record<string, unknown>) => part.text as string);
       return textParts.join('');
     }
@@ -100,18 +103,18 @@ export class ProviderContentExtractor {
 
   private extractOpenAIContent(chunk: Record<string, unknown>): string {
     const choices = chunk.choices as Array<Record<string, unknown>>;
-    const choice = choices?.[0];
-    if (!choice) return '';
+    const choice = choices[0] as Record<string, unknown> | undefined;
+    if (choice == null) return '';
 
     // Handle streaming content
-    const delta = choice.delta as Record<string, unknown>;
-    if (delta?.content) {
+    const delta = choice.delta as Record<string, unknown> | undefined;
+    if (delta?.content != null && delta.content !== '') {
       return delta.content as string;
     }
 
     // Handle complete content
-    const message = choice.message as Record<string, unknown>;
-    if (message?.content) {
+    const message = choice.message as Record<string, unknown> | undefined;
+    if (message?.content != null && message.content !== '') {
       return message.content as string;
     }
 
@@ -122,16 +125,21 @@ export class ProviderContentExtractor {
     // Handle different Anthropic event types
     switch (chunk.type) {
       case 'content_block_delta': {
-        const delta = chunk.delta as Record<string, unknown>;
-        return (delta?.text as string) || '';
+        const delta = chunk.delta as Record<string, unknown> | undefined;
+        const text = delta?.text;
+        return typeof text === 'string' ? text : '';
       }
       case 'content_block_start': {
-        const contentBlock = chunk.content_block as Record<string, unknown>;
-        return (contentBlock?.text as string) || '';
+        const contentBlock = chunk.content_block as
+          | Record<string, unknown>
+          | undefined;
+        const text = contentBlock?.text;
+        return typeof text === 'string' ? text : '';
       }
       case 'message_delta': {
-        const delta = chunk.delta as Record<string, unknown>;
-        return (delta?.text as string) || '';
+        const delta = chunk.delta as Record<string, unknown> | undefined;
+        const text = delta?.text;
+        return typeof text === 'string' ? text : '';
       }
       default:
         return '';
@@ -140,64 +148,74 @@ export class ProviderContentExtractor {
 
   private extractGenericContent(chunk: Record<string, unknown>): string {
     // Try common content patterns
-    if (chunk.text) return chunk.text as string;
-    if (chunk.content) return chunk.content as string;
-    if (chunk.message) return chunk.message as string;
-    const delta = chunk.delta as Record<string, unknown>;
-    if (delta?.text) return delta.text as string;
+    if (chunk.text != null && chunk.text !== '') return chunk.text as string;
+    if (chunk.content != null && chunk.content !== '')
+      return chunk.content as string;
+    if (chunk.message != null && chunk.message !== '')
+      return chunk.message as string;
+    const delta = chunk.delta as Record<string, unknown> | undefined;
+    if (delta?.text != null && delta.text !== '') return delta.text as string;
 
     return '';
   }
 
   private extractGeminiToolCalls(chunk: Record<string, unknown>): ToolCall[] {
     const candidates = chunk.candidates as Array<Record<string, unknown>>;
-    const candidate = candidates?.[0];
-    if (!candidate) return [];
-    const content = candidate.content as Record<string, unknown>;
-    const parts = content?.parts as Array<Record<string, unknown>>;
-    if (!parts) return [];
+    const candidate = candidates[0] as Record<string, unknown> | undefined;
+    if (candidate == null) return [];
+    const content = candidate.content as Record<string, unknown> | undefined;
+    const parts = content?.parts as Array<Record<string, unknown>> | undefined;
+    if (parts == null) return [];
 
     return parts
-      .filter((part: Record<string, unknown>) => part.functionCall)
+      .filter(
+        (part: Record<string, unknown>) =>
+          part.functionCall != null && part.functionCall !== '',
+      )
       .map((part: Record<string, unknown>) => ({
         provider: 'gemini',
         name: (part.functionCall as Record<string, unknown>).name as string,
         arguments: (part.functionCall as Record<string, unknown>).args,
         id:
-          ((part.functionCall as Record<string, unknown>).id as string) ||
-          this.generateToolCallId(),
+          typeof (part.functionCall as Record<string, unknown>).id === 'string'
+            ? ((part.functionCall as Record<string, unknown>).id as string)
+            : this.generateToolCallId(),
       }));
   }
 
   private extractOpenAIToolCalls(chunk: Record<string, unknown>): ToolCall[] {
     const choices = chunk.choices as Array<Record<string, unknown>>;
-    const choice = choices?.[0];
-    if (!choice) return [];
+    const choice = choices[0] as Record<string, unknown> | undefined;
+    if (choice == null) return [];
 
     // Handle streaming tool calls
-    const delta = choice.delta as Record<string, unknown>;
-    const toolCalls = delta?.tool_calls as Array<Record<string, unknown>>;
-    if (toolCalls) {
+    const delta = choice.delta as Record<string, unknown> | undefined;
+    const toolCalls = delta?.tool_calls as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (toolCalls != null) {
       return toolCalls.map((call: Record<string, unknown>) => ({
         provider: 'openai',
-        name: (call.function as Record<string, unknown>)?.name as string,
-        arguments: (call.function as Record<string, unknown>)?.arguments,
+        name: (call.function as Record<string, unknown>).name as string,
+        arguments: (call.function as Record<string, unknown>).arguments,
         id: call.id as string,
       }));
     }
 
     // Handle complete tool calls
-    const message = choice.message as Record<string, unknown>;
-    const messageToolCalls = message?.tool_calls as Array<
-      Record<string, unknown>
-    >;
-    if (messageToolCalls) {
+    const message = choice.message as Record<string, unknown> | undefined;
+    const messageToolCalls = message?.tool_calls as
+      | Array<Record<string, unknown>>
+      | undefined;
+    if (messageToolCalls != null) {
       return messageToolCalls.map((call: Record<string, unknown>) => ({
         provider: 'openai',
         name: (call.function as Record<string, unknown>).name as string,
         arguments: JSON.parse(
-          ((call.function as Record<string, unknown>).arguments as string) ||
-            '{}',
+          typeof (call.function as Record<string, unknown>).arguments ===
+            'string'
+            ? ((call.function as Record<string, unknown>).arguments as string)
+            : '{}',
         ),
         id: call.id as string,
       }));

@@ -109,7 +109,7 @@ export function convertToVercelMessages(
     if (toolIdMapper != null) {
       return toolIdMapper.resolveToolResponseId(block);
     }
-    return normalizeToOpenAIToolId(block.callId || '');
+    return normalizeToOpenAIToolId(block.callId);
   };
 
   for (const content of contents) {
@@ -222,7 +222,10 @@ export function convertToVercelMessages(
         };
 
         // Add reasoning_content if includeReasoningInContext is true and thinking blocks exist
-        if (options?.includeReasoningInContext && thinkingBlocks.length > 0) {
+        if (
+          options?.includeReasoningInContext === true &&
+          thinkingBlocks.length > 0
+        ) {
           const reasoningText = thinkingToReasoningField(thinkingBlocks);
           if (reasoningText) {
             const messageWithReasoning = baseMessage as unknown as Record<
@@ -245,7 +248,10 @@ export function convertToVercelMessages(
         };
 
         // Add reasoning_content if includeReasoningInContext is true and thinking blocks exist
-        if (options?.includeReasoningInContext && thinkingBlocks.length > 0) {
+        if (
+          options?.includeReasoningInContext === true &&
+          thinkingBlocks.length > 0
+        ) {
           const reasoningText = thinkingToReasoningField(thinkingBlocks);
           if (reasoningText) {
             const messageWithReasoning = baseMessage as unknown as Record<
@@ -262,8 +268,8 @@ export function convertToVercelMessages(
           messages.push(baseMessage);
         }
       }
-    } else if (content.speaker === 'tool') {
-      // Convert tool messages to tool result messages
+    } else {
+      // Convert tool messages to tool result messages (content.speaker === 'tool')
       const toolResponseBlocks = content.blocks.filter(
         (b: ContentBlock) => b.type === 'tool_response',
       );
@@ -282,7 +288,7 @@ export function convertToVercelMessages(
             return {
               type: 'tool-result' as const,
               toolCallId: resolveToolResponseId(block),
-              toolName: extBlock.name || extBlock.toolName || '',
+              toolName: extBlock.name ?? extBlock.toolName,
               output: {
                 type: 'text',
                 value: payload.result,
@@ -319,21 +325,12 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
       if (Array.isArray(message.content)) {
         const blocks: ContentBlock[] = [];
         for (const part of message.content) {
-          const partType = (part as { type?: string }).type;
-
-          if (typeof part === 'string') {
-            if (part) {
-              blocks.push({ type: 'text', text: part });
-            }
-            continue;
-          }
-
-          if (partType === 'text') {
+          if (part.type === 'text') {
             const text = (part as { text?: string }).text;
             if (text) {
               blocks.push({ type: 'text', text });
             }
-          } else if (partType === 'image') {
+          } else if ((part as { type?: string }).type === 'image') {
             const imageData =
               (part as { image?: string; url?: string }).image ??
               (part as { url?: string }).url;
@@ -383,16 +380,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
         }
       } else if (Array.isArray(message.content)) {
         for (const part of message.content) {
-          const partType = (part as { type?: string }).type;
-
-          if (typeof part === 'string') {
-            if (part) {
-              blocks.push({
-                type: 'text',
-                text: part,
-              });
-            }
-          } else if (partType === 'text') {
+          if (part.type === 'text') {
             const text = (part as { text?: string }).text;
             if (text) {
               blocks.push({
@@ -400,7 +388,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
                 text,
               });
             }
-          } else if (partType === 'image') {
+          } else if ((part as { type?: string }).type === 'image') {
             const imageData =
               (part as { image?: string; url?: string }).image ??
               (part as { url?: string }).url;
@@ -413,7 +401,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
                 mimeType,
               });
             }
-          } else if (partType === 'tool-call') {
+          } else if (part.type === 'tool-call') {
             const toolPart = part as ToolCallPart & {
               args?: unknown;
             };
@@ -469,50 +457,48 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
       const blocks: ToolResponseBlock[] = [];
 
       for (const part of message.content) {
-        if (part.type === 'tool-result') {
-          const output = (part as { output?: unknown }).output;
-          const isErrorOutput =
-            output &&
-            typeof output === 'object' &&
-            'type' in (output as { type?: string }) &&
-            typeof (output as { type?: string }).type === 'string' &&
-            (output as { type?: string }).type?.startsWith('error');
-          const resultValue =
-            output &&
-            typeof output === 'object' &&
-            'value' in (output as { value?: unknown })
-              ? (output as { value?: unknown }).value
-              : output;
-          let parsedResult = resultValue;
+        const output: unknown = part.output;
+        const isErrorOutput =
+          output != null &&
+          typeof output === 'object' &&
+          'type' in (output as Record<string, unknown>) &&
+          typeof (output as Record<string, string>).type === 'string' &&
+          (output as Record<string, string>).type.startsWith('error');
+        const resultValue =
+          output != null &&
+          typeof output === 'object' &&
+          'value' in (output as Record<string, unknown>)
+            ? (output as Record<string, unknown>).value
+            : output;
+        let parsedResult = resultValue;
 
-          if (typeof resultValue === 'string') {
-            if (resultValue === EMPTY_TOOL_RESULT_PLACEHOLDER) {
-              parsedResult = undefined;
-            } else {
-              try {
-                parsedResult = JSON.parse(resultValue);
-              } catch {
-                parsedResult = resultValue;
-              }
+        if (typeof resultValue === 'string') {
+          if (resultValue === EMPTY_TOOL_RESULT_PLACEHOLDER) {
+            parsedResult = undefined;
+          } else {
+            try {
+              parsedResult = JSON.parse(resultValue);
+            } catch {
+              parsedResult = resultValue;
             }
           }
-
-          const toolResponseBlock: ToolResponseBlock & { isError?: boolean } = {
-            type: 'tool_response',
-            callId: normalizeToHistoryToolId(part.toolCallId),
-            toolName: part.toolName,
-            result: parsedResult,
-          };
-
-          if (isErrorOutput) {
-            toolResponseBlock.isError = true;
-            if (typeof resultValue === 'string') {
-              toolResponseBlock.error = resultValue;
-            }
-          }
-
-          blocks.push(toolResponseBlock);
         }
+
+        const toolResponseBlock: ToolResponseBlock & { isError?: boolean } = {
+          type: 'tool_response',
+          callId: normalizeToHistoryToolId(part.toolCallId),
+          toolName: part.toolName,
+          result: parsedResult,
+        };
+
+        if (isErrorOutput) {
+          toolResponseBlock.isError = true;
+          if (typeof resultValue === 'string') {
+            toolResponseBlock.error = resultValue;
+          }
+        }
+
+        blocks.push(toolResponseBlock);
       }
 
       if (blocks.length > 0) {
@@ -521,21 +507,9 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
           blocks,
         });
       }
-    } else if (message.role === 'system') {
-      // Convert system messages
-      const systemContent = message.content;
-      const text =
-        typeof systemContent === 'string'
-          ? systemContent
-          : Array.isArray(systemContent)
-            ? (systemContent as Array<{ type: string; text?: string } | string>)
-                .map((part) => {
-                  if (typeof part === 'string') return part;
-                  if (part.type === 'text') return part.text || '';
-                  return '';
-                })
-                .join('\n')
-            : '';
+    } else {
+      // Convert system messages (message.role === 'system')
+      const text = message.content;
 
       if (text) {
         const systemContentObj: IContent & { metadata: { role: string } } = {
