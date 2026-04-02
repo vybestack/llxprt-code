@@ -75,7 +75,7 @@ interface TextInputProps {
  * Simple text input component for search.
  */
 function TextInput({ focus, value, placeholder }: TextInputProps) {
-  const showPlaceholder = !value && placeholder;
+  const showPlaceholder = value.length === 0 && placeholder !== undefined;
 
   if (showPlaceholder) {
     return <Text color={Colors.Gray}>{placeholder}</Text>;
@@ -115,7 +115,7 @@ export function getToolCurrentState(
 ): ToolEnabledState {
   try {
     const excludeTools =
-      pendingExcludeTools ?? ((settings.merged.excludeTools as string[]) || []);
+      pendingExcludeTools ?? (settings.merged.excludeTools as string[]);
     // Tool is enabled if not in excludeTools
     return excludeTools.includes(toolName) ? 'disabled' : 'enabled';
   } catch (error) {
@@ -134,8 +134,7 @@ export function updateToolExclusion(
   scope: SettingScope,
 ): void {
   try {
-    const currentExcludeTools =
-      (settings.merged.excludeTools as string[]) || [];
+    const currentExcludeTools = settings.merged.excludeTools as string[];
     let newExcludeTools = [...currentExcludeTools];
 
     if (state === 'enabled') {
@@ -212,7 +211,7 @@ export function SettingsDialog({
   // Perform search
   useEffect(() => {
     let active = true;
-    if (!searchQuery.trim() || !fzfInstance) {
+    if (searchQuery.trim().length === 0) {
       setFilteredKeys(getDialogSettingKeys());
       return;
     }
@@ -345,7 +344,7 @@ export function SettingsDialog({
 
   const generateSubSettingsItems = (parentKey: string) => {
     const parentDefinition = getSettingDefinition(parentKey);
-    let subSettings = parentDefinition?.subSettings || {};
+    let subSettings = parentDefinition?.subSettings ?? {};
 
     // If this is the coreToolSettings, use the memoized dynamic settings
     if (parentKey === 'coreToolSettings') {
@@ -366,8 +365,8 @@ export function SettingsDialog({
           // For core tools, use excludeTools logic
           if (parentKey === 'coreToolSettings') {
             // Calculate new excludeTools list for pending state
-            const currentExcludeTools =
-              (settings.merged.excludeTools as string[]) || [];
+            const currentExcludeTools = settings.merged
+              .excludeTools as string[];
             // We need to check if there's already a pending change for excludeTools
             let pendingExcludeTools = currentExcludeTools;
             if (globalPendingChanges.has('excludeTools')) {
@@ -404,8 +403,8 @@ export function SettingsDialog({
               setShowRestartPrompt(true);
 
               // Calculate new excludeTools list for pending state
-              const currentExcludeTools =
-                (settings.merged.excludeTools as string[]) || [];
+              const currentExcludeTools = settings.merged
+                .excludeTools as string[];
               // We need to check if there's already a pending change for excludeTools
               let pendingExcludeTools = currentExcludeTools;
               if (globalPendingChanges.has('excludeTools')) {
@@ -485,7 +484,7 @@ export function SettingsDialog({
       return {
         description: definition?.description,
 
-        label: definition?.label || key,
+        label: definition?.label ?? key,
         value: key,
         type: definition?.type,
         toggle: () => {
@@ -731,7 +730,7 @@ export function SettingsDialog({
   let showScopeSelection = true;
 
   // If we have limited height, prioritize showing more settings over scope selection
-  if (availableTerminalHeight && availableTerminalHeight < 25) {
+  if (availableTerminalHeight !== undefined && availableTerminalHeight < 25) {
     // For very limited height, hide scope selection to show more settings
     const totalWithScope = totalFixedHeight + SCOPE_SELECTION_HEIGHT;
     const availableWithScope = Math.max(
@@ -763,9 +762,10 @@ export function SettingsDialog({
   }
 
   // Use the calculated maxVisibleItems or fall back to the original maxItemsToShow
-  const effectiveMaxItemsToShow = availableTerminalHeight
-    ? Math.min(maxVisibleItems, items.length)
-    : maxItemsToShow;
+  const effectiveMaxItemsToShow =
+    availableTerminalHeight !== undefined
+      ? Math.min(maxVisibleItems, items.length)
+      : maxItemsToShow;
 
   // Ensure focus stays on settings when scope selection is hidden
   React.useEffect(() => {
@@ -779,9 +779,6 @@ export function SettingsDialog({
     scrollOffset,
     scrollOffset + effectiveMaxItemsToShow,
   );
-  // Always show arrows for consistent UI and to indicate circular navigation
-  const showScrollUp = true;
-  const showScrollDown = true;
 
   const saveRestartRequiredSettings = () => {
     const restartRequiredSettings =
@@ -843,7 +840,7 @@ export function SettingsDialog({
           return;
         }
 
-        const ch = stripUnsafeCharacters(key.sequence ?? '');
+        const ch = stripUnsafeCharacters(key.sequence);
         if (
           ch.length === 1 &&
           !key.ctrl &&
@@ -859,8 +856,7 @@ export function SettingsDialog({
       }
       if (
         focusSection === 'settings' &&
-        !isSearching &&
-        !editingKey &&
+        editingKey === null &&
         key.sequence === '/' &&
         !key.ctrl &&
         !key.meta
@@ -991,9 +987,7 @@ export function SettingsDialog({
           }
         } else if (keyMatchers[Command.RETURN](key)) {
           const currentItem = items[activeSettingIndex];
-          const currentDefinition = getSettingDefinition(
-            currentItem?.value || '',
-          );
+          const currentDefinition = getSettingDefinition(currentItem.value);
 
           // Check if this item has sub-settings (special case for coreToolSettings)
           let hasSubSettings = false;
@@ -1003,7 +997,7 @@ export function SettingsDialog({
           ) {
             hasSubSettings = true;
           } else if (
-            currentItem?.value === 'coreToolSettings' &&
+            currentItem.value === 'coreToolSettings' &&
             config != null
           ) {
             // Special case: coreToolSettings always has sub-settings
@@ -1021,8 +1015,8 @@ export function SettingsDialog({
             // Switch to sub-settings mode
             setSubSettingsMode({
               isActive: true,
-              parentKey: currentItem?.value || '',
-              parentLabel: currentDefinition?.label || currentItem?.value || '',
+              parentKey: currentItem.value,
+              parentLabel: currentDefinition?.label ?? currentItem.value,
             });
 
             // Reset sub-settings page state
@@ -1032,8 +1026,8 @@ export function SettingsDialog({
           }
 
           // For boolean type, use toggle() function (simple on/off)
-          if (currentItem?.type === 'boolean') {
-            currentItem?.toggle();
+          if (currentItem.type === 'boolean') {
+            currentItem.toggle();
           }
           // For enum types, handle cycle through options
           else if (
@@ -1041,7 +1035,7 @@ export function SettingsDialog({
             currentDefinition.options != null
           ) {
             const options = currentDefinition.options;
-            const path = (currentItem?.value || '').split('.');
+            const path = currentItem.value.split('.');
 
             // Get current value from multiple places in order
             let currentValue = getNestedValue(pendingSettings, path);
@@ -1049,9 +1043,9 @@ export function SettingsDialog({
             // If there's a global pending change for this key, use that first
             if (
               currentValue === undefined &&
-              globalPendingChanges.has(currentItem?.value || '')
+              globalPendingChanges.has(currentItem.value)
             ) {
-              currentValue = globalPendingChanges.get(currentItem?.value || '');
+              currentValue = globalPendingChanges.get(currentItem.value);
             }
 
             // If still undefined, try to get from merged settings
@@ -1061,7 +1055,7 @@ export function SettingsDialog({
 
             // If still undefined, use the default value
             if (currentValue === undefined) {
-              currentValue = getDefaultValue(currentItem?.value || '');
+              currentValue = getDefaultValue(currentItem.value);
             }
 
             const currentIndex = options.findIndex(
@@ -1073,18 +1067,14 @@ export function SettingsDialog({
 
             // Update pending settings
             setPendingSettings((prev) =>
-              setPendingSettingValueAny(
-                currentItem?.value || '',
-                newValue,
-                prev,
-              ),
+              setPendingSettingValueAny(currentItem.value, newValue, prev),
             );
 
             // Handle the setting change based on whether it requires restart
-            if (!requiresRestart(currentItem?.value || '')) {
+            if (!requiresRestart(currentItem.value)) {
               // Save immediately for settings that don't require restart
               saveSingleSetting(
-                currentItem?.value || '',
+                currentItem.value,
                 newValue,
                 settings,
                 selectedScope,
@@ -1093,32 +1083,32 @@ export function SettingsDialog({
               // Remove from modifiedSets since it's now saved
               setModifiedSettings((prev) => {
                 const updated = new Set(prev);
-                updated.delete(currentItem?.value || '');
+                updated.delete(currentItem.value);
                 return updated;
               });
 
               setRestartRequiredSettings((prev) => {
                 const updated = new Set(prev);
-                updated.delete(currentItem?.value || '');
+                updated.delete(currentItem.value);
                 return updated;
               });
 
               // Remove from global pending changes if present
               setGlobalPendingChanges((prev) => {
-                if (!prev.has(currentItem?.value || '')) return prev;
+                if (!prev.has(currentItem.value)) return prev;
                 const next = new Map(prev);
-                next.delete(currentItem?.value || '');
+                next.delete(currentItem.value);
                 return next;
               });
             } else {
               // Mark as modified and needing restart
               setModifiedSettings((prev) => {
-                const updated = new Set(prev).add(currentItem?.value || '');
+                const updated = new Set(prev).add(currentItem.value);
                 const needsRestart = hasRestartRequiredSettings(updated);
                 if (needsRestart) {
                   setShowRestartPrompt(true);
                   setRestartRequiredSettings((prevRestart) =>
-                    new Set(prevRestart).add(currentItem?.value || ''),
+                    new Set(prevRestart).add(currentItem.value),
                   );
                 }
                 return updated;
@@ -1127,23 +1117,23 @@ export function SettingsDialog({
               // Store in globalPendingChanges
               setGlobalPendingChanges((prev) => {
                 const next = new Map(prev);
-                next.set(currentItem?.value || '', newValue as PendingValue);
+                next.set(currentItem.value, newValue as PendingValue);
                 return next;
               });
             }
           }
           // For numbers and strings, use edit mode
           else if (
-            currentItem?.type === 'number' ||
-            currentItem?.type === 'string'
+            currentItem.type === 'number' ||
+            currentItem.type === 'string'
           ) {
             startEditing(currentItem.value);
           } else {
-            currentItem?.toggle();
+            currentItem.toggle();
           }
-        } else if (/^[0-9]$/.test(key.sequence || '') && !editingKey) {
+        } else if (/^[0-9]$/.test(key.sequence) && editingKey === null) {
           const currentItem = items[activeSettingIndex];
-          if (currentItem?.type === 'number') {
+          if (currentItem.type === 'number') {
             startEditing(currentItem.value, key.sequence);
           }
         } else if (
@@ -1152,7 +1142,7 @@ export function SettingsDialog({
         ) {
           // Ctrl+C or Ctrl+L: Clear current setting and reset to default
           const currentSetting = items[activeSettingIndex];
-          if (currentSetting) {
+          {
             const defaultValue = getDefaultValue(currentSetting.value);
             const defType = currentSetting.type;
             if (defType === 'boolean') {
@@ -1362,11 +1352,9 @@ export function SettingsDialog({
           </Box>
         ) : (
           <>
-            {showScrollUp && (
-              <Box marginX={1}>
-                <Text color={Colors.Gray}>▲</Text>
-              </Box>
-            )}
+            <Box marginX={1}>
+              <Text color={Colors.Gray}>▲</Text>
+            </Box>
             {visibleItems.map((item, idx) => {
               const isActive =
                 focusSection === 'settings' &&
@@ -1410,17 +1398,12 @@ export function SettingsDialog({
                   displayValue = String(currentValue);
                 } else {
                   displayValue =
-                    defaultValue !== undefined && defaultValue !== null
-                      ? String(defaultValue)
-                      : '';
+                    defaultValue !== undefined ? String(defaultValue) : '';
                 }
 
                 // Add * if value differs from default OR if currently being modified
                 const isModified = modifiedSettings.has(item.value);
-                const effectiveCurrentValue =
-                  currentValue !== undefined && currentValue !== null
-                    ? currentValue
-                    : defaultValue;
+                const effectiveCurrentValue = currentValue ?? defaultValue;
                 const isDifferentFromDefault =
                   effectiveCurrentValue !== defaultValue;
 
@@ -1466,12 +1449,10 @@ export function SettingsDialog({
                 const toolName = item.value.replace('coreToolSettings.', '');
 
                 // Check pending settings first for excludeTools
-                let excludeTools =
-                  (pendingSettings.excludeTools as string[]) || [];
+                let excludeTools = pendingSettings.excludeTools as string[];
                 // If not in pending, fall back to merged settings (handled by getToolCurrentState but we want pending awareness)
                 if (pendingSettings.excludeTools == null) {
-                  excludeTools =
-                    (settings.merged.excludeTools as string[]) || [];
+                  excludeTools = settings.merged.excludeTools as string[];
                 }
 
                 const currentState = getToolCurrentState(
@@ -1567,11 +1548,9 @@ export function SettingsDialog({
                 </React.Fragment>
               );
             })}
-            {showScrollDown && (
-              <Box marginX={1}>
-                <Text color={Colors.Gray}>▼</Text>
-              </Box>
-            )}
+            <Box marginX={1}>
+              <Text color={Colors.Gray}>▼</Text>
+            </Box>
           </>
         )}
 
