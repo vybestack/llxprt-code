@@ -18,7 +18,7 @@ import {
   FinishReason,
   type GenerateContentConfig,
 } from '@google/genai';
-import { retryWithBackoff } from '../utils/retry.js';
+import { isRetryableError, retryWithBackoff } from '../utils/retry.js';
 import { prependAsyncGenerator } from '../utils/asyncIterator.js';
 import { flushRuntimeAuthScope } from '../auth/precedence.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -149,6 +149,8 @@ export class StreamProcessor {
     return retryWithBackoff(apiCall, {
       onPersistent429: () => this._handleBucketFailover(),
       signal: params.config?.abortSignal,
+      shouldRetryOnError: (error) =>
+        error instanceof EmptyStreamError || isRetryableError(error),
     });
   }
 

@@ -201,9 +201,10 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
 
       // Verify the timeline shows first chunk was consumed before method returned
       // This is the key fix - the first chunk establishes the HTTP connection
-      const generateCallIdx = timeline.indexOf('generateChatCompletion:called');
+      const providerStartedIdx = timeline.indexOf('provider:started');
       const methodReturnedIdx = timeline.indexOf('method:returned');
-      expect(generateCallIdx).toBeLessThan(methodReturnedIdx);
+      expect(providerStartedIdx).toBeGreaterThan(-1);
+      expect(providerStartedIdx).toBeLessThan(methodReturnedIdx);
     });
 
     it('should throw EmptyStreamError when stream is immediately exhausted', async () => {
@@ -239,6 +240,54 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           mockProvider,
         ),
       ).rejects.toThrow(EmptyStreamError);
+    });
+  });
+
+  describe('execute stream call retry classification', () => {
+    it('should classify EmptyStreamError as retryable in the retry policy', async () => {
+      let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
+      (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
+        async <T>(
+          fn: () => Promise<T>,
+          options?: { shouldRetryOnError?: (error: unknown) => boolean },
+        ) => {
+          capturedShouldRetryOnError = options?.shouldRetryOnError;
+          return fn();
+        },
+      );
+
+      const executeStreamApiCall = (
+        processor as unknown as {
+          _executeStreamApiCall: (
+            params: { config?: { abortSignal?: AbortSignal } },
+            promptId: string,
+            userContent: Content | Content[],
+            provider: { name: string },
+          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+        }
+      )._executeStreamApiCall;
+
+      const providerStub = { name: 'test-provider' };
+      await executeStreamApiCall
+        .call(
+          processor,
+          { config: {} },
+          'test-prompt',
+          { role: 'user', parts: [{ text: 'test' }] },
+          providerStub,
+        )
+        .catch(() => {
+          // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
+        });
+
+      expect(capturedShouldRetryOnError).toBeDefined();
+      expect(
+        capturedShouldRetryOnError?.(
+          new EmptyStreamError(
+            'Model stream ended immediately with no content.',
+          ),
+        ),
+      ).toBe(true);
     });
   });
 

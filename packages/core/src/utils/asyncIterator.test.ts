@@ -171,13 +171,14 @@ describe('prependAsyncGenerator', () => {
   });
 
   it('should handle return() being called early', async () => {
+    let cleanedUp = false;
     async function* source(): AsyncGenerator<string> {
       try {
         yield 'a';
         yield 'b';
         yield 'c';
       } finally {
-        // cleanup logic would go here
+        cleanedUp = true;
       }
     }
 
@@ -189,9 +190,11 @@ describe('prependAsyncGenerator', () => {
     const result2 = await prepended.next();
     expect(result2.value).toBe('a');
 
-    // Return early - should terminate the generator
+    // Return early - should terminate the generator and trigger cleanup
     // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
     await prepended.return?.();
+
+    expect(cleanedUp).toBe(true);
 
     const result3 = await prepended.next();
     expect(result3.done).toBe(true);

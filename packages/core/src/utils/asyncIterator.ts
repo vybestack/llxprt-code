@@ -37,15 +37,25 @@ export async function* prependAsyncGenerator<T>(
   preloadedValue: T,
   source: AsyncIterator<T>,
 ): AsyncGenerator<T> {
-  // Yield the preloaded value first
-  yield preloadedValue;
+  let sourceExhausted = false;
+  try {
+    // Yield the preloaded value first
+    yield preloadedValue;
 
-  // Then delegate to the source iterator
-  let result = await source.next();
-  // We check done explicitly against true for type safety
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  while (result.done !== true) {
-    yield result.value;
-    result = await source.next();
+    // Then delegate to the source iterator
+    let result = await source.next();
+    // We check done explicitly against true for type safety
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    while (result.done !== true) {
+      yield result.value;
+      result = await source.next();
+    }
+    sourceExhausted = true;
+  } finally {
+    // Forward early termination to the wrapped iterator for cleanup
+    // This ensures source's finally blocks run (e.g., network resource cleanup)
+    if (!sourceExhausted) {
+      await source.return?.();
+    }
   }
 }
