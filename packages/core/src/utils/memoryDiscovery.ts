@@ -47,7 +47,7 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
     const gitPath = path.join(currentDir, '.git');
     try {
       const stats = await fs.lstat(gitPath);
-      if (stats.isDirectory() || stats.isFile()) {
+      if (stats.isDirectory()) {
         return currentDir;
       }
     } catch (error: unknown) {
@@ -483,14 +483,7 @@ export async function loadEnvironmentMemory(
         `Loading environment memory for trusted root: ${resolvedRoot} (Stopping exactly here)`,
       );
     }
-    // Find the project root (.git directory) to determine traversal boundary
-    const projectRoot = await findProjectRoot(resolvedRoot);
-    // Traverse upward from resolvedRoot to projectRoot (or just resolvedRoot if no git)
-    return findUpwardGeminiFiles(
-      resolvedRoot,
-      projectRoot ?? resolvedRoot,
-      debugMode,
-    );
+    return findUpwardGeminiFiles(resolvedRoot, resolvedRoot, debugMode);
   });
 
   const pathArrays = await Promise.all(traversalPromises);
