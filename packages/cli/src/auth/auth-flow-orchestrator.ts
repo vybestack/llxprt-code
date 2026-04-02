@@ -218,7 +218,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       () => `[FLOW] provider.initiateAuth() returned token for ${providerName}`,
     );
 
-    if (!token) {
+    if (token == null) {
       throw new Error('Authentication completed but no token was returned');
     }
 
@@ -275,7 +275,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   private async attemptRefreshBeforeBrowser(
     providerName: string,
     bucket: string | undefined,
-    diskToken: import('./types.js').OAuthToken | undefined,
+    diskToken: OAuthToken | undefined,
   ): Promise<boolean> {
     if (
       diskToken == null ||
@@ -635,7 +635,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         buckets.length,
       );
 
-      if (showPrompt) {
+      if (showPrompt === true) {
         logger.debug(
           'Prompt mode enabled - waiting indefinitely for user approval',
         );

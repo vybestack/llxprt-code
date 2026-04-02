@@ -5,8 +5,8 @@
  */
 
 import {
-  MCPServerConfig,
-  GeminiCLIExtension,
+  type MCPServerConfig,
+  type GeminiCLIExtension,
   Storage,
   getErrorMessage,
   type SkillDefinition,
@@ -186,7 +186,10 @@ export function loadExtensions(
 
   const allExtensions = [...loadUserExtensions()];
 
-  if ((isWorkspaceTrusted(settings) ?? true) && !settings.extensionManagement) {
+  if (
+    (isWorkspaceTrusted(settings) ?? true) &&
+    settings.extensionManagement !== true
+  ) {
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
   }
 
@@ -255,7 +258,7 @@ export function loadExtension(
   if (
     (installMetadata?.type === 'git' ||
       installMetadata?.type === 'github-release') &&
-    settings.security?.blockGitExtensions
+    settings.security.blockGitExtensions === true
   ) {
     return null;
   }
@@ -433,10 +436,14 @@ export async function resolveExtensionSettingsWithSource(
 
     // Workspace overrides user when workspace value is explicitly set
     if (workspaceValue !== undefined && workspaceValue !== '') {
-      value = setting.sensitive ? '[value stored in keychain]' : workspaceValue;
+      value =
+        setting.sensitive === true
+          ? '[value stored in keychain]'
+          : workspaceValue;
       source = 'workspace';
     } else if (userValue !== undefined && userValue !== '') {
-      value = setting.sensitive ? '[value stored in keychain]' : userValue;
+      value =
+        setting.sensitive === true ? '[value stored in keychain]' : userValue;
       source = 'user';
     } else {
       value = '[not set]';
@@ -497,7 +504,7 @@ export function loadInstallMetadata(
 }
 
 function getContextFileNames(config: ExtensionConfig): string[] {
-  if (!config.contextFileName) {
+  if (config.contextFileName == null) {
     return ['LLXPRT.md'];
   } else if (!Array.isArray(config.contextFileName)) {
     return [config.contextFileName];
@@ -654,7 +661,7 @@ export async function inferInstallMetadata(
   }
 
   // Local path - verify it exists
-  if (ref || autoUpdate) {
+  if (ref != null || autoUpdate === true) {
     throw new Error(
       'The --ref and --autoUpdate flags are only applicable for git-based installations.',
     );
@@ -682,7 +689,7 @@ export async function installOrUpdateExtension(
   if (
     (installMetadata.type === 'git' ||
       installMetadata.type === 'github-release') &&
-    settings.security?.blockGitExtensions
+    settings.security.blockGitExtensions === true
   ) {
     throw new Error(
       'Installing extensions from remote sources is disallowed by your current settings.',
@@ -731,13 +738,8 @@ export async function installOrUpdateExtension(
     // Update the ref in metadata to the actual tag that was downloaded
     installMetadata.ref = result.tagName;
     localSourcePath = tempDir;
-  } else if (
-    installMetadata.type === 'local' ||
-    installMetadata.type === 'link'
-  ) {
-    localSourcePath = installMetadata.source;
   } else {
-    throw new Error(`Unsupported install type: ${installMetadata.type}`);
+    localSourcePath = installMetadata.source;
   }
 
   try {
@@ -840,23 +842,26 @@ export function validateName(name: string): void {
 function extensionConsentString(extensionConfig: ExtensionConfig): string {
   const sanitizedConfig = escapeAnsiCtrlCodes(extensionConfig);
   const output: string[] = [];
-  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers || {});
+  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers ?? {});
   output.push(`Installing extension "${sanitizedConfig.name}".`);
   output.push(
     '**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**',
   );
 
-  if (mcpServerEntries.length) {
+  if (mcpServerEntries.length > 0) {
     output.push('This extension will run the following MCP servers:');
     for (const [key, mcpServer] of mcpServerEntries) {
-      const isLocal = !!mcpServer.command;
+      const isLocal = mcpServer.command != null;
       const source =
         mcpServer.httpUrl ??
-        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
+        `${mcpServer.command ?? ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (sanitizedConfig.hooks && Object.keys(sanitizedConfig.hooks).length > 0) {
+  if (
+    sanitizedConfig.hooks != null &&
+    Object.keys(sanitizedConfig.hooks).length > 0
+  ) {
     output.push(
       `This extension will register hooks: ${Object.keys(sanitizedConfig.hooks).join(', ')}`,
     );
@@ -864,12 +869,12 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
       'Note: Hooks can intercept and modify LLxprt Code behavior. Additional consent will be requested.',
     );
   }
-  if (sanitizedConfig.contextFileName) {
+  if (sanitizedConfig.contextFileName != null) {
     output.push(
       `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
   }
-  if (sanitizedConfig.excludeTools) {
+  if (sanitizedConfig.excludeTools != null) {
     output.push(
       `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
     );

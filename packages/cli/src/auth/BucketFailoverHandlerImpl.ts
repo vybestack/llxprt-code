@@ -220,9 +220,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           // Token exists and is not expired — failure isn't credential-related
           reason = 'skipped';
         }
-      } else if (reason === null) {
+      } else {
         // No token in store (REQ-1598-CL03)
-        reason = 'no-token';
+        reason ??= 'no-token';
       }
     }
 
@@ -246,10 +246,6 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
     for (const bucket of this.buckets) {
       // Skip buckets already tried in this session (REQ-1598-FL13)
       if (this.triedBucketsThisSession.has(bucket)) {
-        // Only mark as skipped if not already classified in Pass 1
-        if (!this.lastFailoverReasons[bucket]) {
-          this.lastFailoverReasons[bucket] = 'skipped';
-        }
         continue;
       }
 

@@ -95,7 +95,7 @@ function buildHooksConfig(
   adminSkillsEnabled: boolean,
   cwd: string,
 ) {
-  const hooksConfig = settings.hooks || {};
+  const hooksConfig = settings.hooks ?? {};
   const { disabled: _disabled, ...eventHooks } = hooksConfig as {
     disabled?: string[];
     [key: string]: unknown;
@@ -126,7 +126,7 @@ function buildToolConfig(
   policyEngineConfig: PolicyEngineConfig,
 ) {
   return {
-    coreTools: profileSettingsWithTools.coreTools || undefined,
+    coreTools: profileSettingsWithTools.coreTools ?? undefined,
     allowedTools: allowedTools.length > 0 ? [...allowedTools] : undefined,
     excludeTools: [...excludeTools],
     toolDiscoveryCommand: profileSettingsWithTools.toolDiscoveryCommand,
@@ -180,24 +180,24 @@ function buildSessionBaseArgs(
     llxprtMdFileCount: fileCount,
     llxprtMdFilePaths: [...filePaths],
     showMemoryUsage:
-      argv.showMemoryUsage ||
-      profileSettingsWithTools.ui?.showMemoryUsage ||
-      false,
+      (argv.showMemoryUsage ?? false) ||
+      (profileSettingsWithTools.ui?.showMemoryUsage ?? false),
     disableYoloMode:
-      profileSettingsWithTools.security?.disableYoloMode ||
-      profileSettingsWithTools.admin?.secureModeEnabled,
+      (profileSettingsWithTools.security?.disableYoloMode ?? false) ||
+      (profileSettingsWithTools.admin?.secureModeEnabled ?? false),
     accessibility: { ...profileSettingsWithTools.accessibility, screenReader },
     usageStatisticsEnabled:
       profileSettingsWithTools.ui?.usageStatisticsEnabled ?? true,
     fileFiltering: context.fileFiltering,
     checkpointing:
-      argv.checkpointing || profileSettingsWithTools.checkpointing?.enabled,
-    dumpOnError: argv.dumponerror || false,
+      (argv.checkpointing ?? false) ||
+      (profileSettingsWithTools.checkpointing?.enabled ?? false),
+    dumpOnError: argv.dumponerror ?? false,
     proxy:
-      argv.proxy ||
-      process.env.HTTPS_PROXY ||
-      process.env.https_proxy ||
-      process.env.HTTP_PROXY ||
+      argv.proxy ??
+      process.env.HTTPS_PROXY ??
+      process.env.https_proxy ??
+      process.env.HTTP_PROXY ??
       process.env.http_proxy,
     fileDiscoveryService: context.fileService,
     bugCommand: profileSettingsWithTools.bugCommand,
@@ -229,8 +229,8 @@ function buildFeatureArgs(
   return {
     extensionContextFilePaths: [...context.extensionContextFilePaths],
     maxSessionTurns: profileSettingsWithTools.ui?.maxSessionTurns ?? -1,
-    experimentalZedIntegration: argv.experimentalAcp || false,
-    listExtensions: argv.listExtensions || false,
+    experimentalZedIntegration: argv.experimentalAcp ?? false,
+    listExtensions: argv.listExtensions ?? false,
     activeExtensions: context.activeExtensions.map((e) => ({
       name: e.name,
       version: e.version,
@@ -268,7 +268,7 @@ function buildFeatureArgs(
     continueSession:
       argv.continue === '' || argv.continue === true
         ? true
-        : argv.continue || false,
+        : (argv.continue ?? false),
     jitContextEnabled: context.jitContextEnabled,
     ...hooksConfig,
   };

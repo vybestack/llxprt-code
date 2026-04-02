@@ -264,9 +264,9 @@ export class CredentialProxyServer {
     const id =
       typeof frame.id === 'string' ? frame.id : String(frame.id ?? 'unknown');
     const op = typeof frame.op === 'string' ? frame.op : undefined;
-    const payload = (frame.payload as Record<string, unknown>) ?? {};
+    const payload = (frame.payload ?? {}) as Record<string, unknown>;
 
-    if (!frame.id || !op) {
+    if (frame.id == null || !op) {
       this.sendError(socket, id, 'INVALID_REQUEST', 'Missing request id or op');
       return;
     }
@@ -604,7 +604,7 @@ export class CredentialProxyServer {
         response.auth_url =
           initiationResult.verification_uri_complete ??
           initiationResult.verification_uri;
-      } else if (flowType === 'device_code') {
+      } else {
         // For device code flows, return verification URI and user code
         response.auth_url = initiationResult.verification_uri;
         response.verification_uri = initiationResult.verification_uri;

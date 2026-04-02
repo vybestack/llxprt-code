@@ -246,11 +246,10 @@ async function reapplyCliOverrides(
   }
 
   if (
-    bootstrapArgs &&
-    (bootstrapArgs.keyOverride ||
-      bootstrapArgs.keyfileOverride ||
-      bootstrapArgs.baseurlOverride ||
-      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
+    bootstrapArgs.keyOverride ||
+    bootstrapArgs.keyfileOverride ||
+    bootstrapArgs.baseurlOverride ||
+    (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0)
   ) {
     const { applyCliArgumentOverrides } = await import(
       '../runtime/runtimeSettings.js'
@@ -351,7 +350,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     );
   }
   if (
-    profileSettingsWithTools.emojifilter &&
+    profileSettingsWithTools.emojifilter != null &&
     !settingsService.get('emojifilter')
   ) {
     settingsService.set('emojifilter', profileSettingsWithTools.emojifilter);
@@ -362,7 +361,6 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   const profileToLoad = profileLoadResult.profileToLoad;
   if (
     (profileToLoad || bootstrapArgs.profileJson !== null) &&
-    profileSettingsWithTools &&
     argv.provider === undefined
   ) {
     const ephemeralKeys = [
