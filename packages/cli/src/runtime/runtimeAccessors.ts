@@ -100,9 +100,7 @@ export function getCliRuntimeContext() {
 
     // Fallback path for legacy compatibility (disabled under stateless hardening)
     const resolvedSettings =
-      settingsService ??
-      entry.config.getSettingsService() ??
-      new SettingsService();
+      settingsService ?? entry.config.getSettingsService();
     return createProviderRuntimeContext({
       settingsService: resolvedSettings,
       config: entry.config,
@@ -148,15 +146,6 @@ export function getCliRuntimeServices(): CliRuntimeServices {
     );
   }
   const settingsService = entry.settingsService ?? context.settingsService;
-  if (!settingsService) {
-    throw new Error(
-      formatMissingRuntimeMessage({
-        runtimeId,
-        missingFields: ['SettingsService'],
-        hint: 'Call activateIsolatedRuntimeContext() or inject a runtime-specific SettingsService for tests.',
-      }),
-    );
-  }
   const providerManager = entry.providerManager;
   if (providerManager == null) {
     throw new Error(
@@ -378,7 +367,7 @@ export function getActiveModelName(): string {
 
   try {
     const provider = providerManager.getActiveProvider();
-    return provider.getDefaultModel?.() ?? '';
+    return provider.getDefaultModel();
   } catch {
     return '';
   }

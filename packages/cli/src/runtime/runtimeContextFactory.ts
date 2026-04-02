@@ -250,22 +250,21 @@ export function createIsolatedRuntimeContext(
 
   const llxprtDir = path.join(os.homedir(), '.llxprt');
   const resolvedProfileManager =
-    optionsConfigWithManagers?.getProfileManager?.() ??
-    configWithManagers.getProfileManager?.() ??
+    optionsConfigWithManagers?.getProfileManager() ??
+    configWithManagers.getProfileManager() ??
     new ProfileManager(path.join(llxprtDir, 'profiles'));
   const resolvedSubagentManager =
-    optionsConfigWithManagers?.getSubagentManager?.() ??
-    configWithManagers.getSubagentManager?.() ??
+    optionsConfigWithManagers?.getSubagentManager() ??
+    configWithManagers.getSubagentManager() ??
     new SubagentManager(
       path.join(llxprtDir, 'subagents'),
       resolvedProfileManager,
     );
 
-  configWithManagers.setProfileManager?.(resolvedProfileManager);
-  configWithManagers.setSubagentManager?.(resolvedSubagentManager);
+  configWithManagers.setProfileManager(resolvedProfileManager);
+  configWithManagers.setSubagentManager(resolvedSubagentManager);
 
-  const resolvedSettingsService =
-    config.getSettingsService() ?? settingsService;
+  const resolvedSettingsService = config.getSettingsService();
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
