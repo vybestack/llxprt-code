@@ -1086,7 +1086,7 @@ function entrypoint(
 
   for (const p of ports()) {
     // Skip socat relay for ports handled by SSH tunnels (Podman macOS)
-    if (skipPortRelays?.has(p)) {
+    if (skipPortRelays?.has(p) === true) {
       continue;
     }
     shellCmds.push(
@@ -1102,7 +1102,7 @@ function entrypoint(
         ? 'npm run debug --'
         : 'npm rebuild && npm run start --'
       : isDebugMode
-        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT || '9229'} $(which llxprt)`
+        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT ?? '9229'} $(which llxprt)`
         : 'llxprt';
 
   const args = [...shellCmds, cliCmd, ...quotedCliArgs];
@@ -1138,7 +1138,7 @@ export async function start_sandbox(
   };
 
   const patcher = new ConsolePatcher({
-    debugMode: cliConfig?.getDebugMode() || !!process.env.DEBUG,
+    debugMode: cliConfig?.getDebugMode() === true || !!process.env.DEBUG,
     stderr: true,
   });
   patcher.patch();
@@ -1192,7 +1192,7 @@ export async function start_sandbox(
       // Add included directories from the workspace context
       // Always add 5 INCLUDE_DIR parameters to ensure .sb files can reference them
       const MAX_INCLUDE_DIRS = 5;
-      const targetDir = fs.realpathSync(cliConfig?.getTargetDir() || '');
+      const targetDir = fs.realpathSync(cliConfig?.getTargetDir() ?? '');
       const includedDirs: string[] = [];
 
       if (cliConfig != null) {
@@ -1242,16 +1242,16 @@ export async function start_sandbox(
 
       if (proxyCommand) {
         const proxy =
-          process.env.HTTPS_PROXY ||
-          process.env.https_proxy ||
-          process.env.HTTP_PROXY ||
-          process.env.http_proxy ||
+          process.env.HTTPS_PROXY ??
+          process.env.https_proxy ??
+          process.env.HTTP_PROXY ??
+          process.env.http_proxy ??
           'http://localhost:8877';
         sandboxEnv['HTTPS_PROXY'] = proxy;
         sandboxEnv['https_proxy'] = proxy; // lower-case can be required, e.g. for curl
         sandboxEnv['HTTP_PROXY'] = proxy;
         sandboxEnv['http_proxy'] = proxy;
-        const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+        const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
         if (noProxy) {
           sandboxEnv['NO_PROXY'] = noProxy;
           sandboxEnv['no_proxy'] = noProxy;
@@ -1264,7 +1264,7 @@ export async function start_sandbox(
         // install handlers to stop proxy on exit/signal
         const stopProxy = () => {
           debugLogger.log('stopping proxy ...');
-          if (proxyProcess?.pid) {
+          if (proxyProcess?.pid !== undefined) {
             process.kill(-proxyProcess.pid, 'SIGTERM');
           }
         };
@@ -1280,7 +1280,7 @@ export async function start_sandbox(
           debugLogger.error(data.toString());
         });
         proxyProcess.on('close', (code, signal) => {
-          if (sandboxProcess?.pid) {
+          if (sandboxProcess?.pid !== undefined) {
             process.kill(-sandboxProcess.pid, 'SIGTERM');
           }
           throw new FatalSandboxError(
@@ -1345,7 +1345,7 @@ export async function start_sandbox(
           } catch (err) {
             // Issue #1020: Log I/O errors but don't crash
             // This can happen after long-running sessions on macOS
-            if (cliConfig?.getDebugMode()) {
+            if (cliConfig?.getDebugMode() === true) {
               debugLogger.error('[sandbox] Failed to restore raw mode:', err);
             }
           }
@@ -1353,7 +1353,7 @@ export async function start_sandbox(
       });
 
       return await new Promise<number>((resolve) => {
-        sandboxProcess?.on('close', (code, signal) => {
+        sandboxProcess.on('close', (code, signal) => {
           resolve(normalizeExitCode(code, signal));
         });
       });
@@ -1581,7 +1581,7 @@ export async function start_sandbox(
       const portsToForwardSet = new Set<string>(ports());
 
       if (isSandboxDebugModeEnabled(process.env.DEBUG)) {
-        portsToForwardSet.add(process.env.DEBUG_PORT || '9229');
+        portsToForwardSet.add(process.env.DEBUG_PORT ?? '9229');
       }
       const portsToForward: string[] = [...portsToForwardSet];
 
@@ -1615,7 +1615,7 @@ export async function start_sandbox(
 
     // if DEBUG is enabled, expose debugging port (skip if using SSH tunnels on Podman macOS)
     if (isSandboxDebugModeEnabled(process.env.DEBUG) && !isPodmanMacOS) {
-      const debugPort = process.env.DEBUG_PORT || '9229';
+      const debugPort = process.env.DEBUG_PORT ?? '9229';
       args.push(`--publish`, `${debugPort}:${debugPort}`);
     }
 
@@ -1625,10 +1625,10 @@ export async function start_sandbox(
     const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
     if (proxyCommand) {
       let proxy =
-        process.env.HTTPS_PROXY ||
-        process.env.https_proxy ||
-        process.env.HTTP_PROXY ||
-        process.env.http_proxy ||
+        process.env.HTTPS_PROXY ??
+        process.env.https_proxy ??
+        process.env.HTTP_PROXY ??
+        process.env.http_proxy ??
         'http://localhost:8877';
       proxy = proxy.replace('localhost', SANDBOX_PROXY_NAME);
       if (proxy) {
@@ -1637,7 +1637,7 @@ export async function start_sandbox(
         args.push('--env', `HTTP_PROXY=${proxy}`);
         args.push('--env', `http_proxy=${proxy}`);
       }
-      const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+      const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
       if (noProxy) {
         args.push('--env', `NO_PROXY=${noProxy}`);
         args.push('--env', `no_proxy=${noProxy}`);
@@ -1738,7 +1738,9 @@ export async function start_sandbox(
     // sandbox can then set up this new VIRTUAL_ENV directory using sandbox.bashrc (see below)
     // directory will be empty if not set up, which is still preferable to having host binaries
     if (
-      process.env.VIRTUAL_ENV?.toLowerCase().startsWith(workdir.toLowerCase())
+      process.env.VIRTUAL_ENV?.toLowerCase().startsWith(
+        workdir.toLowerCase(),
+      ) === true
     ) {
       const sandboxVenvPath = path.resolve(
         SETTINGS_DIRECTORY_NAME,
@@ -1774,7 +1776,7 @@ export async function start_sandbox(
     }
 
     // copy NODE_OPTIONS
-    const existingNodeOptions = process.env.NODE_OPTIONS || '';
+    const existingNodeOptions = process.env.NODE_OPTIONS ?? '';
     const allNodeOptions = [
       ...(existingNodeOptions ? [existingNodeOptions] : []),
       ...nodeArgs,
@@ -1855,18 +1857,15 @@ export async function start_sandbox(
 
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.1: Start credential proxy BEFORE spawning container
     // The proxy must be listening before the container starts so it can connect immediately
-    let credentialProxyHandle: { stop: () => Promise<void> } | undefined;
     let credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
     try {
-      credentialProxyHandle = await createAndStartProxy({
+      await createAndStartProxy({
         socketPath: resolvedTmpdir,
       });
       const socketPath = getProxySocketPath();
       if (socketPath) {
         // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
-        const shouldBridgeCredentialProxy =
-          (config.command === 'podman' || config.command === 'docker') &&
-          os.platform() === 'darwin';
+        const shouldBridgeCredentialProxy = os.platform() === 'darwin';
 
         if (shouldBridgeCredentialProxy) {
           if (config.command === 'podman') {
@@ -1881,25 +1880,23 @@ export async function start_sandbox(
                 excludedTunnelPorts: reservedTunnelPorts,
               },
             );
-          } else if (config.command === 'docker') {
+          } else {
             credentialProxyBridgeResult = await setupCredentialProxyDockerMacOS(
               args,
               socketPath,
             );
           }
 
-          if (credentialProxyBridgeResult != null) {
-            credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
-            if (credentialProxyBridgeResult.entrypointPrefix) {
-              entrypointPrefixes.push(
-                credentialProxyBridgeResult.entrypointPrefix,
-              );
-            }
-            args.push(
-              '--env',
-              `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
+          credentialProxyBridgeCleanup = credentialProxyBridgeResult.cleanup;
+          if (credentialProxyBridgeResult.entrypointPrefix) {
+            entrypointPrefixes.push(
+              credentialProxyBridgeResult.entrypointPrefix,
             );
           }
+          args.push(
+            '--env',
+            `LLXPRT_CREDENTIAL_SOCKET=${credentialProxyBridgeResult.containerSocketPath}`,
+          );
         } else {
           args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
         }
@@ -1951,7 +1948,7 @@ export async function start_sandbox(
         debugLogger.error(data.toString().trim());
       });
       proxyProcess.on('close', (code, signal) => {
-        if (sandboxProcess?.pid) {
+        if (sandboxProcess?.pid !== undefined) {
           process.kill(-sandboxProcess.pid, 'SIGTERM');
         }
         throw new FatalSandboxError(
@@ -2021,7 +2018,7 @@ export async function start_sandbox(
         } catch (err) {
           // Issue #1020: Log I/O errors but don't crash
           // This can happen after long-running sessions on macOS
-          if (cliConfig?.getDebugMode()) {
+          if (cliConfig?.getDebugMode() === true) {
             debugLogger.error('[sandbox] Failed to restore raw mode:', err);
           }
         }
@@ -2061,18 +2058,16 @@ export async function start_sandbox(
     }
 
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
-    if (credentialProxyHandle) {
-      const stopCredentialProxy = () => {
-        void stopProxy();
-      };
-      process.on('exit', stopCredentialProxy);
-      process.on('SIGINT', stopCredentialProxy);
-      process.on('SIGTERM', stopCredentialProxy);
-      sandboxProcess.on('close', stopCredentialProxy);
-    }
+    const stopCredentialProxy = () => {
+      void stopProxy();
+    };
+    process.on('exit', stopCredentialProxy);
+    process.on('SIGINT', stopCredentialProxy);
+    process.on('SIGTERM', stopCredentialProxy);
+    sandboxProcess.on('close', stopCredentialProxy);
 
     return await new Promise<number>((resolve) => {
-      sandboxProcess?.on('close', (code, signal) => {
+      sandboxProcess.on('close', (code, signal) => {
         const exitCode = normalizeExitCode(code, signal);
         if (exitCode !== 0) {
           debugLogger.log(
@@ -2101,11 +2096,9 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
     const checkProcess = spawn(sandbox, args);
 
     let stdoutData = '';
-    if (checkProcess.stdout) {
-      checkProcess.stdout.on('data', (data) => {
-        stdoutData += data.toString();
-      });
-    }
+    checkProcess.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+    });
 
     checkProcess.on('error', (err) => {
       debugLogger.warn(
@@ -2168,12 +2161,8 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
     };
 
     const cleanup = () => {
-      if (pullProcess.stdout) {
-        pullProcess.stdout.removeListener('data', onStdoutData);
-      }
-      if (pullProcess.stderr) {
-        pullProcess.stderr.removeListener('data', onStderrData);
-      }
+      pullProcess.stdout.removeListener('data', onStdoutData);
+      pullProcess.stderr.removeListener('data', onStderrData);
       pullProcess.removeListener('error', onError);
       pullProcess.removeListener('close', onClose);
       if (pullProcess.connected) {
@@ -2181,12 +2170,8 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
       }
     };
 
-    if (pullProcess.stdout) {
-      pullProcess.stdout.on('data', onStdoutData);
-    }
-    if (pullProcess.stderr) {
-      pullProcess.stderr.on('data', onStderrData);
-    }
+    pullProcess.stdout.on('data', onStdoutData);
+    pullProcess.stderr.on('data', onStderrData);
     pullProcess.on('error', onError);
     pullProcess.on('close', onClose);
   });

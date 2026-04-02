@@ -13,7 +13,6 @@ import {
 } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import {
-  type Config,
   type DiscoveredMCPPrompt,
   DiscoveredMCPTool,
   getMCPDiscoveryState,
@@ -24,7 +23,6 @@ import {
   getErrorMessage,
   type AnyDeclarativeTool,
   type MCPServerConfig,
-  type DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
@@ -125,16 +123,7 @@ const getMcpStatus = async (
 
   const allTools = toolRegistry.getAllTools();
   const promptRegistry = config.getPromptRegistry();
-  const allResources =
-    (
-      config as Config & {
-        getResourceRegistry?: () => {
-          getAllResources: () => DiscoveredMCPResource[];
-        };
-      }
-    )
-      .getResourceRegistry?.()
-      ?.getAllResources?.() ?? [];
+  const allResources = config.getResourceRegistry().getAllResources();
 
   for (const serverName of serverNames) {
     const serverTools = allTools.filter((tool: AnyDeclarativeTool) => {
