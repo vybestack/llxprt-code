@@ -110,6 +110,7 @@ export class TodoContinuationService {
    * @returns Formatted continuation prompt string
    */
   generateContinuationPrompt(config: ContinuationPromptConfig): string {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard
     if (!config) {
       throw new Error('Configuration is required');
     }
@@ -140,6 +141,7 @@ export class TodoContinuationService {
   checkContinuationConditions(
     context: ContinuationContext,
   ): ContinuationEvaluation {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard
     if (!context) {
       throw new Error('Context is required');
     }

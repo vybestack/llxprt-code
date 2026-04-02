@@ -86,18 +86,13 @@ export function buildRuntimeProfileSnapshot(): Profile {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
   const providerName =
     resolveActiveProviderName(settingsService, config) ??
-    providerManager.getActiveProviderName() ??
-    config.getProvider() ??
-    'openai';
+    providerManager.getActiveProviderName();
   const providerSettings = getProviderSettingsSnapshot(
     settingsService,
     providerName,
   );
   const currentModel =
-    (providerSettings.model as string | undefined) ??
-    config.getModel() ??
-    providerManager.getProviderByName(providerName)?.getDefaultModel?.() ??
-    'unknown';
+    (providerSettings.model as string | undefined) ?? config.getModel();
 
   const ephemeralSettings = config.getEphemeralSettings();
   const snapshot: Record<string, unknown> = {};
@@ -208,8 +203,8 @@ function hasBucketSetChanged(
 }
 
 function getFailoverBuckets(config: CliRuntimeConfig): string[] {
-  const handler = config.getBucketFailoverHandler?.();
-  return handler?.getBuckets?.() ?? [];
+  const handler = config.getBucketFailoverHandler();
+  return handler?.getBuckets() ?? [];
 }
 
 function getOAuthBuckets(authConfig: ProfileAuthConfig | undefined): string[] {
@@ -275,7 +270,7 @@ function clearProfileFailoverOnBucketChanges(
       'Clearing session bucket and failover handler.',
   );
   oauthManager.clearSessionBucket(profile.provider);
-  config.setBucketFailoverHandler?.(undefined);
+  config.setBucketFailoverHandler(undefined);
 }
 
 function wireStandardProfileFailover(
@@ -365,7 +360,7 @@ async function wireLoadBalancerFailover(
   config: CliRuntimeConfig,
   profile: LoadBalancerProfile,
 ): Promise<void> {
-  const subProfileNames = profile.profiles || [];
+  const subProfileNames = profile.profiles;
   logger.debug(
     () =>
       `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
@@ -397,7 +392,7 @@ async function wireLoadBalancerFailover(
     () =>
       '[issue1467] Clearing failover handler after LB sub-profile bucket changes',
   );
-  config.setBucketFailoverHandler?.(undefined);
+  config.setBucketFailoverHandler(undefined);
 }
 
 function buildProfileLoadResult(
@@ -522,13 +517,12 @@ export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
 
   const providerName =
     resolveActiveProviderName(settingsService, config) ??
-    providerManager.getActiveProviderName() ??
-    null;
+    providerManager.getActiveProviderName();
   const modelValue = getActiveModelName();
   const modelName =
-    modelValue && modelValue.trim() !== ''
+    modelValue !== '' && modelValue.trim() !== ''
       ? modelValue
-      : (config.getModel() ?? null);
+      : config.getModel();
 
   const profileName = getActiveProfileName();
 

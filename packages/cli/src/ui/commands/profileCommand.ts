@@ -250,7 +250,7 @@ const saveCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
@@ -506,7 +506,7 @@ const loadCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     // Parse profile name from args
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       // Open interactive profile selection dialog
@@ -556,16 +556,16 @@ const loadCommand: SlashCommand = {
           );
         }
       }
-      const infoMessages = (result.infoMessages ?? [])
+      const infoMessages = result.infoMessages
         .map((message) => `\n- ${message}`)
         .join('');
-      const warningMessages = (result.warnings ?? [])
-        .map((warning) => `\n⚠ ${warning}`)
+      const warningMessages = result.warnings
+        .map((warning) => `\n ${warning}`)
         .join('');
 
       const configService = context.services.config;
       if (configService != null) {
-        const providerManager = configService.getProviderManager?.();
+        const providerManager = configService.getProviderManager();
         if (providerManager != null && result.providerName) {
           logger.debug(
             () =>
@@ -591,11 +591,11 @@ const loadCommand: SlashCommand = {
                 `[profile] failed to set provider on config manager: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
-          configService.setProvider?.(result.providerName);
+          configService.setProvider(result.providerName);
         }
 
-        const geminiClient = configService.getGeminiClient?.();
-        if (geminiClient && typeof geminiClient.setTools === 'function') {
+        const geminiClient = configService.getGeminiClient();
+        if (typeof geminiClient.setTools === 'function') {
           try {
             await geminiClient.setTools();
           } catch (error) {
@@ -624,7 +624,7 @@ const loadCommand: SlashCommand = {
       try {
         const statusAfter = runtime.getActiveProviderStatus();
         context.recordingIntegration?.recordProviderSwitch(
-          statusAfter.providerName ?? result.providerName ?? 'unknown',
+          statusAfter.providerName ?? result.providerName,
           statusAfter.modelName ?? 'unknown',
         );
       } catch {
@@ -713,7 +713,7 @@ const deleteCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     // Parse profile name from args
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       // For now, show usage until dialog system is implemented
@@ -793,7 +793,7 @@ const setDefaultCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     // Parse profile name from args
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
@@ -819,7 +819,7 @@ const setDefaultCommand: SlashCommand = {
     }
 
     try {
-      // Check if settings service is available
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- runtime guard
       if (!context.services.settings) {
         return {
           type: 'message',
@@ -936,7 +936,7 @@ const showCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
@@ -1003,7 +1003,7 @@ const editCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
