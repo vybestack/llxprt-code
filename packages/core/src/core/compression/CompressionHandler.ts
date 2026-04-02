@@ -766,6 +766,9 @@ export class CompressionHandler {
       }
     }
 
+    // Get config from runtimeContext for bucket failover handling
+    const config = this.runtimeContext.providerRuntime?.config;
+
     return {
       history: this.historyService.getCurated(),
       runtimeContext: this.runtimeContext,
@@ -786,6 +789,7 @@ export class CompressionHandler {
       ...(activeTodos ? { activeTodos } : {}),
       compressionVerification:
         this.runtimeContext.ephemerals.compressionVerification?.() ?? false,
+      ...(config ? { config } : {}),
     };
   }
 
