@@ -75,7 +75,7 @@ export function createUserContentWithFunctionResponseFix(
     // First check if this is an array of functionResponse Parts
     // This happens when multiple tool responses are sent together
     const allFunctionResponses = message.every(
-      (item) => item && typeof item === 'object' && 'functionResponse' in item,
+      (item) => typeof item === 'object' && 'functionResponse' in item,
     );
 
     if (allFunctionResponses) {
@@ -93,7 +93,7 @@ export function createUserContentWithFunctionResponseFix(
           for (const subItem of item) {
             parts.push(subItem);
           }
-        } else if (item && typeof item === 'object') {
+        } else if (typeof item === 'object') {
           // Individual part (function response, text, etc.)
           parts.push(item);
         }
@@ -132,7 +132,7 @@ export function normalizeToolInteractionInput(
 
   // Detect if this is a tool response sequence (functionResponse parts only)
   const hasFunctionResponses = parts.some(
-    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    (part) => typeof part === 'object' && 'functionResponse' in part,
   );
 
   // If no function responses, fall back to original behavior
@@ -150,7 +150,7 @@ export function normalizeToolInteractionInput(
 export function isValidNonThoughtTextPart(part: Part): boolean {
   return (
     typeof part.text === 'string' &&
-    !part.thought &&
+    part.thought !== true &&
     // Technically, the model should never generate parts that have text and
     // any of these but we don't trust them so check anyways.
     !part.functionCall &&
@@ -182,10 +182,10 @@ export function isValidContent(content: Content): boolean {
     return false;
   }
   for (const part of content.parts) {
-    if (part == undefined || Object.keys(part).length === 0) {
+    if (Object.keys(part).length === 0) {
       return false;
     }
-    if (!part.thought && part.text !== undefined && part.text === '') {
+    if (part.thought !== true && part.text !== undefined && part.text === '') {
       return false;
     }
   }
@@ -210,7 +210,7 @@ export function validateHistory(history: Content[]): void {
 export function extractCuratedHistory(
   comprehensiveHistory: Content[],
 ): Content[] {
-  if (comprehensiveHistory == undefined || comprehensiveHistory.length === 0) {
+  if (comprehensiveHistory.length === 0) {
     return [];
   }
   const curatedHistory: Content[] = [];
@@ -279,7 +279,7 @@ export function convertPartListUnionToIContent(input: PartListUnion): IContent {
 export function convertMixedPartsToIContent(parts: Part[]): IContent {
   // Fast path: all function responses → tool message
   const allFunctionResponses = parts.every(
-    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    (part) => typeof part === 'object' && 'functionResponse' in part,
   );
   if (allFunctionResponses) {
     return convertAllFunctionResponses(parts);
@@ -304,10 +304,9 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
     ) {
       blocks.push({
         type: 'tool_response',
-        callId: part.functionResponse.id || '',
-        toolName: part.functionResponse.name || '',
-        result:
-          (part.functionResponse.response as Record<string, unknown>) || {},
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
+        result: part.functionResponse.response ?? {},
         error: undefined,
       } as ToolResponseBlock);
     }
@@ -345,18 +344,17 @@ function classifyMixedParts(parts: Part[]): {
       hasAIContent = true;
       blocks.push({
         type: 'tool_call',
-        id: part.functionCall.id || '',
-        name: part.functionCall.name || '',
-        parameters: (part.functionCall.args as Record<string, unknown>) || {},
+        id: part.functionCall.id ?? '',
+        name: part.functionCall.name ?? '',
+        parameters: part.functionCall.args ?? {},
       } as ToolCallBlock);
     } else if ('functionResponse' in part && part.functionResponse) {
       hasToolContent = true;
       blocks.push({
         type: 'tool_response',
-        callId: part.functionResponse.id || '',
-        toolName: part.functionResponse.name || '',
-        result:
-          (part.functionResponse.response as Record<string, unknown>) || {},
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
+        result: part.functionResponse.response ?? {},
         error: undefined,
       } as ToolResponseBlock);
     }
@@ -413,7 +411,8 @@ export function convertBlocksToParts(blocks: ContentBlock[]): Part[] {
         parts.push(thoughtPart);
         break;
       }
-      default:
+      case 'media':
+      case 'code':
         break;
     }
   }
@@ -477,13 +476,13 @@ export function applyResponseMetadata(
   // Add usage metadata if present
   if (input.metadata?.usage) {
     const usageMetadata: UsageMetadataWithCache = {
-      promptTokenCount: input.metadata.usage.promptTokens || 0,
-      candidatesTokenCount: input.metadata.usage.completionTokens || 0,
-      totalTokenCount: input.metadata.usage.totalTokens || 0,
+      promptTokenCount: input.metadata.usage.promptTokens,
+      candidatesTokenCount: input.metadata.usage.completionTokens,
+      totalTokenCount: input.metadata.usage.totalTokens,
       cache_read_input_tokens:
-        input.metadata.usage.cache_read_input_tokens || 0,
+        input.metadata.usage.cache_read_input_tokens ?? 0,
       cache_creation_input_tokens:
-        input.metadata.usage.cache_creation_input_tokens || 0,
+        input.metadata.usage.cache_creation_input_tokens ?? 0,
     };
     response.usageMetadata = usageMetadata;
   }
@@ -494,7 +493,10 @@ export function applyResponseMetadata(
   const terminationReason =
     input.metadata?.stopReason ?? input.metadata?.finishReason;
 
-  if (terminationReason && response.candidates?.[0]) {
+  if (
+    terminationReason !== undefined &&
+    response.candidates?.[0] !== undefined
+  ) {
     const finishReasonByTerminationReason: Record<string, FinishReason> = {
       // Anthropic/Gemini-style values
       end_turn: FinishReason.STOP,
@@ -515,9 +517,9 @@ export function applyResponseMetadata(
       incomplete: FinishReason.MAX_TOKENS,
       failed: FinishReason.STOP,
     };
-    const mappedReason = finishReasonByTerminationReason[terminationReason];
-    if (mappedReason) {
-      response.candidates[0].finishReason = mappedReason;
+    if (terminationReason in finishReasonByTerminationReason) {
+      response.candidates[0].finishReason =
+        finishReasonByTerminationReason[terminationReason];
     }
   }
 

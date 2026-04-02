@@ -221,7 +221,7 @@ export class TurnProcessor {
           break;
         }
       }
-      if (lastError) throw lastError;
+      if (lastError != null) throw lastError;
     } finally {
       onDone();
     }
@@ -385,7 +385,7 @@ export class TurnProcessor {
       () => '[TurnProcessor] Active provider snapshot before send',
       {
         providerName: provider.name,
-        providerDefaultModel: provider.getDefaultModel?.(),
+        providerDefaultModel: provider.getDefaultModel(),
         configModel: this.runtimeContext.state.model,
         baseUrl: this.resolveProviderBaseUrl(provider),
       },
@@ -421,7 +421,7 @@ export class TurnProcessor {
       runtime: runtimeContext,
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
-      userMemory: runtimeContext.config?.getUserMemory?.(),
+      userMemory: runtimeContext.config?.getUserMemory(),
     });
 
     let lastResponse: IContent | undefined;
@@ -429,9 +429,9 @@ export class TurnProcessor {
       const promptTokens = iContent.metadata?.usage?.promptTokens;
       if (promptTokens !== undefined) {
         const cacheReads =
-          iContent.metadata?.usage?.cache_read_input_tokens || 0;
+          iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
         const cacheWrites =
-          iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+          iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
         this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
         this.compressionHandler.lastPromptTokenCount =
           this.lastPromptTokenCount;
@@ -448,10 +448,10 @@ export class TurnProcessor {
     tools: unknown,
     baseUrl: string | undefined,
   ): void {
-    if (tools && Array.isArray(tools)) {
+    if (tools != null && Array.isArray(tools)) {
       const total = tools.reduce((sum, g) => {
         if (
-          g &&
+          g != null &&
           'functionDeclarations' in g &&
           Array.isArray(g.functionDeclarations)
         )
@@ -470,7 +470,7 @@ export class TurnProcessor {
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
-        toolCount: (tools as unknown[])?.length ?? 0,
+        toolCount: Array.isArray(tools) ? tools.length : 0,
         baseUrl,
       },
     );
@@ -505,7 +505,7 @@ export class TurnProcessor {
   ): void {
     const curatedHistory = this.historyService.getCurated();
     const index = ContentConverters.toGeminiContents(curatedHistory).length;
-    const newEntries = afcHistory.slice(index) ?? [];
+    const newEntries = afcHistory.slice(index);
     const matcher = this.makePositionMatcher();
     for (const content of newEntries) {
       const turnKey = this.historyService.generateTurnKey();
@@ -563,7 +563,7 @@ export class TurnProcessor {
         );
       }
     } else if (
-      response.candidates?.length &&
+      (response.candidates?.length ?? 0) > 0 &&
       (afcHistory == null || afcHistory.length === 0)
     ) {
       const turnKey = this.historyService.generateTurnKey();
@@ -590,13 +590,13 @@ export class TurnProcessor {
     if (usageMetadata?.promptTokenCount !== undefined) {
       const combined =
         usageMetadata.promptTokenCount +
-        (usageMetadata.cache_read_input_tokens || 0) +
-        (usageMetadata.cache_creation_input_tokens || 0);
+        (usageMetadata.cache_read_input_tokens ?? 0) +
+        (usageMetadata.cache_creation_input_tokens ?? 0);
       if (combined > 0) {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
       }
-    } else if (this.lastPromptTokenCount) {
+    } else if (this.lastPromptTokenCount !== null) {
       // lastPromptTokenCount is already cache-adjusted (includes
       // cache_read + cache_creation tokens) from the provider call path
       if (this.lastPromptTokenCount > 0) {
@@ -625,15 +625,14 @@ export class TurnProcessor {
 
       for (const toolGroup of tools) {
         if (
-          toolGroup &&
           'functionDeclarations' in toolGroup &&
           Array.isArray(toolGroup.functionDeclarations)
         ) {
           for (const funcDecl of toolGroup.functionDeclarations) {
-            const name = funcDecl.name || 'unknown';
+            const name = funcDecl.name ?? 'unknown';
             toolNames.push(name);
             if (
-              funcDecl.parametersJsonSchema &&
+              funcDecl.parametersJsonSchema != null &&
               typeof funcDecl.parametersJsonSchema === 'object'
             ) {
               if (

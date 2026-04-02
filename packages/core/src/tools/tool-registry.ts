@@ -90,11 +90,19 @@ Signal: Signal number or \`(none)\` if no signal was received.
     child.stdin.write(JSON.stringify(params));
     child.stdin.end();
 
-    let stdout = '';
-    let stderr = '';
-    let error: Error | null = null;
-    let code: number | null = null;
-    let exitSignal: NodeJS.Signals | null = null;
+    const state: {
+      stdout: string;
+      stderr: string;
+      error: Error | null;
+      code: number | null;
+      exitSignal: NodeJS.Signals | null;
+    } = {
+      stdout: '',
+      stderr: '',
+      error: null,
+      code: null,
+      exitSignal: null,
+    };
 
     // Handle abort signal to kill the child process
     const abortHandler = () => {
@@ -107,23 +115,23 @@ Signal: Signal number or \`(none)\` if no signal was received.
     try {
       await new Promise<void>((resolve) => {
         const onStdout = (data: Buffer) => {
-          stdout += data?.toString();
+          state.stdout += data.toString();
         };
 
         const onStderr = (data: Buffer) => {
-          stderr += data?.toString();
+          state.stderr += data.toString();
         };
 
         const onError = (err: Error) => {
-          error = err;
+          state.error = err;
         };
 
         const onClose = (
           _code: number | null,
           _signal: NodeJS.Signals | null,
         ) => {
-          code = _code;
-          exitSignal = _signal;
+          state.code = _code;
+          state.exitSignal = _signal;
           cleanup();
           resolve();
         };
@@ -148,13 +156,18 @@ Signal: Signal number or \`(none)\` if no signal was received.
     }
 
     // if there is any error, non-zero exit code, signal, or stderr, return error details instead of stdout
-    if (error || code != 0 || exitSignal || stderr) {
+    if (
+      state.error !== null ||
+      state.code !== 0 ||
+      state.exitSignal !== null ||
+      state.stderr !== ''
+    ) {
       const llmContent = [
-        `Stdout: ${stdout || '(empty)'}`,
-        `Stderr: ${stderr || '(empty)'}`,
-        `Error: ${error ?? '(none)'}`,
-        `Exit Code: ${code ?? '(none)'}`,
-        `Signal: ${exitSignal ?? '(none)'}`,
+        `Stdout: ${state.stdout !== '' ? state.stdout : '(empty)'}`,
+        `Stderr: ${state.stderr !== '' ? state.stderr : '(empty)'}`,
+        `Error: ${state.error !== null ? String(state.error) : '(none)'}`,
+        `Exit Code: ${state.code !== null ? String(state.code) : '(none)'}`,
+        `Signal: ${state.exitSignal !== null ? String(state.exitSignal) : '(none)'}`,
       ].join('\n');
       return {
         llmContent,
@@ -167,8 +180,8 @@ Signal: Signal number or \`(none)\` if no signal was received.
     }
 
     return {
-      llmContent: stdout,
-      returnDisplay: stdout,
+      llmContent: state.stdout,
+      returnDisplay: state.stdout,
     };
   }
 }
@@ -228,7 +241,7 @@ export class ToolRegistry {
   } {
     const ephemerals =
       typeof this.config.getEphemeralSettings === 'function'
-        ? this.config.getEphemeralSettings() || {}
+        ? this.config.getEphemeralSettings()
         : {};
 
     const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
@@ -239,17 +252,17 @@ export class ToolRegistry {
       : Array.isArray(ephemerals['disabled-tools'])
         ? (ephemerals['disabled-tools'] as string[])
         : [];
-    const excludedRaw = this.config.getExcludeTools?.() ?? [];
+    const excludedRaw = this.config.getExcludeTools() ?? [];
 
     return {
       allowed: new Set(
-        allowedRaw.map((name) => normalizeToolName(name) || name),
+        allowedRaw.map((name) => normalizeToolName(name) ?? name),
       ),
       disabled: new Set(
-        disabledRaw.map((name) => normalizeToolName(name) || name),
+        disabledRaw.map((name) => normalizeToolName(name) ?? name),
       ),
       excluded: new Set(
-        excludedRaw.map((name) => normalizeToolName(name) || name),
+        excludedRaw.map((name) => normalizeToolName(name) ?? name),
       ),
     };
   }
@@ -258,7 +271,7 @@ export class ToolRegistry {
     toolName: string,
     governance: ReturnType<ToolRegistry['getToolGovernance']>,
   ): boolean {
-    const canonical = normalizeToolName(toolName) || toolName;
+    const canonical = normalizeToolName(toolName) ?? toolName;
     if (governance.excluded.has(canonical)) {
       return false;
     }
@@ -449,19 +462,19 @@ export class ToolRegistry {
       const functions: FunctionDeclaration[] = [];
       const discoveredItems = JSON.parse(stdout.trim());
 
-      if (!discoveredItems || !Array.isArray(discoveredItems)) {
+      if (discoveredItems == null || !Array.isArray(discoveredItems)) {
         throw new Error(
           'Tool discovery command did not return a JSON array of tools.',
         );
       }
 
       for (const tool of discoveredItems) {
-        if (tool && typeof tool === 'object') {
+        if (tool != null && typeof tool === 'object') {
           if (Array.isArray(tool['function_declarations'])) {
             functions.push(...tool['function_declarations']);
           } else if (Array.isArray(tool['functionDeclarations'])) {
             functions.push(...tool['functionDeclarations']);
-          } else if (tool['name']) {
+          } else if (tool['name'] != null) {
             functions.push(tool as FunctionDeclaration);
           }
         }
@@ -473,7 +486,7 @@ export class ToolRegistry {
           continue;
         }
         const parameters =
-          func.parametersJsonSchema &&
+          func.parametersJsonSchema != null &&
           typeof func.parametersJsonSchema === 'object' &&
           !Array.isArray(func.parametersJsonSchema)
             ? func.parametersJsonSchema
@@ -504,21 +517,18 @@ export class ToolRegistry {
    * Used to conditionally hide tool parameters that are disabled by settings.
    */
   private getSchemaTransforms(): { hideTaskAsync: boolean } {
-    const settingsService = this.config.getSettingsService?.();
+    const settingsService = this.config.getSettingsService();
 
     // Global setting from /settings (subagents.asyncEnabled)
-    let globalAsyncEnabled = true;
-    if (settingsService) {
-      const globalSettings = settingsService.getAllGlobalSettings?.();
-      const subagentsSettings = globalSettings?.['subagents'] as
-        | { asyncEnabled?: boolean }
-        | undefined;
-      globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
-    }
+    const globalSettings = settingsService.getAllGlobalSettings();
+    const subagentsSettings = globalSettings['subagents'] as
+      | { asyncEnabled?: boolean }
+      | undefined;
+    const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
 
     // Profile setting from /set (subagents.async.enabled)
     const profileAsyncEnabled =
-      settingsService?.get('subagents.async.enabled') !== false;
+      settingsService.get('subagents.async.enabled') !== false;
 
     return {
       hideTaskAsync: !globalAsyncEnabled || !profileAsyncEnabled,
@@ -620,7 +630,7 @@ export class ToolRegistry {
   getToolsByServer(serverName: string): AnyDeclarativeTool[] {
     const serverTools: AnyDeclarativeTool[] = [];
     for (const tool of this.tools.values()) {
-      if ((tool as DiscoveredMCPTool)?.serverName === serverName) {
+      if ((tool as DiscoveredMCPTool).serverName === serverName) {
         serverTools.push(tool);
       }
     }
@@ -686,7 +696,7 @@ export class ToolRegistry {
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
     // Normalize the tool name for consistent storage and lookup
-    const normalizedName = normalizeToolName(tool.name) || tool.name;
+    const normalizedName = normalizeToolName(tool.name) ?? tool.name;
 
     if (targetMap.has(normalizedName)) {
       // For non-MCP tools, log warning and overwrite
