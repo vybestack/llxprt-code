@@ -85,18 +85,18 @@ export const diagnosticsCommand: SlashCommand = {
       }
 
       // Show bucket failover status
-      const failoverHandler = config.getBucketFailoverHandler?.();
+      const failoverHandler = config.getBucketFailoverHandler();
       if (failoverHandler != null) {
-        const buckets = failoverHandler.getBuckets?.() ?? [];
-        const currentBucket = failoverHandler.getCurrentBucket?.();
-        const isEnabled = failoverHandler.isEnabled?.() ?? false;
+        const buckets = failoverHandler.getBuckets();
+        const currentBucket = failoverHandler.getCurrentBucket();
+        const isEnabled = failoverHandler.isEnabled();
         diagnostics.push(
           `- Bucket Failover: ${isEnabled ? 'Enabled' : 'Disabled'}`,
         );
         if (buckets.length > 0) {
           diagnostics.push(`- Failover Buckets: ${buckets.join(' → ')}`);
           diagnostics.push(
-            `- Current Failover Bucket: ${currentBucket ?? buckets[0] ?? 'default'}`,
+            `- Current Failover Bucket: ${currentBucket ?? buckets[0]}`,
           );
           // Calculate next bucket
           if (currentBucket && buckets.length > 1) {
@@ -241,9 +241,9 @@ export const diagnosticsCommand: SlashCommand = {
 
       // Add dumpcontext status
       const dumpcontextMode =
-        ephemeralSettings['dumpcontext'] ||
+        (ephemeralSettings['dumpcontext'] as string | undefined) ??
         (ephemeralSettings['dumponerror'] === 'enabled' ? 'error' : 'off');
-      if (dumpcontextMode && dumpcontextMode !== 'off') {
+      if (dumpcontextMode !== 'off') {
         diagnostics.push(`\n## Context Dumping`);
         diagnostics.push(`- Mode: ${dumpcontextMode}`);
         diagnostics.push(`- Dump Directory: ${os.homedir()}/.llxprt/dumps/`);
@@ -256,7 +256,7 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(
         `- Debug Mode: ${config.getDebugMode() ? 'Enabled' : 'Disabled'}`,
       );
-      diagnostics.push(`- Approval Mode: ${config.getApprovalMode() || 'off'}`);
+      diagnostics.push(`- Approval Mode: ${config.getApprovalMode()}`);
 
       diagnostics.push('\n## Compression');
       const compressionThreshold =
@@ -268,10 +268,10 @@ export const diagnosticsCommand: SlashCommand = {
       );
 
       diagnostics.push('\n## Settings');
-      const merged = settings?.merged || {};
-      diagnostics.push(`- Theme: ${merged.ui?.theme || 'default'}`);
-      diagnostics.push(`- Default Profile: ${merged.defaultProfile || 'none'}`);
-      diagnostics.push(`- Sandbox: ${merged.sandbox || 'disabled'}`);
+      const merged = settings.merged;
+      diagnostics.push(`- Theme: ${merged.ui?.theme ?? 'default'}`);
+      diagnostics.push(`- Default Profile: ${merged.defaultProfile ?? 'none'}`);
+      diagnostics.push(`- Sandbox: ${merged.sandbox ?? 'disabled'}`);
 
       diagnostics.push('\n## IDE Integration');
       diagnostics.push(
@@ -302,23 +302,19 @@ export const diagnosticsCommand: SlashCommand = {
         `- User Memory: ${userMemory ? `${userMemory.length} characters` : 'Not loaded'}`,
       );
       diagnostics.push(
-        `- Context Files: ${config.getLlxprtMdFileCount() || 0} files`,
+        `- Context Files: ${config.getLlxprtMdFileCount()} files`,
       );
 
       diagnostics.push('\n## Tools');
       try {
         const toolRegistry = config.getToolRegistry();
-        if (toolRegistry) {
-          const tools = toolRegistry.getAllTools();
-          diagnostics.push(`- Available Tools: ${tools.length}`);
-          const toolNames = tools
-            .map((t: { name: string }) => t.name)
-            .slice(0, 10);
-          if (toolNames.length > 0) {
-            diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
-          }
-        } else {
-          diagnostics.push('- Tool Registry: Not initialized');
+        const tools = toolRegistry.getAllTools();
+        diagnostics.push(`- Available Tools: ${tools.length}`);
+        const toolNames = tools
+          .map((t: { name: string }) => t.name)
+          .slice(0, 10);
+        if (toolNames.length > 0) {
+          diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
         }
       } catch {
         diagnostics.push('- Tool Registry: Not initialized');
@@ -326,7 +322,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Telemetry');
       diagnostics.push(
-        `- Usage Statistics: ${merged.ui?.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
+        `- Usage Statistics: ${merged.ui.usageStatisticsEnabled === true ? 'Enabled' : 'Disabled'}`,
       );
 
       diagnostics.push('\n## OAuth Tokens');
@@ -418,7 +414,7 @@ export const diagnosticsCommand: SlashCommand = {
                   `  - Status: ${isExpired ? 'Expired' : 'Valid'}`,
                 );
 
-                if (token.expiresAt) {
+                if (token.expiresAt !== undefined) {
                   const expiryDate = new Date(token.expiresAt);
                   const timeUntilExpiry = Math.max(
                     0,
