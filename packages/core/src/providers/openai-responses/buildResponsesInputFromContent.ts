@@ -132,7 +132,7 @@ export function buildResponsesInputFromContent(
           arguments: JSON.stringify(toolCall.parameters),
         });
       }
-    } else if (c.speaker === 'tool') {
+    } else {
       const toolResponseBlocks = c.blocks.filter(
         (b) => b.type === 'tool_response',
       );
@@ -149,13 +149,9 @@ export function buildResponsesInputFromContent(
         const limited =
           config === undefined
             ? { content: rawResult, wasTruncated: false }
-            : limitOutputTokens(
-                rawResult,
-                config,
-                toolResponseBlock.toolName ?? 'tool_response',
-              );
+            : limitOutputTokens(rawResult, config, toolResponseBlock.toolName);
 
-        const textResult = limited.content || limited.message || '';
+        const textResult = limited.content ?? limited.message ?? '';
 
         input.push({
           type: 'function_call_output',

@@ -43,7 +43,7 @@ export class ProviderError extends Error {
     this.originalError = originalError;
 
     // Maintain proper stack trace for where error was thrown (V8 only)
-    if (Error.captureStackTrace) {
+    if (Error.captureStackTrace != null) {
       Error.captureStackTrace(this, this.constructor);
     }
   }
@@ -121,7 +121,7 @@ export function wrapError(error: unknown, provider: string): ProviderError {
     }
 
     // Check for server errors (5xx) - these are retryable
-    if (statusCode && statusCode >= 500 && statusCode < 600) {
+    if (statusCode != null && statusCode >= 500 && statusCode < 600) {
       return new ProviderError(
         error.message,
         provider,
@@ -132,7 +132,7 @@ export function wrapError(error: unknown, provider: string): ProviderError {
     }
 
     // For other errors with status codes, wrap as generic ProviderError (not retryable)
-    if (statusCode) {
+    if (statusCode != null) {
       return new ProviderError(
         error.message,
         provider,
@@ -161,7 +161,11 @@ function getStatusCode(error: Error): number | undefined {
   if (typeof candidate.status === 'number') return candidate.status;
 
   const response = candidate.response;
-  if (response && typeof response === 'object' && 'status' in response) {
+  if (
+    response != null &&
+    typeof response === 'object' &&
+    'status' in response
+  ) {
     const responseStatus = (response as { status?: unknown }).status;
     if (typeof responseStatus === 'number') {
       return responseStatus;
@@ -195,7 +199,7 @@ function getRetryAfter(error: Error): number | undefined {
 }
 
 function getRetryAfterFromHeaders(headers: unknown): number | undefined {
-  if (!headers || typeof headers !== 'object') {
+  if (headers == null || typeof headers !== 'object') {
     return undefined;
   }
 
