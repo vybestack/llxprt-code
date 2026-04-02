@@ -5,7 +5,6 @@
  */
 
 import {
-  Config,
   ProviderManager,
   OpenAIProvider,
   OpenAIResponsesProvider,
@@ -15,29 +14,33 @@ import {
   FakeProvider,
   sanitizeForByteString,
   needsSanitization,
-  SettingsService,
   getSettingsService,
   DebugLogger,
   debugLogger,
+} from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  SettingsService,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
-import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
+import type { IFileSystem } from './IFileSystem.js';
+import { NodeFileSystem } from './IFileSystem.js';
 import {
-  Settings,
   LoadedSettings,
   USER_SETTINGS_PATH,
   type MergedSettings,
+  type Settings,
 } from '../config/settings.js';
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import type { HistoryItemWithoutId } from '../ui/types.js';
 
-import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
+import type { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasEntry,
@@ -104,9 +107,7 @@ export function setFileSystem(fs: IFileSystem): void {
  * Get the file system implementation to use.
  */
 function getFileSystem(): IFileSystem {
-  if (!fileSystemInstance) {
-    fileSystemInstance = new NodeFileSystem();
-  }
+  fileSystemInstance ??= new NodeFileSystem();
   return fileSystemInstance;
 }
 
@@ -210,7 +211,7 @@ function resolveAuthOnlyFlag(
   if (typeof getSettingsService === 'function') {
     try {
       const settingsService = getSettingsService();
-      if (settingsService && typeof settingsService.get === 'function') {
+      if (typeof settingsService.get === 'function') {
         const serviceValue = settingsService.get('authOnly');
         if (serviceValue !== undefined) {
           const coerced = coerceAuthOnly(serviceValue);
@@ -286,7 +287,7 @@ export function createProviderManager(
 
   logger.debug('createProviderManager config check', {
     hasConfig: !!config,
-    configType: config?.constructor?.name,
+    configType: config?.constructor.name,
   });
 
   if (config) {
@@ -303,7 +304,7 @@ export function createProviderManager(
 
   const settingsData =
     loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
-  const ephemeralSettings = config?.getEphemeralSettings?.() ?? {};
+  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
   const effectiveOpenaiResponsesEnabled: boolean | undefined =
     ephemeralSettings.openaiResponsesEnabled !== undefined
       ? Boolean(ephemeralSettings.openaiResponsesEnabled)
@@ -328,13 +329,13 @@ export function createProviderManager(
     | Record<string, unknown>
     | undefined;
   const openaiProviderApiKey =
-    (openaiSettings?.apiKey as string | undefined) ||
+    (openaiSettings?.apiKey as string | undefined) ??
     (openaiSettings?.['auth-key'] as string | undefined);
 
   let openaiApiKey: string | undefined;
 
   if (
-    ephemeralAuthKey &&
+    ephemeralAuthKey != null &&
     typeof ephemeralAuthKey === 'string' &&
     ephemeralAuthKey.trim() !== ''
   ) {
@@ -355,9 +356,9 @@ export function createProviderManager(
   const ephemeralBaseUrl = ephemeralSettings['base-url'];
   const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
   const openaiBaseUrl =
-    ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
+    ephemeralBaseUrl != null && typeof ephemeralBaseUrl === 'string'
       ? ephemeralBaseUrl
-      : providerBaseUrl && typeof providerBaseUrl === 'string'
+      : providerBaseUrl != null && typeof providerBaseUrl === 'string'
         ? providerBaseUrl
         : process.env.OPENAI_BASE_URL;
 
@@ -604,7 +605,7 @@ export function bindOpenAIAliasIdentity(
 }
 
 function bindProviderAliasIdentity(provider: unknown, alias: string): void {
-  const aliasName = alias?.trim();
+  const aliasName = alias.trim();
   if (!aliasName) {
     return;
   }
@@ -633,7 +634,7 @@ function createOpenAIAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
     debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -666,7 +667,7 @@ function createOpenAIAliasProvider(
   }
 
   const provider = new OpenAIProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
@@ -706,7 +707,7 @@ function createOpenAIResponsesAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIResponsesProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
     debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -739,7 +740,7 @@ function createOpenAIResponsesAliasProvider(
   }
 
   const provider = new OpenAIResponsesProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
@@ -784,7 +785,7 @@ function createOpenAIVercelAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIVercelProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
     debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -817,7 +818,7 @@ function createOpenAIVercelAliasProvider(
   }
 
   const provider = new OpenAIVercelProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
@@ -865,7 +866,7 @@ function createGeminiAliasProvider(
   const resolvedBaseUrl = entry.config['base-url'];
 
   const provider = new GeminiProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     config,
     oauthManager,
@@ -897,7 +898,7 @@ function createAnthropicAliasProvider(
 ): AnthropicProvider | null {
   let aliasApiKey: string | undefined;
   // Only use environment variable API key if authOnly is not enabled
-  if (!authOnlyEnabled && entry.config.apiKeyEnv) {
+  if (authOnlyEnabled !== true && entry.config.apiKeyEnv) {
     const envValue = process.env[entry.config.apiKeyEnv];
     if (envValue && envValue.trim() !== '') {
       aliasApiKey = sanitizeApiKey(envValue);
@@ -912,7 +913,7 @@ function createAnthropicAliasProvider(
   }
 
   const provider = new AnthropicProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     providerConfig,
     oauthManager,
