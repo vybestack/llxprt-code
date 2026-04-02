@@ -92,6 +92,7 @@ import { McpClientManager } from '../tools/mcp-client-manager.js';
 import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
+import type { CoreToolScheduler } from '../core/coreToolScheduler.js';
 
 export class Config extends ConfigBase {
   constructor(params: ConfigParameters) {
@@ -157,10 +158,10 @@ export class Config extends ConfigBase {
     if (subagentMgr != null) {
       subagentMgr.clearExtensionSubagents();
       for (const extension of this.getExtensions()) {
-        if (extension.isActive && extension.subagents?.length) {
+        if (extension.isActive && (extension.subagents?.length ?? 0) > 0) {
           subagentMgr.registerExtensionSubagents(
             extension.name,
-            extension.subagents,
+            extension.subagents!,
           );
         }
       }
@@ -169,7 +170,7 @@ export class Config extends ConfigBase {
     // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
     if (subagentMgr != null) {
       const allSettings = this.settingsService.getAllGlobalSettings();
-      const subagentsSettings = allSettings?.['subagents'] as
+      const subagentsSettings = allSettings['subagents'] as
         | Record<string, unknown>
         | undefined;
       const definitions = subagentsSettings?.['definitions'] as
@@ -204,7 +205,7 @@ export class Config extends ConfigBase {
     let existingHistory: Content[] = [];
     let existingHistoryService: HistoryService | null = null;
 
-    if (previousGeminiClient?.isInitialized()) {
+    if (previousGeminiClient.isInitialized()) {
       existingHistory = await previousGeminiClient.getHistory();
       existingHistoryService = previousGeminiClient.getHistoryService();
       logger.debug('Retrieved existing state', {
@@ -246,7 +247,7 @@ export class Config extends ConfigBase {
       // Vertex and Genai have incompatible encryption and sending history with
       // throughtSignature from Genai to Vertex will fail, we need to strip them
       const fromGenaiToVertex =
-        this.contentGeneratorConfig?.vertexai === false &&
+        this.contentGeneratorConfig.vertexai === false &&
         newContentGeneratorConfig.vertexai === true;
 
       logger.debug('Storing history for later use', {
@@ -261,11 +262,7 @@ export class Config extends ConfigBase {
             const newContent = { ...content };
             if (newContent.parts != null) {
               newContent.parts = newContent.parts.map((part) => {
-                if (
-                  part &&
-                  typeof part === 'object' &&
-                  'thoughtSignature' in part
-                ) {
+                if ('thoughtSignature' in part) {
                   const newPart = { ...part };
                   delete (newPart as { thoughtSignature?: string })
                     .thoughtSignature;
@@ -290,20 +287,15 @@ export class Config extends ConfigBase {
 
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
-    if (
-      previousGeminiClient &&
-      typeof previousGeminiClient.dispose === 'function'
-    ) {
-      try {
-        previousGeminiClient.dispose();
-      } catch (error) {
-        logger.warn(
-          () =>
-            `Failed to dispose previous GeminiClient: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-        );
-      }
+    try {
+      previousGeminiClient.dispose();
+    } catch (error) {
+      logger.warn(
+        () =>
+          `Failed to dispose previous GeminiClient: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
     }
     this.geminiClient = newGeminiClient;
 
@@ -324,33 +316,27 @@ export class Config extends ConfigBase {
   getModel(): string {
     // Delegate to SettingsService as source of truth
     const settingsService = this.getSettingsService();
-    if (settingsService) {
-      const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
-        const providerSettings =
-          settingsService.getProviderSettings(activeProvider);
-        if (providerSettings.model) {
-          return providerSettings.model as string;
-        }
+    const activeProvider = settingsService.get('activeProvider') as string;
+    if (activeProvider) {
+      const providerSettings =
+        settingsService.getProviderSettings(activeProvider);
+      if (providerSettings.model != null) {
+        return providerSettings.model as string;
       }
     }
     // Fallback to legacy
-    return this.contentGeneratorConfig?.model || this.model;
+    return this.contentGeneratorConfig.model;
   }
 
   setModel(newModel: string): void {
     // Update SettingsService as source of truth
     const settingsService = this.getSettingsService();
-    if (settingsService) {
-      const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) {
-        settingsService.setProviderSetting(activeProvider, 'model', newModel);
-      }
+    const activeProvider = settingsService.get('activeProvider') as string;
+    if (activeProvider) {
+      settingsService.setProviderSetting(activeProvider, 'model', newModel);
     }
     // Keep legacy updates for backward compatibility
-    if (this.contentGeneratorConfig) {
-      this.contentGeneratorConfig.model = newModel;
-    }
+    this.contentGeneratorConfig.model = newModel;
     // Also update the base model so it persists across refreshAuth
     if (this.model !== newModel || this.inFallbackMode) {
       this.model = newModel;
@@ -376,7 +362,7 @@ export class Config extends ConfigBase {
    */
   async refreshMcpContext(): Promise<void> {
     await this.refreshMemory();
-    if (this.geminiClient?.isInitialized()) {
+    if (this.geminiClient.isInitialized()) {
       await this.geminiClient.setTools();
       await this.geminiClient.updateSystemInstruction();
     }
@@ -409,7 +395,7 @@ export class Config extends ConfigBase {
       if (!extension.isActive) {
         continue;
       }
-      for (const tool of extension.excludeTools || []) {
+      for (const tool of extension.excludeTools ?? []) {
         excludeToolsSet.add(tool);
       }
     }
@@ -514,7 +500,7 @@ export class Config extends ConfigBase {
 
   private expandPath(filePath: string): string {
     if (filePath.startsWith('~/')) {
-      return filePath.replace('~', process.env.HOME || '');
+      return filePath.replace('~', process.env.HOME ?? '');
     }
     return filePath;
   }
@@ -633,7 +619,7 @@ export class Config extends ConfigBase {
       // Initialize lazily using the 'task-max-async' setting (default 5)
       const settingsService = this.getSettingsService();
       const maxAsyncTasks =
-        (settingsService.get('task-max-async') as number) ?? 5;
+        (settingsService.get('task-max-async') as number | undefined) ?? 5;
       this.asyncTaskManager = new AsyncTaskManager(maxAsyncTasks);
     }
     return this.asyncTaskManager;
@@ -746,7 +732,7 @@ export class Config extends ConfigBase {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
+  ): Promise<CoreToolScheduler> {
     const schedulerMessageBus = dependencies?.messageBus;
     if (schedulerMessageBus == null) {
       throw new Error(
@@ -790,15 +776,13 @@ export class Config extends ConfigBase {
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access
-    if (this.hookSystem == null) {
-      this.hookSystem = new HookSystem(this);
-    }
+    this.hookSystem ??= new HookSystem(this);
 
     return this.hookSystem;
   }
 
   async dispose(): Promise<void> {
-    this.geminiClient?.dispose();
+    this.geminiClient.dispose();
     if (this.mcpClientManager != null) {
       await this.mcpClientManager.stop();
     }

@@ -133,7 +133,7 @@ function collectErrorDetails(error: unknown): {
       errorObject.error,
     ];
     for (const nested of possibleNestedErrors) {
-      if (nested && nested !== current) {
+      if (nested != null && nested !== current) {
         stack.push(nested);
       }
     }
@@ -153,7 +153,7 @@ export function createStreamInterruptionError(
   if (details != null) {
     (error as { details?: Record<string, unknown> }).details = details;
   }
-  if (cause && !(error as { cause?: unknown }).cause) {
+  if (cause != null && (error as { cause?: unknown }).cause == null) {
     (error as { cause?: unknown }).cause = cause;
   }
   return error;
@@ -254,7 +254,7 @@ export function isRetryableError(
   }
 
   // PRIORITY 3: Generic "fetch failed" messages only retry when explicitly enabled
-  if (retryFetchErrors) {
+  if (retryFetchErrors === true) {
     const { messages } = collectErrorDetails(error);
     if (messages.some((msg) => msg.toLowerCase().includes('fetch failed'))) {
       return true;
@@ -287,7 +287,7 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: Partial<RetryOptions>,
 ): Promise<T> {
-  if (options?.signal?.aborted) {
+  if (options?.signal?.aborted === true) {
     throw createAbortError();
   }
 
@@ -298,7 +298,9 @@ export async function retryWithBackoff<T>(
   const cleanOptions =
     options != null
       ? Object.fromEntries(
-          Object.entries(options).filter(([_, v]) => v != null),
+          Object.entries(options as Record<string, unknown>).filter(
+            ([_, v]) => v !== undefined,
+          ),
         )
       : {};
 
@@ -323,7 +325,7 @@ export async function retryWithBackoff<T>(
   const failoverThreshold = 1; // Attempt bucket failover after this many consecutive 429s
 
   while (attempt < maxAttempts) {
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       throw createAbortError();
     }
     attempt++;
@@ -334,7 +336,7 @@ export async function retryWithBackoff<T>(
       consecutive429s = 0;
       consecutiveAuthErrors = 0;
 
-      if (shouldRetryOnContent?.(result as GenerateContentResponse)) {
+      if (shouldRetryOnContent?.(result as GenerateContentResponse) === true) {
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
         await delay(delayWithJitter, signal);
@@ -375,7 +377,9 @@ export async function retryWithBackoff<T>(
       // This retry relies on either automatic OAuth refresh during the next request
       // or refresh logic inside onPersistent429 before failover executes.
       const shouldAttemptRefreshRetry =
-        isAuthError && options?.onPersistent429 && consecutiveAuthErrors === 1;
+        isAuthError &&
+        options?.onPersistent429 != null &&
+        consecutiveAuthErrors === 1;
 
       if (shouldAttemptRefreshRetry) {
         logger.debug(
@@ -412,7 +416,7 @@ export async function retryWithBackoff<T>(
 
         logger.debug(
           () =>
-            `[issue1029] onPersistent429 callback returned: ${failoverResult === null ? 'null (no handler)' : failoverResult}`,
+            `[issue1029] onPersistent429 callback returned: ${failoverResult ?? 'null (no handler)'}`,
         );
 
         if (failoverResult === true || typeof failoverResult === 'string') {
@@ -548,12 +552,12 @@ export async function retryWithBackoff<T>(
  * @returns True if the error is an overloaded_error, false otherwise.
  */
 export function isOverloadError(error: unknown): boolean {
-  if (error && typeof error === 'object') {
+  if (error != null && typeof error === 'object') {
     const errorObj = error as {
       error?: { type?: string; message?: string };
       type?: string;
     };
-    const errorType = errorObj.error?.type || errorObj.type;
+    const errorType = errorObj.error?.type ?? errorObj.type;
     return errorType === 'overloaded_error';
   }
   return false;
@@ -663,13 +667,17 @@ function logRetryAttempt(
 ): void {
   const logger = new DebugLogger('llxprt:retry');
   let message = `Attempt ${attempt} failed. Retrying with backoff...`;
-  if (errorStatus) {
+  if (errorStatus !== undefined) {
     message = `Attempt ${attempt} failed with status ${errorStatus}. Retrying with backoff...`;
   }
 
   if (errorStatus === 429) {
     logger.debug(() => `${message} Error: ${error}`);
-  } else if (errorStatus && errorStatus >= 500 && errorStatus < 600) {
+  } else if (
+    errorStatus !== undefined &&
+    errorStatus >= 500 &&
+    errorStatus < 600
+  ) {
     logger.error(() => `${message} Error: ${error}`);
   } else if (error instanceof Error) {
     // Fallback for errors that might not have a status but have a message
