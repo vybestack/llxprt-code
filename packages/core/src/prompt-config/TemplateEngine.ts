@@ -29,16 +29,7 @@ export class TemplateEngine {
     variables: TemplateVariables,
     options?: TemplateProcessingOptions,
   ): string {
-    // Step 1: Validate inputs
-    if (content == null || content == undefined) {
-      return '';
-    }
-
-    if (typeof content !== 'string') {
-      return content;
-    }
-
-    const vars = variables || {};
+    const vars = variables;
 
     // Step 2: Initialize processing state
     let result = '';
@@ -122,14 +113,6 @@ export class TemplateEngine {
     context: PromptContext,
     currentTool: string | null = null,
   ): TemplateVariables {
-    // Validate context - return minimal valid object if no context
-    if (!context) {
-      return {
-        MODEL: '',
-        PROVIDER: '',
-      };
-    }
-
     // Initialize variables map with required fields
     const variables: TemplateVariables = {
       MODEL: context.model || '',
@@ -142,62 +125,59 @@ export class TemplateEngine {
     }
 
     // Add environment variables
-    if (context.environment) {
-      variables['IS_GIT_REPO'] = context.environment.isGitRepository
-        ? 'true'
-        : 'false';
-      variables['IS_SANDBOXED'] = context.environment.isSandboxed
-        ? 'true'
-        : 'false';
-      variables['HAS_IDE'] = context.environment.hasIdeCompanion
-        ? 'true'
-        : 'false';
+    variables['IS_GIT_REPO'] = context.environment.isGitRepository
+      ? 'true'
+      : 'false';
+    variables['IS_SANDBOXED'] = context.environment.isSandboxed
+      ? 'true'
+      : 'false';
+    variables['HAS_IDE'] = context.environment.hasIdeCompanion
+      ? 'true'
+      : 'false';
 
-      if (context.environment.workingDirectory) {
-        variables['WORKING_DIRECTORY'] = context.environment.workingDirectory;
-      }
-      if (context.environment.folderStructure) {
-        variables['FOLDER_STRUCTURE'] = context.environment.folderStructure;
-      }
+    if (context.environment.workingDirectory) {
+      variables['WORKING_DIRECTORY'] = context.environment.workingDirectory;
+    }
+    if (context.environment.folderStructure) {
+      variables['FOLDER_STRUCTURE'] = context.environment.folderStructure;
+    }
 
-      if (context.environment.sandboxType) {
-        variables['SANDBOX_TYPE'] = context.environment.sandboxType;
-      } else {
-        variables['SANDBOX_TYPE'] = context.environment.isSandboxed
-          ? 'unknown'
-          : 'none';
-      }
+    if (context.environment.sandboxType) {
+      variables['SANDBOX_TYPE'] = context.environment.sandboxType;
+    } else {
+      variables['SANDBOX_TYPE'] = context.environment.isSandboxed
+        ? 'unknown'
+        : 'none';
+    }
 
-      const workspaceName =
-        context.environment.workspaceName ||
-        (context.environment.workingDirectory
-          ? path.basename(context.environment.workingDirectory)
-          : '');
-      if (workspaceName) {
-        variables['WORKSPACE_NAME'] = workspaceName;
-      } else {
-        variables['WORKSPACE_NAME'] = 'unknown';
-      }
+    const workspaceName =
+      context.environment.workspaceName ??
+      (context.environment.workingDirectory
+        ? path.basename(context.environment.workingDirectory)
+        : '');
+    if (workspaceName) {
+      variables['WORKSPACE_NAME'] = workspaceName;
+    } else {
+      variables['WORKSPACE_NAME'] = 'unknown';
+    }
 
-      const workspaceRoot =
-        context.environment.workspaceRoot ||
-        context.environment.workingDirectory;
-      if (workspaceRoot) {
-        variables['WORKSPACE_ROOT'] = workspaceRoot;
-      } else {
-        variables['WORKSPACE_ROOT'] = 'unknown';
-      }
+    const workspaceRoot =
+      context.environment.workspaceRoot ?? context.environment.workingDirectory;
+    if (workspaceRoot) {
+      variables['WORKSPACE_ROOT'] = workspaceRoot;
+    } else {
+      variables['WORKSPACE_ROOT'] = 'unknown';
+    }
 
-      const workspaceDirectories =
-        context.environment.workspaceDirectories ||
-        (context.environment.workingDirectory
-          ? [context.environment.workingDirectory]
-          : []);
-      if (workspaceDirectories.length > 0) {
-        variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
-      } else {
-        variables['WORKSPACE_DIRECTORIES'] = 'unknown';
-      }
+    const workspaceDirectories =
+      context.environment.workspaceDirectories ??
+      (context.environment.workingDirectory
+        ? [context.environment.workingDirectory]
+        : []);
+    if (workspaceDirectories.length > 0) {
+      variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
+    } else {
+      variables['WORKSPACE_DIRECTORIES'] = 'unknown';
     }
 
     // Add derived variables
@@ -218,17 +198,15 @@ export class TemplateEngine {
     });
     variables['CURRENT_TIME'] = now.toLocaleTimeString();
     variables['CURRENT_DATETIME'] = now.toLocaleString();
-    const sessionStartedAt =
-      context.environment?.sessionStartedAt &&
-      context.environment.sessionStartedAt.trim() !== ''
-        ? context.environment.sessionStartedAt
-        : undefined;
+    const sessionStartedAt = context.environment.sessionStartedAt;
     variables['SESSION_STARTED_AT'] =
-      sessionStartedAt ?? variables['CURRENT_DATETIME'];
+      sessionStartedAt !== undefined && sessionStartedAt.trim() !== ''
+        ? sessionStartedAt
+        : variables['CURRENT_DATETIME'];
     variables['PLATFORM'] = process.platform;
 
     // Add SUBAGENT_DELEGATION variable - empty unless includeSubagentDelegation is true and the required tools are available
-    const enabledTools = context.enabledTools ?? [];
+    const enabledTools = context.enabledTools;
     const hasTaskTool =
       enabledTools.includes('Task') || enabledTools.includes('task');
     const hasListSubagentsTool =
@@ -273,7 +251,7 @@ export class TemplateEngine {
 
     // Add interaction mode variables
     const interactionMode =
-      context.environment?.interactionMode || 'interactive';
+      context.environment.interactionMode ?? 'interactive';
     variables['INTERACTION_MODE'] = interactionMode;
 
     // Add interaction mode label
@@ -281,7 +259,7 @@ export class TemplateEngine {
       variables['INTERACTION_MODE_LABEL'] = 'an interactive';
     } else if (interactionMode === 'non-interactive') {
       variables['INTERACTION_MODE_LABEL'] = 'a non-interactive';
-    } else if (interactionMode === 'subagent') {
+    } else {
       variables['INTERACTION_MODE_LABEL'] = 'a subagent';
     }
 

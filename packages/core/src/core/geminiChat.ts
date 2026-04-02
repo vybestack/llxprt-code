@@ -146,7 +146,7 @@ export class GeminiChat {
     this.logger.debug('GeminiChat initialized:', {
       model,
       initialHistoryLength: initialHistory.length,
-      hasHistoryService: !!this.historyService,
+      hasHistoryService: true,
       hasRuntimeState: true,
     });
 
