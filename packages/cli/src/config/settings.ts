@@ -21,10 +21,10 @@ import * as commentJson from 'comment-json';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
-import {
+import type {
   Settings,
-  type MergedSettings,
   MemoryImportFormat,
+  type MergedSettings,
   SETTINGS_SCHEMA,
   type SettingDefinition,
 } from './settingsSchema.js';

@@ -554,7 +554,7 @@ describe('TopDownTruncationStrategy', () => {
         const responseBlock = msg.blocks.find(
           (b) => b.type === 'tool_response',
         );
-        // eslint-disable-next-line vitest/no-conditional-expect -- Guard to check tool response exists
+
         if (responseBlock != null && 'callId' in responseBlock) {
           const callId = responseBlock.callId;
           const hasCall = result.newHistory.some(

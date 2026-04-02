@@ -27,8 +27,6 @@ import {
   findWordEndInLine,
   findNextWordStartInLine,
   isWordCharStrict,
-} from './text-buffer.js';
-import {
   getTransformedImagePath,
   calculateTransformationsForLine,
   getTransformUnderCursor,

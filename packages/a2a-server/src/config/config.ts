@@ -190,7 +190,6 @@ export function loadEnvironment(): void {
 
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- intentional infinite loop with break
 
   while (true) {
     // prefer gemini-specific .env under GEMINI_DIR

@@ -4,16 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import type { Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import { mapToDisplay } from './toolMapping.js';
-import {
-  ApprovalMode,
+import type {
   AnyDeclarativeTool,
   AnyToolInvocation,
   CompletedToolCall,
+  ApprovalMode,
   type Config,
   type CoreToolScheduler,
   type MessageBus,

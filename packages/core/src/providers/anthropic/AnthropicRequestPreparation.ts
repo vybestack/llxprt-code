@@ -409,9 +409,8 @@ function mapEffortLevel(
     return 'medium';
   } else if (rawEffort === 'high') {
     return 'high';
-  } else {
-    return opus46Plus ? 'max' : 'high';
   }
+  return opus46Plus ? 'max' : 'high';
 }
 
 /**
@@ -585,7 +584,6 @@ async function resolveMcpAndSubagentConfig(params: {
     () => config?.getSubagentManager?.(),
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial mock at runtime
   const interactionMode =
     config?.isInteractive?.() === true ? 'interactive' : 'non-interactive';
 

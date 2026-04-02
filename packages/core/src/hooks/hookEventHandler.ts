@@ -25,8 +25,9 @@ import type {
   PreCompressTrigger,
   HookExecutionResult,
   McpContext,
+  NotificationType,
 } from './types.js';
-import { HookEventName, NotificationType } from './types.js';
+import { HookEventName } from './types.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {

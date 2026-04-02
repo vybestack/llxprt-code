@@ -18,11 +18,8 @@ import type {
   ToolCall,
   ProviderPerformanceMetrics,
 } from '../providers/types.js';
-import {
-  HookEventName,
-  type HookExecutionResult,
-  type HookInput,
-} from '../hooks/types.js';
+import type { HookEventName } from '../hooks/types.js';
+import { type HookExecutionResult, type HookInput } from '../hooks/types.js';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',

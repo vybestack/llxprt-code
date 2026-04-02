@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -38,28 +37,28 @@ vi.mock('./clientToolGovernance.js', () => ({
   shouldIncludeSubagentDelegationForConfig: vi.fn(() => Promise.resolve(false)),
 }));
 
-import {
+import type {
   Chat,
   Content,
   EmbedContentResponse,
   GenerateContentResponse,
-  GoogleGenAI,
   Part,
   PartListUnion,
 } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import {
   findCompressSplitPoint,
   GeminiClient,
   isThinkingSupported,
 } from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
-import {
+import type {
   ContentGenerator,
   ContentGeneratorConfig,
 } from './contentGenerator.js';
 
 import type { ConfigParameters } from '../config/config.js';
-import { GeminiChat } from './geminiChat.js';
+import type { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { GeminiEventType, Turn } from './turn.js';

@@ -174,7 +174,7 @@ export class ToolCallPipeline {
   normalizeToolName(name: string, args?: string): string {
     const mockValidatedCall = {
       index: 0,
-      name: name,
+      name,
       args: args ?? '',
       isValid: true,
       validationErrors: [],

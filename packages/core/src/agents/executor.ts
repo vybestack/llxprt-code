@@ -200,7 +200,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         );
 
         // Re-check after async call; TypeScript narrows the earlier check
-        if ((signal as AbortSignal).aborted) {
+        if (signal.aborted) {
           terminateReason = AgentTerminateMode.ABORTED;
           break;
         }

@@ -393,7 +393,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       ] as AgentSettings;
       wrapper = await this.createTask(
         taskId,
-        contextId as string,
+        contextId,
         agentSettings,
         eventBus,
       );
@@ -489,8 +489,6 @@ export class CoderAgentExecutor implements AgentExecutor {
         logger.info(
           `[CoderAgentExecutor] Task ${taskId}: All pending tools completed or none were pending.`,
         );
-
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- signal may change asynchronously during waitForPendingTools
 
         if (abortSignal.aborted) throw new Error('Execution aborted');
 

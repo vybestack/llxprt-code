@@ -130,7 +130,7 @@ export async function prepareRequest(
   );
   const systemPrompt = await getCoreSystemPromptAsync({
     tools: toolNamesArg,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial mock in tests
+
     interactionMode:
       config?.isInteractive?.() === true ? 'interactive' : 'non-interactive',
     userMemory,

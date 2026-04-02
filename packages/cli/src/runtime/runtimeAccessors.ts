@@ -17,10 +17,10 @@
  * @plan:PLAN-20260320-ISSUE1575.P02 - Extracted from runtimeSettings.ts
  */
 
-import {
+import type {
+  SettingsService,
   type Config,
   DebugLogger,
-  SettingsService,
   type ProviderManager,
   type ProfileManager,
   createProviderRuntimeContext,

@@ -204,7 +204,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
       // Process thinking chunk
       // eslint-disable-next-line vitest/no-conditional-in-test -- Accumulation logic for processing stream
       if (thinkingChunk.parts != null) {
-        // eslint-disable-next-line vitest/no-conditional-in-test -- Logic path for including thoughts
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...thinkingChunk.parts);
         }
@@ -213,7 +212,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
       // Process tool call chunk
       // eslint-disable-next-line vitest/no-conditional-in-test -- Accumulation logic for processing stream
       if (toolCallChunk.parts != null) {
-        // eslint-disable-next-line vitest/no-conditional-in-test -- Logic path for including thoughts
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...toolCallChunk.parts);
         }

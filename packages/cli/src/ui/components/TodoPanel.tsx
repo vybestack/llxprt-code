@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useTodoContext } from '../contexts/TodoContext.js';
 import { useToolCallContext } from '../contexts/ToolCallContext.js';

@@ -5,7 +5,8 @@
  */
 
 import { Box, Text } from 'ink';
-import React, { useState } from 'react';
+import type React from 'react';
+import { useState } from 'react';
 import { Colors } from '../colors.js';
 import { theme } from '../semantic-colors.js';
 import {

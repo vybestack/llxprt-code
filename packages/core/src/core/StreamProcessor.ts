@@ -181,7 +181,7 @@ export class StreamProcessor {
     );
 
     // Trigger BeforeModel hook for streaming path
-    if (configForHooks && configForHooks.getEnableHooks?.()) {
+    if (configForHooks?.getEnableHooks?.()) {
       const hookSystem = configForHooks.getHookSystem?.();
       if (hookSystem) {
         await hookSystem.initialize();
@@ -413,7 +413,7 @@ export class StreamProcessor {
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
-      if (hookConfig && hookConfig.getEnableHooks?.()) {
+      if (hookConfig?.getEnableHooks?.()) {
         const hookSystem = hookConfig.getHookSystem?.();
         if (hookSystem) {
           if (!hookSystem.isInitialized()) {

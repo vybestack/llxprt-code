@@ -529,7 +529,6 @@ export class MessageStreamOrchestrator {
     if (!Array.isArray(request)) return [];
     const names = new Set<string>();
     for (const part of request) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- PartUnion includes string, need guard for `in`
       if (typeof part === 'object' && 'functionResponse' in part) {
         const funcResp = (part as { functionResponse: { name?: string } })
           .functionResponse;

@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
+  SettingsService,
   ApprovalMode,
   DebugLogger,
   ProfileManager,
@@ -30,7 +31,6 @@ import type { CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import type { ProfileLoadResult } from './profileResolution.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 

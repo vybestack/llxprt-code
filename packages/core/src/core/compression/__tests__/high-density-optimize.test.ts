@@ -691,7 +691,6 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     const textBlocks = replaced.blocks.filter((b) => b.type === 'text');
     // The file content should be removed from the earlier inclusion
     for (const tb of textBlocks) {
-      // eslint-disable-next-line vitest/no-conditional-in-test -- Type guard for text blocks
       if (tb.type === 'text') {
         expect(tb.text).not.toContain('version1');
       }
@@ -830,7 +829,6 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         (b): b is ToolResponseBlock => b.type === 'tool_response',
       );
       for (const tb of toolBlocks) {
-        // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to verify pruned pointer
         if (tb.result === PRUNED_POINTER) {
           // Verify it's one of the old entries (indices 1, 3 = first two tool responses)
           expect(idx).toBeLessThanOrEqual(3);
@@ -947,7 +945,7 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         expect(rb.type).toBe('tool_response');
         expect(rb.callId).toBeDefined();
         expect(rb.toolName).toBe('read_file');
-        // eslint-disable-next-line vitest/no-conditional-in-test -- Guard to verify pruned pointer
+
         if (rb.result === PRUNED_POINTER) {
           // Structure is preserved — only result changed
           expect(rb.isComplete).toBe(true);

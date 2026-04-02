@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
-import { HookSystem } from '../hooks/HookSystem.js';
+import type { HookSystem } from '../hooks/HookSystem.js';
 import { BeforeModelHookOutput, AfterModelHookOutput } from '../hooks/types.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';

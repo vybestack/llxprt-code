@@ -369,7 +369,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       // Verify no tool_call is present in tail without its corresponding tool_response
       for (let i = 0; i < result.newHistory.length; i++) {
         const entry = result.newHistory[i];
-        // eslint-disable-next-line vitest/no-conditional-in-test -- Iterating over history entries
+
         if (entry.speaker === 'ai') {
           const toolCallBlocks = entry.blocks.filter(
             (b): b is ToolCallBlock => b.type === 'tool_call',
@@ -449,11 +449,10 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       const toolEntries = result.newHistory.filter((e) => e.speaker === 'tool');
       for (const te of toolEntries) {
         for (const block of te.blocks) {
-          // eslint-disable-next-line vitest/no-conditional-in-test -- Filtering to tool_response blocks
           if (block.type !== 'tool_response') continue;
           // If outside tail, result should be a short summary string
           const resultStr = String(block.result);
-          // eslint-disable-next-line vitest/no-conditional-in-test -- Comparing values to skip unchanged
+
           if (resultStr !== bigContent) {
             expect(resultStr.length).toBeLessThan(200);
           }
@@ -548,7 +547,6 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       // The summarized response should reference the file path or tool name
       for (const te of toolEntries) {
         for (const block of te.blocks) {
-          // eslint-disable-next-line vitest/no-conditional-in-test -- Filtering to tool_response blocks
           if (block.type !== 'tool_response') continue;
           const resultStr = String(block.result);
           // Summary should mention either the path or the tool name
@@ -1095,10 +1093,8 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
           // Entries outside the tail that are tool responses
           const nonTailEntries = result.newHistory.slice(0, -tailSize);
           for (const entry of nonTailEntries) {
-            // eslint-disable-next-line vitest/no-conditional-in-test -- Filtering to tool entries
             if (entry.speaker !== 'tool') continue;
             for (const block of entry.blocks) {
-              // eslint-disable-next-line vitest/no-conditional-in-test -- Filtering to tool_response blocks
               if (block.type !== 'tool_response') continue;
               expect(typeof block.result).toBe('string');
             }

@@ -12,7 +12,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { debugState } from '../debug.js';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
-import { EventEmitter } from 'node:events';
+import type { EventEmitter } from 'node:events';
 
 // Frames that render at least this far before or after an action are considered
 // idle frames.
@@ -139,7 +139,7 @@ export const DebugProfiler = () => {
     // These events are expected to trigger UI renders.
     // Cast to base EventEmitter to allow generic event name iteration.
     const coreEventsBase = coreEvents as unknown as EventEmitter;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const appEventsBase = appEvents as unknown as EventEmitter;
     for (const eventName of Object.values(CoreEvent)) {
       coreEventsBase.on(eventName, handler);

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   MCPServerConfig,
   BugCommandSettings,
   TelemetrySettings,
@@ -14,7 +14,7 @@ import {
   type HookDefinition,
   type HookEventName,
 } from '@vybestack/llxprt-code-core';
-import { CustomTheme } from '../ui/themes/theme.js';
+import type { CustomTheme } from '../ui/themes/theme.js';
 import type { WittyPhraseStyle } from '../ui/constants/phrasesCollections.js';
 import type { SessionRetentionSettings } from './settings.js';
 
