@@ -19,6 +19,7 @@ import {
   type GenerateContentConfig,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
+import { prependAsyncGenerator } from '../utils/asyncIterator.js';
 import { flushRuntimeAuthScope } from '../auth/precedence.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
@@ -42,6 +43,7 @@ import {
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import {
   InvalidStreamError,
+  EmptyStreamError,
   isSchemaDepthError,
   isThoughtPart,
   type UsageMetadataWithCache,
@@ -271,10 +273,43 @@ export class StreamProcessor {
         userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 
-      return this._convertIContentStream(streamResponse, requestPayload, {
-        promptId,
-        startTime,
-      });
+      // Convert IContent stream to GenerateContentResponse stream
+      const convertedStream = this._convertIContentStream(
+        streamResponse,
+        requestPayload,
+        {
+          promptId,
+          startTime,
+        },
+      );
+
+      /**
+       * CRITICAL FIX (#1750): Eagerly consume the first chunk within the retry boundary.
+       *
+       * The problem: provider.generateChatCompletion() returns a lazy async generator.
+       * The actual API call and HTTP connection establishment happens when the iterator
+       * is consumed, not when the generator is created. This means errors during the
+       * actual API call occur OUTSIDE the retryWithBackoff boundary.
+       *
+       * The fix: Call .next() on the converted stream BEFORE returning. This ensures:
+       * 1. The HTTP connection is established inside the retryWithBackoff boundary
+       * 2. Connection errors (429, 500, etc.) trigger retry logic and bucket failover
+       * 3. Empty stream detection happens within the retry boundary
+       *
+       * We then use prependAsyncGenerator to reconstruct a generator that yields
+       * the preloaded first chunk followed by the remaining iterator.
+       */
+      const firstChunk = await convertedStream.next();
+
+      if (firstChunk.done === true) {
+        throw new EmptyStreamError(
+          'Model stream ended immediately with no content.',
+        );
+      }
+
+      // Use prependAsyncGenerator to wrap the preloaded first chunk
+      // with the remaining iterator from convertedStream
+      return prependAsyncGenerator(firstChunk.value, convertedStream);
     } catch (error) {
       const durationMs = Date.now() - startTime;
       logApiError(
