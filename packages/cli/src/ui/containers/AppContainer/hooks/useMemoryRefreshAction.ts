@@ -64,6 +64,7 @@ export function useMemoryRefreshAction({
 
         config.setUserMemory(memoryContent);
         config.setLlxprtMdFileCount(fileCount);
+        config.setLlxprtMdFilePaths(result.filePaths);
       }
 
       setLlxprtMdFileCount(fileCount);

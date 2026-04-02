@@ -32,6 +32,7 @@ describe('useMemoryRefreshAction', () => {
       refreshMemory: vi.fn().mockResolvedValue(refreshMemoryResult),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
+      setLlxprtMdFilePaths: vi.fn(),
       getDebugMode: vi.fn(() => false),
       getWorkingDir: vi.fn(() => '/tmp/workspace'),
       getWorkspaceContext: vi.fn(() => ({
@@ -75,6 +76,7 @@ describe('useMemoryRefreshAction', () => {
     expect(loadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
     expect(config.setUserMemory).not.toHaveBeenCalled();
     expect(config.setLlxprtMdFileCount).not.toHaveBeenCalled();
+    expect(config.setLlxprtMdFilePaths).not.toHaveBeenCalled();
     expect(setLlxprtMdFileCount).toHaveBeenCalledWith(2);
 
     expect(addItem).toHaveBeenCalledWith(
@@ -106,6 +108,7 @@ describe('useMemoryRefreshAction', () => {
       refreshMemory: vi.fn(),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
+      setLlxprtMdFilePaths: vi.fn(),
       getDebugMode: vi.fn(() => false),
       getWorkingDir: vi.fn(() => '/tmp/workspace'),
       getWorkspaceContext: vi.fn(() => ({
@@ -149,6 +152,11 @@ describe('useMemoryRefreshAction', () => {
     expect(loadHierarchicalLlxprtMemory).toHaveBeenCalledTimes(1);
     expect(config.setUserMemory).toHaveBeenCalledWith('non-jit memory');
     expect(config.setLlxprtMdFileCount).toHaveBeenCalledWith(3);
+    expect(config.setLlxprtMdFilePaths).toHaveBeenCalledWith([
+      '/tmp/a',
+      '/tmp/b',
+      '/tmp/c',
+    ]);
     expect(setLlxprtMdFileCount).toHaveBeenCalledWith(3);
 
     expect(addItem).toHaveBeenCalledWith(
