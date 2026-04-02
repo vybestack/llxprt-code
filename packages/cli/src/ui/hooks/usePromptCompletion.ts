@@ -129,20 +129,18 @@ export function usePromptCompletion({
         return;
       }
 
-      if (response) {
-        const responseText = getResponseText(response);
+      const responseText = getResponseText(response);
 
-        if (responseText) {
-          const suggestionText = responseText.trim();
+      if (responseText) {
+        const suggestionText = responseText.trim();
 
-          if (
-            suggestionText.length > 0 &&
-            suggestionText.startsWith(trimmedText)
-          ) {
-            setGhostText(suggestionText);
-          } else {
-            clearGhostText();
-          }
+        if (
+          suggestionText.length > 0 &&
+          suggestionText.startsWith(trimmedText)
+        ) {
+          setGhostText(suggestionText);
+        } else {
+          clearGhostText();
         }
       }
     } catch (error) {

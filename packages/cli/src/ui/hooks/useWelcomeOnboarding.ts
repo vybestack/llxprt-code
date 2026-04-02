@@ -98,13 +98,9 @@ export const useWelcomeOnboarding = (
   // Load available providers on mount
   useEffect(() => {
     const providerManager = runtime.getCliProviderManager();
-    if (providerManager) {
-      const providers = providerManager.listProviders();
-      setAvailableProviders(providers);
-      debug.log(
-        `Loaded ${providers.length} providers: ${providers.join(', ')}`,
-      );
-    }
+    const providers = providerManager.listProviders();
+    setAvailableProviders(providers);
+    debug.log(`Loaded ${providers.length} providers: ${providers.join(', ')}`);
   }, [runtime]);
 
   // Load available models when provider is selected
@@ -267,7 +263,7 @@ export const useWelcomeOnboarding = (
       try {
         const providerManager = runtime.getCliProviderManager();
         debug.log(
-          `[saveProfile] START name=${name}, active provider: ${providerManager?.getActiveProviderName()}`,
+          `[saveProfile] START name=${name}, active provider: ${providerManager.getActiveProviderName()}`,
         );
 
         // Check if profile already exists
@@ -298,7 +294,7 @@ export const useWelcomeOnboarding = (
           `[saveProfile] Load result: ${JSON.stringify(loadResult, null, 2)}`,
         );
         debug.log(
-          `[saveProfile] After load - active provider: ${providerManager?.getActiveProviderName()}`,
+          `[saveProfile] After load - active provider: ${providerManager.getActiveProviderName()}`,
         );
       } catch (error) {
         debug.log(`[saveProfile] Failed: ${error}`);
@@ -340,7 +336,7 @@ export const useWelcomeOnboarding = (
       const providerManager = runtime.getCliProviderManager();
 
       debug.log(
-        `[triggerAuth] Before auth - current active: ${providerManager?.getActiveProviderName()}`,
+        `[triggerAuth] Before auth - current active: ${providerManager.getActiveProviderName()}`,
       );
 
       // Authenticate FIRST before switching provider (prevents double OAuth)
@@ -360,7 +356,7 @@ export const useWelcomeOnboarding = (
         autoOAuth: false,
       });
       debug.log(
-        `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager?.getActiveProviderName()}`,
+        `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager.getActiveProviderName()}`,
       );
 
       // For API key method, set the key after switching provider
@@ -378,7 +374,7 @@ export const useWelcomeOnboarding = (
       }
 
       debug.log(
-        `[triggerAuth] END - active provider: ${providerManager?.getActiveProviderName()}`,
+        `[triggerAuth] END - active provider: ${providerManager.getActiveProviderName()}`,
       );
     },
     [runtime],

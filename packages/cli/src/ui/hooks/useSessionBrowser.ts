@@ -204,11 +204,7 @@ export function useSessionBrowser(
       // Always include sessions with unloaded previews (REQ-SR-003)
       if (s.previewState === 'loading') return true;
       // Match against loaded preview text, provider, model
-      const fields = [
-        s.firstUserMessage ?? '',
-        s.provider ?? '',
-        s.model ?? '',
-      ];
+      const fields = [s.firstUserMessage ?? '', s.provider, s.model];
       return fields.some((f) => f.toLowerCase().includes(lowerTerm));
     });
   }, [sessions]);
@@ -228,7 +224,7 @@ export function useSessionBrowser(
           (a, b) => a.lastModified.getTime() - b.lastModified.getTime(),
         );
       case 'size':
-        return sorted.sort((a, b) => (b.fileSize ?? 0) - (a.fileSize ?? 0));
+        return sorted.sort((a, b) => b.fileSize - a.fileSize);
       default:
         return sorted;
     }
@@ -517,9 +513,7 @@ export function useSessionBrowser(
         const lowerInput = input.toLowerCase();
         if (lowerInput === 'y') {
           const session = currentPageItems[currentDeleteConfirmIndex];
-          if (session) {
-            void executeDelete(session);
-          }
+          void executeDelete(session);
         } else if (lowerInput === 'n' || key.name === 'escape') {
           setDeleteConfirmIndex(null);
         }
@@ -532,9 +526,7 @@ export function useSessionBrowser(
         const lowerInput = input.toLowerCase();
         if (lowerInput === 'y') {
           setConversationConfirmActive(false);
-          if (currentSelectedSession) {
-            void executeResume(currentSelectedSession);
-          }
+          void executeResume(currentSelectedSession);
         } else if (lowerInput === 'n' || key.name === 'escape') {
           setConversationConfirmActive(false);
         }
@@ -562,8 +554,6 @@ export function useSessionBrowser(
 
       // Enter: initiate resume
       if (key.name === 'return') {
-        if (!currentSelectedSession) return;
-
         if (hasActiveConversation) {
           setConversationConfirmActive(true);
         } else {
@@ -630,7 +620,7 @@ export function useSessionBrowser(
       if (!currentIsSearching) {
         // Delete key shows confirmation
         if (key.name === 'delete') {
-          if (currentPageItems.length > 0 && currentSelectedSession) {
+          if (currentPageItems.length > 0) {
             setDeleteConfirmIndex(currentSelectedIndex);
           }
           return;

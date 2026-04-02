@@ -137,7 +137,7 @@ export const useSlashCommandProcessor = (
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const alternateBuffer =
     settings.merged.ui.useAlternateBuffer === true &&
-    !config?.getScreenReader();
+    config?.getScreenReader() !== true;
 
   const reloadCommands = useCallback(() => {
     setReloadTrigger((v) => v + 1);
@@ -169,7 +169,7 @@ export const useSlashCommandProcessor = (
       // The logger's initialize is async, but we can create the instance
       // synchronously. Commands that use it will await its initialization.
       new Logger(
-        config?.getSessionId() || '',
+        config?.getSessionId() ?? '',
         config?.storage ?? new Storage(process.cwd()),
       ),
     [config],
@@ -679,12 +679,8 @@ export const useSlashCommandProcessor = (
                         if (typeof part === 'string') {
                           return part;
                         }
-                        if (
-                          typeof part === 'object' &&
-                          part !== null &&
-                          'text' in part
-                        ) {
-                          return (part as { text?: string }).text || '';
+                        if (typeof part === 'object' && 'text' in part) {
+                          return (part as { text?: string }).text ?? '';
                         }
                         return '';
                       })
@@ -896,7 +892,7 @@ export const useSlashCommandProcessor = (
                   // Restore IContent[] to gemini client via restoreHistory
                   await config
                     .getGeminiClient()
-                    ?.restoreHistory(resumeResult.history);
+                    .restoreHistory(resumeResult.history);
 
                   // Convert IContent[] to UI history items and load
                   const uiHistory = iContentToHistoryItems(

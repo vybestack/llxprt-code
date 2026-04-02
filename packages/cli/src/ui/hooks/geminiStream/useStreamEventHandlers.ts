@@ -142,8 +142,8 @@ function applyThoughtToState(
       )?.profileName;
       const pn = liveProfileName ?? ep;
       return {
-        type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
-        text: item?.text || '',
+        type: (item?.type as 'gemini' | 'gemini_content') ?? 'gemini',
+        text: item?.text ?? '',
         ...(pn != null ? { profileName: pn } : {}),
         thinkingBlocks: [...thinkingBlocksRef.current],
       };
@@ -564,11 +564,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
             addItem(
               {
                 type: MessageType.INFO,
-                text: `Execution stopped by hook: ${event.systemMessage?.trim() || event.reason}`,
+                text: `Execution stopped by hook: ${event.systemMessage?.trim() ?? event.reason}`,
               },
               userMessageTimestamp,
             );
-            if (event.contextCleared) {
+            if (event.contextCleared === true) {
               addItem(
                 {
                   type: MessageType.INFO,
@@ -582,11 +582,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
             addItem(
               {
                 type: MessageType.INFO,
-                text: `Execution blocked by hook: ${event.systemMessage?.trim() || event.reason}`,
+                text: `Execution blocked by hook: ${event.systemMessage?.trim() ?? event.reason}`,
               },
               userMessageTimestamp,
             );
-            if (event.contextCleared) {
+            if (event.contextCleared === true) {
               addItem(
                 {
                   type: MessageType.INFO,
@@ -649,7 +649,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         userMessageTimestamp,
       );
       const showProfileChangeInChat =
-        settings?.merged?.showProfileChangeInChat ?? true;
+        settings.merged.showProfileChangeInChat ?? true;
       const liveProfileName = getCurrentProfileName(config);
       if (
         showProfileChangeInChat &&
@@ -670,7 +670,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     [
       addItem,
       config,
-      settings?.merged?.showProfileChangeInChat,
+      settings.merged.showProfileChangeInChat,
       lastProfileNameRef,
     ],
   );
@@ -706,7 +706,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           const slashCommandResult = isSlashCommand(trimmedQuery)
             ? await handleSlashCommand(trimmedQuery)
             : false;
-          if (slashCommandResult) {
+          if (slashCommandResult !== false) {
             return processSlashCommandResult(
               slashCommandResult,
               scheduleToolCalls,

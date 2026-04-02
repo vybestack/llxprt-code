@@ -170,15 +170,15 @@ export function useMouseSelection({
       }
 
       scrollableCandidates.sort((a, b) => a.area - b.area);
-      const scrollableRoot = scrollableCandidates[0]?.node;
-
-      if (!scrollableRoot) {
+      if (scrollableCandidates.length === 0) {
         return { node: root, point };
       }
 
+      const scrollableRoot = scrollableCandidates[0].node;
+
       // Ignore clicks on the scrollbar column so scrollbar dragging still works.
-      const scrollableBox = scrollableCandidates[0]?.box;
-      if (scrollableBox && x === scrollableBox.x + scrollableBox.width - 1) {
+      const scrollableBox = scrollableCandidates[0].box;
+      if (x === scrollableBox.x + scrollableBox.width - 1) {
         return null;
       }
 
@@ -203,8 +203,8 @@ export function useMouseSelection({
       return {
         node: scrollableRoot,
         point: {
-          x: x - (scrollableBox?.x ?? 0),
-          y: y - (scrollableBox?.y ?? 0),
+          x: x - scrollableBox.x,
+          y: y - scrollableBox.y,
         },
       };
     },

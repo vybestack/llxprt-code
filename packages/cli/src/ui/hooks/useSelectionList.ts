@@ -89,7 +89,7 @@ const findNextValidIndex = (
     // We add `len` before the modulo to ensure a positive result in JS for negative steps.
     nextIndex = (nextIndex + step + len) % len;
 
-    if (!items[nextIndex]?.disabled) {
+    if (items[nextIndex].disabled !== true) {
       return nextIndex;
     }
   }
@@ -109,7 +109,7 @@ const computeInitialIndex = (
 
   if (initialKey !== undefined) {
     for (let i = 0; i < items.length; i++) {
-      if (items[i].key === initialKey && !items[i].disabled) {
+      if (items[i].key === initialKey && items[i].disabled !== true) {
         return i;
       }
     }
@@ -121,7 +121,7 @@ const computeInitialIndex = (
     targetIndex = 0;
   }
 
-  if (items[targetIndex]?.disabled) {
+  if (items[targetIndex].disabled === true) {
     const nextValid = findNextValidIndex(targetIndex, 'down', items);
     targetIndex = nextValid;
   }
@@ -285,14 +285,14 @@ export function useSelectionList<T>({
   useEffect(() => {
     let needsClear = false;
 
-    if (state.pendingHighlight && items[state.activeIndex]) {
+    if (state.pendingHighlight) {
       onHighlight?.(items[state.activeIndex].value);
       needsClear = true;
     }
 
-    if (state.pendingSelect && items[state.activeIndex]) {
+    if (state.pendingSelect) {
       const currentItem = items[state.activeIndex];
-      if (currentItem && !currentItem.disabled) {
+      if (currentItem.disabled !== true) {
         if (selectionLogger.enabled) {
           selectionLogger.debug(
             () =>

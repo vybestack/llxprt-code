@@ -151,9 +151,9 @@ export function splitPartsByRole(parts: Part[]): {
   const otherParts: Part[] = [];
 
   for (const part of parts) {
-    if (part && typeof part === 'object' && 'functionCall' in part) {
+    if (typeof part === 'object' && 'functionCall' in part) {
       functionCalls.push(part);
-    } else if (part && typeof part === 'object' && 'functionResponse' in part) {
+    } else if (typeof part === 'object' && 'functionResponse' in part) {
       functionResponses.push(part);
     } else {
       otherParts.push(part);
@@ -169,7 +169,7 @@ export function splitPartsByRole(parts: Part[]): {
 export function collectGeminiTools<
   T extends { request: { isClientInitiated?: boolean } },
 >(primaryTools: T[]): T[] {
-  return primaryTools.filter((t) => !t.request.isClientInitiated);
+  return primaryTools.filter((t) => t.request.isClientInitiated !== true);
 }
 
 /**
@@ -266,7 +266,7 @@ export function buildFullSplitItem(
   )?.profileName;
   const profileName = liveProfileName ?? existingProfileName;
   return {
-    type: (currentItem?.type as 'gemini' | 'gemini_content') ?? 'gemini',
+    type: currentItem?.type === 'gemini_content' ? 'gemini_content' : 'gemini',
     text: sanitizedCombined,
     ...(profileName != null ? { profileName } : {}),
     ...(thinkingBlocks.length > 0
@@ -415,17 +415,15 @@ export function showCitations(
 ): boolean {
   try {
     const settingsService = config.getSettingsService();
-    if (settingsService) {
-      const enabled = settingsService.get('ui.showCitations');
-      if (enabled !== undefined) {
-        return enabled as boolean;
-      }
+    const enabled = settingsService.get('ui.showCitations');
+    if (enabled !== undefined) {
+      return enabled as boolean;
     }
   } catch {
     // Fall through to other methods
   }
 
-  const enabled = (settings?.merged as { ui?: { showCitations?: boolean } })?.ui
+  const enabled = (settings.merged as { ui?: { showCitations?: boolean } })?.ui
     ?.showCitations;
   if (enabled !== undefined) {
     return enabled;
@@ -443,10 +441,7 @@ export function showCitations(
 export function getCurrentProfileName(config: Config): string | null {
   try {
     const settingsService = config.getSettingsService();
-    if (
-      settingsService &&
-      typeof settingsService.getCurrentProfileName === 'function'
-    ) {
+    if (typeof settingsService.getCurrentProfileName === 'function') {
       return settingsService.getCurrentProfileName() ?? null;
     }
   } catch {
