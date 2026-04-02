@@ -61,9 +61,9 @@ export class FileCommandLoader implements ICommandLoader {
   private readonly isTrustedFolder: boolean;
 
   constructor(private readonly config: Config | null) {
-    this.folderTrustEnabled = !!config?.getFolderTrust();
-    this.isTrustedFolder = !!config?.isTrustedFolder();
-    this.projectRoot = config?.getProjectRoot() || process.cwd();
+    this.folderTrustEnabled = config?.getFolderTrust() === true;
+    this.isTrustedFolder = config?.isTrustedFolder() === true;
+    this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 
   /**
@@ -114,10 +114,7 @@ export class FileCommandLoader implements ICommandLoader {
         // Add all commands without deduplication
         allCommands.push(...commands);
       } catch (error) {
-        if (
-          !signal.aborted &&
-          (error as { code?: string })?.code !== 'ENOENT'
-        ) {
+        if (!signal.aborted && (error as { code?: string }).code !== 'ENOENT') {
           debugLogger.error(
             `[FileCommandLoader] Error loading commands from ${dirInfo.path}:`,
             error,
@@ -224,7 +221,7 @@ export class FileCommandLoader implements ICommandLoader {
 
     // Add extension name tag for extension commands
     const defaultDescription = `Custom command from ${path.basename(filePath)}`;
-    let description = validDef.description || defaultDescription;
+    let description = validDef.description ?? defaultDescription;
     if (extensionName) {
       description = `[${extensionName}] ${description}`;
     }

@@ -213,6 +213,6 @@ export async function performResume(
     ok: true,
     history: resumeResult.history,
     metadata: resumeResult.metadata,
-    warnings: resumeResult.warnings ?? [],
+    warnings: resumeResult.warnings,
   };
 }
