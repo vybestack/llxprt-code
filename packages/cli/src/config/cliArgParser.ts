@@ -96,11 +96,11 @@ function registerCommands(yargsInstance: Argv, settings: Settings): Argv {
     yargsInstance.command(hooksCommand);
   }
 
-  if (settings?.extensionManagement ?? false) {
+  if (settings.extensionManagement ?? false) {
     yargsInstance.command(extensionsCommand);
   }
 
-  if (settings?.experimental?.skills ?? false) {
+  if (settings.experimental?.skills ?? false) {
     yargsInstance.command(skillsCommand);
   }
 
@@ -155,8 +155,8 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     sandboxProfileLoad: result['sandboxProfileLoad'] as string | undefined,
     debug: result['debug'] as boolean | undefined,
     prompt:
-      (result['prompt'] as string | undefined) ||
-      queryFromPromptWords ||
+      (result['prompt'] as string | undefined) ??
+      queryFromPromptWords ??
       undefined,
     promptInteractive: result['promptInteractive'] as string | undefined,
     outputFormat: result['outputFormat'] as string | undefined,
@@ -206,7 +206,7 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
 /** Checks for subcommand dispatch (mcp, hooks, extensions) and exits if handled. */
 function handleSubcommandExit(result: Record<string, unknown>): void {
   const commands = result['_'] as unknown[];
-  if (!commands || commands.length === 0) {
+  if (commands.length === 0) {
     return;
   }
 
@@ -244,17 +244,27 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .check((argv) => {
           const pw = argv['promptWords'];
-          if (argv['prompt'] && Array.isArray(pw) && pw.length > 0) {
+          if (
+            argv['prompt'] !== undefined &&
+            Array.isArray(pw) &&
+            pw.length > 0
+          ) {
             throw new Error(
               'Cannot use both a positional prompt and the --prompt (-p) flag together',
             );
           }
-          if (argv['prompt'] && argv['promptInteractive']) {
+          if (
+            argv['prompt'] !== undefined &&
+            argv['promptInteractive'] !== undefined
+          ) {
             throw new Error(
               'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
             );
           }
-          if (argv['yolo'] && argv['approvalMode']) {
+          if (
+            argv['yolo'] !== undefined &&
+            argv['approvalMode'] !== undefined
+          ) {
             throw new Error(
               'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
             );
@@ -277,12 +287,15 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     .alias('h', 'help')
     .strict()
     .check((argv) => {
-      if (argv['prompt'] && argv['promptInteractive']) {
+      if (
+        argv['prompt'] !== undefined &&
+        argv['promptInteractive'] !== undefined
+      ) {
         throw new Error(
           'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
         );
       }
-      if (argv['profile'] && argv['profileLoad']) {
+      if (argv['profile'] !== undefined && argv['profileLoad'] !== undefined) {
         throw new Error(
           'Cannot use both --profile and --profile-load. Use one at a time.',
         );

@@ -37,7 +37,7 @@ const getSavedChatTags = async (
   mtSortDesc: boolean,
 ): Promise<ChatDetail[]> => {
   const cfg = context.services.config;
-  const geminiDir = cfg?.storage?.getProjectTempDir();
+  const geminiDir = cfg?.storage.getProjectTempDir();
   if (!geminiDir) {
     return [];
   }
@@ -127,7 +127,7 @@ const saveCommand: SlashCommand = {
     await logger.initialize();
 
     // Check for overwrite confirmation first
-    if (!context.overwriteConfirmed) {
+    if (context.overwriteConfirmed !== true) {
       const exists = await logger.checkpointExists(tag);
       if (exists) {
         return {
@@ -140,7 +140,7 @@ const saveCommand: SlashCommand = {
             ' already exists. Do you want to overwrite it?',
           ),
           originalInvocation: {
-            raw: context.invocation?.raw || `/chat save ${tag}`,
+            raw: context.invocation?.raw ?? `/chat save ${tag}`,
           },
         };
       }
@@ -148,7 +148,7 @@ const saveCommand: SlashCommand = {
 
     const client = config?.getGeminiClient();
     // Check if chat is initialized before accessing it
-    if (!client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'error',
@@ -197,7 +197,9 @@ const resumeCommand: SlashCommand = {
 
     // Get emoji filter mode from settings
     const emojiFilterMode =
-      (config?.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+      (config?.getEphemeralSetting('emojifilter') as
+        | EmojiFilterMode
+        | undefined) ?? 'auto';
 
     // Create emoji filter if not in 'allowed' mode
     const emojiFilter =
@@ -237,9 +239,7 @@ const resumeCommand: SlashCommand = {
     // Use LoadHistoryActionReturn to properly sync both UI and client history
     const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
       const text =
-        content.parts
-          ?.map((part: Part) => (part.text ? part.text : ''))
-          .join('') || '';
+        content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
       return {
         type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
         text,
@@ -277,7 +277,7 @@ const deleteCommand: SlashCommand = {
     const { logger } = context.services;
     await logger.initialize();
 
-    if (!force && !context.overwriteConfirmed) {
+    if (!force && context.overwriteConfirmed !== true) {
       return {
         type: 'confirm_action',
         prompt: React.createElement(
@@ -288,7 +288,7 @@ const deleteCommand: SlashCommand = {
           '?',
         ),
         originalInvocation: {
-          raw: context.invocation?.raw || `/chat delete ${tag}`,
+          raw: context.invocation?.raw ?? `/chat delete ${tag}`,
         },
       };
     }
@@ -340,7 +340,7 @@ const renameCommand: SlashCommand = {
     }
 
     if (await logger.checkpointExists(newTag)) {
-      if (!context.overwriteConfirmed) {
+      if (context.overwriteConfirmed !== true) {
         return {
           type: 'confirm_action',
           prompt: React.createElement(
@@ -351,7 +351,7 @@ const renameCommand: SlashCommand = {
             ' already exists. Do you want to overwrite it?',
           ),
           originalInvocation: {
-            raw: context.invocation?.raw || `/chat rename ${oldTag} ${newTag}`,
+            raw: context.invocation?.raw ?? `/chat rename ${oldTag} ${newTag}`,
           },
         };
       }
@@ -379,7 +379,7 @@ const clearCommand: SlashCommand = {
   action: async (context): Promise<MessageActionReturn | void> => {
     const client = context.services.config?.getGeminiClient();
     // Check if chat is initialized before clearing
-    if (!client?.hasChatInitialized()) {
+    if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
         messageType: 'info',
@@ -417,7 +417,7 @@ const restoreHistory = async (
   turns: number,
 ): Promise<SlashCommandActionReturn> => {
   const client = context.services.config?.getGeminiClient();
-  if (!client?.hasChatInitialized()) {
+  if (client?.hasChatInitialized() !== true) {
     return {
       type: 'message',
       messageType: 'error',
@@ -456,9 +456,7 @@ const restoreHistory = async (
   // Convert to UI history items for display
   const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
     const text =
-      content.parts
-        ?.map((part: Part) => (part.text ? part.text : ''))
-        .join('') || '';
+      content.parts?.map((part: Part) => part.text ?? '').join('') ?? '';
     return {
       type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
       text,
@@ -542,7 +540,7 @@ const debugCommand: SlashCommand = {
     }
 
     // Checkpoint directory information
-    const checkpointDir = config?.storage?.getProjectTempDir();
+    const checkpointDir = config?.storage.getProjectTempDir();
     if (checkpointDir) {
       debugInfo.push(`Checkpoint directory: ${checkpointDir}`);
     } else {

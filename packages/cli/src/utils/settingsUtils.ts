@@ -52,9 +52,7 @@ export function getSettingsByCategory(): Record<
 
   Object.values(FLATTENED_SCHEMA).forEach((definition) => {
     const category = definition.category;
-    if (!categories[category]) {
-      categories[category] = [];
-    }
+    categories[category] ??= [];
     categories[category].push(definition);
   });
 
@@ -68,12 +66,11 @@ export function getSettingDefinition(
   key: string,
 ): (SettingDefinition & { key: string }) | undefined {
   // First check static settings
-  const staticDef = FLATTENED_SCHEMA[key];
-  if (staticDef) return staticDef;
+  if (key in FLATTENED_SCHEMA) return FLATTENED_SCHEMA[key];
 
   // Then check dynamic settings
-  const dynamicDef = dynamicSettingsRegistry.get(key);
-  if (dynamicDef != null) {
+  if (dynamicSettingsRegistry.has(key)) {
+    const dynamicDef = dynamicSettingsRegistry.get(key)!;
     return { ...dynamicDef, key };
   }
 
@@ -85,7 +82,7 @@ export function getSettingDefinition(
  */
 export function requiresRestart(key: string): boolean {
   // First check static settings
-  if (FLATTENED_SCHEMA[key]?.requiresRestart) {
+  if (FLATTENED_SCHEMA[key].requiresRestart) {
     return true;
   }
 
@@ -98,7 +95,7 @@ export function requiresRestart(key: string): boolean {
  */
 export function getDefaultValue(key: string): SettingDefinition['default'] {
   // First check static settings
-  const staticDefault = FLATTENED_SCHEMA[key]?.default;
+  const staticDefault = FLATTENED_SCHEMA[key].default;
   if (staticDefault !== undefined) {
     return staticDefault;
   }
@@ -137,7 +134,7 @@ export function getNestedValue(
   if (rest.length === 0) {
     return value;
   }
-  if (value && typeof value === 'object' && value !== null) {
+  if (typeof value === 'object' && value !== null) {
     return getNestedValue(value as Record<string, unknown>, rest);
   }
   return undefined;
@@ -226,14 +223,14 @@ export function isValidSettingKey(key: string): boolean {
  * Get the category for a setting
  */
 export function getSettingCategory(key: string): string | undefined {
-  return FLATTENED_SCHEMA[key]?.category;
+  return FLATTENED_SCHEMA[key].category;
 }
 
 /**
  * Check if a setting should be shown in the settings dialog
  */
 export function shouldShowInDialog(key: string): boolean {
-  return FLATTENED_SCHEMA[key]?.showInDialog ?? true; // Default to true for backward compatibility
+  return FLATTENED_SCHEMA[key].showInDialog ?? true; // Default to true for backward compatibility
 }
 
 /**
@@ -252,9 +249,7 @@ export function getDialogSettingsByCategory(): Record<
     .filter((definition) => definition.showInDialog !== false)
     .forEach((definition) => {
       const category = definition.category;
-      if (!categories[category]) {
-        categories[category] = [];
-      }
+      categories[category] ??= [];
       categories[category].push(definition);
     });
 
@@ -353,7 +348,7 @@ function setNestedValue(
     return obj;
   }
 
-  if (!obj[first] || typeof obj[first] !== 'object') {
+  if (obj[first] == null || typeof obj[first] !== 'object') {
     obj[first] = {};
   }
 
@@ -478,7 +473,7 @@ export function getDisplayValue(
   if (settingExistsInScope(key, settings) || isInModifiedSettings) {
     return `${valueString}*`; // * indicates setting is set in current scope
   }
-  if (isChangedFromDefault || isInModifiedSettings) {
+  if (isChangedFromDefault) {
     return `${valueString}*`; // * indicates changed from default value
   }
 
