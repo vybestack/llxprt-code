@@ -22,7 +22,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
     const warningCode =
       typeof warning === 'string'
         ? undefined
-        : typeof warning?.code === 'string'
+        : typeof warning.code === 'string'
           ? warning.code
           : undefined;
     if (warningCode && suppressedWarningCodes.has(warningCode)) {
@@ -31,12 +31,12 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
     const message =
       typeof warning === 'string'
         ? warning
-        : (warning?.stack ?? warning?.message ?? String(warning));
+        : (warning.stack ?? warning.message ?? String(warning));
     debugLogger.warn(message);
   });
 }
 
-import React, { ErrorInfo, useState, useEffect } from 'react';
+import React, { type ErrorInfo, useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
@@ -61,12 +61,12 @@ import {
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import chalk from 'chalk';
 import {
-  DnsResolutionOrder,
-  LoadedSettings,
+  type DnsResolutionOrder,
+  type LoadedSettings,
   loadSettings,
 } from './config/settings.js';
 import {
-  Config,
+  type Config,
   sessionId,
   setGitStatsService,
   FatalConfigError,
@@ -162,7 +162,7 @@ export function formatNonInteractiveError(error: unknown): string {
     return error.stack ?? error.message;
   }
 
-  if (error && typeof error === 'object') {
+  if (error != null && typeof error === 'object') {
     try {
       return JSON.stringify(error, null, 2);
     } catch {
@@ -379,7 +379,10 @@ export async function main() {
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
 
-  if (settings.merged.ui.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
+  if (
+    settings.merged.ui.autoConfigureMaxOldSpaceSize === true &&
+    !process.env.SANDBOX
+  ) {
     // Only relaunch with a larger heap when the autosizing setting is enabled.
     const debugMode = isDebugMode();
     const memoryArgs = shouldRelaunchForMemory(debugMode);
@@ -391,7 +394,7 @@ export async function main() {
 
   const argv = await parseArguments(settings.merged);
 
-  const hasPipedInput = !process.stdin.isTTY && !argv.experimentalAcp;
+  const hasPipedInput = !process.stdin.isTTY && argv.experimentalAcp !== true;
   let cachedStdinData: string | null = null;
   let stdinWasRead = false;
 
@@ -404,7 +407,7 @@ export async function main() {
   };
 
   const questionFromArgs =
-    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+    argv.promptInteractive ?? argv.prompt ?? (argv.promptWords ?? []).join(' ');
 
   await cleanupCheckpoints();
 
@@ -428,7 +431,7 @@ export async function main() {
 
   // If we're in ACP mode, redirect console output IMMEDIATELY
   // before any config loading that might write to stdout
-  if (argv.experimentalAcp) {
+  if (argv.experimentalAcp === true) {
     // eslint-disable-next-line no-console
     console.log = console.error;
     // eslint-disable-next-line no-console
@@ -501,15 +504,19 @@ export async function main() {
     stdinManager.enable();
 
     // This cleanup isn't strictly needed but may help in certain situations.
-    process.on('SIGTERM', async () => {
-      stdinManager.disable(true); // Restore to wasRaw
-      await runExitCleanup();
-      process.exit(0);
+    process.on('SIGTERM', () => {
+      void (async () => {
+        stdinManager.disable(true); // Restore to wasRaw
+        await runExitCleanup();
+        process.exit(0);
+      })();
     });
-    process.on('SIGINT', async () => {
-      stdinManager.disable(true); // Restore to wasRaw
-      await runExitCleanup();
-      process.exit(130); // Standard exit code for SIGINT
+    process.on('SIGINT', () => {
+      void (async () => {
+        stdinManager.disable(true); // Restore to wasRaw
+        await runExitCleanup();
+        process.exit(130); // Standard exit code for SIGINT
+      })();
     });
 
     // Register cleanup for the stdin manager to ensure error handler is removed
@@ -532,12 +539,10 @@ export async function main() {
 
   const consolePatcher = new ConsolePatcher({
     stderr: !(
-      config.getOutputFormat?.() === OutputFormat.JSON &&
-      !config.isInteractive()
+      config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive()
     ),
     debugMode:
-      config.getOutputFormat?.() === OutputFormat.JSON &&
-      !config.isInteractive()
+      config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive()
         ? false
         : config.getDebugMode(),
   });
@@ -554,7 +559,7 @@ export async function main() {
   }
 
   const bootstrapProfileName =
-    argv.profileLoad?.trim() ||
+    argv.profileLoad?.trim() ??
     (typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
       ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
       : '');
@@ -703,10 +708,7 @@ export async function main() {
           ? cliModelFromBootstrap
           : config.getModel();
 
-      if (
-        (!configModel || configModel === 'placeholder-model') &&
-        activeProvider.getDefaultModel
-      ) {
+      if (!configModel || configModel === 'placeholder-model') {
         // No model specified or placeholder, get the provider's default
         configModel = activeProvider.getDefaultModel();
       }
@@ -730,17 +732,15 @@ export async function main() {
         Object.assign(mergedModelParams, configWithParams._cliModelParams);
       }
 
-      if (activeProvider) {
-        const existingParams = getActiveModelParams();
+      const existingParams = getActiveModelParams();
 
-        for (const [key, value] of Object.entries(mergedModelParams)) {
-          setActiveModelParam(key, value);
-        }
+      for (const [key, value] of Object.entries(mergedModelParams)) {
+        setActiveModelParam(key, value);
+      }
 
-        for (const key of Object.keys(existingParams)) {
-          if (!(key in mergedModelParams)) {
-            clearActiveModelParam(key);
-          }
+      for (const key of Object.keys(existingParams)) {
+        if (!(key in mergedModelParams)) {
+          clearActiveModelParam(key);
         }
       }
 
@@ -774,7 +774,7 @@ export async function main() {
     // computeSandboxMemoryArgs() always returns args because the sandbox starts fresh
     // with Node.js default ~950MB heap.
     let sandboxMemoryArgs: string[] = [];
-    if (settings.merged.ui.autoConfigureMaxOldSpaceSize) {
+    if (settings.merged.ui.autoConfigureMaxOldSpaceSize === true) {
       const containerMemoryStr =
         process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
       let containerMemoryMB: number | undefined;
@@ -919,7 +919,7 @@ export async function main() {
   await fsPromises.mkdir(chatsDir, { recursive: true });
 
   // --list-sessions: display sessions and exit
-  if (argv.listSessions) {
+  if (argv.listSessions === true) {
     const { sessions } = await listSessions(chatsDir, projectHash);
     if (sessions.length === 0) {
       debugLogger.log('No recorded sessions for this project.');
@@ -1014,9 +1014,7 @@ export async function main() {
   if (resumedHistory && resumedHistory.length > 0) {
     try {
       const geminiClient = config.getGeminiClient();
-      if (geminiClient) {
-        await geminiClient.restoreHistory(resumedHistory);
-      }
+      await geminiClient.restoreHistory(resumedHistory);
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
       debugLogger.warn(
@@ -1180,13 +1178,13 @@ export async function main() {
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
-  if (!settings.merged.ui.hideWindowTitle) {
+  if (settings.merged.ui.hideWindowTitle !== true) {
     // Initial state before React loop starts
     const windowTitle = computeTerminalTitle({
       streamingState: StreamingState.Idle,
       isConfirming: false,
       folderName: title,
-      showThoughts: !!settings.merged.ui.showStatusInTitle,
+      showThoughts: settings.merged.ui.showStatusInTitle === true,
       useDynamicTitle: settings.merged.ui.dynamicWindowTitle ?? true,
     });
     writeToStdout(`\x1b]0;${windowTitle}\x07`);
