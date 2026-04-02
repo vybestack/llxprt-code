@@ -60,7 +60,6 @@ import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { shouldIncludeSubagentDelegation } from '../../prompt-config/subagent-delegation.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
-import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { CodexOAuthTokenSchema } from '../../auth/types.js';
 import type { OAuthManager } from '../../auth/precedence.js';
 import { getErrorStatus, isNetworkTransientError } from '../../utils/retry.js';
@@ -89,7 +88,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     const baseConfig: BaseProviderConfig = {
       name: 'openai-responses',
-      baseURL: baseURL || 'https://api.openai.com/v1',
+      baseURL: baseURL ?? 'https://api.openai.com/v1',
       envKeyNames: ['OPENAI_API_KEY'],
       isOAuthEnabled: isCodex && !!oauthManager,
       oauthProvider: isCodex ? 'codex' : undefined,
@@ -104,7 +103,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
-        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, hasApiKey: ${!!apiKey}, codexMode: ${isCodex}`,
+        `Constructor - baseURL: ${baseURL ?? 'https://api.openai.com/v1'}, hasApiKey: ${!!apiKey}, codexMode: ${isCodex}`,
     );
   }
 
@@ -182,7 +181,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
+    const baseURL = this.getBaseURL() ?? 'https://api.openai.com/v1';
     const isCodex = this.isCodexMode(baseURL);
 
     // @plan PLAN-20251214-ISSUE160.P05
@@ -482,6 +481,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
 
+    // Extract ephemerals with safe access - test mocks may pass undefined despite the required type
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- test mocks may set ephemerals to undefined
+    const invocationEphemerals = options.invocation.ephemerals ?? {};
+    // Extract settings with safe access - test mocks may pass undefined despite the required type
+    const settingsService = options.settings as
+      | typeof options.settings
+      | undefined;
+
     // Ensure OpenAI/Codex history is API-compliant:
     // every assistant tool_call must have a corresponding tool_response.
     // Cancelled tools can leave orphaned tool_call blocks which cause the next
@@ -490,10 +497,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       SyntheticToolResponseHandler.patchMessageHistory(content);
 
     // Use getAuthTokenForPrompt() to trigger OAuth if needed
-    const apiKey =
-      (await this.getAuthTokenForPrompt()) ??
-      (await resolveRuntimeAuthToken(options.resolved.authToken)) ??
-      '';
+    const apiKey = await this.getAuthTokenForPrompt();
     if (!apiKey) {
       throw new Error(
         this._isCodexMode
@@ -520,19 +524,22 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Source user memory directly from normalized options if available, then fallback to runtime config
     const userMemory = await resolveUserMemory(
       options.userMemory,
-      () => options.invocation?.userMemory,
+      () => options.invocation.userMemory,
     );
 
     const mcpInstructions = options.config
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial test stub
       ?.getMcpClientManager?.()
       ?.getMcpInstructions();
     const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
       toolNamesForPrompt ?? [],
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- config may be a partial test stub
       () => options.config?.getSubagentManager?.(),
     );
     const systemPrompt = await getCoreSystemPromptAsync({
       model: resolvedModel,
       tools: toolNamesForPrompt,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions -- config may be a partial test stub
       interactionMode: options.config?.isInteractive?.()
         ? 'interactive'
         : 'non-interactive',
@@ -570,11 +577,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Check if reasoning should be included in context
     // Precedence: invocation ephemerals > invocation modelBehavior > settings
     const includeReasoningInContextSetting =
-      options.invocation?.ephemerals?.['reasoning.includeInContext'] ??
-      options.invocation?.getModelBehavior<boolean>(
+      invocationEphemerals['reasoning.includeInContext'] ??
+      options.invocation.getModelBehavior<boolean>(
         'reasoning.includeInContext',
       ) ??
-      options.settings?.get('reasoning.includeInContext');
+      settingsService?.get('reasoning.includeInContext');
     const includeReasoningInContext =
       includeReasoningInContextSetting !== false;
 
@@ -639,7 +646,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             if (thinkingBlock.encryptedContent) {
               // Guard against undefined/empty thought - use empty string as fallback
               // to avoid creating invalid { type: 'summary_text', text: undefined }
-              const summaryText = thinkingBlock.thought ?? '';
+              const summaryText = thinkingBlock.thought;
               input.push({
                 type: 'reasoning',
                 id: `reasoning_${Date.now()}_${reasoningIdCounter++}`,
@@ -668,7 +675,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             arguments: JSON.stringify(toolCall.parameters),
           });
         }
-      } else if (c.speaker === 'tool') {
+      } else {
         // Convert tool responses to function_call_output format (Responses API)
         const toolResponseBlocks = c.blocks.filter(
           (b) => b.type === 'tool_response',
@@ -695,10 +702,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
           const limited = limitOutputTokens(
             rawResult,
             outputLimiterConfig,
-            toolResponseBlock.toolName ?? 'tool_response',
+            toolResponseBlock.toolName,
           );
 
-          const candidate = limited.content || limited.message || '';
+          const candidate = limited.content || (limited.message ?? '');
 
           const outputCallId = normalizeToOpenAIToolId(
             toolResponseBlock.callId,
@@ -779,11 +786,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @requirement:REQ-SP4-002/REQ-SP4-003
     // Source per-call request overrides from normalized options (ephemeral settings take precedence)
     const mergedParams: Record<string, unknown> = {
-      ...(options.invocation?.modelParams ?? {}),
+      ...options.invocation.modelParams,
     };
 
     // Translate generic maxOutputTokens ephemeral to max_output_tokens for Responses API
-    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const rawMaxOutput = settingsService?.get('maxOutputTokens');
     const genericMaxOutput =
       typeof rawMaxOutput === 'number' &&
       Number.isFinite(rawMaxOutput) &&
@@ -904,7 +911,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       model: resolvedModel,
       input: requestInput,
       stream: true,
-      ...(requestOverrides || {}),
+      ...requestOverrides,
     };
 
     // Set the system prompt as instructions for the Responses API
@@ -916,37 +923,35 @@ export class OpenAIResponsesProvider extends BaseProvider {
       request.tools = responsesTools;
       // Per codex-rs: set tool_choice when tools are present, respecting user-specified values
       // Only default to 'auto' if not already set (e.g., 'required' or a specific function name)
-      if (!request.tool_choice) {
-        request.tool_choice = 'auto';
-      }
+      request.tool_choice ??= 'auto';
       request.parallel_tool_calls = true;
     }
 
     // Add include parameter for reasoning when reasoning is enabled
     // Precedence: invocation ephemerals > invocation modelBehavior > settings
     const reasoningEnabled =
-      (options.invocation?.ephemerals?.['reasoning.enabled'] ??
-        options.invocation?.getModelBehavior<boolean>('reasoning.enabled') ??
-        options.settings?.get('reasoning.enabled')) === true;
+      (invocationEphemerals['reasoning.enabled'] ??
+        options.invocation.getModelBehavior<boolean>('reasoning.enabled') ??
+        settingsService?.get('reasoning.enabled')) === true;
     // Reasoning settings come from model-behavior (via invocation.getModelBehavior or settings)
     // not from modelParams (which is for pass-through API params like temperature)
     const reasoningEffort =
-      options.invocation?.ephemerals?.['reasoning.effort'] ??
-      options.invocation?.getModelBehavior<string>('reasoning.effort') ??
-      options.settings?.get('reasoning.effort');
+      invocationEphemerals['reasoning.effort'] ??
+      options.invocation.getModelBehavior<string>('reasoning.effort') ??
+      settingsService?.get('reasoning.effort');
     const reasoningSummary =
-      options.invocation?.ephemerals?.['reasoning.summary'] ??
-      options.invocation?.getModelBehavior<string>('reasoning.summary') ??
-      options.settings?.get('reasoning.summary');
+      invocationEphemerals['reasoning.summary'] ??
+      options.invocation.getModelBehavior<string>('reasoning.summary') ??
+      settingsService?.get('reasoning.summary');
     // Check if thinking blocks should be shown in the response (defaults to true)
     // This respects the reasoning.includeInResponse setting (fixes #922)
     // Precedence: invocation ephemerals > invocation modelBehavior > settings
     const includeThinkingInResponseSetting =
-      options.invocation?.ephemerals?.['reasoning.includeInResponse'] ??
-      options.invocation?.getModelBehavior<boolean>(
+      invocationEphemerals['reasoning.includeInResponse'] ??
+      options.invocation.getModelBehavior<boolean>(
         'reasoning.includeInResponse',
       ) ??
-      options.settings?.get('reasoning.includeInResponse');
+      settingsService?.get('reasoning.includeInResponse');
     const includeThinkingInResponse =
       includeThinkingInResponseSetting !== false;
     const shouldRequestReasoning =
@@ -965,10 +970,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
       // Add reasoning.effort to request if set
       // Per Responses API, reasoning goes inside the 'reasoning' field
-      if (reasoningEffort && typeof reasoningEffort === 'string') {
-        if (!request.reasoning) {
-          request.reasoning = {};
-        }
+      if (reasoningEffort != null && typeof reasoningEffort === 'string') {
+        request.reasoning ??= {};
         (request.reasoning as { effort?: string }).effort = reasoningEffort;
         this.logger.debug(
           () => `Added reasoning.effort to request: ${reasoningEffort}`,
@@ -979,13 +982,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Add reasoning.summary to request if set and not 'none'
     // Per codex-rs implementation, the summary goes inside reasoning.summary
     if (
-      reasoningSummary &&
+      reasoningSummary != null &&
       typeof reasoningSummary === 'string' &&
       reasoningSummary !== 'none'
     ) {
-      if (!request.reasoning) {
-        request.reasoning = {};
-      }
+      request.reasoning ??= {};
       (request.reasoning as { summary?: string }).summary = reasoningSummary;
       this.logger.debug(
         () => `Added reasoning.summary to request: ${reasoningSummary}`,
@@ -1002,10 +1003,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // This field controls response verbosity and enables thinking/reasoning summaries.
     // codex-rs sends this via the 'text' field: { verbosity: "low" | "medium" | "high" }
     const textVerbosity =
-      options.invocation?.ephemerals?.['text.verbosity'] ??
-      options.settings?.get('text.verbosity');
+      invocationEphemerals['text.verbosity'] ??
+      settingsService?.get('text.verbosity');
     if (
-      textVerbosity &&
+      textVerbosity != null &&
       typeof textVerbosity === 'string' &&
       ['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
     ) {
@@ -1034,19 +1035,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Apply prompt caching for both Codex and non-Codex modes
     // Check ephemeral settings first (from invocation snapshot), then provider settings
     const promptCachingSetting =
-      (options.invocation?.ephemerals?.['prompt-caching'] as
+      (invocationEphemerals['prompt-caching'] as string | undefined) ??
+      (settingsService?.getProviderSettings(this.name)['prompt-caching'] as
         | string
         | undefined) ??
-      (options.settings?.getProviderSettings?.(this.name)?.[
-        'prompt-caching'
-      ] as string | undefined) ??
       '1h'; // default to enabled
 
     const isCachingEnabled = promptCachingSetting !== 'off';
 
     if (isCachingEnabled) {
-      const cacheKey =
-        options.invocation?.runtimeId ?? options.runtime?.runtimeId;
+      const cacheKey = options.invocation.runtimeId;
       if (cacheKey && typeof cacheKey === 'string' && cacheKey.trim() !== '') {
         request.prompt_cache_key = cacheKey;
         // Note: prompt_cache_retention is NOT supported by Codex API (causes 400 error)
@@ -1095,15 +1093,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // @issue #1145: Add session_id header to bind requests into a single cache namespace
       // This matches codex-rs behavior: tmp/codex/codex-rs/codex-api/src/requests/headers.rs
       // The session_id header helps the Codex backend group requests for better cache hits
-      const sessionId =
-        options.invocation?.runtimeId ?? options.runtime?.runtimeId;
+      const sessionId = options.invocation.runtimeId;
       if (sessionId && typeof sessionId === 'string' && sessionId.trim()) {
         headers['session_id'] = sessionId;
       }
 
       this.logger.debug(
         () =>
-          `Codex mode: adding headers for account ${accountId.substring(0, 8)}..., session_id=${sessionId?.substring(0, 8) ?? 'none'}...`,
+          `Codex mode: adding headers for account ${accountId.substring(0, 8)}..., session_id=${sessionId.substring(0, 8)}...`,
       );
     }
 
@@ -1111,10 +1108,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Retry must encompass both the initial fetch and the subsequent stream
     // consumption, because transient network failures can occur mid-stream.
     // @fix #1076: Unified retry defaults across all providers (retries=6, retrywait=4000)
-    const ephemeralRetries = options.invocation?.ephemerals?.['retries'] as
+    const ephemeralRetries = invocationEphemerals['retries'] as
       | number
       | undefined;
-    const ephemeralRetryWait = options.invocation?.ephemerals?.['retrywait'] as
+    const ephemeralRetryWait = invocationEphemerals['retrywait'] as
       | number
       | undefined;
     const maxStreamingAttempts = ephemeralRetries ?? 6;
