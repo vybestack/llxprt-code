@@ -5,6 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach, Mock, afterEach } from 'vitest';
+import { createAbortError } from '../utils/delay.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -1797,6 +1798,85 @@ describe('subagent.ts', () => {
         vi.useRealTimers();
       });
 
+      it('should actively abort a stalled non-interactive response stream before the overall run timeout expires', async () => {
+        vi.useFakeTimers();
+
+        const { config } = await createMockConfig();
+        const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
+        let capturedSignal: AbortSignal | undefined;
+
+        mockSendMessageStream.mockImplementation(
+          async ({ config: messageConfig }) => {
+            capturedSignal = messageConfig.abortSignal;
+            return (async function* () {
+              yield {
+                type: StreamEventType.CHUNK,
+                value: {
+                  text: 'partial output',
+                  candidates: [
+                    { content: { parts: [{ text: 'partial output' }] } },
+                  ],
+                } as GenerateContentResponse,
+              };
+
+              await new Promise<void>((_resolve, reject) => {
+                if (!capturedSignal) {
+                  reject(new Error('Abort signal was not provided'));
+                  return;
+                }
+                if (capturedSignal.aborted) {
+                  reject(createAbortError());
+                  return;
+                }
+                capturedSignal.addEventListener(
+                  'abort',
+                  () => {
+                    queueMicrotask(() => reject(createAbortError()));
+                  },
+                  { once: true },
+                );
+              });
+            })();
+          },
+        );
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          runConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        const runPromise = scope.runNonInteractive(new ContextState());
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error('Expected stalled subagent stream to abort');
+          },
+          (error) => {
+            expect(error).toMatchObject({
+              name: 'AbortError',
+            });
+          },
+        );
+
+        await vi.advanceTimersByTimeAsync(31_000);
+
+        await runRejection;
+
+        expect(scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.TIMEOUT,
+        );
+        expect(capturedSignal?.aborted).toBe(true);
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+      });
+
       it('should terminate with ERROR if the model call throws', async () => {
         const { config } = await createMockConfig();
         mockSendMessageStream.mockRejectedValue(new Error('API Failure'));
@@ -1817,6 +1897,163 @@ describe('subagent.ts', () => {
           scope.runNonInteractive(new ContextState()),
         ).rejects.toThrow('API Failure');
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
+      });
+
+      it('should actively abort a hung non-interactive model call when the time limit expires', async () => {
+        vi.useFakeTimers();
+
+        const { config } = await createMockConfig();
+        const runConfig: RunConfig = {
+          max_time_minutes: 0.001,
+          max_turns: 100,
+        };
+        let capturedSignal: AbortSignal | undefined;
+
+        mockSendMessageStream.mockImplementation(
+          async ({ config: messageConfig }) => {
+            capturedSignal = messageConfig.abortSignal;
+            return (async function* () {
+              await new Promise<void>((resolve, reject) => {
+                if (!capturedSignal) {
+                  reject(new Error('Abort signal was not provided'));
+                  return;
+                }
+                if (capturedSignal.aborted) {
+                  reject(createAbortError());
+                  return;
+                }
+                capturedSignal.addEventListener(
+                  'abort',
+                  () => {
+                    queueMicrotask(() => reject(createAbortError()));
+                  },
+                  { once: true },
+                );
+              });
+              yield* [];
+            })();
+          },
+        );
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          runConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        const runPromise = scope.runNonInteractive(new ContextState());
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error('Expected timed out subagent run to abort');
+          },
+          (error) => {
+            expect(error).toMatchObject({
+              name: 'AbortError',
+            });
+          },
+        );
+
+        await vi.advanceTimersByTimeAsync(100);
+
+        await runRejection;
+
+        expect(scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.TIMEOUT,
+        );
+        expect(capturedSignal?.aborted).toBe(true);
+
+        vi.useRealTimers();
+      });
+    });
+
+    describe('runInteractive - Termination and Recovery', () => {
+      const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
+
+      it('should time out while waiting for interactive tool completion', async () => {
+        vi.useFakeTimers();
+
+        const { config } = await createMockConfig();
+        const runConfig: RunConfig = {
+          max_time_minutes: 0.001,
+          max_turns: 100,
+        };
+        const schedulerFactory = vi.fn(() => ({
+          schedule: vi.fn(),
+        }));
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: {
+            listToolNames: () => ['external_tool'],
+            getToolMetadata: () => ({
+              name: 'external_tool',
+              description: 'External tool',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'interactive-timeout-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          runConfig,
+          { tools: ['external_tool'] },
+          undefined,
+          overrides,
+        );
+
+        const interactiveResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'call-timeout',
+                          name: 'external_tool',
+                          args: {},
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(interactiveResponseStream);
+        const runPromise = scope.runInteractive(new ContextState(), {
+          schedulerFactory,
+        });
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error('Expected interactive subagent timeout to abort');
+          },
+          (error) => {
+            expect(error).toMatchObject({
+              name: 'AbortError',
+            });
+          },
+        );
+
+        await vi.advanceTimersByTimeAsync(100);
+
+        await runRejection;
+        expect(scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.TIMEOUT,
+        );
+
+        vi.useRealTimers();
       });
     });
 

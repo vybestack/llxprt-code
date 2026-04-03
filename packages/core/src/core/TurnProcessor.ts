@@ -12,10 +12,16 @@ import {
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
+import { createAbortError } from '../utils/delay.js';
+import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import type { IContent } from '../services/history/IContent.js';
-import type { IProvider, ProviderToolset } from '../providers/IProvider.js';
+import type {
+  GenerateChatOptions,
+  IProvider,
+  ProviderToolset,
+} from '../providers/IProvider.js';
 import { DebugLogger } from '../debug/index.js';
 import type { CompressionHandler } from './compression/CompressionHandler.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
@@ -35,6 +41,7 @@ import {
   INVALID_CONTENT_RETRY_OPTIONS,
   type UsageMetadataWithCache,
 } from './geminiChatTypes.js';
+import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
 import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
@@ -413,30 +420,62 @@ export class TurnProcessor {
       'TurnProcessor.executeProviderCall',
       { toolCount: tools?.length ?? 0 },
     );
+    const timeoutController = new AbortController();
+    const timeoutSignal = timeoutController.signal;
+    const upstreamAbortSignal = params.config?.abortSignal;
+    const onAbort = () => timeoutController.abort();
+    upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
 
     const streamResponse = provider.generateChatCompletion({
       contents: requestContents,
       tools: tools as ProviderToolset | undefined,
       config: runtimeContext.config,
       runtime: runtimeContext,
+      invocation: {
+        signal: timeoutSignal,
+      } as unknown as GenerateChatOptions['invocation'],
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
       userMemory: runtimeContext.config?.getUserMemory?.(),
     });
 
     let lastResponse: IContent | undefined;
-    for await (const iContent of streamResponse) {
-      const promptTokens = iContent.metadata?.usage?.promptTokens;
-      if (promptTokens !== undefined) {
-        const cacheReads =
-          iContent.metadata?.usage?.cache_read_input_tokens || 0;
-        const cacheWrites =
-          iContent.metadata?.usage?.cache_creation_input_tokens || 0;
-        this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
-        this.compressionHandler.lastPromptTokenCount =
-          this.lastPromptTokenCount;
+
+    try {
+      const iterator = streamResponse[Symbol.asyncIterator]();
+      while (true) {
+        const nextResponse = await nextStreamEventWithIdleTimeout({
+          iterator,
+          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
+          signal: timeoutSignal,
+          onTimeout: () => {
+            if (upstreamAbortSignal?.aborted) {
+              return;
+            }
+            timeoutController.abort();
+          },
+          createTimeoutError: () => createAbortError(),
+        });
+        if (nextResponse.done) {
+          break;
+        }
+
+        const iContent = nextResponse.value;
+        const promptTokens = iContent.metadata?.usage?.promptTokens;
+        if (promptTokens !== undefined) {
+          const cacheReads =
+            iContent.metadata?.usage?.cache_read_input_tokens || 0;
+          const cacheWrites =
+            iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+          this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
+          this.compressionHandler.lastPromptTokenCount =
+            this.lastPromptTokenCount;
+        }
+        lastResponse = iContent;
       }
-      lastResponse = iContent;
+    } finally {
+      timeoutController.abort();
+      upstreamAbortSignal?.removeEventListener('abort', onAbort);
     }
 
     if (!lastResponse) throw new Error('No response from provider');

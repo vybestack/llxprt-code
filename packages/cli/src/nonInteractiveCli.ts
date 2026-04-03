@@ -22,9 +22,12 @@ import {
   coreEvents,
   CoreEvent,
   setActiveProviderRuntimeContext,
+  nextStreamEventWithIdleTimeout,
+  StreamIdleTimeoutError,
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type MessageBus,
+  type ServerGeminiStreamEvent,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
@@ -35,6 +38,8 @@ import type { LoadedSettings } from './config/settings.js';
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
+
+const NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS = 30_000;
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -300,6 +305,7 @@ export async function runNonInteractive({
         abortController.signal,
         prompt_id,
       );
+      const responseIterator = responseStream[Symbol.asyncIterator]();
 
       let firstEventInTurn = true;
       const maybeEmitProfileName = () => {
@@ -315,7 +321,31 @@ export async function runNonInteractive({
         firstEventInTurn = false;
       };
 
-      for await (const event of responseStream) {
+      while (true) {
+        let nextEvent: IteratorResult<ServerGeminiStreamEvent>;
+        try {
+          nextEvent = await nextStreamEventWithIdleTimeout({
+            iterator: responseIterator,
+            timeoutMs: NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS,
+            signal: abortController.signal,
+          });
+        } catch (error) {
+          if (
+            error instanceof StreamIdleTimeoutError &&
+            !abortController.signal.aborted
+          ) {
+            abortController.abort();
+            debugLogger.error('Operation cancelled.');
+            return;
+          }
+          throw error;
+        }
+
+        if (nextEvent.done) {
+          break;
+        }
+
+        const event = nextEvent.value;
         if (abortController.signal.aborted) {
           debugLogger.error('Operation cancelled.');
           return;

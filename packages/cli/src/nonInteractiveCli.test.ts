@@ -10,12 +10,15 @@ import {
   ToolRegistry,
   ToolErrorType,
   shutdownTelemetry,
+  isTelemetrySdkInitialized,
   GeminiEventType,
   ServerGeminiStreamEvent,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
+
+const NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS = 30_000;
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';
 
@@ -29,6 +32,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     executeToolCall: vi.fn(),
     shutdownTelemetry: vi.fn(),
     isTelemetrySdkInitialized: vi.fn().mockReturnValue(true),
+    delay: original.delay,
+    nextStreamEventWithIdleTimeout: original.nextStreamEventWithIdleTimeout,
+    StreamIdleTimeoutError: original.StreamIdleTimeoutError,
   };
 });
 
@@ -77,6 +83,7 @@ describe('runNonInteractive', () => {
   let mockToolRegistry: ToolRegistry;
   let mockCoreExecuteToolCall: vi.Mock;
   let mockShutdownTelemetry: vi.Mock;
+  let mockIsTelemetrySdkInitialized: vi.Mock;
   let consoleErrorSpy: vi.SpyInstance;
   let processStdoutSpy: vi.SpyInstance;
   let mockGeminiClient: {
@@ -85,6 +92,9 @@ describe('runNonInteractive', () => {
   beforeEach(async () => {
     mockCoreExecuteToolCall = vi.mocked(executeToolCall);
     mockShutdownTelemetry = vi.mocked(shutdownTelemetry);
+    mockShutdownTelemetry.mockResolvedValue(undefined);
+    mockIsTelemetrySdkInitialized = vi.mocked(isTelemetrySdkInitialized);
+    mockIsTelemetrySdkInitialized.mockReturnValue(true);
 
     mockCommandServiceCreate.mockResolvedValue({
       getCommands: mockGetCommands,
@@ -171,6 +181,42 @@ describe('runNonInteractive', () => {
       yield event;
     }
   }
+
+  it('should cancel the turn when the stream goes idle after partial output', async () => {
+    vi.useFakeTimers();
+    try {
+      let capturedSignal: AbortSignal | undefined;
+      mockGeminiClient.sendMessageStream.mockImplementation(
+        (_messages: Part[], signal: AbortSignal) => {
+          capturedSignal = signal;
+          return (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+            yield { type: GeminiEventType.Content, value: 'Partial output' };
+            await new Promise<void>(() => {});
+          })();
+        },
+      );
+
+      const runPromise = runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Test input',
+        prompt_id: 'prompt-id-idle',
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      await vi.advanceTimersByTimeAsync(
+        NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS + 1,
+      );
+      await runPromise;
+
+      expect(capturedSignal?.aborted).toBe(true);
+      expect(processStdoutSpy.mock.calls).toEqual([['']]);
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Operation cancelled.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('should process input and write text output', async () => {
     const events: ServerGeminiStreamEvent[] = [

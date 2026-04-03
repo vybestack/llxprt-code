@@ -12,6 +12,7 @@ import {
   ServerGeminiErrorEvent,
   ServerGeminiStreamEvent,
   DEFAULT_AGENT_ID,
+  TURN_STREAM_IDLE_TIMEOUT_MS,
 } from './turn.js';
 import {
   GenerateContentResponse,
@@ -588,6 +589,54 @@ describe('Turn', () => {
         { type: GeminiEventType.Retry },
         { type: GeminiEventType.Content, value: 'Success' },
       ]);
+    });
+
+    it('should abort and yield UserCancelled when the stream goes idle after partial output', async () => {
+      vi.useFakeTimers();
+      const abortSignals: AbortSignal[] = [];
+
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'First part' }] } }],
+          } as GenerateContentResponse,
+        };
+        await new Promise<void>(() => {});
+      })();
+
+      mockSendMessageStream.mockImplementation(async (params) => {
+        const config = params as {
+          config?: { abortSignal?: AbortSignal };
+        };
+        if (config.config?.abortSignal) {
+          abortSignals.push(config.config.abortSignal);
+        }
+        return mockResponseStream;
+      });
+
+      const eventsPromise = (async () => {
+        const events: ServerGeminiStreamEvent[] = [];
+        for await (const event of turn.run(
+          [{ text: 'Test idle timeout' }],
+          new AbortController().signal,
+        )) {
+          events.push(event);
+        }
+        return events;
+      })();
+
+      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+      const events = await eventsPromise;
+
+      expect(events).toEqual([
+        { type: GeminiEventType.Content, value: 'First part' },
+        { type: GeminiEventType.UserCancelled },
+      ]);
+      expect(abortSignals).toHaveLength(1);
+      expect(abortSignals[0]?.aborted).toBe(true);
+
+      vi.useRealTimers();
     });
 
     it('should yield content events with traceId', async () => {

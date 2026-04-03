@@ -24,7 +24,10 @@ import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
-import type { ToolCallRequestInfo } from '../core/turn.js';
+import {
+  type ToolCallRequestInfo,
+  TURN_STREAM_IDLE_TIMEOUT_MS,
+} from '../core/turn.js';
 import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { GlobTool } from '../tools/glob.js';
 import { GrepTool } from '../tools/grep.js';
@@ -46,6 +49,8 @@ import { parseThought } from '../utils/thoughtUtils.js';
 import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { debugLogger } from '../utils/debugLogger.js';
+import { createAbortError } from '../utils/delay.js';
+import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 
 /** A callback function to report on agent activity. */
 export type ActivityCallback = (activity: SubagentActivityEvent) => void;
@@ -257,56 +262,84 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     signal: AbortSignal,
     promptId: string,
   ): Promise<{ functionCalls: FunctionCall[]; textResponse: string }> {
+    const timeoutController = new AbortController();
+    const timeoutSignal = timeoutController.signal;
+    const onAbort = () => timeoutController.abort();
+    signal.addEventListener('abort', onAbort, { once: true });
+
     const messageParams = {
       message: message.parts || [],
       config: {
-        abortSignal: signal,
+        abortSignal: timeoutSignal,
         tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined,
       },
     };
 
-    const responseStream = await chat.sendMessageStream(
-      messageParams,
-      promptId,
-    );
+    try {
+      const responseStream = await chat.sendMessageStream(
+        messageParams,
+        promptId,
+      );
 
-    const functionCalls: FunctionCall[] = [];
-    let textResponse = '';
+      const functionCalls: FunctionCall[] = [];
+      let textResponse = '';
+      const iterator = responseStream[Symbol.asyncIterator]();
 
-    for await (const resp of responseStream) {
-      if (signal.aborted) break;
-
-      if (resp.type === StreamEventType.CHUNK) {
-        const chunk = resp.value;
-        const parts = chunk.candidates?.[0]?.content?.parts;
-
-        // Extract and emit any subject "thought" content from the model.
-        const { subject } = parseThought(
-          parts?.find((p) => p.thought)?.text || '',
-        );
-        if (subject) {
-          this.emitActivity('THOUGHT_CHUNK', { text: subject });
+      while (true) {
+        const result = await nextStreamEventWithIdleTimeout({
+          iterator,
+          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
+          signal: timeoutSignal,
+          onTimeout: () => {
+            if (signal.aborted) {
+              return;
+            }
+            timeoutController.abort();
+          },
+          createTimeoutError: () => createAbortError(),
+        });
+        if (result.done) {
+          break;
         }
 
-        // Collect any function calls requested by the model.
-        if (chunk.functionCalls) {
-          functionCalls.push(...chunk.functionCalls);
-        }
+        const resp = result.value;
+        if (signal.aborted) break;
 
-        // Handle text response (non-thought text)
-        const text =
-          parts
-            ?.filter((p) => !p.thought && p.text)
-            .map((p) => p.text)
-            .join('') || '';
+        if (resp.type === StreamEventType.CHUNK) {
+          const chunk = resp.value;
+          const parts = chunk.candidates?.[0]?.content?.parts;
 
-        if (text) {
-          textResponse += text;
+          // Extract and emit any subject "thought" content from the model.
+          const { subject } = parseThought(
+            parts?.find((p: Part) => p.thought)?.text || '',
+          );
+          if (subject) {
+            this.emitActivity('THOUGHT_CHUNK', { text: subject });
+          }
+
+          // Collect any function calls requested by the model.
+          if (chunk.functionCalls) {
+            functionCalls.push(...chunk.functionCalls);
+          }
+
+          // Handle text response (non-thought text)
+          const text =
+            parts
+              ?.filter((p: Part) => !p.thought && p.text)
+              .map((p: Part) => p.text)
+              .join('') || '';
+
+          if (text) {
+            textResponse += text;
+          }
         }
       }
-    }
 
-    return { functionCalls, textResponse };
+      return { functionCalls, textResponse };
+    } finally {
+      timeoutController.abort();
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 
   /** Initializes a `GeminiChat` instance for the agent run. */
