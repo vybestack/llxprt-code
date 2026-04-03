@@ -15,6 +15,7 @@ import {
   type OnAuthErrorHandler,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { createHash } from 'node:crypto';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
 
 const logger = new DebugLogger('llxprt:auth:error-handler');
@@ -91,12 +92,12 @@ export class OnAuthErrorHandlerImpl implements OnAuthErrorHandler {
   }
 
   /**
-   * Create a simple hash of a token for logging purposes (not for security)
+   * Create a cryptographic fingerprint of a token for safe logging
    */
   private hashToken(token: string): string {
-    if (token.length <= 8) {
-      return '[short]';
+    if (!token || token.length === 0) {
+      return '[empty]';
     }
-    return `${token.slice(0, 4)}...${token.slice(-4)}`;
+    return createHash('sha256').update(token).digest('hex').slice(0, 12);
   }
 }

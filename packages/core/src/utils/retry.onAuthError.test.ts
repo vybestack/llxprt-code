@@ -21,7 +21,7 @@ describe('retryWithBackoff onAuthError callback', () => {
     vi.useFakeTimers();
     setSimulate429(false);
     // Suppress unhandled promise rejection warnings for tests that expect errors
-    console.warn = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {

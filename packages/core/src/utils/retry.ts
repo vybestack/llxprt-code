@@ -401,8 +401,14 @@ export async function retryWithBackoff<T>(
       }
 
       // Before retrying on auth error, invoke the onAuthError callback to allow
-      // cache invalidation and force-refresh. This is the first auth error in sequence.
-      if (isAuthError && consecutiveAuthErrors === 1 && options?.onAuthError) {
+      // cache invalidation and force-refresh. Only fires when a retry will
+      // actually occur (first auth error in sequence and another attempt remains).
+      if (
+        isAuthError &&
+        consecutiveAuthErrors === 1 &&
+        options?.onAuthError &&
+        attempt < maxAttempts
+      ) {
         try {
           logger.debug(
             () =>

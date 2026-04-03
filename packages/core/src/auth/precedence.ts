@@ -1092,23 +1092,9 @@ export class AuthPrecedenceResolver {
    * @fix issue1861 - Token revocation handling
    */
   invalidateProviderCache(providerId: string, profileId?: string): void {
-    const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
-
-    try {
-      const context = getActiveProviderRuntimeContext();
-      if (context?.runtimeId && !knownRuntimeIds.includes(context.runtimeId)) {
-        knownRuntimeIds.push(context.runtimeId);
-      }
-    } catch {
-      // Context not available, proceed with known IDs
-    }
-
-    for (const runtimeId of knownRuntimeIds) {
-      const state = runtimeScopedStates.get(runtimeId);
-      if (!state) continue;
-
-      // Use invalidateMatchingEntries to surgically invalidate entries
-      // matching the provider and optional profile
+    // Iterate all runtime-scoped states to ensure revoked tokens are
+    // invalidated across every active runtime scope
+    for (const [, state] of runtimeScopedStates) {
       invalidateMatchingEntries(
         state,
         (entry) => {
