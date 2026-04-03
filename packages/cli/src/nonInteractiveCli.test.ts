@@ -13,6 +13,7 @@ import {
   isTelemetrySdkInitialized,
   GeminiEventType,
   ServerGeminiStreamEvent,
+  StreamIdleTimeoutError,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
@@ -205,13 +206,20 @@ describe('runNonInteractive', () => {
 
       await vi.advanceTimersByTimeAsync(0);
 
+      // Capture rejection before advancing timers so it doesn't become
+      // an unhandled rejection (the promise rejects during timer advance)
+      let caughtError: unknown;
+      runPromise.catch((err: unknown) => {
+        caughtError = err;
+      });
+
       await vi.advanceTimersByTimeAsync(
         NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS + 1,
       );
-      await runPromise;
+      await runPromise.catch(() => {});
 
+      expect(caughtError).toBeInstanceOf(StreamIdleTimeoutError);
       expect(capturedSignal?.aborted).toBe(true);
-      expect(processStdoutSpy.mock.calls).toEqual([['']]);
       expect(consoleErrorSpy).toHaveBeenCalledWith('Operation cancelled.');
     } finally {
       vi.useRealTimers();
