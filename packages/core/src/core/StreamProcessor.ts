@@ -18,7 +18,8 @@ import {
   FinishReason,
   type GenerateContentConfig,
 } from '@google/genai';
-import { retryWithBackoff } from '../utils/retry.js';
+import { isRetryableError, retryWithBackoff } from '../utils/retry.js';
+import { prependAsyncGenerator } from '../utils/asyncIterator.js';
 import { flushRuntimeAuthScope } from '../auth/precedence.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
@@ -42,6 +43,7 @@ import {
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import {
   InvalidStreamError,
+  EmptyStreamError,
   isSchemaDepthError,
   isThoughtPart,
   type UsageMetadataWithCache,
@@ -128,7 +130,68 @@ export class StreamProcessor {
       provider,
     );
 
-    return this.processStreamResponse(streamResponse, userContent);
+    let processedStream: AsyncGenerator<GenerateContentResponse> | undefined;
+    const ensureProcessedStream =
+      (): AsyncGenerator<GenerateContentResponse> => {
+        if (!processedStream) {
+          processedStream = this.processStreamResponse(
+            streamResponse,
+            userContent,
+          );
+        }
+        return processedStream;
+      };
+
+    const cancellableStream: AsyncGenerator<GenerateContentResponse> = {
+      async next(
+        value?: unknown,
+      ): Promise<IteratorResult<GenerateContentResponse>> {
+        return ensureProcessedStream().next(value);
+      },
+      async return(
+        value?: unknown,
+      ): Promise<IteratorResult<GenerateContentResponse>> {
+        if (processedStream) {
+          return processedStream.return
+            ? processedStream.return(value)
+            : { done: true, value: undefined };
+        }
+
+        if (streamResponse.return) {
+          await streamResponse.return(value);
+        }
+
+        return { done: true, value: undefined };
+      },
+      async throw(
+        error?: unknown,
+      ): Promise<IteratorResult<GenerateContentResponse>> {
+        if (processedStream) {
+          if (processedStream.throw) {
+            return processedStream.throw(error);
+          }
+          throw error;
+        }
+
+        if (streamResponse.throw) {
+          return streamResponse.throw(error);
+        }
+
+        if (streamResponse.return) {
+          await streamResponse.return(undefined);
+        }
+
+        throw error;
+      },
+      [Symbol.asyncIterator](): AsyncGenerator<GenerateContentResponse> {
+        return this;
+      },
+      async [Symbol.asyncDispose](): Promise<void> {
+        await this.return(undefined);
+      },
+    };
+
+    return cancellableStream;
   }
 
   /**
@@ -143,10 +206,17 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const apiCall = () =>
       this._buildAndSendStreamRequest(params, promptId, userContent, provider);
+    const retryFetchErrors = (
+      params.config as { retryFetchErrors?: boolean } | undefined
+    )?.retryFetchErrors;
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () => this._handleBucketFailover(),
       signal: params.config?.abortSignal,
+      retryFetchErrors,
+      shouldRetryOnError: (error, currentRetryFetchErrors) =>
+        error instanceof EmptyStreamError ||
+        isRetryableError(error, currentRetryFetchErrors),
     });
   }
 
@@ -271,10 +341,43 @@ export class StreamProcessor {
         userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 
-      return this._convertIContentStream(streamResponse, requestPayload, {
-        promptId,
-        startTime,
-      });
+      // Convert IContent stream to GenerateContentResponse stream
+      const convertedStream = this._convertIContentStream(
+        streamResponse,
+        requestPayload,
+        {
+          promptId,
+          startTime,
+        },
+      );
+
+      /**
+       * CRITICAL FIX (#1750): Eagerly consume the first chunk within the retry boundary.
+       *
+       * The problem: provider.generateChatCompletion() returns a lazy async generator.
+       * The actual API call and HTTP connection establishment happens when the iterator
+       * is consumed, not when the generator is created. This means errors during the
+       * actual API call occur OUTSIDE the retryWithBackoff boundary.
+       *
+       * The fix: Call .next() on the converted stream BEFORE returning. This ensures:
+       * 1. The HTTP connection is established inside the retryWithBackoff boundary
+       * 2. Connection errors (429, 500, etc.) trigger retry logic and bucket failover
+       * 3. Empty stream detection happens within the retry boundary
+       *
+       * We then use prependAsyncGenerator to reconstruct a generator that yields
+       * the preloaded first chunk followed by the remaining iterator.
+       */
+      const firstChunk = await convertedStream.next();
+
+      if (firstChunk.done === true) {
+        throw new EmptyStreamError(
+          'Model stream ended immediately with no content.',
+        );
+      }
+
+      // Use prependAsyncGenerator to wrap the preloaded first chunk
+      // with the remaining iterator from convertedStream
+      return prependAsyncGenerator(firstChunk.value, convertedStream);
     } catch (error) {
       const durationMs = Date.now() - startTime;
       logApiError(
@@ -455,7 +558,7 @@ export class StreamProcessor {
       yield convertedChunk;
     }
 
-    if (telemetryContext) {
+    if (telemetryContext && lastConvertedChunk) {
       const durationMs = Date.now() - telemetryContext.startTime;
       logApiResponse(
         this.runtimeContext,
@@ -463,8 +566,8 @@ export class StreamProcessor {
         this.runtimeContext.state.model,
         telemetryContext.promptId,
         durationMs,
-        lastConvertedChunk?.usageMetadata,
-        lastConvertedChunk ? JSON.stringify(lastConvertedChunk) : '{}',
+        lastConvertedChunk.usageMetadata,
+        JSON.stringify(lastConvertedChunk),
       );
     }
   }
