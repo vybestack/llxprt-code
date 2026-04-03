@@ -38,6 +38,7 @@ vi.mock('./turnLogging.js', () => ({
 }));
 
 import { retryWithBackoff } from '../utils/retry.js';
+import { logApiResponse } from './turnLogging.js';
 
 // Helper to create valid IContent with blocks
 function createIContent(text: string): IContent {
@@ -240,16 +241,26 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           mockProvider,
         ),
       ).rejects.toThrow(EmptyStreamError);
+
+      // Ensure empty attempts are not logged as successful responses.
+      expect(logApiResponse).not.toHaveBeenCalled();
     });
   });
 
   describe('execute stream call retry classification', () => {
     it('should classify EmptyStreamError as retryable in the retry policy', async () => {
-      let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
+      let capturedShouldRetryOnError:
+        | ((error: unknown, retryFetchErrors?: boolean) => boolean)
+        | undefined;
       (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
         async <T>(
           fn: () => Promise<T>,
-          options?: { shouldRetryOnError?: (error: unknown) => boolean },
+          options?: {
+            shouldRetryOnError?: (
+              error: unknown,
+              retryFetchErrors?: boolean,
+            ) => boolean;
+          },
         ) => {
           capturedShouldRetryOnError = options?.shouldRetryOnError;
           return fn();
@@ -286,6 +297,74 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
           new EmptyStreamError(
             'Model stream ended immediately with no content.',
           ),
+        ),
+      ).toBe(true);
+    });
+
+    it('should pass retryFetchErrors through the retry policy classifier', async () => {
+      let capturedRetryFetchErrors: boolean | undefined;
+      let capturedShouldRetryOnError:
+        | ((error: unknown, retryFetchErrors?: boolean) => boolean)
+        | undefined;
+
+      (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
+        async <T>(
+          fn: () => Promise<T>,
+          options?: {
+            retryFetchErrors?: boolean;
+            shouldRetryOnError?: (
+              error: unknown,
+              retryFetchErrors?: boolean,
+            ) => boolean;
+          },
+        ) => {
+          capturedRetryFetchErrors = options?.retryFetchErrors;
+          capturedShouldRetryOnError = options?.shouldRetryOnError;
+          return fn();
+        },
+      );
+
+      const executeStreamApiCall = (
+        processor as unknown as {
+          _executeStreamApiCall: (
+            params: {
+              config?: {
+                abortSignal?: AbortSignal;
+                retryFetchErrors?: boolean;
+              };
+            },
+            promptId: string,
+            userContent: Content | Content[],
+            provider: { name: string },
+          ) => Promise<AsyncGenerator<GenerateContentResponse>>;
+        }
+      )._executeStreamApiCall;
+
+      const providerStub = { name: 'test-provider' };
+      await executeStreamApiCall
+        .call(
+          processor,
+          { config: { retryFetchErrors: true } },
+          'test-prompt',
+          { role: 'user', parts: [{ text: 'test' }] },
+          providerStub,
+        )
+        .catch(() => {
+          // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
+        });
+
+      expect(capturedRetryFetchErrors).toBe(true);
+      expect(capturedShouldRetryOnError).toBeDefined();
+      expect(
+        capturedShouldRetryOnError?.(
+          new Error('fetch failed sending request'),
+          false,
+        ),
+      ).toBe(false);
+      expect(
+        capturedShouldRetryOnError?.(
+          new Error('fetch failed sending request'),
+          true,
         ),
       ).toBe(true);
     });

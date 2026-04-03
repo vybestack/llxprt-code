@@ -145,12 +145,17 @@ export class StreamProcessor {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const apiCall = () =>
       this._buildAndSendStreamRequest(params, promptId, userContent, provider);
+    const retryFetchErrors = (
+      params.config as { retryFetchErrors?: boolean } | undefined
+    )?.retryFetchErrors;
 
     return retryWithBackoff(apiCall, {
       onPersistent429: () => this._handleBucketFailover(),
       signal: params.config?.abortSignal,
-      shouldRetryOnError: (error) =>
-        error instanceof EmptyStreamError || isRetryableError(error),
+      retryFetchErrors,
+      shouldRetryOnError: (error, currentRetryFetchErrors) =>
+        error instanceof EmptyStreamError ||
+        isRetryableError(error, currentRetryFetchErrors),
     });
   }
 
@@ -492,7 +497,7 @@ export class StreamProcessor {
       yield convertedChunk;
     }
 
-    if (telemetryContext) {
+    if (telemetryContext && lastConvertedChunk) {
       const durationMs = Date.now() - telemetryContext.startTime;
       logApiResponse(
         this.runtimeContext,
@@ -500,8 +505,8 @@ export class StreamProcessor {
         this.runtimeContext.state.model,
         telemetryContext.promptId,
         durationMs,
-        lastConvertedChunk?.usageMetadata,
-        lastConvertedChunk ? JSON.stringify(lastConvertedChunk) : '{}',
+        lastConvertedChunk.usageMetadata,
+        JSON.stringify(lastConvertedChunk),
       );
     }
   }
