@@ -119,4 +119,13 @@ export interface BucketFailoverOAuthManagerLike {
     requestMetadata?: import('@vybestack/llxprt-code-core').OAuthTokenRequestMetadata,
   ): Promise<void>;
   getTokenStore(): import('@vybestack/llxprt-code-core').TokenStore;
+  /**
+   * Force refresh a token when it is known to be revoked (401/403 error).
+   * @fix issue1861 - Token revocation handling
+   */
+  forceRefreshToken(
+    providerName: string,
+    failedAccessToken: string,
+    bucket?: string,
+  ): Promise<import('@vybestack/llxprt-code-core').OAuthToken | null>;
 }

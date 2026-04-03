@@ -74,6 +74,7 @@ export {
   type ActiveExtension,
   type FailoverContext,
   type BucketFailoverHandler,
+  type OnAuthErrorHandler,
   type MCPOAuthConfig,
   type AnyToolInvocation,
   type SkillDefinition,

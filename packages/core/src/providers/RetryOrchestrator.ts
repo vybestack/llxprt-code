@@ -357,7 +357,30 @@ export class RetryOrchestrator implements IProvider {
 
         // Retry once to allow OAuth refresh before failover
         const shouldAttemptRefreshRetry =
-          isAuthError && bucketFailoverHandler && consecutiveAuthErrors === 1;
+          isAuthError && consecutiveAuthErrors === 1;
+
+        // Before retrying on auth error, invoke the auth error handler to allow
+        // cache invalidation and force-refresh
+        if (shouldAttemptRefreshRetry) {
+          const authErrorHandler = this.getOnAuthErrorHandler(options);
+          if (authErrorHandler) {
+            try {
+              const failedAccessToken = await this.resolveAuthToken(options);
+              const providerId = this.name;
+              await authErrorHandler.handleAuthError({
+                failedAccessToken,
+                providerId,
+                errorStatus: errorStatus ?? 401,
+              });
+            } catch (handlerError) {
+              // Log but don't fail - the retry should still proceed
+              this.logger.debug(
+                () =>
+                  `Auth error handler failed, continuing with retry: ${handlerError}`,
+              );
+            }
+          }
+        }
 
         // Determine if we should attempt bucket failover
         const shouldAttemptFailover =
@@ -615,6 +638,56 @@ export class RetryOrchestrator implements IProvider {
       options.runtime?.config?.getBucketFailoverHandler?.() ??
       options.config?.getBucketFailoverHandler?.()
     );
+  }
+
+  /**
+   * Gets the auth error handler from options
+   * @fix issue1861
+   */
+  private getOnAuthErrorHandler(
+    options: GenerateChatOptions,
+  ): import('../config/configTypes.js').OnAuthErrorHandler | undefined {
+    return (
+      options.runtime?.config?.getOnAuthErrorHandler?.() ??
+      options.config?.getOnAuthErrorHandler?.()
+    );
+  }
+
+  /**
+   * Resolves the auth token from options (handles both string and RuntimeAuthTokenProvider)
+   * @fix issue1861
+   */
+  private async resolveAuthToken(
+    options: GenerateChatOptions,
+  ): Promise<string> {
+    const authToken = options.resolved?.authToken;
+    if (typeof authToken === 'string') {
+      return authToken;
+    }
+    // Handle plain function returning string or Promise<string>
+    // Note: tests may bypass type system, so we need runtime check
+    if (
+      typeof authToken === 'function' &&
+      !('provide' in (authToken as unknown as object))
+    ) {
+      const result = await (authToken as () => string | Promise<string>)();
+      return typeof result === 'string' ? result : '';
+    }
+    // Handle RuntimeAuthTokenProvider object with provide method
+    if (
+      authToken &&
+      typeof authToken === 'object' &&
+      'provide' in authToken &&
+      typeof (authToken as { provide?: unknown }).provide === 'function'
+    ) {
+      const result = await (
+        authToken as {
+          provide: () => Promise<string | undefined> | string | undefined;
+        }
+      ).provide();
+      return typeof result === 'string' ? result : '';
+    }
+    return '';
   }
 
   /**

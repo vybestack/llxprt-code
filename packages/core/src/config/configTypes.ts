@@ -252,6 +252,26 @@ export interface FailoverContext {
 }
 
 /**
+ * Handler for authentication errors (401/403) that allows cache invalidation
+ * and force-refresh before retrying with the same revoked token.
+ * @fix issue1861
+ */
+export interface OnAuthErrorHandler {
+  /**
+   * Handle an authentication error by invalidating caches and/or forcing token refresh.
+   * Called by RetryOrchestrator and retryWithBackoff on 401/403 errors before retry.
+   *
+   * @param context - Information about the failed authentication attempt
+   */
+  handleAuthError(context: {
+    failedAccessToken: string;
+    providerId: string;
+    profileId?: string;
+    errorStatus: number;
+  }): Promise<void>;
+}
+
+/**
  * Handler for bucket failover on rate limit/quota errors
  * @plan PLAN-20251213issue490
  */

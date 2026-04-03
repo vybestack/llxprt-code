@@ -18,6 +18,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { hasRequestMetadata } from './auth-utils.js';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
+import { OnAuthErrorHandlerImpl } from './OnAuthErrorHandlerImpl.js';
 import type { OAuthBucketManager } from './OAuthBucketManager.js';
 import type { BucketFailoverOAuthManagerLike } from './types.js';
 
@@ -97,4 +98,46 @@ export function ensureFailoverHandler(
   }
 
   return failoverHandler;
+}
+
+/**
+ * Ensure the Config's OnAuthErrorHandler exists and is set.
+ * Creates and sets a new handler when one doesn't exist.
+ * Logs a warning when Config is unavailable.
+ *
+ * Returns the current (or newly created) handler, or undefined when no Config is available.
+ *
+ * @fix issue1861 - Token revocation handling
+ */
+export function ensureOnAuthErrorHandler(
+  providerName: string,
+  config: Config | undefined,
+  facadeRef: BucketFailoverOAuthManagerLike,
+): void {
+  if (!config) {
+    logger.warn(
+      `[issue1861] CRITICAL: No Config available to set auth error handler! ` +
+        `Token revocation recovery will NOT work. Ensure OAuthManager receives the active Config instance from the composition root.`,
+    );
+    return;
+  }
+
+  // Check if handler already exists
+  const existingHandler = config.getOnAuthErrorHandler?.();
+  if (existingHandler) {
+    logger.debug(
+      () =>
+        `[issue1861] OnAuthErrorHandler already configured on config for ${providerName}`,
+    );
+    return;
+  }
+
+  // Create new handler
+  const newHandler = new OnAuthErrorHandlerImpl(facadeRef);
+  config.setOnAuthErrorHandler?.(newHandler);
+
+  logger.debug(
+    () =>
+      `[issue1861] Created and set new OnAuthErrorHandlerImpl on config for ${providerName}`,
+  );
 }

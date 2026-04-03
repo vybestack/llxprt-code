@@ -63,6 +63,17 @@ export interface OAuthManager {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<OAuthToken | null>;
+  /**
+   * Force refresh a token when it is known to be revoked.
+   * @param provider - The provider name
+   * @param failedAccessToken - The access token that was rejected
+   * @returns The refreshed token, or null if refresh was not possible
+   * @fix issue1861 - Token revocation handling
+   */
+  forceRefreshToken?(
+    provider: string,
+    failedAccessToken: string,
+  ): Promise<OAuthToken | null>;
 }
 
 interface ResolveAuthOptions {
@@ -1068,6 +1079,33 @@ export class AuthPrecedenceResolver {
           () => `Failed to flush runtime auth scope ${runtimeId}: ${error}`,
         );
       }
+    }
+  }
+
+  /**
+   * Invalidates cached OAuth tokens for a specific provider.
+   * This enables surgical cache invalidation for a single provider rather than
+   * the all-or-nothing invalidateCache() behavior.
+   *
+   * @param providerId - The provider ID to invalidate cache entries for
+   * @param profileId - Optional profile ID to invalidate only that specific profile
+   * @fix issue1861 - Token revocation handling
+   */
+  invalidateProviderCache(providerId: string, profileId?: string): void {
+    // Iterate all runtime-scoped states to ensure revoked tokens are
+    // invalidated across every active runtime scope
+    for (const [, state] of runtimeScopedStates) {
+      invalidateMatchingEntries(
+        state,
+        (entry) => {
+          if (entry.providerId !== providerId) return false;
+          if (profileId !== undefined && entry.profileId !== profileId) {
+            return false;
+          }
+          return true;
+        },
+        'token-revoked',
+      );
     }
   }
 }
