@@ -461,12 +461,6 @@ export class SubAgentScope {
       }
     } catch (error) {
       if (abortController.signal.aborted) {
-        if (
-          this.output.terminate_reason !== SubagentTerminateMode.TIMEOUT &&
-          !this.parentAbortSignal?.aborted
-        ) {
-          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-        }
         throw createAbortError();
       }
       throw error;

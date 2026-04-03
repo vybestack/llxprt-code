@@ -330,10 +330,11 @@ export async function runNonInteractive({
             signal: abortController.signal,
           });
         } catch (error) {
-          if (
-            error instanceof StreamIdleTimeoutError &&
-            !abortController.signal.aborted
-          ) {
+          if (abortController.signal.aborted) {
+            debugLogger.error('Operation cancelled.');
+            return;
+          }
+          if (error instanceof StreamIdleTimeoutError) {
             abortController.abort();
             debugLogger.error('Operation cancelled.');
             if (streamFormatter) {
