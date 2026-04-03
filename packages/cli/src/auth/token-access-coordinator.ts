@@ -22,7 +22,10 @@ import type {
   AuthenticatorInterface,
   BucketFailoverOAuthManagerLike,
 } from './types.js';
-import { ensureFailoverHandler } from './token-bucket-failover-helper.js';
+import {
+  ensureFailoverHandler,
+  ensureOnAuthErrorHandler,
+} from './token-bucket-failover-helper.js';
 import {
   handleRefreshLockMiss,
   executeTokenRefresh,
@@ -310,6 +313,9 @@ export class TokenAccessCoordinator {
       () =>
         `[issue1029] getOAuthToken: provider=${providerName}, buckets=${JSON.stringify(profileBuckets)}, hasConfig=${!!config}`,
     );
+
+    // @fix issue1861: Ensure OnAuthErrorHandler is configured for auth error handling
+    ensureOnAuthErrorHandler(providerName, config, this.facadeRef);
 
     const failoverHandler = ensureFailoverHandler(
       providerName,
@@ -794,5 +800,142 @@ export class TokenAccessCoordinator {
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string[]> {
     return resolveProfileBuckets(providerName, metadata);
+  }
+
+  // --------------------------------------------------------------------------
+  // forceRefreshToken - Force refresh when token is known to be revoked
+  // --------------------------------------------------------------------------
+
+  /**
+   * Force refresh a token when we know it has been revoked (401/403 error).
+   * Uses TOCTOU pattern with refresh lock to prevent race conditions.
+   *
+   * @param providerName - Name of the provider
+   * @param failedAccessToken - The access token that was rejected (for comparison)
+   * @param bucket - Optional bucket name
+   * @returns The new OAuth token, or null if refresh was not possible
+   * @fix issue1861 - Token revocation handling
+   */
+  async forceRefreshToken(
+    providerName: string,
+    failedAccessToken: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
+    logger.debug(
+      () =>
+        `[FLOW] forceRefreshToken() called for provider: ${providerName}, bucket: ${bucket ?? 'default'}`,
+    );
+
+    if (!this.providerRegistry.getProvider(providerName)) {
+      logger.debug(
+        () =>
+          `[FLOW] Unknown provider for forceRefreshToken(): ${providerName}`,
+      );
+      return null;
+    }
+
+    // Acquire refresh lock
+    const lockAcquired = await this.tokenStore.acquireRefreshLock(
+      providerName,
+      { waitMs: 10000, staleMs: 30000, bucket },
+    );
+
+    if (!lockAcquired) {
+      logger.debug(
+        () =>
+          `[FLOW] Failed to acquire refresh lock for forceRefreshToken() on ${providerName}`,
+      );
+      return null;
+    }
+
+    try {
+      // TOCTOU: Re-read token from store after acquiring lock
+      const storedToken = await this.tokenStore.getToken(providerName, bucket);
+
+      if (!storedToken) {
+        logger.debug(
+          () =>
+            `[FLOW] No stored token found for forceRefreshToken() on ${providerName}`,
+        );
+        return null;
+      }
+
+      // If stored token differs from failed token, another process already refreshed
+      if (storedToken.access_token !== failedAccessToken) {
+        logger.debug(
+          () =>
+            `[FLOW] Token already refreshed by another process for ${providerName}`,
+        );
+        return storedToken;
+      }
+
+      // Check if we have a refresh token
+      if (
+        !storedToken.refresh_token ||
+        typeof storedToken.refresh_token !== 'string' ||
+        storedToken.refresh_token === ''
+      ) {
+        logger.debug(
+          () =>
+            `[FLOW] No refresh token available for forceRefreshToken() on ${providerName}`,
+        );
+        return null;
+      }
+
+      // Perform the actual refresh
+      const provider = this.providerRegistry.getProvider(providerName);
+      if (!provider) {
+        return null;
+      }
+
+      logger.debug(
+        () =>
+          `[FLOW] Executing force refresh for ${providerName} (token matches failed token)`,
+      );
+
+      const refreshedToken = await provider.refreshToken(storedToken);
+
+      if (!refreshedToken) {
+        logger.debug(
+          () => `[FLOW] Force refresh returned null for ${providerName}`,
+        );
+        return null;
+      }
+
+      // Merge and save the refreshed token
+      const { mergeRefreshedToken } = await import(
+        '@vybestack/llxprt-code-core'
+      );
+      type OAuthTokenWithExtras =
+        import('@vybestack/llxprt-code-core').OAuthTokenWithExtras;
+      const mergedToken = mergeRefreshedToken(
+        storedToken as OAuthTokenWithExtras,
+        refreshedToken as Partial<OAuthTokenWithExtras>,
+      );
+
+      logger.debug(
+        () =>
+          `[FLOW] Force refresh successful for ${providerName}, saving token...`,
+      );
+
+      await this.tokenStore.saveToken(providerName, mergedToken, bucket);
+
+      // Schedule proactive renewal for the new token
+      this.proactiveRenewalManager.scheduleProactiveRenewal(
+        providerName,
+        bucket,
+        mergedToken,
+      );
+
+      return mergedToken;
+    } catch (refreshError) {
+      logger.debug(
+        () =>
+          `[FLOW] Force refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
+      );
+      return null;
+    } finally {
+      await this.tokenStore.releaseRefreshLock(providerName, bucket);
+    }
   }
 }

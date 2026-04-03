@@ -60,6 +60,7 @@ import {
   type SandboxConfig,
   type ActiveExtension,
   type BucketFailoverHandler,
+  type OnAuthErrorHandler,
   type FileFilteringOptions,
 } from './configTypes.js';
 
@@ -147,6 +148,7 @@ export abstract class ConfigBaseCore {
   protected subagentManager?: SubagentManager;
   protected subagentSchedulerFactory?: SubagentSchedulerFactory;
   protected bucketFailoverHandler?: BucketFailoverHandler;
+  protected onAuthErrorHandler?: OnAuthErrorHandler;
   // Track all potential tools for settings UI
   protected allPotentialTools: ToolRecord[] = [];
   protected provider?: string;
@@ -247,6 +249,20 @@ export abstract class ConfigBaseCore {
    */
   getBucketFailoverHandler(): BucketFailoverHandler | undefined {
     return this.bucketFailoverHandler;
+  }
+  /**
+   * Set the auth error handler for 401/403 token revocation handling
+   * @fix issue1861
+   */
+  setOnAuthErrorHandler(handler: OnAuthErrorHandler | undefined): void {
+    this.onAuthErrorHandler = handler;
+  }
+  /**
+   * Get the auth error handler
+   * @fix issue1861
+   */
+  getOnAuthErrorHandler(): OnAuthErrorHandler | undefined {
+    return this.onAuthErrorHandler;
   }
   /**
    * Set the session recording service for hooks to access transcript path

@@ -63,6 +63,17 @@ export interface OAuthManager {
     provider: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<OAuthToken | null>;
+  /**
+   * Force refresh a token when it is known to be revoked.
+   * @param provider - The provider name
+   * @param failedAccessToken - The access token that was rejected
+   * @returns The refreshed token, or null if refresh was not possible
+   * @fix issue1861 - Token revocation handling
+   */
+  forceRefreshToken?(
+    provider: string,
+    failedAccessToken: string,
+  ): Promise<OAuthToken | null>;
 }
 
 interface ResolveAuthOptions {
@@ -1068,6 +1079,47 @@ export class AuthPrecedenceResolver {
           () => `Failed to flush runtime auth scope ${runtimeId}: ${error}`,
         );
       }
+    }
+  }
+
+  /**
+   * Invalidates cached OAuth tokens for a specific provider.
+   * This enables surgical cache invalidation for a single provider rather than
+   * the all-or-nothing invalidateCache() behavior.
+   *
+   * @param providerId - The provider ID to invalidate cache entries for
+   * @param profileId - Optional profile ID to invalidate only that specific profile
+   * @fix issue1861 - Token revocation handling
+   */
+  invalidateProviderCache(providerId: string, profileId?: string): void {
+    const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
+
+    try {
+      const context = getActiveProviderRuntimeContext();
+      if (context?.runtimeId && !knownRuntimeIds.includes(context.runtimeId)) {
+        knownRuntimeIds.push(context.runtimeId);
+      }
+    } catch {
+      // Context not available, proceed with known IDs
+    }
+
+    for (const runtimeId of knownRuntimeIds) {
+      const state = runtimeScopedStates.get(runtimeId);
+      if (!state) continue;
+
+      // Use invalidateMatchingEntries to surgically invalidate entries
+      // matching the provider and optional profile
+      invalidateMatchingEntries(
+        state,
+        (entry) => {
+          if (entry.providerId !== providerId) return false;
+          if (profileId !== undefined && entry.profileId !== profileId) {
+            return false;
+          }
+          return true;
+        },
+        'token-revoked',
+      );
     }
   }
 }

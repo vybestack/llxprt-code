@@ -105,6 +105,7 @@ function createMockFacade() {
     authenticate: vi.fn(async () => {}),
     authenticateMultipleBuckets: vi.fn(async () => {}),
     getTokenStore: vi.fn(),
+    forceRefreshToken: vi.fn(async () => null as OAuthToken | null),
   };
 }
 

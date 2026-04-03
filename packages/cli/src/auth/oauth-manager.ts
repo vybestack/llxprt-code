@@ -455,4 +455,25 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       requestMetadata,
     );
   }
+
+  /**
+   * Force refresh a token when it is known to be revoked (401/403 error).
+   * Delegates to TokenAccessCoordinator.
+   * @param providerName - Name of the provider
+   * @param failedAccessToken - The access token that was rejected
+   * @param bucket - Optional bucket name
+   * @returns The refreshed token, or null if refresh was not possible
+   * @fix issue1861 - Token revocation handling
+   */
+  async forceRefreshToken(
+    providerName: string,
+    failedAccessToken: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
+    return this.tokenAccessCoordinator.forceRefreshToken(
+      providerName,
+      failedAccessToken,
+      bucket,
+    );
+  }
 }

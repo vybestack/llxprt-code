@@ -25,6 +25,12 @@ export interface RetryOptions {
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
   retryFetchErrors?: boolean;
   signal?: AbortSignal;
+  /**
+   * Callback invoked on 401/403 auth errors before retry.
+   * Allows for cache invalidation and force-refresh.
+   * @fix issue1861
+   */
+  onAuthError?: (context: { errorStatus: number }) => Promise<void>;
 }
 
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -264,13 +270,23 @@ export function isRetryableError(
   // PRIORITY 4: ApiError with deterministic 400 is NEVER retryable
   if (error instanceof ApiError) {
     if (error.status === 400) return false;
-    return error.status === 429 || (error.status >= 500 && error.status < 600);
+    return (
+      error.status === 401 ||
+      error.status === 403 ||
+      error.status === 429 ||
+      (error.status >= 500 && error.status < 600)
+    );
   }
 
   // PRIORITY 5: Generic status-based retry (handles non-ApiError shapes)
   const status = getErrorStatus(error);
   if (status !== undefined) {
-    return status === 429 || (status >= 500 && status < 600);
+    return (
+      status === 401 ||
+      status === 403 ||
+      status === 429 ||
+      (status >= 500 && status < 600)
+    );
   }
 
   return false;
@@ -382,6 +398,24 @@ export async function retryWithBackoff<T>(
           () =>
             `401/403 error detected, retrying once to allow refresh before bucket failover`,
         );
+      }
+
+      // Before retrying on auth error, invoke the onAuthError callback to allow
+      // cache invalidation and force-refresh. This is the first auth error in sequence.
+      if (isAuthError && consecutiveAuthErrors === 1 && options?.onAuthError) {
+        try {
+          logger.debug(
+            () =>
+              `Calling onAuthError callback for status ${errorStatus} before retry`,
+          );
+          await options.onAuthError({ errorStatus: errorStatus ?? 401 });
+        } catch (handlerError) {
+          // Log but don't fail - the retry should still proceed
+          logger.debug(
+            () =>
+              `onAuthError callback failed, continuing with retry: ${handlerError}`,
+          );
+        }
       }
 
       const canAttemptFailover = Boolean(options?.onPersistent429);
