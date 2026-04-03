@@ -25,6 +25,7 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '../runtime/runtimeAdapters.js';
+import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
 
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -168,6 +169,195 @@ describe('GeminiChat runtime context', () => {
     const contents = options.contents;
     expect(Array.isArray(contents)).toBe(true);
     expect(contents?.length).toBeGreaterThan(0);
+  });
+  it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let capturedSignal: AbortSignal | undefined;
+      const generateChatCompletionMock = vi.fn(async function* (
+        options: GenerateChatOptions,
+      ) {
+        capturedSignal = options.invocation?.signal;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'partial' }],
+        };
+        await new Promise((_, reject) => {
+          capturedSignal?.addEventListener(
+            'abort',
+            () => reject(capturedSignal?.reason ?? new Error('Aborted')),
+            { once: true },
+          );
+        });
+      });
+
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: generateChatCompletionMock,
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+        getAuthToken: vi.fn(async () => 'stub-auth-token'),
+      };
+
+      manager.registerProvider(provider);
+
+      const runtimeState = createAgentRuntimeState({
+        runtimeId: 'runtime-test',
+        provider: provider.name,
+        model: config.getModel(),
+        sessionId: config.getSessionId(),
+      });
+      const historyService = new HistoryService();
+      const view = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 128000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+          'reasoning.includeInContext': true,
+        },
+        provider: createProviderAdapterFromManager(config.getProviderManager()),
+        telemetry: createTelemetryAdapterFromConfig(config),
+        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+        providerRuntime: { ...providerRuntime },
+      });
+
+      const chat = new GeminiChat(
+        view,
+        {} as unknown as ContentGenerator,
+        {},
+        [],
+      );
+
+      const runPromise = chat.sendMessage(
+        { message: 'Hello there!' },
+        'prompt-stalled-send',
+      );
+      const rejection = runPromise.then(
+        () => {
+          throw new Error('Expected stalled sendMessage response to abort');
+        },
+        (error) => {
+          expect(error).toMatchObject({
+            name: 'AbortError',
+          });
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+
+      await rejection;
+      expect(capturedSignal?.aborted).toBe(true);
+      expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborts a stalled direct-message response after partial provider output instead of hanging forever', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let capturedSignal: AbortSignal | undefined;
+      const generateChatCompletionMock = vi.fn(async function* (
+        options: GenerateChatOptions,
+      ) {
+        capturedSignal = options.invocation?.signal;
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'partial direct' }],
+        };
+        await new Promise((_, reject) => {
+          capturedSignal?.addEventListener(
+            'abort',
+            () => reject(capturedSignal?.reason ?? new Error('Aborted')),
+            { once: true },
+          );
+        });
+      });
+
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: generateChatCompletionMock,
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+        getAuthToken: vi.fn(async () => 'stub-auth-token'),
+      };
+
+      manager.registerProvider(provider);
+
+      const runtimeState = createAgentRuntimeState({
+        runtimeId: 'runtime-test',
+        provider: provider.name,
+        model: config.getModel(),
+        sessionId: config.getSessionId(),
+      });
+      const historyService = new HistoryService();
+      const view = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 128000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+          'reasoning.includeInContext': true,
+        },
+        provider: createProviderAdapterFromManager(config.getProviderManager()),
+        telemetry: createTelemetryAdapterFromConfig(config),
+        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+        providerRuntime: { ...providerRuntime },
+      });
+
+      const chat = new GeminiChat(
+        view,
+        {} as unknown as ContentGenerator,
+        {},
+        [],
+      );
+
+      const runPromise = chat.generateDirectMessage(
+        { message: 'Hello there!' },
+        'prompt-stalled-direct',
+      );
+      const rejection = runPromise.then(
+        () => {
+          throw new Error('Expected stalled direct-message response to abort');
+        },
+        (error) => {
+          expect(error).toMatchObject({
+            name: 'AbortError',
+          });
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+
+      await rejection;
+      expect(capturedSignal?.aborted).toBe(true);
+      expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('commits tool call/response even when model returns only thinking after tool results', async () => {

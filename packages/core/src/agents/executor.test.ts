@@ -37,6 +37,7 @@ import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { z } from 'zod';
 import type { ToolErrorType } from '../index.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { createAbortError } from '../utils/delay.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -819,6 +820,66 @@ describe('AgentExecutor', () => {
       const output = await executor.run({ goal: 'Timeout test' }, signal);
 
       expect(output.terminate_reason).toBe(AgentTerminateMode.TIMEOUT);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('should actively abort a stalled response stream before the overall timeout expires', async () => {
+      const definition = createTestDefinition([LSTool.Name], {
+        max_time_minutes: 5,
+      });
+      const executor = await AgentExecutor.create(
+        definition,
+        mockConfig,
+        getTestRuntimeMessageBus(mockConfig),
+      );
+
+      let capturedSignal: AbortSignal | undefined;
+      mockSendMessageStream.mockImplementationOnce(
+        async ({ config: messageConfig }) => {
+          capturedSignal = messageConfig?.abortSignal;
+          return (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk([{ text: 'partial output' }]),
+            } as StreamEvent;
+
+            await new Promise<void>((_resolve, reject) => {
+              if (!capturedSignal) {
+                reject(new Error('Abort signal was not provided'));
+                return;
+              }
+              if (capturedSignal.aborted) {
+                reject(createAbortError());
+                return;
+              }
+              capturedSignal.addEventListener(
+                'abort',
+                () => {
+                  queueMicrotask(() => reject(createAbortError()));
+                },
+                { once: true },
+              );
+            });
+          })();
+        },
+      );
+
+      const runPromise = executor.run({ goal: 'Stall test' }, signal);
+      const runRejection = runPromise.then(
+        () => {
+          throw new Error('Expected stalled executor run to abort');
+        },
+        (error) => {
+          expect(error).toMatchObject({
+            name: 'AbortError',
+          });
+        },
+      );
+
+      await vi.advanceTimersByTimeAsync(31_000);
+
+      await runRejection;
+      expect(capturedSignal?.aborted).toBe(true);
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
 

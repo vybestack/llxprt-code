@@ -39,8 +39,11 @@ import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import { UserTierId } from '../code_assist/types.js';
 import { parseThought, type ThoughtSummary } from '../utils/thoughtUtils.js';
+import { createAbortError } from '../utils/delay.js';
+import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
+export const TURN_STREAM_IDLE_TIMEOUT_MS = 30_000;
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
@@ -368,6 +371,8 @@ export class Turn {
     req: PartListUnion,
     signal: AbortSignal,
   ): AsyncGenerator<ServerGeminiStreamEvent> {
+    let idleTimedOut = false;
+
     this.logger.debug('Turn.run called', {
       req: JSON.stringify(req, null, 2),
       typeofReq: typeof req,
@@ -375,133 +380,167 @@ export class Turn {
     });
 
     try {
+      if (signal.aborted) {
+        yield { type: GeminiEventType.UserCancelled };
+        return;
+      }
+
       // Note: This assumes `sendMessageStream` yields events like
       // { type: StreamEventType.RETRY } or { type: StreamEventType.CHUNK, value: GenerateContentResponse }
-      const responseStream = await this.chat.sendMessageStream(
-        {
-          message: req,
-          config: {
-            abortSignal: signal,
-          },
-        },
-        this.prompt_id,
-      );
+      const timeoutController = new AbortController();
+      const timeoutSignal = timeoutController.signal;
+      const onParentAbort = () => timeoutController.abort();
+      signal.addEventListener('abort', onParentAbort, { once: true });
 
-      for await (const streamEvent of responseStream) {
-        if (signal?.aborted) {
-          yield { type: GeminiEventType.UserCancelled };
-          return;
-        }
-
-        // Handle the RETRY event
-        if (streamEvent.type === StreamEventType.RETRY) {
-          yield { type: GeminiEventType.Retry };
-          continue;
-        }
-
-        // Handle AGENT_EXECUTION_STOPPED event
-        if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
-          yield {
-            type: GeminiEventType.AgentExecutionStopped,
-            reason: streamEvent.reason,
-            systemMessage: streamEvent.systemMessage,
-            contextCleared: streamEvent.contextCleared,
-          };
-          return;
-        }
-
-        // Handle AGENT_EXECUTION_BLOCKED event
-        if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
-          yield {
-            type: GeminiEventType.AgentExecutionBlocked,
-            reason: streamEvent.reason,
-            systemMessage: streamEvent.systemMessage,
-            contextCleared: streamEvent.contextCleared,
-          };
-          continue;
-        }
-
-        // Narrow to CHUNK — the only other variant in the discriminated union
-        const resp = streamEvent.value;
-        if (!resp) continue; // Skip if there's no response body
-
-        this.debugResponses.push(resp);
-
-        const traceId = resp.responseId;
-
-        // Check ALL parts for thinking, not just parts[0]
-        // Bug fix: Previously only checked parts[0], missing thoughts in other positions
-        // @plan PLAN-20251202-THINKING.P16
-        const allParts = resp.candidates?.[0]?.content?.parts ?? [];
-        for (const part of allParts) {
-          if ((part as unknown as { thought?: boolean }).thought) {
-            const thought = parseThought(
-              (part as unknown as { text?: string }).text ?? '',
-            );
-            yield {
-              type: GeminiEventType.Thought,
-              value: thought,
-              traceId,
-            };
-          }
-        }
-
-        const text = getResponseText(resp);
-        if (text) {
-          yield { type: GeminiEventType.Content, value: text, traceId };
-
-          // Emit citation event if conditions are met
-          // Based on upstream implementation - emit citation after content
-          const citationEvent = this.emitCitation(
-            'Response may contain information from external sources. Please verify important details independently.',
-          );
-          if (citationEvent) {
-            yield citationEvent;
-          }
-        }
-
-        // Handle function calls (requesting tool execution)
-        const functionCalls = getFunctionCalls(resp) ?? [];
-        for (const fnCall of functionCalls) {
-          const event = this.handlePendingFunctionCall(fnCall);
-          if (event) {
-            yield event;
-          }
-        }
-
-        // Check if response was truncated or stopped for various reasons
-        const finishReason = resp.candidates?.[0]?.finishReason;
-
-        // This is the key change: Only yield 'Finished' if there is a finishReason.
-        if (finishReason) {
-          this.logger.debug(() => `[stream:turn] emitting Finished event`, {
-            finishReason,
-            traceId,
-            partCount: allParts.length,
-            toolCallCount: functionCalls.length,
-            textLength: text?.length ?? 0,
-            hasUsageMetadata: Boolean(resp.usageMetadata),
-          });
-          this.finishReason = finishReason;
-          yield {
-            type: GeminiEventType.Finished,
-            value: {
-              reason: finishReason,
-              usageMetadata: resp.usageMetadata,
+      try {
+        const responseStream = await this.chat.sendMessageStream(
+          {
+            message: req,
+            config: {
+              abortSignal: timeoutSignal,
             },
-          };
-        } else {
-          this.logger.debug(() => `[stream:turn] chunk had no finishReason`, {
-            traceId,
-            partCount: allParts.length,
-            toolCallCount: functionCalls.length,
-            textLength: text?.length ?? 0,
-            hasUsageMetadata: Boolean(resp.usageMetadata),
+          },
+          this.prompt_id,
+        );
+        const iterator = responseStream[Symbol.asyncIterator]();
+
+        while (true) {
+          const result = await nextStreamEventWithIdleTimeout({
+            iterator,
+            timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
+            signal: timeoutSignal,
+            onTimeout: () => {
+              if (signal.aborted) {
+                return;
+              }
+              idleTimedOut = true;
+              timeoutController.abort();
+            },
+            createTimeoutError: () => createAbortError(),
           });
+          if (result.done) {
+            break;
+          }
+
+          const streamEvent = result.value;
+          if (signal?.aborted) {
+            yield { type: GeminiEventType.UserCancelled };
+            return;
+          }
+
+          // Handle the RETRY event
+          if (streamEvent.type === StreamEventType.RETRY) {
+            yield { type: GeminiEventType.Retry };
+            continue;
+          }
+
+          // Handle AGENT_EXECUTION_STOPPED event
+          if (streamEvent.type === StreamEventType.AGENT_EXECUTION_STOPPED) {
+            yield {
+              type: GeminiEventType.AgentExecutionStopped,
+              reason: streamEvent.reason,
+              systemMessage: streamEvent.systemMessage,
+              contextCleared: streamEvent.contextCleared,
+            };
+            return;
+          }
+
+          // Handle AGENT_EXECUTION_BLOCKED event
+          if (streamEvent.type === StreamEventType.AGENT_EXECUTION_BLOCKED) {
+            yield {
+              type: GeminiEventType.AgentExecutionBlocked,
+              reason: streamEvent.reason,
+              systemMessage: streamEvent.systemMessage,
+              contextCleared: streamEvent.contextCleared,
+            };
+            continue;
+          }
+
+          // Narrow to CHUNK — the only other variant in the discriminated union
+          const resp = streamEvent.value;
+          if (!resp) continue; // Skip if there's no response body
+
+          this.debugResponses.push(resp);
+
+          const traceId = resp.responseId;
+
+          // Check ALL parts for thinking, not just parts[0]
+          // Bug fix: Previously only checked parts[0], missing thoughts in other positions
+          // @plan PLAN-20251202-THINKING.P16
+          const allParts = resp.candidates?.[0]?.content?.parts ?? [];
+          for (const part of allParts) {
+            if ((part as unknown as { thought?: boolean }).thought) {
+              const thought = parseThought(
+                (part as unknown as { text?: string }).text ?? '',
+              );
+              yield {
+                type: GeminiEventType.Thought,
+                value: thought,
+                traceId,
+              };
+            }
+          }
+
+          const text = getResponseText(resp);
+          if (text) {
+            yield { type: GeminiEventType.Content, value: text, traceId };
+
+            // Emit citation event if conditions are met
+            // Based on upstream implementation - emit citation after content
+            const citationEvent = this.emitCitation(
+              'Response may contain information from external sources. Please verify important details independently.',
+            );
+            if (citationEvent) {
+              yield citationEvent;
+            }
+          }
+
+          // Handle function calls (requesting tool execution)
+          const functionCalls = getFunctionCalls(resp) ?? [];
+          for (const fnCall of functionCalls) {
+            const event = this.handlePendingFunctionCall(fnCall);
+            if (event) {
+              yield event;
+            }
+          }
+
+          // Check if response was truncated or stopped for various reasons
+          const finishReason = resp.candidates?.[0]?.finishReason;
+
+          // This is the key change: Only yield 'Finished' if there is a finishReason.
+          if (finishReason) {
+            this.logger.debug(() => `[stream:turn] emitting Finished event`, {
+              finishReason,
+              traceId,
+              partCount: allParts.length,
+              toolCallCount: functionCalls.length,
+              textLength: text?.length ?? 0,
+              hasUsageMetadata: Boolean(resp.usageMetadata),
+            });
+            this.finishReason = finishReason;
+            yield {
+              type: GeminiEventType.Finished,
+              value: {
+                reason: finishReason,
+                usageMetadata: resp.usageMetadata,
+              },
+            };
+          } else {
+            this.logger.debug(() => `[stream:turn] chunk had no finishReason`, {
+              traceId,
+              partCount: allParts.length,
+              toolCallCount: functionCalls.length,
+              textLength: text?.length ?? 0,
+              hasUsageMetadata: Boolean(resp.usageMetadata),
+            });
+          }
         }
+      } finally {
+        timeoutController.abort();
+        signal.removeEventListener('abort', onParentAbort);
       }
     } catch (e) {
-      if (signal.aborted) {
+      if (signal.aborted || idleTimedOut) {
         yield { type: GeminiEventType.UserCancelled };
         // Regular cancellation error, fail gracefully.
         return;

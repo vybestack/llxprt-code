@@ -318,5 +318,37 @@ describe('subagentExecution', () => {
         channel.outputUpdateHandler('call-1', 'some output'),
       ).not.toThrow();
     });
+
+    it('should reject awaitCompletedCalls when the abort signal fires first', async () => {
+      const channel = createCompletionChannel({});
+      const abortController = new AbortController();
+
+      const completionPromise = channel.awaitCompletedCalls(
+        abortController.signal,
+      );
+
+      abortController.abort();
+
+      await expect(completionPromise).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+    });
+
+    it('should allow a later awaitCompletedCalls after an aborted waiter is cleared', async () => {
+      const channel = createCompletionChannel({});
+      const abortController = new AbortController();
+
+      const abortedPromise = channel.awaitCompletedCalls(
+        abortController.signal,
+      );
+      abortController.abort();
+      await expect(abortedPromise).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+
+      await channel.handleCompletion([]);
+
+      await expect(channel.awaitCompletedCalls()).resolves.toEqual([]);
+    });
   });
 });

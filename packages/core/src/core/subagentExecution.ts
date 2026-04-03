@@ -38,6 +38,7 @@ import {
 } from './subagentTypes.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { AnsiLine } from '../utils/terminalSerializer.js';
+import { createAbortError } from '../utils/delay.js';
 
 // ---------------------------------------------------------------------------
 // Shared execution context — all loop helpers receive this instead of `this`
@@ -372,7 +373,7 @@ export interface InitSchedulerContext {
 
 /** Return type for the completion channel factory. */
 export interface CompletionChannel {
-  awaitCompletedCalls: () => Promise<CompletedToolCall[]>;
+  awaitCompletedCalls: (signal?: AbortSignal) => Promise<CompletedToolCall[]>;
   handleCompletion: (calls: CompletedToolCall[]) => Promise<void>;
   outputUpdateHandler: OutputUpdateHandler;
 }
@@ -384,15 +385,33 @@ export function createCompletionChannel(
   let pendingCompletedCalls: CompletedToolCall[] | null = null;
   let completionResolver: ((calls: CompletedToolCall[]) => void) | null = null;
 
-  const awaitCompletedCalls = () => {
+  const awaitCompletedCalls = (signal?: AbortSignal) => {
     if (pendingCompletedCalls) {
       const calls = pendingCompletedCalls;
       pendingCompletedCalls = null;
       return Promise.resolve(calls);
     }
-    return new Promise<CompletedToolCall[]>((resolve) => {
-      completionResolver = resolve;
-    });
+    if (signal?.aborted) {
+      return Promise.reject(createAbortError());
+    }
+    const completionPromise = new Promise<CompletedToolCall[]>(
+      (resolve, reject) => {
+        const resolveCompletion = (calls: CompletedToolCall[]) => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(calls);
+        };
+        const onAbort = () => {
+          if (completionResolver === resolveCompletion) {
+            completionResolver = null;
+          }
+          signal?.removeEventListener('abort', onAbort);
+          reject(createAbortError());
+        };
+        completionResolver = resolveCompletion;
+        signal?.addEventListener('abort', onAbort, { once: true });
+      },
+    );
+    return completionPromise;
   };
 
   const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {

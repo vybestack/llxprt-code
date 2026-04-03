@@ -11,8 +11,15 @@
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config } from '../config/config.js';
-import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
+import {
+  type ToolCallRequestInfo,
+  GeminiEventType,
+  Turn,
+  TURN_STREAM_IDLE_TIMEOUT_MS,
+} from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import { createAbortError } from '../utils/delay.js';
+import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 import {
   type Content,
   type Part,
@@ -103,6 +110,8 @@ export class SubAgentScope {
 
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
+
+  private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   /** @plan PLAN-20251028-STATELESS6.P08, PLAN-20260303-MESSAGEBUS.P01 */
   private constructor(
@@ -238,6 +247,35 @@ export class SubAgentScope {
     };
   }
 
+  private armTimeout(abortController: AbortController): void {
+    if (!Number.isFinite(this.runConfig.max_time_minutes)) {
+      return;
+    }
+    const timeoutMs = this.runConfig.max_time_minutes * 60 * 1000;
+    if (timeoutMs <= 0) {
+      if (!abortController.signal.aborted) {
+        this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+        abortController.abort(createAbortError());
+      }
+      return;
+    }
+    this.clearTimeoutHandle();
+    this.timeoutHandle = setTimeout(() => {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+      abortController.abort(createAbortError());
+    }, timeoutMs);
+  }
+
+  private clearTimeoutHandle(): void {
+    if (this.timeoutHandle) {
+      clearTimeout(this.timeoutHandle);
+      this.timeoutHandle = null;
+    }
+  }
+
   private async prepareRun(context: ContextState) {
     const chat = await createChatObject({
       promptConfig: this.promptConfig,
@@ -264,6 +302,7 @@ export class SubAgentScope {
     if (this.outputConfig?.outputs) {
       functionDeclarations.push(...getScopeLocalFuncDefs(this.outputConfig));
     }
+    this.armTimeout(abortController);
     return { chat, abortController, functionDeclarations };
   }
 
@@ -359,7 +398,9 @@ export class SubAgentScope {
       }
       finalizeOutput(this.output);
     } catch (error) {
-      handleExecutionError(error, execCtx);
+      if (this.output.terminate_reason !== SubagentTerminateMode.TIMEOUT) {
+        handleExecutionError(error, execCtx);
+      }
       finalizeOutput(this.output);
       throw error;
     } finally {
@@ -397,23 +438,32 @@ export class SubAgentScope {
     const parts = currentMessages[0]?.parts ?? [];
 
     let textResponse = '';
-    const stream = turn.run(parts, abortController.signal);
-    for await (const event of stream) {
-      if (abortController.signal.aborted) break;
-      if (event.type === GeminiEventType.Content && event.value) {
-        textResponse += event.value;
-        const filtered = filterTextWithEmoji(event.value, execCtx);
-        if (filtered.blocked) {
+    try {
+      const stream = turn.run(parts, abortController.signal);
+      for await (const event of stream) {
+        if (abortController.signal.aborted) break;
+        if (event.type === GeminiEventType.Content && event.value) {
+          textResponse += event.value;
+          const filtered = filterTextWithEmoji(event.value, execCtx);
+          if (filtered.blocked) {
+            execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
+            throw new Error(
+              filtered.error ?? 'Content blocked by emoji filter',
+            );
+          }
+          if (execCtx.onMessage && filtered.text) {
+            execCtx.onMessage(filtered.text);
+          }
+        } else if (event.type === GeminiEventType.Error && event.value?.error) {
           execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
-          throw new Error(filtered.error ?? 'Content blocked by emoji filter');
+          throw new Error(event.value.error.message);
         }
-        if (execCtx.onMessage && filtered.text) {
-          execCtx.onMessage(filtered.text);
-        }
-      } else if (event.type === GeminiEventType.Error && event.value?.error) {
-        execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
-        throw new Error(event.value.error.message);
       }
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        throw createAbortError();
+      }
+      throw error;
     }
 
     return {
@@ -430,7 +480,9 @@ export class SubAgentScope {
         req: ToolCallRequestInfo | ToolCallRequestInfo[],
         signal: AbortSignal,
       ) => Promise<void> | void;
-      awaitCompletedCalls: () => Promise<CompletedToolCall[]>;
+      awaitCompletedCalls: (
+        signal?: AbortSignal,
+      ) => Promise<CompletedToolCall[]>;
     },
     abortController: AbortController,
     execCtx: ExecutionLoopContext,
@@ -458,7 +510,9 @@ export class SubAgentScope {
     let responseParts: Part[] = [...manualParts];
 
     if (schedulerRequests.length > 0) {
-      const completionPromise = scheduler.awaitCompletedCalls();
+      const completionPromise = scheduler.awaitCompletedCalls(
+        abortController.signal,
+      );
       await scheduler.schedule(schedulerRequests, abortController.signal);
       const completedCalls = await completionPromise;
       responseParts = responseParts.concat(
@@ -500,6 +554,7 @@ export class SubAgentScope {
     schedulerDispose: () => Promise<void>,
     _abortController: AbortController,
   ): Promise<void> {
+    this.clearTimeoutHandle();
     try {
       await schedulerDispose();
     } catch (error) {
@@ -583,10 +638,13 @@ export class SubAgentScope {
       }
       finalizeOutput(this.output);
     } catch (error) {
-      handleExecutionError(error, execCtx);
+      if (this.output.terminate_reason !== SubagentTerminateMode.TIMEOUT) {
+        handleExecutionError(error, execCtx);
+      }
       finalizeOutput(this.output);
       throw error;
     } finally {
+      this.clearTimeoutHandle();
       this.parentAbortCleanup?.();
       this.parentAbortCleanup = undefined;
       this.activeAbortController = null;
@@ -614,24 +672,59 @@ export class SubAgentScope {
       `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`,
     );
 
+    const timeoutController = new AbortController();
+    const timeoutSignal = timeoutController.signal;
+    const onAbort = () => timeoutController.abort();
+    abortController.signal.addEventListener('abort', onAbort, { once: true });
+    if (abortController.signal.aborted) {
+      onAbort();
+      abortController.signal.removeEventListener('abort', onAbort);
+      return { functionCalls: [], textResponse: '' };
+    }
+
     let functionCalls: FunctionCall[] = [];
     let textResponse = '';
-    for await (const resp of responseStream) {
-      if (abortController.signal.aborted)
-        return { functionCalls: [], textResponse: '' };
-      if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
-        const chunkCalls = resp.value.functionCalls ?? [];
-        if (chunkCalls.length > 0) {
-          functionCalls.push(...chunkCalls);
-          this.logger.debug(
-            () =>
-              `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
-          );
+
+    try {
+      const iterator = responseStream[Symbol.asyncIterator]();
+      while (true) {
+        const result = await nextStreamEventWithIdleTimeout({
+          iterator,
+          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
+          signal: timeoutSignal,
+          onTimeout: () => {
+            if (abortController.signal.aborted) {
+              return;
+            }
+            this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+            timeoutController.abort();
+            abortController.abort(createAbortError());
+          },
+          createTimeoutError: () => createAbortError(),
+        });
+        if (result.done) {
+          break;
+        }
+        const resp = result.value;
+        if (abortController.signal.aborted)
+          return { functionCalls: [], textResponse: '' };
+        if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
+          const chunkCalls = resp.value.functionCalls ?? [];
+          if (chunkCalls.length > 0) {
+            functionCalls.push(...chunkCalls);
+            this.logger.debug(
+              () =>
+                `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
+            );
+          }
+        }
+        if (resp.type === StreamEventType.CHUNK && resp.value.text) {
+          textResponse += resp.value.text;
         }
       }
-      if (resp.type === StreamEventType.CHUNK && resp.value.text) {
-        textResponse += resp.value.text;
-      }
+    } finally {
+      timeoutController.abort();
+      abortController.signal.removeEventListener('abort', onAbort);
     }
 
     if (textResponse) {

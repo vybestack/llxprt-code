@@ -111,6 +111,9 @@ export const useGeminiStream = (
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const abortActiveStream = useCallback((reason?: unknown) => {
+    abortControllerRef.current?.abort(reason);
+  }, []);
   const turnCancelledRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const lastProfileNameRef = useRef<string | undefined>(undefined);
@@ -442,6 +445,7 @@ export const useGeminiStream = (
     setThought,
     setLastGeminiActivityTime,
     scheduleToolCalls,
+    abortActiveStream,
     handleShellCommand,
     handleSlashCommand,
     logger,

@@ -26,6 +26,8 @@ import {
   UserPromptEvent,
   parseAndFormatApiError,
   DEFAULT_AGENT_ID,
+  createAbortError,
+  nextStreamEventWithIdleTimeout,
   type ThinkingBlock,
   tokenLimit,
   uiTelemetryService,
@@ -59,6 +61,8 @@ import {
 import { StreamProcessingStatus } from './types.js';
 import { handleAtCommand } from '../atCommandProcessor.js';
 
+const GEMINI_STREAM_IDLE_TIMEOUT_MS = 30_000;
+
 interface StreamEventHandlerDeps {
   config: Config;
   settings: LoadedSettings;
@@ -91,6 +95,7 @@ interface StreamEventHandlerDeps {
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
   ) => Promise<void>;
+  abortActiveStream: (reason?: unknown) => void;
   handleShellCommand: (query: string, signal: AbortSignal) => boolean;
   handleSlashCommand: (
     cmd: PartListUnion,
@@ -169,6 +174,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     setThought,
     setLastGeminiActivityTime,
     scheduleToolCalls,
+    abortActiveStream,
     handleShellCommand,
     handleSlashCommand,
     logger,
@@ -487,137 +493,173 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
       let processingResult = StreamProcessingStatus.Completed;
-      for await (const event of stream) {
-        if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT)
-          continue;
-        switch (event.type) {
-          case ServerGeminiEventType.Thought:
-            applyThoughtToState(
-              event.value,
-              sanitizeContent,
-              config,
-              thinkingBlocksRef,
-              setLastGeminiActivityTime,
-              setThought,
-              setPendingHistoryItem,
-            );
-            break;
-          case ServerGeminiEventType.Content:
-            setLastGeminiActivityTime(Date.now());
-            geminiMessageBuffer = handleContentEvent(
-              event.value,
-              geminiMessageBuffer,
-              userMessageTimestamp,
-            );
-            break;
-          case ServerGeminiEventType.ToolCallRequest:
-            toolCallRequests.push({
-              ...event.value,
-              agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
-            });
-            break;
-          case ServerGeminiEventType.UserCancelled:
-            toolCallRequests.length = 0;
-            handleUserCancelledEvent(userMessageTimestamp);
-            processingResult = StreamProcessingStatus.UserCancelled;
-            break;
-          case ServerGeminiEventType.Error:
-            toolCallRequests.length = 0;
-            handleErrorEvent(event.value, userMessageTimestamp);
-            processingResult = StreamProcessingStatus.Error;
-            break;
-          case ServerGeminiEventType.ChatCompressed:
-            handleChatCompressionEvent(event.value, userMessageTimestamp);
-            break;
-          case ServerGeminiEventType.ToolCallConfirmation:
-          case ServerGeminiEventType.ToolCallResponse:
-            break;
-          case ServerGeminiEventType.MaxSessionTurns:
-            handleMaxSessionTurnsEvent();
-            break;
-          case ServerGeminiEventType.ContextWindowWillOverflow:
-            handleContextWindowWillOverflowEvent(
-              event.value.estimatedRequestTokenCount,
-              event.value.remainingTokenCount,
-            );
-            break;
-          case ServerGeminiEventType.Finished:
-            handleFinishedEvent(event, userMessageTimestamp);
-            break;
-          case ServerGeminiEventType.LoopDetected:
-            loopDetectedRef.current = true;
-            toolCallRequests.length = 0;
-            break;
-          case ServerGeminiEventType.UsageMetadata:
-            if (event.value.promptTokenCount !== undefined)
-              uiTelemetryService.setLastPromptTokenCount(
-                event.value.promptTokenCount,
-              );
-            break;
-          case ServerGeminiEventType.Citation:
-            handleCitationEvent(event.value, userMessageTimestamp);
-            break;
-          case ServerGeminiEventType.Retry:
-          case ServerGeminiEventType.InvalidStream:
-            break;
-          case ServerGeminiEventType.AgentExecutionStopped:
-            addItem(
-              {
-                type: MessageType.INFO,
-                text: `Execution stopped by hook: ${event.systemMessage?.trim() || event.reason}`,
-              },
-              userMessageTimestamp,
-            );
-            if (event.contextCleared) {
-              addItem(
-                {
-                  type: MessageType.INFO,
-                  text: 'Conversation context has been cleared.',
-                },
-                userMessageTimestamp,
-              );
-            }
-            break;
-          case ServerGeminiEventType.AgentExecutionBlocked:
-            addItem(
-              {
-                type: MessageType.INFO,
-                text: `Execution blocked by hook: ${event.systemMessage?.trim() || event.reason}`,
-              },
-              userMessageTimestamp,
-            );
-            if (event.contextCleared) {
-              addItem(
-                {
-                  type: MessageType.INFO,
-                  text: 'Conversation context has been cleared.',
-                },
-                userMessageTimestamp,
-              );
-            }
-            break;
-          default:
-            break;
+      const pendingHistoryAtTimeout = () => {
+        if (pendingHistoryItemRef.current) {
+          addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+          setPendingHistoryItem(null);
         }
-      }
+      };
+      try {
+        const iterator = stream[Symbol.asyncIterator]();
+        while (true) {
+          const nextEvent = await nextStreamEventWithIdleTimeout({
+            iterator,
+            timeoutMs: GEMINI_STREAM_IDLE_TIMEOUT_MS,
+            signal,
+            onTimeout: () => {
+              if (signal.aborted) {
+                return;
+              }
 
-      if (
-        processingResult === StreamProcessingStatus.Completed &&
-        !signal.aborted &&
-        !turnCancelledRef.current &&
-        !loopDetectedRef.current &&
-        toolCallRequests.length > 0
-      ) {
-        const deduped = deduplicateToolCallRequests(toolCallRequests);
-        if (deduped.length > 0) {
-          if (pendingHistoryItemRef.current) {
-            addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-            setPendingHistoryItem(null);
+              pendingHistoryAtTimeout();
+              setThought(null);
+              abortActiveStream(createAbortError());
+            },
+            createTimeoutError: () => createAbortError(),
+          });
+          if (nextEvent.done) {
+            break;
           }
-          await scheduleToolCalls(deduped, signal);
+
+          const event = nextEvent.value;
+          if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) {
+            continue;
+          }
+
+          switch (event.type) {
+            case ServerGeminiEventType.Thought:
+              applyThoughtToState(
+                event.value,
+                sanitizeContent,
+                config,
+                thinkingBlocksRef,
+                setLastGeminiActivityTime,
+                setThought,
+                setPendingHistoryItem,
+              );
+              break;
+            case ServerGeminiEventType.Content:
+              setLastGeminiActivityTime(Date.now());
+              geminiMessageBuffer = handleContentEvent(
+                event.value,
+                geminiMessageBuffer,
+                userMessageTimestamp,
+              );
+              break;
+            case ServerGeminiEventType.ToolCallRequest:
+              toolCallRequests.push({
+                ...event.value,
+                agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
+              });
+              break;
+            case ServerGeminiEventType.UserCancelled:
+              toolCallRequests.length = 0;
+              handleUserCancelledEvent(userMessageTimestamp);
+              processingResult = StreamProcessingStatus.UserCancelled;
+              break;
+            case ServerGeminiEventType.Error:
+              toolCallRequests.length = 0;
+              handleErrorEvent(event.value, userMessageTimestamp);
+              processingResult = StreamProcessingStatus.Error;
+              break;
+            case ServerGeminiEventType.ChatCompressed:
+              handleChatCompressionEvent(event.value, userMessageTimestamp);
+              break;
+            case ServerGeminiEventType.ToolCallConfirmation:
+            case ServerGeminiEventType.ToolCallResponse:
+              break;
+            case ServerGeminiEventType.MaxSessionTurns:
+              handleMaxSessionTurnsEvent();
+              break;
+            case ServerGeminiEventType.ContextWindowWillOverflow:
+              handleContextWindowWillOverflowEvent(
+                event.value.estimatedRequestTokenCount,
+                event.value.remainingTokenCount,
+              );
+              break;
+            case ServerGeminiEventType.Finished:
+              handleFinishedEvent(event, userMessageTimestamp);
+              break;
+            case ServerGeminiEventType.LoopDetected:
+              loopDetectedRef.current = true;
+              toolCallRequests.length = 0;
+              break;
+            case ServerGeminiEventType.UsageMetadata:
+              if (event.value.promptTokenCount !== undefined)
+                uiTelemetryService.setLastPromptTokenCount(
+                  event.value.promptTokenCount,
+                );
+              break;
+            case ServerGeminiEventType.Citation:
+              handleCitationEvent(event.value, userMessageTimestamp);
+              break;
+            case ServerGeminiEventType.Retry:
+            case ServerGeminiEventType.InvalidStream:
+              break;
+            case ServerGeminiEventType.AgentExecutionStopped:
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: `Execution stopped by hook: ${event.systemMessage?.trim() || event.reason}`,
+                },
+                userMessageTimestamp,
+              );
+              if (event.contextCleared) {
+                addItem(
+                  {
+                    type: MessageType.INFO,
+                    text: 'Conversation context has been cleared.',
+                  },
+                  userMessageTimestamp,
+                );
+              }
+              break;
+            case ServerGeminiEventType.AgentExecutionBlocked:
+              addItem(
+                {
+                  type: MessageType.INFO,
+                  text: `Execution blocked by hook: ${event.systemMessage?.trim() || event.reason}`,
+                },
+                userMessageTimestamp,
+              );
+              if (event.contextCleared) {
+                addItem(
+                  {
+                    type: MessageType.INFO,
+                    text: 'Conversation context has been cleared.',
+                  },
+                  userMessageTimestamp,
+                );
+              }
+              break;
+            default:
+              break;
+          }
+        }
+
+        if (
+          processingResult === StreamProcessingStatus.Completed &&
+          !signal.aborted &&
+          !turnCancelledRef.current &&
+          !loopDetectedRef.current &&
+          toolCallRequests.length > 0
+        ) {
+          const deduped = deduplicateToolCallRequests(toolCallRequests);
+          if (deduped.length > 0) {
+            if (pendingHistoryItemRef.current) {
+              addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+              setPendingHistoryItem(null);
+            }
+            await scheduleToolCalls(deduped, signal);
+          }
+        }
+
+        return processingResult;
+      } finally {
+        if (pendingHistoryItemRef.current && signal.aborted) {
+          setPendingHistoryItem(null);
         }
       }
-      return processingResult;
     },
     [
       config,
@@ -625,6 +667,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       handleUserCancelledEvent,
       handleErrorEvent,
       scheduleToolCalls,
+      abortActiveStream,
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
@@ -777,3 +820,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     prepareQueryForGemini,
   };
 }
+
+export const __testing = {
+  GEMINI_STREAM_IDLE_TIMEOUT_MS,
+};

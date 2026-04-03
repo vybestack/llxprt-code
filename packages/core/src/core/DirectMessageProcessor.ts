@@ -13,8 +13,14 @@ import {
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
+import { createAbortError } from '../utils/delay.js';
+import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 import type { IContent } from '../services/history/IContent.js';
-import type { IProvider, ProviderToolset } from '../providers/IProvider.js';
+import type {
+  GenerateChatOptions,
+  IProvider,
+  ProviderToolset,
+} from '../providers/IProvider.js';
 import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
@@ -25,6 +31,7 @@ import {
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
 import { isSchemaDepthError } from './geminiChatTypes.js';
+import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -215,6 +222,15 @@ export class DirectMessageProcessor {
       );
     }
 
+    const timeoutController = new AbortController();
+    const timeoutSignal = timeoutController.signal;
+    const upstreamAbortSignal = params.config?.abortSignal;
+    const onAbort = () => timeoutController.abort();
+    upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
+    if (upstreamAbortSignal?.aborted) {
+      onAbort();
+    }
+
     const streamResponse = provider.generateChatCompletion({
       contents: contentsForApi,
       tools:
@@ -223,6 +239,9 @@ export class DirectMessageProcessor {
           : undefined,
       config: runtimeContext.config,
       runtime: runtimeContext,
+      invocation: {
+        signal: timeoutSignal,
+      } as unknown as GenerateChatOptions['invocation'],
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
       userMemory: runtimeContext.config?.getUserMemory?.(),
@@ -231,15 +250,39 @@ export class DirectMessageProcessor {
     let lastResponse: IContent | undefined;
     let lastBlockWasNonText = false;
     let aggregatedText = '';
-    for await (const iContent of streamResponse) {
-      lastResponse = iContent;
-      const result = aggregateTextWithSpacing(
-        iContent.blocks ?? [],
-        aggregatedText,
-        lastBlockWasNonText,
-      );
-      aggregatedText = result.text;
-      lastBlockWasNonText = result.lastBlockWasNonText;
+
+    try {
+      const iterator = streamResponse[Symbol.asyncIterator]();
+      while (true) {
+        const nextResponse = await nextStreamEventWithIdleTimeout({
+          iterator,
+          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
+          signal: timeoutSignal,
+          onTimeout: () => {
+            if (upstreamAbortSignal?.aborted) {
+              return;
+            }
+            timeoutController.abort();
+          },
+          createTimeoutError: () => createAbortError(),
+        });
+        if (nextResponse.done) {
+          break;
+        }
+
+        const iContent = nextResponse.value;
+        lastResponse = iContent;
+        const result = aggregateTextWithSpacing(
+          iContent.blocks ?? [],
+          aggregatedText,
+          lastBlockWasNonText,
+        );
+        aggregatedText = result.text;
+        lastBlockWasNonText = result.lastBlockWasNonText;
+      }
+    } finally {
+      timeoutController.abort();
+      upstreamAbortSignal?.removeEventListener('abort', onAbort);
     }
 
     if (!lastResponse) {
