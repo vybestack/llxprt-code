@@ -82,14 +82,13 @@ function createMockProvider(name: string): OAuthProvider {
     name,
     initiateAuth: vi.fn(async () => makeToken('from-initiate')),
     getToken: vi.fn(async () => null),
-    refreshToken: vi.fn(async (oldToken: OAuthToken) => {
-      // Simulate a refresh by returning a new access token with same refresh token
-      return makeToken(
+    refreshToken: vi.fn(async (oldToken: OAuthToken) =>
+      makeToken(
         `refreshed-${oldToken.access_token}`,
         3600,
         oldToken.refresh_token,
-      );
-    }),
+      ),
+    ),
   };
 }
 
