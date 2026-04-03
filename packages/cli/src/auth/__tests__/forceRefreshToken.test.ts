@@ -95,7 +95,9 @@ function createMockProvider(name: string): OAuthProvider {
 // Minimal ProviderRegistry-like object
 function createMockRegistry(provider?: OAuthProvider, oauthEnabled = true) {
   return {
-    getProvider: vi.fn((_name: string) => provider ?? undefined),
+    getProvider: vi.fn((name: string) =>
+      provider && name === provider.name ? provider : undefined,
+    ),
     isOAuthEnabled: vi.fn(() => oauthEnabled),
     hasExplicitInMemoryOAuthState: vi.fn(() => false),
   };
@@ -322,21 +324,23 @@ describe('TokenAccessCoordinator forceRefreshToken', () => {
    * Test that forceRefreshToken handles unknown provider
    */
   it('should return null when provider is unknown', async () => {
+    const providerName = 'unknown-provider';
     const failedToken = 'failed-access-token';
     const initialToken = makeToken(failedToken, 3600, 'refresh-token-123');
-    const initialTokens = new Map([['unknown', initialToken]]);
+    const initialTokens = new Map([[providerName, initialToken]]);
 
-    const { coordinator } = makeCoordinator({
+    const { coordinator, registry } = makeCoordinator({
       provider: undefined,
       initialTokens,
     });
 
     const result = await coordinator.forceRefreshToken(
-      'unknown-provider',
+      providerName,
       failedToken,
     );
 
     expect(result).toBeNull();
+    expect(registry.getProvider).toHaveBeenCalledWith(providerName);
   });
 
   /**
