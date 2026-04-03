@@ -13,8 +13,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   AuthPrecedenceResolver,
-  AuthPrecedenceConfig,
-  OAuthManager,
+  type AuthPrecedenceConfig,
+  type OAuthManager,
   type OAuthTokenRequestMetadata,
 } from './precedence.js';
 import { SettingsService } from '../settings/SettingsService.js';
@@ -23,11 +23,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import {
-  getSettingsService,
-  registerSettingsService,
-  resetSettingsService,
-} from '../settings/settingsServiceInstance.js';
+import { resetSettingsService } from '../settings/settingsServiceInstance.js';
 
 const baseConfig: AuthPrecedenceConfig = {
   envKeyNames: [],
@@ -38,11 +34,8 @@ const baseConfig: AuthPrecedenceConfig = {
 };
 
 describe('AuthPrecedenceResolver invalidateProviderCache', () => {
-  let originalContext: ReturnType<typeof createProviderRuntimeContext> | null;
-
   beforeEach(() => {
     vi.restoreAllMocks();
-    originalContext = null;
     resetSettingsService();
   });
 
