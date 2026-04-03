@@ -31,6 +31,11 @@ export async function nextStreamEventWithIdleTimeout<T>({
   const timeoutController = new AbortController();
   const onAbort = () => timeoutController.abort();
   signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) {
+    signal.removeEventListener('abort', onAbort);
+    await onTimeout?.();
+    throw createTimeoutError();
+  }
 
   try {
     const timeoutPromise = delay(timeoutMs, timeoutController.signal).then(

@@ -227,6 +227,9 @@ export class DirectMessageProcessor {
     const upstreamAbortSignal = params.config?.abortSignal;
     const onAbort = () => timeoutController.abort();
     upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
+    if (upstreamAbortSignal?.aborted) {
+      onAbort();
+    }
 
     const streamResponse = provider.generateChatCompletion({
       contents: contentsForApi,

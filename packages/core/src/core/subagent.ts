@@ -461,6 +461,12 @@ export class SubAgentScope {
       }
     } catch (error) {
       if (abortController.signal.aborted) {
+        if (
+          this.output.terminate_reason !== SubagentTerminateMode.TIMEOUT &&
+          !this.parentAbortSignal?.aborted
+        ) {
+          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+        }
         throw createAbortError();
       }
       throw error;
@@ -676,6 +682,11 @@ export class SubAgentScope {
     const timeoutSignal = timeoutController.signal;
     const onAbort = () => timeoutController.abort();
     abortController.signal.addEventListener('abort', onAbort, { once: true });
+    if (abortController.signal.aborted) {
+      onAbort();
+      abortController.signal.removeEventListener('abort', onAbort);
+      return { functionCalls: [], textResponse: '' };
+    }
 
     let functionCalls: FunctionCall[] = [];
     let textResponse = '';

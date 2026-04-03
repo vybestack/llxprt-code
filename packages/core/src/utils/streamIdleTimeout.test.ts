@@ -141,4 +141,19 @@ describe('nextStreamEventWithIdleTimeout', () => {
     });
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('should throw immediately when signal is already aborted', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const iterator = (async function* () {
+      yield 1;
+    })()[Symbol.asyncIterator]();
+    await expect(
+      nextStreamEventWithIdleTimeout({
+        iterator,
+        timeoutMs: 5000,
+        signal: ac.signal,
+      }),
+    ).rejects.toThrow(StreamIdleTimeoutError);
+  });
 });

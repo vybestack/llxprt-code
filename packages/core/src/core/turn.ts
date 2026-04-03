@@ -380,6 +380,11 @@ export class Turn {
     });
 
     try {
+      if (signal.aborted) {
+        yield { type: GeminiEventType.UserCancelled };
+        return;
+      }
+
       // Note: This assumes `sendMessageStream` yields events like
       // { type: StreamEventType.RETRY } or { type: StreamEventType.CHUNK, value: GenerateContentResponse }
       const timeoutController = new AbortController();

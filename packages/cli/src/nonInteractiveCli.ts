@@ -336,7 +336,16 @@ export async function runNonInteractive({
           ) {
             abortController.abort();
             debugLogger.error('Operation cancelled.');
-            return;
+            if (streamFormatter) {
+              streamFormatter.emitEvent({
+                type: JsonStreamEventType.ERROR,
+                timestamp: new Date().toISOString(),
+                severity: 'error',
+                message:
+                  'Stream idle timeout: no response received within the allowed time.',
+              });
+            }
+            throw error;
           }
           throw error;
         }
