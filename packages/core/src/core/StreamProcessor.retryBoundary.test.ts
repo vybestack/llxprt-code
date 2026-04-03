@@ -16,7 +16,7 @@ import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from './geminiChatTypes.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { GenerateContentResponse } from '@google/genai';
-import type { Content } from '@google/genai';
+import type { Content, SendMessageParameters } from '@google/genai';
 
 // Import retry utility types
 import type * as retryModule from '../utils/retry.js';
@@ -38,6 +38,7 @@ vi.mock('./turnLogging.js', () => ({
 }));
 
 import { retryWithBackoff } from '../utils/retry.js';
+import { prependAsyncGenerator } from '../utils/asyncIterator.js';
 import { logApiResponse } from './turnLogging.js';
 
 // Helper to create valid IContent with blocks
@@ -147,6 +148,31 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
   });
 
   describe('first chunk consumption within retry boundary', () => {
+    it('forwards cancellation to the wrapped source iterator before first next', async () => {
+      let sourceClosed = false;
+
+      async function* source(): AsyncGenerator<number> {
+        try {
+          yield 2;
+          await new Promise<void>(() => {
+            // keep source pending to mimic a live stream
+          });
+        } finally {
+          sourceClosed = true;
+        }
+      }
+
+      const sourceIterator = source();
+      const firstResult = await sourceIterator.next();
+      expect(firstResult.done).toBe(false);
+
+      const wrapped = prependAsyncGenerator(firstResult.value, sourceIterator);
+
+      const cancelResult = await wrapped.return();
+      expect(cancelResult.done).toBe(true);
+      expect(sourceClosed).toBe(true);
+    });
+
     it('should consume first chunk inside _buildAndSendStreamRequest before returning', async () => {
       // Track when the provider is called vs when the stream yields
       const timeline: string[] = [];
@@ -459,6 +485,83 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       // Verify the API call was actually attempted
       expect(apiCallMade).toBe(true);
     });
+  });
+});
+
+describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before first next', () => {
+  it('should forward return to the preloaded stream without creating the processed stream', async () => {
+    let sourceClosed = false;
+
+    async function* source(): AsyncGenerator<GenerateContentResponse> {
+      try {
+        yield {
+          candidates: [{ content: { parts: [{ text: 'prefetched' }] } }],
+        } as GenerateContentResponse;
+        await new Promise<void>(() => {
+          // Keep source pending to mimic an active stream.
+        });
+      } finally {
+        sourceClosed = true;
+      }
+    }
+
+    const sourceIterator = source();
+    const prefetched = await sourceIterator.next();
+    expect(prefetched.done).toBe(false);
+
+    const preloadedStream = prependAsyncGenerator(
+      prefetched.value,
+      sourceIterator,
+    );
+
+    const processStreamResponse = vi.fn(() => {
+      async function* processed(): AsyncGenerator<GenerateContentResponse> {
+        yield {
+          candidates: [{ content: { parts: [{ text: 'processed' }] } }],
+        } as GenerateContentResponse;
+      }
+      return processed();
+    });
+
+    const executeStreamApiCall = vi.fn().mockResolvedValue(preloadedStream);
+
+    const provider = {
+      name: 'test-provider',
+      generateChatCompletion: vi.fn(),
+    };
+
+    const processor = Object.create(
+      StreamProcessor.prototype,
+    ) as StreamProcessor;
+    Object.assign(processor, {
+      runtimeContext: {
+        state: {
+          model: 'test-model',
+          baseUrl: 'https://test.example.com',
+        },
+      },
+      compressionHandler: {
+        enforceContextWindow: vi.fn().mockResolvedValue(undefined),
+      },
+      providerResolver: vi.fn(() => provider),
+      _executeStreamApiCall: executeStreamApiCall,
+      processStreamResponse,
+      logger: { debug: () => {}, warn: () => {} },
+    });
+
+    const stream = await processor.makeApiCallAndProcessStream(
+      { config: {} } as SendMessageParameters,
+      'test-prompt',
+      0,
+      { role: 'user', parts: [{ text: 'hello' }] },
+    );
+
+    const returnResult = await stream.return();
+
+    expect(returnResult.done).toBe(true);
+    expect(processStreamResponse).not.toHaveBeenCalled();
+    expect(sourceClosed).toBe(true);
+    expect(executeStreamApiCall).toHaveBeenCalledTimes(1);
   });
 });
 

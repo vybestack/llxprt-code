@@ -33,29 +33,66 @@
  * // yields: 'first', 'second', 'third'
  * ```
  */
-export async function* prependAsyncGenerator<T>(
+export function prependAsyncGenerator<T>(
   preloadedValue: T,
   source: AsyncIterator<T>,
 ): AsyncGenerator<T> {
+  let preloadedPending = true;
   let sourceExhausted = false;
-  try {
-    // Yield the preloaded value first
-    yield preloadedValue;
+  let terminated = false;
 
-    // Then delegate to the source iterator
-    let result = await source.next();
-    // We check done explicitly against true for type safety
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    while (result.done !== true) {
-      yield result.value;
-      result = await source.next();
-    }
-    sourceExhausted = true;
-  } finally {
-    // Forward early termination to the wrapped iterator for cleanup
-    // This ensures source's finally blocks run (e.g., network resource cleanup)
-    if (!sourceExhausted) {
-      await source.return?.();
-    }
-  }
+  const prefixedIterator: AsyncGenerator<T> = {
+    async next(value?: unknown): Promise<IteratorResult<T>> {
+      if (terminated) {
+        return { done: true, value: undefined };
+      }
+
+      if (preloadedPending) {
+        preloadedPending = false;
+        return { done: false, value: preloadedValue };
+      }
+
+      const result = await source.next(value);
+      if (result.done === true) {
+        sourceExhausted = true;
+      }
+      return result;
+    },
+
+    async return(value?: unknown): Promise<IteratorResult<T>> {
+      if (terminated) {
+        return { done: true, value: undefined };
+      }
+
+      terminated = true;
+      if (!sourceExhausted && typeof source.return === 'function') {
+        return source.return(value);
+      }
+      return { done: true, value: undefined };
+    },
+
+    async throw(error?: unknown): Promise<IteratorResult<T>> {
+      terminated = true;
+
+      if (typeof source.throw === 'function') {
+        return source.throw(error);
+      }
+
+      if (!sourceExhausted && typeof source.return === 'function') {
+        await source.return();
+      }
+
+      throw error;
+    },
+
+    [Symbol.asyncIterator](): AsyncGenerator<T> {
+      return this;
+    },
+
+    async [Symbol.asyncDispose](): Promise<void> {
+      await this.return(undefined);
+    },
+  };
+
+  return prefixedIterator;
 }

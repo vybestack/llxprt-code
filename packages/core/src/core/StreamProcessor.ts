@@ -130,7 +130,68 @@ export class StreamProcessor {
       provider,
     );
 
-    return this.processStreamResponse(streamResponse, userContent);
+    let processedStream: AsyncGenerator<GenerateContentResponse> | undefined;
+    const ensureProcessedStream =
+      (): AsyncGenerator<GenerateContentResponse> => {
+        if (!processedStream) {
+          processedStream = this.processStreamResponse(
+            streamResponse,
+            userContent,
+          );
+        }
+        return processedStream;
+      };
+
+    const cancellableStream: AsyncGenerator<GenerateContentResponse> = {
+      async next(
+        value?: unknown,
+      ): Promise<IteratorResult<GenerateContentResponse>> {
+        return ensureProcessedStream().next(value);
+      },
+      async return(
+        value?: unknown,
+      ): Promise<IteratorResult<GenerateContentResponse>> {
+        if (processedStream) {
+          return processedStream.return
+            ? processedStream.return(value)
+            : { done: true, value: undefined };
+        }
+
+        if (streamResponse.return) {
+          await streamResponse.return(value);
+        }
+
+        return { done: true, value: undefined };
+      },
+      async throw(
+        error?: unknown,
+      ): Promise<IteratorResult<GenerateContentResponse>> {
+        if (processedStream) {
+          if (processedStream.throw) {
+            return processedStream.throw(error);
+          }
+          throw error;
+        }
+
+        if (streamResponse.throw) {
+          return streamResponse.throw(error);
+        }
+
+        if (streamResponse.return) {
+          await streamResponse.return(undefined);
+        }
+
+        throw error;
+      },
+      [Symbol.asyncIterator](): AsyncGenerator<GenerateContentResponse> {
+        return this;
+      },
+      async [Symbol.asyncDispose](): Promise<void> {
+        await this.return(undefined);
+      },
+    };
+
+    return cancellableStream;
   }
 
   /**
