@@ -470,5 +470,77 @@ describe('bucketFailoverIntegration', () => {
 
       expect(result.bucket).toBe('bucket2');
     });
+
+    it('handles Anthropic rate_limit_error in error body (issue1871)', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      // eslint-disable-next-line require-yield
+      async function* failGenerator() {
+        // Simulate Anthropic's rate_limit_error response structure (body only, no HTTP 429)
+        const error = new Error('Rate limited');
+        (error as { error?: { type?: string; message?: string } }).error = {
+          type: 'rate_limit_error',
+          message: 'Rate limited',
+        };
+        throw error;
+      }
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+      expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles Anthropic overloaded_error in error body', async () => {
+      const responseContent: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Success!' }],
+      };
+
+      // eslint-disable-next-line require-yield
+      async function* failGenerator() {
+        // Simulate Anthropic's overloaded_error response structure
+        const error = new Error('Overloaded');
+        (error as { error?: { type?: string; message?: string } }).error = {
+          type: 'overloaded_error',
+          message: 'Overloaded',
+        };
+        throw error;
+      }
+
+      async function* successGenerator() {
+        yield responseContent;
+      }
+
+      vi.mocked(mockProvider.generateChatCompletion)
+        .mockReturnValueOnce(failGenerator())
+        .mockReturnValueOnce(successGenerator());
+
+      const config: BucketFailoverConfig = {
+        buckets: ['bucket1', 'bucket2'],
+        provider: mockProvider,
+      };
+
+      const result = await executeProviderWithBucketFailover(options, config);
+
+      expect(result.bucket).toBe('bucket2');
+      expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
+    });
   });
 });

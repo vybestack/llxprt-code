@@ -664,6 +664,55 @@ describe('retryWithBackoff', () => {
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
     /**
+    /**
+     * @requirement issue1871 - Anthropic rate_limit_error bucket failover
+     * @scenario Bucket failover on Anthropic rate_limit_error in body (Variation 1 - no HTTP 429)
+     * @given A request that returns Anthropic rate_limit_error in body without HTTP 429 status
+     * @when onPersistent429 callback is configured
+     * @then Should trigger bucket failover like overloaded_error
+     */
+    it('should call onPersistent429 callback on Anthropic rate_limit_error in body (Variation 1)', async () => {
+      vi.useFakeTimers();
+      let attempt = 0;
+      let failoverCalled = false;
+
+      const mockFn = vi.fn(async () => {
+        attempt++;
+        if (attempt <= 1) {
+          // Simulate Anthropic's rate_limit_error response structure (body only, no HTTP 429)
+          const error: HttpError & {
+            error?: { type?: string; message?: string };
+          } = new Error('Rate limited');
+          error.error = {
+            type: 'rate_limit_error',
+            message: 'Rate limited',
+          };
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => {
+        failoverCalled = true;
+        return true; // Indicate bucket switch succeeded
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 1,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+
+      // onPersistent429 should be called after the first rate_limit_error
+      expect(failoverCallback).toHaveBeenCalled();
+      expect(failoverCalled).toBe(true);
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    /**
      * @requirement issue1123 - Handle 403 permission_error (revoked token)
      * @scenario Bucket failover on 403 OAuth token revoked
      * @given A request that returns 403 with "OAuth token has been revoked"

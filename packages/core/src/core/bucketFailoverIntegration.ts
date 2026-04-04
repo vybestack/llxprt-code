@@ -35,6 +35,15 @@ function shouldFailover(error: Error): boolean {
     return true;
   }
 
+  // Check for Anthropic body-level error types (rate_limit_error, overloaded_error)
+  const bodyError = error as { error?: { type?: string } };
+  if (
+    bodyError.error?.type === 'rate_limit_error' ||
+    bodyError.error?.type === 'overloaded_error'
+  ) {
+    return true;
+  }
+
   return (
     message.includes('429') ||
     message.includes('401') ||
