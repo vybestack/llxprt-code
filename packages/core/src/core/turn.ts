@@ -34,6 +34,7 @@ import {
   GeminiChat,
   InvalidStreamError,
   StreamEventType,
+  StreamEvent,
 } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
@@ -392,6 +393,8 @@ export class Turn {
       const onParentAbort = () => timeoutController.abort();
       signal.addEventListener('abort', onParentAbort, { once: true });
 
+      let streamIterator: AsyncIterator<StreamEvent> | undefined;
+
       try {
         const responseStream = await this.chat.sendMessageStream(
           {
@@ -402,11 +405,11 @@ export class Turn {
           },
           this.prompt_id,
         );
-        const iterator = responseStream[Symbol.asyncIterator]();
+        streamIterator = responseStream[Symbol.asyncIterator]();
 
         while (true) {
           const result = await nextStreamEventWithIdleTimeout({
-            iterator,
+            iterator: streamIterator,
             timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
             signal: timeoutSignal,
             onTimeout: () => {
@@ -536,6 +539,11 @@ export class Turn {
           }
         }
       } finally {
+        // Don't await the return() call to avoid hanging on stuck generators.
+        // The generator will eventually be garbage collected.
+        streamIterator?.return?.().catch(() => {
+          // cleanup errors are non-fatal
+        });
         timeoutController.abort();
         signal.removeEventListener('abort', onParentAbort);
       }

@@ -232,6 +232,155 @@ describe('Turn', () => {
       ]);
       expect(turn.getDebugResponses().length).toBe(1);
     });
+    it('should call return() on stream iterator when aborted', async () => {
+      const abortController = new AbortController();
+      const returnSpy = vi.fn().mockResolvedValue(undefined);
+
+      // Create a mock async generator with a spyable return method
+      async function* mockGenerator() {
+        try {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [{ content: { parts: [{ text: 'First part' }] } }],
+            } as GenerateContentResponse,
+          };
+          // This will wait until aborted
+          await new Promise<void>((resolve) => {
+            abortController.signal.addEventListener('abort', () => resolve(), {
+              once: true,
+            });
+          });
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'Second part - should not be processed' }],
+                  },
+                },
+              ],
+            } as GenerateContentResponse,
+          };
+        } finally {
+          // This ensures return() is called when iterator is closed
+        }
+      }
+
+      const generator = mockGenerator();
+      // Wrap the generator to spy on return()
+      const mockResponseStream = {
+        [Symbol.asyncIterator]: () => ({
+          next: () => generator.next(),
+          return: returnSpy,
+          throw: (e: unknown) => {
+            if (generator.throw) return generator.throw(e);
+            throw e;
+          },
+        }),
+      };
+
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      // Start consuming and abort after first chunk
+      const events: ServerGeminiStreamEvent[] = [];
+      const runPromise = (async () => {
+        for await (const event of turn.run(
+          [{ text: 'Test iterator cleanup' }],
+          abortController.signal,
+        )) {
+          events.push(event);
+          if (event.type === GeminiEventType.Content) {
+            // Abort after first content event
+            abortController.abort();
+          }
+        }
+      })();
+
+      await runPromise;
+
+      // Verify that return() was called on the iterator
+      expect(returnSpy).toHaveBeenCalled();
+      expect(events).toContainEqual({ type: GeminiEventType.UserCancelled });
+    });
+
+    it('should allow subsequent calls after abort (sendPromise resolved)', async () => {
+      const abortController = new AbortController();
+      let callCount = 0;
+
+      const createMockStream = (shouldAbort = false) =>
+        (async function* () {
+          if (shouldAbort) {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [{ content: { parts: [{ text: 'Partial' }] } }],
+              } as GenerateContentResponse,
+            };
+            abortController.abort();
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [{ content: { parts: [{ text: 'Ignored' }] } }],
+              } as GenerateContentResponse,
+            };
+          } else {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [
+                  { content: { parts: [{ text: 'Second call success' }] } },
+                ],
+              } as GenerateContentResponse,
+            };
+          }
+        })();
+
+      mockSendMessageStream.mockImplementation(() => {
+        callCount++;
+        return createMockStream(callCount === 1);
+      });
+
+      // First call - will abort
+      const events1: ServerGeminiStreamEvent[] = [];
+      for await (const event of turn.run(
+        [{ text: 'First call' }],
+        abortController.signal,
+      )) {
+        events1.push(event);
+      }
+
+      expect(events1).toContainEqual({ type: GeminiEventType.UserCancelled });
+      expect(callCount).toBe(1);
+
+      // Second call with fresh abort controller - should NOT hang
+      const freshController = new AbortController();
+      const events2: ServerGeminiStreamEvent[] = [];
+
+      // Use a timeout to detect if it hangs
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Second call timed out')), 5000);
+      });
+
+      const runPromise = (async () => {
+        for await (const event of turn.run(
+          [{ text: 'Second call' }],
+          freshController.signal,
+        )) {
+          events2.push(event);
+        }
+      })();
+
+      await Promise.race([runPromise, timeoutPromise]);
+
+      expect(callCount).toBe(2);
+      expect(events2).toContainEqual({
+        type: GeminiEventType.Content,
+        value: 'Second call success',
+      });
+    });
 
     it('should yield InvalidStream event if sendMessageStream throws InvalidStreamError', async () => {
       const error = new InvalidStreamError(
