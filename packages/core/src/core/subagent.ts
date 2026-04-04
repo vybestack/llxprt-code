@@ -37,7 +37,7 @@ import { type CompletedToolCall } from './coreToolScheduler.js';
 import { type EmojiFilter } from '../filters/EmojiFilter.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
-  validateToolsAgainstRuntime,
+  filterToolsAgainstRuntime,
   createToolExecutionConfig,
   createEmojiFilter,
   buildRuntimeFunctionDeclarations,
@@ -187,11 +187,13 @@ export class SubAgentScope {
     }
 
     if (toolConfig) {
-      await validateToolsAgainstRuntime({
+      const filteredToolConfig = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
+      // Use undefined if all tools were filtered out
+      toolConfig =
+        filteredToolConfig.tools.length > 0 ? filteredToolConfig : undefined;
     }
 
     const settingsSnapshot =

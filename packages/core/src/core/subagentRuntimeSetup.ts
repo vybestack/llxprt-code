@@ -92,11 +92,18 @@ export function convertMetadataToFunctionDeclaration(
 // Validation
 // ---------------------------------------------------------------------------
 
-export async function validateToolsAgainstRuntime(params: {
+/**
+ * Filters the tools in toolConfig against the allowed set from the runtime view.
+ * Returns a new ToolConfig with only the tools that are permitted.
+ * Tools not in the allowed set are logged as warnings and removed.
+ *
+ * @param params - Object containing toolConfig and toolsView
+ * @returns A Promise that resolves to a filtered ToolConfig
+ */
+export async function filterToolsAgainstRuntime(params: {
   toolConfig: ToolConfig;
-  toolRegistry: ToolRegistry;
   toolsView: ToolRegistryView;
-}): Promise<void> {
+}): Promise<ToolConfig> {
   const { toolConfig, toolsView } = params;
   const allowedNames = new Set(
     (typeof toolsView.listToolNames === 'function'
@@ -105,8 +112,11 @@ export async function validateToolsAgainstRuntime(params: {
     ).map(canonicalizeToolName),
   );
 
+  const filteredTools: ToolConfig['tools'] = [];
   for (const toolEntry of toolConfig.tools) {
     if (typeof toolEntry !== 'string') {
+      // Non-string entries (e.g., FunctionDeclaration objects) are preserved
+      filteredTools.push(toolEntry);
       continue;
     }
 
@@ -114,11 +124,19 @@ export async function validateToolsAgainstRuntime(params: {
       allowedNames.size > 0 &&
       !allowedNames.has(canonicalizeToolName(toolEntry))
     ) {
-      throw new Error(
-        `Tool "${toolEntry}" is not permitted for this runtime bundle.`,
+      debugLogger.warn(
+        `Tool "${toolEntry}" is not permitted by the runtime view and is skipped.`,
       );
+      continue;
     }
+
+    filteredTools.push(toolEntry);
   }
+
+  return {
+    ...toolConfig,
+    tools: filteredTools,
+  };
 }
 
 // ---------------------------------------------------------------------------
