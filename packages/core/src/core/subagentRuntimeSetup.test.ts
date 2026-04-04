@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let convertMetadataToFunctionDeclaration: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let validateToolsAgainstRuntime: any;
+let filterToolsAgainstRuntime: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let createToolExecutionConfig: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,7 +30,7 @@ describe('subagentRuntimeSetup', () => {
     const mod = await import('./subagentRuntimeSetup.js');
     convertMetadataToFunctionDeclaration =
       mod.convertMetadataToFunctionDeclaration;
-    validateToolsAgainstRuntime = mod.validateToolsAgainstRuntime;
+    filterToolsAgainstRuntime = mod.filterToolsAgainstRuntime;
     createToolExecutionConfig = mod.createToolExecutionConfig;
     buildEphemeralSettings = mod.buildEphemeralSettings;
     buildRuntimeFunctionDeclarations = mod.buildRuntimeFunctionDeclarations;
@@ -95,8 +95,8 @@ describe('subagentRuntimeSetup', () => {
     });
   });
 
-  describe('validateToolsAgainstRuntime', () => {
-    it('should pass when all whitelisted tools exist in registry', async () => {
+  describe('filterToolsAgainstRuntime', () => {
+    it('should return filtered ToolConfig with only allowed tools', async () => {
       const toolRegistry = {
         getTool: (name: string) =>
           name === 'allowed_tool' ? { name } : undefined,
@@ -106,21 +106,75 @@ describe('subagentRuntimeSetup', () => {
         getToolMetadata: () => ({ name: 'allowed_tool', description: '' }),
       };
       const toolConfig = { tools: ['allowed_tool'] };
-      await expect(
-        validateToolsAgainstRuntime({ toolConfig, toolRegistry, toolsView }),
-      ).resolves.not.toThrow();
+      const result = await filterToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+      expect(result.tools).toEqual(['allowed_tool']);
     });
 
-    it('should throw when whitelisted tool is not in runtime', async () => {
+    it('should filter out disabled tools not in runtime', async () => {
+      const toolRegistry = { getTool: () => undefined };
+      const toolsView = {
+        listToolNames: () => ['other_tool'],
+        getToolMetadata: () => undefined,
+      };
+      const toolConfig = { tools: ['google_web_fetch'] };
+      const result = await filterToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+      expect(result.tools).toEqual([]);
+    });
+
+    it('should preserve tools that are present in toolsView', async () => {
+      const toolRegistry = { getTool: () => undefined };
+      const toolsView = {
+        listToolNames: () => ['google_web_fetch', 'read_file'],
+        getToolMetadata: (name: string) => ({ name, description: '' }),
+      };
+      const toolConfig = { tools: ['google_web_fetch', 'read_file'] };
+      const result = await filterToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+      expect(result.tools).toEqual(['google_web_fetch', 'read_file']);
+    });
+
+    it('should handle mixed allowed and disallowed tools', async () => {
+      const toolRegistry = { getTool: () => undefined };
+      const toolsView = {
+        listToolNames: () => ['read_file', 'write_file'],
+        getToolMetadata: (name: string) => ({ name, description: '' }),
+      };
+      const toolConfig = {
+        tools: ['read_file', 'google_web_fetch', 'write_file'],
+      };
+      const result = await filterToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+      // google_web_fetch should be filtered out
+      expect(result.tools).toEqual(['read_file', 'write_file']);
+    });
+
+    it('should return empty tools array when all tools are filtered out', async () => {
       const toolRegistry = { getTool: () => undefined };
       const toolsView = {
         listToolNames: () => ['other_tool'],
         getToolMetadata: () => undefined,
       };
       const toolConfig = { tools: ['missing_tool'] };
-      await expect(
-        validateToolsAgainstRuntime({ toolConfig, toolRegistry, toolsView }),
-      ).rejects.toThrow(/not permitted/);
+      const result = await filterToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+      expect(result.tools).toEqual([]);
     });
 
     it('should pass with empty whitelist (allow all)', async () => {
@@ -130,9 +184,12 @@ describe('subagentRuntimeSetup', () => {
         getToolMetadata: () => undefined,
       };
       const toolConfig = { tools: [] };
-      await expect(
-        validateToolsAgainstRuntime({ toolConfig, toolRegistry, toolsView }),
-      ).resolves.not.toThrow();
+      const result = await filterToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+      expect(result.tools).toEqual([]);
     });
   });
 
