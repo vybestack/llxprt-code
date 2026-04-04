@@ -581,11 +581,12 @@ export async function retryWithBackoff<T>(
 }
 
 /**
- * Determines if an error is an Anthropic overloaded_error.
- * Anthropic returns overloaded_error as an error type (not HTTP status):
+ * Determines if an error is an Anthropic overloaded_error or rate_limit_error.
+ * Anthropic returns overloaded_error and rate_limit_error as error types (not HTTP status):
  * {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+ * {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}
  * @param error The error object.
- * @returns True if the error is an overloaded_error, false otherwise.
+ * @returns True if the error is an overloaded_error or rate_limit_error, false otherwise.
  */
 export function isOverloadError(error: unknown): boolean {
   if (error && typeof error === 'object') {
@@ -594,7 +595,7 @@ export function isOverloadError(error: unknown): boolean {
       type?: string;
     };
     const errorType = errorObj.error?.type || errorObj.type;
-    return errorType === 'overloaded_error';
+    return errorType === 'overloaded_error' || errorType === 'rate_limit_error';
   }
   return false;
 }

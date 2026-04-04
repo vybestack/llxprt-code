@@ -316,6 +316,7 @@ export class AllBucketsExhaustedError extends Error {
   readonly attemptedBuckets: string[];
   readonly lastError: Error;
   readonly bucketFailureReasons: Record<string, BucketFailureReason>;
+  readonly status?: number;
 
   constructor(
     providerName: string,
@@ -336,14 +337,39 @@ export class AllBucketsExhaustedError extends Error {
         .join('\n');
     }
 
+    // Extract human-readable message from Anthropic-style JSON error strings
+    const cleanedLastErrorMsg =
+      AllBucketsExhaustedError.extractHumanReadableMessage(lastError.message);
+
     super(
       `All buckets exhausted for provider '${providerName}': ${attemptedBuckets.join(', ')}` +
         (bucketDetails ? `\n${bucketDetails}` : '') +
-        `\nLast error: ${lastError.message}`,
+        `\nLast error: ${cleanedLastErrorMsg}`,
     );
     this.name = 'AllBucketsExhaustedError';
     this.attemptedBuckets = [...attemptedBuckets];
     this.lastError = lastError;
     this.bucketFailureReasons = reasons;
+    this.status = (lastError as { status?: number }).status;
+  }
+
+  /**
+   * Extracts the human-readable message from Anthropic-style JSON error strings.
+   * e.g. '429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}'
+   *      → 'Rate limited'
+   */
+  private static extractHumanReadableMessage(raw: string): string {
+    const jsonStart = raw.indexOf('{');
+    if (jsonStart === -1) return raw;
+    try {
+      const parsed = JSON.parse(raw.substring(jsonStart)) as {
+        error?: { message?: string; type?: string };
+        type?: string;
+      };
+      if (parsed?.error?.message) return parsed.error.message;
+    } catch {
+      // Not valid JSON — use as-is
+    }
+    return raw;
   }
 }
