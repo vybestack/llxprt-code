@@ -97,12 +97,11 @@ export function convertMetadataToFunctionDeclaration(
  * Returns a new ToolConfig with only the tools that are permitted.
  * Tools not in the allowed set are logged as warnings and removed.
  *
- * @param params - Object containing toolConfig, toolRegistry, and toolsView
+ * @param params - Object containing toolConfig and toolsView
  * @returns A Promise that resolves to a filtered ToolConfig
  */
 export async function filterToolsAgainstRuntime(params: {
   toolConfig: ToolConfig;
-  toolRegistry: ToolRegistry;
   toolsView: ToolRegistryView;
 }): Promise<ToolConfig> {
   const { toolConfig, toolsView } = params;

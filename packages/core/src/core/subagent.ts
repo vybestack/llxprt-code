@@ -189,7 +189,6 @@ export class SubAgentScope {
     if (toolConfig) {
       const filteredToolConfig = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       // Use undefined if all tools were filtered out

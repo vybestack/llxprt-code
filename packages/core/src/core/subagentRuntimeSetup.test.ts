@@ -97,10 +97,6 @@ describe('subagentRuntimeSetup', () => {
 
   describe('filterToolsAgainstRuntime', () => {
     it('should return filtered ToolConfig with only allowed tools', async () => {
-      const toolRegistry = {
-        getTool: (name: string) =>
-          name === 'allowed_tool' ? { name } : undefined,
-      };
       const toolsView = {
         listToolNames: () => ['allowed_tool'],
         getToolMetadata: () => ({ name: 'allowed_tool', description: '' }),
@@ -108,14 +104,12 @@ describe('subagentRuntimeSetup', () => {
       const toolConfig = { tools: ['allowed_tool'] };
       const result = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       expect(result.tools).toEqual(['allowed_tool']);
     });
 
     it('should filter out disabled tools not in runtime', async () => {
-      const toolRegistry = { getTool: () => undefined };
       const toolsView = {
         listToolNames: () => ['other_tool'],
         getToolMetadata: () => undefined,
@@ -123,14 +117,12 @@ describe('subagentRuntimeSetup', () => {
       const toolConfig = { tools: ['google_web_fetch'] };
       const result = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       expect(result.tools).toEqual([]);
     });
 
     it('should preserve tools that are present in toolsView', async () => {
-      const toolRegistry = { getTool: () => undefined };
       const toolsView = {
         listToolNames: () => ['google_web_fetch', 'read_file'],
         getToolMetadata: (name: string) => ({ name, description: '' }),
@@ -138,14 +130,12 @@ describe('subagentRuntimeSetup', () => {
       const toolConfig = { tools: ['google_web_fetch', 'read_file'] };
       const result = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       expect(result.tools).toEqual(['google_web_fetch', 'read_file']);
     });
 
     it('should handle mixed allowed and disallowed tools', async () => {
-      const toolRegistry = { getTool: () => undefined };
       const toolsView = {
         listToolNames: () => ['read_file', 'write_file'],
         getToolMetadata: (name: string) => ({ name, description: '' }),
@@ -155,7 +145,6 @@ describe('subagentRuntimeSetup', () => {
       };
       const result = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       // google_web_fetch should be filtered out
@@ -163,7 +152,6 @@ describe('subagentRuntimeSetup', () => {
     });
 
     it('should return empty tools array when all tools are filtered out', async () => {
-      const toolRegistry = { getTool: () => undefined };
       const toolsView = {
         listToolNames: () => ['other_tool'],
         getToolMetadata: () => undefined,
@@ -171,14 +159,12 @@ describe('subagentRuntimeSetup', () => {
       const toolConfig = { tools: ['missing_tool'] };
       const result = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       expect(result.tools).toEqual([]);
     });
 
     it('should pass with empty whitelist (allow all)', async () => {
-      const toolRegistry = { getTool: () => undefined };
       const toolsView = {
         listToolNames: () => [],
         getToolMetadata: () => undefined,
@@ -186,7 +172,6 @@ describe('subagentRuntimeSetup', () => {
       const toolConfig = { tools: [] };
       const result = await filterToolsAgainstRuntime({
         toolConfig,
-        toolRegistry,
         toolsView,
       });
       expect(result.tools).toEqual([]);
