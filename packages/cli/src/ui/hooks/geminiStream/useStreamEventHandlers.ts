@@ -499,8 +499,9 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
           setPendingHistoryItem(null);
         }
       };
+      let iterator: AsyncIterator<GeminiEvent> | undefined;
       try {
-        const iterator = stream[Symbol.asyncIterator]();
+        iterator = stream[Symbol.asyncIterator]();
         while (true) {
           const nextEvent = await nextStreamEventWithIdleTimeout({
             iterator,
@@ -656,6 +657,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
 
         return processingResult;
       } finally {
+        // Don't await the return() call to avoid hanging on stuck generators.
+        // The generator will eventually be garbage collected.
+        iterator?.return?.().catch(() => {
+          // cleanup errors are non-fatal
+        });
         if (pendingHistoryItemRef.current && signal.aborted) {
           setPendingHistoryItem(null);
         }
