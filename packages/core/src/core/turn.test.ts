@@ -360,8 +360,12 @@ describe('Turn', () => {
       const events2: ServerGeminiStreamEvent[] = [];
 
       // Use a timeout to detect if it hangs
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Second call timed out')), 5000);
+        timeoutId = setTimeout(
+          () => reject(new Error('Second call timed out')),
+          5000,
+        );
       });
 
       const runPromise = (async () => {
@@ -373,7 +377,11 @@ describe('Turn', () => {
         }
       })();
 
-      await Promise.race([runPromise, timeoutPromise]);
+      try {
+        await Promise.race([runPromise, timeoutPromise]);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
 
       expect(callCount).toBe(2);
       expect(events2).toContainEqual({

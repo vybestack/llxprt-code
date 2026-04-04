@@ -34,7 +34,7 @@ import {
   GeminiChat,
   InvalidStreamError,
   StreamEventType,
-  StreamEvent,
+  type StreamEvent,
 } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
