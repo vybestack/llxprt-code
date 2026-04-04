@@ -663,7 +663,7 @@ describe('retryWithBackoff', () => {
       expect(failoverCallback).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
-    /**
+
     /**
      * @requirement issue1871 - Anthropic rate_limit_error bucket failover
      * @scenario Bucket failover on Anthropic rate_limit_error in body (Variation 1 - no HTTP 429)
