@@ -61,7 +61,7 @@ import {
 import { StreamProcessingStatus } from './types.js';
 import { handleAtCommand } from '../atCommandProcessor.js';
 
-const GEMINI_STREAM_IDLE_TIMEOUT_MS = 30_000;
+const GEMINI_STREAM_IDLE_TIMEOUT_MS = 120_000;
 
 interface StreamEventHandlerDeps {
   config: Config;

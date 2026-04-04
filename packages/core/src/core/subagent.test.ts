@@ -6,6 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, Mock, afterEach } from 'vitest';
 import { createAbortError } from '../utils/delay.js';
+import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -1864,7 +1865,7 @@ describe('subagent.ts', () => {
           },
         );
 
-        await vi.advanceTimersByTimeAsync(31_000);
+        await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1_000);
 
         await runRejection;
 

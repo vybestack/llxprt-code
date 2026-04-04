@@ -10,6 +10,7 @@
 export function createAbortError(): Error {
   const abortError = new Error('Aborted');
   abortError.name = 'AbortError';
+  (abortError as NodeJS.ErrnoException).code = 'ABORT_ERR';
   return abortError;
 }
 

@@ -21,7 +21,6 @@ import {
   UserTierId,
   UnauthorizedError,
   getErrorMessage,
-  isNodeError,
   parseAndFormatApiError,
   ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
@@ -382,7 +381,8 @@ export function handleSubmissionError(
     onAuthError();
     return true;
   }
-  if (!isNodeError(error) || error.name !== 'AbortError') {
+  const isAbortError = error instanceof Error && error.name === 'AbortError';
+  if (!isAbortError) {
     addItem(
       {
         type: MessageType.ERROR,

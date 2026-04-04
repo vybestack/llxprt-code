@@ -38,6 +38,7 @@ import { z } from 'zod';
 import type { ToolErrorType } from '../index.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { createAbortError } from '../utils/delay.js';
+import { TURN_STREAM_IDLE_TIMEOUT_MS } from '../core/turn.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -876,7 +877,7 @@ describe('AgentExecutor', () => {
         },
       );
 
-      await vi.advanceTimersByTimeAsync(31_000);
+      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1_000);
 
       await runRejection;
       expect(capturedSignal?.aborted).toBe(true);

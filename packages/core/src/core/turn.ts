@@ -44,7 +44,7 @@ import { createAbortError } from '../utils/delay.js';
 import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
-export const TURN_STREAM_IDLE_TIMEOUT_MS = 30_000;
+export const TURN_STREAM_IDLE_TIMEOUT_MS = 120_000;
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
