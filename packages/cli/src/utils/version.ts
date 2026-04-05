@@ -11,7 +11,28 @@ import path from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Capture env version at module initialization (startup/import time)
+const startupEnvVersion = process.env['CLI_VERSION'];
+
+let versionPromise: Promise<string> | undefined;
+
+async function resolveVersion(): Promise<string> {
+  // Use the startup-captured env version, not dynamically reading env
+  if (startupEnvVersion) {
+    return startupEnvVersion;
+  }
+
+  try {
+    const pkgJson = await getPackageJson(__dirname);
+    return pkgJson?.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 export async function getCliVersion(): Promise<string> {
-  const pkgJson = await getPackageJson(__dirname);
-  return process.env['CLI_VERSION'] || pkgJson?.version || 'unknown';
+  if (versionPromise === undefined) {
+    versionPromise = resolveVersion();
+  }
+  return versionPromise;
 }
