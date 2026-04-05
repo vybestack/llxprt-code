@@ -40,11 +40,12 @@ import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import { UserTierId } from '../code_assist/types.js';
 import { parseThought, type ThoughtSummary } from '../utils/thoughtUtils.js';
-import { createAbortError } from '../utils/delay.js';
 import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
 export const TURN_STREAM_IDLE_TIMEOUT_MS = 120_000;
+const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
+  'Stream idle timeout: no response received within the allowed time.';
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
@@ -67,6 +68,7 @@ export enum GeminiEventType {
   ToolCallResponse = 'tool_call_response',
   ToolCallConfirmation = 'tool_call_confirmation',
   UserCancelled = 'user_cancelled',
+  StreamIdleTimeout = 'stream_idle_timeout',
   Error = 'error',
   ChatCompressed = 'chat_compressed',
   Thought = 'thought',
@@ -173,6 +175,11 @@ export type ServerGeminiToolCallConfirmationEvent = {
 
 export type ServerGeminiUserCancelledEvent = {
   type: GeminiEventType.UserCancelled;
+};
+
+export type ServerGeminiStreamIdleTimeoutEvent = {
+  type: GeminiEventType.StreamIdleTimeout;
+  value: GeminiErrorEventValue;
 };
 
 export type ServerGeminiErrorEvent = {
@@ -292,6 +299,7 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiToolCallResponseEvent
   | ServerGeminiToolCallConfirmationEvent
   | ServerGeminiUserCancelledEvent
+  | ServerGeminiStreamIdleTimeoutEvent
   | ServerGeminiErrorEvent
   | ServerGeminiChatCompressedEvent
   | ServerGeminiThoughtEvent
@@ -419,7 +427,8 @@ export class Turn {
               idleTimedOut = true;
               timeoutController.abort();
             },
-            createTimeoutError: () => createAbortError(),
+            createTimeoutError: () =>
+              new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
           });
           if (result.done) {
             break;
@@ -548,9 +557,22 @@ export class Turn {
         signal.removeEventListener('abort', onParentAbort);
       }
     } catch (e) {
-      if (signal.aborted || idleTimedOut) {
+      if (signal.aborted) {
         yield { type: GeminiEventType.UserCancelled };
         // Regular cancellation error, fail gracefully.
+        return;
+      }
+
+      if (idleTimedOut) {
+        yield {
+          type: GeminiEventType.StreamIdleTimeout,
+          value: {
+            error: {
+              message: TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE,
+              status: undefined,
+            },
+          },
+        };
         return;
       }
 

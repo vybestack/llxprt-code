@@ -115,11 +115,13 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     );
     const runPromiseExpectation = runPromise.then(
       () => {
-        throw new Error('Expected stalled stream to abort');
+        throw new Error('Expected stalled stream to timeout');
       },
       (error) => {
         expect(error).toMatchObject({
-          name: 'AbortError',
+          name: 'StreamIdleTimeoutError',
+          message:
+            'Stream idle timeout: no response received within the allowed time.',
         });
       },
     );

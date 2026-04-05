@@ -748,7 +748,7 @@ describe('Turn', () => {
       ]);
     });
 
-    it('should abort and yield UserCancelled when the stream goes idle after partial output', async () => {
+    it('should yield StreamIdleTimeout when the stream goes idle after partial output', async () => {
       vi.useFakeTimers();
       try {
         const abortSignals: AbortSignal[] = [];
@@ -789,7 +789,16 @@ describe('Turn', () => {
 
         expect(events).toEqual([
           { type: GeminiEventType.Content, value: 'First part' },
-          { type: GeminiEventType.UserCancelled },
+          {
+            type: GeminiEventType.StreamIdleTimeout,
+            value: {
+              error: {
+                message:
+                  'Stream idle timeout: no response received within the allowed time.',
+                status: undefined,
+              },
+            },
+          },
         ]);
         expect(abortSignals).toHaveLength(1);
         expect(abortSignals[0]?.aborted).toBe(true);

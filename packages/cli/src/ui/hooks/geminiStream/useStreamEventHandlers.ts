@@ -26,8 +26,8 @@ import {
   UserPromptEvent,
   parseAndFormatApiError,
   DEFAULT_AGENT_ID,
-  createAbortError,
   nextStreamEventWithIdleTimeout,
+  StreamIdleTimeoutError,
   type ThinkingBlock,
   tokenLimit,
   uiTelemetryService,
@@ -346,7 +346,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
   );
 
   const handleErrorEvent = useCallback(
-    (eventValue: ErrorEvent['value'], userMessageTimestamp: number) => {
+    (
+      eventValue: ErrorEvent['value'],
+      userMessageTimestamp: number,
+      options?: { clearQueue?: boolean },
+    ) => {
       if (pendingHistoryItemRef.current) {
         flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
@@ -362,6 +366,9 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         },
         userMessageTimestamp,
       );
+      if (options?.clearQueue ?? true) {
+        queuedSubmissionsRef.current = [];
+      }
       setThought(null);
     },
     [
@@ -371,6 +378,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
       config,
       setThought,
       flushPendingHistoryItem,
+      queuedSubmissionsRef,
     ],
   );
 
@@ -514,9 +522,16 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
 
               pendingHistoryAtTimeout();
               setThought(null);
-              abortActiveStream(createAbortError());
+              abortActiveStream(
+                new StreamIdleTimeoutError(
+                  'Stream idle timeout: no response received within the allowed time.',
+                ),
+              );
             },
-            createTimeoutError: () => createAbortError(),
+            createTimeoutError: () =>
+              new StreamIdleTimeoutError(
+                'Stream idle timeout: no response received within the allowed time.',
+              ),
           });
           if (nextEvent.done) {
             break;
@@ -557,6 +572,13 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
               toolCallRequests.length = 0;
               handleUserCancelledEvent(userMessageTimestamp);
               processingResult = StreamProcessingStatus.UserCancelled;
+              break;
+            case ServerGeminiEventType.StreamIdleTimeout:
+              toolCallRequests.length = 0;
+              handleErrorEvent(event.value, userMessageTimestamp, {
+                clearQueue: false,
+              });
+              processingResult = StreamProcessingStatus.Error;
               break;
             case ServerGeminiEventType.Error:
               toolCallRequests.length = 0;

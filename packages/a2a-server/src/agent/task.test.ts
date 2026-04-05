@@ -112,6 +112,102 @@ describe('Task', () => {
         }),
       );
     });
+
+    it('handles UserCancelled as explicit user cancel semantics', async () => {
+      const mockConfig = createMockConfig();
+      const mockEventBus: ExecutionEventBus = {
+        publish: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        once: vi.fn(),
+        removeAllListeners: vi.fn(),
+        finished: vi.fn(),
+      };
+
+      // @ts-expect-error - Calling private constructor for test purposes.
+      const task = new Task(
+        'task-id',
+        'context-id',
+        mockConfig as Config,
+        mockEventBus,
+      );
+
+      const cancelPendingToolsSpy = vi.spyOn(task, 'cancelPendingTools');
+      const publishSpy = vi.spyOn(task, 'setTaskStateAndPublishUpdate');
+
+      await task.acceptAgentMessage({
+        type: GeminiEventType.UserCancelled,
+      });
+
+      expect(cancelPendingToolsSpy).toHaveBeenCalledWith(
+        'User cancelled via LLM stream event',
+      );
+      expect(publishSpy).toHaveBeenCalledWith(
+        'input-required',
+        { kind: 'state-change' },
+        'Task cancelled by user',
+        undefined,
+        true,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('handles StreamIdleTimeout as timeout semantics (not user-cancel)', async () => {
+      const mockConfig = createMockConfig();
+      const mockEventBus: ExecutionEventBus = {
+        publish: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+        once: vi.fn(),
+        removeAllListeners: vi.fn(),
+        finished: vi.fn(),
+      };
+
+      // @ts-expect-error - Calling private constructor for test purposes.
+      const task = new Task(
+        'task-id',
+        'context-id',
+        mockConfig as Config,
+        mockEventBus,
+      );
+
+      const cancelPendingToolsSpy = vi.spyOn(task, 'cancelPendingTools');
+      const publishSpy = vi.spyOn(task, 'setTaskStateAndPublishUpdate');
+
+      await task.acceptAgentMessage({
+        type: GeminiEventType.StreamIdleTimeout,
+        value: {
+          error: {
+            message:
+              'Stream idle timeout: no response received within the allowed time.',
+            status: undefined,
+          },
+        },
+      });
+
+      expect(cancelPendingToolsSpy).toHaveBeenCalledWith(
+        'LLM stream idle timeout: Stream idle timeout: no response received within the allowed time.',
+      );
+      expect(publishSpy).toHaveBeenCalledWith(
+        'input-required',
+        { kind: 'state-change' },
+        'Task timed out waiting for model response.',
+        undefined,
+        true,
+        '[API Error: Stream idle timeout: no response received within the allowed time.]',
+        undefined,
+      );
+      expect(publishSpy).not.toHaveBeenCalledWith(
+        'input-required',
+        { kind: 'state-change' },
+        'Task cancelled by user',
+        undefined,
+        true,
+        undefined,
+        undefined,
+      );
+    });
   });
 
   describe('modelInfo propagation', () => {
