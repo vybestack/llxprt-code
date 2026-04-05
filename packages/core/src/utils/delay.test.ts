@@ -5,7 +5,24 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { delay } from './delay.js';
+import { delay, createAbortError } from './delay.js';
+
+describe('createAbortError', () => {
+  it('creates an AbortError with name, message, and code', () => {
+    const error = createAbortError();
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('AbortError');
+    expect(error.message).toBe('Aborted');
+    expect((error as NodeJS.ErrnoException).code).toBe('ABORT_ERR');
+  });
+
+  it('returns an error that isNodeError would recognize', () => {
+    const error = createAbortError();
+    // Verify the error has 'code' property so isNodeError returns true
+    expect('code' in error).toBe(true);
+    expect((error as NodeJS.ErrnoException).code).toBe('ABORT_ERR');
+  });
+});
 
 describe('abortableDelay', () => {
   beforeEach(() => {

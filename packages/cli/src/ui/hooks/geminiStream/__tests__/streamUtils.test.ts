@@ -548,6 +548,26 @@ describe('handleSubmissionError', () => {
     expect(result).toBe(false);
     expect(mockAddItem).not.toHaveBeenCalled();
   });
+  it('does not add error item for AbortError without code property (backward compatibility)', () => {
+    // Simulate old createAbortError that didn't have code property
+    const abortErrWithoutCode = Object.assign(new Error('Aborted'), {
+      name: 'AbortError',
+    });
+    // Verify this error would NOT pass isNodeError check (no code property)
+    const isNodeError =
+      abortErrWithoutCode instanceof Error && 'code' in abortErrWithoutCode;
+    expect(isNodeError).toBe(false);
+
+    const result = handleSubmissionError(
+      abortErrWithoutCode,
+      mockAddItem,
+      mockConfig,
+      mockOnAuthError,
+      Date.now(),
+    );
+    expect(result).toBe(false);
+    expect(mockAddItem).not.toHaveBeenCalled();
+  });
 });
 
 // ─── showCitations ────────────────────────────────────────────────────────────

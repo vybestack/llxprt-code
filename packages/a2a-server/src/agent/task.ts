@@ -795,6 +795,26 @@ export class Task {
           traceId,
         );
         break;
+      case GeminiEventType.StreamIdleTimeout: {
+        const timeoutMessage =
+          event.value.error.message ||
+          'Stream idle timeout: no response received within the allowed time.';
+        logger.warn(
+          '[Task] Received stream idle timeout event from LLM stream:',
+          timeoutMessage,
+        );
+        this.cancelPendingTools(`LLM stream idle timeout: ${timeoutMessage}`);
+        this.setTaskStateAndPublishUpdate(
+          'input-required',
+          stateChange,
+          'Task timed out waiting for model response.',
+          undefined,
+          true,
+          parseAndFormatApiError(event.value.error),
+          traceId,
+        );
+        break;
+      }
       case GeminiEventType.Thought:
         logger.info('[Task] Sending agent thought...');
         this._sendThought(event.value, traceId);
