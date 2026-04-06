@@ -337,7 +337,10 @@ export class StreamProcessor {
         config: runtimeContext.config,
         runtime: runtimeContext,
         settings: runtimeContext.settingsService,
-        metadata: runtimeContext.metadata,
+        metadata: {
+          ...runtimeContext.metadata,
+          abortSignal: params.config?.abortSignal,
+        },
         userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 

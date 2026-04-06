@@ -6,7 +6,11 @@
 
 import type { Config } from '../config/config.js';
 import { reportError } from '../utils/errorReporting.js';
-import { GeminiChat, StreamEventType } from '../core/geminiChat.js';
+import {
+  GeminiChat,
+  StreamEventType,
+  type StreamEvent,
+} from '../core/geminiChat.js';
 import { Type } from '@google/genai';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { type ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
@@ -275,6 +279,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       },
     };
 
+    let streamIterator: AsyncIterator<StreamEvent> | undefined;
     try {
       const responseStream = await chat.sendMessageStream(
         messageParams,
@@ -283,11 +288,11 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       const functionCalls: FunctionCall[] = [];
       let textResponse = '';
-      const iterator = responseStream[Symbol.asyncIterator]();
+      streamIterator = responseStream[Symbol.asyncIterator]();
 
       while (true) {
         const result = await nextStreamEventWithIdleTimeout({
-          iterator,
+          iterator: streamIterator,
           timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
           signal: timeoutSignal,
           onTimeout: () => {
@@ -337,6 +342,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       return { functionCalls, textResponse };
     } finally {
+      streamIterator?.return?.().catch(() => {});
       timeoutController.abort();
       signal.removeEventListener('abort', onAbort);
     }
