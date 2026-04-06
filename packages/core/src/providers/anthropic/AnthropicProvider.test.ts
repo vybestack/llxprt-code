@@ -804,7 +804,7 @@ describe('AnthropicProvider', () => {
           blocks: [
             {
               type: 'tool_call',
-              id: 'hist_tool_tool-123', // ID gets normalized to history format
+              id: expect.stringMatching(/^hist_tool_tool-123_seq\d+$/),
               name: 'get_weather',
               parameters: { location: 'San Francisco' },
             },

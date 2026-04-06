@@ -2058,6 +2058,129 @@ describe('subagent.ts', () => {
       });
     });
 
+    describe('interactive tool scheduling timeout', () => {
+      it('should time out when scheduler.schedule() never resolves after emitting a tool call (#1872)', async () => {
+        vi.useFakeTimers();
+
+        const { config } = await createMockConfig();
+        const runConfig: RunConfig = {
+          max_time_minutes: 0.001, // 0.06 seconds
+          max_turns: 100,
+        };
+
+        // schedule() hangs until the AbortSignal fires — matching real
+        // scheduler where attemptExecutionOfScheduledCalls propagates abort.
+        // awaitCompletedCalls returns a forever-pending promise; since
+        // schedule() throws first the completion promise is never awaited.
+        const abortAwareHang = (_req: unknown, signal: AbortSignal) =>
+          new Promise<never>((_resolve, reject) => {
+            const abort = () => {
+              const err = new Error('Aborted');
+              err.name = 'AbortError';
+              reject(err);
+            };
+            if (signal.aborted) {
+              abort();
+              return;
+            }
+            signal.addEventListener('abort', abort, { once: true });
+          });
+
+        const schedulerFactory = vi.fn(() => ({
+          schedule: vi.fn().mockImplementation(abortAwareHang),
+          awaitCompletedCalls: vi.fn().mockImplementation(
+            (signal?: AbortSignal) =>
+              new Promise<never>((_resolve, reject) => {
+                const abort = () => {
+                  const err = new Error('Aborted');
+                  err.name = 'AbortError';
+                  reject(err);
+                };
+                if (signal?.aborted) {
+                  abort();
+                  return;
+                }
+                signal?.addEventListener('abort', abort, { once: true });
+              }),
+          ),
+        }));
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: {
+            listToolNames: () => ['hanging_tool'],
+            getToolMetadata: () => ({
+              name: 'hanging_tool',
+              description: 'A tool that triggers a hanging scheduler',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'hanging-scheduler-agent',
+          config,
+          { systemPrompt: 'Execute task.' },
+          defaultModelConfig,
+          runConfig,
+          { tools: ['hanging_tool'] },
+          undefined,
+          overrides,
+        );
+
+        // Stream yields a tool call then ends
+        const interactiveResponseStream = (async function* () {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [
+                      {
+                        functionCall: {
+                          id: 'call-hang',
+                          name: 'hanging_tool',
+                          args: {},
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          };
+        })();
+        mockSendMessageStream.mockResolvedValue(interactiveResponseStream);
+
+        const runPromise = scope.runInteractive(new ContextState(), {
+          schedulerFactory,
+        });
+
+        const runRejection = runPromise.then(
+          () => {
+            throw new Error(
+              'Expected subagent to abort when scheduler.schedule() hangs',
+            );
+          },
+          (error) => {
+            expect(error).toMatchObject({
+              name: 'AbortError',
+            });
+          },
+        );
+
+        await vi.advanceTimersByTimeAsync(100);
+
+        await runRejection;
+        expect(scope.output.terminate_reason).toBe(
+          SubagentTerminateMode.TIMEOUT,
+        );
+
+        vi.useRealTimers();
+      });
+    });
+
     describe('dispose', () => {
       it('should abort active operations when dispose is called', async () => {
         const { config } = await createMockConfig();

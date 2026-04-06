@@ -515,8 +515,12 @@ export class SubAgentScope {
       const completionPromise = scheduler.awaitCompletedCalls(
         abortController.signal,
       );
+      // Prevent unhandled rejection if both schedule() and
+      // completionPromise reject on the same abort signal.
+      completionPromise.catch(() => {});
       await scheduler.schedule(schedulerRequests, abortController.signal);
       const completedCalls = await completionPromise;
+
       responseParts = responseParts.concat(
         buildPartsFromCompletedCalls(completedCalls, {
           onMessage: this.onMessage,
