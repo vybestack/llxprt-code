@@ -487,6 +487,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
+    const abortSignal = options.metadata?.abortSignal as
+      | AbortSignal
+      | undefined;
 
     // Ensure OpenAI/Codex history is API-compliant:
     // every assistant tool_call must have a corresponding tool_response.
@@ -1137,6 +1140,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
         method: 'POST',
         headers,
         body: bodyBlob,
+        signal: abortSignal,
       });
 
       try {

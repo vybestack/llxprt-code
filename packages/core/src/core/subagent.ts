@@ -690,9 +690,9 @@ export class SubAgentScope {
 
     let functionCalls: FunctionCall[] = [];
     let textResponse = '';
+    const iterator = responseStream[Symbol.asyncIterator]();
 
     try {
-      const iterator = responseStream[Symbol.asyncIterator]();
       while (true) {
         const result = await nextStreamEventWithIdleTimeout({
           iterator,
@@ -729,6 +729,8 @@ export class SubAgentScope {
         }
       }
     } finally {
+      // Close the stream iterator to release sendPromise in TurnProcessor.
+      iterator.return?.(undefined).catch(() => {});
       timeoutController.abort();
       abortController.signal.removeEventListener('abort', onAbort);
     }

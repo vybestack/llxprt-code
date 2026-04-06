@@ -807,6 +807,89 @@ describe('Turn', () => {
       }
     });
 
+    it('should allow subsequent calls after idle timeout (sendPromise deadlock prevention)', async () => {
+      vi.useFakeTimers();
+      try {
+        let callCount = 0;
+        const abortSignals: AbortSignal[] = [];
+
+        const createMockStream = (shouldHang: boolean) =>
+          (async function* () {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [
+                  {
+                    content: {
+                      parts: [{ text: shouldHang ? 'Hanging' : 'OK' }],
+                    },
+                  },
+                ],
+              } as GenerateContentResponse,
+            };
+            if (shouldHang) {
+              // Simulate a hung HTTP stream that never completes
+              await new Promise<void>(() => {});
+            }
+          })();
+
+        mockSendMessageStream.mockImplementation(async (params) => {
+          callCount++;
+          const config = params as {
+            config?: { abortSignal?: AbortSignal };
+          };
+          if (config.config?.abortSignal) {
+            abortSignals.push(config.config.abortSignal);
+          }
+          return createMockStream(callCount === 1);
+        });
+
+        // First call — will idle-timeout
+        const events1Promise = (async () => {
+          const events: ServerGeminiStreamEvent[] = [];
+          for await (const event of turn.run(
+            [{ text: 'First call (will timeout)' }],
+            new AbortController().signal,
+          )) {
+            events.push(event);
+          }
+          return events;
+        })();
+
+        await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+        const events1 = await events1Promise;
+
+        expect(events1).toContainEqual(
+          expect.objectContaining({ type: GeminiEventType.StreamIdleTimeout }),
+        );
+        expect(callCount).toBe(1);
+
+        // Second call — should NOT deadlock on sendPromise
+        const events2Promise = (async () => {
+          const events: ServerGeminiStreamEvent[] = [];
+          for await (const event of turn.run(
+            [{ text: 'Second call (should work)' }],
+            new AbortController().signal,
+          )) {
+            events.push(event);
+          }
+          return events;
+        })();
+
+        // Advance time to let microtasks settle (no timeout needed for non-hanging stream)
+        await vi.advanceTimersByTimeAsync(100);
+        const events2 = await events2Promise;
+
+        expect(callCount).toBe(2);
+        expect(events2).toContainEqual({
+          type: GeminiEventType.Content,
+          value: 'OK',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should yield content events with traceId', async () => {
       const mockResponseStream = (async function* () {
         yield {

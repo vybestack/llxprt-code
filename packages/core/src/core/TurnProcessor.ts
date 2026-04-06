@@ -142,12 +142,29 @@ export class TurnProcessor {
       streamDoneResolver = resolve;
     });
 
+    // Force-resolve sendPromise when the abort signal fires.
+    // This prevents a permanent deadlock when .return() can't propagate
+    // through a generator blocked on a hung inner iterator (e.g. stalled
+    // HTTP stream after idle timeout).
+    const abortSignal = params.config?.abortSignal;
+    const onAbort = () => streamDoneResolver!();
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        streamDoneResolver!();
+      } else {
+        abortSignal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
     return this._createStreamGenerator(
       params,
       prompt_id,
       pendingTokens,
       userContent,
-      () => streamDoneResolver!(),
+      () => {
+        abortSignal?.removeEventListener('abort', onAbort);
+        streamDoneResolver!();
+      },
     );
   }
 
