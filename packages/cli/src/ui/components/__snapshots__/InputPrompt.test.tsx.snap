@@ -1,59 +1,187 @@
-│ >   Type your message or @path/to/file                                                           │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
-
-exports[`InputPrompt > command search (Ctrl+R when not in shell) > expands and collapses long suggestion via Right/Left arrows > command-search-render-collapsed-match 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ (r:)    Type your message or @path/to/file                                                                           │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll →
- lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
- ..."
-`;
-
-exports[`InputPrompt > command search (Ctrl+R when not in shell) > expands and collapses long suggestion via Right/Left arrows > command-search-render-expanded-match 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ (r:)    Type your message or @path/to/file                                                                           │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll ←
- lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll
- llllllllllllllllllllllllllllllllllllllllllllllllll"
-`;
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-collapsed-match 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ (r:)  commit                                                                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- git commit -m "feat: add search" in src/app"
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:838:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+ - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
 `;
 
 exports[`InputPrompt > command search (Ctrl+R when not in shell) > renders match window and expanded view (snapshots) > command-search-render-expanded-match 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ (r:)  commit                                                                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
- git commit -m "feat: add search" in src/app"
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:838:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+ - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
 `;
 
 exports[`InputPrompt > snapshots > should not show inverted cursor when shell is focused 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ >   Type your message or @path/to/file                                                                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:838:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+ - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
 `;
 
 exports[`InputPrompt > snapshots > should render correctly in shell mode 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ !   Type your message or @path/to/file                                                                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:838:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+ - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
 `;
 
 exports[`InputPrompt > snapshots > should render correctly in yolo mode 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *   Type your message or @path/to/file                                                                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:838:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+ - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
 `;
 
 exports[`InputPrompt > snapshots > should render correctly when accepting edits 1`] = `
-"╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ >   Type your message or @path/to/file                                                                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+"
+  ERROR  useMouseContext must be used within a MouseProvider
+
+ packages/cli/src/ui/contexts/MouseContext.tsx:40:11
+
+ 37: export function useMouseContext() {
+ 38:   const context = useContext(MouseContext);
+ 39:   if (!context) {
+ 40:     throw new Error('useMouseContext must be used within a MouseProvider');
+ 41:   }
+ 42:   return context;
+ 43: }
+
+ - useMouseContext (packages/cli/src/ui/contexts/MouseContext.tsx:40:11)
+ - useMouse (packages/cli/src/ui/hooks/useMouse.ts:24:38)
+ - InputPrompt (packages/cli/src/ui/components/InputPrompt.tsx:838:3)
+ -Object.react-stack-bottom-fr
+  me                          (node_modules/react-reconciler/cjs/react-reconciler.development.js:15
+                              859:20)
+ - renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:3221:22)
+ -updateFunctionComponent
+                         (node_modules/react-reconciler/cjs/react-reconciler.development.js:6475:19
+                         )
+ - beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:8009:18)
+ - runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:1738:13)
+ - performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:12834:22)
+ - workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:12644:41)
+"
 `;

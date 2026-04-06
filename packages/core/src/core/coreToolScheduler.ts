@@ -363,11 +363,20 @@ export class CoreToolScheduler {
       return req;
     });
 
-    const freshRequests = requestsToProcess.filter(
-      (r) => !this.seenCallIds.has(r.callId),
-    );
-    for (const req of freshRequests) {
-      this.seenCallIds.add(req.callId);
+    const freshRequests: ToolCallRequestInfo[] = [];
+    const duplicates: ToolCallRequestInfo[] = [];
+    for (const r of requestsToProcess) {
+      if (this.seenCallIds.has(r.callId)) {
+        duplicates.push(r);
+      } else {
+        freshRequests.push(r);
+        this.seenCallIds.add(r.callId);
+      }
+    }
+    if (duplicates.length > 0) {
+      toolSchedulerLogger.warn(
+        `Dropped ${duplicates.length} duplicate tool call(s): ${duplicates.map((d) => `${d.name}[${d.callId}]`).join(', ')}`,
+      );
     }
     return freshRequests;
   }

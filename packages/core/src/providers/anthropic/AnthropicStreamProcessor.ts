@@ -47,6 +47,10 @@ export type StreamProcessorOptions = {
 
 type StreamState = { hasYieldedContent: boolean };
 
+// Global counter appended to tool call IDs so providers that reset indices per
+// API call (e.g. Kimi on Fireworks) never produce duplicates across turns.
+let toolCallSequence = 0;
+
 async function* processStreamEvents(
   stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   options: StreamProcessorOptions,
@@ -355,7 +359,9 @@ function completeToolCall(
     blocks: [
       {
         type: 'tool_call',
-        id: normalizeToHistoryToolId(currentToolCall.id),
+        id: normalizeToHistoryToolId(
+          `${currentToolCall.id}_seq${toolCallSequence++}`,
+        ),
         name: currentToolCall.name,
         parameters: processedParameters,
       },
