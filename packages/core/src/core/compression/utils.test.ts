@@ -676,6 +676,16 @@ describe('sanitizeHistoryForCompression', () => {
     );
   });
 
+  it('converts media blocks with empty filename to text placeholders using mimeType', () => {
+    const history = [humanMsgOnlyMedia(mediaBlock('image/png', ''))];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: image/png]',
+    );
+  });
+
   it('handles different media categories (image, pdf, audio, video, unknown)', () => {
     const imageBlock = mediaBlock('image/jpeg', 'photo.jpg');
     const pdfBlock = mediaBlock('application/pdf', 'report.pdf');

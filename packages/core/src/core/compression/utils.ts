@@ -348,7 +348,8 @@ export async function runVerificationPass(
  */
 export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
   const category = classifyMediaBlock(media);
-  const identifier = media.filename ?? media.mimeType ?? 'unknown';
+  // Use filename if it's non-empty, otherwise fall back to mimeType or 'unknown'
+  const identifier = media.filename?.trim() || media.mimeType || 'unknown';
   // Capitalize PDF label for display, keep other categories as-is
   const label = category === 'pdf' ? 'PDF' : category;
   return `[Attached ${label}: ${identifier}]`;
