@@ -88,7 +88,6 @@ async function* flushTextBuffer(
   buffer: string,
   state: StreamingState,
   deps: StreamProcessorDeps,
-  _isKimiK2Model: boolean,
 ): AsyncGenerator<IContent, void, unknown> {
   const parsedToolCalls: ToolCallBlock[] = [];
   const originalBufferLength = buffer.length;
@@ -252,8 +251,7 @@ export async function* processStreamingResponse(
   ) => AsyncGenerator<IContent, void, unknown>,
 ): AsyncGenerator<IContent, void, unknown> {
   const state = createStreamingState();
-  const isKimiK2Model = model.toLowerCase().includes('kimi-k2');
-  const shouldBufferText = detectedFormat === 'qwen' || isKimiK2Model;
+  const shouldBufferText = detectedFormat === 'qwen';
 
   // Initialize tool call pipeline
   deps.toolCallPipeline.reset();
@@ -360,12 +358,7 @@ export async function* processStreamingResponse(
         choice.delta?.content as unknown,
       );
       if (rawDeltaContent) {
-        let deltaContent: string;
-        if (isKimiK2Model) {
-          deltaContent = rawDeltaContent;
-        } else {
-          deltaContent = sanitizeProviderText(rawDeltaContent);
-        }
+        const deltaContent = sanitizeProviderText(rawDeltaContent);
         if (!deltaContent) {
           continue;
         }
@@ -426,12 +419,7 @@ export async function* processStreamingResponse(
                 kimiEndCount,
               },
             );
-            yield* flushTextBuffer(
-              state.textBuffer,
-              state,
-              deps,
-              isKimiK2Model,
-            );
+            yield* flushTextBuffer(state.textBuffer, state, deps);
             state.textBuffer = '';
           } else if (hasOpenKimiSection) {
             deps.logger.debug(
@@ -551,7 +539,7 @@ export async function* processStreamingResponse(
         detectedFormat,
       },
     );
-    yield* flushTextBuffer(state.textBuffer, state, deps, isKimiK2Model);
+    yield* flushTextBuffer(state.textBuffer, state, deps);
     state.textBuffer = '';
   }
 
