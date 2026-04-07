@@ -1,6 +1,6 @@
-# 🗂️ Autonomous Plan-Creation Guide for Claude Workers
+# Autonomous Plan-Creation Guide for LLxprt Subagents
 
-This document defines how to create foolproof implementation plans that prevent Claude fraud and ensure valid TDD implementations through autonomous worker execution.
+This document defines how to create foolproof implementation plans that prevent implementation fraud and ensure valid TDD implementations through autonomous subagent execution.
 
 **CRITICAL**: When executing plans, you MUST follow the coordination rules in [COORDINATING.md](./COORDINATING.md) and use the [PLAN-TEMPLATE.md](./PLAN-TEMPLATE.md) for generating plans.
 
@@ -9,7 +9,7 @@ This document defines how to create foolproof implementation plans that prevent 
 ## Core Principles
 
 1. **TDD is MANDATORY** - Every line of production code must be written in response to a failing test
-2. **Worker Isolation** - Each phase executed by fresh worker instance with clean context
+2. **Subagent Isolation** - Each phase executed by fresh subagent instance with clean context
 3. **Architect-First** - All plans begin with architect-written specification
 4. **Analysis Before Code** - Mandatory analysis/pseudocode phases before implementation
 5. **Aggressive Verification** - Multi-layered fraud detection at every step
@@ -77,7 +77,7 @@ See [COORDINATING.md](./COORDINATING.md) for detailed execution rules.
 
 ### Pseudocode MUST Be Used
 
-**PROBLEM**: Claude frequently creates pseudocode then ignores it completely during implementation.
+**PROBLEM**: Subagents frequently create pseudocode then ignore it completely during implementation.
 
 **SOLUTION**: Implementation phases MUST explicitly reference pseudocode line numbers:
 
@@ -97,24 +97,28 @@ See [COORDINATING.md](./COORDINATING.md) for detailed execution rules.
 
 Every implementation phase MUST have verification that compares implementation to pseudocode:
 
-```bash
-claude --dangerously-skip-permissions -p "
+```typescript
+// Launch deepthinker subagent to verify pseudocode compliance
+Task({
+  subagent_name: 'deepthinker',
+  goal_prompt: `
 Compare implementation with pseudocode and verify:
 1. Every pseudocode step is implemented
 2. Algorithm matches exactly (no shortcuts)
 3. Order of operations preserved
 4. Error handling matches pseudocode
 Report deviations to verification-report.txt
-"
+`,
+});
 ```
 
 ---
 
 ## CRITICAL: Integration Requirements - STOP BUILDING ISOLATED FEATURES
 
-### The Problem Claude Keeps Repeating
+### The Problem Subagents Keep Repeating
 
-**PROBLEM**: Claude constantly builds perfect features in isolation that don't actually solve the problem because they're never connected to the existing system. This is like building a perfect new engine and leaving it in the garage while the broken engine stays in the car.
+**PROBLEM**: Subagents constantly build perfect features in isolation that don't actually solve the problem because they're never connected to the existing system. This is like building a perfect new engine and leaving it in the garage while the broken engine stays in the car.
 
 **EXAMPLES OF THIS STUPIDITY**:
 
@@ -438,9 +442,11 @@ Create `plan/00a-preflight-verification.md` with:
 
 ## Phase 1: Analysis Phase
 
-### Worker Launch:
-```bash
-claude --dangerously-skip-permissions -p "
+### Subagent Launch:
+```typescript
+Task({
+  subagent_name: "typescriptexpert",
+  goal_prompt: `
 Read specification.md and create detailed domain analysis.
 Output to analysis/domain-model.md
 Include:
@@ -449,7 +455,9 @@ Include:
 - Business rules
 - Edge cases
 - Error scenarios
-" &
+`,
+  output_spec: { analysis_document: "string" }
+});
 ````
 
 ### Verification Must Check:
@@ -463,10 +471,12 @@ Include:
 
 ## Phase 2: Pseudocode Phase
 
-### Worker Launch:
+### Subagent Launch:
 
-```bash
-claude --dangerously-skip-permissions -p "
+```typescript
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: `
 Based on specification.md and analysis/domain-model.md,
 create detailed pseudocode for each component.
 Output to analysis/pseudocode/<component>.md
@@ -479,6 +489,25 @@ REQUIREMENTS:
 5. Note where validation occurs
 
 Example format:
+10: METHOD updateSettings(provider, changes)
+11: VALIDATE changes against schema
+12: IF validation fails
+13: THROW ValidationError with details
+14: BEGIN TRANSACTION
+15: CLONE current settings
+16: MERGE changes into clone
+17: PERSIST to repository
+18: COMMIT TRANSACTION
+19: ON ERROR
+20: ROLLBACK TRANSACTION
+21: THROW PersistenceError
+22: EMIT settings-changed event
+23: RETURN updated settings
+
+DO NOT write actual TypeScript, only numbered pseudocode
+`,
+  output_spec: { pseudocode_document: 'string' },
+});
 ```
 
 10: METHOD updateSettings(provider, changes)
@@ -642,10 +671,12 @@ Each feature follows strict 3-phase TDD cycle:
 - Tests will fail naturally when stub throws or returns empty
 - NEVER create `ServiceV2` or `ServiceNew` - UPDATE existing files
 
-**Worker Prompt**:
+**Subagent Prompt**:
 
-```bash
-claude --dangerously-skip-permissions -p "
+```typescript
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: `
 Implement stub for <feature> based on:
 - specification.md section <X>
 - analysis/pseudocode/<component>.md
@@ -669,7 +700,9 @@ FORBIDDEN:
 - TODO comments in production code
 
 Output status to workers/phase-03.json
-"
+`,
+  output_spec: { status: 'object' },
+});
 ```
 
 **Verification MUST**:
@@ -702,10 +735,12 @@ grep -r "expect.*NotYetImplemented\|toThrow.*NotYetImplemented" test/
 - NO reverse tests (expect().not.toThrow())
 - Tests naturally fail with "Cannot read property" or "is not a function"
 
-**Worker Prompt**:
+**Subagent Prompt**:
 
-```bash
-claude --dangerously-skip-permissions -p "
+```typescript
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: `
 Write comprehensive BEHAVIORAL tests for <feature> based on:
 - specification.md requirements [REQ-X]
 - analysis/pseudocode/<component>.md
@@ -714,7 +749,7 @@ Write comprehensive BEHAVIORAL tests for <feature> based on:
 MANDATORY RULES:
 1. Test ACTUAL BEHAVIOR with real data flows
 2. NEVER test for NotYetImplemented or stub behavior
-3. Each test must transform INPUT → OUTPUT based on requirements
+3. Each test must transform INPUT -> OUTPUT based on requirements
 4. NO tests that just verify mocks were called
 5. NO tests that only check object structure exists
 6. NO reverse tests (expect().not.toThrow())
@@ -736,7 +771,7 @@ FORBIDDEN PATTERNS:
 - Tests that pass with empty implementations
 
 Create 15-20 BEHAVIORAL tests covering:
-- Input → Output transformations for each requirement
+- Input -> Output transformations for each requirement
 - State changes and side effects
 - Error conditions with specific error types/messages
 - Integration between components (real, not mocked)
@@ -749,7 +784,9 @@ test.prop([fc.integer()])('handles any valid input', (input) => {
 });
 
 Output status to workers/phase-04.json
-"
+`,
+  output_spec: { status: 'object' },
+});
 ```
 
 **Verification MUST**:
@@ -796,10 +833,12 @@ Every implementation phase MUST include:
 3. **Integration Points** - Where does this code connect to existing code?
 4. **Expected Outcome** - What should happen when this code runs?
 
-**Worker Prompt**:
+**Subagent Prompt**:
 
-```bash
-claude --dangerously-skip-permissions -p "
+```typescript
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: `
 Implement <feature> to make ALL tests pass.
 
 UPDATE packages/core/src/<feature>.ts
@@ -809,17 +848,17 @@ MANDATORY: Follow pseudocode EXACTLY from analysis/pseudocode/<component>.md:
 
 Example for updateSettings method:
 - Line 11: VALIDATE changes against schema
-  → Use Zod: schema.parse(changes)
+  -> Use Zod: schema.parse(changes)
 - Line 14: BEGIN TRANSACTION
-  → const backup = this.settings
+  -> const backup = this.settings
 - Line 15: CLONE current settings
-  → const clone = structuredClone(this.settings)
+  -> const clone = structuredClone(this.settings)
 - Line 16: MERGE changes into clone
-  → Object.assign(clone.providers[provider], changes)
+  -> Object.assign(clone.providers[provider], changes)
 - Line 17: PERSIST to repository
-  → await this.repository.save(clone)
+  -> await this.repository.save(clone)
 - Line 19-21: ON ERROR ROLLBACK
-  → catch(e) { this.settings = backup; throw e; }
+  -> catch(e) { this.settings = backup; throw e; }
 
 Requirements:
 1. Do NOT modify any existing tests
@@ -832,7 +871,9 @@ Requirements:
 
 Run 'npm test test/<feature>' and ensure all pass.
 Output status to workers/phase-05.json
-"
+`,
+  output_spec: { status: 'object' },
+});
 ```
 
 **Verification MUST**:
@@ -845,11 +886,15 @@ npm test test/<feature> || exit 1
 git diff test/ | grep -E "^[+-]" | grep -v "^[+-]{3}" && echo "FAIL: Tests modified"
 
 # Verify pseudocode was followed
-claude --dangerously-skip-permissions -p "
+Task({
+  subagent_name: "deepthinker",
+  goal_prompt: `
 Compare src/<feature> with analysis/pseudocode/<component>.md
 Check every numbered line is implemented
 Report missing steps to verification-report.txt
-"
+`,
+  output_spec: { compliance_report: "string" }
+});
 
 # No debug code
 grep -r "console\.\|TODO\|FIXME\|XXX" src/
@@ -869,9 +914,11 @@ find src -name "*V2*" -o -name "*Copy*" && echo "FAIL: Duplicate versions found"
 
 ### 1. Semantic Analysis
 
-```bash
-# Verify implementation matches pseudocode
-claude --dangerously-skip-permissions -p "
+```typescript
+// Verify implementation matches pseudocode
+Task({
+  subagent_name: 'deepthinker',
+  goal_prompt: `
 Compare src/<feature> with analysis/pseudocode/<component>.md
 Report any algorithmic differences to verification-report.txt
 Check:
@@ -880,14 +927,18 @@ Check:
 3. Error handling implemented as designed
 4. No shortcuts or simplifications
 5. Line numbers can be traced from pseudocode to code
-"
+`,
+  output_spec: { semantic_analysis: 'string' },
+});
 ```
 
 ### 2. Integration Coherence
 
-```bash
-# Verify components work together
-claude --dangerously-skip-permissions -p "
+```typescript
+// Verify components work together
+Task({
+  subagent_name: 'deepthinker',
+  goal_prompt: `
 Analyze integration between implemented components.
 Check:
 1. Data flows correctly between modules
@@ -895,12 +946,14 @@ Check:
 3. Transaction boundaries respected
 4. No resource leaks
 Report to integration-analysis.txt
-"
+`,
+  output_spec: { integration_analysis: 'string' },
+});
 ```
 
 ### 3. Sophisticated Fraud Pattern Detection
 
-**Basic Fraud Patterns** (Easy to Detect):
+**Basic Fraud patterns** (Easy to Detect):
 
 ```typescript
 // FRAUD: Fake implementation
@@ -983,7 +1036,7 @@ grep -rn -E "return \[\]|return \{\}|return null|return undefined|throw new Erro
 
 **If ANY of these patterns are found in implemented code (not stubs), the phase FAILS.**
 
-Common Claude fraud patterns to detect:
+Common fraud patterns to detect:
 
 | Pattern                  | Example                               | Why It's Fraud                |
 | ------------------------ | ------------------------------------- | ----------------------------- |
@@ -1366,101 +1419,142 @@ Phase 10: Verification    - Run full suite, verify semantic correctness
 
 ### 1. Parallel Analysis
 
-```bash
-# Launch analysis workers in parallel
-claude --dangerously-skip-permissions -p "Analyze domain..." &
-claude --dangerously-skip-permissions -p "Create pseudocode for auth..." &
-claude --dangerously-skip-permissions -p "Create pseudocode for user..." &
-sleep 600
+```typescript
+// Launch analysis subagents in parallel
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: 'Analyze domain...',
+  output_spec: { analysis: 'string' },
+});
+
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: 'Create pseudocode for auth...',
+  output_spec: { pseudocode: 'string' },
+});
+
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: 'Create pseudocode for user...',
+  output_spec: { pseudocode: 'string' },
+});
 ```
 
 ### 2. Sequential Implementation
 
-```bash
-# Each 3-phase cycle must complete before next
-./execute-phase.sh 03 03a  # auth-stub + verification
-./execute-phase.sh 04 04a  # auth-tdd + verification
-./execute-phase.sh 05 05a  # auth-impl + verification
+```typescript
+// Each 3-phase cycle must complete before next
+// Use typescriptexpert for implementation, typescriptreviewer for verification
 
-# Only then move to next feature
-./execute-phase.sh 06 06a  # user-stub + verification
+// Phase 03: auth-stub
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: 'Execute plan/03-auth-stub.md',
+  output_spec: { status: 'object' },
+});
+
+// Phase 03a: verification
+Task({
+  subagent_name: 'typescriptreviewer',
+  goal_prompt: 'Execute plan/03a-auth-stub-verification.md',
+  output_spec: { verdict: 'string' },
+});
+
+// Phase 04: auth-tdd
+Task({
+  subagent_name: 'typescriptexpert',
+  goal_prompt: 'Execute plan/04-auth-tdd.md',
+  output_spec: { status: 'object' },
+});
+
+// Phase 04a: verification
+Task({
+  subagent_name: 'typescriptreviewer',
+  goal_prompt: 'Execute plan/04a-auth-tdd-verification.md',
+  output_spec: { verdict: 'string' },
+});
+
+// Only then move to next feature
 ```
 
 ### 3. Enhanced Verification Gates
 
-```bash
-#!/bin/bash
-# execute-phase.sh
-PHASE=$1
-VERIFICATION=$2
+```typescript
+// Phase execution using subagents with verification
 
-# Execute implementation
-claude --dangerously-skip-permissions \
-  -p "Execute plan/${PHASE}-*.md" &
-WORKER_PID=$!
-sleep 300
+async function executePhase(phaseId: string, verificationId: string) {
+  // Execute implementation with typescriptexpert
+  const implResult = await Task({
+    subagent_name: 'typescriptexpert',
+    goal_prompt: `Execute plan/${phaseId}-*.md`,
+    output_spec: { status: 'object' },
+  });
 
-# Check completion
-if ! wait $WORKER_PID; then
-  echo "Implementation failed"
-  exit 1
-fi
+  if (implResult.status !== 'success') {
+    throw new Error('Implementation failed');
+  }
 
-# For TDD phase, run behavioral verification
-if [[ "$PHASE" == *"-tdd"* ]]; then
-  echo "Running behavioral test verification..."
+  // For TDD phase, run behavioral verification
+  if (phaseId.includes('-tdd')) {
+    console.log('Running behavioral test verification...');
 
-  # Check for mock theater
-  npx tsx verification/mock-theater-detector.ts test/
-  [ $? -eq 0 ] || { echo "Mock theater detected"; exit 1; }
+    // Check for mock theater
+    const mockTheater = detectMockTheater('test/');
+    if (mockTheater) {
+      throw new Error('Mock theater detected');
+    }
 
-  # Check for reverse testing
-  grep -r "NotYetImplemented" test/
-  [ $? -eq 0 ] && { echo "Reverse testing detected"; exit 1; }
+    // Check for reverse testing
+    const reverseTesting = detectReverseTesting('test/');
+    if (reverseTesting) {
+      throw new Error('Reverse testing detected');
+    }
 
-  # Validate behavioral contracts
-  npx tsx verification/behavioral-contract.ts test/
-  [ $? -eq 0 ] || { echo "Behavioral contracts invalid"; exit 1; }
+    // Validate behavioral contracts
+    const contractsValid = validateBehavioralContracts('test/');
+    if (!contractsValid) {
+      throw new Error('Behavioral contracts invalid');
+    }
 
-  # Check integration tests if applicable
-  if [ -d "test/integration" ]; then
-    npx tsx verification/integration-validator.ts test/
-    [ $? -eq 0 ] || { echo "Integration tests invalid"; exit 1; }
-  fi
+    // Run mutation testing
+    const mutationScore = await runMutationTesting();
+    if (mutationScore < 80) {
+      throw new Error(`Mutation score ${mutationScore}% is below 80%`);
+    }
+  }
 
-  # Run mutation testing
-  npx stryker run
-  MUTATION_SCORE=$(jq -r '.metrics.mutationScore' .stryker-tmp/reports/mutation-report.json)
-  if (( $(echo "$MUTATION_SCORE < 80" | bc -l) )); then
-    echo "FAIL: Mutation score $MUTATION_SCORE% is below 80%"
-    exit 1
-  fi
-fi
+  // For implementation phase, verify pseudocode compliance
+  if (phaseId.includes('-impl')) {
+    console.log('Verifying pseudocode compliance...');
 
-# For implementation phase, verify pseudocode compliance
-if [[ "$PHASE" == *"-impl"* ]]; then
-  echo "Verifying pseudocode compliance..."
+    const compliance = await Task({
+      subagent_name: 'deepthinker',
+      goal_prompt: `
+        Compare implementation with pseudocode
+        Verify every numbered line is implemented
+        Report to pseudocode-compliance.json
+      `,
+      output_spec: { compliant: 'boolean', issues: 'string[]' },
+    });
 
-  claude --dangerously-skip-permissions -p "
-  Compare implementation with pseudocode
-  Verify every numbered line is implemented
-  Report to pseudocode-compliance.json
-  "
+    if (!compliance.compliant) {
+      throw new Error('Pseudocode not followed');
+    }
+  }
 
-  COMPLIANCE=$(jq -r '.compliant' pseudocode-compliance.json)
-  [ "$COMPLIANCE" != "true" ] && { echo "Pseudocode not followed"; exit 1; }
-fi
+  // Execute standard verification with typescriptreviewer
+  const verifyResult = await Task({
+    subagent_name: 'typescriptreviewer',
+    goal_prompt: `Execute plan/${verificationId}-*.md`,
+    output_spec: { verdict: 'string', issues: 'string[]' },
+  });
 
-# Execute standard verification
-claude --dangerously-skip-permissions \
-  -p "Execute plan/${VERIFICATION}-*.md"
+  if (verifyResult.verdict !== 'pass') {
+    throw new Error('Verification failed');
+  }
 
-# Check verification passed
-STATUS=$(jq -r .status workers/phase-${VERIFICATION}.json)
-if [ "$STATUS" != "pass" ]; then
-  echo "Verification failed"
-  exit 1
-fi
+  return verifyResult;
+}
 ```
 
 ---
