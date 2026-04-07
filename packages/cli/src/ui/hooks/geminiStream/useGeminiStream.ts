@@ -67,6 +67,14 @@ async function prepareTurnForQuery(
     setThought(null);
     thinkingBlocksRef.current = [];
     config.getBucketFailoverHandler?.()?.reset?.();
+
+    // Invalidate auth cache at turn boundaries for new turns
+    // This ensures tokens updated by other processes are picked up
+    const handler = config.getBucketFailoverHandler?.();
+    if (handler?.invalidateAuthCache) {
+      const runtimeId = config.getSessionId?.() ?? 'default';
+      handler.invalidateAuthCache(runtimeId);
+    }
   } else {
     config.getBucketFailoverHandler?.()?.resetSession?.();
   }
