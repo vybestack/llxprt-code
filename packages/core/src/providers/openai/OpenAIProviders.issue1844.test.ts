@@ -198,7 +198,7 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     expect(lastChunk.metadata?.finishReason).toBe('stop');
   });
 
-  it('should emit buffered text followed by a metadata-only stop chunk for Fireworks Kimi terminal flushes', async () => {
+  it('should emit text immediately for Fireworks Kimi (no longer buffered since kimi-k2 detection removed)', async () => {
     const chunks = [
       {
         id: 'chunk-1',
@@ -263,17 +263,25 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     );
 
     expect(continuationRequested).toBe(false);
-    expect(results).toHaveLength(2);
+    // After removing isKimiK2Model buffering, text emits immediately (not buffered)
+    // So we get 2 text chunks + 1 metadata chunk = 3 total
+    expect(results).toHaveLength(3);
     expect(results[0].blocks).toEqual([
       {
         type: 'text',
-        text: 'Hello there this buffered reply ends only at the terminal chunk',
+        text: 'Hello there this buffered reply',
       },
     ]);
-    expect(results[0].metadata).toBeUndefined();
-    expect(results[1].blocks).toEqual([]);
-    expect(results[1].metadata?.stopReason).toBe('end_turn');
-    expect(results[1].metadata?.finishReason).toBe('stop');
+    expect(results[1].blocks).toEqual([
+      {
+        type: 'text',
+        text: ' ends only at the terminal chunk',
+      },
+    ]);
+    // Final chunk is metadata-only
+    expect(results[2].blocks).toEqual([]);
+    expect(results[2].metadata?.stopReason).toBe('end_turn');
+    expect(results[2].metadata?.finishReason).toBe('stop');
   });
 
   it('should not emit a duplicate terminal metadata chunk when reasoning content already carries the finish signal', async () => {
