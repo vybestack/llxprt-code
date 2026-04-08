@@ -2,7 +2,7 @@
 
 ## CRITICAL: How to Execute Multi-Phase Plans
 
-When you receive a plan with numbered phases, you MUST execute them sequentially. This document explains HOW to coordinate subagents to implement plans correctly.
+When you receive a plan with numbered phases, you MUST execute them sequentially. This document explains HOW to coordinate LLxprt subagents to implement plans correctly.
 
 ## The Golden Rules
 
@@ -16,11 +16,11 @@ When you receive a plan with numbered phases, you MUST execute them sequentially
 ```
 You (LLxprt Code Agent Coordinator) orchestrate like this:
 
-Phase N Worker (LLxprt Code Subagent) → Phase N Output → Phase N Verifier (LLxprt Code Subagent) → PASS/FAIL
-↓ (PASS)
-Phase N+1 Worker → Phase N+1 Output → Phase N+1 Verifier → PASS/FAIL
-↓ (FAIL)
-Phase N Remediation Worker → Phase N Output → Phase N Verifier → PASS/FAIL
+Phase N Subagent (LLxprt Code Subagent) -> Phase N Output -> Phase N Verifier (LLxprt Code Subagent) -> PASS/FAIL
+| (PASS)
+Phase N+1 Subagent -> Phase N+1 Output -> Phase N+1 Verifier -> PASS/FAIL
+| (FAIL)
+Phase N Remediation Subagent -> Phase N Output -> Phase N Verifier -> PASS/FAIL
 (repeat remediation loop until PASS or blocked)
 ```
 

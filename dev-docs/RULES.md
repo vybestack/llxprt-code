@@ -339,6 +339,189 @@ const notifyUser = (email: Email): void => emailService.sendWelcome(email);
 3. Update CLAUDE.md with important discoveries
 4. Commit all changes
 
+## Mock Hygiene
+
+### The Fundamental Rule
+
+**You cannot test a component by mocking that component.**
+
+This seems obvious but is constantly violated. If you mock `EmojiFilter` to test `EmojiFilter`, you're not testing `EmojiFilter` at all.
+
+### Mock Decision Tree
+
+When deciding whether to mock something:
+
+```
+Is it the component you're testing?
+├─ Yes → [ERROR] NEVER MOCK IT
+└─ No → Is it doing the core work being tested?
+    ├─ Yes → [ERROR] DON'T MOCK IT
+    └─ No → Is it infrastructure (FS, network, DB)?
+        ├─ Yes → [OK] OK to mock
+        └─ No → Is it completely unrelated to the test?
+            ├─ Yes → [OK] OK to mock
+            └─ No → WARNING: Probably shouldn't mock
+```
+
+### Prohibited Mock Patterns
+
+#### 1. [ERROR] FORBIDDEN: Self-Mocking Pattern
+
+**Never mock the component under test**
+
+```typescript
+// [ERROR] FORBIDDEN - Mocking the thing being tested
+vi.mock('./EmojiFilter', () => ({
+  EmojiFilter: MockEmojiFilter, // Testing MockEmojiFilter, not EmojiFilter!
+}));
+
+test('EmojiFilter filters emojis', () => {
+  const filter = new EmojiFilter(); // This is MockEmojiFilter!
+  expect(filter.filter('[OK]')).toBe('[OK]'); // Testing the mock!
+});
+```
+
+#### 2. [ERROR] FORBIDDEN: Direct Value Mock Pattern
+
+**Never mock with the expected output directly**
+
+```typescript
+// [ERROR] FORBIDDEN - Mock returns exactly what test expects
+const mockFilter = {
+  filterText: vi.fn().mockReturnValue('[OK] Done'),
+};
+
+test('filters text', () => {
+  expect(mockFilter.filterText('[OK] Done')).toBe('[OK] Done'); // Worthless!
+});
+```
+
+#### 3. [ERROR] FORBIDDEN: Mock Verification Pattern
+
+**Never test that mocks were called**
+
+```typescript
+// [ERROR] FORBIDDEN - Testing mock invocations
+test('calls filter method', () => {
+  mockService.process('data');
+  expect(mockFilter.filter).toHaveBeenCalledWith('data'); // Mock theater!
+});
+```
+
+### Allowed Mock Patterns
+
+#### 1. [OK] ALLOWED: Infrastructure Mocking
+
+**Mock filesystem, network, databases - NOT business logic**
+
+```typescript
+// [OK] ALLOWED - Mock infrastructure, test real component
+const mockFs = createMockFilesystem({
+  '/test.txt': 'Initial content',
+});
+
+const tool = new WriteFileTool({ fs: mockFs }); // REAL tool
+const result = await tool.execute({
+  file_path: '/test.txt',
+  content: 'New [OK] content',
+});
+
+// Test REAL transformation by REAL component
+expect(mockFs.readFile('/test.txt')).toBe('New [OK] content');
+```
+
+#### 2. [OK] ALLOWED: Irrelevant Service Mocking
+
+**Mock services unrelated to what's being tested**
+
+```typescript
+// [OK] ALLOWED - Mock unrelated services
+const mockAuthService = { isAuthenticated: () => true };
+const mockLogger = { log: vi.fn() };
+
+// Testing EmojiFilter, not auth or logging
+const processor = new ContentProcessor({
+  auth: mockAuthService, // Irrelevant to emoji filtering
+  logger: mockLogger, // Irrelevant to emoji filtering
+  filter: new EmojiFilter(), // REAL component under test!
+});
+
+const result = processor.process('Hello [OK]');
+expect(result).toBe('Hello [OK]'); // Testing REAL filtering
+```
+
+#### 3. [OK] ALLOWED: Test Data Builders
+
+**Create test data, don't mock behavior**
+
+```typescript
+// [OK] ALLOWED - Build test data, not mock behavior
+class TestDataBuilder {
+  static createFileWithEmojis(): string {
+    return 'function test() {
+  console.log("[OK] Done!");
+}';
+  }
+}
+
+const tool = new EditTool(); // REAL tool
+const result = await tool.edit({
+  content: TestDataBuilder.createFileWithEmojis(),
+});
+
+expect(result).not.toContain('[OK]'); // Test REAL filtering
+```
+
+### Anti-Patterns to Detect
+
+1. **The Circular Mock**: Mocking A to test A
+2. **The Expected Value Mock**: Mock returns exactly what test expects
+3. **The Mock Verification**: Testing that mocks were called
+4. **The Mock Chain**: A calls MockB calls MockC (no real code tested)
+5. **The Mock Implementation**: Mock has complex logic (should be testing real code)
+
+### Red Flags in Tests
+
+If you see these, the test is probably worthless:
+
+```typescript
+//  Mocking the component under test
+vi.mock('./ComponentUnderTest');
+
+//  Mock returns expected value
+mockThing.method.mockReturnValue('expected value');
+expect(thing.method()).toBe('expected value');
+
+//  Verifying mock was called
+expect(mockService.method).toHaveBeenCalledWith(args);
+
+//  No real component in test
+const mock1 = vi.fn();
+const mock2 = vi.fn();
+mock1.mockReturnValue(mock2);
+
+//  Mock with implementation (why not test real code?)
+vi.mock('./Filter', () => ({
+  filter: (text) => text.replace(/[OK]/g, '[OK]'), // Just use real Filter!
+}));
+```
+
+### The Litmus Test
+
+After writing a test, ask:
+
+1. **If I delete the real implementation, will this test fail?**
+   - If NO: Your test is worthless
+
+2. **If I break the real implementation, will this test catch it?**
+   - If NO: Your test is worthless
+
+3. **Am I testing my mock or my code?**
+   - If MOCK: Your test is worthless
+
+4. **Could I replace the component with `return 'expected'` and pass?**
+   - If YES: Your test is worthless
+
 ## Remember:
 
 - **TDD is not optional** - it's the foundation of quality
