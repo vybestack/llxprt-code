@@ -133,7 +133,7 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
       // GIVEN: Keyring has a value and fallback file also has a value
       const mockKeyring: KeyringAdapter = {
         getPassword: async (_service, account) =>
-          (account === 'shared-key' ? 'keyring-value' : null),
+          account === 'shared-key' ? 'keyring-value' : null,
         setPassword: async () => {},
         deletePassword: async () => false,
       };
