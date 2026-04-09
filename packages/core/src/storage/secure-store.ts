@@ -439,14 +439,33 @@ export class SecureStore {
       );
     }
 
-    // Write fallback file when policy allows (even if keyring succeeded, for Linux reliability)
-    if (this.fallbackPolicy === 'allow') {
-      this.logger.debug(
-        () =>
-          `[set] key='${key}' → encrypted fallback file (${this.fallbackDir})`,
-      );
-      await this.writeFallbackFile(key, value);
+    const shouldWriteFallback =
+      this.fallbackPolicy === 'allow' &&
+      (!keyringWriteSucceeded || process.platform === 'linux');
+
+    if (!shouldWriteFallback) {
+      return;
     }
+
+    this.logger.debug(
+      () =>
+        `[set] key='${key}' → encrypted fallback file (${this.fallbackDir})`,
+    );
+
+    if (keyringWriteSucceeded) {
+      try {
+        await this.writeFallbackFile(key, value);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          () =>
+            `[set] key='${key}' fallback backup failed after keyring success (${this.fallbackDir}): ${msg}`,
+        );
+      }
+      return;
+    }
+
+    await this.writeFallbackFile(key, value);
   }
 
   // ─── CRUD: get() ─────────────────────────────────────────────────────────
