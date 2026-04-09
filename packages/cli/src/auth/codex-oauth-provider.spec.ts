@@ -290,4 +290,75 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       });
     });
   });
+
+  describe('Issue 1895: Canonical device callback URI', () => {
+    it('should use canonical deviceAuthCallbackUri from core instead of hardcoded incorrect value', async () => {
+      // This test ensures the provider uses the canonical deviceAuthCallbackUri
+      // exported from codex-device-flow, not a hardcoded incorrect value.
+      // The old hardcoded value was 'https://auth.openai.com/api/accounts/deviceauth/callback'
+      // The correct canonical value is 'https://auth.openai.com/deviceauth/callback'
+
+      const mockDeviceFlow = {
+        requestDeviceCode: vi.fn().mockResolvedValue({
+          device_auth_id: 'test-device-auth-id',
+          user_code: 'TEST-CODE',
+          interval: 5,
+        }),
+        pollForDeviceToken: vi.fn().mockResolvedValue({
+          authorization_code: 'test-auth-code',
+          code_verifier: 'test-verifier',
+          code_challenge: 'test-challenge',
+        }),
+        completeDeviceAuth: vi.fn(),
+      };
+
+      // Set up the deviceFlow spy to capture the redirectUri passed to completeDeviceAuth
+      mockDeviceFlow.completeDeviceAuth = vi
+        .fn()
+        .mockImplementation(
+          (_authCode: string, _codeVerifier: string, redirectUri: string) => {
+            // Simulate the 400 error that happens with wrong redirect URI
+            if (
+              redirectUri ===
+              'https://auth.openai.com/api/accounts/deviceauth/callback'
+            ) {
+              return Promise.reject(
+                new Error(
+                  'Token exchange failed: 400 token_exchange_user_error',
+                ),
+              );
+            }
+            return Promise.resolve({
+              access_token: 'test-token',
+              refresh_token: 'test-refresh',
+              expiry: Math.floor(Date.now() / 1000) + 3600,
+              token_type: 'Bearer' as const,
+              account_id: 'test-account',
+            });
+          },
+        );
+
+      (
+        provider as unknown as { deviceFlow: typeof mockDeviceFlow }
+      ).deviceFlow = mockDeviceFlow;
+
+      // Attempt device auth
+      const performDeviceAuth = (
+        provider as unknown as { performDeviceAuth: () => Promise<void> }
+      ).performDeviceAuth;
+
+      await performDeviceAuth.call(provider);
+
+      // Verify completeDeviceAuth was called with canonical URI, not the old hardcoded one
+      expect(mockDeviceFlow.completeDeviceAuth).toHaveBeenCalled();
+      const [, , redirectUri] = mockDeviceFlow.completeDeviceAuth.mock.calls[0];
+
+      // The canonical URI should be used (without /api/accounts/ path)
+      expect(redirectUri).toBe('https://auth.openai.com/deviceauth/callback');
+      // The old incorrect hardcoded URI should NOT be used
+      expect(redirectUri).not.toBe(
+        'https://auth.openai.com/api/accounts/deviceauth/callback',
+      );
+    });
+  });
 });
