@@ -55,7 +55,7 @@ import { StreamProcessingStatus, type QueuedSubmission } from './types.js';
  * Resets or carries-over per-turn state depending on whether this is a new
  * prompt or a continuation. Also handles bucket failover reset/reauth.
  */
-async function prepareTurnForQuery(
+export async function prepareTurnForQuery(
   isContinuation: boolean,
   config: Config,
   startNewPrompt: () => void,
