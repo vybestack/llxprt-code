@@ -69,6 +69,7 @@ function mediaBlock(
   mimeType: string,
   filename?: string,
   data = 'base64data',
+  caption?: string,
 ): MediaBlock {
   return {
     type: 'media',
@@ -76,6 +77,7 @@ function mediaBlock(
     filename,
     data,
     encoding: 'base64',
+    caption,
   };
 }
 
@@ -783,6 +785,52 @@ describe('sanitizeHistoryForCompression', () => {
     );
     expect((result[0].blocks[2] as { text: string }).text).toContain(
       '[Tool Call: read_file]',
+    );
+  });
+
+  it('prefers media caption over filename in compression placeholders', () => {
+    const history = [
+      humanMsgOnlyMedia(
+        mediaBlock(
+          'image/png',
+          'diagram.png',
+          'base64data',
+          'Architecture diagram',
+        ),
+      ),
+    ];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].blocks).toHaveLength(1);
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: Architecture diagram]',
+    );
+  });
+
+  it('re-tags tool speaker to human and placeholderizes media blocks in tool messages', () => {
+    const msg: IContent = {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'c1',
+          toolName: 'read_file',
+          result: 'file contents here',
+        },
+        mediaBlock('image/png', 'screenshot.png'),
+      ],
+    };
+    const result = sanitizeHistoryForCompression([msg]);
+    expect(result[0].speaker).toBe('human');
+    expect(result[0].blocks).toHaveLength(2);
+    expect((result[0].blocks[0] as { text: string }).text).toContain(
+      '[Tool Result: read_file]',
+    );
+    expect((result[0].blocks[0] as { text: string }).text).toContain(
+      'file contents here',
+    );
+    expect((result[0].blocks[1] as { text: string }).text).toBe(
+      '[Attached image: screenshot.png]',
     );
   });
 });
