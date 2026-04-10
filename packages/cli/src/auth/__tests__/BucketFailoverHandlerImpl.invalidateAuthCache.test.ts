@@ -30,6 +30,7 @@ describe('BucketFailoverHandlerImpl.invalidateAuthCache', () => {
       getOAuthToken: vi.fn(),
       authenticate: vi.fn(),
       authenticateMultipleBuckets: vi.fn(),
+      forceRefreshToken: vi.fn(),
     };
 
     const metadata: OAuthTokenRequestMetadata = {

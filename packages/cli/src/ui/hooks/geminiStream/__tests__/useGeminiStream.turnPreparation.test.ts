@@ -5,8 +5,14 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from '../useGeminiStream.js';
+
+const existingThinkingBlock: ThinkingBlock = {
+  type: 'thinking',
+  thought: 'existing',
+  sourceField: 'thought',
+};
 
 describe('prepareTurnForQuery', () => {
   it('runs new-turn handler steps in reset -> invalidate -> ensure order', async () => {
@@ -35,7 +41,9 @@ describe('prepareTurnForQuery', () => {
     const setThought = vi.fn(() => {
       callOrder.push('setThought');
     });
-    const thinkingBlocksRef = { current: ['existing'] };
+    const thinkingBlocksRef = { current: [existingThinkingBlock] } as {
+      current: ThinkingBlock[];
+    };
 
     await prepareTurnForQuery(
       false,
@@ -56,7 +64,7 @@ describe('prepareTurnForQuery', () => {
     expect(handler.resetSession).not.toHaveBeenCalled();
   });
 
-  it('uses default runtime id and continuation path resetSession branch', async () => {
+  it('uses continuation path resetSession branch without resetting new-turn state', async () => {
     const callOrder: string[] = [];
     const handler = {
       reset: vi.fn(() => {
@@ -81,7 +89,9 @@ describe('prepareTurnForQuery', () => {
     const setThought = vi.fn(() => {
       callOrder.push('setThought');
     });
-    const thinkingBlocksRef = { current: ['existing'] };
+    const thinkingBlocksRef = { current: [existingThinkingBlock] } as {
+      current: ThinkingBlock[];
+    };
 
     await prepareTurnForQuery(
       true,
@@ -96,6 +106,36 @@ describe('prepareTurnForQuery', () => {
     expect(handler.invalidateAuthCache).not.toHaveBeenCalled();
     expect(startNewPrompt).not.toHaveBeenCalled();
     expect(setThought).not.toHaveBeenCalled();
-    expect(thinkingBlocksRef.current).toEqual(['existing']);
+    expect(thinkingBlocksRef.current).toEqual([existingThinkingBlock]);
+  });
+
+  it('falls back to the default runtime id when session id is unavailable', async () => {
+    const callOrder: string[] = [];
+    const handler = {
+      reset: vi.fn(() => {
+        callOrder.push('reset');
+      }),
+      invalidateAuthCache: vi.fn((runtimeId: string) => {
+        callOrder.push(`invalidate:${runtimeId}`);
+      }),
+      ensureBucketsAuthenticated: vi.fn(async () => {
+        callOrder.push('ensure');
+      }),
+      resetSession: vi.fn(),
+    };
+    const config = {
+      getBucketFailoverHandler: () => handler,
+      getSessionId: () => undefined,
+    } as unknown as Config;
+
+    await prepareTurnForQuery(
+      false,
+      config,
+      vi.fn(),
+      vi.fn(),
+      { current: [] } as { current: ThinkingBlock[] },
+    );
+
+    expect(callOrder).toContain('invalidate:default');
   });
 });
