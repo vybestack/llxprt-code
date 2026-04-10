@@ -200,11 +200,33 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
       }
     });
 
-    it('should NOT write fallback when fallbackPolicy is deny even if keyring fails', async () => {
+    it('should NOT write fallback when fallbackPolicy is deny and no keyring adapter is available', async () => {
+      store = new SecureStore('test-service', {
+        fallbackDir: tempDir,
+        fallbackPolicy: 'deny',
+        keyringLoader: async () => null,
+      });
+
+      const error = await store.set('denied-key', 'secret').catch((err) => err);
+      expect(error).toBeInstanceOf(SecureStoreError);
+      expect(error.message).toBe(
+        'Keyring is unavailable and fallback is denied',
+      );
+      expect(error.code).toBe('UNAVAILABLE');
+
+      const fallbackFile = path.join(tempDir, 'denied-key.enc');
+      const fileExists = await fs
+        .access(fallbackFile)
+        .then(() => true)
+        .catch(() => false);
+      expect(fileExists).toBe(false);
+    });
+
+    it('should preserve the classified keyring error when fallbackPolicy is deny', async () => {
       const mockKeyring: KeyringAdapter = {
         getPassword: async () => null,
         setPassword: async () => {
-          throw new Error('Keyring unavailable');
+          throw new Error('Keyring locked');
         },
         deletePassword: async () => false,
       };
@@ -215,13 +237,13 @@ describe('SecureStore - Linux Keyring Fallback Reliability', () => {
         keyringLoader: async () => mockKeyring,
       });
 
-      const error = await store.set('denied-key', 'secret').catch((err) => err);
+      const error = await store.set('locked-key', 'secret').catch((err) => err);
       expect(error).toBeInstanceOf(SecureStoreError);
-      expect(error.message).toBe(
-        'Keyring is unavailable and fallback is denied',
-      );
+      expect(error.message).toBe('Keyring locked');
+      expect(error.code).toBe('LOCKED');
+      expect(error.remediation).toBe('Unlock your keyring');
 
-      const fallbackFile = path.join(tempDir, 'denied-key.enc');
+      const fallbackFile = path.join(tempDir, 'locked-key.enc');
       const fileExists = await fs
         .access(fallbackFile)
         .then(() => true)

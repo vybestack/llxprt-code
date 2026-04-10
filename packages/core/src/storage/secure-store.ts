@@ -407,6 +407,7 @@ export class SecureStore {
     // Try keyring first (directly, not via isKeychainAvailable)
     const adapter = await this.getKeyring();
     let keyringWriteSucceeded = false;
+    let keyringWriteError: unknown = null;
     if (adapter !== null) {
       try {
         await adapter.setPassword(this.serviceName, key, value);
@@ -414,6 +415,7 @@ export class SecureStore {
         this.logger.debug(() => `[set] key='${key}' → keyring (OS keychain)`);
         keyringWriteSucceeded = true;
       } catch (error) {
+        keyringWriteError = error;
         this.recordKeyringFailure();
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.debug(
@@ -429,6 +431,19 @@ export class SecureStore {
 
     // If keyring unavailable or write failed, check fallback policy
     if (!keyringWriteSucceeded && this.fallbackPolicy === 'deny') {
+      if (adapter !== null && keyringWriteError !== null) {
+        const classified = classifyError(keyringWriteError);
+        const msg =
+          keyringWriteError instanceof Error
+            ? keyringWriteError.message
+            : String(keyringWriteError);
+        this.logger.debug(
+          () =>
+            `[set] key='${key}' fallback denied after keyring write failure (${classified})`,
+        );
+        throw new SecureStoreError(msg, classified, getRemediation(classified));
+      }
+
       this.logger.debug(
         () => `[set] key='${key}' fallback denied — throwing UNAVAILABLE`,
       );
