@@ -344,7 +344,9 @@ export async function runVerificationPass(
  * reaching the compression LLM call, which would cause 400 errors on providers
  * that don't support certain media types.
  *
- * Format: [Attached <category>: <filename or mimeType>]
+ * Format: [Attached <category>: <caption | filename | mimeType | unknown>]
+ * The identifier prefers caption for accessibility/context, then falls back to
+ * filename, mimeType, and finally "unknown".
  */
 export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
   const category = classifyMediaBlock(media);
