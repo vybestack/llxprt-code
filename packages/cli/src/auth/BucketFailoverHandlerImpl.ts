@@ -13,6 +13,7 @@
 import {
   BucketFailoverHandler,
   DebugLogger,
+  flushRuntimeAuthScope,
   type FailoverContext,
   type BucketFailureReason,
   type OAuthToken,
@@ -658,5 +659,13 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
    */
   getLastFailoverReasons(): Record<string, BucketFailureReason> {
     return { ...this.lastFailoverReasons };
+  }
+  /**
+   * Invalidate the auth cache for a runtime, forcing fresh keychain reads.
+   * Called at turn boundaries and after auth errors.
+   */
+  invalidateAuthCache(runtimeId: string): void {
+    flushRuntimeAuthScope(runtimeId);
+    logger.debug('Auth cache invalidated for runtime', { runtimeId });
   }
 }

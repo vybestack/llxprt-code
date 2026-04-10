@@ -55,7 +55,7 @@ import { StreamProcessingStatus, type QueuedSubmission } from './types.js';
  * Resets or carries-over per-turn state depending on whether this is a new
  * prompt or a continuation. Also handles bucket failover reset/reauth.
  */
-async function prepareTurnForQuery(
+export async function prepareTurnForQuery(
   isContinuation: boolean,
   config: Config,
   startNewPrompt: () => void,
@@ -67,6 +67,14 @@ async function prepareTurnForQuery(
     setThought(null);
     thinkingBlocksRef.current = [];
     config.getBucketFailoverHandler?.()?.reset?.();
+
+    // Invalidate auth cache at turn boundaries for new turns
+    // This ensures tokens updated by other processes are picked up
+    const handler = config.getBucketFailoverHandler?.();
+    if (handler?.invalidateAuthCache) {
+      const runtimeId = config.getSessionId?.() ?? 'default';
+      handler.invalidateAuthCache(runtimeId);
+    }
   } else {
     config.getBucketFailoverHandler?.()?.resetSession?.();
   }

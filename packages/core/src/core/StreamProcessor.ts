@@ -460,7 +460,7 @@ export class StreamProcessor {
   private async _handleBucketFailover(): Promise<boolean | null> {
     const failoverHandler =
       this.runtimeContext.providerRuntime.config?.getBucketFailoverHandler();
-    if (!failoverHandler?.isEnabled()) return null;
+    if (!failoverHandler) return null;
 
     this.logger.debug(() => 'Attempting bucket failover on persistent 429');
     const success = await failoverHandler.tryFailover();

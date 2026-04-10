@@ -326,6 +326,12 @@ export interface BucketFailoverHandler {
    * No-op for single-bucket profiles.
    */
   ensureBucketsAuthenticated?(): Promise<void>;
+
+  /**
+   * Invalidate the auth cache for a runtime, forcing fresh keychain reads.
+   * Called at turn boundaries and after auth errors.
+   */
+  invalidateAuthCache?(runtimeId: string): void;
 }
 
 export interface ConfigParameters {
