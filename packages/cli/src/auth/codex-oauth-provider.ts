@@ -8,6 +8,7 @@ import {
   DebugLogger,
   CodexDeviceFlow,
   CodexOAuthTokenSchema,
+  CODEX_CONFIG,
   openBrowserSecurely,
   shouldLaunchBrowser,
   debugLogger,
@@ -332,8 +333,7 @@ export class CodexOAuthProvider implements OAuthProvider {
           `[DEVICE-FLOW] Got authorization_code: ${pollResult.authorization_code.substring(0, 10)}...`,
       );
 
-      const redirectUri =
-        'https://auth.openai.com/api/accounts/deviceauth/callback';
+      const redirectUri = CODEX_CONFIG.deviceAuthCallbackUri;
       const token = await this.deviceFlow.completeDeviceAuth(
         pollResult.authorization_code,
         pollResult.code_verifier,

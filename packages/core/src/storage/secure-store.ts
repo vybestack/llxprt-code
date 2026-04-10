@@ -406,13 +406,16 @@ export class SecureStore {
 
     // Try keyring first (directly, not via isKeychainAvailable)
     const adapter = await this.getKeyring();
+    let keyringWriteSucceeded = false;
+    let keyringWriteError: unknown = null;
     if (adapter !== null) {
       try {
         await adapter.setPassword(this.serviceName, key, value);
         this.recordKeyringSuccess();
         this.logger.debug(() => `[set] key='${key}' → keyring (OS keychain)`);
-        return;
+        keyringWriteSucceeded = true;
       } catch (error) {
+        keyringWriteError = error;
         this.recordKeyringFailure();
         const msg = error instanceof Error ? error.message : String(error);
         this.logger.debug(
@@ -421,8 +424,26 @@ export class SecureStore {
       }
     }
 
-    // Keyring unavailable or write failed — check fallback policy
-    if (this.fallbackPolicy === 'deny') {
+    // If keyring succeeded and fallbackPolicy is deny, we're done
+    if (keyringWriteSucceeded && this.fallbackPolicy === 'deny') {
+      return;
+    }
+
+    // If keyring unavailable or write failed, check fallback policy
+    if (!keyringWriteSucceeded && this.fallbackPolicy === 'deny') {
+      if (adapter !== null && keyringWriteError !== null) {
+        const classified = classifyError(keyringWriteError);
+        const msg =
+          keyringWriteError instanceof Error
+            ? keyringWriteError.message
+            : String(keyringWriteError);
+        this.logger.debug(
+          () =>
+            `[set] key='${key}' fallback denied after keyring write failure (${classified})`,
+        );
+        throw new SecureStoreError(msg, classified, getRemediation(classified));
+      }
+
       this.logger.debug(
         () => `[set] key='${key}' fallback denied — throwing UNAVAILABLE`,
       );
@@ -433,10 +454,32 @@ export class SecureStore {
       );
     }
 
+    const shouldWriteFallback =
+      this.fallbackPolicy === 'allow' &&
+      (!keyringWriteSucceeded || process.platform === 'linux');
+
+    if (!shouldWriteFallback) {
+      return;
+    }
+
     this.logger.debug(
       () =>
         `[set] key='${key}' → encrypted fallback file (${this.fallbackDir})`,
     );
+
+    if (keyringWriteSucceeded) {
+      try {
+        await this.writeFallbackFile(key, value);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          () =>
+            `[set] key='${key}' fallback backup failed after keyring success (${this.fallbackDir}): ${msg}`,
+        );
+      }
+      return;
+    }
+
     await this.writeFallbackFile(key, value);
   }
 
