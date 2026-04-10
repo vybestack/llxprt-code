@@ -27,7 +27,9 @@ describe('StreamProcessor._handleBucketFailover', () => {
   it('allows single-bucket handlers to run tryFailover and flush auth scope', async () => {
     const tryFailover = vi.fn().mockResolvedValue(true);
 
-    const processor = Object.create(StreamProcessor.prototype) as StreamProcessor;
+    const processor = Object.create(
+      StreamProcessor.prototype,
+    ) as StreamProcessor;
     Object.assign(processor, {
       runtimeContext: {
         state: {
@@ -57,8 +59,6 @@ describe('StreamProcessor._handleBucketFailover', () => {
 
     expect(result).toBe(true);
     expect(tryFailover).toHaveBeenCalledTimes(1);
-    expect(flushRuntimeAuthScope).toHaveBeenCalledWith(
-      'provider-runtime-1739',
-    );
+    expect(flushRuntimeAuthScope).toHaveBeenCalledWith('provider-runtime-1739');
   });
 });

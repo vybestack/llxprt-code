@@ -7,7 +7,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
     flushRuntimeAuthScope: vi.fn(),

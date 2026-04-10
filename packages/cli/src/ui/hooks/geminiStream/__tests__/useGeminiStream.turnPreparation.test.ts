@@ -128,13 +128,9 @@ describe('prepareTurnForQuery', () => {
       getSessionId: () => undefined,
     } as unknown as Config;
 
-    await prepareTurnForQuery(
-      false,
-      config,
-      vi.fn(),
-      vi.fn(),
-      { current: [] } as { current: ThinkingBlock[] },
-    );
+    await prepareTurnForQuery(false, config, vi.fn(), vi.fn(), {
+      current: [],
+    } as { current: ThinkingBlock[] });
 
     expect(callOrder).toContain('invalidate:default');
   });
