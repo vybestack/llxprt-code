@@ -15,11 +15,11 @@ import {
   ServerGeminiStreamEvent,
   StreamIdleTimeoutError,
   DebugLogger,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
-const NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS = 30_000;
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';
 
@@ -36,6 +36,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     delay: original.delay,
     nextStreamEventWithIdleTimeout: original.nextStreamEventWithIdleTimeout,
     StreamIdleTimeoutError: original.StreamIdleTimeoutError,
+    DEFAULT_STREAM_IDLE_TIMEOUT_MS: original.DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   };
 });
 
@@ -213,9 +214,7 @@ describe('runNonInteractive', () => {
         caughtError = err;
       });
 
-      await vi.advanceTimersByTimeAsync(
-        NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS + 1,
-      );
+      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
       await runPromise.catch(() => {});
 
       expect(caughtError).toBeInstanceOf(StreamIdleTimeoutError);

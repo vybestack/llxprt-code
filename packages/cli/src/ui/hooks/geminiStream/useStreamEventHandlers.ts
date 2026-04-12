@@ -28,6 +28,8 @@ import {
   DEFAULT_AGENT_ID,
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
+  resolveStreamIdleTimeoutMs,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   type ThinkingBlock,
   tokenLimit,
   uiTelemetryService,
@@ -60,8 +62,6 @@ import {
 } from './streamUtils.js';
 import { StreamProcessingStatus } from './types.js';
 import { handleAtCommand } from '../atCommandProcessor.js';
-
-const GEMINI_STREAM_IDLE_TIMEOUT_MS = 120_000;
 
 interface StreamEventHandlerDeps {
   config: Config;
@@ -508,31 +508,42 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         }
       };
       let iterator: AsyncIterator<GeminiEvent> | undefined;
+
+      // Resolve the effective idle timeout from config
+      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
+
       try {
         iterator = stream[Symbol.asyncIterator]();
         while (true) {
-          const nextEvent = await nextStreamEventWithIdleTimeout({
-            iterator,
-            timeoutMs: GEMINI_STREAM_IDLE_TIMEOUT_MS,
-            signal,
-            onTimeout: () => {
-              if (signal.aborted) {
-                return;
-              }
+          // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+          let nextEvent: IteratorResult<GeminiEvent>;
+          if (effectiveTimeoutMs > 0) {
+            nextEvent = await nextStreamEventWithIdleTimeout({
+              iterator,
+              timeoutMs: effectiveTimeoutMs,
+              signal,
+              onTimeout: () => {
+                if (signal.aborted) {
+                  return;
+                }
 
-              pendingHistoryAtTimeout();
-              setThought(null);
-              abortActiveStream(
+                pendingHistoryAtTimeout();
+                setThought(null);
+                abortActiveStream(
+                  new StreamIdleTimeoutError(
+                    'Stream idle timeout: no response received within the allowed time.',
+                  ),
+                );
+              },
+              createTimeoutError: () =>
                 new StreamIdleTimeoutError(
                   'Stream idle timeout: no response received within the allowed time.',
                 ),
-              );
-            },
-            createTimeoutError: () =>
-              new StreamIdleTimeoutError(
-                'Stream idle timeout: no response received within the allowed time.',
-              ),
-          });
+            });
+          } else {
+            // Watchdog disabled: call iterator.next() directly
+            nextEvent = await iterator.next();
+          }
           if (nextEvent.done) {
             break;
           }
@@ -850,5 +861,5 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
 }
 
 export const __testing = {
-  GEMINI_STREAM_IDLE_TIMEOUT_MS,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 };

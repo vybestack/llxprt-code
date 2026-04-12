@@ -11,22 +11,20 @@
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config } from '../config/config.js';
-import {
-  type ToolCallRequestInfo,
-  GeminiEventType,
-  Turn,
-  TURN_STREAM_IDLE_TIMEOUT_MS,
-} from './turn.js';
+import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '../utils/delay.js';
-import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
+import {
+  nextStreamEventWithIdleTimeout,
+  resolveStreamIdleTimeoutMs,
+} from '../utils/streamIdleTimeout.js';
 import {
   type Content,
   type Part,
   type FunctionCall,
   type FunctionDeclaration,
 } from '@google/genai';
-import { StreamEventType } from './geminiChat.js';
+import { StreamEventType, type StreamEvent } from './geminiChat.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -692,22 +690,32 @@ export class SubAgentScope {
     let textResponse = '';
     const iterator = responseStream[Symbol.asyncIterator]();
 
+    // Resolve the effective idle timeout from config
+    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.config);
+
     try {
       while (true) {
-        const result = await nextStreamEventWithIdleTimeout({
-          iterator,
-          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
-          signal: timeoutSignal,
-          onTimeout: () => {
-            if (abortController.signal.aborted) {
-              return;
-            }
-            this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
-            timeoutController.abort();
-            abortController.abort(createAbortError());
-          },
-          createTimeoutError: () => createAbortError(),
-        });
+        // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+        let result: IteratorResult<StreamEvent, unknown>;
+        if (effectiveTimeoutMs > 0) {
+          result = await nextStreamEventWithIdleTimeout({
+            iterator,
+            timeoutMs: effectiveTimeoutMs,
+            signal: timeoutSignal,
+            onTimeout: () => {
+              if (abortController.signal.aborted) {
+                return;
+              }
+              this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+              timeoutController.abort();
+              abortController.abort(createAbortError());
+            },
+            createTimeoutError: () => createAbortError(),
+          });
+        } else {
+          // Watchdog disabled: call iterator.next() directly
+          result = await iterator.next();
+        }
         if (result.done) {
           break;
         }

@@ -1179,6 +1179,24 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       { value: 'false', description: 'Allow browser auto-launch for OAuth' },
     ],
   },
+  {
+    key: 'stream-idle-timeout-ms',
+    category: 'cli-behavior',
+    description:
+      'Stream idle timeout in milliseconds. Set to 0 to disable. Default: 600000 (10 minutes).',
+    type: 'number',
+    persistToProfile: true,
+    validate: (value: unknown): ValidationResult => {
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+        return { success: true, value };
+      }
+      return {
+        success: false,
+        message:
+          'stream-idle-timeout-ms must be a finite number >= 0 (use 0 to disable)',
+      };
+    },
+  },
 ];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

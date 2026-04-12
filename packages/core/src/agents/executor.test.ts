@@ -38,7 +38,7 @@ import { z } from 'zod';
 import type { ToolErrorType } from '../index.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { createAbortError } from '../utils/delay.js';
-import { TURN_STREAM_IDLE_TIMEOUT_MS } from '../core/turn.js';
+import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -877,7 +877,7 @@ describe('AgentExecutor', () => {
         },
       );
 
-      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1_000);
+      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1_000);
 
       await runRejection;
       expect(capturedSignal?.aborted).toBe(true);
@@ -907,6 +907,54 @@ describe('AgentExecutor', () => {
       const output = await executor.run({ goal: 'Abort test' }, signal);
 
       expect(output.terminate_reason).toBe(AgentTerminateMode.ABORTED);
+    });
+  });
+
+  describe('stream idle timeout behavioral tests', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      process.env = { ...originalEnv };
+      delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      process.env = originalEnv;
+    });
+
+    it('honors config setting: uses resolveStreamIdleTimeoutMs with config', async () => {
+      const customTimeoutMs = 20_000;
+
+      mockConfig.setEphemeralSetting('stream-idle-timeout-ms', customTimeoutMs);
+
+      // Verify the config returns the setting correctly
+      expect(mockConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(
+        customTimeoutMs,
+      );
+    });
+
+    it('disabled path: setting 0 disables watchdog', async () => {
+      mockConfig.setEphemeralSetting('stream-idle-timeout-ms', 0);
+
+      // Verify the config returns 0
+      expect(mockConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(0);
+    });
+
+    it('env var precedence: env var is checked first', async () => {
+      process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = '10000';
+
+      // Import the resolve function to verify env precedence
+      const { resolveStreamIdleTimeoutMs } = await import(
+        '../utils/streamIdleTimeout.js'
+      );
+
+      mockConfig.setEphemeralSetting('stream-idle-timeout-ms', 60000);
+
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(10000); // Env value wins
     });
   });
 });

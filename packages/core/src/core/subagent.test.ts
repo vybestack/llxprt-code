@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, Mock, afterEach } from 'vitest';
 import { createAbortError } from '../utils/delay.js';
-import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
+import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -429,6 +429,14 @@ describe('subagent.ts', () => {
         () =>
           ({
             sendMessageStream: mockSendMessageStream,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+            getConfig: vi.fn().mockReturnValue(undefined),
           }) as unknown as GeminiChat,
       );
     });
@@ -1865,7 +1873,9 @@ describe('subagent.ts', () => {
           },
         );
 
-        await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1_000);
+        await vi.advanceTimersByTimeAsync(
+          DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1_000,
+        );
 
         await runRejection;
 
@@ -2906,6 +2916,398 @@ describe('subagent.ts', () => {
         expect(toolExecutorConfig.getEnableHooks?.()).toBe(true);
         expect(toolExecutorConfig.getHookSystem?.()).toBe(mockHookSystem);
       });
+    });
+  });
+
+  describe('stream idle timeout behavioral tests', () => {
+    const originalEnv = process.env;
+    const mockMessageBus = {} as MessageBus;
+
+    const localDefaultModelConfig: ModelConfig = {
+      model: 'gemini-1.5-flash-latest',
+      temp: 0.5,
+      top_p: 1,
+    };
+
+    const localDefaultRunConfig: RunConfig = {
+      max_time_minutes: 5,
+      max_turns: 10,
+    };
+
+    const createRuntimeBundle = (config: Config): AgentRuntimeLoaderResult => {
+      const history = {
+        clear: vi.fn(),
+        add: vi.fn(),
+        getCuratedForProvider: vi.fn(() => []),
+        getIdGeneratorCallback: vi.fn(() => vi.fn()),
+        findUnmatchedToolCalls: vi.fn(() => []),
+        generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
+      } as unknown as HistoryService;
+
+      const runtimeContext: AgentRuntimeContext = {
+        state: {
+          runtimeId: config.getSessionId() ?? 'runtime-123',
+          provider: config.getProvider() ?? 'gemini',
+          model: config.getModel(),
+          sessionId: config.getSessionId() ?? 'runtime-session',
+          proxyUrl: undefined,
+          modelParams: {},
+        },
+        history,
+        ephemerals: {
+          compressionThreshold: () => 0.8,
+          contextLimit: () => 60_000,
+          preserveThreshold: () => 0.2,
+          toolFormatOverride: () => undefined,
+        },
+        telemetry: {
+          logApiRequest: vi.fn(),
+          logApiResponse: vi.fn(),
+          logApiError: vi.fn(),
+        },
+        provider: {
+          getActiveProvider: vi.fn(
+            () =>
+              ({
+                name: config.getProvider() ?? 'gemini',
+                generateChatCompletion: vi.fn(async function* () {}),
+                getDefaultModel: () => config.getModel(),
+                getServerTools: () => [],
+                invokeServerTool: vi.fn(),
+              }) as IProvider,
+          ),
+          setActiveProvider: vi.fn(),
+        },
+        tools: {
+          listToolNames: () => [],
+          getToolMetadata: () => undefined,
+        },
+        providerRuntime: {
+          runtimeId: config.getSessionId() ?? 'runtime-123',
+          metadata: {},
+          settingsService: config.getSettingsService(),
+          config,
+        } as unknown as ProviderRuntimeContext,
+      };
+
+      return {
+        runtimeContext,
+        history,
+        providerAdapter: runtimeContext.provider,
+        telemetryAdapter: runtimeContext.telemetry,
+        toolsView: runtimeContext.tools,
+        contentGenerator: {} as ContentGenerator,
+        toolRegistry: new ToolRegistry(config, mockMessageBus),
+      };
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      process.env = { ...originalEnv };
+      delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      process.env = originalEnv;
+    });
+
+    it('honors config setting: timeout fires after custom timeout value from config.getEphemeralSetting', async () => {
+      const customTimeoutMs = 15_000; // 15 seconds
+
+      const settingsService = new SettingsService();
+      const configParams: ConfigParameters = {
+        sessionId: 'test-session',
+        model: DEFAULT_GEMINI_MODEL,
+        targetDir: '.',
+        debugMode: false,
+        cwd: process.cwd(),
+        settingsService,
+      };
+      const configWithTimeout = new Config(configParams);
+      configWithTimeout.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        customTimeoutMs,
+      );
+      await initializeTestConfig(configWithTimeout);
+
+      const overrides: SubAgentRuntimeOverrides = {
+        runtimeBundle: createRuntimeBundle(configWithTimeout),
+        toolRegistry: new ToolRegistry(configWithTimeout, mockMessageBus),
+      };
+
+      const scope = await SubAgentScope.create(
+        'timeout-test-agent',
+        configWithTimeout,
+        { systemPrompt: 'Test timeout behavior.' },
+        localDefaultModelConfig,
+        localDefaultRunConfig,
+        undefined,
+        undefined,
+        overrides,
+      );
+
+      // Mock a slow stream that yields after the timeout
+      vi.mocked(GeminiChat).mockImplementationOnce(
+        () =>
+          ({
+            sendMessageStream: vi.fn().mockImplementation(async () => {
+              async function* slowStream() {
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: {
+                    candidates: [
+                      {
+                        content: { parts: [{ text: 'Starting...' }] },
+                      },
+                    ],
+                  },
+                };
+                // Wait past the custom timeout
+                await vi.advanceTimersByTimeAsync(25_000);
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: {
+                    candidates: [
+                      {
+                        content: { parts: [{ text: 'Late response' }] },
+                      },
+                    ],
+                  },
+                };
+              }
+              return slowStream();
+            }),
+            getConfig: () => configWithTimeout,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+          }) as unknown as GeminiChat,
+      );
+
+      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
+      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+
+      const runPromise = scope.runNonInteractive(new ContextState());
+
+      // Attach catch handler before advancing timers to prevent unhandled rejection
+      const resultPromise = runPromise.catch((e) => e);
+
+      // Advance past the custom timeout
+      await vi.advanceTimersByTimeAsync(20_000);
+      await Promise.resolve();
+
+      // Run to completion
+      await vi.runAllTimersAsync();
+
+      // Scope should have timed out
+      const _result = await resultPromise;
+      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
+    });
+
+    it('disabled path: no timeout when setting is 0, even after extended period', async () => {
+      const settingsService = new SettingsService();
+      const configParams: ConfigParameters = {
+        sessionId: 'test-session',
+        model: DEFAULT_GEMINI_MODEL,
+        targetDir: '.',
+        debugMode: false,
+        cwd: process.cwd(),
+        settingsService,
+      };
+      const configWithTimeout = new Config(configParams);
+      configWithTimeout.setEphemeralSetting('stream-idle-timeout-ms', 0); // Disabled
+      await initializeTestConfig(configWithTimeout);
+
+      const overrides: SubAgentRuntimeOverrides = {
+        runtimeBundle: createRuntimeBundle(configWithTimeout),
+        toolRegistry: new ToolRegistry(configWithTimeout, mockMessageBus),
+      };
+
+      const scope = await SubAgentScope.create(
+        'no-timeout-agent',
+        configWithTimeout,
+        { systemPrompt: 'Test no timeout behavior.' },
+        localDefaultModelConfig,
+        { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
+        undefined,
+        undefined,
+        overrides,
+      );
+
+      let resolveIterator: () => void;
+      const iteratorPromise = new Promise<void>((resolve) => {
+        resolveIterator = resolve;
+      });
+
+      vi.mocked(GeminiChat).mockImplementationOnce(
+        () =>
+          ({
+            sendMessageStream: vi.fn().mockImplementation(async () => {
+              async function* stalledStream() {
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: {
+                    candidates: [
+                      {
+                        content: { parts: [{ text: 'Starting...' }] },
+                      },
+                    ],
+                  },
+                };
+                // Wait indefinitely until manually resolved
+                await iteratorPromise;
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: {
+                    candidates: [
+                      {
+                        content: { parts: [{ text: 'Finally done' }] },
+                      },
+                    ],
+                  },
+                };
+              }
+              return stalledStream();
+            }),
+            getConfig: () => configWithTimeout,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+          }) as unknown as GeminiChat,
+      );
+
+      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
+      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+
+      const runPromise = scope.runNonInteractive(new ContextState());
+
+      // Advance 30 minutes - no timeout because watchdog is disabled
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+      await Promise.resolve();
+
+      // No timeout yet
+      expect(scope.output.terminate_reason).not.toBe(
+        SubagentTerminateMode.TIMEOUT,
+      );
+
+      // Resolve the iterator to let the test complete
+      resolveIterator!();
+      await vi.runAllTimersAsync();
+
+      await runPromise;
+      // Should complete normally (not timeout)
+      expect(scope.output.terminate_reason).not.toBe(
+        SubagentTerminateMode.TIMEOUT,
+      );
+    });
+
+    it('env var precedence: env var overrides config setting', async () => {
+      const envTimeoutMs = 8_000; // 8 seconds from env
+      const configTimeoutMs = 45_000; // 45 seconds from config (should be ignored)
+
+      process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
+
+      const settingsService = new SettingsService();
+      const configParams: ConfigParameters = {
+        sessionId: 'test-session',
+        model: DEFAULT_GEMINI_MODEL,
+        targetDir: '.',
+        debugMode: false,
+        cwd: process.cwd(),
+        settingsService,
+      };
+      const configWithTimeout = new Config(configParams);
+      configWithTimeout.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        configTimeoutMs,
+      );
+      await initializeTestConfig(configWithTimeout);
+
+      const overrides: SubAgentRuntimeOverrides = {
+        runtimeBundle: createRuntimeBundle(configWithTimeout),
+        toolRegistry: new ToolRegistry(configWithTimeout, mockMessageBus),
+      };
+
+      const scope = await SubAgentScope.create(
+        'env-precedence-agent',
+        configWithTimeout,
+        { systemPrompt: 'Test env precedence.' },
+        localDefaultModelConfig,
+        localDefaultRunConfig,
+        undefined,
+        undefined,
+        overrides,
+      );
+
+      vi.mocked(GeminiChat).mockImplementationOnce(
+        () =>
+          ({
+            sendMessageStream: vi.fn().mockImplementation(async () => {
+              async function* slowStream() {
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: {
+                    candidates: [
+                      {
+                        content: { parts: [{ text: 'Starting...' }] },
+                      },
+                    ],
+                  },
+                };
+                // Wait past the env timeout but before config timeout
+                await vi.advanceTimersByTimeAsync(15_000);
+                yield {
+                  type: StreamEventType.CHUNK,
+                  value: {
+                    candidates: [
+                      {
+                        content: { parts: [{ text: 'Late response' }] },
+                      },
+                    ],
+                  },
+                };
+              }
+              return slowStream();
+            }),
+            getConfig: () => configWithTimeout,
+            getHistory: vi.fn().mockReturnValue([]),
+            getHistoryService: vi.fn().mockReturnValue({
+              clear: vi.fn(),
+              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+              getCurated: vi.fn().mockReturnValue([]),
+              getTotalTokens: vi.fn().mockReturnValue(0),
+            }),
+          }) as unknown as GeminiChat,
+      );
+
+      vi.mocked(createContentGenerator).mockReturnValue({} as ContentGenerator);
+      vi.mocked(getEnvironmentContext).mockResolvedValue('');
+
+      const runPromise = scope.runNonInteractive(new ContextState());
+
+      // Attach catch handler before advancing timers to prevent unhandled rejection
+      const resultPromise = runPromise.catch((e) => e);
+
+      // Advance past the env timeout (8s) but before config timeout (45s)
+      await vi.advanceTimersByTimeAsync(12_000);
+      await Promise.resolve();
+
+      // Run to completion
+      await vi.runAllTimersAsync();
+
+      // Should have timed out due to env value (8s), not config (45s)
+      const _result = await resultPromise;
+      expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
     });
   });
 });

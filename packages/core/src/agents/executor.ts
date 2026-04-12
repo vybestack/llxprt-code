@@ -28,10 +28,7 @@ import { executeToolCall } from '../core/nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
-import {
-  type ToolCallRequestInfo,
-  TURN_STREAM_IDLE_TIMEOUT_MS,
-} from '../core/turn.js';
+import { type ToolCallRequestInfo } from '../core/turn.js';
 import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { GlobTool } from '../tools/glob.js';
 import { GrepTool } from '../tools/grep.js';
@@ -54,7 +51,10 @@ import { type z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { debugLogger } from '../utils/debugLogger.js';
 import { createAbortError } from '../utils/delay.js';
-import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
+import {
+  nextStreamEventWithIdleTimeout,
+  resolveStreamIdleTimeoutMs,
+} from '../utils/streamIdleTimeout.js';
 
 /** A callback function to report on agent activity. */
 export type ActivityCallback = (activity: SubagentActivityEvent) => void;
@@ -280,6 +280,10 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     };
 
     let streamIterator: AsyncIterator<StreamEvent> | undefined;
+
+    // Resolve the effective idle timeout from config
+    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.runtimeContext);
+
     try {
       const responseStream = await chat.sendMessageStream(
         messageParams,
@@ -291,18 +295,25 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       streamIterator = responseStream[Symbol.asyncIterator]();
 
       while (true) {
-        const result = await nextStreamEventWithIdleTimeout({
-          iterator: streamIterator,
-          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
-          signal: timeoutSignal,
-          onTimeout: () => {
-            if (signal.aborted) {
-              return;
-            }
-            timeoutController.abort();
-          },
-          createTimeoutError: () => createAbortError(),
-        });
+        // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+        let result: IteratorResult<StreamEvent>;
+        if (effectiveTimeoutMs > 0) {
+          result = await nextStreamEventWithIdleTimeout({
+            iterator: streamIterator,
+            timeoutMs: effectiveTimeoutMs,
+            signal: timeoutSignal,
+            onTimeout: () => {
+              if (signal.aborted) {
+                return;
+              }
+              timeoutController.abort();
+            },
+            createTimeoutError: () => createAbortError(),
+          });
+        } else {
+          // Watchdog disabled: call iterator.next() directly
+          result = await streamIterator.next();
+        }
         if (result.done) {
           break;
         }

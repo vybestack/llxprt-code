@@ -40,10 +40,17 @@ import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import { UserTierId } from '../code_assist/types.js';
 import { parseThought, type ThoughtSummary } from '../utils/thoughtUtils.js';
-import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
+import {
+  nextStreamEventWithIdleTimeout,
+  resolveStreamIdleTimeoutMs,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+} from '../utils/streamIdleTimeout.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
-export const TURN_STREAM_IDLE_TIMEOUT_MS = 120_000;
+
+/** @deprecated Use DEFAULT_STREAM_IDLE_TIMEOUT_MS from streamIdleTimeout.js instead */
+export const TURN_STREAM_IDLE_TIMEOUT_MS = DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+
 const TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE =
   'Stream idle timeout: no response received within the allowed time.';
 
@@ -403,6 +410,11 @@ export class Turn {
 
       let streamIterator: AsyncIterator<StreamEvent> | undefined;
 
+      // Resolve the effective idle timeout, considering config and env var
+      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
+        this.chat.getConfig(),
+      );
+
       try {
         const responseStream = await this.chat.sendMessageStream(
           {
@@ -416,20 +428,27 @@ export class Turn {
         streamIterator = responseStream[Symbol.asyncIterator]();
 
         while (true) {
-          const result = await nextStreamEventWithIdleTimeout({
-            iterator: streamIterator,
-            timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
-            signal: timeoutSignal,
-            onTimeout: () => {
-              if (signal.aborted) {
-                return;
-              }
-              idleTimedOut = true;
-              timeoutController.abort();
-            },
-            createTimeoutError: () =>
-              new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
-          });
+          // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+          let result: IteratorResult<StreamEvent>;
+          if (effectiveTimeoutMs > 0) {
+            result = await nextStreamEventWithIdleTimeout({
+              iterator: streamIterator,
+              timeoutMs: effectiveTimeoutMs,
+              signal: timeoutSignal,
+              onTimeout: () => {
+                if (signal.aborted) {
+                  return;
+                }
+                idleTimedOut = true;
+                timeoutController.abort();
+              },
+              createTimeoutError: () =>
+                new Error(TURN_STREAM_IDLE_TIMEOUT_ERROR_MESSAGE),
+            });
+          } else {
+            // Watchdog disabled: call iterator.next() directly
+            result = await streamIterator.next();
+          }
           if (result.done) {
             break;
           }

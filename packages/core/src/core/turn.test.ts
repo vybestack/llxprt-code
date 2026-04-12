@@ -12,8 +12,8 @@ import {
   ServerGeminiErrorEvent,
   ServerGeminiStreamEvent,
   DEFAULT_AGENT_ID,
-  TURN_STREAM_IDLE_TIMEOUT_MS,
 } from './turn.js';
+import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 import {
   GenerateContentResponse,
   Part,
@@ -63,6 +63,9 @@ describe('Turn', () => {
   type MockedChatInstance = {
     sendMessageStream: typeof mockSendMessageStream;
     getHistory: typeof mockGetHistory;
+    getConfig: () =>
+      | { getEphemeralSetting: (key: string) => unknown }
+      | undefined;
   };
   let mockChatInstance: MockedChatInstance;
 
@@ -71,6 +74,7 @@ describe('Turn', () => {
     mockChatInstance = {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
+      getConfig: () => undefined,
     };
     turn = new Turn(
       mockChatInstance as unknown as GeminiChat,
@@ -784,7 +788,7 @@ describe('Turn', () => {
           return events;
         })();
 
-        await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+        await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
         const events = await eventsPromise;
 
         expect(events).toEqual([
@@ -856,7 +860,7 @@ describe('Turn', () => {
           return events;
         })();
 
-        await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+        await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
         const events1 = await events1Promise;
 
         expect(events1).toContainEqual(
@@ -1161,6 +1165,277 @@ describe('Turn', () => {
       };
       expect(stoppedEvent.type).toBe(GeminiEventType.AgentExecutionStopped);
       expect(stoppedEvent.contextCleared).toBeUndefined();
+    });
+  });
+
+  describe('stream idle timeout behavioral tests', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      process.env = { ...originalEnv };
+      delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      process.env = originalEnv;
+    });
+
+    it('honors config setting: timeout fires after custom timeout value from getConfig()', async () => {
+      const customTimeoutMs = 30_000; // 30 seconds
+      const mockGetConfig = vi.fn().mockReturnValue({
+        getEphemeralSetting: (key: string) => {
+          if (key === 'stream-idle-timeout-ms') {
+            return customTimeoutMs;
+          }
+          return undefined;
+        },
+      });
+
+      mockChatInstance = {
+        sendMessageStream: mockSendMessageStream,
+        getHistory: mockGetHistory,
+        getConfig: mockGetConfig,
+      } as unknown as MockedChatInstance;
+
+      turn = new Turn(
+        mockChatInstance as unknown as GeminiChat,
+        'prompt-id-1',
+        DEFAULT_AGENT_ID,
+        'test',
+      );
+      mockGetHistory.mockReturnValue([]);
+
+      // Create a slow iterator that yields after 45 seconds (past the 30s timeout)
+      const mockResponseStream = (async function* () {
+        await vi.advanceTimersByTimeAsync(45_000);
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'Late response' }] } }],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      const signal = new AbortController().signal;
+
+      const iterator = turn.run(reqParts, signal);
+      const runPromise = (async () => {
+        for await (const event of iterator) {
+          events.push(event);
+        }
+      })();
+
+      // Advance just under the custom timeout - no timeout yet
+      await vi.advanceTimersByTimeAsync(29_999);
+      await Promise.resolve();
+      expect(events).toHaveLength(0); // No events yet, no timeout
+
+      // Advance past the custom timeout
+      await vi.advanceTimersByTimeAsync(2);
+      await Promise.resolve();
+
+      // Run to completion
+      await vi.runAllTimersAsync();
+      await runPromise;
+
+      // Should have a StreamIdleTimeout event
+      const timeoutEvent = events.find(
+        (e) => e.type === GeminiEventType.StreamIdleTimeout,
+      );
+      expect(timeoutEvent).toBeDefined();
+      expect(mockGetConfig).toHaveBeenCalled();
+    });
+
+    it('honors config setting: no timeout when iterator yields within custom timeout', async () => {
+      const customTimeoutMs = 30_000;
+      const mockGetConfig = vi.fn().mockReturnValue({
+        getEphemeralSetting: (key: string) => {
+          if (key === 'stream-idle-timeout-ms') {
+            return customTimeoutMs;
+          }
+          return undefined;
+        },
+      });
+
+      mockChatInstance = {
+        sendMessageStream: mockSendMessageStream,
+        getHistory: mockGetHistory,
+        getConfig: mockGetConfig,
+      } as unknown as MockedChatInstance;
+
+      turn = new Turn(
+        mockChatInstance as unknown as GeminiChat,
+        'prompt-id-1',
+        DEFAULT_AGENT_ID,
+        'test',
+      );
+      mockGetHistory.mockReturnValue([]);
+
+      // Fast iterator - yields within the timeout
+      const mockResponseStream = (async function* () {
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'Fast response' }] } }],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      const signal = new AbortController().signal;
+
+      for await (const event of turn.run(reqParts, signal)) {
+        events.push(event);
+      }
+
+      // No timeout event - just content
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(GeminiEventType.Content);
+      expect((events[0] as { value: string }).value).toBe('Fast response');
+    });
+
+    it('disabled path: no timeout when setting is 0, even after 30 minutes', async () => {
+      const mockGetConfig = vi.fn().mockReturnValue({
+        getEphemeralSetting: (key: string) => {
+          if (key === 'stream-idle-timeout-ms') {
+            return 0; // Disabled
+          }
+          return undefined;
+        },
+      });
+
+      mockChatInstance = {
+        sendMessageStream: mockSendMessageStream,
+        getHistory: mockGetHistory,
+        getConfig: mockGetConfig,
+      } as unknown as MockedChatInstance;
+
+      turn = new Turn(
+        mockChatInstance as unknown as GeminiChat,
+        'prompt-id-1',
+        DEFAULT_AGENT_ID,
+        'test',
+      );
+      mockGetHistory.mockReturnValue([]);
+
+      // Iterator that never yields naturally
+      let resolveIterator: () => void;
+      const iteratorPromise = new Promise<void>((resolve) => {
+        resolveIterator = resolve;
+      });
+
+      const mockResponseStream = (async function* () {
+        await iteratorPromise;
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'Finally' }] } }],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      const abortController = new AbortController();
+
+      const runPromise = (async () => {
+        for await (const event of turn.run(reqParts, abortController.signal)) {
+          events.push(event);
+        }
+      })();
+
+      // Advance 30 minutes - no timeout because watchdog is disabled
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+      await Promise.resolve();
+
+      // No timeout events
+      expect(
+        events.find((e) => e.type === GeminiEventType.StreamIdleTimeout),
+      ).toBeUndefined();
+
+      // Resolve the iterator to let the test complete
+      resolveIterator!();
+      await vi.runAllTimersAsync();
+      await runPromise;
+
+      // Should have the content event, no timeout
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(GeminiEventType.Content);
+    });
+
+    it('env var precedence: env var overrides config setting', async () => {
+      const envTimeoutMs = 15_000; // 15 seconds
+      const configTimeoutMs = 60_000; // 60 seconds (should be ignored)
+
+      process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
+
+      const mockGetConfig = vi.fn().mockReturnValue({
+        getEphemeralSetting: (key: string) => {
+          if (key === 'stream-idle-timeout-ms') {
+            return configTimeoutMs;
+          }
+          return undefined;
+        },
+      });
+
+      mockChatInstance = {
+        sendMessageStream: mockSendMessageStream,
+        getHistory: mockGetHistory,
+        getConfig: mockGetConfig,
+      } as unknown as MockedChatInstance;
+
+      turn = new Turn(
+        mockChatInstance as unknown as GeminiChat,
+        'prompt-id-1',
+        DEFAULT_AGENT_ID,
+        'test',
+      );
+      mockGetHistory.mockReturnValue([]);
+
+      // Slow iterator - yields after 30 seconds (past the 15s env timeout)
+      const mockResponseStream = (async function* () {
+        await vi.advanceTimersByTimeAsync(30_000);
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'Late response' }] } }],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      const signal = new AbortController().signal;
+
+      const runPromise = (async () => {
+        for await (const event of turn.run(reqParts, signal)) {
+          events.push(event);
+        }
+      })();
+
+      // Advance past the env timeout (15s), but before config timeout (60s)
+      await vi.advanceTimersByTimeAsync(16_000);
+      await Promise.resolve();
+
+      // Run to completion
+      await vi.runAllTimersAsync();
+      await runPromise;
+
+      // Should have a StreamIdleTimeout event at the env timeout (15s), not config (60s)
+      const timeoutEvent = events.find(
+        (e) => e.type === GeminiEventType.StreamIdleTimeout,
+      );
+      expect(timeoutEvent).toBeDefined();
     });
   });
 });
