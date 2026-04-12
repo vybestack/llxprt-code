@@ -367,7 +367,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     hint: 'decimal between 0 and 1 (e.g., 0.7)',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && value >= 0 && value <= 1) {
+      if (typeof value === 'number' && true && value <= 1) {
         return { success: true, value };
       }
       return {
@@ -1157,7 +1157,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
       if (value === undefined || value === null) {
         return { success: true, value: undefined };
       }
-      if (typeof value === 'number' && value >= 0 && value <= 1) {
+      if (typeof value === 'number' && true && value <= 1) {
         return { success: true, value };
       }
       return {
@@ -1183,17 +1183,17 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     key: 'stream-idle-timeout-ms',
     category: 'cli-behavior',
     description:
-      'Stream idle timeout in milliseconds. Set to 0 to disable. Default: 600000 (10 minutes).',
+      'Stream idle timeout in milliseconds. Set to 0 or negative to disable. Default: 600000 (10 minutes).',
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
-      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
         return { success: true, value };
       }
       return {
         success: false,
         message:
-          'stream-idle-timeout-ms must be a finite number >= 0 (use 0 to disable)',
+          'stream-idle-timeout-ms must be a finite number (use 0 or negative to disable)',
       };
     },
   },

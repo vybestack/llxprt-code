@@ -347,10 +347,11 @@ export class Turn {
    */
   private shouldShowCitations(): boolean {
     try {
-      // Access config through the chat instance
-      const config = (this.chat as unknown as { config: unknown }).config as {
-        getSettingsService(): { get(key: string): unknown } | undefined;
-      };
+      const config = this.chat.getConfig() as
+        | {
+            getSettingsService(): { get(key: string): unknown } | undefined;
+          }
+        | undefined;
 
       const settingsService = config?.getSettingsService();
       if (settingsService) {
