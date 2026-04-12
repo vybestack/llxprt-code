@@ -24,6 +24,7 @@ import {
   setActiveProviderRuntimeContext,
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
+  resolveStreamIdleTimeoutMs,
   type UserFeedbackPayload,
   type EmojiFilterMode,
   type MessageBus,
@@ -38,8 +39,6 @@ import type { LoadedSettings } from './config/settings.js';
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
-
-const NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS = 30_000;
 
 interface RunNonInteractiveParams {
   config: Config;
@@ -321,14 +320,23 @@ export async function runNonInteractive({
         firstEventInTurn = false;
       };
 
+      // Resolve the effective idle timeout for this turn
+      const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
+
       while (true) {
         let nextEvent: IteratorResult<ServerGeminiStreamEvent>;
         try {
-          nextEvent = await nextStreamEventWithIdleTimeout({
-            iterator: responseIterator,
-            timeoutMs: NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS,
-            signal: abortController.signal,
-          });
+          // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+          if (effectiveTimeoutMs > 0) {
+            nextEvent = await nextStreamEventWithIdleTimeout({
+              iterator: responseIterator,
+              timeoutMs: effectiveTimeoutMs,
+              signal: abortController.signal,
+            });
+          } else {
+            // Watchdog disabled: call iterator.next() directly
+            nextEvent = await responseIterator.next();
+          }
         } catch (error) {
           if (abortController.signal.aborted) {
             debugLogger.error('Operation cancelled.');

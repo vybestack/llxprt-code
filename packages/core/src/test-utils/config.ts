@@ -49,7 +49,9 @@ export async function initializeTestConfig(config: Config): Promise<void> {
 /**
  * Creates a fake config instance for testing
  */
-export function makeFakeConfig(): Config {
+export function makeFakeConfig(options?: {
+  ephemeralSettings?: Record<string, unknown>;
+}): Config {
   // Create a minimal config for testing purposes
   const params: ConfigParameters = {
     sessionId: 'test-session',
@@ -63,6 +65,13 @@ export function makeFakeConfig(): Config {
 
   // Set some reasonable defaults for testing
   config.setModel('gemini-2.0-flash-exp');
+
+  // Set ephemeral settings if provided
+  if (options?.ephemeralSettings) {
+    for (const [key, value] of Object.entries(options.ephemeralSettings)) {
+      config.setEphemeralSetting(key, value);
+    }
+  }
 
   // Set up a minimal contentGeneratorConfig for tests
   // This is normally done via refreshAuth() but we can set it directly for synchronous test setup
