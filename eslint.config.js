@@ -333,6 +333,36 @@ export default tseslint.config(
       // Expensive heuristic — NLP analysis on comments with no value for this codebase
       'sonarjs/no-commented-code': 'off',
 
+      // TypeScript-incompatible rules — SonarJS doesn't understand TS global types
+      'sonarjs/no-reference-error': 'off', // Flags NodeJS, describe, it, beforeEach as undefined
+
+      // CLI-inappropriate rules — this is a CLI tool, not a web server
+      'sonarjs/process-argv': 'off', // CLI needs command line args
+      'sonarjs/standard-input': 'off', // CLI needs stdin for pipes
+      'sonarjs/publicly-writable-directories': 'off', // CLI needs temp files
+      'sonarjs/sockets': 'off', // MCP server uses stdio sockets
+
+      // Module-scope misunderstanding — ESM module scope IS local scope
+      'sonarjs/declarations-in-global-scope': 'off', // Top-level module decls are NOT global
+
+      // API naming conflicts — tool API uses snake_case
+      'sonarjs/variable-name': 'off', // file_path, old_string, new_string match tool params
+
+      // Redundant with TypeScript-ESLint / other plugins (already have better versions)
+      'sonarjs/cyclomatic-complexity': 'off', // ESLint 'complexity' already enabled
+      'sonarjs/max-lines-per-function': 'off', // ESLint rule already enabled
+      'sonarjs/max-lines': 'off', // ESLint rule already enabled
+      'sonarjs/no-unused-vars': 'off', // @typescript-eslint/no-unused-vars handles this
+      'sonarjs/no-unused-function-argument': 'off', // Covered by TS no-unused-vars with argsIgnorePattern
+      'sonarjs/unused-import': 'off', // import plugin handles this
+      'sonarjs/no-implicit-dependencies': 'off', // import plugin handles this
+      'sonarjs/deprecation': 'off', // TypeScript compiler already warns on deprecated APIs
+
+      // TypeScript-idiomatic patterns that SonarJS misunderstands
+      'sonarjs/void-use': 'off', // Fire-and-forget promises are valid TS pattern
+      'sonarjs/no-nested-functions': 'off', // Closures are idiomatic; nested-control-flow catches real issues
+      'sonarjs/no-undefined-assignment': 'off', // TS uses undefined for optional properties (idiomatic)
+
       // ESLint comments (recommended rules downgraded to warn)
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
