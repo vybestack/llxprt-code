@@ -22,10 +22,8 @@ import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
 } from '../telemetry/index.js';
-import {
-  ContentGeneratorConfig,
-  createContentGeneratorConfig,
-} from '../core/contentGenerator.js';
+import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
+import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { GeminiClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
@@ -37,7 +35,7 @@ import { ShellTool } from '../tools/shell.js';
 import { ReadFileTool } from '../tools/read-file.js';
 
 vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
+  const actual = await importOriginal();
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
@@ -80,8 +78,7 @@ vi.mock('../tools/memoryTool', () => ({
 }));
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/contentGenerator.js')>();
+  const actual = await importOriginal();
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -194,7 +191,7 @@ const mockCoreEvents = vi.hoisted(() => ({
 const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
 
 vi.mock('../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/events.js')>();
+  const actual = await importOriginal();
   return {
     ...actual,
     coreEvents: {
