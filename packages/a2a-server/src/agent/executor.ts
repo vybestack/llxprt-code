@@ -415,6 +415,9 @@ export class CoderAgentExecutor implements AgentExecutor {
       }
     }
 
+    // Defensive check: TypeScript analysis shows wrapper is always defined at this point,
+    // but we keep this guard for runtime safety in case of unexpected code changes.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (!wrapper) {
       logger.error(
         `[CoderAgentExecutor] Task ${taskId} is unexpectedly undefined after load/create.`,
@@ -497,6 +500,8 @@ export class CoderAgentExecutor implements AgentExecutor {
           `[CoderAgentExecutor] Task ${taskId}: All pending tools completed or none were pending.`,
         );
 
+        // Check abort signal after async operation - signal state may have changed.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (abortSignal.aborted) throw new Error('Execution aborted');
 
         const completedTools = currentTask.getAndClearCompletedTools();

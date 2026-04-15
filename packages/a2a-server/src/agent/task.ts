@@ -116,10 +116,11 @@ export class Task {
     const contentConfig = this.config.getContentGeneratorConfig();
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
-      provider: this.config.getProvider?.() ?? 'gemini',
-      model: this.config.getModel?.() ?? contentConfig?.model ?? 'gemini-pro',
-      proxyUrl: this.config.getProxy?.(),
-      sessionId: this.config.getSessionId?.(),
+      provider: this.config.getProvider() ?? 'gemini',
+      // getModel() returns string (non-null), so no nullish coalescing needed
+      model: this.config.getModel() || contentConfig?.model || 'gemini-pro',
+      proxyUrl: this.config.getProxy(),
+      sessionId: this.config.getSessionId(),
     });
     this.geminiClient = new GeminiClient(this.config, runtimeState);
     this.pendingToolConfirmationDetails = new Map();
@@ -399,6 +400,8 @@ export class Task {
         this._registerToolCall(tc.request.callId, tc.status);
       }
 
+      // When status is 'awaiting_approval', tc is narrowed to WaitingToolCall which always has confirmationDetails.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (tc.status === 'awaiting_approval' && tc.confirmationDetails) {
         this.pendingToolConfirmationDetails.set(
           tc.request.callId,
@@ -436,7 +439,6 @@ export class Task {
       toolCalls.forEach((tc: ToolCall) => {
         if (
           tc.status === 'awaiting_approval' &&
-          tc.confirmationDetails &&
           isInteractiveConfirmationDetails(tc.confirmationDetails)
         ) {
           void tc.confirmationDetails.onConfirm(
@@ -609,8 +611,9 @@ export class Task {
       // Should not happen if not a new file, but defensively return empty or newString if oldString is also empty
       return oldString === '' ? newString : '';
     }
-    // If oldString is empty and it's not a new file, do not modify the content.
-    if (oldString === '' && !isNewFile) {
+    // If oldString is empty, do not modify the content. At this point isNewFile is always false
+    // due to the early return at line 609, so no need to check it again.
+    if (oldString === '') {
       return currentContent;
     }
     return currentContent.replaceAll(oldString, newString);
@@ -631,9 +634,9 @@ export class Task {
           agentId: request.agentId ?? DEFAULT_AGENT_ID,
         };
 
+        // args is always defined per ToolCallRequestInfo interface
         if (
           normalizedRequest.name === 'replace' &&
-          normalizedRequest.args &&
           !normalizedRequest.args['newContent'] &&
           normalizedRequest.args['file_path'] &&
           normalizedRequest.args['old_string'] &&
@@ -874,16 +877,16 @@ export class Task {
         logger.info('[Task] Agent execution blocked event received.');
         break;
       case GeminiEventType.Error: {
+        // event.value is always present for Error events (type: ServerGeminiErrorEvent)
+        // Defensive fallback in case error.message is missing or malformed at runtime
         const errorMessage =
-          event.value?.error.message ?? 'Unknown error from LLM stream';
+          event.value.error.message ?? 'Unknown error from LLM stream';
         logger.error(
           '[Task] Received error event from LLM stream:',
           errorMessage,
         );
 
-        const errMessage = event.value
-          ? parseAndFormatApiError(event.value)
-          : 'Unknown error from LLM stream';
+        const errMessage = parseAndFormatApiError(event.value.error);
         this.cancelPendingTools(`LLM stream error: ${errorMessage}`);
         this.setTaskStateAndPublishUpdate(
           this.taskState,
@@ -907,9 +910,10 @@ export class Task {
   }
 
   private async _handleToolConfirmationPart(part: Part): Promise<boolean> {
+    // For DataPart (kind: 'data'), the data property is always defined and non-null.
+    // The part.kind !== 'data' check handles the discriminator, after which part.data is guaranteed.
     if (
       part.kind !== 'data' ||
-      !part.data ||
       typeof part.data['callId'] !== 'string' ||
       typeof part.data['outcome'] !== 'string'
     ) {
