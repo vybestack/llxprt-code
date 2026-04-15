@@ -45,9 +45,9 @@ export async function loadConfig(
     targetDir: workspaceDir, // Or a specific directory the agent operates on
     debugMode: process.env['DEBUG'] === 'true' || false,
     question: '', // Not used in server mode directly like CLI
-    coreTools: settings.coreTools || undefined,
-    excludeTools: settings.excludeTools || undefined,
-    showMemoryUsage: settings.showMemoryUsage || false,
+    coreTools: settings.coreTools ?? undefined,
+    excludeTools: settings.excludeTools ?? undefined,
+    showMemoryUsage: settings.showMemoryUsage ?? false,
     approvalMode:
       process.env['GEMINI_YOLO_MODE'] === 'true'
         ? ApprovalMode.YOLO
@@ -139,9 +139,9 @@ export function mergeMcpServers(
   settings: Settings,
   extensions: GeminiCLIExtension[],
 ) {
-  const mcpServers = { ...(settings.mcpServers || {}) };
+  const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {
-    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
+    Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
       if (mcpServers[key]) {
         debugLogger.warn(
           `Skipping extension MCP config for server with key "${key}" as it already exists.`,
