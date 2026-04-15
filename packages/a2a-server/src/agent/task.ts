@@ -27,7 +27,6 @@ import type {
   CompletedToolCall,
   ToolCall,
   ToolCallRequestInfo,
-  ServerGeminiErrorEvent,
   ServerGeminiStreamEvent,
   ToolCallConfirmationDetails,
   SerializableConfirmationDetails,
@@ -828,21 +827,63 @@ export class Task {
       case GeminiEventType.Finished:
         logger.info(`[Task ${this.id}] Agent finished its turn.`);
         break;
-      case GeminiEventType.Error:
-      default: {
-        // Block scope for lexical declaration
-        const errorEvent = event as ServerGeminiErrorEvent; // Type assertion
+      case GeminiEventType.UsageMetadata:
+        // Usage metadata is informational only, no action needed.
+        break;
+      case GeminiEventType.MaxSessionTurns:
+        logger.warn('[Task] Max session turns reached.');
+        break;
+      case GeminiEventType.LoopDetected:
+        logger.warn('[Task] Loop detected in agent execution.');
+        break;
+      case GeminiEventType.Citation:
+        // Citation events are informational, handled elsewhere.
+        break;
+      case GeminiEventType.Retry:
+        logger.info('[Task] Retry event received from LLM stream.');
+        break;
+      case GeminiEventType.SystemNotice:
+        logger.info('[Task] System notice received from LLM stream.');
+        break;
+      case GeminiEventType.InvalidStream: {
+        const invalidStreamMessage =
+          'Invalid stream event received from LLM stream.';
+        logger.error(
+          '[Task] Received error event from LLM stream:',
+          invalidStreamMessage,
+        );
+        this.cancelPendingTools(`LLM stream error: ${invalidStreamMessage}`);
+        this.setTaskStateAndPublishUpdate(
+          this.taskState,
+          stateChange,
+          `Agent Error, unknown agent message: ${invalidStreamMessage}`,
+          undefined,
+          false,
+          invalidStreamMessage,
+          traceId,
+        );
+        break;
+      }
+      case GeminiEventType.ContextWindowWillOverflow:
+        logger.warn('[Task] Context window will overflow event received.');
+        break;
+      case GeminiEventType.AgentExecutionStopped:
+        logger.info('[Task] Agent execution stopped event received.');
+        break;
+      case GeminiEventType.AgentExecutionBlocked:
+        logger.info('[Task] Agent execution blocked event received.');
+        break;
+      case GeminiEventType.Error: {
         const errorMessage =
-          errorEvent.value?.error.message ?? 'Unknown error from LLM stream';
+          event.value?.error.message ?? 'Unknown error from LLM stream';
         logger.error(
           '[Task] Received error event from LLM stream:',
           errorMessage,
         );
 
-        let errMessage = 'Unknown error from LLM stream';
-        if (errorEvent.value) {
-          errMessage = parseAndFormatApiError(errorEvent.value);
-        }
+        const errMessage = event.value
+          ? parseAndFormatApiError(event.value)
+          : 'Unknown error from LLM stream';
         this.cancelPendingTools(`LLM stream error: ${errorMessage}`);
         this.setTaskStateAndPublishUpdate(
           this.taskState,
@@ -854,6 +895,13 @@ export class Task {
           traceId,
         );
         break;
+      }
+      default: {
+        // Exhaustive guard: ensures all GeminiEventType cases are handled
+        const _exhaustiveCheck: never = event;
+        throw new Error(
+          `Unknown event type: ${(_exhaustiveCheck as { type: string }).type}`,
+        );
       }
     }
   }
