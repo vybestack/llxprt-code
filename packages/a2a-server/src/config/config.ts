@@ -142,7 +142,7 @@ export function mergeMcpServers(
   const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {
     Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
-      if (mcpServers[key]) {
+      if (Object.prototype.hasOwnProperty.call(mcpServers, key)) {
         debugLogger.warn(
           `Skipping extension MCP config for server with key "${key}" as it already exists.`,
         );
