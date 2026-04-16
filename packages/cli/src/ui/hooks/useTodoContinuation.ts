@@ -221,11 +221,7 @@ export const useTodoContinuation = (
       // Find the most relevant active todo
       const activeTodo = _findMostRelevantActiveTodo(todoContext.todos);
 
-      if (
-        !activeTodo ||
-        !activeTodo.content ||
-        activeTodo.content.trim() === ''
-      ) {
+      if (!activeTodo?.content || activeTodo.content.trim() === '') {
         return;
       }
 

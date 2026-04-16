@@ -125,13 +125,12 @@ export class TodoContinuationService {
         config.attemptCount,
         config.previousFailure,
       );
-    } else {
-      return this.generateStandardPrompt(
-        taskDescription,
-        config.attemptCount,
-        config.previousFailure,
-      );
     }
+    return this.generateStandardPrompt(
+      taskDescription,
+      config.attemptCount,
+      config.previousFailure,
+    );
   }
 
   /**
@@ -230,7 +229,7 @@ export class TodoContinuationService {
    * @returns Formatted task description string
    */
   formatTaskDescription(todo: Todo): string {
-    if (!todo || !todo.content) {
+    if (!todo?.content) {
       return 'Complete task';
     }
 
@@ -357,9 +356,8 @@ export class TodoContinuationService {
 
     if (isYoloMode) {
       return this.generateYoloModePrompt(truncatedDescription);
-    } else {
-      return this.generateStandardPrompt(truncatedDescription);
     }
+    return this.generateStandardPrompt(truncatedDescription);
   }
 
   /**
@@ -391,15 +389,14 @@ export class TodoContinuationService {
     ) {
       // Good word boundary found
       return truncated.substring(0, lastSpaceIndex) + '...';
-    } else {
-      // No good word boundary, hard truncate
-      return (
-        truncated.substring(
-          0,
-          TodoContinuationService.MAX_TASK_DESCRIPTION_LENGTH - 3,
-        ) + '...'
-      );
     }
+    // No good word boundary, hard truncate
+    return (
+      truncated.substring(
+        0,
+        TodoContinuationService.MAX_TASK_DESCRIPTION_LENGTH - 3,
+      ) + '...'
+    );
   }
 
   /**

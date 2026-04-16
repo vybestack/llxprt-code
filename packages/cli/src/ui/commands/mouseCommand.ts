@@ -38,8 +38,7 @@ export const mouseCommand: SlashCommand = {
     }
 
     const currentlyActive = isMouseEventsActive();
-    const nextActive =
-      mode === 'toggle' ? !currentlyActive : mode === 'on' ? true : false;
+    const nextActive = mode === 'toggle' ? !currentlyActive : mode === 'on';
 
     setMouseEventsActive(nextActive);
 

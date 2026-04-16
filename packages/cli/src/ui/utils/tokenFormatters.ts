@@ -15,9 +15,8 @@ export const formatTokensPerMinute = (tpm: number): string => {
     return tpm.toString();
   } else if (tpm < 1000000) {
     return `${(tpm / 1000).toFixed(1)}K`;
-  } else {
-    return `${(tpm / 1000000).toFixed(1)}M`;
   }
+  return `${(tpm / 1000000).toFixed(1)}M`;
 };
 
 /**
@@ -30,9 +29,8 @@ export const formatThrottleTime = (ms: number): string => {
     return `${ms}ms`;
   } else if (ms < 60000) {
     return `${(ms / 1000).toFixed(1)}s`;
-  } else {
-    return `${(ms / 60000).toFixed(1)}m`;
   }
+  return `${(ms / 60000).toFixed(1)}m`;
 };
 
 /**

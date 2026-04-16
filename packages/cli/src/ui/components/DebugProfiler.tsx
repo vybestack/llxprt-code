@@ -139,7 +139,7 @@ export const DebugProfiler = () => {
     // These events are expected to trigger UI renders.
     // Cast to base EventEmitter to allow generic event name iteration.
     const coreEventsBase = coreEvents as unknown as EventEmitter;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const appEventsBase = appEvents as unknown as EventEmitter;
     for (const eventName of Object.values(CoreEvent)) {
       coreEventsBase.on(eventName, handler);

@@ -99,13 +99,12 @@ export const toolkeyCommand: SlashCommand = {
           messageType: 'info',
           content: `${entry.displayName} API key: ${masked}`,
         };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `No API key configured for '${entry.displayName}'`,
-        };
       }
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `No API key configured for '${entry.displayName}'`,
+      };
     }
 
     // @pseudocode lines 305-308: Clear key (case-insensitive "none")

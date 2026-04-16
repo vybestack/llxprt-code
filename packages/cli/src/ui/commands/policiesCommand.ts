@@ -36,9 +36,8 @@ function getTierBand(priority: number): string {
     return 'Tier 2 (User-defined)';
   } else if (priority >= 1.0) {
     return 'Tier 1 (Defaults)';
-  } else {
-    return 'Tier 0 (System)';
   }
+  return 'Tier 0 (System)';
 }
 
 /**

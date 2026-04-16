@@ -45,12 +45,11 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         'Please paste it into your browser to authenticate with Google.',
         'After authenticating, paste the verification code you receive below:',
       ];
-    } else {
-      return [
-        'Please check your browser and authorize the application.',
-        'After authorizing, paste the authorization code below:',
-      ];
     }
+    return [
+      'Please check your browser and authorize the application.',
+      'After authorizing, paste the authorization code below:',
+    ];
   }, [provider]);
 
   /**

@@ -65,14 +65,13 @@ export const logoutCommand: SlashCommand = {
           messageType: 'info',
           content: `Successfully logged out of ${provider}`,
         };
-      } else {
-        // User wasn't authenticated but we cleaned up any stale tokens
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Cleaned up authentication state for ${provider} (was not authenticated)`,
-        };
       }
+      // User wasn't authenticated but we cleaned up any stale tokens
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Cleaned up authentication state for ${provider} (was not authenticated)`,
+      };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

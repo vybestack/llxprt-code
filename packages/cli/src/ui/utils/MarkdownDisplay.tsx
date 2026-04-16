@@ -261,23 +261,21 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           leadingWhitespace={leadingWhitespace}
         />,
       );
-    } else {
-      if (line.trim().length === 0 && !inCodeBlock) {
-        if (!lastLineEmpty) {
-          contentBlocks.push(
-            <Box key={`spacer-${index}`} height={EMPTY_LINE_HEIGHT} />,
-          );
-          lastLineEmpty = true;
-        }
-      } else {
-        addContentBlock(
-          <Box key={key}>
-            <Text wrap="wrap" color={responseColor}>
-              <RenderInline text={line} defaultColor={responseColor} />
-            </Text>
-          </Box>,
+    } else if (line.trim().length === 0 && !inCodeBlock) {
+      if (!lastLineEmpty) {
+        contentBlocks.push(
+          <Box key={`spacer-${index}`} height={EMPTY_LINE_HEIGHT} />,
         );
+        lastLineEmpty = true;
       }
+    } else {
+      addContentBlock(
+        <Box key={key}>
+          <Text wrap="wrap" color={responseColor}>
+            <RenderInline text={line} defaultColor={responseColor} />
+          </Text>
+        </Box>,
+      );
     }
   });
 

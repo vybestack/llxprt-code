@@ -17,8 +17,9 @@ import {
   type Config,
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-core';
-import type { OAuthToken, TokenStore } from './types.js';
 import type {
+  OAuthToken,
+  TokenStore,
   AuthenticatorInterface,
   BucketFailoverOAuthManagerLike,
 } from './types.js';

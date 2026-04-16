@@ -119,7 +119,7 @@ export class ToolCallNormalizer {
    * Parse arguments string to object using processToolParameters
    */
   private parseArgs(args?: string): Record<string, unknown> {
-    if (!args || !args.trim()) {
+    if (!args?.trim()) {
       return {};
     }
 

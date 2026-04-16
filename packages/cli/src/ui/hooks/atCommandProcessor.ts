@@ -16,9 +16,9 @@ import {
   isNodeError,
   unescapePath,
   debugLogger,
+  validatePathWithinWorkspace,
 } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
-import { validatePathWithinWorkspace } from '@vybestack/llxprt-code-core';
 import {
   HistoryItem,
   IndividualToolCallDisplay,

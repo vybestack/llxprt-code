@@ -912,10 +912,9 @@ export abstract class BaseProvider implements IProvider {
       : {
           settingsService: input.settings!,
           config: input.config ?? undefined,
-          runtimeId:
-            currentRuntimeId && currentRuntimeId.trim()
-              ? currentRuntimeId
-              : `${input.providerKey}:${input.stage}`,
+          runtimeId: currentRuntimeId?.trim()
+            ? currentRuntimeId
+            : `${input.providerKey}:${input.stage}`,
           metadata,
         };
 

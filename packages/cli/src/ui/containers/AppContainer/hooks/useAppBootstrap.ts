@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
@@ -41,7 +47,6 @@ import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
 import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
-import React from 'react';
 
 export interface AppBootstrapProps {
   config: Config;

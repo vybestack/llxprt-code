@@ -236,11 +236,11 @@ export async function getHigherPriorityAuth(
     // SettingsService not registered (subagent/test context) — skip authOnly check
   }
 
-  if (merged.providerApiKeys && merged.providerApiKeys[providerName]) {
+  if (merged.providerApiKeys?.[providerName]) {
     return 'API Key';
   }
 
-  if (merged.providerKeyfiles && merged.providerKeyfiles[providerName]) {
+  if (merged.providerKeyfiles?.[providerName]) {
     return 'Keyfile';
   }
 

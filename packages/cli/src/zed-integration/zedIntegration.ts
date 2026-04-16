@@ -370,7 +370,7 @@ export class GeminiAgent {
           }
         }
 
-        if (providerManager && providerManager.hasActiveProvider()) {
+        if (providerManager?.hasActiveProvider()) {
           // Use provider-based auth if a provider is configured
           this.logger.debug(
             () =>
@@ -473,7 +473,7 @@ export class GeminiAgent {
           );
 
           const providerManager = sessionConfig.getProviderManager();
-          if (providerManager && providerManager.hasActiveProvider()) {
+          if (providerManager?.hasActiveProvider()) {
             await sessionConfig.refreshAuth('provider');
           } else {
             await sessionConfig.refreshAuth('oauth');
@@ -1180,9 +1180,8 @@ export class Session {
                 fileUri: part.uri.slice(FILE_URI_SCHEME.length),
               },
             };
-          } else {
-            return { text: `@${part.uri}` };
           }
+          return { text: `@${part.uri}` };
         }
         case 'resource': {
           embeddedContext.push(part.resource);
@@ -1520,21 +1519,19 @@ function toToolCallContent(toolResult: ToolResult): acp.ToolCallContent | null {
         oldText: toolResult.returnDisplay.originalContent,
         newText: toolResult.returnDisplay.newContent,
       };
-    } else {
-      const content =
-        typeof toolResult.returnDisplay === 'object' &&
-        'content' in toolResult.returnDisplay &&
-        typeof toolResult.returnDisplay.content === 'string'
-          ? toolResult.returnDisplay.content
-          : '';
-      return {
-        type: 'content',
-        content: { type: 'text', text: content },
-      };
     }
-  } else {
-    return null;
+    const content =
+      typeof toolResult.returnDisplay === 'object' &&
+      'content' in toolResult.returnDisplay &&
+      typeof toolResult.returnDisplay.content === 'string'
+        ? toolResult.returnDisplay.content
+        : '';
+    return {
+      type: 'content',
+      content: { type: 'text', text: content },
+    };
   }
+  return null;
 }
 
 const basicPermissionOptions = [

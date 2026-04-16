@@ -56,15 +56,14 @@ export function allowedMcpServers(
         return isAllowed;
       }),
     );
-  } else {
-    blockedMcpServers.push(
-      ...Object.entries(mcpServers).map(([key, server]) => ({
-        name: key,
-        extensionName: server.extensionName || '',
-      })),
-    );
-    return {};
   }
+  blockedMcpServers.push(
+    ...Object.entries(mcpServers).map(([key, server]) => ({
+      name: key,
+      extensionName: server.extensionName || '',
+    })),
+  );
+  return {};
 }
 
 export function resolveMcpServers(

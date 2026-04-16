@@ -239,10 +239,9 @@ export class SyntheticToolResponseHandler {
             error: trBlock.error,
             isComplete: trBlock.isComplete,
           } as ToolResponseBlock;
-        } else {
-          // For other block types, use structured cloning
-          return JSON.parse(JSON.stringify(block));
         }
+        // For other block types, use structured cloning
+        return JSON.parse(JSON.stringify(block));
       }),
       metadata: msg.metadata
         ? JSON.parse(JSON.stringify(msg.metadata))

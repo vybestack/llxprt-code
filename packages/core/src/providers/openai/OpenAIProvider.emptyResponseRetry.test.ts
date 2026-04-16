@@ -155,9 +155,8 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
       callCount++;
       if (callCount === 1) {
         return createStreamingResponse(firstResponseChunks);
-      } else {
-        return createStreamingResponse(secondResponseChunks);
       }
+      return createStreamingResponse(secondResponseChunks);
     });
 
     const messages: IMessage[] = [

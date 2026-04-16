@@ -298,9 +298,8 @@ export class AuthCommandExecutor {
             messageType: 'info',
             content: status,
           };
-        } else {
-          status += ' (authenticated)';
         }
+        status += ' (authenticated)';
       } else if (isEnabled && !isAuthenticated) {
         status += ' (not authenticated)';
       }

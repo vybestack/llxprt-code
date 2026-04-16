@@ -72,9 +72,8 @@ export class SecureInputHandler {
           const keyToMask = patContent.substring(0, lineBreakMatch.index);
           const afterLineBreak = patContent.substring(lineBreakMatch.index!);
           return `${prefix}${this.maskValue(keyToMask)}${afterLineBreak}`;
-        } else {
-          return `${prefix}${this.maskValue(patContent)}`;
         }
+        return `${prefix}${this.maskValue(patContent)}`;
       }
 
       // @plan PLAN-20260211-SECURESTORE.P15
@@ -134,19 +133,17 @@ export class SecureInputHandler {
           }
 
           return result;
-        } else {
-          // No line break, mask the entire key portion
-          const maskedKey = this.maskValue(keyContent);
-          return `/key ${maskedKey}`;
         }
+        // No line break, mask the entire key portion
+        const maskedKey = this.maskValue(keyContent);
+        return `/key ${maskedKey}`;
       } else if (keyfileMatch && keyfileMatch[1]) {
         // We have content after "/keyfile "
         // For /keyfile, we don't mask the file path (it's not sensitive)
         return text;
-      } else {
-        // Just "/key", "/keyfile" or with space but no content yet
-        return text;
       }
+      // Just "/key", "/keyfile" or with space but no content yet
+      return text;
     }
 
     // Not in secure mode

@@ -612,7 +612,7 @@ describe('ast-edit characterization tests', () => {
         new AbortController().signal,
       );
 
-      if (confirmationDetails && confirmationDetails.onConfirm) {
+      if (confirmationDetails?.onConfirm) {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
         );

@@ -15,8 +15,7 @@ import {
   mergeRefreshedToken,
   type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-core';
-import type { OAuthToken, TokenStore } from './types.js';
-import type { OAuthProvider } from './types.js';
+import type { OAuthToken, TokenStore, OAuthProvider } from './types.js';
 import {
   createProfileManager,
   isLoadBalancerProfileLike,
@@ -307,7 +306,7 @@ export class ProactiveRenewalManager {
       normalizedBucket,
     );
 
-    if (!currentToken || !currentToken.refresh_token) {
+    if (!currentToken?.refresh_token) {
       this.clearProactiveRenewal(key);
       return;
     }

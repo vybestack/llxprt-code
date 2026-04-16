@@ -9,9 +9,9 @@ import type {
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
+  SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
-import type { SessionMetadata } from '@vybestack/llxprt-code-core';
 
 /**
  * @hook useRecordingInfrastructure

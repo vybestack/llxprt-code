@@ -45,9 +45,8 @@ export function sortFileEntries(
       return -1;
     } else if (bIsRecent) {
       return 1;
-    } else {
-      return a.fullpath().localeCompare(b.fullpath());
     }
+    return a.fullpath().localeCompare(b.fullpath());
   });
   return sortedEntries;
 }

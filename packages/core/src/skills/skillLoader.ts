@@ -123,7 +123,7 @@ export async function loadSkillsFromDir(
   try {
     const absoluteSearchPath = path.resolve(dir);
     const stats = await fs.stat(absoluteSearchPath).catch(() => null);
-    if (!stats || !stats.isDirectory()) {
+    if (!stats?.isDirectory()) {
       return [];
     }
 

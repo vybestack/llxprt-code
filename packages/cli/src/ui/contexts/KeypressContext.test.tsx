@@ -727,23 +727,22 @@ describe('Kitty Sequence Parsing', () => {
                 shift: false,
               },
             };
-          } else {
-            // iTerm2 and VSCode send accented characters (å, ø, µ)
-            // Note: µ (mu) is sent with meta:false on iTerm2/VSCode but
-            // gets converted to m with meta:true
-            return {
-              terminal,
-              key,
-              chunk: accentedChar,
-              expected: {
-                name: key,
-                ctrl: false,
-                meta: true, // Always expect meta:true after conversion
-                shift: false,
-                sequence: accentedChar,
-              },
-            };
           }
+          // iTerm2 and VSCode send accented characters (å, ø, µ)
+          // Note: µ (mu) is sent with meta:false on iTerm2/VSCode but
+          // gets converted to m with meta:true
+          return {
+            terminal,
+            key,
+            chunk: accentedChar,
+            expected: {
+              name: key,
+              ctrl: false,
+              meta: true, // Always expect meta:true after conversion
+              shift: false,
+              sequence: accentedChar,
+            },
+          };
         }),
       ),
     )(

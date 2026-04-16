@@ -412,10 +412,8 @@ export class ShellToolInvocation extends BaseToolInvocation<
               backgroundPIDs.push(pid);
             }
           }
-        } else {
-          if (!signal.aborted) {
-            this.logger.debug(() => 'missing pgrep output');
-          }
+        } else if (!signal.aborted) {
+          this.logger.debug(() => 'missing pgrep output');
         }
 
         // Try to get the actual PGID
@@ -540,12 +538,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
             : {};
 
       let llmPayload = llmContent;
-      if (
-        summarizeConfig &&
-        summarizeConfig[ShellTool.Name] &&
-        result &&
-        !result.aborted
-      ) {
+      if (summarizeConfig?.[ShellTool.Name] && result && !result.aborted) {
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
         if (contentGenConfig?.providerManager) {
@@ -755,9 +748,8 @@ function getShellToolDescription(): string {
 
   if (os.platform() === 'win32') {
     return `This tool executes a given shell command as \`cmd.exe /c <command>\`. Command can start background processes using \`start /b\`.${returnedInfo}`;
-  } else {
-    return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
   }
+  return `This tool executes a given shell command as \`bash -c <command>\`. Command can start background processes using \`&\`. Command is executed as a subprocess that leads its own process group. Command process group can be terminated as \`kill -- -PGID\` or signaled as \`kill -s SIGNAL -- -PGID\`.${returnedInfo}`;
 }
 
 function getCommandDescription(): string {
@@ -768,12 +760,11 @@ function getCommandDescription(): string {
       'Exact command to execute as `cmd.exe /c <command>`' +
       cmd_substitution_warning
     );
-  } else {
-    return (
-      'Exact bash command to execute as `bash -c <command>`' +
-      cmd_substitution_warning
-    );
   }
+  return (
+    'Exact bash command to execute as `bash -c <command>`' +
+    cmd_substitution_warning
+  );
 }
 
 export class ShellTool extends BaseDeclarativeTool<

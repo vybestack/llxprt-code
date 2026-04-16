@@ -612,7 +612,7 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
     (outputShapes) => {
       const outputs = outputShapes.map((s) => ({
         stopReason: s.hasStopReason ? s.stopReason : undefined,
-        continue: s.continueIsFalse ? false : true,
+        continue: !s.continueIsFalse,
       }));
 
       const aggregated = buildAggregated(outputs);

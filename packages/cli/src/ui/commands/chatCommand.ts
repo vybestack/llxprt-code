@@ -165,13 +165,12 @@ const saveCommand: SlashCommand = {
         messageType: 'info',
         content: `Conversation checkpoint saved with tag: ${decodeTagName(tag)}.`,
       };
-    } else {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No conversation found to save.',
-      };
     }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'No conversation found to save.',
+    };
   },
 };
 

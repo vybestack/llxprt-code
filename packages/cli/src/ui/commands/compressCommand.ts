@@ -44,7 +44,7 @@ export const compressCommand: SlashCommand = {
       ui.setPendingItem(pendingMessage);
       const promptId = `compress-${Date.now()}`;
       const geminiClient = context.services.config?.getGeminiClient();
-      if (!geminiClient || !geminiClient.hasChatInitialized()) {
+      if (!geminiClient?.hasChatInitialized()) {
         ui.addItem(
           {
             type: MessageType.ERROR,

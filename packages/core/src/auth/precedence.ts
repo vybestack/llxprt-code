@@ -954,7 +954,7 @@ export class AuthPrecedenceResolver {
   }
 
   private resolveProviderIdentifier(preferredProviderId?: string): string {
-    if (preferredProviderId && preferredProviderId.trim()) {
+    if (preferredProviderId?.trim()) {
       return preferredProviderId.trim();
     }
     const oauthProvider = this.normalizeProviderId(this.config.oauthProvider);

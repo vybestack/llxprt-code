@@ -120,15 +120,14 @@ function buildEnumSchema(
         ...Array<z.ZodLiteral<number>>,
       ],
     );
-  } else {
-    return z.union(
-      values.map((v) => z.literal(v)) as [
-        z.ZodLiteral<unknown>,
-        z.ZodLiteral<unknown>,
-        ...Array<z.ZodLiteral<unknown>>,
-      ],
-    );
   }
+  return z.union(
+    values.map((v) => z.literal(v)) as [
+      z.ZodLiteral<unknown>,
+      z.ZodLiteral<unknown>,
+      ...Array<z.ZodLiteral<unknown>>,
+    ],
+  );
 }
 
 /**

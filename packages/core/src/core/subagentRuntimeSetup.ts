@@ -309,7 +309,7 @@ export function buildRuntimeFunctionDeclarations(
 export function getScopeLocalFuncDefs(
   outputConfig?: OutputConfig,
 ): FunctionDeclaration[] {
-  if (!outputConfig || !outputConfig.outputs) {
+  if (!outputConfig?.outputs) {
     return [];
   }
 
@@ -351,7 +351,7 @@ export function buildChatSystemPrompt(
 
   let finalPrompt = templateString(promptConfig.systemPrompt, context);
 
-  if (outputConfig && outputConfig.outputs) {
+  if (outputConfig?.outputs) {
     let outputInstructions =
       '\n\nAfter you have achieved all other goals, you MUST emit the required output variables. For each expected output, make one final call to the `self_emitvalue` tool.';
 

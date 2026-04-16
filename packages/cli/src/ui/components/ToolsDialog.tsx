@@ -32,9 +32,8 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
   const availableTools = tools.filter((tool) => {
     if (action === 'disable') {
       return !disabledTools.includes(tool.name);
-    } else {
-      return disabledTools.includes(tool.name);
     }
+    return disabledTools.includes(tool.name);
   });
 
   // Create items for RadioButtonSelect

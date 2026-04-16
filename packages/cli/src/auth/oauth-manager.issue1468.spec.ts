@@ -56,8 +56,7 @@ vi.mock('../runtime/runtimeSettings.js', () => ({
 }));
 
 import { OAuthManager } from './oauth-manager.js';
-import type { OAuthProvider } from './types.js';
-import type { OAuthToken, TokenStore } from './types.js';
+import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';

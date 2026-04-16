@@ -152,7 +152,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
         | GroundingSupportItem[]
         | undefined;
 
-      if (!responseText || !responseText.trim()) {
+      if (!responseText?.trim()) {
         return {
           llmContent: `No search results or information found for query: "${this.params.query}"`,
           returnDisplay: 'No information found.',

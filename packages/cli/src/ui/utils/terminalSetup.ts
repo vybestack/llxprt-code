@@ -137,9 +137,8 @@ function getVSCodeStyleConfigDir(appName: string): string | null {
       return null;
     }
     return path.join(process.env.APPDATA, appName, 'User');
-  } else {
-    return path.join(os.homedir(), '.config', appName, 'User');
   }
+  return path.join(os.homedir(), '.config', appName, 'User');
 }
 
 // Generic VS Code-style terminal configuration
@@ -272,12 +271,11 @@ async function configureVSCodeStyle(
         message: `Added Shift+Enter and Ctrl+Enter keybindings to ${terminalName}.\nModified: ${keybindingsFile}`,
         requiresRestart: true,
       };
-    } else {
-      return {
-        success: true,
-        message: `${terminalName} keybindings already configured.`,
-      };
     }
+    return {
+      success: true,
+      message: `${terminalName} keybindings already configured.`,
+    };
   } catch (error) {
     return {
       success: false,

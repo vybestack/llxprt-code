@@ -326,17 +326,15 @@ function visitBoxRow(element: React.ReactNode): Row {
       if (parentProps === undefined || parentProps.wrap === 'wrap') {
         hasSeenWrapped = true;
         row.segments.push(segment);
+      } else if (!hasSeenWrapped) {
+        row.noWrapSegments.push(segment);
       } else {
-        if (!hasSeenWrapped) {
-          row.noWrapSegments.push(segment);
-        } else {
-          // put in the wrapped segment as the row is already stuck in wrapped mode.
-          row.segments.push(segment);
-          debugReportError(
-            'Text elements without wrapping cannot appear after elements with wrapping in the same row.',
-            element,
-          );
-        }
+        // put in the wrapped segment as the row is already stuck in wrapped mode.
+        row.segments.push(segment);
+        debugReportError(
+          'Text elements without wrapping cannot appear after elements with wrapping in the same row.',
+          element,
+        );
       }
       return;
     }
@@ -526,15 +524,13 @@ function layoutInkElementAsStyledText(
   function addWrappingPartToLines() {
     if (lines.length === 0) {
       lines.push([...nonWrappingContent, ...wrappingPart]);
+    } else if (noWrappingWidth > 0) {
+      lines.push([
+        ...[{ text: ' '.repeat(noWrappingWidth), props: {} }],
+        ...wrappingPart,
+      ]);
     } else {
-      if (noWrappingWidth > 0) {
-        lines.push([
-          ...[{ text: ' '.repeat(noWrappingWidth), props: {} }],
-          ...wrappingPart,
-        ]);
-      } else {
-        lines.push(wrappingPart);
-      }
+      lines.push(wrappingPart);
     }
     wrappingPart = [];
     wrappingPartWidth = 0;

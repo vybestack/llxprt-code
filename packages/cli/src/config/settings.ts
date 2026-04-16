@@ -91,9 +91,8 @@ export function getSystemSettingsPath(): string {
     return '/Library/Application Support/LLxprt-Code/settings.json';
   } else if (platform() === 'win32') {
     return 'C:\\ProgramData\\llxprt-code\\settings.json';
-  } else {
-    return '/etc/llxprt-code/settings.json';
   }
+  return '/etc/llxprt-code/settings.json';
 }
 
 export function getSystemDefaultsPath(): string {

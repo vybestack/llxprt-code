@@ -139,7 +139,7 @@ export class OpenFilesManager {
     const file = this.openFiles.find(
       (f) => f.path === editor.document.uri.fsPath,
     );
-    if (!file || !file.isActive) {
+    if (!file?.isActive) {
       return;
     }
 

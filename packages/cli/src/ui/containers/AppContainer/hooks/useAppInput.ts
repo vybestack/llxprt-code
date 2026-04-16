@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { useGeminiStream } from '../../../hooks/geminiStream/index.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
@@ -28,7 +28,6 @@ import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import * as fs from 'fs';
-import React from 'react';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import type { AppDialogsResult } from './useAppDialogs.js';
 

@@ -480,7 +480,7 @@ export class DirectMessageProcessor {
     let directResponse = convertIContentToResponse(lastResponse);
 
     // Trigger AfterModel hook
-    if (config && config.getEnableHooks?.()) {
+    if (config?.getEnableHooks?.()) {
       const hookSystem = config.getHookSystem?.();
       if (hookSystem) {
         await hookSystem.initialize();

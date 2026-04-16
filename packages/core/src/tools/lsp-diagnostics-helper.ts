@@ -37,7 +37,7 @@ export async function collectLspDiagnosticsBlock(
   absolutePath: string,
 ): Promise<string | null> {
   const lspClient = config.getLspServiceClient();
-  if (!lspClient || !lspClient.isAlive()) {
+  if (!lspClient?.isAlive()) {
     return null;
   }
 

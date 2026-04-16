@@ -191,7 +191,7 @@ describe('prependAsyncGenerator', () => {
     expect(result2.value).toBe('a');
 
     // Return early - should terminate the generator and trigger cleanup
-    // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
+
     await prepended.return?.();
 
     expect(cleanedUp).toBe(true);

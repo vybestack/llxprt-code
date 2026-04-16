@@ -14,8 +14,7 @@ import {
   ProactiveRenewalManager,
   MAX_PROACTIVE_RENEWAL_FAILURES,
 } from '../proactive-renewal-manager.js';
-import type { OAuthProvider } from '../types.js';
-import type { TokenStore, OAuthToken } from '../types.js';
+import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 
 function createMockToken(
   expirySeconds: number,

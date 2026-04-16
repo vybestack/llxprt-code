@@ -189,10 +189,9 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
           await tokenStore.saveToken('anthropic', newToken);
           await tokenStore.releaseRefreshLock('anthropic');
           return { client: i, refreshed: true, token: newToken };
-        } else {
-          const updatedToken = await tokenStore.getToken('anthropic');
-          return { client: i, refreshed: false, token: updatedToken };
         }
+        const updatedToken = await tokenStore.getToken('anthropic');
+        return { client: i, refreshed: false, token: updatedToken };
       } catch (error) {
         return { client: i, error: String(error) };
       }

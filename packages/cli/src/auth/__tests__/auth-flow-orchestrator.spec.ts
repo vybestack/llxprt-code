@@ -8,9 +8,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { OAuthToken, TokenStore } from '../types.js';
-import type { OAuthProvider } from '../types.js';
 import type {
+  OAuthToken,
+  TokenStore,
+  OAuthProvider,
   BucketFailoverOAuthManagerLike,
   AuthenticatorInterface,
 } from '../types.js';

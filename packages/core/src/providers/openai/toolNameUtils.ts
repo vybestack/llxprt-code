@@ -41,7 +41,7 @@ export function enhanceToolNameExtraction(
   }
 
   // Try to use the new name chunk
-  if (newName && newName.trim()) {
+  if (newName?.trim()) {
     return { name: newName.trim(), isFallback: false };
   }
 
@@ -77,7 +77,7 @@ export function validateToolName(
   toolName: string,
   availableToolNames: string[] = [],
 ): { isValid: boolean; correctedName?: string; reason?: string } {
-  if (!toolName || !toolName.trim()) {
+  if (!toolName?.trim()) {
     return {
       isValid: false,
       reason: 'Tool name is empty or missing',
