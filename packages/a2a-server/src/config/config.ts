@@ -81,7 +81,8 @@ export async function loadConfig(
     false,
     fileService,
     extensions,
-    true, /// TODO: Wire up folder trust logic here.
+    // Folder trust integration pending; using permissive default for server mode.
+    true,
   );
   configParams.userMemory = memoryContent;
   configParams.llxprtMdFileCount = fileCount;
