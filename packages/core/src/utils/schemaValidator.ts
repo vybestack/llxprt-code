@@ -229,9 +229,19 @@ export class SchemaValidator {
       }
     }
 
-    // Create a copy of the schema without our custom properties for AJV
+    // Create a copy of the schema without our custom properties for AJV.
+    // We also strip `$schema` so Ajv compiles under its default dialect
+    // (draft 2020-12) regardless of which draft URI the upstream schema
+    // declares. Without this, servers that emit draft-2019-09 (or any
+    // future draft) would fail with `no schema with key or ref "<uri>"`
+    // even though the actual keywords in use (type/properties/required/
+    // additionalProperties/anyOf/allOf/oneOf/enum/const/pattern/items)
+    // are identical across drafts 07, 2019-09 and 2020-12. The draft-07
+    // meta-schema registered above remains available for any schemas
+    // that `$ref` it explicitly.
     const ajvSchema = { ...extSchema };
     delete ajvSchema.requireOne;
+    delete ajvSchema.$schema;
 
     const validate = ajValidator.compile(ajvSchema);
     const valid = validate(data);

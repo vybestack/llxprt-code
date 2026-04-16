@@ -339,6 +339,51 @@ describe('SchemaValidator', () => {
       );
     });
 
+    it('accepts draft-2019-09 schemas (intermediate draft between 07 and 2020-12)', () => {
+      // Some MCP servers still emit draft-2019-09. The validator must not
+      // error with `no schema with key or ref "https://json-schema.org/draft/2019-09/schema"`.
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2019-09/schema',
+        type: 'object',
+        properties: {
+          timeout_ms: { type: 'integer', minimum: 0 },
+        },
+        required: ['timeout_ms'],
+        additionalProperties: false,
+      };
+
+      expect(SchemaValidator.validate(schema, { timeout_ms: 1000 })).toBeNull();
+      const missing = SchemaValidator.validate(schema, {});
+      expect(missing).not.toBeNull();
+      expect(missing).not.toContain('no schema with key or ref');
+      expect(missing).toContain('must have required property');
+
+      const extra = SchemaValidator.validate(schema, {
+        timeout_ms: 1000,
+        stray: 'x',
+      });
+      expect(extra).not.toBeNull();
+      expect(extra).not.toContain('no schema with key or ref');
+      expect(extra).toContain('must NOT have additional properties');
+    });
+
+    it('ignores unrecognized $schema URIs instead of erroring out', () => {
+      // Future-proofing: if a server declares a draft we have not explicitly
+      // registered, validation must still proceed under Ajv's default dialect
+      // rather than failing with a meta-schema lookup error.
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2099-01/schema',
+        type: 'object',
+        properties: { value: { type: 'number' } },
+        required: ['value'],
+      };
+
+      expect(SchemaValidator.validate(schema, { value: 42 })).toBeNull();
+      const error = SchemaValidator.validate(schema, {});
+      expect(error).not.toBeNull();
+      expect(error).not.toContain('no schema with key or ref');
+    });
+
     it('enforces draft 2020-12 additionalProperties: false', () => {
       const schema = {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
