@@ -356,6 +356,7 @@ describe('SchemaValidator', () => {
       });
       expect(error).not.toBeNull();
       expect(error).not.toContain('no schema with key or ref');
+      expect(error).toContain('must NOT have additional properties');
     });
   });
 });
