@@ -4,17 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   SlashCommand,
   SlashCommandActionReturn,
   CommandContext,
-  CommandKind,
   MessageActionReturn,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
-import {
+import type {
   Config,
   DiscoveredMCPPrompt,
+  AnyDeclarativeTool,
+  MCPServerConfig,
+  DiscoveredMCPResource,
+} from '@vybestack/llxprt-code-core';
+import {
   DiscoveredMCPTool,
   getMCPDiscoveryState,
   getMCPServerStatus,
@@ -22,9 +27,6 @@ import {
   MCPServerStatus,
   mcpServerRequiresOAuth,
   getErrorMessage,
-  AnyDeclarativeTool,
-  MCPServerConfig,
-  DiscoveredMCPResource,
 } from '@vybestack/llxprt-code-core';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';

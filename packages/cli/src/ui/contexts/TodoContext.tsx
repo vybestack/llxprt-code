@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Todo } from '@vybestack/llxprt-code-core';
+import type { Todo } from '@vybestack/llxprt-code-core';
 
 interface TodoContextType {
   todos: Todo[];

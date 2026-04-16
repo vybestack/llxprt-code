@@ -33,12 +33,12 @@ import type {
   SuccessfulToolCall,
 } from '../core/coreToolScheduler.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import type { ToolRegistry } from '../index.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   type ToolResult,
   Kind,
-  ToolRegistry,
   ApprovalMode,
   type Config,
 } from '../index.js';

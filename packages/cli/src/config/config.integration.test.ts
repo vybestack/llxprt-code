@@ -8,10 +8,12 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import {
-  Config,
+import type {
   ConfigParameters,
   ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core';
+import {
+  Config,
   DEFAULT_FILE_FILTERING_OPTIONS,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';

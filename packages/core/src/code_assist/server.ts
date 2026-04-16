@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OAuth2Client } from 'google-auth-library';
+import type { OAuth2Client } from 'google-auth-library';
 import {
   type CodeAssistGlobalUserSettingResponse,
   type LoadCodeAssistRequest,
@@ -15,17 +15,19 @@ import {
   type RetrieveUserQuotaResponse,
   type SetCodeAssistGlobalUserSettingRequest,
 } from './types.js';
+import type {
+  CountTokensResponse,
+  EmbedContentResponse,
+  GenerateContentResponse,
+} from '@google/genai';
 import {
   type CountTokensParameters,
-  CountTokensResponse,
   type EmbedContentParameters,
-  EmbedContentResponse,
   type GenerateContentParameters,
-  GenerateContentResponse,
 } from '@google/genai';
 import * as readline from 'readline';
 import { type ContentGenerator } from '../core/contentGenerator.js';
-import { UserTierId } from './types.js';
+import type { UserTierId } from './types.js';
 import {
   type CaCountTokenResponse,
   type CaGenerateContentResponse,

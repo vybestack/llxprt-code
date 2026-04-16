@@ -17,9 +17,9 @@ import {
 } from './tools.js';
 import { makeRelative } from '../utils/paths.js';
 import type { SgNode, NapiConfig } from '@ast-grep/napi';
+import type { Lang } from '../utils/ast-grep-utils.js';
 import {
   parse,
-  Lang,
   getAstLanguage,
   resolveLanguageFromPath,
   LANGUAGE_MAP,

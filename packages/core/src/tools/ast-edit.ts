@@ -15,15 +15,14 @@
  */
 
 import * as path from 'path';
-import {
-  BaseDeclarativeTool,
-  Kind,
-  ToolInvocation,
-  type ToolResult,
-} from './tools.js';
+import type { ToolInvocation } from './tools.js';
+import { BaseDeclarativeTool, Kind, type ToolResult } from './tools.js';
 import { isNodeError } from '../utils/errors.js';
-import { Config } from '../config/config.js';
-import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
+import type { Config } from '../config/config.js';
+import type {
+  ModifiableDeclarativeTool,
+  ModifyContext,
+} from './modifiable-tool.js';
 
 // Import types and constants from extracted modules
 import type {

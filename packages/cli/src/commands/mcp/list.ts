@@ -8,8 +8,8 @@
 import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import {
-  MCPServerConfig,
   MCPServerStatus,
   createTransport,
   debugLogger,

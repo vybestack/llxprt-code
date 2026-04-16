@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AuthPrecedenceConfig, OAuthManager } from '../precedence.js';
 import {
-  AuthPrecedenceConfig,
   AuthPrecedenceResolver,
-  OAuthManager,
   type OAuthTokenRequestMetadata,
 } from '../precedence.js';
 import { SettingsService } from '../../settings/SettingsService.js';

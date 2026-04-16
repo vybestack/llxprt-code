@@ -1,10 +1,10 @@
 /* eslint-disable no-console */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  buildResponsesRequest,
+import type {
   ResponsesRequestParams,
   ResponsesRequest,
 } from './buildResponsesRequest.js';
+import { buildResponsesRequest } from './buildResponsesRequest.js';
 
 describe('buildResponsesRequest', () => {
   beforeEach(() => {

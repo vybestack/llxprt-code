@@ -16,10 +16,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from './HistoryService.js';
+import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 import {
-  IContent,
-  ToolCallBlock,
-  ToolResponseBlock,
   createUserMessage as createUserMessageFromIContent,
   createToolResponse as createToolResponseFromIContent,
 } from './IContent.js';

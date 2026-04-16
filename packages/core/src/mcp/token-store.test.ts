@@ -5,11 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  BaseTokenStore,
-  MCPOAuthToken,
-  MCPOAuthCredentials,
-} from './token-store.js';
+import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
+import { BaseTokenStore } from './token-store.js';
 
 // Test implementation of BaseTokenStore for testing protected methods
 class TestTokenStore extends BaseTokenStore {

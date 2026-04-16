@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { ToolFormatter } from './ToolFormatter.js';
-import { ITool } from '../providers/ITool.js';
+import type { ITool } from '../providers/ITool.js';
 
 describe('ToolFormatter.toResponsesTool', () => {
   const formatter = new ToolFormatter();

@@ -8,7 +8,7 @@
  * Centralized SettingsService singleton instance
  */
 
-import { SettingsService } from './SettingsService.js';
+import type { SettingsService } from './SettingsService.js';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,

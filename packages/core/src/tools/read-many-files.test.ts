@@ -13,7 +13,7 @@ import path from 'path';
 import fs from 'fs'; // Actual fs for setup
 import { readFile as mockReadFile } from 'fs/promises';
 import os from 'os';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from './tool-error.js';

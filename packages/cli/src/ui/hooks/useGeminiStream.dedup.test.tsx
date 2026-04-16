@@ -16,16 +16,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
 import { useGeminiStream } from './geminiStream/index.js';
-import {
+import type {
   Config,
   GeminiClient,
-  GeminiEventType,
   ToolCallRequestInfo,
   ToolRegistry,
+} from '@vybestack/llxprt-code-core';
+import {
+  GeminiEventType,
   ApprovalMode,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   ToolCallStatus,

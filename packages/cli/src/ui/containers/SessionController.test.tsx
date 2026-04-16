@@ -28,7 +28,7 @@ import {
   type SessionContextType,
 } from './SessionController.js';
 import { MessageType } from '../types.js';
-import { Config, IProvider } from '@vybestack/llxprt-code-core';
+import type { Config, IProvider } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 

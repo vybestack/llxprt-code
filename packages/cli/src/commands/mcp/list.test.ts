@@ -4,16 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  Mock,
-  MockInstance,
-} from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DebugLogger, createTransport } from '@vybestack/llxprt-code-core';
 import { listMcpServers } from './list.js';
 import { loadSettings } from '../../config/settings.js';

@@ -58,7 +58,7 @@ import type {
   WorkspaceContext,
 } from '../utils/workspaceContext.js';
 import type { ToolRegistry } from './tool-registry.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { DebugLogger } from '../debug/index.js';
 import { coreEvents } from '../utils/events.js';
 

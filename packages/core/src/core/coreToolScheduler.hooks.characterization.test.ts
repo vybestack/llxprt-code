@@ -9,7 +9,8 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import { ApprovalMode, Config, ToolRegistry } from '../index.js';
+import type { Config, ToolRegistry } from '../index.js';
+import { ApprovalMode } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { PolicyDecision } from '../policy/types.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';

@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback } from 'react';
+import type React from 'react';
+import { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import {
@@ -13,12 +14,10 @@ import {
   type EditorDisplay,
 } from '../editors/editorSettingsManager.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import {
-  EditorType,
-  isEditorAvailable,
-  debugLogger,
-} from '@vybestack/llxprt-code-core';
+import type { LoadedSettings } from '../../config/settings.js';
+import { SettingScope } from '../../config/settings.js';
+import type { EditorType } from '@vybestack/llxprt-code-core';
+import { isEditorAvailable, debugLogger } from '@vybestack/llxprt-code-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 
 interface EditorDialogProps {

@@ -9,13 +9,13 @@
  * @requirement R17.4
  */
 
-import {
-  CommandKind,
+import type {
   SlashCommand,
   CommandContext,
   SlashCommandActionReturn,
   MessageActionReturn,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import { DebugLogger, MessageBus } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';

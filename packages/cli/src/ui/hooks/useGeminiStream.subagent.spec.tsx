@@ -5,26 +5,27 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi, Mock, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
 import { useGeminiStream } from './geminiStream/index.js';
-import {
-  useReactToolScheduler,
+import type {
   TrackedCompletedToolCall,
   TrackedToolCall,
 } from './useReactToolScheduler.js';
-import {
+import { useReactToolScheduler } from './useReactToolScheduler.js';
+import type {
   Config,
   GeminiClient,
   EditorType,
   AnyToolInvocation,
 } from '@vybestack/llxprt-code-core';
-import { Part, PartListUnion } from '@google/genai';
-import { LoadedSettings } from '../../config/settings.js';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
-import { SlashCommandProcessorResult } from '../types.js';
+import type { Part, PartListUnion } from '@google/genai';
+import type { LoadedSettings } from '../../config/settings.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { SlashCommandProcessorResult } from '../types.js';
 
 const inkMock = vi.hoisted(() => {
   const noop = vi.fn(() => null);

@@ -12,8 +12,8 @@ import {
   startInteractiveUI,
   formatNonInteractiveError,
 } from './gemini.js';
+import type { LoadedSettings } from './config/settings.js';
 import {
-  LoadedSettings,
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';

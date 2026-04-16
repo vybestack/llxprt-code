@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
 import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
 import type { SettingsService } from '../../settings/SettingsService.js';

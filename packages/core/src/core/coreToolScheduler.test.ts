@@ -10,30 +10,31 @@ import type {
   WaitingToolCall,
   CompletedToolCall,
   ErroredToolCall,
-} from './coreToolScheduler.js';
-import {
-  CoreToolScheduler,
   ToolCall,
   WaitingToolCall,
 } from './coreToolScheduler.js';
+import { CoreToolScheduler } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '../utils/generateContentResponseUtilities.js';
-import {
-  BaseDeclarativeTool,
-  BaseToolInvocation,
+import type {
   ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
   ToolConfirmationPayload,
   ToolInvocation,
   ToolResult,
   Config,
+  ToolRegistry,
+} from '../index.js';
+import {
+  BaseDeclarativeTool,
+  BaseToolInvocation,
+  ToolConfirmationOutcome,
   Kind,
   ApprovalMode,
-  ToolRegistry,
 } from '../index.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
-import { Part, PartListUnion, type Content } from '@google/genai';
+import type { Part, PartListUnion } from '@google/genai';
+import { type Content } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import {

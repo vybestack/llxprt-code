@@ -17,7 +17,7 @@ import {
 } from '../../providers/providerManagerInstance.js';
 import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
-import { IdeClient } from '../../../../core/src/ide/ide-client.js';
+import type { IdeClient } from '../../../../core/src/ide/ide-client.js';
 
 const runtimeMocks = vi.hoisted(() => ({
   getRuntimeApiMock: vi.fn(),

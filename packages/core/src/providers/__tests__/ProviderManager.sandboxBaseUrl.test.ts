@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
-import { IProvider } from '../IProvider.js';
+import type { IProvider } from '../IProvider.js';
 import {
   registerSettingsService,
   resetSettingsService,

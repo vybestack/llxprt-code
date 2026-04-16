@@ -11,8 +11,8 @@ if (process.env.NO_COLOR !== undefined) {
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { themeManager, DEFAULT_THEME } from './theme-manager.js';
-import { CustomTheme } from './theme.js';
-import { SemanticColors } from './semantic-tokens.js';
+import type { CustomTheme } from './theme.js';
+import type { SemanticColors } from './semantic-tokens.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import type * as osActual from 'node:os';

@@ -6,11 +6,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import * as path from 'node:path';
-import {
-  loadTrustedFolders,
-  TrustLevel,
-  LoadedTrustedFolders,
-} from '../../config/trustedFolders.js';
+import type { LoadedTrustedFolders } from '../../config/trustedFolders.js';
+import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
 import { useSettings } from '../contexts/SettingsContext.js';
 import { getIdeTrust } from '@vybestack/llxprt-code-core';
 

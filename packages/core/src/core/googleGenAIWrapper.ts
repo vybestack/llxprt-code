@@ -8,15 +8,17 @@ import {
   type ContentGenerator,
   type ContentGeneratorConfig,
 } from './contentGenerator.js';
+import type {
+  GenerateContentResponse,
+  CountTokensResponse,
+  EmbedContentResponse,
+  Models,
+} from '@google/genai';
 import {
   type GenerateContentParameters,
-  GenerateContentResponse,
   type CountTokensParameters,
-  CountTokensResponse,
   type EmbedContentParameters,
-  EmbedContentResponse,
   GoogleGenAI,
-  Models,
 } from '@google/genai';
 
 /**

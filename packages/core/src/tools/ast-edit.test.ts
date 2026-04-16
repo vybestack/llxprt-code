@@ -5,14 +5,12 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import fs, { promises as fsPromises } from 'fs';
+import type fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as AstEditModule from './ast-edit.js';
-import {
-  ASTEditTool,
-  ASTReadFileTool,
-  EnhancedDeclaration,
-} from './ast-edit.js';
-import { Config } from '../config/config.js';
+import type { EnhancedDeclaration } from './ast-edit.js';
+import { ASTEditTool, ASTReadFileTool } from './ast-edit.js';
+import type { Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 import { prioritizeSymbolsFromDeclarations } from './ast-edit/context-collector.js';
 

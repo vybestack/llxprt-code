@@ -15,10 +15,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  ToolCallNormalizer,
-  NormalizedToolCall,
-} from './ToolCallNormalizer.js';
+import type { NormalizedToolCall } from './ToolCallNormalizer.js';
+import { ToolCallNormalizer } from './ToolCallNormalizer.js';
 
 // Mock processToolParameters to simulate different return values
 vi.mock('../../tools/doubleEscapeUtils.js', () => ({

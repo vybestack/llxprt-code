@@ -9,17 +9,18 @@ import path from 'path';
 import toml from '@iarna/toml';
 import { glob } from 'glob';
 import { z } from 'zod';
-import { Config, Storage, debugLogger } from '@vybestack/llxprt-code-core';
-import { ICommandLoader } from './types.js';
-import {
+import type { Config } from '@vybestack/llxprt-code-core';
+import { Storage, debugLogger } from '@vybestack/llxprt-code-core';
+import type { ICommandLoader } from './types.js';
+import type {
   CommandContext,
-  CommandKind,
   SlashCommand,
   SlashCommandActionReturn,
 } from '../ui/commands/types.js';
+import { CommandKind } from '../ui/commands/types.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
+import type { IPromptProcessor } from './prompt-processors/types.js';
 import {
-  IPromptProcessor,
   SHORTHAND_ARGS_PLACEHOLDER,
   SHELL_INJECTION_TRIGGER,
 } from './prompt-processors/types.js';

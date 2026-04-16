@@ -11,7 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import commandExists from 'command-exists';
 import * as os from 'node:os';
-import { Settings } from './settings.js';
+import type { Settings } from './settings.js';
 import { resolvePath } from '../utils/resolvePath.js';
 import {
   ensureDefaultSandboxProfiles,

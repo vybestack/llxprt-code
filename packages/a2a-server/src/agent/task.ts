@@ -5,7 +5,6 @@
  */
 
 import {
-  CoreToolScheduler,
   GeminiClient,
   GeminiEventType,
   ToolConfirmationOutcome,
@@ -30,6 +29,7 @@ import type {
   UserTierId,
   ModelInfo,
   AnsiOutput,
+  CoreToolScheduler,
 } from '@vybestack/llxprt-code-core';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';

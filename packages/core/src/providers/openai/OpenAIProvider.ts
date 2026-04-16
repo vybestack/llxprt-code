@@ -19,7 +19,7 @@
  * @requirement REQ-INT-001.1
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import { type IContent } from '../../services/history/IContent.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';

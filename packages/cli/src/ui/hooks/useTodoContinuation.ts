@@ -5,12 +5,8 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  Config,
-  GeminiClient,
-  Todo,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+import type { Config, GeminiClient, Todo } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { useTodoContext } from '../contexts/TodoContext.js';
 
 export interface ContinuationState {

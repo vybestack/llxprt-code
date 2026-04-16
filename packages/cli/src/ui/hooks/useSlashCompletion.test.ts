@@ -13,12 +13,10 @@ import { useSlashCompletion } from './useSlashCompletion.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import {
-  CommandContext,
-  SlashCommand,
-  CommandKind,
-} from '../commands/types.js';
-import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
+import type { CommandContext, SlashCommand } from '../commands/types.js';
+import { CommandKind } from '../commands/types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import { FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
 describe('useSlashCompletion', () => {

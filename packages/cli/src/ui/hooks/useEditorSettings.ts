@@ -5,15 +5,15 @@
  */
 
 import { useCallback } from 'react';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { type HistoryItem, MessageType } from '../types.js';
+import type { EditorType } from '@vybestack/llxprt-code-core';
 import {
   allowEditorTypeInSandbox,
   checkHasEditorType,
-  EditorType,
 } from '@vybestack/llxprt-code-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { AppState } from '../reducers/appReducer.js';
+import type { AppState } from '../reducers/appReducer.js';
 
 import { SettingPaths } from '../../config/settingPaths.js';
 

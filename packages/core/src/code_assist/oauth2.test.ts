@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import type { Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OAuth2Client } from 'google-auth-library';
 import {
   performLogin,
@@ -12,7 +13,7 @@ import {
   authWithCode,
   clearOauthClientCache,
 } from './oauth2.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import readline from 'node:readline';
 import open from 'open';
 import { FatalAuthenticationError } from '../utils/errors.js';

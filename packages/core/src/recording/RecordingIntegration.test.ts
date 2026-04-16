@@ -36,7 +36,7 @@ import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { EventEmitter } from 'node:events';
+import type { EventEmitter } from 'node:events';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';

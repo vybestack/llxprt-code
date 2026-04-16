@@ -8,12 +8,12 @@
 
 import React from 'react';
 import { Text } from 'ink';
-import {
+import type {
   SlashCommand,
   CommandContext,
   SlashCommandActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';

@@ -5,12 +5,12 @@
  */
 
 import * as path from 'node:path';
-import {
-  CommandKind,
+import type {
   OpenDialogActionReturn,
   SlashCommand,
   MessageActionReturn,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
 
 const VALID_TRUST_LEVELS = [

@@ -14,15 +14,17 @@
  */
 
 import type { Config } from '../config/config.js';
-import {
+import type {
   SessionStartSource,
   SessionEndReason,
+  PreCompressTrigger,
+  PreCompressOutput,
+} from '../hooks/types.js';
+import {
   SessionStartHookOutput,
   SessionEndHookOutput,
   BeforeAgentHookOutput,
   AfterAgentHookOutput,
-  PreCompressTrigger,
-  PreCompressOutput,
 } from '../hooks/types.js';
 import { DebugLogger } from '../debug/index.js';
 

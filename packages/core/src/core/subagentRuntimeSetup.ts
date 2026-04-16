@@ -14,8 +14,8 @@
 
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import type { Config } from '../config/config.js';
 import {
-  Config,
   ApprovalMode,
   type SchedulerCallbacks,
   type SchedulerOptions,
@@ -41,8 +41,8 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import type { ContextState } from './subagentTypes.js';
 import {
-  ContextState,
   templateString,
   type ToolConfig,
   type OutputConfig,

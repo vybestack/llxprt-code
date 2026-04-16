@@ -16,7 +16,7 @@ import {
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { BaseToolInvocation } from './tools.js';
 import fetch from 'node-fetch';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';

@@ -4,18 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import {
-  MessageBusType,
+import { MessageBusType, DebugLogger } from '@vybestack/llxprt-code-core';
+import type {
+  MessageBus,
   BucketAuthConfirmationRequest,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
-import {
-  RadioButtonSelect,
-  RadioSelectItem,
-} from './shared/RadioButtonSelect.js';
+import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
+import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';

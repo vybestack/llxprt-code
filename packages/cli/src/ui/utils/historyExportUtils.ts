@@ -7,7 +7,7 @@
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Content } from '@google/genai';
+import type { Content } from '@google/genai';
 
 /**
  * Sanitizes a transcript by redacting sensitive credentials and keys.

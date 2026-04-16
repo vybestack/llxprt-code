@@ -14,8 +14,9 @@ import {
   getMCPDiscoveryState,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-core';
-import { MessageActionReturn } from './types.js';
-import { Type, CallableTool } from '@google/genai';
+import type { MessageActionReturn } from './types.js';
+import type { CallableTool } from '@google/genai';
+import { Type } from '@google/genai';
 
 // Mock external dependencies
 vi.mock('open', () => ({

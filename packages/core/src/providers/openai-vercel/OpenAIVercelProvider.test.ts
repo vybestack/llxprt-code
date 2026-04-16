@@ -14,7 +14,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import { BaseProvider } from '../BaseProvider.js';
-import { IProvider } from '../IProvider.js';
+import type { IProvider } from '../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';

@@ -8,11 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import {
-  createTmpDir,
-  cleanupTmpDir,
-  FileSystemStructure,
-} from '@vybestack/llxprt-code-test-utils';
+import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
+import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 import { extractPathToken, getPathSuggestions } from './shellPathCompletion.js';
 
 describe('extractPathToken', () => {

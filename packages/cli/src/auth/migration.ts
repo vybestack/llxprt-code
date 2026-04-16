@@ -14,7 +14,8 @@
  */
 
 import type { OAuthProvider } from './types.js';
-import { TokenStore, debugLogger } from '@vybestack/llxprt-code-core';
+import type { TokenStore } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 
 /**
  * Migrate any in-memory tokens to persistent storage

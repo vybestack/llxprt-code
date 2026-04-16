@@ -12,7 +12,7 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { debugState } from '../debug.js';
 import { appEvents, AppEvent } from '../../utils/events.js';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
-import { EventEmitter } from 'node:events';
+import type { EventEmitter } from 'node:events';
 
 // Frames that render at least this far before or after an action are considered
 // idle frames.

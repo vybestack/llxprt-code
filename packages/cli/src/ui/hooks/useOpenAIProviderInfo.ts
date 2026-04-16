@@ -5,11 +5,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import {
+import type {
   Config,
   ProviderMessage as Message,
-  getOpenAIProviderInfo,
 } from '@vybestack/llxprt-code-core';
+import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 // Import OpenAIProviderInfo type from the function return type

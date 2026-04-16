@@ -4,17 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-} from 'react';
-import { ToolCallContextType, ToolCallContext } from './ToolCallContext.js';
+import type React from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { ToolCallContextType } from './ToolCallContext.js';
+import { ToolCallContext } from './ToolCallContext.js';
+import type { TodoToolCall } from '@vybestack/llxprt-code-core';
 import {
   ToolCallTrackerService,
-  TodoToolCall,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 

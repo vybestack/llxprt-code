@@ -16,13 +16,10 @@
  */
 
 import { useRef, useCallback, useEffect } from 'react';
-import {
-  GeminiClient,
-  DEFAULT_AGENT_ID,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import type { GeminiClient } from '@vybestack/llxprt-code-core';
+import { DEFAULT_AGENT_ID, DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Part, PartListUnion } from '@google/genai';
-import {
+import type {
   TrackedToolCall,
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,

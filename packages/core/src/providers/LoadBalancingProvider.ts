@@ -11,14 +11,14 @@
  * Selection happens at REQUEST TIME, not profile load time.
  */
 
-import {
+import type {
   IProvider,
   GenerateChatOptions,
   ProviderToolset,
 } from './IProvider.js';
-import { IModel } from './IModel.js';
-import { IContent } from '../services/history/IContent.js';
-import { ProviderManager } from './ProviderManager.js';
+import type { IModel } from './IModel.js';
+import type { IContent } from '../services/history/IContent.js';
+import type { ProviderManager } from './ProviderManager.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { Profile } from '../types/modelParams.js';
 import { LoadBalancerFailoverError } from './errors.js';

@@ -4,16 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   GeminiClient,
   createRuntimeStateFromConfig,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import {
-  FunctionCallingConfigMode,
-  SendMessageParameters,
-} from '@google/genai';
+import type { SendMessageParameters } from '@google/genai';
+import { FunctionCallingConfigMode } from '@google/genai';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 
 const logger = new DebugLogger('llxprt:subagent:auto-prompt');

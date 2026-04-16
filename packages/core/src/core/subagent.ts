@@ -10,7 +10,7 @@
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   type ToolCallRequestInfo,
   GeminiEventType,
@@ -67,9 +67,9 @@ import {
 } from './subagentExecution.js';
 
 // --- Internal imports from subagentTypes.ts (used within this file) ---
+import type { ContextState } from './subagentTypes.js';
 import {
   SubagentTerminateMode,
-  ContextState,
   defaultEnvironmentContextLoader,
   type OutputObject,
   type PromptConfig,

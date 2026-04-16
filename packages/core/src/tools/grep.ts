@@ -23,14 +23,14 @@ import {
   resolveTextSearchTarget,
   type ResolvedSearchTarget,
 } from '../utils/resolveTextSearchTarget.js';
-import { Config } from '../config/config.js';
-import { FileExclusions } from '../utils/ignorePatterns.js';
+import type { Config } from '../config/config.js';
+import type { FileExclusions } from '../utils/ignorePatterns.js';
 import { ToolErrorType } from './tool-error.js';
 import {
   limitOutputTokens,
   formatLimitedOutput,
 } from '../utils/toolOutputLimiter.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 /**

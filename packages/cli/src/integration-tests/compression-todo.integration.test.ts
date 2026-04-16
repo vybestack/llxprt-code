@@ -25,9 +25,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import type { Todo } from '@vybestack/llxprt-code-core';
 import {
   TodoStore,
-  Todo,
   buildContinuationDirective,
 } from '@vybestack/llxprt-code-core';
 

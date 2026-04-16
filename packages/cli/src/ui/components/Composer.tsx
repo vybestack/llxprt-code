@@ -5,7 +5,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { InputPrompt } from './InputPrompt.js';

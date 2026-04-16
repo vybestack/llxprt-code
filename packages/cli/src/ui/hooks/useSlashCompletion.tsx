@@ -8,23 +8,20 @@ import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
+import type { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import {
   isNodeError,
   escapePath,
   unescapePath,
   getErrorMessage,
-  Config,
-  FileDiscoveryService,
   DEFAULT_FILE_FILTERING_OPTIONS,
   SHELL_SPECIAL_CHARS,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
-import { CommandContext, SlashCommand } from '../commands/types.js';
-import {
-  logicalPosToOffset,
-  TextBuffer,
-} from '../components/shared/text-buffer.js';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { TextBuffer } from '../components/shared/text-buffer.js';
+import { logicalPosToOffset } from '../components/shared/text-buffer.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
 import { useCompletion } from './useCompletion.js';

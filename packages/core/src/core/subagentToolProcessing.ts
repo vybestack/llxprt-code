@@ -11,8 +11,8 @@
  * Extracted from subagent.ts as part of Issue #1581 (Phase 3).
  */
 
-import { DebugLogger } from '../debug/DebugLogger.js';
-import { Config } from '../config/config.js';
+import type { DebugLogger } from '../debug/DebugLogger.js';
+import type { Config } from '../config/config.js';
 import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 import {
   executeToolCall,

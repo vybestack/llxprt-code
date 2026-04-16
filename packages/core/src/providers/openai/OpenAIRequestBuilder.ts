@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import type { IContent } from '../../services/history/IContent.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';

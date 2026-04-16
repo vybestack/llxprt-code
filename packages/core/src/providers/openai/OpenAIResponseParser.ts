@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import type { DebugLogger } from '../../debug/index.js';
 import type {
   ToolCallBlock,

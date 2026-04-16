@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
+import type { FilterConfiguration } from './EmojiFilter';
+import { EmojiFilter } from './EmojiFilter';
 
 // Remove mock to test actual implementation
 /*

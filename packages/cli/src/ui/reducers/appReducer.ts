@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { HistoryItem } from '../types.js';
+import type { HistoryItem } from '../types.js';
 
 export type AppAction =
   | {

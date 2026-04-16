@@ -5,10 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  applyCliSetArguments,
-  EphemeralSettingTarget,
-} from './cliEphemeralSettings.js';
+import type { EphemeralSettingTarget } from './cliEphemeralSettings.js';
+import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 class TestTarget implements EphemeralSettingTarget {
   private readonly values = new Map<string, unknown>();

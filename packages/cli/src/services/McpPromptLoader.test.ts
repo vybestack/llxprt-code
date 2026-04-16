@@ -5,9 +5,9 @@
  */
 
 import { McpPromptLoader } from './McpPromptLoader.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import * as cliCore from '@vybestack/llxprt-code-core';
-import { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
+import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommandKind, type CommandContext } from '../ui/commands/types.js';
 

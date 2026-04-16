@@ -11,12 +11,12 @@ import {
 } from './runtimeRegistry.js';
 import { configureCliStatelessHardening } from './statelessHardening.js';
 import { setCliRuntimeContext } from './runtimeLifecycle.js';
-import {
+import type {
   Config,
   SettingsService,
   ProviderManager,
-  clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
+import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 
 import {
   getCliRuntimeServices,

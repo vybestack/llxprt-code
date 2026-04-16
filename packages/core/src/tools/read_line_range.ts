@@ -21,16 +21,14 @@ import {
   processSingleFileContent,
   getSpecificMimeType,
 } from '../utils/fileUtils.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
-import {
-  getGitLineChanges,
-  GitLineChangeMarker,
-} from '../utils/gitLineChanges.js';
+import type { GitLineChangeMarker } from '../utils/gitLineChanges.js';
+import { getGitLineChanges } from '../utils/gitLineChanges.js';
 
 /**
  * Parameters for the ReadLineRange tool

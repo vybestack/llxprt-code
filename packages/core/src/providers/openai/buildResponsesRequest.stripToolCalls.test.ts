@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 describe('buildResponsesRequest - tool_calls stripping', () => {
   it('should strip tool_calls from messages when building request', () => {
     const messages: IContent[] = [

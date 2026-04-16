@@ -26,13 +26,8 @@ import {
   executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
-import {
-  ApprovalMode,
-  Config,
-  ToolRegistry,
-  DEFAULT_AGENT_ID,
-  ToolErrorType,
-} from '../index.js';
+import type { Config, ToolRegistry } from '../index.js';
+import { ApprovalMode, DEFAULT_AGENT_ID, ToolErrorType } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';
 

@@ -54,23 +54,19 @@ vi.mock('../../utils/autoPromptGenerator.js', async (importOriginal) => {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import {
-  SubagentManager,
-  ProfileManager,
-  Logger,
-  SessionMetrics,
-} from '@vybestack/llxprt-code-core';
+import type { Logger, SessionMetrics } from '@vybestack/llxprt-code-core';
+import { SubagentManager, ProfileManager } from '@vybestack/llxprt-code-core';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
 import { FunctionCallingConfigMode } from '@google/genai';
-import {
+import type {
   CommandContext,
   MessageActionReturn,
   ConfirmActionReturn,
   SlashCommandActionReturn,
 } from '../types.js';
-import { LoadedSettings } from '../../../config/settings.js';
-import { SessionStatsState } from '../../contexts/SessionContext.js';
+import type { LoadedSettings } from '../../../config/settings.js';
+import type { SessionStatsState } from '../../contexts/SessionContext.js';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 

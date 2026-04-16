@@ -19,7 +19,7 @@
  * under the original `AppContainer` name used by App.tsx and the public API.
  */
 
-import React from 'react';
+import type React from 'react';
 import type {
   Config,
   MessageBus,

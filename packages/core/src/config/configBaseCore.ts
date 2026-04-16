@@ -7,46 +7,46 @@ import * as path from 'node:path';
 import type { EventEmitter } from 'node:events';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
-import { GeminiClient } from '../core/client.js';
-import { PromptRegistry } from '../prompts/prompt-registry.js';
-import { ResourceRegistry } from '../resources/resource-registry.js';
-import { ToolRegistry } from '../tools/tool-registry.js';
-import { McpClientManager } from '../tools/mcp-client-manager.js';
+import type { GeminiClient } from '../core/client.js';
+import type { PromptRegistry } from '../prompts/prompt-registry.js';
+import type { ResourceRegistry } from '../resources/resource-registry.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
+import type { McpClientManager } from '../tools/mcp-client-manager.js';
 import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '../tools/memoryTool.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
-import { HookSystem } from '../hooks/hookSystem.js';
+import type { HookSystem } from '../hooks/hookSystem.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import { GitService } from '../services/gitService.js';
-import { ContextManager } from '../services/contextManager.js';
+import type { GitService } from '../services/gitService.js';
+import type { ContextManager } from '../services/contextManager.js';
 import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
-import { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
-import { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
+import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
+import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
+import type { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 import type { FileSystemService } from '../services/fileSystemService.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
-import { OutputFormat } from '../utils/output-format.js';
+import type { OutputFormat } from '../utils/output-format.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
-import { WorkspaceContext } from '../utils/workspaceContext.js';
+import type { WorkspaceContext } from '../utils/workspaceContext.js';
 import type { ExtensionLoader } from '../utils/extensionLoader.js';
+import type { TelemetryTarget } from '../telemetry/index.js';
 import {
-  TelemetryTarget,
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
 } from '../telemetry/index.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
-import { IdeClient } from '../ide/ide-client.js';
-import { SettingsService } from '../settings/SettingsService.js';
-import { ProfileManager } from './profileManager.js';
-import { SubagentManager } from './subagentManager.js';
-import { Storage } from './storage.js';
-import { FileExclusions } from '../utils/ignorePatterns.js';
-import { PolicyEngine } from '../policy/policy-engine.js';
-import { SkillManager } from '../skills/skillManager.js';
+import type { IdeClient } from '../ide/ide-client.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import type { ProfileManager } from './profileManager.js';
+import type { SubagentManager } from './subagentManager.js';
+import type { Storage } from './storage.js';
+import type { FileExclusions } from '../utils/ignorePatterns.js';
+import type { PolicyEngine } from '../policy/policy-engine.js';
+import type { SkillManager } from '../skills/skillManager.js';
 import type { ToolRecord } from './toolRegistryFactory.js';
 import type { LspState } from './lspIntegration.js';
+import type { ApprovalMode, MCPServerConfig } from './configTypes.js';
 import {
-  ApprovalMode,
   type AccessibilitySettings,
   type BugCommandSettings,
   type ChatCompressionSettings,
@@ -56,7 +56,6 @@ import {
   type IntrospectionAgentSettings,
   type TelemetrySettings,
   type GeminiCLIExtension,
-  MCPServerConfig,
   type SandboxConfig,
   type ActiveExtension,
   type BucketFailoverHandler,

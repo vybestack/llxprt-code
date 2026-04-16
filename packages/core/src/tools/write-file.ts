@@ -7,7 +7,8 @@
 import fs from 'fs';
 import path from 'path';
 import * as Diff from 'diff';
-import { Config, ApprovalMode } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,

@@ -14,7 +14,7 @@ import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_TRUNCATE_MODE,
 } from './toolOutputLimiter.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 
 describe('toolOutputLimiter', () => {
   let mockConfig: {

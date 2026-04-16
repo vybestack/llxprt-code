@@ -5,12 +5,9 @@
  */
 
 import { type ToolResult } from '../tools/tools.js';
-import {
-  type Content,
-  type GenerateContentConfig,
-  GenerateContentResponse,
-} from '@google/genai';
-import { GeminiClient } from '../core/client.js';
+import type { GenerateContentResponse } from '@google/genai';
+import { type Content, type GenerateContentConfig } from '@google/genai';
+import type { GeminiClient } from '../core/client.js';
 import { DEFAULT_GEMINI_FLASH_LITE_MODEL } from '../config/models.js';
 import { getResponseText } from './generateContentResponseUtilities.js';
 import { partToString } from './partUtils.js';

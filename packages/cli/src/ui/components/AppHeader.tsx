@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text } from 'ink';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { SemanticColors } from '../colors.js';

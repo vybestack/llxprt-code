@@ -9,13 +9,13 @@
  * @requirement R12, R13, R14, R15, R16, R17, R18, R19
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
   MessageActionReturn,
   SlashCommandActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 /**
  * @plan:PLAN-20250214-CREDPROXY.P33
  */

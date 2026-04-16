@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { themeManager } from './theme-manager.js';
-import { SemanticColors } from './semantic-tokens.js';
+import type { SemanticColors } from './semantic-tokens.js';
 import { getColorMigrationMapping } from './theme-compat.js';
 import { Colors } from '../colors.js';
 

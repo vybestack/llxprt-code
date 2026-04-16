@@ -9,7 +9,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InsertAtLineTool } from '../insert_at_line.js';
-import { Config, ApprovalMode } from '../../config/config.js';
+import type { Config } from '../../config/config.js';
+import { ApprovalMode } from '../../config/config.js';
 import { createMockWorkspaceContext } from '../../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../../services/fileSystemService.js';
 import path from 'path';

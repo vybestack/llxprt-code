@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ColorsTheme } from './theme.js';
-import { SemanticColors } from './semantic-tokens.js';
+import type { ColorsTheme } from './theme.js';
+import type { SemanticColors } from './semantic-tokens.js';
 
 /**
  * Resolves a theme's colors to semantic color tokens.

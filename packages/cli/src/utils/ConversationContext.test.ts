@@ -5,10 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  ConversationContext,
-  IConversationContext,
-} from './ConversationContext.js';
+import type { IConversationContext } from './ConversationContext.js';
+import { ConversationContext } from './ConversationContext.js';
 
 describe('ConversationContextManager', () => {
   // Reset the singleton before each test to ensure isolation

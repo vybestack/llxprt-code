@@ -6,8 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveSemanticColors } from './semantic-resolver.js';
-import { SemanticColors } from './semantic-tokens.js';
-import { ColorsTheme } from './theme.js';
+import type { SemanticColors } from './semantic-tokens.js';
+import type { ColorsTheme } from './theme.js';
 
 describe('semantic-resolver', () => {
   describe('resolveSemanticColors', () => {

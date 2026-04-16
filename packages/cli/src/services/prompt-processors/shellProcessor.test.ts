@@ -7,10 +7,10 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { ConfirmationRequiredError, ShellProcessor } from './shellProcessor.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { CommandContext } from '../../ui/commands/types.js';
+import type { CommandContext } from '../../ui/commands/types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
-  Config,
   escapeShellArg,
   getShellConfiguration,
 } from '@vybestack/llxprt-code-core';

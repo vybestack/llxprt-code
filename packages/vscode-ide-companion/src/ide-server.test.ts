@@ -9,7 +9,8 @@ import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { IDEServer } from './ide-server.js';
-import { DiffContentProvider, DiffManager } from './diff-manager.js';
+import type { DiffContentProvider } from './diff-manager.js';
+import { DiffManager } from './diff-manager.js';
 
 vi.mock('vscode', () => ({
   EventEmitter: vi.fn(() => ({

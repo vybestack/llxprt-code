@@ -9,9 +9,9 @@
  * @requirement REQ-INT-001.1
  */
 import { DebugLogger } from '../../debug/index.js';
-import { ProviderManager } from '../ProviderManager.js';
+import type { ProviderManager } from '../ProviderManager.js';
 import { getActiveProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
-import { ConversationCache } from './ConversationCache.js';
+import type { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 
 // Create a single logger instance for the module (following singleton pattern)

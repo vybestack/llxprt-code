@@ -9,10 +9,11 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ApplyPatchTool, classifyPatchOperations } from '../apply-patch.js';
-import { ApprovalMode, Config } from '../../config/config.js';
+import type { Config } from '../../config/config.js';
+import { ApprovalMode } from '../../config/config.js';
 import { createMockWorkspaceContext } from '../../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../../services/fileSystemService.js';
-import * as Diff from 'diff';
+import type * as Diff from 'diff';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';

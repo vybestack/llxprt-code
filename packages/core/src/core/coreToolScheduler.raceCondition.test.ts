@@ -9,15 +9,17 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import {
-  BaseDeclarativeTool,
-  BaseToolInvocation,
+import type {
   ToolInvocation,
   ToolResult,
   Config,
+  ToolRegistry,
+} from '../index.js';
+import {
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   Kind,
   ApprovalMode,
-  ToolRegistry,
 } from '../index.js';
 import { PolicyDecision } from '../policy/types.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';

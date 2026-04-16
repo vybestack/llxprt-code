@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from '@vybestack/llxprt-code-core';
-import type { Todo } from '@vybestack/llxprt-code-core';
+import type { Config, Todo } from '@vybestack/llxprt-code-core';
 
 /**
  * Test mock config interface for unit tests

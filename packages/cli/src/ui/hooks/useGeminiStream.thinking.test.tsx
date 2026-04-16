@@ -11,24 +11,21 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import type { Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import * as ReactDOM from 'react-dom';
 import { useGeminiStream } from './geminiStream/index.js';
-import {
-  useReactToolScheduler,
-  TrackedToolCall,
-} from './useReactToolScheduler.js';
-import {
-  Config,
-  EditorType,
-  GeminiEventType as ServerGeminiEventType,
-} from '@vybestack/llxprt-code-core';
+import type { TrackedToolCall } from './useReactToolScheduler.js';
+import { useReactToolScheduler } from './useReactToolScheduler.js';
+import type { Config, EditorType } from '@vybestack/llxprt-code-core';
+import { GeminiEventType as ServerGeminiEventType } from '@vybestack/llxprt-code-core';
 import { FinishReason } from '@google/genai';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
-import { MessageType, HistoryItemGemini, StreamingState } from '../types.js';
-import { LoadedSettings } from '../../config/settings.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { HistoryItemGemini } from '../types.js';
+import { MessageType, StreamingState } from '../types.js';
+import type { LoadedSettings } from '../../config/settings.js';
 
 const inkMock = vi.hoisted(() => {
   const write = vi.fn();

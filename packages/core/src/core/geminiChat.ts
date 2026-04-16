@@ -55,7 +55,7 @@ export {
 
 import type { StreamEvent } from './geminiChatTypes.js';
 import type { CompressionContext } from './compression/types.js';
-import { PerformCompressionResult } from './turn.js';
+import type { PerformCompressionResult } from './turn.js';
 
 /**
  * Error thrown when agent execution is stopped by a hook.

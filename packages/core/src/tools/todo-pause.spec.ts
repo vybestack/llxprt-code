@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TodoPause, TodoPauseParams } from './todo-pause.js';
+import type { TodoPauseParams } from './todo-pause.js';
+import { TodoPause } from './todo-pause.js';
 
 describe('TodoPause - Behavioral Tests', () => {
   let tool: TodoPause;

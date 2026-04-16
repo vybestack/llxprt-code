@@ -8,7 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { ProfileManager, Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-core';
+import { ProfileManager } from '@vybestack/llxprt-code-core';
 import {
   createTempDirectory,
   cleanupTempDirectory,

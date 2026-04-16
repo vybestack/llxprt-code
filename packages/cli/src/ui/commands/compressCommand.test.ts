@@ -5,9 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { GeminiClient } from '@vybestack/llxprt-code-core';
 import {
   CompressionStatus,
-  GeminiClient,
   PerformCompressionResult,
 } from '@vybestack/llxprt-code-core';
 import { compressCommand } from './compressCommand.js';

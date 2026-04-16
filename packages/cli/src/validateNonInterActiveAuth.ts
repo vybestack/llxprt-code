@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   ExitCodes,
   JsonFormatter,
   OutputFormat,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from './config/settings.js';
+import type { LoadedSettings } from './config/settings.js';
 
 /**
  * Check if any authentication environment variables are set.

@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   getErrorMessage,
   getMCPServerPrompts,
 } from '@vybestack/llxprt-code-core';
-import {
+import type {
   CommandContext,
-  CommandKind,
   SlashCommand,
   SlashCommandActionReturn,
 } from '../ui/commands/types.js';
-import { ICommandLoader } from './types.js';
-import {
+import { CommandKind } from '../ui/commands/types.js';
+import type { ICommandLoader } from './types.js';
+import type {
   PromptArgument,
   PromptMessage,
 } from '@modelcontextprotocol/sdk/types.js';

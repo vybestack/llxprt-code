@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { TodoToolCall } from '@vybestack/llxprt-code-core';
+import type { TodoToolCall } from '@vybestack/llxprt-code-core';
 
 export interface ToolCallContextType {
   /**

@@ -29,7 +29,7 @@ import type {
   HookExecutionRequest,
   HookExecutionResponse,
 } from '../hookBusContracts.js';
-import { DebugLogger } from '../../debug/index.js';
+import type { DebugLogger } from '../../debug/index.js';
 import type { Config } from '../../config/config.js';
 import type { MessageBus } from '../../confirmation-bus/message-bus.js';
 import type { MessageBusType } from '../../confirmation-bus/types.js';

@@ -5,12 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ReadFileTool, ReadFileToolParams } from './read-file.js';
+import type { ReadFileToolParams } from './read-file.js';
+import { ReadFileTool } from './read-file.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import fsp from 'fs/promises';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';

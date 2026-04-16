@@ -19,7 +19,7 @@
  * - External tools marked even when primaryTools is empty
  */
 
-import React from 'react';
+import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Part } from '@google/genai';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core';

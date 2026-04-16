@@ -5,7 +5,7 @@ import {
   MODEL_CONTEXT_SIZE,
 } from './estimateRemoteTokens.js';
 import { ConversationCache } from './ConversationCache.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 describe('estimateRemoteTokens', () => {
   let cache: ConversationCache;
 

@@ -10,17 +10,11 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { act, useState } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useAtCompletion } from './useAtCompletion.js';
-import {
-  Config,
-  FileSearch,
-  FileSearchFactory,
-} from '@vybestack/llxprt-code-core';
-import {
-  createTmpDir,
-  cleanupTmpDir,
-  FileSystemStructure,
-} from '@vybestack/llxprt-code-test-utils';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
+import { FileSearchFactory } from '@vybestack/llxprt-code-core';
+import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
+import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
 
 // Test harness to capture the state from the hook's callbacks.
 function useTestHarnessForAtCompletion(

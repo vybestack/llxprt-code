@@ -1,4 +1,8 @@
-import { LoadedSettings, SettingScope, Settings } from '../config/settings.js';
+import type {
+  LoadedSettings,
+  SettingScope,
+  Settings,
+} from '../config/settings.js';
 
 /**
  * Recursively sets a value in a nested object using a key path array.

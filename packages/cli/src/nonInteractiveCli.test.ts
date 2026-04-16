@@ -4,19 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   Config,
-  executeToolCall,
   ToolRegistry,
+  ServerGeminiStreamEvent,
+} from '@vybestack/llxprt-code-core';
+import {
+  executeToolCall,
   ToolErrorType,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   GeminiEventType,
-  ServerGeminiStreamEvent,
   StreamIdleTimeoutError,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { Part } from '@google/genai';
+import type { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
 
 const NON_INTERACTIVE_STREAM_IDLE_TIMEOUT_MS = 30_000;

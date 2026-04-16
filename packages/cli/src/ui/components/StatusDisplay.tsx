@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { HookStatusDisplay } from './HookStatusDisplay.js';
 import { ContextSummaryDisplay } from './ContextSummaryDisplay.js';
 import type { ActiveHook } from '../types.js';

@@ -5,8 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Config } from '@vybestack/llxprt-code-core';
-import type { Todo } from '@vybestack/llxprt-code-core';
+import type { Config, Todo } from '@vybestack/llxprt-code-core';
 import {
   TodoContinuationService,
   type ContinuationPromptConfig,

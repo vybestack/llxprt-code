@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { BaseProvider, BaseProviderConfig } from '../providers/BaseProvider.js';
+import type { BaseProviderConfig } from '../providers/BaseProvider.js';
+import { BaseProvider } from '../providers/BaseProvider.js';
 import type { IProviderConfig } from '../providers/types/IProviderConfig.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import { SettingsService as SettingsServiceImpl } from '../settings/SettingsService.js';

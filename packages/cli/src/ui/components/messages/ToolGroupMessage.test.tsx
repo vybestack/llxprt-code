@@ -9,8 +9,9 @@ import { render } from 'ink-testing-library';
 import React from 'react';
 import { Text } from 'ink';
 import { ToolGroupMessage } from './ToolGroupMessage.js';
-import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
-import {
+import type { IndividualToolCallDisplay } from '../../types.js';
+import { ToolCallStatus } from '../../types.js';
+import type {
   Config,
   ToolCallConfirmationDetails,
   Todo,

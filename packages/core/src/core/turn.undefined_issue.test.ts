@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Turn } from './turn.js';
-import { GeminiChat } from './geminiChat.js';
-import { FunctionCall } from '@google/genai';
+import type { GeminiChat } from './geminiChat.js';
+import type { FunctionCall } from '@google/genai';
 import { GeminiEventType } from './turn.js';
 
 describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => {

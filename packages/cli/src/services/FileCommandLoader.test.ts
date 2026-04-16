@@ -6,7 +6,8 @@
 
 import * as glob from 'glob';
 import * as path from 'node:path';
-import { Config, Storage } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-core';
 import mock from 'mock-fs';
 import { FileCommandLoader } from './FileCommandLoader.js';
 import { assert, vi } from 'vitest';
@@ -20,7 +21,7 @@ import {
   ShellProcessor,
 } from './prompt-processors/shellProcessor.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
-import { CommandContext } from '../ui/commands/types.js';
+import type { CommandContext } from '../ui/commands/types.js';
 
 const mockShellProcess = vi.hoisted(() => vi.fn());
 const mockAtFileProcess = vi.hoisted(() => vi.fn());

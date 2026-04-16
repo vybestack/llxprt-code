@@ -18,15 +18,14 @@
 import { useEffect, useRef } from 'react';
 import path from 'path';
 import { promises as nodeFs } from 'fs';
-import {
+import type {
   Config,
   GeminiClient,
   GitService,
-  getErrorMessage,
-  isNodeError,
 } from '@vybestack/llxprt-code-core';
-import { TrackedToolCall } from '../useReactToolScheduler.js';
-import { HistoryItem } from '../../types.js';
+import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
+import type { TrackedToolCall } from '../useReactToolScheduler.js';
+import type { HistoryItem } from '../../types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

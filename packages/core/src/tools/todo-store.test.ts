@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TodoStore } from './todo-store.js';
-import { Todo } from './todo-schemas.js';
+import type { Todo } from './todo-schemas.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';

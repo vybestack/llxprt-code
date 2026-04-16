@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { GeminiEventType, type ServerGeminiStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 5000;

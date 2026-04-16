@@ -5,9 +5,9 @@
  */
 
 import { useCallback } from 'react';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
+import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { AppState } from '../reducers/appReducer.js';
+import type { AppState } from '../reducers/appReducer.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,

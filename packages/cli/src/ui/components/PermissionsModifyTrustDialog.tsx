@@ -4,19 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useState, useMemo } from 'react';
+import type React from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import * as path from 'node:path';
 import { Colors } from '../colors.js';
-import {
-  RadioButtonSelect,
-  RadioSelectItem,
-} from './shared/RadioButtonSelect.js';
+import type { RadioSelectItem } from './shared/RadioButtonSelect.js';
+import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { usePermissionsModifyTrust } from '../hooks/usePermissionsModifyTrust.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
-import { HistoryItemWithoutId, MessageType } from '../types.js';
-import { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { HistoryItemWithoutId } from '../types.js';
+import { MessageType } from '../types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 interface PermissionsModifyTrustDialogProps {
   onExit: () => void;
