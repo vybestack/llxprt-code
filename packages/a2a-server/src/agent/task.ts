@@ -70,6 +70,317 @@ function isInteractiveConfirmationDetails(
   return 'onConfirm' in details;
 }
 
+/**
+ * Maps an outcome string from a tool confirmation part to the corresponding
+ * ToolConfirmationOutcome enum value. Returns undefined for unknown outcomes.
+ */
+function mapOutcomeStringToEnum(
+  outcomeString: string,
+): ToolConfirmationOutcome | undefined {
+  switch (outcomeString) {
+    case 'proceed_once':
+      return ToolConfirmationOutcome.ProceedOnce;
+    case 'cancel':
+      return ToolConfirmationOutcome.Cancel;
+    case 'proceed_always':
+      return ToolConfirmationOutcome.ProceedAlways;
+    case 'proceed_always_server':
+      return ToolConfirmationOutcome.ProceedAlwaysServer;
+    case 'proceed_always_tool':
+      return ToolConfirmationOutcome.ProceedAlwaysTool;
+    case 'modify_with_editor':
+      return ToolConfirmationOutcome.ModifyWithEditor;
+    case 'suggest_edit':
+      return ToolConfirmationOutcome.SuggestEdit;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Extracts tool confirmation payload data from a part.
+ * Returns undefined if neither newContent nor editedCommand is present.
+ */
+function buildToolConfirmationPayload(
+  partData: Record<string, unknown>,
+): ToolConfirmationPayload | undefined {
+  const newContent =
+    typeof partData['newContent'] === 'string'
+      ? partData['newContent']
+      : undefined;
+  const editedCommand =
+    typeof partData['editedCommand'] === 'string'
+      ? partData['editedCommand']
+      : undefined;
+
+  if (newContent === undefined && editedCommand === undefined) {
+    return undefined;
+  }
+  return { newContent, editedCommand };
+}
+
+/**
+ * Handles error scenarios during tool confirmation processing.
+ * Logs the error, resolves the tool call, and publishes an error event.
+ */
+function handleToolConfirmationError(
+  callId: string,
+  error: unknown,
+  taskState: TaskState,
+  resolveToolCall: (id: string) => void,
+  createTextMessage: (text: string) => Message,
+  createStatusUpdateEvent: (
+    state: TaskState,
+    message: CoderAgentMessage,
+    msg: Message,
+    final: boolean,
+  ) => TaskStatusUpdateEvent,
+  eventBus?: ExecutionEventBus,
+): void {
+  logger.error(
+    `[Task] Error during tool confirmation for callId ${callId}:`,
+    error,
+  );
+  resolveToolCall(callId);
+  const errorMessageText =
+    error instanceof Error
+      ? error.message
+      : `Error processing tool confirmation for ${callId}`;
+  const message = createTextMessage(errorMessageText);
+  const toolCallUpdate: ToolCallUpdate = {
+    kind: CoderAgentEvent.ToolCallUpdateEvent,
+  };
+  const event = createStatusUpdateEvent(
+    taskState,
+    toolCallUpdate,
+    message,
+    false,
+  );
+  eventBus?.publish(event);
+}
+
+/**
+ * Handles stream idle timeout events by cancelling pending tools
+ * and publishing an input-required state update.
+ */
+function handleStreamIdleTimeout(
+  event: ServerGeminiStreamEvent & {
+    type: typeof GeminiEventType.StreamIdleTimeout;
+  },
+  task: {
+    cancelPendingTools: (reason: string) => void;
+    setTaskStateAndPublishUpdate: (
+      state: TaskState,
+      msg: CoderAgentMessage,
+      text: string | undefined,
+      parts: Part[] | undefined,
+      final: boolean,
+      error?: string,
+      traceId?: string,
+    ) => void;
+  },
+  stateChange: StateChange,
+  traceId?: string,
+): void {
+  const timeoutMessage =
+    event.value.error.message ||
+    'Stream idle timeout: no response received within the allowed time.';
+  logger.warn(
+    '[Task] Received stream idle timeout event from LLM stream:',
+    timeoutMessage,
+  );
+  task.cancelPendingTools(`LLM stream idle timeout: ${timeoutMessage}`);
+  task.setTaskStateAndPublishUpdate(
+    'input-required',
+    stateChange,
+    'Task timed out waiting for model response.',
+    undefined,
+    true,
+    parseAndFormatApiError(event.value.error),
+    traceId,
+  );
+}
+
+/**
+ * Handles invalid stream events by cancelling pending tools
+ * and publishing an error status update.
+ */
+function handleInvalidStream(
+  task: {
+    taskState: TaskState;
+    cancelPendingTools: (reason: string) => void;
+    setTaskStateAndPublishUpdate: (
+      state: TaskState,
+      msg: CoderAgentMessage,
+      text: string | undefined,
+      parts: Part[] | undefined,
+      final: boolean,
+      error?: string,
+      traceId?: string,
+    ) => void;
+  },
+  stateChange: StateChange,
+  traceId?: string,
+): void {
+  const invalidStreamMessage = 'Invalid stream event received from LLM stream.';
+  logger.error(
+    '[Task] Received error event from LLM stream:',
+    invalidStreamMessage,
+  );
+  task.cancelPendingTools(`LLM stream error: ${invalidStreamMessage}`);
+  task.setTaskStateAndPublishUpdate(
+    task.taskState,
+    stateChange,
+    `Agent Error, unknown agent message: ${invalidStreamMessage}`,
+    undefined,
+    false,
+    invalidStreamMessage,
+    traceId,
+  );
+}
+
+/**
+ * Handles LLM stream error events by cancelling pending tools
+ * and publishing an error status update.
+ */
+function handleStreamError(
+  event: ServerGeminiStreamEvent & { type: typeof GeminiEventType.Error },
+  task: {
+    taskState: TaskState;
+    cancelPendingTools: (reason: string) => void;
+    setTaskStateAndPublishUpdate: (
+      state: TaskState,
+      msg: CoderAgentMessage,
+      text: string | undefined,
+      parts: Part[] | undefined,
+      final: boolean,
+      error?: string,
+      traceId?: string,
+    ) => void;
+  },
+  stateChange: StateChange,
+  traceId?: string,
+): void {
+  const errorMessage =
+    event.value.error.message ?? 'Unknown error from LLM stream';
+  logger.error('[Task] Received error event from LLM stream:', errorMessage);
+  const errMessage = parseAndFormatApiError(event.value.error);
+  task.cancelPendingTools(`LLM stream error: ${errorMessage}`);
+  task.setTaskStateAndPublishUpdate(
+    task.taskState,
+    stateChange,
+    `Agent Error, unknown agent message: ${errorMessage}`,
+    undefined,
+    false,
+    errMessage,
+    traceId,
+  );
+}
+
+// Informational event type Sets (class-level to avoid rebuilding on each call)
+const LOG_WARN_TYPES: ReadonlySet<GeminiEventType> = new Set([
+  GeminiEventType.ToolCallRequest,
+  GeminiEventType.MaxSessionTurns,
+  GeminiEventType.LoopDetected,
+  GeminiEventType.ContextWindowWillOverflow,
+]);
+
+const LOG_INFO_TYPES: ReadonlySet<GeminiEventType> = new Set([
+  GeminiEventType.ToolCallResponse,
+  GeminiEventType.Finished,
+  GeminiEventType.Retry,
+  GeminiEventType.SystemNotice,
+  GeminiEventType.AgentExecutionStopped,
+  GeminiEventType.AgentExecutionBlocked,
+]);
+
+const SILENT_TYPES: ReadonlySet<GeminiEventType> = new Set([
+  GeminiEventType.ChatCompressed,
+  GeminiEventType.UsageMetadata,
+  GeminiEventType.Citation,
+]);
+
+// Union of all informational event types for type narrowing
+const INFORMATIONAL_TYPES: ReadonlySet<GeminiEventType> = new Set([
+  ...LOG_WARN_TYPES,
+  ...LOG_INFO_TYPES,
+  ...SILENT_TYPES,
+]);
+
+/**
+ * Type alias for informational/log-only events that don't affect task state.
+ * These events are logged (or silent) and should be handled early to reduce complexity.
+ */
+export type InformationalGeminiStreamEvent = Extract<
+  ServerGeminiStreamEvent,
+  {
+    type:
+      | GeminiEventType.ToolCallRequest
+      | GeminiEventType.MaxSessionTurns
+      | GeminiEventType.LoopDetected
+      | GeminiEventType.ContextWindowWillOverflow
+      | GeminiEventType.ToolCallResponse
+      | GeminiEventType.Finished
+      | GeminiEventType.Retry
+      | GeminiEventType.SystemNotice
+      | GeminiEventType.AgentExecutionStopped
+      | GeminiEventType.AgentExecutionBlocked
+      | GeminiEventType.ChatCompressed
+      | GeminiEventType.UsageMetadata
+      | GeminiEventType.Citation;
+  }
+>;
+
+/**
+ * Type guard to check if an event is informational (log-only or silent).
+ * These events don't affect task state and are handled early to reduce branching complexity.
+ */
+function isInformationalAgentEvent(
+  event: ServerGeminiStreamEvent,
+): event is InformationalGeminiStreamEvent {
+  return INFORMATIONAL_TYPES.has(event.type);
+}
+
+// Flat dispatch for informational events: logs and returns whether handled
+function logInformationalEvent(
+  type: GeminiEventType,
+  event: InformationalGeminiStreamEvent,
+  taskId: string,
+): void {
+  if (type === GeminiEventType.ToolCallRequest) {
+    logger.warn(
+      '[Task] A single tool call request was passed to acceptAgentMessage. This should be handled in a batch by the agent. Ignoring.',
+    );
+  } else if (type === GeminiEventType.MaxSessionTurns) {
+    logger.warn('[Task] Max session turns reached.');
+  } else if (type === GeminiEventType.LoopDetected) {
+    logger.warn('[Task] Loop detected in agent execution.');
+  } else if (type === GeminiEventType.ContextWindowWillOverflow) {
+    logger.warn('[Task] Context window will overflow event received.');
+  } else if (type === GeminiEventType.ToolCallResponse) {
+    // Type narrow to ToolCallResponse event which has the value property
+    const responseEvent = event as Extract<
+      InformationalGeminiStreamEvent,
+      { type: GeminiEventType.ToolCallResponse }
+    >;
+    logger.info(
+      '[Task] Received tool call response from LLM (part of generation):',
+      responseEvent.value,
+    );
+  } else if (type === GeminiEventType.Finished) {
+    logger.info(`[Task ${taskId}] Agent finished its turn.`);
+  } else if (type === GeminiEventType.Retry) {
+    logger.info('[Task] Retry event received from LLM stream.');
+  } else if (type === GeminiEventType.SystemNotice) {
+    logger.info('[Task] System notice received from LLM stream.');
+  } else if (type === GeminiEventType.AgentExecutionStopped) {
+    logger.info('[Task] Agent execution stopped event received.');
+  } else if (type === GeminiEventType.AgentExecutionBlocked) {
+    logger.info('[Task] Agent execution blocked event received.');
+  }
+  // ChatCompressed, UsageMetadata, Citation are silent - no logging
+}
+
 export class Task {
   id: string;
   contextId: string;
@@ -743,6 +1054,18 @@ export class Task {
   }
 
   async acceptAgentMessage(event: ServerGeminiStreamEvent): Promise<void> {
+    // Handle informational/log-only events early to reduce branching complexity.
+    // Type guard narrows event to informational types; early return ensures
+    // the main switch only handles state-changing events.
+    if (isInformationalAgentEvent(event)) {
+      const type = event.type;
+      if (LOG_WARN_TYPES.has(type) || LOG_INFO_TYPES.has(type)) {
+        logInformationalEvent(type, event, this.id);
+      }
+      // Silent types (ChatCompressed, UsageMetadata, Citation) require no action
+      return;
+    }
+
     const stateChange: StateChange = {
       kind: CoderAgentEvent.StateChangeEvent,
     };
@@ -755,21 +1078,6 @@ export class Task {
       case GeminiEventType.Content:
         logger.info('[Task] Sending agent message content...');
         this._sendTextContent(event.value, traceId);
-        break;
-      case GeminiEventType.ToolCallRequest:
-        // This is now handled by the agent loop, which collects all requests
-        // and calls scheduleToolCalls once.
-        logger.warn(
-          '[Task] A single tool call request was passed to acceptAgentMessage. This should be handled in a batch by the agent. Ignoring.',
-        );
-        break;
-      case GeminiEventType.ToolCallResponse:
-        // This event type from ServerGeminiStreamEvent might be for when LLM *generates* a tool response part.
-        // The actual execution result comes via user message.
-        logger.info(
-          '[Task] Received tool call response from LLM (part of generation):',
-          event.value,
-        );
         break;
       case GeminiEventType.ToolCallConfirmation:
         // This is when LLM requests confirmation, not when user provides it.
@@ -797,26 +1105,9 @@ export class Task {
           traceId,
         );
         break;
-      case GeminiEventType.StreamIdleTimeout: {
-        const timeoutMessage =
-          event.value.error.message ||
-          'Stream idle timeout: no response received within the allowed time.';
-        logger.warn(
-          '[Task] Received stream idle timeout event from LLM stream:',
-          timeoutMessage,
-        );
-        this.cancelPendingTools(`LLM stream idle timeout: ${timeoutMessage}`);
-        this.setTaskStateAndPublishUpdate(
-          'input-required',
-          stateChange,
-          'Task timed out waiting for model response.',
-          undefined,
-          true,
-          parseAndFormatApiError(event.value.error),
-          traceId,
-        );
+      case GeminiEventType.StreamIdleTimeout:
+        handleStreamIdleTimeout(event, this, stateChange, traceId);
         break;
-      }
       case GeminiEventType.Thought:
         logger.info('[Task] Sending agent thought...');
         this._sendThought(event.value, traceId);
@@ -825,85 +1116,18 @@ export class Task {
         logger.info('[Task] Received model info event:', event.value);
         this.modelInfo = event.value;
         break;
-      case GeminiEventType.ChatCompressed:
+      case GeminiEventType.InvalidStream:
+        handleInvalidStream(this, stateChange, traceId);
         break;
-      case GeminiEventType.Finished:
-        logger.info(`[Task ${this.id}] Agent finished its turn.`);
+      case GeminiEventType.Error:
+        handleStreamError(event, this, stateChange, traceId);
         break;
-      case GeminiEventType.UsageMetadata:
-        // Usage metadata is informational only, no action needed.
-        break;
-      case GeminiEventType.MaxSessionTurns:
-        logger.warn('[Task] Max session turns reached.');
-        break;
-      case GeminiEventType.LoopDetected:
-        logger.warn('[Task] Loop detected in agent execution.');
-        break;
-      case GeminiEventType.Citation:
-        // Citation events are informational, handled elsewhere.
-        break;
-      case GeminiEventType.Retry:
-        logger.info('[Task] Retry event received from LLM stream.');
-        break;
-      case GeminiEventType.SystemNotice:
-        logger.info('[Task] System notice received from LLM stream.');
-        break;
-      case GeminiEventType.InvalidStream: {
-        const invalidStreamMessage =
-          'Invalid stream event received from LLM stream.';
-        logger.error(
-          '[Task] Received error event from LLM stream:',
-          invalidStreamMessage,
-        );
-        this.cancelPendingTools(`LLM stream error: ${invalidStreamMessage}`);
-        this.setTaskStateAndPublishUpdate(
-          this.taskState,
-          stateChange,
-          `Agent Error, unknown agent message: ${invalidStreamMessage}`,
-          undefined,
-          false,
-          invalidStreamMessage,
-          traceId,
-        );
-        break;
-      }
-      case GeminiEventType.ContextWindowWillOverflow:
-        logger.warn('[Task] Context window will overflow event received.');
-        break;
-      case GeminiEventType.AgentExecutionStopped:
-        logger.info('[Task] Agent execution stopped event received.');
-        break;
-      case GeminiEventType.AgentExecutionBlocked:
-        logger.info('[Task] Agent execution blocked event received.');
-        break;
-      case GeminiEventType.Error: {
-        // event.value is always present for Error events (type: ServerGeminiErrorEvent)
-        // Defensive fallback in case error.message is missing or malformed at runtime
-        const errorMessage =
-          event.value.error.message ?? 'Unknown error from LLM stream';
-        logger.error(
-          '[Task] Received error event from LLM stream:',
-          errorMessage,
-        );
-
-        const errMessage = parseAndFormatApiError(event.value.error);
-        this.cancelPendingTools(`LLM stream error: ${errorMessage}`);
-        this.setTaskStateAndPublishUpdate(
-          this.taskState,
-          stateChange,
-          `Agent Error, unknown agent message: ${errorMessage}`,
-          undefined,
-          false,
-          errMessage,
-          traceId,
-        );
-        break;
-      }
       default: {
-        // Exhaustive guard: ensures all GeminiEventType cases are handled
+        // Exhaustiveness check: after early-return for informational events,
+        // all remaining cases are state-changing and should be handled above.
         const _exhaustiveCheck: never = event;
         throw new Error(
-          `Unknown event type: ${(_exhaustiveCheck as { type: string }).type}`,
+          `Unknown event type: ${JSON.stringify(_exhaustiveCheck)}`,
         );
       }
     }
@@ -922,23 +1146,9 @@ export class Task {
 
     const callId = part.data['callId'];
     const outcomeString = part.data['outcome'];
-    let confirmationOutcome: ToolConfirmationOutcome | undefined;
+    const confirmationOutcome = mapOutcomeStringToEnum(outcomeString);
 
-    if (outcomeString === 'proceed_once') {
-      confirmationOutcome = ToolConfirmationOutcome.ProceedOnce;
-    } else if (outcomeString === 'cancel') {
-      confirmationOutcome = ToolConfirmationOutcome.Cancel;
-    } else if (outcomeString === 'proceed_always') {
-      confirmationOutcome = ToolConfirmationOutcome.ProceedAlways;
-    } else if (outcomeString === 'proceed_always_server') {
-      confirmationOutcome = ToolConfirmationOutcome.ProceedAlwaysServer;
-    } else if (outcomeString === 'proceed_always_tool') {
-      confirmationOutcome = ToolConfirmationOutcome.ProceedAlwaysTool;
-    } else if (outcomeString === 'modify_with_editor') {
-      confirmationOutcome = ToolConfirmationOutcome.ModifyWithEditor;
-    } else if (outcomeString === 'suggest_edit') {
-      confirmationOutcome = ToolConfirmationOutcome.SuggestEdit;
-    } else {
+    if (!confirmationOutcome) {
       logger.warn(
         `[Task] Unknown tool confirmation outcome: "${outcomeString}" for callId: ${callId}`,
       );
@@ -977,24 +1187,14 @@ export class Task {
         // This will trigger the scheduler to continue or cancel the specific tool.
         // The scheduler's onToolCallsUpdate will then reflect the new state (e.g., executing or cancelled).
 
-        const payload: ToolConfirmationPayload = {
-          newContent:
-            typeof part.data['newContent'] === 'string'
-              ? part.data['newContent']
-              : undefined,
-          editedCommand:
-            typeof part.data['editedCommand'] === 'string'
-              ? part.data['editedCommand']
-              : undefined,
-        };
-        const hasPayload =
-          payload.newContent !== undefined ||
-          payload.editedCommand !== undefined;
+        const payload = buildToolConfirmationPayload(part.data);
+        const hasPayload = payload !== undefined;
 
         // Preserve existing inline-edit behavior: final event should be emitted
         // only after the follow-up confirmation completes.
+        // Use hasPayload to cover both newContent and editedCommand cases.
         if (confirmationDetails.type === 'edit') {
-          this.skipFinalTrueAfterInlineEdit = payload.newContent !== undefined;
+          this.skipFinalTrueAfterInlineEdit = hasPayload;
           try {
             await confirmationDetails.onConfirm(
               confirmationOutcome,
@@ -1032,27 +1232,15 @@ export class Task {
       // If ProceedOnce, scheduler updates to 'executing', then eventually 'success'/'error', which resolves.
       return true;
     } catch (error) {
-      logger.error(
-        `[Task] Error during tool confirmation for callId ${callId}:`,
+      handleToolConfirmationError(
+        callId,
         error,
-      );
-      // If confirming fails, we should probably mark this tool as failed
-      this._resolveToolCall(callId); // Resolve it as it won't proceed.
-      const errorMessageText =
-        error instanceof Error
-          ? error.message
-          : `Error processing tool confirmation for ${callId}`;
-      const message = this._createTextMessage(errorMessageText);
-      const toolCallUpdate: ToolCallUpdate = {
-        kind: CoderAgentEvent.ToolCallUpdateEvent,
-      };
-      const event = this._createStatusUpdateEvent(
         this.taskState,
-        toolCallUpdate,
-        message,
-        false,
+        this._resolveToolCall.bind(this),
+        this._createTextMessage.bind(this),
+        this._createStatusUpdateEvent.bind(this),
+        this.eventBus,
       );
-      this.eventBus?.publish(event);
       return false;
     }
   }
