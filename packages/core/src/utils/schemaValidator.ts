@@ -4,12 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import AjvPkg from 'ajv';
+import { createRequire } from 'node:module';
+// ajv v8 does not declare package "exports", so subpath imports like
+// "ajv/dist/2020" are the only supported way to pull in the draft-2020-12
+// build and its meta-schema. See https://ajv.js.org/json-schema.html#draft-2020-12
+// eslint-disable-next-line import/no-internal-modules
+import Ajv2020Pkg from 'ajv/dist/2020.js';
 import type { ErrorObject } from 'ajv';
 // Ajv's ESM/CJS interop: use 'any' for compatibility as recommended by Ajv docs
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const AjvClass = (AjvPkg as any).default || AjvPkg;
-const ajValidator = new AjvClass(
+const Ajv2020Class = (Ajv2020Pkg as any).default ?? Ajv2020Pkg;
+// The draft-07 meta-schema ships as a .json file inside the ajv package. Using
+// createRequire keeps us compatible with both ESM runtimes (Node ESM, Vitest)
+// and the TypeScript build without relying on JSON import attributes.
+const requireFromHere = createRequire(import.meta.url);
+const draft07MetaSchema = requireFromHere(
+  'ajv/dist/refs/json-schema-draft-07.json',
+);
+// Use Ajv2020 so tool inputSchemas declaring
+// "$schema": "https://json-schema.org/draft/2020-12/schema"
+// (e.g. every tool advertised by @playwright/mcp) compile successfully.
+// Ajv2020 is also backwards-compatible with schemas that omit $schema. To
+// keep existing tools that still declare draft-07 working, we register the
+// draft-07 meta-schema as well.
+const ajValidator = new Ajv2020Class(
   // See: https://ajv.js.org/options.html#strict-mode-options
   {
     // strictSchema defaults to true and prevents use of JSON schemas that
@@ -21,6 +39,7 @@ const ajValidator = new AjvClass(
     strictSchema: false,
   },
 );
+ajValidator.addMetaSchema(draft07MetaSchema);
 // Register custom formats used by upstream schemas
 ajValidator.addFormat('google-duration', {
   type: 'string',

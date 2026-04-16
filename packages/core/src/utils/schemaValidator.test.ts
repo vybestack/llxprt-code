@@ -278,4 +278,84 @@ describe('SchemaValidator', () => {
       expect(SchemaValidator.validate(schema, validData)).toBeNull();
     });
   });
+
+  // Regression tests for issue #1902 — Playwright MCP and any other MCP
+  // server whose tool inputSchema declares $schema: draft/2020-12 must not
+  // cause SchemaValidator.validate() to throw.
+  describe('JSON Schema draft compatibility', () => {
+    it('accepts schemas declaring draft 2020-12 (Playwright MCP style)', () => {
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          width: {
+            type: 'number',
+            description: 'Width of the browser window',
+          },
+          height: {
+            type: 'number',
+            description: 'Height of the browser window',
+          },
+        },
+        required: ['width', 'height'],
+        additionalProperties: false,
+      };
+
+      expect(
+        SchemaValidator.validate(schema, { width: 1024, height: 768 }),
+      ).toBeNull();
+    });
+
+    it('reports data errors against draft 2020-12 schemas (not schema-loading errors)', () => {
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          url: { type: 'string' },
+        },
+        required: ['url'],
+        additionalProperties: false,
+      };
+
+      const error = SchemaValidator.validate(schema, {});
+      expect(error).not.toBeNull();
+      expect(error).not.toContain('no schema with key or ref');
+      expect(error).toContain('must have required property');
+    });
+
+    it('still accepts draft-07 schemas with a $schema declaration', () => {
+      const schema = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        required: ['name'],
+      };
+
+      expect(SchemaValidator.validate(schema, { name: 'ok' })).toBeNull();
+      expect(SchemaValidator.validate(schema, {})).toContain(
+        'must have required property',
+      );
+    });
+
+    it('enforces draft 2020-12 additionalProperties: false', () => {
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          level: { type: 'string' },
+        },
+        required: ['level'],
+        additionalProperties: false,
+      };
+
+      const error = SchemaValidator.validate(schema, {
+        level: 'info',
+        unexpected: true,
+      });
+      expect(error).not.toBeNull();
+      expect(error).not.toContain('no schema with key or ref');
+    });
+  });
 });
