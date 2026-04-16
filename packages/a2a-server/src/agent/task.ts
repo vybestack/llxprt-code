@@ -64,6 +64,84 @@ import type { PartUnion, Part as genAiPart } from '@google/genai';
 
 type UnionKeys<T> = T extends T ? keyof T : never;
 
+/**
+ * Normalizes a tool call request with default agentId and computes newContent
+ * for 'replace' tool calls that don't already have newContent set.
+ */
+async function normalizeToolCallRequest(
+  request: ToolCallRequestInfo,
+  getProposedContent: (
+    filePath: string,
+    oldString: string,
+    newString: string,
+  ) => Promise<string>,
+): Promise<ToolCallRequestInfo> {
+  const normalizedRequest: ToolCallRequestInfo = {
+    ...request,
+    agentId: request.agentId ?? DEFAULT_AGENT_ID,
+  };
+
+  if (
+    normalizedRequest.name === 'replace' &&
+    !normalizedRequest.args['newContent'] &&
+    normalizedRequest.args['file_path'] &&
+    normalizedRequest.args['old_string'] &&
+    normalizedRequest.args['new_string']
+  ) {
+    const newContent = await getProposedContent(
+      normalizedRequest.args['file_path'] as string,
+      normalizedRequest.args['old_string'] as string,
+      normalizedRequest.args['new_string'] as string,
+    );
+    return {
+      ...normalizedRequest,
+      args: { ...normalizedRequest.args, newContent },
+    };
+  }
+  return normalizedRequest;
+}
+
+/**
+ * Extracts helper for writing checkpoint files and updating request checkpoints.
+ */
+async function writeCheckpointsAndUpdateRequests(
+  checkpointsToWrite: Map<string, string>,
+  checkpointDir: string,
+  toolCallToCheckpointMap: Map<string, string>,
+  updatedRequests: ToolCallRequestInfo[],
+): Promise<void> {
+  await fs.promises.mkdir(checkpointDir, { recursive: true });
+
+  for (const [filename, content] of checkpointsToWrite.entries()) {
+    const checkpointPath = path.join(checkpointDir, filename);
+    const tmpPath = `${checkpointPath}.tmp`;
+
+    try {
+      await fs.promises.writeFile(tmpPath, content, 'utf8');
+      await fs.promises.rename(tmpPath, checkpointPath);
+
+      const checkpointKey = filename.replace(/\.json$/, '');
+      const callId = Array.from(toolCallToCheckpointMap.entries()).find(
+        ([, fname]) => fname === checkpointKey,
+      )?.[0];
+
+      if (callId) {
+        const request = updatedRequests.find((req) => req.callId === callId);
+        if (request) {
+          request.checkpoint = checkpointPath;
+          logger.info(
+            `[Task] Checkpoint created for callId ${callId}: ${checkpointPath}`,
+          );
+        }
+      }
+    } catch (writeError) {
+      logger.warn(
+        `[Task] Failed to write checkpoint ${filename}: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+      );
+    }
+  }
+}
+
 function isInteractiveConfirmationDetails(
   details: ToolCallConfirmationDetails | SerializableConfirmationDetails,
 ): details is ToolCallConfirmationDetails {
@@ -939,32 +1017,9 @@ export class Task {
     }
 
     const updatedRequests = await Promise.all(
-      requests.map(async (request) => {
-        const normalizedRequest: ToolCallRequestInfo = {
-          ...request,
-          agentId: request.agentId ?? DEFAULT_AGENT_ID,
-        };
-
-        // args is always defined per ToolCallRequestInfo interface
-        if (
-          normalizedRequest.name === 'replace' &&
-          !normalizedRequest.args['newContent'] &&
-          normalizedRequest.args['file_path'] &&
-          normalizedRequest.args['old_string'] &&
-          normalizedRequest.args['new_string']
-        ) {
-          const newContent = await this.getProposedContent(
-            normalizedRequest.args['file_path'] as string,
-            normalizedRequest.args['old_string'] as string,
-            normalizedRequest.args['new_string'] as string,
-          );
-          return {
-            ...normalizedRequest,
-            args: { ...normalizedRequest.args, newContent },
-          };
-        }
-        return normalizedRequest;
-      }),
+      requests.map((request) =>
+        normalizeToolCallRequest(request, this.getProposedContent.bind(this)),
+      ),
     );
 
     logger.info(
@@ -975,82 +1030,63 @@ export class Task {
     };
     this.setTaskStateAndPublishUpdate('working', stateChange);
 
-    // Create checkpoints for restorable tool calls before scheduling
-    if (this.config.getCheckpointingEnabled()) {
-      try {
-        const restorableRequests = updatedRequests.filter((r) =>
-          EDIT_TOOL_NAMES.has(r.name),
-        );
-
-        if (restorableRequests.length > 0) {
-          logger.info(
-            `[Task] Creating checkpoints for ${restorableRequests.length} restorable tool calls.`,
-          );
-
-          const gitService = await this.config.getGitService();
-          const { checkpointsToWrite, toolCallToCheckpointMap, errors } =
-            await processRestorableToolCalls(
-              restorableRequests,
-              gitService,
-              this.geminiClient,
-            );
-
-          if (errors.length > 0) {
-            logger.warn(
-              `[Task] Checkpoint creation had ${errors.length} errors: ${errors.join(', ')}`,
-            );
-          }
-
-          if (checkpointsToWrite.size > 0) {
-            const checkpointDir =
-              this.config.storage.getProjectTempCheckpointsDir();
-
-            await fs.promises.mkdir(checkpointDir, { recursive: true });
-
-            for (const [filename, content] of checkpointsToWrite.entries()) {
-              const checkpointPath = path.join(checkpointDir, filename);
-              const tmpPath = `${checkpointPath}.tmp`;
-
-              try {
-                await fs.promises.writeFile(tmpPath, content, 'utf8');
-                await fs.promises.rename(tmpPath, checkpointPath);
-
-                // Set checkpoint on the matching request
-                const checkpointKey = filename.replace(/\.json$/, '');
-                const callId = Array.from(
-                  toolCallToCheckpointMap.entries(),
-                ).find(([, fname]) => fname === checkpointKey)?.[0];
-
-                if (callId) {
-                  const request = updatedRequests.find(
-                    (req) => req.callId === callId,
-                  );
-                  if (request) {
-                    request.checkpoint = checkpointPath;
-                    logger.info(
-                      `[Task] Checkpoint created for callId ${callId}: ${checkpointPath}`,
-                    );
-                  }
-                }
-              } catch (writeError) {
-                logger.warn(
-                  `[Task] Failed to write checkpoint ${filename}: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
-                );
-              }
-            }
-          }
-        }
-      } catch (checkpointError) {
-        logger.warn(
-          `[Task] Checkpoint creation failed, continuing with tool execution: ${checkpointError instanceof Error ? checkpointError.message : String(checkpointError)}`,
-        );
-      }
-    }
+    await this._createCheckpointsForRestorableTools(updatedRequests);
 
     if (!this.scheduler) {
       throw new Error('Scheduler not initialized');
     }
     await this.scheduler.schedule(updatedRequests, abortSignal);
+  }
+
+  private async _createCheckpointsForRestorableTools(
+    updatedRequests: ToolCallRequestInfo[],
+  ): Promise<void> {
+    if (!this.config.getCheckpointingEnabled()) {
+      return;
+    }
+
+    try {
+      const restorableRequests = updatedRequests.filter((r) =>
+        EDIT_TOOL_NAMES.has(r.name),
+      );
+
+      if (restorableRequests.length === 0) {
+        return;
+      }
+
+      logger.info(
+        `[Task] Creating checkpoints for ${restorableRequests.length} restorable tool calls.`,
+      );
+
+      const gitService = await this.config.getGitService();
+      const { checkpointsToWrite, toolCallToCheckpointMap, errors } =
+        await processRestorableToolCalls(
+          restorableRequests,
+          gitService,
+          this.geminiClient,
+        );
+
+      if (errors.length > 0) {
+        logger.warn(
+          `[Task] Checkpoint creation had ${errors.length} errors: ${errors.join(', ')}`,
+        );
+      }
+
+      if (checkpointsToWrite.size > 0) {
+        const checkpointDir =
+          this.config.storage.getProjectTempCheckpointsDir();
+        await writeCheckpointsAndUpdateRequests(
+          checkpointsToWrite,
+          checkpointDir,
+          toolCallToCheckpointMap,
+          updatedRequests,
+        );
+      }
+    } catch (checkpointError) {
+      logger.warn(
+        `[Task] Checkpoint creation failed, continuing with tool execution: ${checkpointError instanceof Error ? checkpointError.message : String(checkpointError)}`,
+      );
+    }
   }
 
   async acceptAgentMessage(event: ServerGeminiStreamEvent): Promise<void> {
