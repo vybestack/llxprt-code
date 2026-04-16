@@ -97,7 +97,7 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
       text?: { verbosity?: string };
     };
 
-    expect(parsedBody.text).toEqual({ verbosity: 'low' });
+    expect(parsedBody.text).toStrictEqual({ verbosity: 'low' });
   });
 
   it('should add text.verbosity to request when text.verbosity is set to "medium"', async () => {
@@ -159,7 +159,7 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
       text?: { verbosity?: string };
     };
 
-    expect(parsedBody.text).toEqual({ verbosity: 'medium' });
+    expect(parsedBody.text).toStrictEqual({ verbosity: 'medium' });
   });
 
   it('should add text.verbosity to request when text.verbosity is set to "high"', async () => {
@@ -221,7 +221,7 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
       text?: { verbosity?: string };
     };
 
-    expect(parsedBody.text).toEqual({ verbosity: 'high' });
+    expect(parsedBody.text).toStrictEqual({ verbosity: 'high' });
   });
 
   it('should NOT add text field when text.verbosity is not set', async () => {
@@ -344,6 +344,6 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
       text?: { verbosity?: string };
     };
 
-    expect(parsedBody.text).toEqual({ verbosity: 'high' });
+    expect(parsedBody.text).toStrictEqual({ verbosity: 'high' });
   });
 });

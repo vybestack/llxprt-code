@@ -234,7 +234,7 @@ describe('Configuration Integration Tests', () => {
         debugMode: false,
       };
       const config = new Config(configParams);
-      expect(config.getExtensionContextFilePaths()).toEqual([]);
+      expect(config.getExtensionContextFilePaths()).toStrictEqual([]);
     });
 
     it('should correctly store and return extension context file paths', () => {
@@ -249,7 +249,7 @@ describe('Configuration Integration Tests', () => {
         extensionContextFilePaths: contextFiles,
       };
       const config = new Config(configParams);
-      expect(config.getExtensionContextFilePaths()).toEqual(contextFiles);
+      expect(config.getExtensionContextFilePaths()).toStrictEqual(contextFiles);
     });
   });
 
@@ -422,7 +422,7 @@ describe('Configuration Integration Tests', () => {
 
         const argv = await parseArguments(settings);
 
-        expect(argv.set).toEqual([
+        expect(argv.set).toStrictEqual([
           'context-limit=32000',
           'tool-output-max-tokens=4096',
         ]);

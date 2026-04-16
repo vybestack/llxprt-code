@@ -2057,7 +2057,7 @@ describe('InputPrompt', () => {
       await waitFor(() => {
         expect(stdout.lastFrame()).not.toContain('(r:)');
         expect(props.buffer.text).toBe(initialText);
-        expect(props.buffer.cursor).toEqual(initialCursor);
+        expect(props.buffer.cursor).toStrictEqual(initialCursor);
       });
 
       unmount();

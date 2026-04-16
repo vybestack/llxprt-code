@@ -172,7 +172,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(results[0]).toEqual({
+      expect(results[0]).toStrictEqual({
         type: 'text',
         content: 'response from first',
       });
@@ -231,7 +231,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(results[0]).toEqual({
+      expect(results[0]).toStrictEqual({
         type: 'text',
         content: 'response from second',
       });
@@ -300,7 +300,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(results[0]).toEqual({
+      expect(results[0]).toStrictEqual({
         type: 'text',
         content: 'response from third',
       });
@@ -471,7 +471,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         results.push(chunk);
       }
 
-      expect(results[0]).toEqual({
+      expect(results[0]).toStrictEqual({
         type: 'text',
         content: 'correct response',
       });
@@ -535,7 +535,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(captured).toEqual([
+      expect(captured).toStrictEqual([
         {
           baseURL: 'https://original.api.com',
           authToken: 'original-token',
@@ -598,7 +598,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(captured).toEqual([{ baseURL: 'https://subprofile.api.com' }]);
+      expect(captured).toStrictEqual([
+        { baseURL: 'https://subprofile.api.com' },
+      ]);
     });
 
     it('should override resolved authToken when sub-profile provides one', async () => {
@@ -656,7 +658,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(captured).toEqual([{ authToken: 'subprofile-token' }]);
+      expect(captured).toStrictEqual([{ authToken: 'subprofile-token' }]);
     });
   });
 
@@ -1176,9 +1178,9 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(3);
-      expect(results[0]).toEqual({ type: 'text', content: 'chunk1' });
-      expect(results[1]).toEqual({ type: 'text', content: 'chunk2' });
-      expect(results[2]).toEqual({ type: 'text', content: 'chunk3' });
+      expect(results[0]).toStrictEqual({ type: 'text', content: 'chunk1' });
+      expect(results[1]).toStrictEqual({ type: 'text', content: 'chunk2' });
+      expect(results[2]).toStrictEqual({ type: 'text', content: 'chunk3' });
     });
 
     it('should not duplicate chunks on retry of initial connection', async () => {
@@ -1234,7 +1236,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       }
 
       expect(results).toHaveLength(1);
-      expect(results[0]).toEqual({ type: 'text', content: 'unique-chunk' });
+      expect(results[0]).toStrictEqual({
+        type: 'text',
+        content: 'unique-chunk',
+      });
     });
   });
 
@@ -1687,7 +1692,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
 
       // Should have received the partial chunk before the error
       expect(chunks).toHaveLength(1);
-      expect(chunks[0]).toEqual({
+      expect(chunks[0]).toStrictEqual({
         type: 'text',
         content: 'partial-response',
       });

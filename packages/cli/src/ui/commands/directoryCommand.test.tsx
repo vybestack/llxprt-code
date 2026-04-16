@@ -385,7 +385,7 @@ describe('directoryCommand', () => {
       const result = await addCommand.action(mockContext, trustedPath);
 
       // Should return early with restrictive sandbox message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:

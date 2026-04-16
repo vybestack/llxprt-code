@@ -192,8 +192,8 @@ describe('mergeRefreshedToken', () => {
 
     mergeRefreshedToken(currentCopy, newToken);
 
-    expect(currentCopy).toEqual(currentToken);
-    expect(newToken).toEqual(newCopy);
+    expect(currentCopy).toStrictEqual(currentToken);
+    expect(newToken).toStrictEqual(newCopy);
   });
 
   /**

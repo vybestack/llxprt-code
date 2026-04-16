@@ -226,7 +226,7 @@ describe('PromptInstaller', () => {
       expect(result.installed).not.toContain('core.md');
       expect(result.skipped).toContain('core.md');
       expect(result.conflicts).toHaveLength(1);
-      expect(result.notices).toEqual([
+      expect(result.notices).toStrictEqual([
         `Warning: this version includes a newer version of ${path.join(testBaseDir, 'core.md')} which you customized. We put ${path.join(testBaseDir, 'core.md.20251029T012233')} next to it for your review.`,
       ]);
 

@@ -43,7 +43,7 @@ describe('encodeFrame', () => {
     const jsonBytes = frame.subarray(4, 4 + payloadLength);
     const parsed = JSON.parse(jsonBytes.toString('utf8'));
 
-    expect(parsed).toEqual(payload);
+    expect(parsed).toStrictEqual(payload);
   });
 
   /**
@@ -58,7 +58,7 @@ describe('encodeFrame', () => {
     const results = decoder.feed(frame);
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual(payload);
+    expect(results[0]).toStrictEqual(payload);
   });
 
   /**
@@ -73,7 +73,7 @@ describe('encodeFrame', () => {
     expect(frame.length).toBe(6); // 4 header + 2 payload
 
     const jsonBytes = frame.subarray(4);
-    expect(JSON.parse(jsonBytes.toString('utf8'))).toEqual({});
+    expect(JSON.parse(jsonBytes.toString('utf8'))).toStrictEqual({});
   });
 
   /**
@@ -88,7 +88,7 @@ describe('encodeFrame', () => {
     const jsonBytes = frame.subarray(4, 4 + payloadLength);
     const parsed = JSON.parse(jsonBytes.toString('utf8'));
 
-    expect(parsed).toEqual(payload);
+    expect(parsed).toStrictEqual(payload);
     expect(parsed.emoji).toBe('');
     expect(parsed.kanji).toBe('漢字');
   });
@@ -139,7 +139,7 @@ describe('FrameDecoder', () => {
     const results = decoder.feed(frame);
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual(payload);
+    expect(results[0]).toStrictEqual(payload);
   });
 
   /**
@@ -152,7 +152,7 @@ describe('FrameDecoder', () => {
 
     const results = decoder.feed(frame);
 
-    expect(results[0]).toEqual(payload);
+    expect(results[0]).toStrictEqual(payload);
     expect(typeof results[0]).toBe('object');
     expect(results[0].status).toBe('ok');
     expect(results[0].count).toBe(99);
@@ -172,8 +172,8 @@ describe('FrameDecoder', () => {
     const results = decoder.feed(combined);
 
     expect(results).toHaveLength(2);
-    expect(results[0]).toEqual(payload1);
-    expect(results[1]).toEqual(payload2);
+    expect(results[0]).toStrictEqual(payload1);
+    expect(results[1]).toStrictEqual(payload2);
   });
 
   /**
@@ -193,7 +193,7 @@ describe('FrameDecoder', () => {
 
     const results2 = decoder.feed(chunk2);
     expect(results2).toHaveLength(1);
-    expect(results2[0]).toEqual(payload);
+    expect(results2[0]).toStrictEqual(payload);
   });
 
   /**
@@ -217,7 +217,7 @@ describe('FrameDecoder', () => {
 
     const r3 = decoder.feed(chunk3);
     expect(r3).toHaveLength(1);
-    expect(r3[0]).toEqual(payload);
+    expect(r3[0]).toStrictEqual(payload);
   });
 
   /**
@@ -243,7 +243,7 @@ describe('FrameDecoder', () => {
     const results = decoder.feed(frame);
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual({});
+    expect(results[0]).toStrictEqual({});
   });
 });
 
@@ -277,7 +277,7 @@ describe('FrameDecoder partial frame timer', () => {
     const rest = frame.subarray(6);
     const results = decoder.feed(rest);
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual(payload);
+    expect(results[0]).toStrictEqual(payload);
   });
 
   /**
@@ -300,7 +300,7 @@ describe('FrameDecoder partial frame timer', () => {
     const rest = frame.subarray(5);
     const results = decoder.feed(rest);
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual(payload);
+    expect(results[0]).toStrictEqual(payload);
 
     // Advancing past the original timeout should NOT cause any error
     // because the timer was cancelled when the frame completed
@@ -337,6 +337,6 @@ describe('FrameDecoder partial frame timer', () => {
     const newFrame = encodeFrame(newPayload);
     const results = decoder.feed(newFrame);
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual(newPayload);
+    expect(results[0]).toStrictEqual(newPayload);
   });
 });

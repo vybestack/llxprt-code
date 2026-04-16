@@ -44,7 +44,7 @@ describe('ide-installer', () => {
       const installer = getIdeInstaller(ide);
 
       expect(installer).not.toBeNull();
-      expect(installer?.install).toEqual(expect.any(Function));
+      expect(installer?.install).toStrictEqual(expect.any(Function));
     });
   });
 

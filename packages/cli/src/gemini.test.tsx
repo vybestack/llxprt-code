@@ -886,7 +886,7 @@ describe('startInteractiveUI', () => {
     const [reactElement, options] = renderSpy.mock.calls[0];
 
     // Verify render options
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
       }),

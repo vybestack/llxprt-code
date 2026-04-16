@@ -19,7 +19,7 @@ describe('GemmaToolCallParser', () => {
     expect(cleanedContent).toBe('Here is the result:');
     expect(toolCalls).toHaveLength(1);
     expect(toolCalls[0].name).toBe('list_directory');
-    expect(toolCalls[0].arguments).toEqual({ path: '/home' });
+    expect(toolCalls[0].arguments).toStrictEqual({ path: '/home' });
   });
 
   it('should parse multiple tool calls', () => {
@@ -61,7 +61,7 @@ describe('GemmaToolCallParser', () => {
     expect(result.cleanedContent).toBe('');
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0].name).toBe('list_directory');
-    expect(result.toolCalls[0].arguments).toEqual({
+    expect(result.toolCalls[0].arguments).toStrictEqual({
       path: '/Users/acoliver/projects/gemini-code/gemini-cli/project-plans',
     });
   });
@@ -79,7 +79,7 @@ describe('GemmaToolCallParser', () => {
       expect(result.cleanedContent).toBe('');
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0].name).toBe('get_stock_fundamentals');
-      expect(result.toolCalls[0].arguments).toEqual({ symbol: 'TSLA' });
+      expect(result.toolCalls[0].arguments).toStrictEqual({ symbol: 'TSLA' });
     });
 
     it('should parse multiple Hermes tool calls', () => {
@@ -100,9 +100,9 @@ And also:
       );
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('get_stock_fundamentals');
-      expect(result.toolCalls[0].arguments).toEqual({ symbol: 'AAPL' });
+      expect(result.toolCalls[0].arguments).toStrictEqual({ symbol: 'AAPL' });
       expect(result.toolCalls[1].name).toBe('get_stock_fundamentals');
-      expect(result.toolCalls[1].arguments).toEqual({ symbol: 'GOOGL' });
+      expect(result.toolCalls[1].arguments).toStrictEqual({ symbol: 'GOOGL' });
     });
 
     it('should handle Hermes format with special tokens', () => {
@@ -118,7 +118,7 @@ I'll help you with that.
       expect(result.cleanedContent).toBe("I'll help you with that.");
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0].name).toBe('search_files');
-      expect(result.toolCalls[0].arguments).toEqual({ query: 'test' });
+      expect(result.toolCalls[0].arguments).toStrictEqual({ query: 'test' });
     });
 
     it('should handle malformed Hermes format', () => {
@@ -149,7 +149,7 @@ I'll help you with that.
       expect(result.cleanedContent).toBe("I'll help you with that.");
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0].name).toBe('get_weather');
-      expect(result.toolCalls[0].arguments).toEqual({
+      expect(result.toolCalls[0].arguments).toStrictEqual({
         location: 'San Francisco',
         units: 'celsius',
       });
@@ -173,11 +173,13 @@ And also:
       expect(result.cleanedContent).toBe('And also:');
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('search');
-      expect(result.toolCalls[0].arguments).toEqual({
+      expect(result.toolCalls[0].arguments).toStrictEqual({
         query: 'climate change',
       });
       expect(result.toolCalls[1].name).toBe('calculator');
-      expect(result.toolCalls[1].arguments).toEqual({ expression: '2 + 2' });
+      expect(result.toolCalls[1].arguments).toStrictEqual({
+        expression: '2 + 2',
+      });
     });
 
     it('should handle Claude-style XML with numeric and boolean parameters', () => {
@@ -191,7 +193,7 @@ And also:
 
       expect(result.cleanedContent).toBe('');
       expect(result.toolCalls).toHaveLength(1);
-      expect(result.toolCalls[0].arguments).toEqual({
+      expect(result.toolCalls[0].arguments).toStrictEqual({
         value: 23.5,
         celsius: true,
         room_id: 42,
@@ -206,7 +208,7 @@ And also:
       const result = parser.parse(content);
 
       expect(result.toolCalls).toHaveLength(1);
-      expect(result.toolCalls[0].arguments).toEqual({
+      expect(result.toolCalls[0].arguments).toStrictEqual({
         query: '<script> & "test"',
       });
     });
@@ -228,7 +230,7 @@ And also:
       expect(result.cleanedContent).toBe('Let me search for that.');
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0].name).toBe('search');
-      expect(result.toolCalls[0].arguments).toEqual({
+      expect(result.toolCalls[0].arguments).toStrictEqual({
         query: 'TypeScript tutorials',
         limit: 10,
       });
@@ -254,11 +256,11 @@ And also:
       expect(result.cleanedContent).toBe('');
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('read_file');
-      expect(result.toolCalls[0].arguments).toEqual({
+      expect(result.toolCalls[0].arguments).toStrictEqual({
         path: '/home/user/doc.txt',
       });
       expect(result.toolCalls[1].name).toBe('write_file');
-      expect(result.toolCalls[1].arguments).toEqual({
+      expect(result.toolCalls[1].arguments).toStrictEqual({
         path: '/home/user/output.txt',
         content: 'Hello World',
       });

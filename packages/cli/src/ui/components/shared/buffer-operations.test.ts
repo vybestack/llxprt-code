@@ -45,32 +45,32 @@ describe('buffer-operations', () => {
     it('should replace text in same line', () => {
       const state = createState(['hello world']);
       const result = replaceRangeInternal(state, 0, 0, 0, 5, 'hi');
-      expect(result.lines).toEqual(['hi world']);
+      expect(result.lines).toStrictEqual(['hi world']);
       expect(result.cursorCol).toBe(2);
     });
 
     it('should replace across multiple lines', () => {
       const state = createState(['hello', 'world', 'test']);
       const result = replaceRangeInternal(state, 0, 2, 2, 2, 'X');
-      expect(result.lines).toEqual(['heXst']);
+      expect(result.lines).toStrictEqual(['heXst']);
     });
 
     it('should insert newlines', () => {
       const state = createState(['hello world']);
       const result = replaceRangeInternal(state, 0, 5, 0, 6, '\n');
-      expect(result.lines).toEqual(['hello', 'world']);
+      expect(result.lines).toStrictEqual(['hello', 'world']);
     });
 
     it('should handle empty replacement', () => {
       const state = createState(['hello world']);
       const result = replaceRangeInternal(state, 0, 5, 0, 6, '');
-      expect(result.lines).toEqual(['helloworld']);
+      expect(result.lines).toStrictEqual(['helloworld']);
     });
 
     it('should handle replacement at line boundaries', () => {
       const state = createState(['hello']);
       const result = replaceRangeInternal(state, 0, 0, 0, 5, 'X');
-      expect(result.lines).toEqual(['X']);
+      expect(result.lines).toStrictEqual(['X']);
     });
   });
 
@@ -81,10 +81,10 @@ describe('buffer-operations', () => {
       state.cursorCol = 3;
       const result = pushUndo(state);
       expect(result.undoStack).toHaveLength(1);
-      expect(result.undoStack[0].lines).toEqual(['hello']);
+      expect(result.undoStack[0].lines).toStrictEqual(['hello']);
       expect(result.undoStack[0].cursorRow).toBe(0);
       expect(result.undoStack[0].cursorCol).toBe(3);
-      expect(result.redoStack).toEqual([]);
+      expect(result.redoStack).toStrictEqual([]);
     });
 
     it('should limit undo stack size', () => {

@@ -196,7 +196,7 @@ describe('FileExclusions', () => {
       const defaultPatterns = excluder.getDefaultExcludePatterns(options);
       const buildPatterns = excluder.buildExcludePatterns(options);
 
-      expect(buildPatterns).toEqual(defaultPatterns);
+      expect(buildPatterns).toStrictEqual(defaultPatterns);
     });
   });
 });
@@ -214,7 +214,7 @@ describe('BINARY_EXTENSIONS', () => {
 
   it('should be sorted', () => {
     const sortedExtensions = [...BINARY_EXTENSIONS].sort();
-    expect(BINARY_EXTENSIONS).toEqual(sortedExtensions);
+    expect(BINARY_EXTENSIONS).toStrictEqual(sortedExtensions);
   });
 
   it('should not contain invalid extensions from brace patterns', () => {
@@ -245,7 +245,7 @@ describe('extractExtensionsFromPatterns', () => {
     ],
   ])('should extract %s', (_, patterns, expected) => {
     const result = extractExtensionsFromPatterns(patterns);
-    expect(result).toEqual(expected);
+    expect(result).toStrictEqual(expected);
   });
 
   it('should handle brace expansion patterns', () => {
@@ -289,14 +289,21 @@ describe('extractExtensionsFromPatterns', () => {
     const patterns = ['**/*.js', '**/*.{js,ts}', '**/*.ts'];
     const result = extractExtensionsFromPatterns(patterns);
 
-    expect(result).toEqual(['.js', '.ts']);
+    expect(result).toStrictEqual(['.js', '.ts']);
   });
 
   it('should handle complex brace patterns with multiple extensions', () => {
     const patterns = ['**/*.{html,css,js,jsx,ts,tsx}'];
     const result = extractExtensionsFromPatterns(patterns);
 
-    expect(result).toEqual(['.css', '.html', '.js', '.jsx', '.ts', '.tsx']);
+    expect(result).toStrictEqual([
+      '.css',
+      '.html',
+      '.js',
+      '.jsx',
+      '.ts',
+      '.tsx',
+    ]);
   });
 
   it('should handle edge cases with path.extname', () => {
@@ -304,6 +311,6 @@ describe('extractExtensionsFromPatterns', () => {
     const result = extractExtensionsFromPatterns(patterns);
 
     // Should handle edge cases properly (trailing dots are filtered out)
-    expect(result).toEqual(['.json']);
+    expect(result).toStrictEqual(['.json']);
   });
 });

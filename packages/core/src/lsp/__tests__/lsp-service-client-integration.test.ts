@@ -161,7 +161,9 @@ describe('LspServiceClient integration contract', () => {
 
     await client.start();
 
-    await expect(client.checkFile('/tmp/workspace/a.ts')).resolves.toEqual([]);
+    await expect(
+      client.checkFile('/tmp/workspace/a.ts'),
+    ).resolves.toStrictEqual([]);
   });
 
   it('getAllDiagnostics on dead service returns empty object', async () => {
@@ -169,7 +171,7 @@ describe('LspServiceClient integration contract', () => {
 
     await client.start();
 
-    await expect(client.getAllDiagnostics()).resolves.toEqual({});
+    await expect(client.getAllDiagnostics()).resolves.toStrictEqual({});
   });
 
   it('status on dead service returns unhealthy detail for configured server', async () => {
@@ -177,7 +179,7 @@ describe('LspServiceClient integration contract', () => {
 
     await client.start();
 
-    await expect(client.status()).resolves.toEqual([
+    await expect(client.status()).resolves.toStrictEqual([
       {
         serverId: 'ts',
         healthy: false,

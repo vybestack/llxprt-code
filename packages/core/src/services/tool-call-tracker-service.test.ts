@@ -81,7 +81,7 @@ describe('ToolCallTrackerService', () => {
     );
     expect(allCalls).toHaveLength(1);
     expect(allCalls[0].name).toBe('test_tool');
-    expect(allCalls[0].parameters).toEqual({
+    expect(allCalls[0].parameters).toStrictEqual({
       param1: 'value1',
       param2: 42,
     });
@@ -131,7 +131,7 @@ describe('ToolCallTrackerService', () => {
     // Verify we have one executing tool call
     expect(executingCalls).toHaveLength(1);
     expect(executingCalls[0].name).toBe('executing_tool');
-    expect(executingCalls[0].parameters).toEqual({ param: 'value' });
+    expect(executingCalls[0].parameters).toStrictEqual({ param: 'value' });
   });
 
   it('should complete tracking of executing tool calls', async () => {

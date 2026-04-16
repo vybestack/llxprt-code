@@ -55,7 +55,7 @@ describe('CrawlCache', () => {
       const data = ['foo', 'bar'];
       write(key, data, 10000); // 10 second TTL
       const cachedData = read(key);
-      expect(cachedData).toEqual(data);
+      expect(cachedData).toStrictEqual(data);
     });
 
     it('should return undefined for a nonexistent key', () => {
@@ -81,11 +81,11 @@ describe('CrawlCache', () => {
       write(key, data, ttl);
 
       // Should exist immediately after writing
-      expect(read(key)).toEqual(data);
+      expect(read(key)).toStrictEqual(data);
 
       // Advance time just before expiration
       await vi.advanceTimersByTimeAsync(ttl - 1);
-      expect(read(key)).toEqual(data);
+      expect(read(key)).toStrictEqual(data);
 
       // Advance time past expiration
       await vi.advanceTimersByTimeAsync(1);
@@ -104,16 +104,16 @@ describe('CrawlCache', () => {
 
       // Advance time, but not enough to expire
       await vi.advanceTimersByTimeAsync(3000);
-      expect(read(key)).toEqual(initialData);
+      expect(read(key)).toStrictEqual(initialData);
 
       // Update the data, which should reset the timer
       write(key, updatedData, ttl);
-      expect(read(key)).toEqual(updatedData);
+      expect(read(key)).toStrictEqual(updatedData);
 
       // Advance time again. If the timer wasn't reset, the total elapsed
       // time (3000 + 3000 = 6000) would cause an eviction.
       await vi.advanceTimersByTimeAsync(3000);
-      expect(read(key)).toEqual(updatedData);
+      expect(read(key)).toStrictEqual(updatedData);
 
       // Advance past the new expiration time
       await vi.advanceTimersByTimeAsync(2001);

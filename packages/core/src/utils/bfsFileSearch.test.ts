@@ -41,7 +41,7 @@ describe('bfsFileSearch', () => {
   it('should find a file in the root directory', async () => {
     const targetFilePath = await createTestFile('content', 'target.txt');
     const result = await bfsFileSearch(testRootDir, { fileName: 'target.txt' });
-    expect(result).toEqual([targetFilePath]);
+    expect(result).toStrictEqual([targetFilePath]);
   });
 
   it('should find a file in a nested directory', async () => {
@@ -52,7 +52,7 @@ describe('bfsFileSearch', () => {
       'target.txt',
     );
     const result = await bfsFileSearch(testRootDir, { fileName: 'target.txt' });
-    expect(result).toEqual([targetFilePath]);
+    expect(result).toStrictEqual([targetFilePath]);
   });
 
   it('should find multiple files with the same name', async () => {
@@ -60,13 +60,13 @@ describe('bfsFileSearch', () => {
     const targetFilePath2 = await createTestFile('content2', 'b', 'target.txt');
     const result = await bfsFileSearch(testRootDir, { fileName: 'target.txt' });
     result.sort();
-    expect(result).toEqual([targetFilePath1, targetFilePath2].sort());
+    expect(result).toStrictEqual([targetFilePath1, targetFilePath2].sort());
   });
 
   it('should return an empty array if no file is found', async () => {
     await createTestFile('content', 'other.txt');
     const result = await bfsFileSearch(testRootDir, { fileName: 'target.txt' });
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it('should ignore directories specified in ignoreDirs', async () => {
@@ -80,7 +80,7 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
       ignoreDirs: ['ignored'],
     });
-    expect(result).toEqual([targetFilePath]);
+    expect(result).toStrictEqual([targetFilePath]);
   });
 
   it('should respect the maxDirs limit and not find the file', async () => {
@@ -89,7 +89,7 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
       maxDirs: 3,
     });
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it('should respect the maxDirs limit and find the file', async () => {
@@ -104,7 +104,7 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
       maxDirs: 4,
     });
-    expect(result).toEqual([targetFilePath]);
+    expect(result).toStrictEqual([targetFilePath]);
   });
 
   it('should only find files in root directory when maxDepth is 0', async () => {
@@ -116,7 +116,7 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
       maxDepth: 0,
     });
-    expect(result).toEqual([rootFile]);
+    expect(result).toStrictEqual([rootFile]);
   });
 
   it('should find files up to one level deep when maxDepth is 1', async () => {
@@ -129,7 +129,7 @@ describe('bfsFileSearch', () => {
       maxDepth: 1,
     });
     result.sort();
-    expect(result).toEqual([rootFile, level1File].sort());
+    expect(result).toStrictEqual([rootFile, level1File].sort());
   });
 
   it('should find files at all depths when maxDepth is undefined', async () => {
@@ -141,7 +141,7 @@ describe('bfsFileSearch', () => {
       fileName: 'target.txt',
     });
     result.sort();
-    expect(result).toEqual([rootFile, level1File, level2File].sort());
+    expect(result).toStrictEqual([rootFile, level1File, level2File].sort());
   });
 
   it('should find files at all depths when maxDepth is very large', async () => {
@@ -154,7 +154,7 @@ describe('bfsFileSearch', () => {
       maxDepth: 999999,
     });
     result.sort();
-    expect(result).toEqual([rootFile, level1File, level2File].sort());
+    expect(result).toStrictEqual([rootFile, level1File, level2File].sort());
   });
 
   it('should work correctly when maxDepth and maxDirs are both set', async () => {
@@ -209,7 +209,7 @@ describe('bfsFileSearch', () => {
         },
       });
 
-      expect(result).toEqual([targetFilePath]);
+      expect(result).toStrictEqual([targetFilePath]);
     });
 
     it('should ignore llxprtignored files', async () => {
@@ -232,7 +232,7 @@ describe('bfsFileSearch', () => {
         },
       });
 
-      expect(result).toEqual([targetFilePath]);
+      expect(result).toStrictEqual([targetFilePath]);
     });
 
     it('should not ignore files if respect flags are false', async () => {
@@ -261,7 +261,7 @@ describe('bfsFileSearch', () => {
         },
       });
 
-      expect(result.sort()).toEqual([target1, target2].sort());
+      expect(result.sort()).toStrictEqual([target1, target2].sort());
     });
   });
 
@@ -305,7 +305,7 @@ describe('bfsFileSearch', () => {
         firstResultSorted = sortedResult;
       }
       // Verify consistency across all iterations
-      expect(sortedResult).toEqual(firstResultSorted);
+      expect(sortedResult).toStrictEqual(firstResultSorted);
 
       console.log(`📊 Iteration ${i + 1}: ${duration.toFixed(2)}ms`);
     }

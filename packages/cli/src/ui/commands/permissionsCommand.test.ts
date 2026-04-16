@@ -79,7 +79,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const result = permissionsCommand.action?.(mockContext, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'dialog',
         dialog: 'permissions',
       });
@@ -89,7 +89,7 @@ describe('permissionsCommand', () => {
       const mockContext = createMockContext();
       const result = permissionsCommand.action?.(mockContext, '   ');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'dialog',
         dialog: 'permissions',
       });
@@ -108,7 +108,7 @@ describe('permissionsCommand', () => {
         path.normalize(targetPath),
         'TRUST_FOLDER',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Trust level set to TRUST_FOLDER'),
@@ -126,7 +126,7 @@ describe('permissionsCommand', () => {
         path.normalize(targetPath),
         'TRUST_PARENT',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Trust level set to TRUST_PARENT'),
@@ -144,7 +144,7 @@ describe('permissionsCommand', () => {
         path.normalize(targetPath),
         'DO_NOT_TRUST',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Trust level set to DO_NOT_TRUST'),
@@ -158,7 +158,7 @@ describe('permissionsCommand', () => {
       const result = permissionsCommand.action?.(mockContext, args);
 
       expect(mockSetValue).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('Invalid trust level'),
@@ -172,7 +172,7 @@ describe('permissionsCommand', () => {
       const result = permissionsCommand.action?.(mockContext, args);
 
       expect(mockSetValue).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('path is required'),
@@ -190,7 +190,7 @@ describe('permissionsCommand', () => {
         path.normalize(targetPath),
         'TRUST_FOLDER',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Trust level set to TRUST_FOLDER'),
@@ -207,7 +207,7 @@ describe('permissionsCommand', () => {
         expect.any(String),
         'TRUST_FOLDER',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Trust level set to TRUST_FOLDER'),
@@ -224,7 +224,7 @@ describe('permissionsCommand', () => {
 
       const result = permissionsCommand.action?.(mockContext, args);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('Failed to save trust settings'),

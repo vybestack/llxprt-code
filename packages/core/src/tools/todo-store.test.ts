@@ -62,7 +62,7 @@ describe('TodoStore', () => {
   describe('readTodos', () => {
     it('should return empty array when no todos exist', async () => {
       const result = await store.readTodos();
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should read todos from file system', async () => {
@@ -71,14 +71,14 @@ describe('TodoStore', () => {
 
       // Read them back
       const result = await store.readTodos();
-      expect(result).toEqual(sampleTodos);
+      expect(result).toStrictEqual(sampleTodos);
     });
 
     it('should handle missing file gracefully', async () => {
       // Create a new store with a different agent ID to ensure clean state
       const cleanStore = new TodoStore(sessionId, 'non-existent-agent');
       const result = await cleanStore.readTodos();
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
   });
 
@@ -88,7 +88,7 @@ describe('TodoStore', () => {
 
       // Verify we can read back what we wrote
       const result = await store.readTodos();
-      expect(result).toEqual(sampleTodos);
+      expect(result).toStrictEqual(sampleTodos);
     });
 
     it('should create todos directory if not exists', async () => {
@@ -103,7 +103,7 @@ describe('TodoStore', () => {
 
       // Verify we can read back what we wrote (which proves directory was created)
       const result = await newStore.readTodos();
-      expect(result).toEqual(sampleTodos);
+      expect(result).toStrictEqual(sampleTodos);
     });
 
     it('should overwrite existing todos', async () => {
@@ -122,14 +122,14 @@ describe('TodoStore', () => {
 
       // Verify only new todos exist
       const result = await store.readTodos();
-      expect(result).toEqual(newTodos);
+      expect(result).toStrictEqual(newTodos);
     });
 
     it('should write empty array when no todos provided', async () => {
       await store.writeTodos([]);
 
       const result = await store.readTodos();
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
   });
 
@@ -141,8 +141,8 @@ describe('TodoStore', () => {
       await store1.writeTodos(sampleTodos);
       await store2.writeTodos([]);
 
-      expect(await store1.readTodos()).toEqual(sampleTodos);
-      expect(await store2.readTodos()).toEqual([]);
+      expect(await store1.readTodos()).toStrictEqual(sampleTodos);
+      expect(await store2.readTodos()).toStrictEqual([]);
     });
 
     it('should use session-only file when no agent ID provided', async () => {
@@ -151,12 +151,12 @@ describe('TodoStore', () => {
 
       // Verify we can read back what we wrote
       const result = await sessionStore.readTodos();
-      expect(result).toEqual(sampleTodos);
+      expect(result).toStrictEqual(sampleTodos);
 
       // Verify that agent-specific store doesn't see session-only todos
       const agentStore = new TodoStore(sessionId, 'different-agent');
       const agentResult = await agentStore.readTodos();
-      expect(agentResult).toEqual([]);
+      expect(agentResult).toStrictEqual([]);
     });
 
     it('should treat default agent id the same as session namespace', async () => {
@@ -166,7 +166,7 @@ describe('TodoStore', () => {
       const primaryStore = new TodoStore(sessionId, DEFAULT_AGENT_ID);
       const primaryResult = await primaryStore.readTodos();
 
-      expect(primaryResult).toEqual(sampleTodos);
+      expect(primaryResult).toStrictEqual(sampleTodos);
     });
   });
 
@@ -180,7 +180,7 @@ describe('TodoStore', () => {
 
       const results = await Promise.all(promises);
       results.forEach((result) => {
-        expect(result).toEqual(sampleTodos);
+        expect(result).toStrictEqual(sampleTodos);
       });
     });
 
@@ -192,7 +192,7 @@ describe('TodoStore', () => {
 
       // Verify write succeeded
       const result = await store.readTodos();
-      expect(result).toEqual(sampleTodos);
+      expect(result).toStrictEqual(sampleTodos);
     });
   });
 
@@ -203,12 +203,12 @@ describe('TodoStore', () => {
 
       // Verify we can read back what we wrote
       const result = await store.readTodos();
-      expect(result).toEqual(sampleTodos);
+      expect(result).toStrictEqual(sampleTodos);
 
       // Verify that a different agent doesn't see these todos
       const differentAgentStore = new TodoStore(sessionId, 'different-agent');
       const differentResult = await differentAgentStore.readTodos();
-      expect(differentResult).toEqual([]);
+      expect(differentResult).toStrictEqual([]);
     });
   });
 });

@@ -44,7 +44,7 @@ describe('dumpcontextCommand', () => {
 
       const result = await dumpcontextCommand.action(mockContext, 'status');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Context dumping: off'),
@@ -63,7 +63,7 @@ describe('dumpcontextCommand', () => {
 
       const result = await dumpcontextCommand.action(mockContext, 'status');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Context dumping: on'),
@@ -82,7 +82,7 @@ describe('dumpcontextCommand', () => {
 
       const result = await dumpcontextCommand.action(mockContext, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Context dumping: error'),
@@ -105,7 +105,7 @@ describe('dumpcontextCommand', () => {
       const result = await dumpcontextCommand.action(mockContext, 'on');
 
       expect(mockSetEphemeralSetting).toHaveBeenCalledWith('dumpcontext', 'on');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Context dumping enabled'),
@@ -131,7 +131,7 @@ describe('dumpcontextCommand', () => {
         'dumpcontext',
         'error',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Context dumping enabled for errors'),
@@ -157,7 +157,7 @@ describe('dumpcontextCommand', () => {
         'dumpcontext',
         'off',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Context dumping disabled'),
@@ -183,7 +183,7 @@ describe('dumpcontextCommand', () => {
         'dumpcontext',
         'now',
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining(
@@ -206,7 +206,7 @@ describe('dumpcontextCommand', () => {
 
       const result = await dumpcontextCommand.action(mockContext, 'invalid');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('Invalid mode'),

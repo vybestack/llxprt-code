@@ -200,7 +200,7 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
 
       expect(result.emojiDetected).toBe(true);
       expect(result.blocked).toBe(false);
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         filePath: '/src/test.js',
         content: 'console.log("[OK] Success!"); //  Celebration',
         message: 'Update complete WARNING: Check warnings',

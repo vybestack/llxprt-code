@@ -612,7 +612,7 @@ describe('vim-buffer-actions', () => {
 
         const result = handleVimAction(state, action);
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.lines).toEqual(['line1', 'line3']);
+        expect(result.lines).toStrictEqual(['line1', 'line3']);
         expect(result.cursorRow).toBe(1);
         expect(result.cursorCol).toBe(0);
       });
@@ -626,7 +626,7 @@ describe('vim-buffer-actions', () => {
 
         const result = handleVimAction(state, action);
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.lines).toEqual(['line3']);
+        expect(result.lines).toStrictEqual(['line3']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -640,7 +640,7 @@ describe('vim-buffer-actions', () => {
 
         const result = handleVimAction(state, action);
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.lines).toEqual(['']);
+        expect(result.lines).toStrictEqual(['']);
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(0);
       });
@@ -739,7 +739,7 @@ describe('vim-buffer-actions', () => {
 
         const result = handleVimAction(state, action);
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.lines).toEqual(['hello world', '']);
+        expect(result.lines).toStrictEqual(['hello world', '']);
         expect(result.cursorRow).toBe(1);
         expect(result.cursorCol).toBe(0);
       });
@@ -752,7 +752,7 @@ describe('vim-buffer-actions', () => {
 
         const result = handleVimAction(state, action);
         expect(result).toHaveOnlyValidCharacters();
-        expect(result.lines).toEqual(['hello', '', 'world']);
+        expect(result.lines).toStrictEqual(['hello', '', 'world']);
         expect(result.cursorRow).toBe(1);
         expect(result.cursorCol).toBe(0);
       });
@@ -848,7 +848,7 @@ describe('vim-buffer-actions', () => {
         expect(result).toHaveOnlyValidCharacters();
         // The movement 'j' with count 2 changes 2 lines starting from cursor row
         // Since we're at cursor position 2, it changes lines starting from current row
-        expect(result.lines).toEqual(['line1', 'line2', 'line3']); // No change because count > available lines
+        expect(result.lines).toStrictEqual(['line1', 'line2', 'line3']); // No change because count > available lines
         expect(result.cursorRow).toBe(0);
         expect(result.cursorCol).toBe(2);
       });

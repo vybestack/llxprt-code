@@ -100,7 +100,7 @@ describe('checkForUpdates', () => {
 
     const result = await checkForUpdates(mockSettings);
     expect(result?.message).toContain('1.0.0 → 1.1.0');
-    expect(result?.update).toEqual({ current: '1.0.0', latest: '1.1.0' });
+    expect(result?.update).toStrictEqual({ current: '1.0.0', latest: '1.1.0' });
   });
 
   it('should return null if the latest version is the same as the current version', async () => {

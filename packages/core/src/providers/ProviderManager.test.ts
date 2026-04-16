@@ -56,7 +56,7 @@ describe('ProviderManager provider ordering', () => {
       manager.registerProvider(createProvider(name));
     }
 
-    expect(manager.listProviders()).toEqual([
+    expect(manager.listProviders()).toStrictEqual([
       'anthropic',
       'gemini',
       'openai',

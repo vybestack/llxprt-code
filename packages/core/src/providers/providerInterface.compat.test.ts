@@ -82,7 +82,7 @@ describe('generateChatCompletion compatibility', () => {
 
     await legacyProvider.generateChatCompletion(options).next();
 
-    expect(legacyProvider.lastOptions?.contents).toEqual([message]);
+    expect(legacyProvider.lastOptions?.contents).toStrictEqual([message]);
     expect(legacyProvider.lastOptions?.tools).toBeUndefined();
     expect(legacyProvider.lastOptions?.settings).toBe(options.settings);
   });

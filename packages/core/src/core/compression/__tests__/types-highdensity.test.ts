@@ -110,7 +110,7 @@ describe('Type shapes @plan PLAN-20260211-HIGHDENSITY.P04', () => {
         metadata,
       };
 
-      expect(result.removals).toEqual([0, 3, 5]);
+      expect(result.removals).toStrictEqual([0, 3, 5]);
       expect(result.replacements.size).toBe(0);
       expect(result.metadata).toBe(metadata);
     });
@@ -183,7 +183,7 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    */
   it('MiddleOutStrategy has trigger { mode: threshold, defaultThreshold: 0.85 }', () => {
     const strategy = new MiddleOutStrategy();
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'threshold',
       defaultThreshold: 0.85,
     });
@@ -194,7 +194,7 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    */
   it('TopDownTruncationStrategy has trigger { mode: threshold, defaultThreshold: 0.85 }', () => {
     const strategy = new TopDownTruncationStrategy();
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'threshold',
       defaultThreshold: 0.85,
     });
@@ -205,7 +205,7 @@ describe('Existing strategy triggers @plan PLAN-20260211-HIGHDENSITY.P04', () =>
    */
   it('OneShotStrategy has trigger { mode: threshold, defaultThreshold: 0.85 }', () => {
     const strategy = new OneShotStrategy();
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'threshold',
       defaultThreshold: 0.85,
     });
@@ -281,7 +281,7 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   it('getCompressionStrategy returns MiddleOutStrategy for middle-out', () => {
     const strategy = getCompressionStrategy('middle-out');
     expect(strategy).toBeInstanceOf(MiddleOutStrategy);
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'threshold',
       defaultThreshold: 0.85,
     });
@@ -290,7 +290,7 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   it('getCompressionStrategy returns TopDownTruncationStrategy for top-down-truncation', () => {
     const strategy = getCompressionStrategy('top-down-truncation');
     expect(strategy).toBeInstanceOf(TopDownTruncationStrategy);
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'threshold',
       defaultThreshold: 0.85,
     });
@@ -299,7 +299,7 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   it('getCompressionStrategy returns OneShotStrategy for one-shot', () => {
     const strategy = getCompressionStrategy('one-shot');
     expect(strategy).toBeInstanceOf(OneShotStrategy);
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'threshold',
       defaultThreshold: 0.85,
     });
@@ -312,7 +312,7 @@ describe('Factory high-density support @plan PLAN-20260211-HIGHDENSITY.P04', () 
   it('getCompressionStrategy returns HighDensityStrategy for high-density', () => {
     const strategy = getCompressionStrategy('high-density');
     expect(strategy).toBeInstanceOf(HighDensityStrategy);
-    expect(strategy.trigger).toEqual({
+    expect(strategy.trigger).toStrictEqual({
       mode: 'continuous',
       defaultThreshold: 0.6,
     });

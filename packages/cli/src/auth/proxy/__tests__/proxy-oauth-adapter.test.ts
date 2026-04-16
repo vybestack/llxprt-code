@@ -82,7 +82,7 @@ describe('ProxyOAuthAdapter', () => {
 
     const result = await adapter.login('anthropic');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       status: 'complete',
       access_token: 'token',
     });

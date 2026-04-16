@@ -244,7 +244,7 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
      */
     it('returns empty sessions array when no sessions exist', async () => {
       const result = await listSessions(chatsDir, PROJECT_HASH);
-      expect(result.sessions).toEqual([]);
+      expect(result.sessions).toStrictEqual([]);
     });
 
     /**

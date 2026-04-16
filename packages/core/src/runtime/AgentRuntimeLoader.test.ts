@@ -225,7 +225,7 @@ describe('AgentRuntimeLoader', () => {
     expect(bundle.runtimeContext.ephemerals.compressionThreshold()).toBe(0.33);
     expect(bundle.runtimeContext.ephemerals.contextLimit()).toBe(5_000);
     expect(bundle.runtimeContext.ephemerals.preserveThreshold()).toBe(0.25);
-    expect(mutableSettings).toEqual({
+    expect(mutableSettings).toStrictEqual({
       compressionThreshold: 0.33,
       contextLimit: 5_000,
       preserveThreshold: 0.25,
@@ -263,7 +263,7 @@ describe('AgentRuntimeLoader', () => {
       },
     });
 
-    expect(bundle.toolsView.listToolNames()).toEqual(['alpha']);
+    expect(bundle.toolsView.listToolNames()).toStrictEqual(['alpha']);
     expect(bundle.toolsView.getToolMetadata('alpha')).toMatchObject({
       name: 'alpha',
       description: 'Alpha tool for testing.',

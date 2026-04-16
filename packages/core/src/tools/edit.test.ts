@@ -248,7 +248,7 @@ describe('EditTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      expect(confirmation).toEqual(
+      expect(confirmation).toStrictEqual(
         expect.objectContaining({
           title: `Confirm Edit: ${testFile}`,
           fileName: testFile,
@@ -295,7 +295,7 @@ describe('EditTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      expect(confirmation).toEqual(
+      expect(confirmation).toStrictEqual(
         expect.objectContaining({
           title: `Confirm Edit: ${newFileName}`,
           fileName: newFileName,

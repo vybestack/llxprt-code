@@ -330,7 +330,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
 
       expect(resultTail.length).toBe(originalTail.length);
       for (let i = 0; i < originalTail.length; i++) {
-        expect(resultTail[i]).toEqual(originalTail[i]);
+        expect(resultTail[i]).toStrictEqual(originalTail[i]);
       }
     });
 
@@ -406,7 +406,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
 
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toEqual(history);
+      expect(result.newHistory).toStrictEqual(history);
     });
   });
 
@@ -821,7 +821,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
 
       const result = await strategy.compress(ctx);
 
-      expect(result.newHistory).toEqual([]);
+      expect(result.newHistory).toStrictEqual([]);
       expect(result.metadata.originalMessageCount).toBe(0);
     });
 
@@ -836,7 +836,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
       const result = await strategy.compress(ctx);
 
       expect(result.newHistory.length).toBe(1);
-      expect(result.newHistory[0]).toEqual(single);
+      expect(result.newHistory[0]).toStrictEqual(single);
     });
   });
 
@@ -967,7 +967,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
             i++
           ) {
             if (originalTail[i].speaker === 'ai') {
-              expect(resultTail[i]).toEqual(originalTail[i]);
+              expect(resultTail[i]).toStrictEqual(originalTail[i]);
             }
           }
         }),
@@ -1038,7 +1038,7 @@ describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', (
             i < Math.min(originalTail.length, resultTail.length);
             i++
           ) {
-            expect(resultTail[i]).toEqual(originalTail[i]);
+            expect(resultTail[i]).toStrictEqual(originalTail[i]);
           }
         }),
         { numRuns: 30 },

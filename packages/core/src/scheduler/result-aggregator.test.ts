@@ -216,7 +216,7 @@ describe('ResultAggregator', () => {
       const ids = (
         callbacks.setSuccess as ReturnType<typeof vi.fn>
       ).mock.calls.map((args: unknown[]) => args[0]);
-      expect(ids).toEqual(['c0', 'c1', 'c2']);
+      expect(ids).toStrictEqual(['c0', 'c1', 'c2']);
     });
 
     it('waits when a gap in indices exists and publishes once gap is filled', async () => {
@@ -238,7 +238,7 @@ describe('ResultAggregator', () => {
       const ids = (
         callbacks.setSuccess as ReturnType<typeof vi.fn>
       ).mock.calls.map((args: unknown[]) => args[0]);
-      expect(ids).toEqual(['c0', 'c1']);
+      expect(ids).toStrictEqual(['c0', 'c1']);
     });
   });
 

@@ -199,7 +199,7 @@ describe('buildSettingsSnapshot', () => {
     const config = makeConfig();
     const snapshot = buildSettingsSnapshot(config);
 
-    expect(snapshot.tools).toEqual({ allowed: ['bash', 'read_file'] });
+    expect(snapshot.tools).toStrictEqual({ allowed: ['bash', 'read_file'] });
   });
 
   it('includes telemetry configuration', () => {
@@ -207,7 +207,7 @@ describe('buildSettingsSnapshot', () => {
 
     const snapshot = buildSettingsSnapshot(config);
 
-    expect(snapshot.telemetry).toEqual({ enabled: true, target: null });
+    expect(snapshot.telemetry).toStrictEqual({ enabled: true, target: null });
   });
 });
 

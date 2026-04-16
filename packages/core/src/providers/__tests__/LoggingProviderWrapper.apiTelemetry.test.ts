@@ -467,7 +467,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual(['stop']);
+      expect(call[1].finish_reasons).toStrictEqual(['stop']);
     });
 
     it('should default finish_reasons to [] when no finishReason in metadata', async () => {
@@ -499,7 +499,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual([]);
+      expect(call[1].finish_reasons).toStrictEqual([]);
     });
 
     it('should populate finish_reasons via processStreamForMetrics path (logging disabled)', async () => {
@@ -526,7 +526,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual(['length']);
+      expect(call[1].finish_reasons).toStrictEqual(['length']);
     });
 
     // Issue #1844: stopReason fallback when finishReason is absent
@@ -589,7 +589,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual(['end_turn']);
+      expect(call[1].finish_reasons).toStrictEqual(['end_turn']);
     });
 
     it('should populate finish_reasons from metadata.stopReason via processStreamForMetrics path', async () => {
@@ -650,7 +650,7 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      expect(call[1].finish_reasons).toEqual(['completed']);
+      expect(call[1].finish_reasons).toStrictEqual(['completed']);
     });
   });
 

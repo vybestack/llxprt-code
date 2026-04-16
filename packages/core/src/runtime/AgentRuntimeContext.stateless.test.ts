@@ -70,9 +70,9 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     context.telemetry.logApiRequest(requestEvent);
 
     expect(telemetry.logApiRequest).toHaveBeenCalledWith(requestEvent);
-    expect(context.provider.getActiveProvider()).toEqual(
+    expect(context.provider.getActiveProvider()).toStrictEqual(
       expect.objectContaining({ name: 'stub-provider' }),
     );
-    expect(context.tools.listToolNames()).toEqual(['alpha']);
+    expect(context.tools.listToolNames()).toStrictEqual(['alpha']);
   });
 });

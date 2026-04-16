@@ -209,7 +209,7 @@ describe('AST Tools', () => {
         'REGEX',
       ].sort();
 
-      expect(actualExports).toEqual(expectedExports);
+      expect(actualExports).toStrictEqual(expectedExports);
     });
   });
 

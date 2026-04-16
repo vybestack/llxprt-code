@@ -7,7 +7,7 @@ describe('PolicyEngine', () => {
     it('initializes with default values when no config provided', () => {
       const engine = new PolicyEngine();
 
-      expect(engine.getRules()).toEqual([]);
+      expect(engine.getRules()).toStrictEqual([]);
       expect(engine.getDefaultDecision()).toBe(PolicyDecision.ASK_USER);
       expect(engine.isNonInteractive()).toBe(false);
     });

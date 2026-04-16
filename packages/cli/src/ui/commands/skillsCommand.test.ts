@@ -479,7 +479,7 @@ describe('skillsCommand', () => {
       );
 
       const completions = await disableCmd.completion!(context, 'sk');
-      expect(completions).toEqual(['skill1']);
+      expect(completions).toStrictEqual(['skill1']);
     });
 
     it('should provide completions for enable (only disabled skills)', async () => {
@@ -509,7 +509,7 @@ describe('skillsCommand', () => {
       );
 
       const completions = await enableCmd.completion!(context, 'sk');
-      expect(completions).toEqual(['skill2']);
+      expect(completions).toStrictEqual(['skill2']);
     });
   });
 });

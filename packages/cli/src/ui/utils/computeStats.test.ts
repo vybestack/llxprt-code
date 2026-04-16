@@ -135,7 +135,7 @@ describe('computeSessionStats', () => {
 
     const result = computeSessionStats(metrics);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       totalApiTime: 0,
       totalToolTime: 0,
       agentActiveTime: 0,

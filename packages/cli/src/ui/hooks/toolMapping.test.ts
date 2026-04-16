@@ -144,7 +144,7 @@ describe('toolMapping', () => {
       const result = mapToDisplay(toolCall);
       const displayTool = result.tools[0];
 
-      expect(displayTool).toEqual(
+      expect(displayTool).toStrictEqual(
         expect.objectContaining({
           callId: 'call-1',
           name: 'Test Tool',
@@ -216,7 +216,9 @@ describe('toolMapping', () => {
       const displayTool = result.tools[0];
 
       expect(displayTool.status).toBe(ToolCallStatus.Confirming);
-      expect(displayTool.confirmationDetails).toEqual(confirmationDetails);
+      expect(displayTool.confirmationDetails).toStrictEqual(
+        confirmationDetails,
+      );
     });
 
     it('maps error tool call missing tool definition', () => {

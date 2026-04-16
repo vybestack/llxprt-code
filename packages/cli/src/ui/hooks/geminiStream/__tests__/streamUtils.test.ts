@@ -55,27 +55,27 @@ vi.mock('../../../utils/markdownUtilities.js', async () => ({
 describe('mergePartListUnions', () => {
   it('merges string items into text parts', () => {
     const result = mergePartListUnions(['hello', 'world']);
-    expect(result).toEqual([{ text: 'hello' }, { text: 'world' }]);
+    expect(result).toStrictEqual([{ text: 'hello' }, { text: 'world' }]);
   });
 
   it('merges Part objects directly', () => {
     const part: Part = { text: 'foo' };
     const result = mergePartListUnions([part]);
-    expect(result).toEqual([{ text: 'foo' }]);
+    expect(result).toStrictEqual([{ text: 'foo' }]);
   });
 
   it('merges arrays of string/Part', () => {
     const result = mergePartListUnions([['a', { text: 'b' }]]);
-    expect(result).toEqual([{ text: 'a' }, { text: 'b' }]);
+    expect(result).toStrictEqual([{ text: 'a' }, { text: 'b' }]);
   });
 
   it('returns empty array for empty input', () => {
-    expect(mergePartListUnions([])).toEqual([]);
+    expect(mergePartListUnions([])).toStrictEqual([]);
   });
 
   it('flattens nested arrays', () => {
     const result = mergePartListUnions([['a', 'b'], ['c'], 'd']);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       { text: 'a' },
       { text: 'b' },
       { text: 'c' },
@@ -226,7 +226,7 @@ describe('collectGeminiTools', () => {
     ];
     const result = collectGeminiTools(tools);
     expect(result).toHaveLength(2);
-    expect(result.map((t) => t.request.name)).toEqual([
+    expect(result.map((t) => t.request.name)).toStrictEqual([
       'gemini-tool',
       'no-flag-tool',
     ]);
@@ -297,7 +297,7 @@ describe('deduplicateToolCallRequests', () => {
     const requests = [makeRequest('a'), makeRequest('b'), makeRequest('a')];
     const result = deduplicateToolCallRequests(requests);
     expect(result).toHaveLength(2);
-    expect(result.map((r) => r.callId)).toEqual(['a', 'b']);
+    expect(result.map((r) => r.callId)).toStrictEqual(['a', 'b']);
   });
 
   it('preserves insertion order', () => {
@@ -308,7 +308,7 @@ describe('deduplicateToolCallRequests', () => {
       makeRequest('a'),
     ];
     const result = deduplicateToolCallRequests(requests);
-    expect(result.map((r) => r.callId)).toEqual(['c', 'a', 'b']);
+    expect(result.map((r) => r.callId)).toStrictEqual(['c', 'a', 'b']);
   });
 
   it('returns empty for empty input', () => {
@@ -326,7 +326,7 @@ describe('deduplicateToolCallRequests', () => {
 describe('buildThinkingBlock', () => {
   it('creates a ThinkingBlock from thought text', () => {
     const block = buildThinkingBlock('my thought', []);
-    expect(block).toEqual({
+    expect(block).toStrictEqual({
       type: 'thinking',
       thought: 'my thought',
       sourceField: 'thought',

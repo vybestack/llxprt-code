@@ -618,7 +618,10 @@ describe('parseArguments', () => {
       'read_file,ShellTool(git status)',
     ];
     const argv = await parseArguments({} as Settings);
-    expect(argv.allowedTools).toEqual(['read_file', 'ShellTool(git status)']);
+    expect(argv.allowedTools).toStrictEqual([
+      'read_file',
+      'ShellTool(git status)',
+    ]);
   });
 
   it('should support comma-separated values for --allowed-mcp-server-names', async () => {
@@ -629,13 +632,13 @@ describe('parseArguments', () => {
       'server1,server2',
     ];
     const argv = await parseArguments({} as Settings);
-    expect(argv.allowedMcpServerNames).toEqual(['server1', 'server2']);
+    expect(argv.allowedMcpServerNames).toStrictEqual(['server1', 'server2']);
   });
 
   it('should support comma-separated values for --extensions', async () => {
     process.argv = ['node', 'script.js', '--extensions', 'ext1,ext2'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.extensions).toEqual(['ext1', 'ext2']);
+    expect(argv.extensions).toStrictEqual(['ext1', 'ext2']);
   });
 });
 
@@ -700,7 +703,7 @@ describe('loadCliConfig', () => {
     const loadMemoryMock = vi.mocked(ServerConfig.loadServerHierarchicalMemory);
     expect(loadMemoryMock).toHaveBeenCalled();
     expect(loadMemoryMock.mock.calls.at(-1)?.[0]).toBe(process.cwd());
-    expect(loadMemoryMock.mock.calls.at(-1)?.[1]).toEqual(
+    expect(loadMemoryMock.mock.calls.at(-1)?.[1]).toStrictEqual(
       expectedIncludeDirectories,
     );
     expect(config.shouldLoadMemoryFromIncludeDirectories()).toBe(true);
@@ -742,7 +745,7 @@ describe('loadCliConfig chatCompression', () => {
       'test-session',
       argv,
     );
-    expect(config.getChatCompression()).toEqual({
+    expect(config.getChatCompression()).toStrictEqual({
       contextPercentageThreshold: 0.5,
     });
   });
@@ -1267,7 +1270,7 @@ describe('loadCliConfig interactive', () => {
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello');
-    expect(argv.extensions).toEqual(['none']);
+    expect(argv.extensions).toStrictEqual(['none']);
   });
 
   it('should handle multiple positional words correctly', async () => {
@@ -1363,7 +1366,7 @@ describe('loadCliConfig interactive', () => {
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
-    expect(argv.extensions).toEqual(['none']);
+    expect(argv.extensions).toStrictEqual(['none']);
   });
 
   it('should be interactive if no positional prompt words are provided with flags', async () => {
@@ -1739,7 +1742,7 @@ describe('parseArguments with positional prompt', () => {
   it('should correctly parse a positional prompt', async () => {
     process.argv = ['node', 'script.js', 'positional', 'prompt'];
     const argv = await parseArguments({} as Settings);
-    expect(argv.promptWords).toEqual(['positional', 'prompt']);
+    expect(argv.promptWords).toStrictEqual(['positional', 'prompt']);
   });
 
   it('should correctly parse positional query argument', async () => {
@@ -1786,7 +1789,9 @@ describe('defaultDisabledTools', () => {
       argv,
     );
     const disabled = config.getEphemeralSetting('tools.disabled');
-    expect(disabled).toEqual(expect.arrayContaining(['google_web_fetch']));
+    expect(disabled).toStrictEqual(
+      expect.arrayContaining(['google_web_fetch']),
+    );
   });
 
   it('should merge defaultDisabledTools with existing tools.disabled', async () => {
@@ -1812,7 +1817,7 @@ describe('defaultDisabledTools', () => {
     );
     const currentDisabled =
       (config.getEphemeralSetting('tools.disabled') as string[]) || [];
-    expect(currentDisabled).toEqual(
+    expect(currentDisabled).toStrictEqual(
       expect.arrayContaining(['read_file', 'google_web_fetch']),
     );
   });

@@ -83,7 +83,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(firstModel).toHaveProperty('name');
     expect(firstModel).toHaveProperty('provider', 'openai');
     expect(firstModel).toHaveProperty('supportedToolFormats');
-    expect(firstModel.supportedToolFormats).toEqual(['openai']);
+    expect(firstModel.supportedToolFormats).toStrictEqual(['openai']);
 
     // If LLXPRT_DEFAULT_MODEL is set, verify it's in the list
     const defaultModel = process.env.LLXPRT_DEFAULT_MODEL;

@@ -264,19 +264,19 @@ describe('fileUtils', () => {
           0xef, 0xbb, 0xbf, 0x48, 0x65, 0x6c, 0x6c, 0x6f,
         ]);
         const result = detectBOM(buf);
-        expect(result).toEqual({ encoding: 'utf8', bomLength: 3 });
+        expect(result).toStrictEqual({ encoding: 'utf8', bomLength: 3 });
       });
 
       it('should detect UTF-16 LE BOM', () => {
         const buf = Buffer.from([0xff, 0xfe, 0x48, 0x00, 0x65, 0x00]);
         const result = detectBOM(buf);
-        expect(result).toEqual({ encoding: 'utf16le', bomLength: 2 });
+        expect(result).toStrictEqual({ encoding: 'utf16le', bomLength: 2 });
       });
 
       it('should detect UTF-16 BE BOM', () => {
         const buf = Buffer.from([0xfe, 0xff, 0x00, 0x48, 0x00, 0x65]);
         const result = detectBOM(buf);
-        expect(result).toEqual({ encoding: 'utf16be', bomLength: 2 });
+        expect(result).toStrictEqual({ encoding: 'utf16be', bomLength: 2 });
       });
 
       it('should detect UTF-32 LE BOM', () => {
@@ -284,7 +284,7 @@ describe('fileUtils', () => {
           0xff, 0xfe, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00,
         ]);
         const result = detectBOM(buf);
-        expect(result).toEqual({ encoding: 'utf32le', bomLength: 4 });
+        expect(result).toStrictEqual({ encoding: 'utf32le', bomLength: 4 });
       });
 
       it('should detect UTF-32 BE BOM', () => {
@@ -292,7 +292,7 @@ describe('fileUtils', () => {
           0x00, 0x00, 0xfe, 0xff, 0x00, 0x00, 0x00, 0x48,
         ]);
         const result = detectBOM(buf);
-        expect(result).toEqual({ encoding: 'utf32be', bomLength: 4 });
+        expect(result).toStrictEqual({ encoding: 'utf32be', bomLength: 4 });
       });
 
       it('should return null for no BOM', () => {
@@ -864,7 +864,7 @@ describe('fileUtils', () => {
       expect(result.returnDisplay).toBe('Read lines 6-10 of 20 from test.txt');
       expect(result.isTruncated).toBe(true);
       expect(result.originalLineCount).toBe(20);
-      expect(result.linesShown).toEqual([6, 10]);
+      expect(result.linesShown).toStrictEqual([6, 10]);
     });
 
     it('should identify truncation when reading the end of a file', async () => {
@@ -885,7 +885,7 @@ describe('fileUtils', () => {
       expect(result.returnDisplay).toBe('Read lines 11-20 of 20 from test.txt');
       expect(result.isTruncated).toBe(true); // This is the key check for the bug
       expect(result.originalLineCount).toBe(20);
-      expect(result.linesShown).toEqual([11, 20]);
+      expect(result.linesShown).toStrictEqual([11, 20]);
     });
 
     it('should handle limit exceeding file length', async () => {
@@ -905,7 +905,7 @@ describe('fileUtils', () => {
       expect(result.returnDisplay).toBe('');
       expect(result.isTruncated).toBe(false);
       expect(result.originalLineCount).toBe(2);
-      expect(result.linesShown).toEqual([1, 2]);
+      expect(result.linesShown).toStrictEqual([1, 2]);
     });
 
     it('should truncate long lines in text files', async () => {

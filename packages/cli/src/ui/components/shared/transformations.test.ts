@@ -73,7 +73,7 @@ describe('transformations', () => {
     it('should return empty array for no matches', () => {
       const line = 'Just plain text';
       const result = calculateTransformationsForLine(line);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should calculate correct positions', () => {
@@ -103,13 +103,13 @@ describe('transformations', () => {
     it('should return empty arrays for lines without images', () => {
       const lines = ['line 1', 'line 2'];
       const result = calculateTransformations(lines);
-      expect(result[0]).toEqual([]);
-      expect(result[1]).toEqual([]);
+      expect(result[0]).toStrictEqual([]);
+      expect(result[1]).toStrictEqual([]);
     });
 
     it('should handle empty lines array', () => {
       const result = calculateTransformations([]);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
   });
 

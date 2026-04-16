@@ -85,7 +85,7 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
       const loadedProfile = await profileManager.loadProfile('test-profile');
 
       // Verify all fields match
-      expect(loadedProfile).toEqual(testProfile);
+      expect(loadedProfile).toStrictEqual(testProfile);
       expect(loadedProfile.version).toBe(1);
       expect(loadedProfile.provider).toBe('anthropic');
       expect(loadedProfile.model).toBe('claude-3-5-sonnet-20240620');
@@ -139,7 +139,7 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
       // Load and verify each profile
       for (const [name, expectedProfile] of Object.entries(profiles)) {
         const loadedProfile = await profileManager.loadProfile(name);
-        expect(loadedProfile).toEqual(expectedProfile);
+        expect(loadedProfile).toStrictEqual(expectedProfile);
       }
     });
   });
@@ -180,7 +180,7 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
       const parsedContent = JSON.parse(rawContent);
 
       // Verify JSON structure
-      expect(parsedContent).toEqual(profile);
+      expect(parsedContent).toStrictEqual(profile);
 
       // Verify formatting (should be pretty-printed with 2-space indentation)
       expect(rawContent).toContain('  "version": 1');
@@ -255,7 +255,7 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
     it('should handle empty profile list gracefully', async () => {
       // Don't create any profiles
       const profileList = await profileManager.listProfiles();
-      expect(profileList).toEqual([]);
+      expect(profileList).toStrictEqual([]);
     });
 
     it('should create profiles directory if it does not exist', async () => {
@@ -387,10 +387,10 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
       const loaded = await profileManager.loadProfile('comprehensive');
 
       // Verify all fields are preserved
-      expect(loaded).toEqual(comprehensiveProfile);
+      expect(loaded).toStrictEqual(comprehensiveProfile);
       expect(loaded.modelParams.logprobs).toBe(true);
       expect(loaded.modelParams.top_logprobs).toBe(3);
-      expect(loaded.ephemeralSettings['custom-headers']).toEqual({
+      expect(loaded.ephemeralSettings['custom-headers']).toStrictEqual({
         'X-Organization-ID': 'org-123',
         'X-Project-ID': 'proj-456',
         'X-Custom-Tracking': 'enabled',
@@ -409,9 +409,9 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
       await profileManager.saveProfile('minimal', minimalProfile);
       const loaded = await profileManager.loadProfile('minimal');
 
-      expect(loaded).toEqual(minimalProfile);
-      expect(loaded.modelParams).toEqual({});
-      expect(loaded.ephemeralSettings).toEqual({});
+      expect(loaded).toStrictEqual(minimalProfile);
+      expect(loaded.modelParams).toStrictEqual({});
+      expect(loaded.ephemeralSettings).toStrictEqual({});
     });
   });
 
@@ -446,7 +446,7 @@ describe('Profile Save/Load Cycle Integration Tests', () => {
       for (const name of specialNames) {
         expect(profileList).toContain(name);
         const loaded = await profileManager.loadProfile(name);
-        expect(loaded).toEqual(baseProfile);
+        expect(loaded).toStrictEqual(baseProfile);
       }
     });
   });

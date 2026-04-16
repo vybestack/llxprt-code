@@ -118,26 +118,26 @@ describe('Runtime model parameter isolation', () => {
   });
 
   it('keeps model parameters scoped to the active provider', async () => {
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
 
     setActiveModelParam('temperature', 0.8);
     setActiveModelParam('max_tokens', 2048);
 
-    expect(getActiveModelParams()).toEqual({
+    expect(getActiveModelParams()).toStrictEqual({
       temperature: 0.8,
       max_tokens: 2048,
     });
     expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.8);
 
     await switchActiveProvider('beta');
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
     expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.8);
 
     setActiveModelParam('temperature', 0.35);
-    expect(getActiveModelParams()).toEqual({ temperature: 0.35 });
+    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.35 });
 
     await switchActiveProvider('alpha');
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').temperature,
     ).toBeUndefined();
@@ -151,7 +151,7 @@ describe('Runtime model parameter isolation', () => {
     const snapshot = buildRuntimeProfileSnapshot();
     expect(snapshot.provider).toBe('alpha');
     expect(snapshot.model).toBe('alpha-model');
-    expect(snapshot.modelParams).toEqual({
+    expect(snapshot.modelParams).toStrictEqual({
       top_p: 0.91,
       response_format: { type: 'json_object' },
     });
@@ -182,9 +182,9 @@ describe('Runtime model parameter isolation', () => {
 
   it('clears individual model params via helper', () => {
     setActiveModelParam('temperature', 0.42);
-    expect(getActiveModelParams()).toEqual({ temperature: 0.42 });
+    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.42 });
 
     clearActiveModelParam('temperature');
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
   });
 });

@@ -34,7 +34,7 @@ describe('policy-helpers', () => {
 
       const context = getPolicyContextFromInvocation(mockInvocation, request);
 
-      expect(context).toEqual({
+      expect(context).toStrictEqual({
         toolName: 'test-tool',
         args: { baz: 'qux' },
       });
@@ -70,11 +70,11 @@ describe('policy-helpers', () => {
         { foo: 'bar' },
         undefined, // serverName will be undefined for non-BaseToolInvocation
       );
-      expect(result.decision).toEqual({
+      expect(result.decision).toStrictEqual({
         action: PolicyDecision.ALLOW,
         reason: '',
       });
-      expect(result.context).toEqual({
+      expect(result.context).toStrictEqual({
         toolName: 'test-tool',
         args: { foo: 'bar' },
       });

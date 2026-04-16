@@ -175,7 +175,7 @@ describe('CodeAssistServer', () => {
       'loadCodeAssist',
       expect.any(Object),
     );
-    expect(response).toEqual(mockResponse);
+    expect(response).toStrictEqual(mockResponse);
   });
 
   it('should return 0 for countTokens', async () => {

@@ -58,7 +58,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
     expect(terminalMessage).toBeDefined();
 
     // Should have usage
-    expect(terminalMessage!.metadata!.usage).toEqual({
+    expect(terminalMessage!.metadata!.usage).toStrictEqual({
       promptTokens: 10,
       completionTokens: 2,
       totalTokens: 12,

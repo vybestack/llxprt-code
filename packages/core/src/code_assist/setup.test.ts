@@ -77,7 +77,7 @@ describe('setupUser for existing user', () => {
       {},
       undefined,
     );
-    expect(projectId).toEqual({
+    expect(projectId).toStrictEqual({
       projectId: 'server-project',
       userTier: 'standard-tier',
     });
@@ -143,7 +143,7 @@ describe('setupUser for new user', () => {
         duetProject: 'test-project',
       },
     });
-    expect(userData).toEqual({
+    expect(userData).toStrictEqual({
       projectId: 'server-project',
       userTier: 'standard-tier',
     });
@@ -166,7 +166,7 @@ describe('setupUser for new user', () => {
         pluginType: 'GEMINI',
       },
     });
-    expect(userData).toEqual({
+    expect(userData).toStrictEqual({
       projectId: 'server-project',
       userTier: 'free-tier',
     });
@@ -184,7 +184,7 @@ describe('setupUser for new user', () => {
       },
     });
     const userData = await setupUser({} as OAuth2Client);
-    expect(userData).toEqual({
+    expect(userData).toStrictEqual({
       projectId: 'test-project',
       userTier: 'standard-tier',
     });

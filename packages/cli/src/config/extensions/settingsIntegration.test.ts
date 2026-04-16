@@ -74,12 +74,12 @@ describe('settingsIntegration', () => {
       const settings = loadExtensionSettingsFromManifest(tempDir);
 
       expect(settings).toHaveLength(2);
-      expect(settings[0]).toEqual({
+      expect(settings[0]).toStrictEqual({
         name: 'API Key',
         envVar: 'API_KEY',
         sensitive: true,
       });
-      expect(settings[1]).toEqual({
+      expect(settings[1]).toStrictEqual({
         name: 'API URL',
         description: 'The API endpoint URL',
         envVar: 'API_URL',
@@ -102,12 +102,12 @@ describe('settingsIntegration', () => {
 
       const settings = loadExtensionSettingsFromManifest(tempDir);
 
-      expect(settings).toEqual([]);
+      expect(settings).toStrictEqual([]);
     });
 
     it('should return empty array if manifest not found', () => {
       const settings = loadExtensionSettingsFromManifest(tempDir);
-      expect(settings).toEqual([]);
+      expect(settings).toStrictEqual([]);
     });
   });
 
@@ -154,15 +154,15 @@ describe('settingsIntegration', () => {
       const contents = await getEnvContents('test-ext', tempDir);
 
       expect(contents).toHaveLength(3);
-      expect(contents[0]).toEqual({
+      expect(contents[0]).toStrictEqual({
         name: 'Public Setting',
         value: 'public-value',
       });
-      expect(contents[1]).toEqual({
+      expect(contents[1]).toStrictEqual({
         name: 'Secret Setting',
         value: '[not set]',
       });
-      expect(contents[2]).toEqual({
+      expect(contents[2]).toStrictEqual({
         name: 'Unset Setting',
         value: '[not set]',
       });
@@ -182,7 +182,7 @@ describe('settingsIntegration', () => {
       );
 
       const contents = await getEnvContents('test-ext', tempDir);
-      expect(contents).toEqual([]);
+      expect(contents).toStrictEqual([]);
     });
   });
 
@@ -689,7 +689,7 @@ describe('settingsIntegration', () => {
       );
 
       expect(resolved).toHaveLength(1);
-      expect(resolved[0]).toEqual({
+      expect(resolved[0]).toStrictEqual({
         name: 'API Key',
         envVar: 'API_KEY',
         value: 'user-value',
@@ -752,7 +752,7 @@ describe('settingsIntegration', () => {
       );
 
       expect(resolved).toHaveLength(1);
-      expect(resolved[0]).toEqual({
+      expect(resolved[0]).toStrictEqual({
         name: 'API Key',
         envVar: 'API_KEY',
         value: 'workspace-value',
@@ -794,7 +794,7 @@ describe('settingsIntegration', () => {
       );
 
       expect(resolved).toHaveLength(1);
-      expect(resolved[0]).toEqual({
+      expect(resolved[0]).toStrictEqual({
         name: 'API Key',
         envVar: 'API_KEY',
         value: '[not set]',
@@ -836,7 +836,7 @@ describe('settingsIntegration', () => {
       );
 
       expect(resolved).toHaveLength(1);
-      expect(resolved[0]).toEqual({
+      expect(resolved[0]).toStrictEqual({
         name: 'Secret',
         envVar: 'SECRET',
         value: '[not set]',
@@ -857,7 +857,7 @@ describe('settingsIntegration', () => {
         [],
       );
 
-      expect(resolved).toEqual([]);
+      expect(resolved).toStrictEqual([]);
     });
   });
 });

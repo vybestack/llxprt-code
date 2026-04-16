@@ -65,7 +65,7 @@ describe('Todo Integration Test', () => {
     // Verify we have one executing tool call
     expect(allCalls).toHaveLength(1);
     expect(allCalls[0].name).toBe('test_tool');
-    expect(allCalls[0].parameters).toEqual({ param: 'value' });
+    expect(allCalls[0].parameters).toStrictEqual({ param: 'value' });
 
     // Complete the tool call tracking
     await ToolCallTrackerService.completeToolCallTracking(

@@ -156,7 +156,9 @@ describe('detectIde with ideInfoFromFile', () => {
       name: 'custom-ide',
       displayName: 'Custom IDE',
     };
-    expect(detectIde(ideProcessInfo, ideInfoFromFile)).toEqual(ideInfoFromFile);
+    expect(detectIde(ideProcessInfo, ideInfoFromFile)).toStrictEqual(
+      ideInfoFromFile,
+    );
   });
 
   it('should fall back to env detection if name is missing', () => {

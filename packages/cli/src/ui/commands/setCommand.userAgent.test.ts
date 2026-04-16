@@ -36,7 +36,7 @@ describe('setCommand user-agent ephemeral', () => {
       'user-agent',
       'RooCode/1.0',
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:

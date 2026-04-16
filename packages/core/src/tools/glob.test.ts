@@ -399,7 +399,7 @@ describe('sortFileEntries', () => {
     const sorted = sortFileEntries(entries, nowTimestamp, oneDayInMs);
     const sortedPaths = sorted.map((e) => e.fullpath());
 
-    expect(sortedPaths).toEqual([
+    expect(sortedPaths).toStrictEqual([
       'recent_alpha.txt', // Recent, newest
       'recent_beta.txt', // Recent, older
       'older_apple.txt', // Older, alphabetical
@@ -419,7 +419,7 @@ describe('sortFileEntries', () => {
       createFileEntry('b.txt', recentTime1),
     ];
     const sorted = sortFileEntries(entries, nowTimestamp, oneDayInMs);
-    expect(sorted.map((e) => e.fullpath())).toEqual([
+    expect(sorted.map((e) => e.fullpath())).toStrictEqual([
       'b.txt',
       'c.txt',
       'a.txt',
@@ -434,7 +434,7 @@ describe('sortFileEntries', () => {
       createFileEntry('banana.txt', olderTime),
     ];
     const sorted = sortFileEntries(entries, nowTimestamp, oneDayInMs);
-    expect(sorted.map((e) => e.fullpath())).toEqual([
+    expect(sorted.map((e) => e.fullpath())).toStrictEqual([
       'apple.txt',
       'banana.txt',
       'zebra.txt',
@@ -444,7 +444,7 @@ describe('sortFileEntries', () => {
   it('should handle an empty array', () => {
     const entries: GlobPath[] = [];
     const sorted = sortFileEntries(entries, nowTimestamp, oneDayInMs);
-    expect(sorted).toEqual([]);
+    expect(sorted).toStrictEqual([]);
   });
 
   it('should correctly sort files when mtimes are identical for older files', () => {
@@ -454,7 +454,7 @@ describe('sortFileEntries', () => {
       createFileEntry('a.txt', olderTime),
     ];
     const sorted = sortFileEntries(entries, nowTimestamp, oneDayInMs);
-    expect(sorted.map((e) => e.fullpath())).toEqual(['a.txt', 'b.txt']);
+    expect(sorted.map((e) => e.fullpath())).toStrictEqual(['a.txt', 'b.txt']);
   });
 
   it('should correctly sort files when mtimes are identical for recent files (maintaining mtime sort)', () => {
@@ -479,7 +479,7 @@ describe('sortFileEntries', () => {
       createFileEntry('recent_file.txt', justUnderThreshold),
     ];
     const sorted = sortFileEntries(entries, nowTimestamp, customThresholdMs);
-    expect(sorted.map((e) => e.fullpath())).toEqual([
+    expect(sorted.map((e) => e.fullpath())).toStrictEqual([
       'recent_file.txt',
       'older_file.txt',
     ]);

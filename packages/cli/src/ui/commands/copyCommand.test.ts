@@ -62,7 +62,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No chat history available yet',
@@ -78,7 +78,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No output in history',
@@ -101,7 +101,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No output in history',
@@ -129,7 +129,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last output copied to the clipboard',
@@ -156,7 +156,7 @@ describe('copyCommand', () => {
     const result = await copyCommand.action(mockContext, '');
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Part 1: Part 2: Part 3');
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last output copied to the clipboard',
@@ -183,7 +183,7 @@ describe('copyCommand', () => {
     const result = await copyCommand.action(mockContext, '');
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Text part more text');
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last output copied to the clipboard',
@@ -214,7 +214,7 @@ describe('copyCommand', () => {
     const result = await copyCommand.action(mockContext, '');
 
     expect(mockCopyToClipboard).toHaveBeenCalledWith('Second AI response');
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last output copied to the clipboard',
@@ -237,7 +237,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: `Failed to copy to the clipboard. ${clipboardError.message}`,
@@ -260,7 +260,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: `Failed to copy to the clipboard. ${rejectedValue}`,
@@ -281,7 +281,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'Last AI output contains no text to copy.',
@@ -299,7 +299,7 @@ describe('copyCommand', () => {
 
     const result = await copyCommand.action(nullConfigContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: 'No chat history available yet',

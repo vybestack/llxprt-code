@@ -317,7 +317,7 @@ describe('BaseProvider', () => {
         )
         .next();
 
-      expect(provider.lastOptions?.contents).toEqual(messages);
+      expect(provider.lastOptions?.contents).toStrictEqual(messages);
       expect(provider.lastOptions?.tools).toBeUndefined();
       expect(provider.lastOptions?.settings).toBe(defaultSettings);
     });

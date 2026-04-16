@@ -210,7 +210,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(modelConfig.model).toBe(baseProfile.model);
     expect(modelConfig.temp).toBe(baseProfile.modelParams.temperature);
     expect(modelConfig.top_p).toBe(baseProfile.modelParams.top_p);
-    expect(runConfigArg).toEqual(defaultRunConfig);
+    expect(runConfigArg).toStrictEqual(defaultRunConfig);
 
     expect(runResult.scope).toBe(fakeScope);
   });
@@ -449,7 +449,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loaderArgs = runtimeLoader.mock.calls[0][0];
     expect(loaderArgs.profile.state.model).toBe(profile.model);
     expect(loaderArgs.profile.state.provider).toBe(profile.provider);
-    expect(loaderArgs.profile.settings.tools?.allowed).toEqual(
+    expect(loaderArgs.profile.settings.tools?.allowed).toStrictEqual(
       profile.ephemeralSettings['tools.allowed'],
     );
 
@@ -499,7 +499,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    expect(loaderArgs.profile.settings.tools?.disabled).toEqual([
+    expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
       'google_web_fetch',
     ]);
   });
@@ -544,7 +544,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    expect(loaderArgs.profile.settings.tools?.disabled).toEqual(['write_file']);
+    expect(loaderArgs.profile.settings.tools?.disabled).toStrictEqual([
+      'write_file',
+    ]);
   });
 
   it('copies base-url into provider settings for subagent runtimes', async () => {

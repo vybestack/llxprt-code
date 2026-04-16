@@ -201,7 +201,7 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
       const sequences = onKeypress.mock.calls.map(([arg]) => arg.sequence);
 
       const expectedSequences = useKitty ? ['\x1B[200do'] : ['\x1B[200d', 'o'];
-      expect(sequences).toEqual(expectedSequences);
+      expect(sequences).toStrictEqual(expectedSequences);
     });
 
     it('should handle back to back pastes', () => {

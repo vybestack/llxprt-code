@@ -70,7 +70,7 @@ describe('usageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should NOT include Bearer prefix in Authorization header', async () => {
@@ -140,7 +140,7 @@ describe('usageInfo', () => {
       } as Response);
 
       const result = await fetchZaiUsage('test-key');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
       expect(result?.data.limits).toHaveLength(2);
       expect(result?.data.level).toBe('max');
     });
@@ -194,7 +194,7 @@ describe('usageInfo', () => {
       } as Response);
 
       const result = await fetchZaiUsage('test-key');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should use custom base URL when provided', async () => {

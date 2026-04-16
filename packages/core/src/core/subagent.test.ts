@@ -194,7 +194,7 @@ describe('subagent.ts', () => {
       context.set('key2', 123);
       expect(context.get('key1')).toBe('value1');
       expect(context.get('key2')).toBe(123);
-      expect(context.get_keys()).toEqual(['key1', 'key2']);
+      expect(context.get_keys()).toStrictEqual(['key1', 'key2']);
     });
 
     it('should return undefined for missing keys', () => {
@@ -856,7 +856,7 @@ describe('subagent.ts', () => {
         const ephemerals =
           toolExecutorConfig.getEphemeralSettings?.() ??
           ({} as Record<string, unknown>);
-        expect(ephemerals['tools.allowed']).toEqual(['read_file']);
+        expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
       });
 
       it('never passes foreground Config into executeToolCall', async () => {
@@ -949,7 +949,7 @@ describe('subagent.ts', () => {
 
         // Check History (should be empty since environment context is now in system instruction)
         const history = callArgs[3];
-        expect(history).toEqual([]);
+        expect(history).toStrictEqual([]);
       });
 
       it('should include output instructions in the system prompt when outputs are defined', async () => {
@@ -1028,7 +1028,7 @@ describe('subagent.ts', () => {
         // Environment context should now be in system instruction
         expect(systemInstruction).toContain('Env Context');
         // History should only contain initialMessages, not environment context
-        expect(history).toEqual([...initialMessages]);
+        expect(history).toStrictEqual([...initialMessages]);
       });
 
       it('should substitute placeholders for missing template variables', async () => {
@@ -1167,13 +1167,13 @@ describe('subagent.ts', () => {
         await scope.runNonInteractive(new ContextState());
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
-        expect(scope.output.emitted_vars).toEqual({});
+        expect(scope.output.emitted_vars).toStrictEqual({});
         expect(scope.output.final_message).toMatch(
           /Completed the requested task/i,
         );
         expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
         // Check the initial message
-        expect(mockSendMessageStream.mock.calls[0][0].message).toEqual([
+        expect(mockSendMessageStream.mock.calls[0][0].message).toStrictEqual([
           {
             text: 'Follow the task directives provided in the system prompt.',
           },
@@ -1266,7 +1266,7 @@ describe('subagent.ts', () => {
         await scope.runNonInteractive(new ContextState());
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
-        expect(scope.output.emitted_vars).toEqual({ result: 'Success!' });
+        expect(scope.output.emitted_vars).toStrictEqual({ result: 'Success!' });
         expect(scope.output.final_message).toContain('result=Success');
         expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
@@ -1369,7 +1369,7 @@ describe('subagent.ts', () => {
 
         // Check the response sent back to the model
         const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-        expect(secondCallArgs.message).toEqual([
+        expect(secondCallArgs.message).toStrictEqual([
           { text: 'file1.txt\nfile2.ts' },
         ]);
 
@@ -1439,7 +1439,7 @@ describe('subagent.ts', () => {
         // The agent should send the specific error message from responseParts.
         const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
 
-        expect(secondCallArgs.message).toEqual([
+        expect(secondCallArgs.message).toStrictEqual([
           {
             text: 'ERROR: Tool failed catastrophically',
           },
@@ -1688,7 +1688,7 @@ describe('subagent.ts', () => {
         );
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
-        expect(scope.output.emitted_vars).toEqual({
+        expect(scope.output.emitted_vars).toStrictEqual({
           required_var: 'Here it is',
         });
         expect(mockSendMessageStream).toHaveBeenCalledTimes(3);

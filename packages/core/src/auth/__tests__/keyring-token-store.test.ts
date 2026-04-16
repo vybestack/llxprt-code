@@ -358,7 +358,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     await expect(tokenStore.saveToken('bad/name', token)).rejects.toThrow();
     // Verify no keys were written
     const keysAfter = await secureStore.list();
-    expect(keysAfter).toEqual(keysBefore);
+    expect(keysAfter).toStrictEqual(keysBefore);
   });
 
   // ─── R3: Serialization, Parsing, Passthrough ────────────────────────────
@@ -544,7 +544,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     await tokenStore.saveToken('gemini', makeMinimalToken());
     await tokenStore.saveToken('gemini', makeMinimalToken(), 'work');
     const providers = await tokenStore.listProviders();
-    expect(providers).toEqual(['anthropic', 'gemini']);
+    expect(providers).toStrictEqual(['anthropic', 'gemini']);
   });
 
   /**
@@ -559,7 +559,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     await tokenStore.saveToken('gemini', makeMinimalToken(), 'work');
     await tokenStore.saveToken('anthropic', makeMinimalToken());
     const buckets = await tokenStore.listBuckets('gemini');
-    expect(buckets).toEqual(['default', 'work']);
+    expect(buckets).toStrictEqual(['default', 'work']);
   });
 
   /**
@@ -589,7 +589,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
       secureStore: failStore,
     });
     const result = await failTokenStore.listProviders();
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
     await fs.rm(errorTempDir, { recursive: true, force: true });
   });
 
@@ -619,7 +619,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
       secureStore: failStore,
     });
     const result = await failTokenStore.listBuckets('gemini');
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
     await fs.rm(errorTempDir, { recursive: true, force: true });
   });
 
@@ -635,7 +635,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
   it('getBucketStats returns placeholder stats when token exists', async () => {
     await tokenStore.saveToken('gemini', makeMinimalToken());
     const stats = await tokenStore.getBucketStats('gemini', 'default');
-    expect(stats).toEqual({
+    expect(stats).toStrictEqual({
       bucket: 'default',
       requestCount: 0,
       percentage: 0,
@@ -1072,7 +1072,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
           expect(retrieved).not.toBeNull();
           for (const [key, value] of Object.entries(extraFields)) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((retrieved as any)[key]).toEqual(value);
+            expect((retrieved as any)[key]).toStrictEqual(value);
           }
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
@@ -1146,7 +1146,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
           }
           const listed = await setup.tokenStore.listProviders();
           const sortedProviders = [...providers].sort();
-          expect(listed).toEqual(sortedProviders);
+          expect(listed).toStrictEqual(sortedProviders);
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }
@@ -1178,7 +1178,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
             await setup.tokenStore.removeToken('propremove', bucket);
           }
           const result = await setup.tokenStore.listBuckets('propremove');
-          expect(result).toEqual([]);
+          expect(result).toStrictEqual([]);
         } finally {
           await fs.rm(setup.tempDir, { recursive: true, force: true });
         }

@@ -148,7 +148,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
-      expect(savedProfile.ephemeralSettings).toEqual({});
+      expect(savedProfile.ephemeralSettings).toStrictEqual({});
     });
 
     it('handles ephemeral settings with only protected values', async () => {
@@ -167,7 +167,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
       // All settings were protected, so ephemeralSettings should be empty
-      expect(savedProfile.ephemeralSettings).toEqual({});
+      expect(savedProfile.ephemeralSettings).toStrictEqual({});
     });
 
     it('preserves multiple profile names correctly', async () => {
@@ -183,7 +183,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
-      expect(savedProfile.profiles).toEqual([
+      expect(savedProfile.profiles).toStrictEqual([
         'profile1',
         'profile2',
         'profile3',
@@ -216,7 +216,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
         .calls[0][1] as LoadBalancerProfile;
 
       // Only streaming should remain (provider should be stripped)
-      expect(savedProfile.ephemeralSettings).toEqual({
+      expect(savedProfile.ephemeralSettings).toStrictEqual({
         streaming: false,
       });
     });

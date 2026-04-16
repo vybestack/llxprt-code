@@ -174,13 +174,15 @@ describe('ToolRegistry', () => {
       config.setEphemeralSetting('tools.disabled', ['code-editor']);
 
       const declarations = toolRegistry.getFunctionDeclarations();
-      expect(declarations.map((decl) => decl.name)).toEqual(['file-reader']);
+      expect(declarations.map((decl) => decl.name)).toStrictEqual([
+        'file-reader',
+      ]);
 
       config.setEphemeralSetting('tools.disabled', []);
       config.setEphemeralSetting('tools.allowed', ['code-editor']);
 
       const allowedDeclarations = toolRegistry.getFunctionDeclarations();
-      expect(allowedDeclarations.map((decl) => decl.name)).toEqual([
+      expect(allowedDeclarations.map((decl) => decl.name)).toStrictEqual([
         'code-editor',
       ]);
     });
@@ -201,7 +203,7 @@ describe('ToolRegistry', () => {
       const displayNames = allTools.map((t) => t.displayName);
 
       // Assert that the returned array is sorted by displayName
-      expect(displayNames).toEqual(['Tool A', 'Tool B', 'Tool C']);
+      expect(displayNames).toStrictEqual(['Tool A', 'Tool B', 'Tool C']);
     });
   });
 
@@ -219,14 +221,14 @@ describe('ToolRegistry', () => {
       const toolNames = toolRegistry.getAllToolNames();
 
       // Assert that the returned array contains all tool names
-      expect(toolNames).toEqual(['c-tool', 'a-tool', 'b-tool']);
+      expect(toolNames).toStrictEqual(['c-tool', 'a-tool', 'b-tool']);
     });
   });
 
   describe('getToolsByServer', () => {
     it('should return an empty array if no tools match the server name', () => {
       toolRegistry.registerTool(new MockTool());
-      expect(toolRegistry.getToolsByServer('any-mcp-server')).toEqual([]);
+      expect(toolRegistry.getToolsByServer('any-mcp-server')).toStrictEqual([]);
     });
 
     it('should return only tools matching the server name, sorted by name', async () => {
@@ -282,7 +284,7 @@ describe('ToolRegistry', () => {
 
       // Assert that the array has the correct tools and is sorted by name
       expect(toolsFromServer1).toHaveLength(3);
-      expect(toolNames).toEqual(expectedNames);
+      expect(toolNames).toStrictEqual(expectedNames);
 
       // Assert that all returned tools are indeed from the correct server
       for (const tool of toolsFromServer1) {
@@ -333,7 +335,7 @@ describe('ToolRegistry', () => {
 
       toolRegistry.sortTools();
 
-      expect(toolRegistry.getAllToolNames()).toEqual([
+      expect(toolRegistry.getAllToolNames()).toStrictEqual([
         'builtin-1',
         'builtin-2',
         'discovered-1',

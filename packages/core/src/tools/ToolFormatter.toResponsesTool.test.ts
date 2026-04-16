@@ -35,7 +35,7 @@ describe('ToolFormatter.toResponsesTool', () => {
     const result = formatter.toResponsesTool(tools);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
+    expect(result[0]).toStrictEqual({
       type: 'function',
       name: 'get_weather',
       description: 'Get weather information',
@@ -97,7 +97,7 @@ describe('ToolFormatter.toResponsesTool', () => {
 
     const result = formatter.toResponsesTool(tools);
 
-    expect(result[0].parameters).toEqual(tools[0].function.parameters);
+    expect(result[0].parameters).toStrictEqual(tools[0].function.parameters);
   });
 
   it('should handle tools with no parameters', () => {
@@ -117,7 +117,7 @@ describe('ToolFormatter.toResponsesTool', () => {
 
     const result = formatter.toResponsesTool(tools);
 
-    expect(result[0].parameters).toEqual({
+    expect(result[0].parameters).toStrictEqual({
       type: 'object',
       properties: {},
       required: [], // Always present for K2 model compatibility

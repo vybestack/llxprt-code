@@ -54,7 +54,7 @@ describe('useShellPathCompletion', () => {
       return useShellPathCompletion(buffer, testRootDir, true, false);
     });
 
-    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.suggestions).toStrictEqual([]);
     expect(result.current.showSuggestions).toBe(false);
   });
 

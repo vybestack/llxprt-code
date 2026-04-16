@@ -268,7 +268,7 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
-      expect(confirmationDetails).toEqual({
+      expect(confirmationDetails).toStrictEqual({
         type: 'info',
         title: 'Confirm Web Fetch',
         prompt: 'fetch https://example.com',
@@ -288,7 +288,7 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
-      expect(confirmationDetails).toEqual({
+      expect(confirmationDetails).toStrictEqual({
         type: 'info',
         title: 'Confirm Web Fetch',
         prompt:
@@ -311,7 +311,7 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
-      expect(confirmationDetails).toEqual({
+      expect(confirmationDetails).toStrictEqual({
         type: 'info',
         title: 'Confirm Web Fetch',
         prompt: `fetch ${maliciousUrl}`,

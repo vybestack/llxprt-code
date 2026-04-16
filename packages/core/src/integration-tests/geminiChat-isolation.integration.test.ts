@@ -553,7 +553,7 @@ describe('GeminiChat Isolation Integration Tests', () => {
       );
 
       // THEN: Each context retains its model
-      expect(retrievedModels).toEqual(models);
+      expect(retrievedModels).toStrictEqual(models);
 
       // THEN: No context affected by others
       contexts.forEach((ctx, index) => {
@@ -679,8 +679,8 @@ describe('GeminiChat Isolation Integration Tests', () => {
       );
 
       // THEN: Each context has its own settings
-      expect(thresholds).toEqual([0.5, 0.7, 0.9]);
-      expect(limits).toEqual([50000, 70000, 90000]);
+      expect(thresholds).toStrictEqual([0.5, 0.7, 0.9]);
+      expect(limits).toStrictEqual([50000, 70000, 90000]);
 
       // THEN: No cross-contamination
       contexts.forEach((ctx, index) => {

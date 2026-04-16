@@ -152,12 +152,12 @@ describe('Settings Remediation Integration', () => {
       config.setEphemeralSetting('temperature', 0.8);
 
       expect(changeEvents).toHaveLength(2);
-      expect(changeEvents[0]).toEqual({
+      expect(changeEvents[0]).toStrictEqual({
         key: 'temperature',
         oldValue: undefined,
         newValue: 0.7,
       });
-      expect(changeEvents[1]).toEqual({
+      expect(changeEvents[1]).toStrictEqual({
         key: 'temperature',
         oldValue: 0.7,
         newValue: 0.8,
@@ -194,13 +194,13 @@ describe('Settings Remediation Integration', () => {
       settingsService.setProviderSetting('openai', 'model', 'gpt-4');
 
       expect(providerEvents).toHaveLength(2);
-      expect(providerEvents[0]).toEqual({
+      expect(providerEvents[0]).toStrictEqual({
         provider: 'openai',
         key: 'model',
         oldValue: undefined,
         newValue: 'gpt-3.5-turbo',
       });
-      expect(providerEvents[1]).toEqual({
+      expect(providerEvents[1]).toStrictEqual({
         provider: 'openai',
         key: 'model',
         oldValue: 'gpt-3.5-turbo',

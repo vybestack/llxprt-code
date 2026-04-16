@@ -93,7 +93,7 @@ describe('todoCommand', () => {
 
       // Verify updateTodos([]) was called
       expect(ctx.todoContext?.updateTodos).toHaveBeenCalledWith([]);
-      expect(ctx.todoContext?.todos).toEqual([]);
+      expect(ctx.todoContext?.todos).toStrictEqual([]);
     });
 
     /**

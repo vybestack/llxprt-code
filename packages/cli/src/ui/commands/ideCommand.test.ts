@@ -147,7 +147,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: '[CONNECTED] Connected to VS Code',
@@ -163,7 +163,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: `[CONNECTING] Connecting...`,
@@ -178,7 +178,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: `[DISCONNECTED] Disconnected`,
@@ -196,7 +196,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: `[DISCONNECTED] Disconnected: ${details}`,

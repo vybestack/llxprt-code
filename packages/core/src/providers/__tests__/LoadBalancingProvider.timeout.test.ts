@@ -239,7 +239,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       }
 
       // Verify all chunks received
-      expect(receivedChunks).toEqual(['chunk1', 'chunk2', 'chunk3']);
+      expect(receivedChunks).toStrictEqual(['chunk1', 'chunk2', 'chunk3']);
     });
   });
 

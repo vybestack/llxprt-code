@@ -119,13 +119,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
       (m: { role: string }) => m.role === 'user',
     );
     expect(userMessage.content).toHaveLength(3);
-    expect(userMessage.content[1]).toEqual({
+    expect(userMessage.content[1]).toStrictEqual({
       type: 'image_url',
       image_url: {
         url: 'data:image/png;base64,data1',
       },
     });
-    expect(userMessage.content[2]).toEqual({
+    expect(userMessage.content[2]).toStrictEqual({
       type: 'image_url',
       image_url: {
         url: 'data:image/jpeg;base64,data2',
@@ -223,7 +223,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     );
     expect(syntheticUserMessage).toBeDefined();
     expect(syntheticUserMessage.content).toHaveLength(2);
-    expect(syntheticUserMessage.content[1]).toEqual({
+    expect(syntheticUserMessage.content[1]).toStrictEqual({
       type: 'image_url',
       image_url: {
         url: 'data:image/png;base64,screenshotdata',
@@ -281,7 +281,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
       (m: { role: string }) => m.role === 'user',
     );
     expect(userMessage.content).toHaveLength(1);
-    expect(userMessage.content[0]).toEqual({
+    expect(userMessage.content[0]).toStrictEqual({
       type: 'image_url',
       image_url: {
         url: 'data:image/png;base64,imagedata',
@@ -338,7 +338,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
     const userMessage = callArgs.messages.find(
       (m: { role: string }) => m.role === 'user',
     );
-    expect(userMessage.content[0]).toEqual({
+    expect(userMessage.content[0]).toStrictEqual({
       type: 'image_url',
       image_url: {
         url: 'https://example.com/image.png',
@@ -386,7 +386,7 @@ describe('OpenAIProvider - MediaBlock support', () => {
       (m: { role: string }) => m.role === 'user',
     );
     expect(userMessage.content).toHaveLength(2);
-    expect(userMessage.content[1]).toEqual({
+    expect(userMessage.content[1]).toStrictEqual({
       type: 'file',
       file: {
         filename: 'report.pdf',
@@ -593,11 +593,11 @@ describe('OpenAIProvider - MediaBlock support', () => {
       // Synthetic user message should contain the image
       expect(syntheticUserMessage).toBeDefined();
       expect(syntheticUserMessage.content).toHaveLength(2);
-      expect(syntheticUserMessage.content[0]).toEqual({
+      expect(syntheticUserMessage.content[0]).toStrictEqual({
         type: 'text',
         text: '[Images from tool response]',
       });
-      expect(syntheticUserMessage.content[1]).toEqual({
+      expect(syntheticUserMessage.content[1]).toStrictEqual({
         type: 'image_url',
         image_url: {
           url: 'data:image/png;base64,screenshotdata',
@@ -777,11 +777,11 @@ describe('OpenAIProvider - MediaBlock support', () => {
       // Synthetic user message should only contain the image
       expect(syntheticUserMessage).toBeDefined();
       expect(syntheticUserMessage.content).toHaveLength(2);
-      expect(syntheticUserMessage.content[0]).toEqual({
+      expect(syntheticUserMessage.content[0]).toStrictEqual({
         type: 'text',
         text: '[Images from tool response]',
       });
-      expect(syntheticUserMessage.content[1]).toEqual({
+      expect(syntheticUserMessage.content[1]).toStrictEqual({
         type: 'image_url',
         image_url: {
           url: 'data:image/png;base64,imagedata',

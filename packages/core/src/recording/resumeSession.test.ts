@@ -197,7 +197,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.history).toHaveLength(1);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'second session message',
         });
@@ -241,7 +241,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.history).toHaveLength(1);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'target content',
         });
@@ -286,17 +286,17 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         lockHandles.push(result.lockHandle);
         expect(result.history).toHaveLength(3);
         expect(result.history[0].speaker).toBe('human');
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'question 1',
         });
         expect(result.history[1].speaker).toBe('ai');
-        expect(result.history[1].blocks[0]).toEqual({
+        expect(result.history[1].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'answer 1',
         });
         expect(result.history[2].speaker).toBe('human');
-        expect(result.history[2].blocks[0]).toEqual({
+        expect(result.history[2].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'question 2',
         });
@@ -347,15 +347,15 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
         lockHandles.push(result.lockHandle);
         // After compression: summary + 2 new content items = 3
         expect(result.history).toHaveLength(3);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'Summary of prior conversation',
         });
-        expect(result.history[1].blocks[0]).toEqual({
+        expect(result.history[1].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'new msg after compression',
         });
-        expect(result.history[2].blocks[0]).toEqual({
+        expect(result.history[2].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'new response',
         });
@@ -521,7 +521,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         lockHandles.push(result.lockHandle);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'older unlocked content',
         });
@@ -793,7 +793,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
             expect(result.history).toHaveLength(contents.length);
             for (let i = 0; i < contents.length; i++) {
               expect(result.history[i].speaker).toBe(contents[i].speaker);
-              expect(result.history[i].blocks[0]).toEqual(
+              expect(result.history[i].blocks[0]).toStrictEqual(
                 contents[i].blocks[0],
               );
             }

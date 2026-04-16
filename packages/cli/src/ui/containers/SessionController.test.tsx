@@ -140,7 +140,7 @@ describe('SessionController', () => {
     );
 
     expect(contextValue).toBeDefined();
-    expect(contextValue!.history).toEqual([]);
+    expect(contextValue!.history).toStrictEqual([]);
     expect(typeof contextValue!.addItem).toBe('function');
     expect(typeof contextValue!.updateItem).toBe('function');
     expect(typeof contextValue!.clearItems).toBe('function');

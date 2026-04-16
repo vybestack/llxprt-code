@@ -136,7 +136,7 @@ describe('git extension helpers', () => {
       ['git@github.com:owner/repo.git', 'owner', 'repo'],
       ['owner/repo', 'owner', 'repo'],
     ])('should parse %s to %s/%s', (url, owner, repo) => {
-      expect(tryParseGithubUrl(url)).toEqual({ owner, repo });
+      expect(tryParseGithubUrl(url)).toStrictEqual({ owner, repo });
     });
 
     it.each([
@@ -340,14 +340,14 @@ describe('git extension helpers', () => {
       mockPlatform.mockReturnValue('darwin');
       mockArch.mockReturnValue('arm64');
       const result = findReleaseAsset(assets);
-      expect(result).toEqual(assets[0]);
+      expect(result).toStrictEqual(assets[0]);
     });
 
     it('should find asset matching platform if arch does not match', () => {
       mockPlatform.mockReturnValue('linux');
       mockArch.mockReturnValue('arm64');
       const result = findReleaseAsset(assets);
-      expect(result).toEqual(assets[2]);
+      expect(result).toStrictEqual(assets[2]);
     });
 
     it('should return undefined if no matching asset is found', () => {
@@ -363,7 +363,7 @@ describe('git extension helpers', () => {
       mockPlatform.mockReturnValue('darwin');
       mockArch.mockReturnValue('arm64');
       const result = findReleaseAsset(singleAsset);
-      expect(result).toEqual(singleAsset[0]);
+      expect(result).toStrictEqual(singleAsset[0]);
     });
 
     it('should return undefined if multiple generic assets exist', () => {

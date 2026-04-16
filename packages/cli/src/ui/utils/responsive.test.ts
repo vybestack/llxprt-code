@@ -15,7 +15,7 @@ import {
 
 describe('BREAKPOINTS', () => {
   it('should define consistent breakpoint values', () => {
-    expect(BREAKPOINTS).toEqual({
+    expect(BREAKPOINTS).toStrictEqual({
       NARROW: 80,
       STANDARD: 120,
       WIDE: 160,

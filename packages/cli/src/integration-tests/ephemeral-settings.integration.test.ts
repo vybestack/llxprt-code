@@ -83,7 +83,7 @@ describe('Ephemeral Settings Integration Tests', () => {
         'https://api.example.com',
       );
       expect(config.getEphemeralSetting('auth-key')).toBe('test-key-123');
-      expect(config.getEphemeralSetting('custom-headers')).toEqual({
+      expect(config.getEphemeralSetting('custom-headers')).toStrictEqual({
         'X-Custom-Header': 'test-value',
         Authorization: 'Bearer token123',
       });
@@ -122,7 +122,7 @@ describe('Ephemeral Settings Integration Tests', () => {
       config.setEphemeralSetting('custom-headers', customHeaders);
 
       // Verify custom headers are stored
-      expect(config.getEphemeralSetting('custom-headers')).toEqual(
+      expect(config.getEphemeralSetting('custom-headers')).toStrictEqual(
         customHeaders,
       );
 
@@ -275,7 +275,7 @@ describe('Ephemeral Settings Integration Tests', () => {
       expect(newConfig.getEphemeralSetting('base-url')).toBe(
         'https://api.profile.com',
       );
-      expect(newConfig.getEphemeralSetting('custom-headers')).toEqual({
+      expect(newConfig.getEphemeralSetting('custom-headers')).toStrictEqual({
         'X-Profile-Header': 'profile-value',
       });
 
@@ -362,7 +362,7 @@ describe('Ephemeral Settings Integration Tests', () => {
     it('should handle complex ephemeral setting values', () => {
       // Arrays
       config.setEphemeralSetting('array-setting', ['a', 'b', 'c']);
-      expect(config.getEphemeralSetting('array-setting')).toEqual([
+      expect(config.getEphemeralSetting('array-setting')).toStrictEqual([
         'a',
         'b',
         'c',
@@ -377,7 +377,9 @@ describe('Ephemeral Settings Integration Tests', () => {
         },
       };
       config.setEphemeralSetting('nested-object', nestedObj);
-      expect(config.getEphemeralSetting('nested-object')).toEqual(nestedObj);
+      expect(config.getEphemeralSetting('nested-object')).toStrictEqual(
+        nestedObj,
+      );
 
       // Numbers, booleans, null
       config.setEphemeralSetting('number', 42);
@@ -398,7 +400,7 @@ describe('Ephemeral Settings Integration Tests', () => {
 
       // Should return new objects each time
       expect(settings1).not.toBe(settings2);
-      expect(settings1).toEqual(settings2);
+      expect(settings1).toStrictEqual(settings2);
 
       // Modifying returned object should not affect internal state
       settings1['key1'] = 'modified';

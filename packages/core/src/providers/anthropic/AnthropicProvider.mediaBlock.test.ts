@@ -206,7 +206,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     expect(Array.isArray(userMsg!.content)).toBe(true);
 
     const contentArray = userMsg!.content as AnthropicContentBlock[];
-    expect(contentArray).toEqual(
+    expect(contentArray).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'text',
@@ -426,7 +426,7 @@ describe('AnthropicProvider MediaBlock support', () => {
       (b) => b.type === 'document',
     ) as AnthropicDocumentBlock;
     expect(docBlock).toBeDefined();
-    expect(docBlock.source).toEqual({
+    expect(docBlock.source).toStrictEqual({
       type: 'base64',
       media_type: 'application/pdf',
       data: 'JVBERi0xLjQ=',
@@ -508,7 +508,7 @@ describe('AnthropicProvider MediaBlock support', () => {
       (p) => p.type === 'document',
     ) as AnthropicDocumentBlock;
     expect(docPart).toBeDefined();
-    expect(docPart.source).toEqual({
+    expect(docPart.source).toStrictEqual({
       type: 'base64',
       media_type: 'application/pdf',
       data: 'JVBERi0xLjQ=',

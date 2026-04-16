@@ -56,7 +56,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       const lb = new LoadBalancingProvider(config, providerManager);
       const stats = lb.getStats();
 
-      expect(stats.backendMetrics).toEqual({});
+      expect(stats.backendMetrics).toStrictEqual({});
     });
   });
 

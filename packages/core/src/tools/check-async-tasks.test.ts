@@ -90,7 +90,7 @@ describe('CheckAsyncTasksTool', () => {
       const result = await invocation.execute(new AbortController().signal);
 
       expect(result.error).toBeUndefined();
-      expect(result.metadata).toEqual({ count: 0 });
+      expect(result.metadata).toStrictEqual({ count: 0 });
       expect(result.llmContent).toBe('No async tasks.');
       expect(result.returnDisplay).toContain(
         'No async tasks are currently running or completed',

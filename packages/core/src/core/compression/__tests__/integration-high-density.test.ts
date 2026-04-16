@@ -106,7 +106,7 @@ describe('Integration: Density + Compression Pipeline', () => {
     const strategy = new HighDensityStrategy();
     const context = makeMinimalContext([]);
     const result = await strategy.compress(context);
-    expect(result.newHistory).toEqual([]);
+    expect(result.newHistory).toStrictEqual([]);
     expect(result.metadata.llmCallMade).toBe(false);
     expect(result.metadata.strategyUsed).toBe('high-density');
   });

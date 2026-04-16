@@ -75,7 +75,7 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       // Verify all models have correct provider and tool format
       for (const model of models) {
         expect(model.provider).toBe('codex');
-        expect(model.supportedToolFormats).toEqual(['openai']);
+        expect(model.supportedToolFormats).toStrictEqual(['openai']);
       }
     });
 

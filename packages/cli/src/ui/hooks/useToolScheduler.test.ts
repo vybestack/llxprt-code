@@ -627,7 +627,7 @@ describe('useReactToolScheduler', () => {
 
   it('initial state should be empty', () => {
     const { result } = renderScheduler();
-    expect(result.current[0]).toEqual([]);
+    expect(result.current[0]).toStrictEqual([]);
   });
 
   it('should schedule and execute a tool call successfully', async () => {
@@ -677,7 +677,7 @@ describe('useReactToolScheduler', () => {
     expect(completedCall.status).toBe('success');
     expect(completedCall.request.agentId).toBe('primary');
     expect(completedCall.response?.resultDisplay).toBe('Formatted tool output');
-    expect(completedCall.response?.responseParts).toEqual([
+    expect(completedCall.response?.responseParts).toStrictEqual([
       {
         functionCall: {
           id: 'call1',
@@ -693,7 +693,7 @@ describe('useReactToolScheduler', () => {
         },
       },
     ]);
-    expect(result.current[0]).toEqual([]);
+    expect(result.current[0]).toStrictEqual([]);
   });
 
   it('should handle tool not found', async () => {
@@ -734,7 +734,7 @@ describe('useReactToolScheduler', () => {
     expect(errorMessage).toContain('Did you mean one of:');
     expect(errorMessage).toContain('"mockTool"');
     expect(errorMessage).toContain('"anotherTool"');
-    expect(result.current[0]).toEqual([]);
+    expect(result.current[0]).toStrictEqual([]);
   });
 
   it('should handle error during shouldConfirmExecute', async () => {
@@ -771,7 +771,7 @@ describe('useReactToolScheduler', () => {
     expect(errorCall.status).toBe('error');
     expect(errorCall.request.agentId).toBe('primary');
     expect(errorCall.response?.error?.message).toBe(confirmError.message);
-    expect(result.current[0]).toEqual([]);
+    expect(result.current[0]).toStrictEqual([]);
   });
 
   it('should handle error during execute', async () => {
@@ -809,7 +809,7 @@ describe('useReactToolScheduler', () => {
     expect(execCall.status).toBe('error');
     expect(execCall.request.agentId).toBe('primary');
     expect(execCall.response?.error?.message).toBe(execError.message);
-    expect(result.current[0]).toEqual([]);
+    expect(result.current[0]).toStrictEqual([]);
   });
 
   it('should handle tool requiring confirmation - approved', async () => {
@@ -885,7 +885,7 @@ describe('useReactToolScheduler', () => {
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('success');
     expect(completedCalls[0].response?.resultDisplay).toBe('Confirmed display');
-    expect(completedCalls[0].response?.responseParts).toEqual(
+    expect(completedCalls[0].response?.responseParts).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           functionResponse: expect.objectContaining({
@@ -963,7 +963,7 @@ describe('useReactToolScheduler', () => {
     const completedCalls = onComplete.mock.calls[0][1] as CompletedToolCall[];
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('cancelled');
-    expect(completedCalls[0].response?.responseParts).toEqual(
+    expect(completedCalls[0].response?.responseParts).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           functionResponse: expect.objectContaining({
@@ -1055,7 +1055,7 @@ describe('useReactToolScheduler', () => {
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('success');
     expect(completedCalls[0].response?.resultDisplay).toBe('Final display');
-    expect(completedCalls[0].response?.responseParts).toEqual(
+    expect(completedCalls[0].response?.responseParts).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           functionResponse: expect.objectContaining({
@@ -1165,7 +1165,7 @@ describe('useReactToolScheduler', () => {
         ],
       }),
     });
-    expect(result.current[0]).toEqual([]);
+    expect(result.current[0]).toStrictEqual([]);
   });
 });
 

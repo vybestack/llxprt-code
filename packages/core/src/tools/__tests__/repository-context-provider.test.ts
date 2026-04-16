@@ -87,7 +87,7 @@ describe('RepositoryContextProvider', () => {
       });
 
       const result = await provider.collectRepositoryContext('/test');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         gitUrl: 'https://github.com/test/repo.git',
         commitSha: 'abc123def456',
         branch: 'main',

@@ -306,6 +306,6 @@ describe('useSlashCommandProcessor', () => {
       ?.value;
     await commandsPromise;
 
-    expect(latestCommands).toEqual([testCommand]);
+    expect(latestCommands).toStrictEqual([testCommand]);
   });
 });

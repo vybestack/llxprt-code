@@ -682,7 +682,7 @@ describe('E2E Tests', () => {
       const agent = request.agent(app);
       const res = await agent.get('/listCommands').expect(200);
 
-      expect(res.body).toEqual({
+      expect(res.body).toStrictEqual({
         commands: [
           {
             name: 'test-command',
@@ -732,7 +732,7 @@ describe('E2E Tests', () => {
       const res = await agent.get('/listCommands').expect(200);
 
       expect(res.body.commands[0].name).toBe('cyclic-command');
-      expect(res.body.commands[0].subCommands).toEqual([]);
+      expect(res.body.commands[0].subCommands).toStrictEqual([]);
 
       expect(warnSpy).toHaveBeenCalledWith(
         'Command cyclic-command already inserted in the response, skipping',
@@ -762,7 +762,7 @@ describe('E2E Tests', () => {
         .set('Content-Type', 'application/json')
         .expect(200);
 
-      expect(res.body).toEqual({
+      expect(res.body).toStrictEqual({
         name: 'extensions list',
         data: mockExtensions,
       });
@@ -871,14 +871,14 @@ describe('E2E Tests', () => {
               try {
                 const events = streamToSSEEventsForCommand(data);
                 expect(events.length).toBe(2);
-                expect(events[0].result).toEqual({
+                expect(events[0].result).toStrictEqual({
                   kind: 'status-update',
                   status: { state: 'working' },
                   taskId: 'test-task',
                   contextId: 'test-context',
                   final: false,
                 });
-                expect(events[1].result).toEqual({
+                expect(events[1].result).toStrictEqual({
                   kind: 'status-update',
                   status: { state: 'completed' },
                   taskId: 'test-task',
@@ -912,7 +912,10 @@ describe('E2E Tests', () => {
           .set('Content-Type', 'application/json')
           .expect(200);
 
-        expect(res.body).toEqual({ name: 'non-stream-test', data: 'done' });
+        expect(res.body).toStrictEqual({
+          name: 'non-stream-test',
+          data: 'done',
+        });
       });
     });
   });

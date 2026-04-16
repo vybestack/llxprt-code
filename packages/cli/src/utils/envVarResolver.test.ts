@@ -106,7 +106,7 @@ describe('resolveEnvVarsInObject', () => {
 
     const result = resolveEnvVarsInObject(config);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       server: {
         auth: {
           key: 'secret-123',
@@ -130,7 +130,7 @@ describe('resolveEnvVarsInObject', () => {
 
     const result = resolveEnvVarsInObject(config);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       tags: ['production', 'app', '1.0.0'],
       metadata: {
         env: 'production',
@@ -149,7 +149,7 @@ describe('resolveEnvVarsInObject', () => {
 
     const result = resolveEnvVarsInObject(config);
 
-    expect(result).toEqual(config);
+    expect(result).toStrictEqual(config);
   });
 
   it('should handle MCP server config structure', () => {
@@ -174,7 +174,7 @@ describe('resolveEnvVarsInObject', () => {
 
     const result = resolveEnvVarsInObject(extensionConfig);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       name: 'test-extension',
       version: '1.0.0',
       mcpServers: {
@@ -202,7 +202,7 @@ describe('resolveEnvVarsInObject', () => {
 
     const result = resolveEnvVarsInObject(config);
 
-    expect(result).toEqual(config);
+    expect(result).toStrictEqual(config);
   });
 
   it('should handle circular references in objects without infinite recursion', () => {

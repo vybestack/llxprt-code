@@ -37,9 +37,9 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
     expect(error).toBeInstanceOf(AllBucketsExhaustedError);
     expect(error).toBeInstanceOf(Error);
     expect(error.name).toBe('AllBucketsExhaustedError');
-    expect(error.attemptedBuckets).toEqual(attemptedBuckets);
+    expect(error.attemptedBuckets).toStrictEqual(attemptedBuckets);
     expect(error.lastError).toBe(lastError);
-    expect(error.bucketFailureReasons).toEqual({});
+    expect(error.bucketFailureReasons).toStrictEqual({});
   });
 
   /**
@@ -66,9 +66,9 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
 
     // Assert
     expect(error).toBeInstanceOf(AllBucketsExhaustedError);
-    expect(error.attemptedBuckets).toEqual(attemptedBuckets);
+    expect(error.attemptedBuckets).toStrictEqual(attemptedBuckets);
     expect(error.lastError).toBe(lastError);
-    expect(error.bucketFailureReasons).toEqual(bucketFailureReasons);
+    expect(error.bucketFailureReasons).toStrictEqual(bucketFailureReasons);
     expect(error.bucketFailureReasons.bucket1).toBe('quota-exhausted');
     expect(error.bucketFailureReasons.bucket2).toBe('expired-refresh-failed');
   });
@@ -174,8 +174,8 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
     );
 
     // Assert
-    expect(error.attemptedBuckets).toEqual([]);
-    expect(error.bucketFailureReasons).toEqual({});
+    expect(error.attemptedBuckets).toStrictEqual([]);
+    expect(error.bucketFailureReasons).toStrictEqual({});
     expect(error.message).toContain(providerName);
     expect(error.message).toMatch(/All buckets exhausted for provider/);
   });

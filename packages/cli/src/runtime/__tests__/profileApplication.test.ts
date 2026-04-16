@@ -1050,7 +1050,7 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
     expect(switchIndex).toBeGreaterThan(-1);
 
     // Should include warning about keyfile failure
-    expect(result.warnings).toEqual(
+    expect(result.warnings).toStrictEqual(
       expect.arrayContaining([
         expect.stringMatching(/Failed to load keyfile/i),
       ]),
@@ -1255,7 +1255,7 @@ describe('STEP 2 workflow: pre-switch auth wiring', () => {
 
     const result = await applyProfileWithGuards(profile);
 
-    expect(result.warnings).toEqual(
+    expect(result.warnings).toStrictEqual(
       expect.arrayContaining([
         expect.stringContaining(
           "Key 'missing-key' not found in secure storage",

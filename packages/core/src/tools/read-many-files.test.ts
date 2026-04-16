@@ -237,7 +237,7 @@ describe('ReadManyFilesTool', () => {
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
       const expectedPath = path.join(tempRootDir, 'file1.txt');
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         `--- ${expectedPath} ---\n\nContent of file1\n\n`,
         `\n--- End of content ---`,
       ]);
@@ -304,7 +304,7 @@ describe('ReadManyFilesTool', () => {
       const result = await invocation.execute(new AbortController().signal);
       const content = result.llmContent as string[];
       const expectedPath = path.join(tempRootDir, 'src/main.ts');
-      expect(content).toEqual([
+      expect(content).toStrictEqual([
         `--- ${expectedPath} ---\n\nMain content\n\n`,
         `\n--- End of content ---`,
       ]);
@@ -320,7 +320,7 @@ describe('ReadManyFilesTool', () => {
       const params = { paths: ['nonexistent-file.txt'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         'No files matching the criteria were found or all were skipped.',
       ]);
       expect(result.returnDisplay).toContain(
@@ -336,7 +336,7 @@ describe('ReadManyFilesTool', () => {
       const result = await invocation.execute(new AbortController().signal);
       const content = result.llmContent as string[];
       const expectedPath = path.join(tempRootDir, 'src/app.js');
-      expect(content).toEqual([
+      expect(content).toStrictEqual([
         `--- ${expectedPath} ---\n\napp code\n\n`,
         `\n--- End of content ---`,
       ]);
@@ -383,7 +383,7 @@ describe('ReadManyFilesTool', () => {
       const params = { paths: ['*.png'] }; // Explicitly requesting .png
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           inlineData: {
             data: Buffer.from([
@@ -407,7 +407,7 @@ describe('ReadManyFilesTool', () => {
       const params = { paths: ['myExactImage.png'] }; // Explicitly requesting by full name
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           inlineData: {
             data: Buffer.from([
@@ -446,7 +446,7 @@ describe('ReadManyFilesTool', () => {
       const params = { paths: ['*.pdf'] }; // Explicitly requesting .pdf files
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           inlineData: {
             data: Buffer.from('%PDF-1.4...').toString('base64'),
@@ -462,7 +462,7 @@ describe('ReadManyFilesTool', () => {
       const params = { paths: ['report-final.pdf'] };
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         {
           inlineData: {
             data: Buffer.from('%PDF-1.4...').toString('base64'),
@@ -582,7 +582,7 @@ describe('ReadManyFilesTool', () => {
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
       const expectedPath = path.join(tempRootDir, filePath);
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         `--- ${expectedPath} ---
 
 Content of receive-detail
@@ -601,7 +601,7 @@ Content of receive-detail
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
       const expectedPath = path.join(tempRootDir, 'file[1].txt');
-      expect(result.llmContent).toEqual([
+      expect(result.llmContent).toStrictEqual([
         `--- ${expectedPath} ---
 
 Content of file[1]
@@ -638,7 +638,7 @@ Content of file[1]
             respectLlxprtIgnore: false,
           },
         ),
-      ).toEqual([canonicalVisibleFile]);
+      ).toStrictEqual([canonicalVisibleFile]);
       const nestedConfig = {
         getFileService: () => nestedFileService,
         getFileSystemService: () => new StandardFileSystemService(),

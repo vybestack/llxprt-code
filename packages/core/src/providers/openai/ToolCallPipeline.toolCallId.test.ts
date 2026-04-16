@@ -94,7 +94,7 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
       expect(pipelineResult.normalized).toHaveLength(1);
       expect(pipelineResult.normalized[0].id).toBe('call_abc123');
       expect(pipelineResult.normalized[0].name).toBe('test_tool');
-      expect(pipelineResult.normalized[0].args).toEqual({
+      expect(pipelineResult.normalized[0].args).toStrictEqual({
         param1: 'value1',
         param2: 'value2',
       });
@@ -258,7 +258,7 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
       expect(pipelineResult.normalized).toHaveLength(1);
       expect(pipelineResult.normalized[0].id).toBe('call_real_id_123');
       expect(pipelineResult.normalized[0].name).toBe('run_shell_command');
-      expect(pipelineResult.normalized[0].args).toEqual({
+      expect(pipelineResult.normalized[0].args).toStrictEqual({
         command: 'echo hello',
       });
     });

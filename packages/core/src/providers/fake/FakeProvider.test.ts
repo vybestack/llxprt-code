@@ -132,7 +132,7 @@ describe('FakeProvider', () => {
     expect(await provider.getAuthToken()).toBe('fake-auth-token');
     expect(provider.getDefaultModel()).toBe('fake-model');
     expect(provider.getCurrentModel()).toBe('fake-model');
-    expect(provider.getServerTools()).toEqual([]);
+    expect(provider.getServerTools()).toStrictEqual([]);
 
     await expect(provider.invokeServerTool()).rejects.toThrow(
       /does not support server tools/,
@@ -222,7 +222,7 @@ describe('FakeProvider', () => {
       blocks: unknown[];
       metadata?: { stopReason?: string };
     };
-    expect(first.blocks).toEqual([]);
+    expect(first.blocks).toStrictEqual([]);
     expect(first.metadata?.stopReason).toBe('stop');
   });
 

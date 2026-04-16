@@ -519,7 +519,7 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
         >;
         expect(
           (receivedPayload.nested as Record<string, unknown>).data,
-        ).toEqual([1, 2, 3]);
+        ).toStrictEqual([1, 2, 3]);
         expect(receivedPayload.unicode).toBe('日本語テスト');
 
         clientSocket.destroy();

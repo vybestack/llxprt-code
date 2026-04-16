@@ -328,7 +328,7 @@ describe('Async Task Integration', () => {
       // Note: subagentName is NOT included in reminder (only agent_id, emitted_vars, etc.)
       expect(result!.text).toContain('important data');
       expect(result!.text).toContain('42');
-      expect(result!.notifiedTaskIds).toEqual(['reminder-test']);
+      expect(result!.notifiedTaskIds).toStrictEqual(['reminder-test']);
     });
 
     /**
@@ -357,7 +357,7 @@ describe('Async Task Integration', () => {
       expect(result!.text).toContain('multi-0');
       expect(result!.text).toContain('multi-1');
       expect(result!.text).toContain('multi-2');
-      expect(result!.notifiedTaskIds).toEqual([
+      expect(result!.notifiedTaskIds).toStrictEqual([
         'multi-0',
         'multi-1',
         'multi-2',
@@ -465,7 +465,7 @@ describe('Async Task Integration', () => {
       expect(result!.text).toContain('error-test');
       expect(result!.text).toContain('failed');
       expect(result!.text).toContain('Something went wrong');
-      expect(result!.notifiedTaskIds).toEqual(['error-test']);
+      expect(result!.notifiedTaskIds).toStrictEqual(['error-test']);
     });
 
     /**

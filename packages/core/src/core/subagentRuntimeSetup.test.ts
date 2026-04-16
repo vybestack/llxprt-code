@@ -75,7 +75,7 @@ describe('subagentRuntimeSetup', () => {
       };
       const decl = convertMetadataToFunctionDeclaration('fallback', metadata);
       expect(decl.parametersJsonSchema).toBeDefined();
-      expect(decl.parametersJsonSchema).toEqual(
+      expect(decl.parametersJsonSchema).toStrictEqual(
         expect.objectContaining({
           properties: expect.objectContaining({
             foo: expect.anything(),
@@ -106,7 +106,7 @@ describe('subagentRuntimeSetup', () => {
         toolConfig,
         toolsView,
       });
-      expect(result.tools).toEqual(['allowed_tool']);
+      expect(result.tools).toStrictEqual(['allowed_tool']);
     });
 
     it('should filter out disabled tools not in runtime', async () => {
@@ -119,7 +119,7 @@ describe('subagentRuntimeSetup', () => {
         toolConfig,
         toolsView,
       });
-      expect(result.tools).toEqual([]);
+      expect(result.tools).toStrictEqual([]);
     });
 
     it('should preserve tools that are present in toolsView', async () => {
@@ -132,7 +132,7 @@ describe('subagentRuntimeSetup', () => {
         toolConfig,
         toolsView,
       });
-      expect(result.tools).toEqual(['google_web_fetch', 'read_file']);
+      expect(result.tools).toStrictEqual(['google_web_fetch', 'read_file']);
     });
 
     it('should handle mixed allowed and disallowed tools', async () => {
@@ -148,7 +148,7 @@ describe('subagentRuntimeSetup', () => {
         toolsView,
       });
       // google_web_fetch should be filtered out
-      expect(result.tools).toEqual(['read_file', 'write_file']);
+      expect(result.tools).toStrictEqual(['read_file', 'write_file']);
     });
 
     it('should return empty tools array when all tools are filtered out', async () => {
@@ -161,7 +161,7 @@ describe('subagentRuntimeSetup', () => {
         toolConfig,
         toolsView,
       });
-      expect(result.tools).toEqual([]);
+      expect(result.tools).toStrictEqual([]);
     });
 
     it('should pass with empty whitelist (allow all)', async () => {
@@ -174,7 +174,7 @@ describe('subagentRuntimeSetup', () => {
         toolConfig,
         toolsView,
       });
-      expect(result.tools).toEqual([]);
+      expect(result.tools).toStrictEqual([]);
     });
   });
 

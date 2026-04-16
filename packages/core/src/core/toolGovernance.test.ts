@@ -33,7 +33,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.allowed).toEqual(new Set(['read_file', 'glob']));
+      expect(governance.allowed).toStrictEqual(new Set(['read_file', 'glob']));
     });
 
     it('should return empty allowed set when tools.allowed is not present', () => {
@@ -41,7 +41,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.allowed).toEqual(new Set());
+      expect(governance.allowed).toStrictEqual(new Set());
     });
 
     it('should return empty allowed set when tools.allowed is not an array', () => {
@@ -51,7 +51,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.allowed).toEqual(new Set());
+      expect(governance.allowed).toStrictEqual(new Set());
     });
   });
 
@@ -63,7 +63,9 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.disabled).toEqual(new Set(['shell', 'write_file']));
+      expect(governance.disabled).toStrictEqual(
+        new Set(['shell', 'write_file']),
+      );
     });
 
     it('should fallback to disabled-tools if tools.disabled is not present', () => {
@@ -73,7 +75,9 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.disabled).toEqual(new Set(['shell', 'write_file']));
+      expect(governance.disabled).toStrictEqual(
+        new Set(['shell', 'write_file']),
+      );
     });
 
     it('should prefer tools.disabled over disabled-tools when both present', () => {
@@ -86,7 +90,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.disabled).toEqual(new Set(['shell']));
+      expect(governance.disabled).toStrictEqual(new Set(['shell']));
       expect(governance.disabled.has('write_file')).toBe(false);
     });
 
@@ -95,7 +99,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.disabled).toEqual(new Set());
+      expect(governance.disabled).toStrictEqual(new Set());
     });
   });
 
@@ -107,7 +111,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.excluded).toEqual(new Set(['dangerous_tool']));
+      expect(governance.excluded).toStrictEqual(new Set(['dangerous_tool']));
     });
 
     it('should return empty excluded set when getExcludeTools returns empty array', () => {
@@ -115,7 +119,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.excluded).toEqual(new Set());
+      expect(governance.excluded).toStrictEqual(new Set());
     });
 
     it('should handle undefined getExcludeTools gracefully', () => {
@@ -126,7 +130,7 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.excluded).toEqual(new Set());
+      expect(governance.excluded).toStrictEqual(new Set());
     });
   });
 
@@ -139,9 +143,9 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.allowed).toEqual(new Set());
-      expect(governance.disabled).toEqual(new Set());
-      expect(governance.excluded).toEqual(new Set());
+      expect(governance.allowed).toStrictEqual(new Set());
+      expect(governance.disabled).toStrictEqual(new Set());
+      expect(governance.excluded).toStrictEqual(new Set());
     });
 
     it('should handle getEphemeralSettings returning null/undefined', () => {
@@ -152,8 +156,8 @@ describe('buildToolGovernance', () => {
 
       const governance = buildToolGovernance(config);
 
-      expect(governance.allowed).toEqual(new Set());
-      expect(governance.disabled).toEqual(new Set());
+      expect(governance.allowed).toStrictEqual(new Set());
+      expect(governance.disabled).toStrictEqual(new Set());
     });
   });
 });

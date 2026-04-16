@@ -44,7 +44,7 @@ describe('buffer-reducer', () => {
       const state = createState();
       const action: TextBufferAction = { type: 'set_text', payload: 'hello' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['hello']);
+      expect(result.lines).toStrictEqual(['hello']);
       expect(result.cursorRow).toBe(0);
       expect(result.cursorCol).toBe(5);
     });
@@ -56,7 +56,7 @@ describe('buffer-reducer', () => {
         payload: 'hello\nworld',
       };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['hello', 'world']);
+      expect(result.lines).toStrictEqual(['hello', 'world']);
       expect(result.cursorRow).toBe(1);
       expect(result.cursorCol).toBe(5);
     });
@@ -78,7 +78,7 @@ describe('buffer-reducer', () => {
       const state = createState();
       const action: TextBufferAction = { type: 'insert', payload: 'a' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['a']);
+      expect(result.lines).toStrictEqual(['a']);
       expect(result.cursorCol).toBe(1);
     });
 
@@ -86,7 +86,7 @@ describe('buffer-reducer', () => {
       const state = createState();
       const action: TextBufferAction = { type: 'insert', payload: 'hello' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['hello']);
+      expect(result.lines).toStrictEqual(['hello']);
       expect(result.cursorCol).toBe(5);
     });
 
@@ -94,7 +94,7 @@ describe('buffer-reducer', () => {
       const state = createState({ lines: ['hello'] });
       const action: TextBufferAction = { type: 'insert', payload: '\n' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['', 'hello']);
+      expect(result.lines).toStrictEqual(['', 'hello']);
       expect(result.cursorRow).toBe(1);
     });
 
@@ -111,7 +111,7 @@ describe('buffer-reducer', () => {
       const state = createState({ lines: ['hello'], cursorCol: 5 });
       const action: TextBufferAction = { type: 'backspace' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['hell']);
+      expect(result.lines).toStrictEqual(['hell']);
       expect(result.cursorCol).toBe(4);
     });
 
@@ -123,7 +123,7 @@ describe('buffer-reducer', () => {
       });
       const action: TextBufferAction = { type: 'backspace' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['helloworld']);
+      expect(result.lines).toStrictEqual(['helloworld']);
       expect(result.cursorRow).toBe(0);
       expect(result.cursorCol).toBe(5);
     });
@@ -132,7 +132,7 @@ describe('buffer-reducer', () => {
       const state = createState();
       const action: TextBufferAction = { type: 'backspace' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['']);
+      expect(result.lines).toStrictEqual(['']);
     });
   });
 
@@ -141,7 +141,7 @@ describe('buffer-reducer', () => {
       const state = createState({ lines: ['hello'], cursorCol: 0 });
       const action: TextBufferAction = { type: 'delete' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['ello']);
+      expect(result.lines).toStrictEqual(['ello']);
     });
 
     it('should join with next line at line end', () => {
@@ -152,7 +152,7 @@ describe('buffer-reducer', () => {
       });
       const action: TextBufferAction = { type: 'delete' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['helloworld']);
+      expect(result.lines).toStrictEqual(['helloworld']);
     });
 
     it('should do nothing at document end', () => {
@@ -163,7 +163,7 @@ describe('buffer-reducer', () => {
       });
       const action: TextBufferAction = { type: 'delete' };
       const result = textBufferReducer(state, action);
-      expect(result.lines).toEqual(['hello']);
+      expect(result.lines).toStrictEqual(['hello']);
     });
   });
 
@@ -187,18 +187,18 @@ describe('buffer-reducer', () => {
     it('should undo insert', () => {
       let state = createState();
       state = textBufferReducer(state, { type: 'insert', payload: 'hello' });
-      expect(state.lines).toEqual(['hello']);
+      expect(state.lines).toStrictEqual(['hello']);
       state = textBufferReducer(state, { type: 'undo' });
-      expect(state.lines).toEqual(['']);
+      expect(state.lines).toStrictEqual(['']);
     });
 
     it('should redo undone action', () => {
       let state = createState();
       state = textBufferReducer(state, { type: 'insert', payload: 'hello' });
       state = textBufferReducer(state, { type: 'undo' });
-      expect(state.lines).toEqual(['']);
+      expect(state.lines).toStrictEqual(['']);
       state = textBufferReducer(state, { type: 'redo' });
-      expect(state.lines).toEqual(['hello']);
+      expect(state.lines).toStrictEqual(['hello']);
     });
 
     it('should clear redo stack on new action', () => {

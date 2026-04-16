@@ -80,7 +80,7 @@ describe('extractThinkingBlocks', () => {
 
     const result = extractThinkingBlocks(content);
 
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   /**
@@ -198,7 +198,7 @@ describe('filterThinkingForContext', () => {
    */
   it('should handle empty contents array', () => {
     const result = filterThinkingForContext([], 'all');
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   /**
@@ -426,7 +426,7 @@ describe('removeThinkingFromContent', () => {
     const result = removeThinkingFromContent(content);
 
     expect(result.blocks).toHaveLength(2);
-    expect(result.blocks).toEqual(content.blocks);
+    expect(result.blocks).toStrictEqual(content.blocks);
   });
 
   /**
@@ -461,7 +461,7 @@ describe('removeThinkingFromContent', () => {
 
     const result = removeThinkingFromContent(content);
 
-    expect(result.metadata).toEqual(content.metadata);
+    expect(result.metadata).toStrictEqual(content.metadata);
     expect(result.speaker).toBe(content.speaker);
   });
 

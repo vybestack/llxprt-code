@@ -239,7 +239,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toEqual({
+    expect(request?.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingBudget: -1,
     });
@@ -289,7 +289,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toEqual({
+    expect(request?.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingLevel: 'HIGH',
     });
@@ -406,7 +406,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toEqual({
+    expect(request?.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
     });
     expect(request?.config?.thinkingConfig).not.toHaveProperty('thinkingLevel');
@@ -459,7 +459,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toEqual({
+    expect(request?.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingBudget: 4096,
     });
@@ -508,7 +508,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const request = googleGenAIState.streamCalls[0]?.request as {
       config?: { thinkingConfig?: Record<string, unknown> };
     };
-    expect(request?.config?.thinkingConfig).toEqual({
+    expect(request?.config?.thinkingConfig).toStrictEqual({
       includeThoughts: true,
       thinkingBudget: -1,
     });

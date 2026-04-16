@@ -392,7 +392,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         r.blocks.filter((b) => b.type === 'tool_call'),
       );
       expect(toolCalls.length).toBe(2);
-      expect(toolCalls.map((tc) => tc.id)).toEqual(
+      expect(toolCalls.map((tc) => tc.id)).toStrictEqual(
         expect.arrayContaining(['hist_tool_123', 'hist_tool_456']),
       );
     });

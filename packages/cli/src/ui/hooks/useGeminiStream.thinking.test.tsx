@@ -445,7 +445,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     });
 
     const secondThoughtValue = result.current.thought;
-    expect(secondThoughtValue).not.toEqual(firstThoughtValue);
+    expect(secondThoughtValue).not.toStrictEqual(firstThoughtValue);
   });
 
   it('should replace thinking content on subsequent Thought events (not append)', async () => {

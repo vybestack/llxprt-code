@@ -119,7 +119,7 @@ describe('maybePromptForSettings', () => {
 
     const result = await maybePromptForSettings(settings, existingValues);
 
-    expect(result).toEqual({ API_KEY: 'already-set' });
+    expect(result).toStrictEqual({ API_KEY: 'already-set' });
     expect(mockQuestion).not.toHaveBeenCalled();
   });
 
@@ -137,7 +137,7 @@ describe('maybePromptForSettings', () => {
     const result = await maybePromptForSettings(settings, existingValues);
 
     expect(mockQuestion).toHaveBeenCalled();
-    expect(result).toEqual({ API_KEY: 'user-entered-value' });
+    expect(result).toStrictEqual({ API_KEY: 'user-entered-value' });
   });
 
   it('should return null when user enters empty value for required setting', async () => {
@@ -169,7 +169,7 @@ describe('maybePromptForSettings', () => {
 
     const result = await maybePromptForSettings(settings, existingValues);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       API_KEY: 'new-api-key',
       API_URL: 'https://api.example.com',
     });

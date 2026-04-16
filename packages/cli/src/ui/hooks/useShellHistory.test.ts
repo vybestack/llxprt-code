@@ -257,6 +257,6 @@ describe('useShellHistory', () => {
     const writtenContent = mockedFs.writeFile.mock.calls[0][1] as string;
     const writtenLines = writtenContent.split('\n');
 
-    expect(writtenLines).toEqual(['cmd2', 'cmd3', 'cmd1']);
+    expect(writtenLines).toStrictEqual(['cmd2', 'cmd3', 'cmd1']);
   });
 });

@@ -45,7 +45,7 @@ describe('SessionStatsContext', () => {
 
     expect(stats?.sessionStartTime).toBeInstanceOf(Date);
     expect(stats?.metrics).toBeDefined();
-    expect(stats?.metrics.models).toEqual({});
+    expect(stats?.metrics.models).toStrictEqual({});
   });
 
   it('should update metrics when the uiTelemetryService emits an update', () => {
@@ -112,7 +112,7 @@ describe('SessionStatsContext', () => {
     });
 
     const stats = contextRef.current?.stats;
-    expect(stats?.metrics).toEqual(newMetrics);
+    expect(stats?.metrics).toStrictEqual(newMetrics);
     expect(stats?.lastPromptTokenCount).toBe(100);
   });
 

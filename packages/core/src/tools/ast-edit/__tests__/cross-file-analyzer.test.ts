@@ -59,7 +59,7 @@ describe('CrossFileRelationshipAnalyzer', () => {
 
       const related = await analyzer.findRelatedFiles(nonexistent);
 
-      expect(related).toEqual([]);
+      expect(related).toStrictEqual([]);
     });
   });
 
@@ -83,14 +83,14 @@ describe('CrossFileRelationshipAnalyzer', () => {
         testDir,
       );
 
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should return empty array for unfound symbol in workspace', async () => {
       const result = await analyzer.findRelatedSymbols('SomeSymbol', testDir);
 
       expect(Array.isArray(result)).toBe(true);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
   });
 });
@@ -147,7 +147,7 @@ describe('getWorkspaceFiles', () => {
   it('should handle empty workspace', async () => {
     const files = await getWorkspaceFiles(testDir);
 
-    expect(files).toEqual([]);
+    expect(files).toStrictEqual([]);
   });
 
   it('should return empty array on error', async () => {
@@ -155,6 +155,6 @@ describe('getWorkspaceFiles', () => {
 
     const files = await getWorkspaceFiles(nonexistentDir);
 
-    expect(files).toEqual([]);
+    expect(files).toStrictEqual([]);
   });
 });

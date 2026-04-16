@@ -154,7 +154,7 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       const addedRule = rules.find((r) => r.toolName === toolName);
       expect(addedRule).toBeDefined();
       expect(addedRule?.priority).toBe(2.95);
-      expect(addedRule?.argsPattern).toEqual(
+      expect(addedRule?.argsPattern).toStrictEqual(
         new RegExp(`"command":"git status(?:[\\s"]|$)`),
       );
 

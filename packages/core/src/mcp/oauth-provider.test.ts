@@ -218,7 +218,7 @@ describe('MCPOAuthProvider', () => {
         mockConfig,
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         accessToken: 'access_token_123',
         refreshToken: 'refresh_token_456',
         tokenType: 'Bearer',
@@ -900,7 +900,7 @@ describe('MCPOAuthProvider', () => {
         'https://auth.example.com/token',
       );
 
-      expect(result).toEqual(refreshResponse);
+      expect(result).toStrictEqual(refreshResponse);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://auth.example.com/token',
         expect.objectContaining({
@@ -1515,7 +1515,7 @@ describe('MCPOAuthProvider', () => {
 
       expect(
         vi.mocked(OAuthUtils.discoverAuthorizationServerMetadata).mock.calls,
-      ).toEqual([
+      ).toStrictEqual([
         ['http://localhost:8888'],
         ['http://localhost:8888/realms/my-realm'],
       ]);
@@ -1560,7 +1560,7 @@ describe('MCPOAuthProvider', () => {
           'https://auth.okta.local/oauth2/default/v1/authorize',
         );
 
-      expect(attempts).toEqual([
+      expect(attempts).toStrictEqual([
         'https://auth.okta.local',
         'https://auth.okta.local/oauth2/default/v1',
         'https://auth.okta.local/oauth2/default',

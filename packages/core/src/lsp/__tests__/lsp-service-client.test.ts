@@ -133,19 +133,21 @@ describe('LspServiceClient unit contract', () => {
 
   it('dead guard checkFile returns []', async () => {
     const client = makeClient(deadConfig);
-    await expect(client.checkFile('/tmp/workspace/a.ts')).resolves.toEqual([]);
+    await expect(
+      client.checkFile('/tmp/workspace/a.ts'),
+    ).resolves.toStrictEqual([]);
   });
 
   it('dead guard getAllDiagnostics returns {}', async () => {
     const client = makeClient(deadConfig);
-    await expect(client.getAllDiagnostics()).resolves.toEqual({});
+    await expect(client.getAllDiagnostics()).resolves.toStrictEqual({});
   });
 
   it('dead guard status returns one unhealthy entry', async () => {
     const client = makeClient(deadConfig);
     await client.start();
     const status = await client.status();
-    expect(status).toEqual([
+    expect(status).toStrictEqual([
       {
         serverId: 'ts',
         healthy: false,
@@ -238,6 +240,6 @@ describe('LspServiceClient unit contract', () => {
         '/tmp/workspace/cancel.ts',
         controller.signal,
       ),
-    ).resolves.toEqual([]);
+    ).resolves.toStrictEqual([]);
   });
 });

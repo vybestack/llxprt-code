@@ -122,10 +122,10 @@ describe('GeminiProvider - MediaBlock support', () => {
     expect(callArgs.contents).toHaveLength(1);
     expect(callArgs.contents[0].role).toBe('user');
     expect(callArgs.contents[0].parts).toHaveLength(2);
-    expect(callArgs.contents[0].parts[0]).toEqual({
+    expect(callArgs.contents[0].parts[0]).toStrictEqual({
       text: 'What is in this image?',
     });
-    expect(callArgs.contents[0].parts[1]).toEqual({
+    expect(callArgs.contents[0].parts[1]).toStrictEqual({
       inlineData: {
         mimeType: 'image/png',
         data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -187,16 +187,16 @@ describe('GeminiProvider - MediaBlock support', () => {
     expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
     const callArgs = generateContentStreamMock.mock.calls[0][0];
     expect(callArgs.contents[0].parts).toHaveLength(3);
-    expect(callArgs.contents[0].parts[0]).toEqual({
+    expect(callArgs.contents[0].parts[0]).toStrictEqual({
       text: 'Compare these images:',
     });
-    expect(callArgs.contents[0].parts[1]).toEqual({
+    expect(callArgs.contents[0].parts[1]).toStrictEqual({
       inlineData: {
         mimeType: 'image/png',
         data: 'data1',
       },
     });
-    expect(callArgs.contents[0].parts[2]).toEqual({
+    expect(callArgs.contents[0].parts[2]).toStrictEqual({
       inlineData: {
         mimeType: 'image/jpeg',
         data: 'data2',
@@ -251,7 +251,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
     const callArgs = generateContentStreamMock.mock.calls[0][0];
     expect(callArgs.contents[0].parts).toHaveLength(1);
-    expect(callArgs.contents[0].parts[0]).toEqual({
+    expect(callArgs.contents[0].parts[0]).toStrictEqual({
       inlineData: {
         mimeType: 'image/png',
         data: 'imagedata',
@@ -305,7 +305,7 @@ describe('GeminiProvider - MediaBlock support', () => {
 
     expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
     const callArgs = generateContentStreamMock.mock.calls[0][0];
-    expect(callArgs.contents[0].parts[0]).toEqual({
+    expect(callArgs.contents[0].parts[0]).toStrictEqual({
       fileData: {
         mimeType: 'image/png',
         fileUri: 'https://example.com/image.png',
@@ -360,7 +360,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
     const callArgs = generateContentStreamMock.mock.calls[0][0];
     // Gemini expects just the base64 data, not the data URI prefix
-    expect(callArgs.contents[0].parts[0]).toEqual({
+    expect(callArgs.contents[0].parts[0]).toStrictEqual({
       inlineData: {
         mimeType: 'image/png',
         data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -415,7 +415,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
     const callArgs = generateContentStreamMock.mock.calls[0][0];
     expect(callArgs.contents[0].parts).toHaveLength(2);
-    expect(callArgs.contents[0].parts[1]).toEqual({
+    expect(callArgs.contents[0].parts[1]).toStrictEqual({
       inlineData: {
         mimeType: 'application/pdf',
         data: 'JVBERi0xLjQ=',
@@ -470,7 +470,7 @@ describe('GeminiProvider - MediaBlock support', () => {
     expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
     const callArgs = generateContentStreamMock.mock.calls[0][0];
     expect(callArgs.contents[0].parts).toHaveLength(2);
-    expect(callArgs.contents[0].parts[1]).toEqual({
+    expect(callArgs.contents[0].parts[1]).toStrictEqual({
       inlineData: {
         mimeType: 'audio/mpeg',
         data: 'audiodata',

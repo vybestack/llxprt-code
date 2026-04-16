@@ -148,7 +148,7 @@ describe('Todo Continuation Integration Tests', () => {
         config.setEphemeralSetting(testCase.key, testCase.value);
 
         // Then: Should retrieve correctly
-        expect(config.getEphemeralSetting(testCase.key)).toEqual(
+        expect(config.getEphemeralSetting(testCase.key)).toStrictEqual(
           testCase.value,
         );
       }
@@ -279,7 +279,7 @@ describe('Todo Continuation Integration Tests', () => {
 
       // Then: Should capture message and options
       expect(capturedMessage).toBe('Test continuation prompt');
-      expect(capturedOptions).toEqual({
+      expect(capturedOptions).toStrictEqual({
         signal: expect.any(AbortSignal),
         prompt_id: 'test-prompt-id',
         turns: undefined,
@@ -560,7 +560,9 @@ describe('Todo Continuation Integration Tests', () => {
 
       // Then: All should be retrievable
       for (const setting of testSettings) {
-        expect(config.getEphemeralSetting(setting.key)).toEqual(setting.value);
+        expect(config.getEphemeralSetting(setting.key)).toStrictEqual(
+          setting.value,
+        );
       }
 
       // When: Get all settings at once
@@ -571,7 +573,7 @@ describe('Todo Continuation Integration Tests', () => {
       expect(allSettings['context-limit']).toBe(150000);
       expect(allSettings['compression-threshold']).toBe(0.75);
       expect(allSettings['base-url']).toBe('https://api.example.com');
-      expect(allSettings['custom-headers']).toEqual({
+      expect(allSettings['custom-headers']).toStrictEqual({
         'X-Test': 'integration',
       });
 

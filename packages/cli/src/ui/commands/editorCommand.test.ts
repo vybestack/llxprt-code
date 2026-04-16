@@ -17,7 +17,7 @@ describe('editorCommand', () => {
     const mockContext = createMockCommandContext();
     const result = editorCommand.action(mockContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'dialog',
       dialog: 'editor',
     });

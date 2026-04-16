@@ -208,10 +208,10 @@ describe('extension tests', () => {
       expect(extensions).toHaveLength(2);
       const ext1 = extensions.find((e) => e.name === 'ext1');
       const ext2 = extensions.find((e) => e.name === 'ext2');
-      expect(ext1?.contextFiles).toEqual([
+      expect(ext1?.contextFiles).toStrictEqual([
         path.join(userExtensionsDir, 'ext1', 'LLXPRT.md'),
       ]);
-      expect(ext2?.contextFiles).toEqual([]);
+      expect(ext2?.contextFiles).toStrictEqual([]);
     });
 
     it('should load context file path from the extension config', () => {
@@ -229,7 +229,7 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       const ext1 = extensions.find((e) => e.name === 'ext1');
-      expect(ext1?.contextFiles).toEqual([
+      expect(ext1?.contextFiles).toStrictEqual([
         path.join(userExtensionsDir, 'ext1', 'my-context-file.md'),
       ]);
     });
@@ -306,7 +306,7 @@ describe('extension tests', () => {
         async (_) => true,
       );
 
-      expect(extensionName).toEqual('my-linked-extension');
+      expect(extensionName).toStrictEqual('my-linked-extension');
       const extensions = loadExtensions(
         new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
       );
@@ -316,11 +316,11 @@ describe('extension tests', () => {
       expect(linkedExt.name).toBe('my-linked-extension');
 
       expect(linkedExt.path).toBe(sourceExtDir);
-      expect(linkedExt.installMetadata).toEqual({
+      expect(linkedExt.installMetadata).toStrictEqual({
         source: sourceExtDir,
         type: 'link',
       });
-      expect(linkedExt.contextFiles).toEqual([
+      expect(linkedExt.contextFiles).toStrictEqual([
         path.join(sourceExtDir, 'context.md'),
       ]);
     });
@@ -354,7 +354,7 @@ describe('extension tests', () => {
       expect(extensions[0].mcpServers?.['test-server'].cwd).toBe(
         path.join(sourceExtDir, 'server'),
       );
-      expect(extensions[0].mcpServers?.['test-server'].args).toEqual([
+      expect(extensions[0].mcpServers?.['test-server'].args).toStrictEqual([
         path.join(sourceExtDir, 'server', 'index.js'),
       ]);
     });
@@ -1165,7 +1165,7 @@ describe('extension tests', () => {
       expect(fs.existsSync(targetExtDir)).toBe(true);
       expect(fs.existsSync(metadataPath)).toBe(true);
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-      expect(metadata).toEqual({
+      expect(metadata).toStrictEqual({
         source: sourceExtDir,
         type: 'local',
       });
@@ -1268,7 +1268,7 @@ describe('extension tests', () => {
       expect(fs.existsSync(targetExtDir)).toBe(true);
       expect(fs.existsSync(metadataPath)).toBe(true);
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-      expect(metadata).toEqual({
+      expect(metadata).toStrictEqual({
         source: gitUrl,
         type: 'git',
       });
@@ -1295,7 +1295,7 @@ describe('extension tests', () => {
       expect(fs.existsSync(configPath)).toBe(false);
 
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-      expect(metadata).toEqual({
+      expect(metadata).toStrictEqual({
         source: sourceExtDir,
         type: 'link',
       });
@@ -1417,7 +1417,7 @@ This extension will run the following MCP servers:
       expect(fs.existsSync(targetExtDir)).toBe(true);
       expect(fs.existsSync(metadataPath)).toBe(true);
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-      expect(metadata).toEqual({
+      expect(metadata).toStrictEqual({
         source: sourceExtDir,
         type: 'local',
         autoUpdate: true,
@@ -1607,7 +1607,7 @@ This extension will run the following MCP servers:
           async () => false, // User declines to trust workspace
         );
 
-        expect(failed).toEqual(['ext1']);
+        expect(failed).toStrictEqual(['ext1']);
       });
 
       it('does not copy extensions to the user dir when user declines trust', async () => {
@@ -1659,7 +1659,7 @@ This extension will run the following MCP servers:
           ),
         );
 
-        expect(extensions).toEqual([]);
+        expect(extensions).toStrictEqual([]);
       });
 
       it('allows extension install when user approves trust prompt', async () => {
@@ -1681,7 +1681,7 @@ This extension will run the following MCP servers:
         );
 
         // Extension should install successfully when user approves
-        expect(failed).toEqual([]);
+        expect(failed).toStrictEqual([]);
       });
     });
 
@@ -1711,7 +1711,7 @@ This extension will run the following MCP servers:
         async (_) => true,
       );
 
-      expect(failed).toEqual([]);
+      expect(failed).toStrictEqual([]);
 
       const userExtensionsDir = path.join(
         tempHomeDir,
@@ -1727,7 +1727,7 @@ This extension will run the following MCP servers:
       const metadataPath = path.join(userExt1Path, INSTALL_METADATA_FILENAME);
       expect(fs.existsSync(metadataPath)).toBe(true);
       const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-      expect(metadata).toEqual({
+      expect(metadata).toStrictEqual({
         source: ext1Path,
         type: 'local',
       });
@@ -1758,7 +1758,7 @@ This extension will run the following MCP servers:
         extensions,
         async (_) => true,
       );
-      expect(failed).toEqual(['ext2']);
+      expect(failed).toStrictEqual(['ext2']);
     });
   });
 

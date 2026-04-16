@@ -36,7 +36,7 @@ describe('setCommand action mutation coverage', () => {
       'context-limit',
       32000,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -50,7 +50,7 @@ describe('setCommand action mutation coverage', () => {
       'context-limit not-a-number',
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'context-limit must be a positive integer (e.g., 100000)',
@@ -64,7 +64,7 @@ describe('setCommand action mutation coverage', () => {
       'socket-keepalive',
       true,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -84,7 +84,7 @@ describe('setCommand action mutation coverage', () => {
     );
 
     const failure = await setCommand.action!(context, 'streaming maybe');
-    expect(failure).toEqual({
+    expect(failure).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:
@@ -110,7 +110,7 @@ describe('setCommand action mutation coverage', () => {
       context,
       'compression-threshold 1.4',
     );
-    expect(failure).toEqual({
+    expect(failure).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:
@@ -148,7 +148,7 @@ describe('setCommand action mutation coverage', () => {
       context,
       'tool-output-max-items 0',
     );
-    expect(failure).toEqual({
+    expect(failure).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'tool-output-max-items must be a positive integer',

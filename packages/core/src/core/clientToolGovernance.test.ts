@@ -51,7 +51,7 @@ describe('getToolGovernanceEphemerals', () => {
   it('returns allowed list when present', () => {
     const config = makeConfig({ 'tools.allowed': ['bash', 'read_file'] });
     const result = getToolGovernanceEphemerals(config);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       allowed: ['bash', 'read_file'],
       disabled: undefined,
     });
@@ -60,13 +60,16 @@ describe('getToolGovernanceEphemerals', () => {
   it('returns disabled list when present via tools.disabled', () => {
     const config = makeConfig({ 'tools.disabled': ['write_file'] });
     const result = getToolGovernanceEphemerals(config);
-    expect(result).toEqual({ allowed: undefined, disabled: ['write_file'] });
+    expect(result).toStrictEqual({
+      allowed: undefined,
+      disabled: ['write_file'],
+    });
   });
 
   it('returns disabled list when present via legacy disabled-tools key', () => {
     const config = makeConfig({ 'disabled-tools': ['dangerous_tool'] });
     const result = getToolGovernanceEphemerals(config);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       allowed: undefined,
       disabled: ['dangerous_tool'],
     });
@@ -78,7 +81,7 @@ describe('getToolGovernanceEphemerals', () => {
       'disabled-tools': ['old_tool'],
     });
     const result = getToolGovernanceEphemerals(config);
-    expect(result?.disabled).toEqual(['new_tool']);
+    expect(result?.disabled).toStrictEqual(['new_tool']);
   });
 
   it('returns both allowed and disabled when both present', () => {
@@ -87,7 +90,7 @@ describe('getToolGovernanceEphemerals', () => {
       'tools.disabled': ['write_file'],
     });
     const result = getToolGovernanceEphemerals(config);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       allowed: ['bash'],
       disabled: ['write_file'],
     });
@@ -96,28 +99,28 @@ describe('getToolGovernanceEphemerals', () => {
 
 describe('readToolList', () => {
   it('returns empty array for non-array input', () => {
-    expect(readToolList(null)).toEqual([]);
-    expect(readToolList(undefined)).toEqual([]);
-    expect(readToolList('bash')).toEqual([]);
-    expect(readToolList(42)).toEqual([]);
+    expect(readToolList(null)).toStrictEqual([]);
+    expect(readToolList(undefined)).toStrictEqual([]);
+    expect(readToolList('bash')).toStrictEqual([]);
+    expect(readToolList(42)).toStrictEqual([]);
   });
 
   it('filters out non-string entries', () => {
-    expect(readToolList(['bash', 123, null, 'read_file'])).toEqual([
+    expect(readToolList(['bash', 123, null, 'read_file'])).toStrictEqual([
       'bash',
       'read_file',
     ]);
   });
 
   it('filters out empty/whitespace entries', () => {
-    expect(readToolList(['bash', '', '   ', 'read_file'])).toEqual([
+    expect(readToolList(['bash', '', '   ', 'read_file'])).toStrictEqual([
       'bash',
       'read_file',
     ]);
   });
 
   it('returns valid string entries', () => {
-    expect(readToolList(['tool1', 'tool2', 'tool3'])).toEqual([
+    expect(readToolList(['tool1', 'tool2', 'tool3'])).toStrictEqual([
       'tool1',
       'tool2',
       'tool3',
@@ -125,11 +128,11 @@ describe('readToolList', () => {
   });
 
   it('returns empty array for empty array input', () => {
-    expect(readToolList([])).toEqual([]);
+    expect(readToolList([])).toStrictEqual([]);
   });
 
   it('trims whitespace from tool names', () => {
-    expect(readToolList([' bash ', '  read_file  '])).toEqual([
+    expect(readToolList([' bash ', '  read_file  '])).toStrictEqual([
       'bash',
       'read_file',
     ]);
@@ -139,7 +142,7 @@ describe('readToolList', () => {
 describe('buildToolDeclarationsFromView', () => {
   it('returns empty array for undefined registry', () => {
     const view = makeView(['tool1']);
-    expect(buildToolDeclarationsFromView(undefined, view)).toEqual([]);
+    expect(buildToolDeclarationsFromView(undefined, view)).toStrictEqual([]);
   });
 
   it('returns empty array when no tool names in view', () => {
@@ -147,7 +150,7 @@ describe('buildToolDeclarationsFromView', () => {
       getAllTools: vi.fn().mockReturnValue([]),
     } as unknown as ToolRegistry;
     const view = makeView([]);
-    expect(buildToolDeclarationsFromView(registry, view)).toEqual([]);
+    expect(buildToolDeclarationsFromView(registry, view)).toStrictEqual([]);
   });
 
   it('prefers getFunctionDeclarations for transformed schemas', () => {
@@ -158,7 +161,7 @@ describe('buildToolDeclarationsFromView', () => {
     } as unknown as ToolRegistry;
     const view = makeView(['bash']);
     const result = buildToolDeclarationsFromView(registry, view);
-    expect(result).toEqual([decl1]);
+    expect(result).toStrictEqual([decl1]);
   });
 
   it('falls back to getAllTools when getFunctionDeclarations not available', () => {
@@ -173,7 +176,7 @@ describe('buildToolDeclarationsFromView', () => {
     } as unknown as ToolRegistry;
     const view = makeView(['bash', 'read_file']);
     const result = buildToolDeclarationsFromView(registry, view);
-    expect(result).toEqual([schema1, schema2]);
+    expect(result).toStrictEqual([schema1, schema2]);
   });
 
   it('skips tools without schema in getAllTools', () => {
@@ -186,19 +189,19 @@ describe('buildToolDeclarationsFromView', () => {
     } as unknown as ToolRegistry;
     const view = makeView(['bash', 'no_schema_tool']);
     const result = buildToolDeclarationsFromView(registry, view);
-    expect(result).toEqual([schema1]);
+    expect(result).toStrictEqual([schema1]);
   });
 });
 
 describe('getEnabledToolNamesForPrompt', () => {
   it('returns empty array when no tool registry', () => {
     const config = makeConfig({});
-    expect(getEnabledToolNamesForPrompt(config)).toEqual([]);
+    expect(getEnabledToolNamesForPrompt(config)).toStrictEqual([]);
   });
 
   it('returns empty array when toolRegistry has no getEnabledTools', () => {
     const config = makeConfigWithTools({}, {} as unknown as ToolRegistry);
-    expect(getEnabledToolNamesForPrompt(config)).toEqual([]);
+    expect(getEnabledToolNamesForPrompt(config)).toStrictEqual([]);
   });
 
   it('returns deduplicated enabled tool names', () => {
@@ -210,7 +213,10 @@ describe('getEnabledToolNamesForPrompt', () => {
       ]),
     } as unknown as ToolRegistry;
     const config = makeConfigWithTools({}, registry);
-    expect(getEnabledToolNamesForPrompt(config)).toEqual(['bash', 'read_file']);
+    expect(getEnabledToolNamesForPrompt(config)).toStrictEqual([
+      'bash',
+      'read_file',
+    ]);
   });
 
   it('filters out empty tool names', () => {

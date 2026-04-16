@@ -87,7 +87,7 @@ describe('toolkeyCommand', () => {
         '/toolkey ex',
       );
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'exa' })]),
       );
       expect(result.hint).toBe('Select built-in tool');
@@ -111,7 +111,7 @@ describe('toolkeyCommand', () => {
         '/toolkey exa ',
       );
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'none' })]),
       );
       expect(result.hint).toBe(

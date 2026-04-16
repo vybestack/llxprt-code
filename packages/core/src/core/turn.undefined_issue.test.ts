@@ -73,7 +73,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       };
 
       expect(validFunctionCall.name).toBe('write_file');
-      expect(validFunctionCall.args).toEqual({
+      expect(validFunctionCall.args).toStrictEqual({
         filename: 'test.txt',
         content: 'Hello World',
       });
@@ -87,7 +87,9 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       };
 
       expect(problematicFunctionCall.name).toBeUndefined();
-      expect(problematicFunctionCall.args).toEqual({ file: 'output.txt' });
+      expect(problematicFunctionCall.args).toStrictEqual({
+        file: 'output.txt',
+      });
     });
 
     it('should handle FunctionCall with empty name', () => {
@@ -97,7 +99,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       };
 
       expect(emptyNameFunctionCall.name).toBe('');
-      expect(emptyNameFunctionCall.args).toEqual({ data: 'test' });
+      expect(emptyNameFunctionCall.args).toStrictEqual({ data: 'test' });
     });
 
     it('should handle FunctionCall with null name', () => {
@@ -107,7 +109,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       };
 
       expect(nullNameFunctionCall.name).toBeUndefined();
-      expect(nullNameFunctionCall.args).toEqual({ content: 'test' });
+      expect(nullNameFunctionCall.args).toStrictEqual({ content: 'test' });
     });
 
     it('should handle FunctionCall with malformed args', () => {
@@ -119,7 +121,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       };
 
       expect(malformedArgsFunctionCall.name).toBe('test_tool');
-      expect(malformedArgsFunctionCall.args).toEqual({
+      expect(malformedArgsFunctionCall.args).toStrictEqual({
         malformed: 'json would be parsed elsewhere',
       });
     });
@@ -180,7 +182,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       'should simulate qwen model problematic scenario: $description',
       ({ functionCall, expectedName }) => {
         // These are the exact scenarios reported in GitHub #305
-        expect(functionCall.args).toEqual({ file: 'test.txt' });
+        expect(functionCall.args).toStrictEqual({ file: 'test.txt' });
         expect(functionCall.name).toBe(expectedName);
       },
     );
@@ -281,7 +283,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
         };
 
         expect(functionCall.name).toBe('test_tool');
-        expect(functionCall.args).toEqual(malformedCase);
+        expect(functionCall.args).toStrictEqual(malformedCase);
       }
     });
 
@@ -301,7 +303,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
         };
 
         expect(functionCall.name).toBe(name);
-        expect(functionCall.args).toEqual({});
+        expect(functionCall.args).toStrictEqual({});
       }
     });
 
@@ -322,7 +324,7 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
         };
 
         expect(functionCall.name).toBe(name);
-        expect(functionCall.args).toEqual({});
+        expect(functionCall.args).toStrictEqual({});
       }
     });
   });

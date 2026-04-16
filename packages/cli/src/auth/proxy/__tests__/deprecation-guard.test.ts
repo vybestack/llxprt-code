@@ -94,7 +94,7 @@ describe('Deprecation Guards (P36)', () => {
         });
       }
 
-      expect(violations).toEqual([]);
+      expect(violations).toStrictEqual([]);
     });
   });
 
@@ -121,7 +121,7 @@ describe('Deprecation Guards (P36)', () => {
         });
       }
 
-      expect(violations).toEqual([]);
+      expect(violations).toStrictEqual([]);
     });
   });
 
@@ -167,7 +167,7 @@ describe('Deprecation Guards (P36)', () => {
         });
       }
 
-      expect(matches).toEqual([]);
+      expect(matches).toStrictEqual([]);
     });
   });
 

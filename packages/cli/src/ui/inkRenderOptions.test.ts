@@ -18,7 +18,7 @@ describe('inkRenderOptions', () => {
       },
     );
 
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,
@@ -35,7 +35,7 @@ describe('inkRenderOptions', () => {
       { merged: { ui: { useAlternateBuffer: true } } },
     );
 
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,
@@ -56,7 +56,7 @@ describe('inkRenderOptions', () => {
       },
     );
 
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,
@@ -73,7 +73,7 @@ describe('inkRenderOptions', () => {
       { merged: { ui: { useAlternateBuffer: false } } },
     );
 
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
         patchConsole: false,

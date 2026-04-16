@@ -32,7 +32,7 @@ describe('setCommand runtime integration', () => {
   it('requires arguments and shows usage when missing', async () => {
     const result = await setCommand.action!(context, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:
@@ -47,7 +47,7 @@ describe('setCommand runtime integration', () => {
       'context-limit',
       32000,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -67,7 +67,7 @@ describe('setCommand runtime integration', () => {
         'X-Test': 'value',
       }),
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -79,7 +79,7 @@ describe('setCommand runtime integration', () => {
     // Issue #884: /set streaming true should work without error
     const result = await setCommand.action!(context, 'streaming true');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: `Ephemeral setting 'streaming' set to "enabled" (session only, use /profile save to persist)`,
@@ -95,7 +95,7 @@ describe('setCommand runtime integration', () => {
     // Issue #884: /set streaming false should work without error
     const result = await setCommand.action!(context, 'streaming false');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: `Ephemeral setting 'streaming' set to "disabled" (session only, use /profile save to persist)`,
@@ -110,7 +110,7 @@ describe('setCommand runtime integration', () => {
   it('rejects invalid ephemeral keys', async () => {
     const result = await setCommand.action!(context, 'invalid-key value');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: expect.stringContaining(
@@ -126,7 +126,7 @@ describe('setCommand runtime integration', () => {
     );
 
     expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:
@@ -147,7 +147,7 @@ describe('setCommand runtime integration', () => {
         key,
         Number(value),
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining(`'${key}'`),
@@ -166,7 +166,7 @@ describe('setCommand runtime integration', () => {
     for (const { key, value } of testCases) {
       const result = await setCommand.action!(context, `${key} ${value}`);
       expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(key, -1);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining(`'${key}'`),
@@ -205,7 +205,7 @@ describe('setCommand runtime integration', () => {
     for (const { key, value, expectedError } of invalidCases) {
       const result = await setCommand.action!(context, `${key} ${value}`);
       expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining(expectedError),
@@ -223,7 +223,7 @@ describe('setCommand runtime integration', () => {
       'temperature',
       0.7,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: "Model parameter 'temperature' set to 0.7",
@@ -234,7 +234,7 @@ describe('setCommand runtime integration', () => {
     const result = await setCommand.action!(context, 'modelparam temperature');
 
     expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:
@@ -249,7 +249,7 @@ describe('setCommand runtime integration', () => {
 
     const result = await setCommand.action!(context, 'modelparam foo 1');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'Failed to set model parameter: boom',
@@ -263,7 +263,7 @@ describe('setCommand runtime integration', () => {
       'base-url',
       undefined,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: "Ephemeral setting 'base-url' cleared",
@@ -274,7 +274,7 @@ describe('setCommand runtime integration', () => {
     const result = await setCommand.action!(context, 'unset modelparam foo');
 
     expect(mockRuntime.clearActiveModelParam).toHaveBeenCalledWith('foo');
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: "Model parameter 'foo' cleared",
@@ -285,7 +285,7 @@ describe('setCommand runtime integration', () => {
     const result = await setCommand.action!(context, 'unset modelparam');
 
     expect(mockRuntime.clearActiveModelParam).not.toHaveBeenCalled();
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:
@@ -307,7 +307,7 @@ describe('setCommand runtime integration', () => {
       'custom-headers',
       undefined,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: "Custom header 'X-Test' cleared",
@@ -325,7 +325,7 @@ describe('setCommand runtime integration', () => {
     );
 
     expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: "No custom header named 'X-Test' found",
@@ -345,7 +345,7 @@ describe('setCommand runtime integration', () => {
       'max_tokens',
       undefined,
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content: "Model parameter 'max_tokens' cleared",
@@ -362,7 +362,7 @@ describe('setCommand runtime integration', () => {
       'unset modelparam max_tokens',
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'Failed to clear model parameter: cannot clear',

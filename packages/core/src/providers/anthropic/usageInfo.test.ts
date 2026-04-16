@@ -71,7 +71,7 @@ describe('usageInfo', () => {
           },
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle HTTP errors gracefully', async () => {
@@ -103,7 +103,7 @@ describe('usageInfo', () => {
       } as Response);
 
       const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
       // Unknown fields should be preserved thanks to passthrough()
       expect(
         (result as Record<string, unknown>)['some_new_quota_type'],
@@ -131,7 +131,7 @@ describe('usageInfo', () => {
       } as Response);
 
       const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle response with null resets_at', async () => {
@@ -148,7 +148,7 @@ describe('usageInfo', () => {
       } as Response);
 
       const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
   });
 

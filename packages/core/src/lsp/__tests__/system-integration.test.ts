@@ -295,7 +295,7 @@ describe('LSP system integration (P35)', () => {
     const config = new Config(createBaseConfigParams({ lsp: true }));
     await initializeTestConfig(config);
 
-    expect(config.getLspConfig()).toEqual({ servers: [] });
+    expect(config.getLspConfig()).toStrictEqual({ servers: [] });
     expect(config.getLspServiceClient()).toBeDefined();
   });
 
@@ -309,7 +309,7 @@ describe('LSP system integration (P35)', () => {
     const config = new Config(createBaseConfigParams({ lsp }));
     await initializeTestConfig(config);
 
-    expect(config.getLspConfig()).toEqual(lsp);
+    expect(config.getLspConfig()).toStrictEqual(lsp);
   });
 
   it('returns same LSP service client instance across calls', async () => {
@@ -407,7 +407,7 @@ describe('LSP system integration (P35)', () => {
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
     await expect(initializeTestConfig(config)).resolves.toBeUndefined();
     expect(config.getLspServiceClient()).toBeUndefined();
-    expect(config.getLspConfig()).toEqual({ servers: [] });
+    expect(config.getLspConfig()).toStrictEqual({ servers: [] });
   });
 
   it('shutdownLspService clears service client and removes lsp-navigation tools', async () => {

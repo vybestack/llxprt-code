@@ -174,7 +174,7 @@ describe('KeychainTokenStorage', () => {
           JSON.stringify(validCredentials),
         );
         const result = await storage.getCredentials('test-server');
-        expect(result).toEqual(validCredentials);
+        expect(result).toStrictEqual(validCredentials);
       });
 
       it('should return null if credentials have expired', async () => {
@@ -184,7 +184,7 @@ describe('KeychainTokenStorage', () => {
         };
         mockKeytar.getPassword.mockResolvedValue(JSON.stringify(expiredCreds));
         const result = await storage.getCredentials('test-server');
-        expect(result).toEqual(expiredCreds);
+        expect(result).toStrictEqual(expiredCreds);
       });
 
       it('should throw if stored data is corrupted JSON', async () => {
@@ -251,7 +251,7 @@ describe('KeychainTokenStorage', () => {
           { account: 'server2', password: '' },
         ]);
         const result = await storage.listServers();
-        expect(result).toEqual(['server1', 'server2']);
+        expect(result).toStrictEqual(['server1', 'server2']);
       });
 
       it('should not include internal test keys in the server list', async () => {
@@ -264,14 +264,14 @@ describe('KeychainTokenStorage', () => {
           { account: 'server2', password: '' },
         ]);
         const result = await storage.listServers();
-        expect(result).toEqual(['server1', 'server2']);
+        expect(result).toStrictEqual(['server1', 'server2']);
       });
 
       it('should return an empty array on error', async () => {
         const error = new Error('find error');
         mockKeytar.findCredentials.mockRejectedValue(error);
         const result = await storage.listServers();
-        expect(result).toEqual([]);
+        expect(result).toStrictEqual([]);
         expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
           'error',
           'Failed to list servers from keychain',
@@ -314,9 +314,9 @@ describe('KeychainTokenStorage', () => {
 
         const result = await storage.getAllCredentials();
         expect(result.size).toBe(3);
-        expect(result.get('test-server')).toEqual(validCredentials);
-        expect(result.get('server2')).toEqual(creds2);
-        expect(result.get('expired-server')).toEqual(expiredCreds);
+        expect(result.get('test-server')).toStrictEqual(validCredentials);
+        expect(result.get('server2')).toStrictEqual(creds2);
+        expect(result.get('expired-server')).toStrictEqual(expiredCreds);
         expect(result.has('bad-server')).toBe(false);
         expect(result.has('invalid-server')).toBe(false);
 

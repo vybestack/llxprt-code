@@ -10,7 +10,7 @@ describe('filterOpenAIRequestParams', () => {
       stop: ['END'],
     });
 
-    expect(filtered).toEqual({
+    expect(filtered).toStrictEqual({
       temperature: 0.5,
       max_tokens: 2048,
       response_format: { type: 'json_schema' },
@@ -26,7 +26,7 @@ describe('filterOpenAIRequestParams', () => {
       user: 'tester',
     });
 
-    expect(filtered).toEqual({
+    expect(filtered).toStrictEqual({
       user: 'tester',
     });
   });
@@ -44,7 +44,7 @@ describe('filterOpenAIRequestParams', () => {
       },
     });
 
-    expect(filtered).toEqual({
+    expect(filtered).toStrictEqual({
       temperature: 0.7,
       reasoning: {
         effort: 'xhigh',
