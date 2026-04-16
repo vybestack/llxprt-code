@@ -12,7 +12,12 @@ import type {
   RequestContext,
   ExecutionEventBus,
 } from '@a2a-js/sdk/server';
-import type { ToolCallRequestInfo, Config } from '@vybestack/llxprt-code-core';
+import type {
+  ToolCallRequestInfo,
+  CompletedToolCall,
+  Config,
+  ServerGeminiStreamEvent,
+} from '@vybestack/llxprt-code-core';
 import { GeminiEventType } from '@vybestack/llxprt-code-core';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -168,6 +173,94 @@ export class CoderAgentExecutor implements AgentExecutor {
     return Array.from(this.tasks.values());
   }
 
+  #publishTaskNotFoundFailure(
+    eventBus: ExecutionEventBus,
+    taskId: string,
+  ): void {
+    logger.warn(
+      `[CoderAgentExecutor] Task ${taskId} not found for cancellation.`,
+    );
+    eventBus.publish({
+      kind: 'status-update',
+      taskId,
+      contextId: uuidv4(),
+      status: {
+        state: 'failed',
+        message: {
+          kind: 'message',
+          role: 'agent',
+          parts: [{ kind: 'text', text: `Task ${taskId} not found.` }],
+          messageId: uuidv4(),
+          taskId,
+        },
+      },
+      final: true,
+    });
+  }
+
+  #publishAlreadyFinalState(
+    eventBus: ExecutionEventBus,
+    taskId: string,
+    task: Task,
+  ): void {
+    logger.info(
+      `[CoderAgentExecutor] Task ${taskId} is already in a final state: ${task.taskState}. No action needed for cancellation.`,
+    );
+    eventBus.publish({
+      kind: 'status-update',
+      taskId,
+      contextId: task.contextId,
+      status: {
+        state: task.taskState,
+        message: {
+          kind: 'message',
+          role: 'agent',
+          parts: [
+            {
+              kind: 'text',
+              text: `Task ${taskId} is already ${task.taskState}.`,
+            },
+          ],
+          messageId: uuidv4(),
+          taskId,
+        },
+      },
+      final: true,
+    });
+  }
+
+  #publishCancellationError(
+    eventBus: ExecutionEventBus,
+    taskId: string,
+    task: Task,
+    errorMessage: string,
+  ): void {
+    logger.error(
+      `[CoderAgentExecutor] Error during task cancellation for ${taskId}: ${errorMessage}`,
+    );
+    eventBus.publish({
+      kind: 'status-update',
+      taskId,
+      contextId: task.contextId,
+      status: {
+        state: 'failed',
+        message: {
+          kind: 'message',
+          role: 'agent',
+          parts: [
+            {
+              kind: 'text',
+              text: `Failed to process cancellation for task ${taskId}: ${errorMessage}`,
+            },
+          ],
+          messageId: uuidv4(),
+          taskId,
+        },
+      },
+      final: true,
+    });
+  }
+
   cancelTask = async (
     taskId: string,
     eventBus: ExecutionEventBus,
@@ -178,55 +271,14 @@ export class CoderAgentExecutor implements AgentExecutor {
     const wrapper = this.tasks.get(taskId);
 
     if (!wrapper) {
-      logger.warn(
-        `[CoderAgentExecutor] Task ${taskId} not found for cancellation.`,
-      );
-      eventBus.publish({
-        kind: 'status-update',
-        taskId,
-        contextId: uuidv4(),
-        status: {
-          state: 'failed',
-          message: {
-            kind: 'message',
-            role: 'agent',
-            parts: [{ kind: 'text', text: `Task ${taskId} not found.` }],
-            messageId: uuidv4(),
-            taskId,
-          },
-        },
-        final: true,
-      });
+      this.#publishTaskNotFoundFailure(eventBus, taskId);
       return;
     }
 
     const { task } = wrapper;
 
     if (task.taskState === 'canceled' || task.taskState === 'failed') {
-      logger.info(
-        `[CoderAgentExecutor] Task ${taskId} is already in a final state: ${task.taskState}. No action needed for cancellation.`,
-      );
-      eventBus.publish({
-        kind: 'status-update',
-        taskId,
-        contextId: task.contextId,
-        status: {
-          state: task.taskState,
-          message: {
-            kind: 'message',
-            role: 'agent',
-            parts: [
-              {
-                kind: 'text',
-                text: `Task ${taskId} is already ${task.taskState}.`,
-              },
-            ],
-            messageId: uuidv4(),
-            taskId,
-          },
-        },
-        final: true,
-      });
+      this.#publishAlreadyFinalState(eventBus, taskId, task);
       return;
     }
 
@@ -254,33 +306,290 @@ export class CoderAgentExecutor implements AgentExecutor {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      logger.error(
-        `[CoderAgentExecutor] Error during task cancellation for ${taskId}: ${errorMessage}`,
-        error,
-      );
-      eventBus.publish({
-        kind: 'status-update',
-        taskId,
-        contextId: task.contextId,
-        status: {
-          state: 'failed',
-          message: {
-            kind: 'message',
-            role: 'agent',
-            parts: [
-              {
-                kind: 'text',
-                text: `Failed to process cancellation for task ${taskId}: ${errorMessage}`,
-              },
-            ],
-            messageId: uuidv4(),
-            taskId,
-          },
-        },
-        final: true,
-      });
+      this.#publishCancellationError(eventBus, taskId, task, errorMessage);
     }
   };
+
+  #setupSocketCloseHandler(
+    taskId: string,
+    abortController: AbortController,
+    abortSignal: AbortSignal,
+  ): void {
+    const store = requestStorage.getStore();
+    if (!store) {
+      logger.error(
+        '[CoderAgentExecutor] Could not get request from async local storage. Cancellation on socket close will not be handled for this request.',
+      );
+      return;
+    }
+
+    const socket = store.req.socket;
+    const onClientEnd = () => {
+      logger.info(
+        `[CoderAgentExecutor] Client socket closed for task ${taskId}. Cancelling execution.`,
+      );
+      if (!abortController.signal.aborted) {
+        abortController.abort();
+      }
+      socket.removeListener('end', onClientEnd);
+    };
+
+    socket.on('end', onClientEnd);
+    abortSignal.addEventListener('abort', () => {
+      socket.removeListener('end', onClientEnd);
+    });
+    logger.info(
+      `[CoderAgentExecutor] Socket close handler set up for task ${taskId}.`,
+    );
+  }
+
+  #publishHydrationFailure(
+    eventBus: ExecutionEventBus,
+    taskId: string,
+    contextId: string,
+  ): void {
+    const stateChange: StateChange = {
+      kind: CoderAgentEvent.StateChangeEvent,
+    };
+    eventBus.publish({
+      kind: 'status-update',
+      taskId,
+      contextId,
+      status: {
+        state: 'failed',
+        message: {
+          kind: 'message',
+          role: 'agent',
+          parts: [
+            {
+              kind: 'text',
+              text: 'Internal error: Task state lost or corrupted.',
+            },
+          ],
+          messageId: uuidv4(),
+          taskId,
+          contextId,
+        },
+      },
+      final: true,
+      metadata: { coderAgent: stateChange },
+    });
+  }
+
+  async #resolveTaskWrapper(
+    taskId: string,
+    contextId: string,
+    userMessage: Message,
+    sdkTask: SDKTask | undefined,
+    eventBus: ExecutionEventBus,
+  ): Promise<TaskWrapper> {
+    let wrapper = this.tasks.get(taskId);
+
+    if (wrapper) {
+      wrapper.task.eventBus = eventBus;
+      logger.info(`[CoderAgentExecutor] Task ${taskId} found in memory cache.`);
+      return wrapper;
+    }
+
+    if (sdkTask) {
+      logger.info(
+        `[CoderAgentExecutor] Task ${taskId} found in TaskStore. Reconstructing...`,
+      );
+      try {
+        return await this.reconstruct(sdkTask, eventBus);
+      } catch (e) {
+        logger.error(
+          `[CoderAgentExecutor] Failed to hydrate task ${taskId}:`,
+          e,
+        );
+        this.#publishHydrationFailure(eventBus, taskId, sdkTask.contextId);
+        throw new Error(`Failed to hydrate task ${taskId}`);
+      }
+    }
+
+    logger.info(`[CoderAgentExecutor] Creating new task ${taskId}.`);
+    const agentSettings = userMessage.metadata?.['coderAgent'] as AgentSettings;
+    wrapper = await this.createTask(taskId, contextId, agentSettings, eventBus);
+    const newTaskSDK = wrapper.toSDKTask();
+    eventBus.publish({
+      ...newTaskSDK,
+      kind: 'task',
+      status: { state: 'submitted', timestamp: new Date().toISOString() },
+      history: [userMessage],
+    });
+    try {
+      await this.taskStore?.save(newTaskSDK);
+      logger.info(`[CoderAgentExecutor] New task ${taskId} saved to store.`);
+    } catch (saveError) {
+      logger.error(
+        `[CoderAgentExecutor] Failed to save new task ${taskId} to store:`,
+        saveError,
+      );
+    }
+    return wrapper;
+  }
+
+  async #processAgentTurnLoop(
+    task: Task,
+    requestContext: RequestContext,
+    abortSignal: AbortSignal,
+  ): Promise<void> {
+    let agentTurnActive = true;
+    logger.info(`[CoderAgentExecutor] Task ${task.id}: Processing user turn.`);
+    let agentEvents: AsyncGenerator<ServerGeminiStreamEvent, void, unknown> =
+      task.acceptUserMessage(requestContext, abortSignal);
+
+    while (agentTurnActive) {
+      logger.info(
+        `[CoderAgentExecutor] Task ${task.id}: Processing agent turn (LLM stream).`,
+      );
+      const toolCallRequests: ToolCallRequestInfo[] = [];
+      for await (const event of agentEvents) {
+        if (abortSignal.aborted) {
+          logger.warn(
+            `[CoderAgentExecutor] Task ${task.id}: Abort signal received during agent event processing.`,
+          );
+          throw new Error('Execution aborted');
+        }
+        if (event.type === GeminiEventType.ToolCallRequest) {
+          toolCallRequests.push(event.value);
+          continue;
+        }
+        await task.acceptAgentMessage(event);
+      }
+
+      if (abortSignal.aborted) throw new Error('Execution aborted');
+
+      if (toolCallRequests.length > 0) {
+        logger.info(
+          `[CoderAgentExecutor] Task ${task.id}: Found ${toolCallRequests.length} tool call requests. Scheduling as a batch.`,
+        );
+        await task.scheduleToolCalls(toolCallRequests, abortSignal);
+      }
+
+      logger.info(
+        `[CoderAgentExecutor] Task ${task.id}: Waiting for pending tools if any.`,
+      );
+      await task.waitForPendingTools();
+      logger.info(
+        `[CoderAgentExecutor] Task ${task.id}: All pending tools completed or none were pending.`,
+      );
+
+      // Check abort signal after async operation - signal state may have changed.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (abortSignal.aborted) throw new Error('Execution aborted');
+
+      const completedTools = task.getAndClearCompletedTools();
+
+      if (completedTools.length > 0) {
+        const result = await this.#processCompletedTools(
+          task,
+          completedTools,
+          abortSignal,
+        );
+        if (result === false) {
+          agentTurnActive = false;
+        } else {
+          agentEvents = result;
+        }
+      } else {
+        logger.info(
+          `[CoderAgentExecutor] Task ${task.id}: No more tool calls to process. Ending agent turn.`,
+        );
+        agentTurnActive = false;
+      }
+    }
+
+    logger.info(
+      `[CoderAgentExecutor] Task ${task.id}: Agent turn finished, setting to input-required.`,
+    );
+    task.setTaskStateAndPublishUpdate(
+      'input-required',
+      { kind: CoderAgentEvent.StateChangeEvent },
+      undefined,
+      undefined,
+      true,
+    );
+  }
+
+  async #processCompletedTools(
+    task: Task,
+    completedTools: CompletedToolCall[],
+    abortSignal: AbortSignal,
+  ): Promise<AsyncGenerator<ServerGeminiStreamEvent, void, unknown> | false> {
+    if (completedTools.every((tool) => tool.status === 'cancelled')) {
+      logger.info(
+        `[CoderAgentExecutor] Task ${task.id}: All tool calls were cancelled. Updating history and ending agent turn.`,
+      );
+      task.addToolResponsesToHistory(completedTools);
+      task.setTaskStateAndPublishUpdate(
+        'input-required',
+        { kind: CoderAgentEvent.StateChangeEvent },
+        undefined,
+        undefined,
+        true,
+      );
+      return false;
+    }
+
+    logger.info(
+      `[CoderAgentExecutor] Task ${task.id}: Found ${completedTools.length} completed tool calls. Sending results back to LLM.`,
+    );
+    return task.sendCompletedToolsToLlm(completedTools, abortSignal);
+  }
+
+  #handleExecutionError(
+    task: Task,
+    abortSignal: AbortSignal,
+    error: unknown,
+  ): void {
+    if (abortSignal.aborted) {
+      logger.warn(`[CoderAgentExecutor] Task ${task.id} execution aborted.`);
+      task.cancelPendingTools('Execution aborted');
+      if (task.taskState !== 'canceled' && task.taskState !== 'failed') {
+        task.setTaskStateAndPublishUpdate(
+          'input-required',
+          { kind: CoderAgentEvent.StateChangeEvent },
+          'Execution aborted by client.',
+          undefined,
+          true,
+        );
+      }
+      return;
+    }
+
+    const errorMessage =
+      error instanceof Error ? error.message : 'Agent execution error';
+    logger.error(
+      `[CoderAgentExecutor] Error executing agent for task ${task.id}:`,
+      error,
+    );
+    task.cancelPendingTools(errorMessage);
+    if (task.taskState !== 'failed') {
+      task.setTaskStateAndPublishUpdate(
+        'failed',
+        { kind: CoderAgentEvent.StateChangeEvent },
+        errorMessage,
+        undefined,
+        true,
+      );
+    }
+  }
+
+  async #saveFinalTaskState(wrapper: TaskWrapper): Promise<void> {
+    logger.info(
+      `[CoderAgentExecutor] Saving final state for task ${wrapper.id}.`,
+    );
+    try {
+      await this.taskStore?.save(wrapper.toSDKTask());
+      logger.info(`[CoderAgentExecutor] Task ${wrapper.id} state saved.`);
+    } catch (saveError) {
+      logger.error(
+        `[CoderAgentExecutor] Failed to save task ${wrapper.id} state in finally block:`,
+        saveError,
+      );
+    }
+  }
 
   async execute(
     requestContext: RequestContext,
@@ -290,10 +599,10 @@ export class CoderAgentExecutor implements AgentExecutor {
     const sdkTask = requestContext.task;
 
     const taskId = sdkTask?.id || userMessage.taskId || uuidv4();
-    const contextId =
+    const contextId: string =
       userMessage.contextId ||
       sdkTask?.contextId ||
-      sdkTask?.metadata?.['_contextId'] ||
+      (sdkTask?.metadata?.['_contextId'] as string | undefined) ||
       uuidv4();
 
     logger.info(
@@ -306,124 +615,17 @@ export class CoderAgentExecutor implements AgentExecutor {
       logger.info('[EventBus event]: ', event),
     );
 
-    const store = requestStorage.getStore();
-    if (!store) {
-      logger.error(
-        '[CoderAgentExecutor] Could not get request from async local storage. Cancellation on socket close will not be handled for this request.',
-      );
-    }
-
     const abortController = new AbortController();
     const abortSignal = abortController.signal;
+    this.#setupSocketCloseHandler(taskId, abortController, abortSignal);
 
-    if (store) {
-      // Grab the raw socket from the request object
-      const socket = store.req.socket;
-      const onClientEnd = () => {
-        logger.info(
-          `[CoderAgentExecutor] Client socket closed for task ${taskId}. Cancelling execution.`,
-        );
-        if (!abortController.signal.aborted) {
-          abortController.abort();
-        }
-        // Clean up the listener to prevent memory leaks
-        socket.removeListener('close', onClientEnd);
-      };
-
-      // Listen on the socket's 'end' event (remote closed the connection)
-      socket.on('end', onClientEnd);
-
-      // It's also good practice to remove the listener if the task completes successfully
-      abortSignal.addEventListener('abort', () => {
-        socket.removeListener('end', onClientEnd);
-      });
-      logger.info(
-        `[CoderAgentExecutor] Socket close handler set up for task ${taskId}.`,
-      );
-    }
-
-    let wrapper: TaskWrapper | undefined = this.tasks.get(taskId);
-
-    if (wrapper) {
-      wrapper.task.eventBus = eventBus;
-      logger.info(`[CoderAgentExecutor] Task ${taskId} found in memory cache.`);
-    } else if (sdkTask) {
-      logger.info(
-        `[CoderAgentExecutor] Task ${taskId} found in TaskStore. Reconstructing...`,
-      );
-      try {
-        wrapper = await this.reconstruct(sdkTask, eventBus);
-      } catch (e) {
-        logger.error(
-          `[CoderAgentExecutor] Failed to hydrate task ${taskId}:`,
-          e,
-        );
-        const stateChange: StateChange = {
-          kind: CoderAgentEvent.StateChangeEvent,
-        };
-        eventBus.publish({
-          kind: 'status-update',
-          taskId,
-          contextId: sdkTask.contextId,
-          status: {
-            state: 'failed',
-            message: {
-              kind: 'message',
-              role: 'agent',
-              parts: [
-                {
-                  kind: 'text',
-                  text: 'Internal error: Task state lost or corrupted.',
-                },
-              ],
-              messageId: uuidv4(),
-              taskId,
-              contextId: sdkTask.contextId,
-            } as Message,
-          },
-          final: true,
-          metadata: { coderAgent: stateChange },
-        });
-        return;
-      }
-    } else {
-      logger.info(`[CoderAgentExecutor] Creating new task ${taskId}.`);
-      const agentSettings = userMessage.metadata?.[
-        'coderAgent'
-      ] as AgentSettings;
-      wrapper = await this.createTask(
-        taskId,
-        contextId as string,
-        agentSettings,
-        eventBus,
-      );
-      const newTaskSDK = wrapper.toSDKTask();
-      eventBus.publish({
-        ...newTaskSDK,
-        kind: 'task',
-        status: { state: 'submitted', timestamp: new Date().toISOString() },
-        history: [userMessage],
-      });
-      try {
-        await this.taskStore?.save(newTaskSDK);
-        logger.info(`[CoderAgentExecutor] New task ${taskId} saved to store.`);
-      } catch (saveError) {
-        logger.error(
-          `[CoderAgentExecutor] Failed to save new task ${taskId} to store:`,
-          saveError,
-        );
-      }
-    }
-
-    // Defensive check: TypeScript analysis shows wrapper is always defined at this point,
-    // but we keep this guard for runtime safety in case of unexpected code changes.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (!wrapper) {
-      logger.error(
-        `[CoderAgentExecutor] Task ${taskId} is unexpectedly undefined after load/create.`,
-      );
-      return;
-    }
+    const wrapper = await this.#resolveTaskWrapper(
+      taskId,
+      contextId,
+      userMessage,
+      sdkTask,
+      eventBus,
+    );
 
     const currentTask = wrapper.task;
 
@@ -447,7 +649,6 @@ export class CoderAgentExecutor implements AgentExecutor {
           `[CoderAgentExecutor] Processing user message ${userMessage.messageId} in secondary execution loop for task ${taskId}.`,
         );
       }
-      // End this execution-- the original/source will be resumed.
       return;
     }
 
@@ -457,156 +658,16 @@ export class CoderAgentExecutor implements AgentExecutor {
     this.executingTasks.add(taskId);
 
     try {
-      let agentTurnActive = true;
-      logger.info(`[CoderAgentExecutor] Task ${taskId}: Processing user turn.`);
-      let agentEvents = currentTask.acceptUserMessage(
+      await this.#processAgentTurnLoop(
+        currentTask,
         requestContext,
         abortSignal,
       );
-
-      while (agentTurnActive) {
-        logger.info(
-          `[CoderAgentExecutor] Task ${taskId}: Processing agent turn (LLM stream).`,
-        );
-        const toolCallRequests: ToolCallRequestInfo[] = [];
-        for await (const event of agentEvents) {
-          if (abortSignal.aborted) {
-            logger.warn(
-              `[CoderAgentExecutor] Task ${taskId}: Abort signal received during agent event processing.`,
-            );
-            throw new Error('Execution aborted');
-          }
-          if (event.type === GeminiEventType.ToolCallRequest) {
-            toolCallRequests.push(event.value);
-            continue;
-          }
-          await currentTask.acceptAgentMessage(event);
-        }
-
-        if (abortSignal.aborted) throw new Error('Execution aborted');
-
-        if (toolCallRequests.length > 0) {
-          logger.info(
-            `[CoderAgentExecutor] Task ${taskId}: Found ${toolCallRequests.length} tool call requests. Scheduling as a batch.`,
-          );
-          await currentTask.scheduleToolCalls(toolCallRequests, abortSignal);
-        }
-
-        logger.info(
-          `[CoderAgentExecutor] Task ${taskId}: Waiting for pending tools if any.`,
-        );
-        await currentTask.waitForPendingTools();
-        logger.info(
-          `[CoderAgentExecutor] Task ${taskId}: All pending tools completed or none were pending.`,
-        );
-
-        // Check abort signal after async operation - signal state may have changed.
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (abortSignal.aborted) throw new Error('Execution aborted');
-
-        const completedTools = currentTask.getAndClearCompletedTools();
-
-        if (completedTools.length > 0) {
-          // If all completed tool calls were canceled, manually add them to history and set state to input-required, final:true
-          if (completedTools.every((tool) => tool.status === 'cancelled')) {
-            logger.info(
-              `[CoderAgentExecutor] Task ${taskId}: All tool calls were cancelled. Updating history and ending agent turn.`,
-            );
-            currentTask.addToolResponsesToHistory(completedTools);
-            agentTurnActive = false;
-            const stateChange: StateChange = {
-              kind: CoderAgentEvent.StateChangeEvent,
-            };
-            currentTask.setTaskStateAndPublishUpdate(
-              'input-required',
-              stateChange,
-              undefined,
-              undefined,
-              true,
-            );
-          } else {
-            logger.info(
-              `[CoderAgentExecutor] Task ${taskId}: Found ${completedTools.length} completed tool calls. Sending results back to LLM.`,
-            );
-
-            agentEvents = currentTask.sendCompletedToolsToLlm(
-              completedTools,
-              abortSignal,
-            );
-            // Continue the loop to process the LLM response to the tool results.
-          }
-        } else {
-          logger.info(
-            `[CoderAgentExecutor] Task ${taskId}: No more tool calls to process. Ending agent turn.`,
-          );
-          agentTurnActive = false;
-        }
-      }
-
-      logger.info(
-        `[CoderAgentExecutor] Task ${taskId}: Agent turn finished, setting to input-required.`,
-      );
-      const stateChange: StateChange = {
-        kind: CoderAgentEvent.StateChangeEvent,
-      };
-      currentTask.setTaskStateAndPublishUpdate(
-        'input-required',
-        stateChange,
-        undefined,
-        undefined,
-        true,
-      );
     } catch (error) {
-      if (abortSignal.aborted) {
-        logger.warn(`[CoderAgentExecutor] Task ${taskId} execution aborted.`);
-        currentTask.cancelPendingTools('Execution aborted');
-        if (
-          currentTask.taskState !== 'canceled' &&
-          currentTask.taskState !== 'failed'
-        ) {
-          currentTask.setTaskStateAndPublishUpdate(
-            'input-required',
-            { kind: CoderAgentEvent.StateChangeEvent },
-            'Execution aborted by client.',
-            undefined,
-            true,
-          );
-        }
-      } else {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Agent execution error';
-        logger.error(
-          `[CoderAgentExecutor] Error executing agent for task ${taskId}:`,
-          error,
-        );
-        currentTask.cancelPendingTools(errorMessage);
-        if (currentTask.taskState !== 'failed') {
-          const stateChange: StateChange = {
-            kind: CoderAgentEvent.StateChangeEvent,
-          };
-          currentTask.setTaskStateAndPublishUpdate(
-            'failed',
-            stateChange,
-            errorMessage,
-            undefined,
-            true,
-          );
-        }
-      }
+      this.#handleExecutionError(currentTask, abortSignal, error);
     } finally {
       this.executingTasks.delete(taskId);
-      logger.info(
-        `[CoderAgentExecutor] Saving final state for task ${taskId}.`,
-      );
-      try {
-        await this.taskStore?.save(wrapper.toSDKTask());
-        logger.info(`[CoderAgentExecutor] Task ${taskId} state saved.`);
-      } catch (saveError) {
-        logger.error(
-          `[CoderAgentExecutor] Failed to save task ${taskId} state in finally block:`,
-          saveError,
-        );
-      }
+      await this.#saveFinalTaskState(wrapper);
     }
   }
 }
