@@ -20,6 +20,7 @@ import {
   type ToolCallConfirmationDetails,
   type SerializableConfirmationDetails,
   type ToolCall,
+  type AnsiOutput,
   type AnyDeclarativeTool,
 } from '@vybestack/llxprt-code-core';
 import type { ExecutionEventBus } from '@a2a-js/sdk/server';
@@ -467,7 +468,8 @@ export async function handleToolConfirmationPart(
 
     // Do not delete if modifying, a subsequent tool confirmation for the same
     // callId will be passed with ProceedOnce/Cancel/etc
-    // Note !== ToolConfirmationOutcome.ModifyWithEditor does not work!
+    // confirmationOutcome is the runtime wire value stored in pendingToolConfirmationDetails,
+    // so we compare against the literal used for ToolConfirmationOutcome.ModifyWithEditor.
     if (confirmationOutcome !== 'modify_with_editor') {
       context.pendingToolConfirmationDetails.delete(callId);
     }
@@ -725,9 +727,6 @@ export function convertAnsiOutputToString(
         .map((line) => line.map((token) => token.text).join(''))
         .join('\n');
 }
-
-// Import AnsiOutput type for convertAnsiOutputToString
-import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 
 /**
  * Creates a text message for the event bus.
