@@ -363,6 +363,20 @@ export default tseslint.config(
       'sonarjs/no-nested-functions': 'off', // Closures are idiomatic; nested-control-flow catches real issues
       'sonarjs/no-undefined-assignment': 'off', // TS uses undefined for optional properties (idiomatic)
 
+      // Issue #1569c: Misfit SonarJS style rules turned off as documented noise.
+      // These rules either conflict with Prettier, are pure stylistic preference,
+      // or produce high false-positive rates with no correctness value for this codebase.
+      'sonarjs/arrow-function-convention': 'off', // Conflicts with Prettier parens handling
+      'sonarjs/no-duplicate-string': 'off', // 3-occurrence threshold produces pure noise
+      'sonarjs/shorthand-property-grouping': 'off', // Pure ordering preference, no correctness value
+      'sonarjs/elseif-without-else': 'off', // Pure style; conflicts with early-return pattern
+      'sonarjs/max-union-size': 'off', // Discriminated unions legitimately exceed arbitrary limit
+      'sonarjs/no-alphabetical-sort': 'off', // Heuristic is false-positive prone on typed arrays
+      'sonarjs/prefer-regexp-exec': 'off', // String.match and RegExp.exec are both idiomatic
+      'sonarjs/function-name': 'off', // Conflicts with TS class/method naming conventions
+      'sonarjs/prefer-immediate-return': 'off', // Named intermediates improve readability/debuggability
+      'sonarjs/pseudo-random': 'off', // CLI context: Math.random for IDs/jitter, not cryptography
+
       // ESLint comments (recommended rules downgraded to warn)
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
