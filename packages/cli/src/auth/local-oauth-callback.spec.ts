@@ -126,6 +126,9 @@ describe('startLocalOAuthCallback', () => {
 
     const callbackPromise = server.waitForCallback();
 
+    // Capture the assertion promise first so we can advance timers before
+    // awaiting — the rejection only happens after timers tick forward.
+    // eslint-disable-next-line vitest/valid-expect -- promise is awaited on next line after timer advance
     const rejection = expect(callbackPromise).rejects.toThrowError(
       'OAuth callback timed out',
     );

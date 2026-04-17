@@ -215,7 +215,7 @@ export default tseslint.config(
         },
       ],
       '@typescript-eslint/consistent-type-imports': [
-        'warn',
+        'error',
         { prefer: 'type-imports' },
       ],
       '@typescript-eslint/switch-exhaustiveness-check': 'warn',
@@ -472,7 +472,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/*/src/**/*.test.{ts,tsx}'],
+    files: ['packages/*/src/**/*.{test,spec}.{ts,tsx}'],
     plugins: {
       vitest,
     },
