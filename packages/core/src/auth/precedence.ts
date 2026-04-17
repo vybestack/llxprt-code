@@ -156,8 +156,10 @@ function normalizeExpiry(expiry?: number | null): number | undefined {
   return expiry > 1_000_000_000_000 ? expiry : expiry * 1000;
 }
 
-function resolveProfileId(settingsService: SettingsService): string {
-  // Prefer explicit profile tracking, fall back to stored value or default.
+function resolveProfileId(settingsService: SettingsService): string | null {
+  // Prefer explicit profile tracking, fall back to stored value.
+  // IMPORTANT: Returning null means "no profile loaded" and callers must avoid
+  // passing a synthetic "default" profileId into OAuth metadata.
   const maybeGetName = (
     settingsService as {
       getCurrentProfileName?: () => string | null;
@@ -173,7 +175,7 @@ function resolveProfileId(settingsService: SettingsService): string {
   if (typeof currentProfile === 'string' && currentProfile.trim()) {
     return currentProfile.trim();
   }
-  return 'default';
+  return null;
 }
 
 function buildCacheKey(
@@ -690,6 +692,7 @@ export class AuthPrecedenceResolver {
     ) {
       const providerId = this.resolveProviderIdentifier(providerKey);
       const profileId = resolveProfileId(settingsService);
+      const profileScopeId = profileId ?? 'no-profile';
 
       let runtimeContext: ProviderRuntimeContext | null = null;
       let runtimeState: RuntimeScopedState | null = null;
@@ -740,7 +743,7 @@ export class AuthPrecedenceResolver {
             const cacheKey = buildCacheKey(
               runtimeState.runtimeAuthScopeId,
               providerId,
-              profileId,
+              profileScopeId,
             );
             if (runtimeState.entries.has(cacheKey)) {
               invalidateEntry(runtimeState, cacheKey, 'oauth-disabled');
@@ -754,7 +757,7 @@ export class AuthPrecedenceResolver {
         const cachedEntry = getValidCachedEntry(
           runtimeState,
           providerId,
-          profileId,
+          profileScopeId,
         );
         if (cachedEntry) {
           recordCacheHit(runtimeState);
@@ -768,7 +771,7 @@ export class AuthPrecedenceResolver {
         const requestMetadata: OAuthTokenRequestMetadata = {
           runtimeAuthScopeId: runtimeState?.runtimeAuthScopeId ?? 'no-runtime',
           providerId,
-          profileId,
+          profileId: profileId ?? undefined,
           cliScope:
             runtimeContext?.metadata &&
             typeof runtimeContext.metadata === 'object'
@@ -807,7 +810,7 @@ export class AuthPrecedenceResolver {
             storeRuntimeScopedToken(
               runtimeState,
               providerId,
-              profileId,
+              profileScopeId,
               token,
               oauthToken ?? null,
             );

@@ -14,7 +14,6 @@ import {
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { createAbortError } from '../utils/delay.js';
-import { nextStreamEventWithIdleTimeout } from '../utils/streamIdleTimeout.js';
 import type { IContent } from '../services/history/IContent.js';
 import type {
   GenerateChatOptions,
@@ -31,7 +30,10 @@ import {
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
 import { isSchemaDepthError } from './geminiChatTypes.js';
-import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
+import {
+  nextStreamEventWithIdleTimeout,
+  resolveStreamIdleTimeoutMs,
+} from '../utils/streamIdleTimeout.js';
 
 type ToolGroupArray = Array<{
   functionDeclarations: Array<{
@@ -251,21 +253,33 @@ export class DirectMessageProcessor {
     let lastBlockWasNonText = false;
     let aggregatedText = '';
 
+    // Resolve the effective idle timeout from config
+    const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
+      runtimeContext.config,
+    );
+
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
       while (true) {
-        const nextResponse = await nextStreamEventWithIdleTimeout({
-          iterator,
-          timeoutMs: TURN_STREAM_IDLE_TIMEOUT_MS,
-          signal: timeoutSignal,
-          onTimeout: () => {
-            if (upstreamAbortSignal?.aborted) {
-              return;
-            }
-            timeoutController.abort();
-          },
-          createTimeoutError: () => createAbortError(),
-        });
+        // Use watchdog if timeout > 0, otherwise call iterator.next() directly
+        let nextResponse: IteratorResult<IContent, unknown>;
+        if (effectiveTimeoutMs > 0) {
+          nextResponse = await nextStreamEventWithIdleTimeout({
+            iterator,
+            timeoutMs: effectiveTimeoutMs,
+            signal: timeoutSignal,
+            onTimeout: () => {
+              if (upstreamAbortSignal?.aborted) {
+                return;
+              }
+              timeoutController.abort();
+            },
+            createTimeoutError: () => createAbortError(),
+          });
+        } else {
+          // Watchdog disabled: call iterator.next() directly
+          nextResponse = await iterator.next();
+        }
         if (nextResponse.done) {
           break;
         }

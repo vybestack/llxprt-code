@@ -15,8 +15,9 @@ import { z } from 'zod';
 
 /**
  * Codex-specific OAuth configuration
+ * Exported for reuse by CLI and other consumers to ensure single source of truth
  */
-const CODEX_CONFIG = {
+export const CODEX_CONFIG = {
   clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
   issuer: 'https://auth.openai.com',
   tokenEndpoint: 'https://auth.openai.com/oauth/token',

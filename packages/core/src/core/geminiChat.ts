@@ -56,6 +56,7 @@ export {
 import type { StreamEvent } from './geminiChatTypes.js';
 import type { CompressionContext } from './compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
+import type { Config } from '../config/config.js';
 
 /**
  * Error thrown when agent execution is stopped by a hook.
@@ -491,5 +492,13 @@ export class GeminiChat {
 
   shouldCompress(pendingTokens?: number): boolean {
     return this.compressionHandler.shouldCompress(pendingTokens);
+  }
+
+  /**
+   * Returns the Config instance from the provider runtime.
+   * Used by Turn and other consumers to access ephemeral settings.
+   */
+  getConfig(): Config | undefined {
+    return this.runtimeContext.providerRuntime?.config;
   }
 }

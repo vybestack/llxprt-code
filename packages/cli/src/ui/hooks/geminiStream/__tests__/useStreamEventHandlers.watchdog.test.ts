@@ -130,7 +130,7 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     await Promise.resolve();
 
     await vi.advanceTimersByTimeAsync(
-      __testing.GEMINI_STREAM_IDLE_TIMEOUT_MS + 1,
+      __testing.DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1,
     );
 
     await runPromiseExpectation;
@@ -222,5 +222,342 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
       expect.objectContaining({ type: MessageType.ERROR }),
       expect.any(Number),
     );
+  });
+});
+
+describe('useStreamEventHandlers stream idle timeout behavioral tests', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    process.env = { ...originalEnv };
+    delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    process.env = originalEnv;
+  });
+
+  it('honors config setting: timeout fires after custom timeout from config.getEphemeralSetting', async () => {
+    const customTimeoutMs = 25_000; // 25 seconds
+
+    const mockConfigWithTimeout = {
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getMaxSessionTurns: vi.fn(() => 42),
+      getEphemeralSetting: vi.fn((key: string) => {
+        if (key === 'stream-idle-timeout-ms') {
+          return customTimeoutMs;
+        }
+        return undefined;
+      }),
+    } as unknown as Config;
+
+    const mockSettings = {
+      merged: { ui: { showCitations: false } },
+    } as LoadedSettings;
+
+    const mockAddItem = vi.fn();
+    const mockScheduleToolCalls = vi.fn().mockResolvedValue(undefined);
+    const abortActiveStream = vi.fn();
+    const setThought = vi.fn();
+    const setLastGeminiActivityTime = vi.fn();
+
+    const pendingHistoryItemRef = {
+      current: null as HistoryItemWithoutId | null,
+    };
+    const setPendingHistoryItem = vi.fn((value) => {
+      pendingHistoryItemRef.current =
+        typeof value === 'function'
+          ? value(pendingHistoryItemRef.current)
+          : value;
+    });
+    const thinkingBlocksRef = { current: [] as ThinkingBlock[] };
+    const turnCancelledRef = { current: false };
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const loopDetectedRef = { current: false };
+    const lastProfileNameRef = { current: undefined as string | undefined };
+
+    const { result } = renderHook(() =>
+      useStreamEventHandlers({
+        config: mockConfigWithTimeout,
+        settings: mockSettings,
+        addItem: mockAddItem,
+        onDebugMessage: vi.fn(),
+        onCancelSubmit: vi.fn(),
+        sanitizeContent: (text: string) => ({ text, blocked: false }),
+        flushPendingHistoryItem: vi.fn(),
+        pendingHistoryItemRef,
+        thinkingBlocksRef,
+        turnCancelledRef,
+        queuedSubmissionsRef,
+        setPendingHistoryItem,
+        setIsResponding: vi.fn(),
+        setThought,
+        setLastGeminiActivityTime,
+        scheduleToolCalls: mockScheduleToolCalls,
+        abortActiveStream,
+        handleShellCommand: vi.fn(() => false),
+        handleSlashCommand: vi.fn().mockResolvedValue(false),
+        logger: null,
+        shellModeActive: false,
+        loopDetectedRef,
+        lastProfileNameRef,
+      }),
+    );
+
+    const signalController = new AbortController();
+    const stalledStream =
+      (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Partial output',
+        };
+        await new Promise(() => {}); // Stalled
+      })();
+
+    const runPromise = result.current.processGeminiStreamEvents(
+      stalledStream,
+      123,
+      signalController.signal,
+    );
+
+    // Attach rejection handler before advancing timers to prevent unhandled rejection
+    const runRejection = runPromise.then(
+      () => {
+        throw new Error('Expected stalled stream to timeout');
+      },
+      (error) => {
+        expect(error).toMatchObject({
+          name: 'StreamIdleTimeoutError',
+        });
+      },
+    );
+
+    // Advance just under custom timeout - no timeout
+    await vi.advanceTimersByTimeAsync(24_999);
+    await Promise.resolve();
+    expect(abortActiveStream).not.toHaveBeenCalled();
+
+    // Advance past custom timeout
+    await vi.advanceTimersByTimeAsync(2);
+    await Promise.resolve();
+
+    await vi.runAllTimersAsync();
+    await runRejection;
+
+    expect(abortActiveStream).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it('disabled path: no timeout when setting is 0, even after extended period', async () => {
+    const mockConfigWithTimeout = {
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getMaxSessionTurns: vi.fn(() => 42),
+      getEphemeralSetting: vi.fn((key: string) => {
+        if (key === 'stream-idle-timeout-ms') {
+          return 0; // Disabled
+        }
+        return undefined;
+      }),
+    } as unknown as Config;
+
+    const mockSettings = {
+      merged: { ui: { showCitations: false } },
+    } as LoadedSettings;
+
+    const mockAddItem = vi.fn();
+    const mockScheduleToolCalls = vi.fn().mockResolvedValue(undefined);
+    const abortActiveStream = vi.fn();
+    const setThought = vi.fn();
+    const setLastGeminiActivityTime = vi.fn();
+
+    const pendingHistoryItemRef = {
+      current: null as HistoryItemWithoutId | null,
+    };
+    const setPendingHistoryItem = vi.fn();
+    const thinkingBlocksRef = { current: [] as ThinkingBlock[] };
+    const turnCancelledRef = { current: false };
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const loopDetectedRef = { current: false };
+    const lastProfileNameRef = { current: undefined as string | undefined };
+
+    let resolveIterator: () => void;
+    const iteratorPromise = new Promise<void>((resolve) => {
+      resolveIterator = resolve;
+    });
+
+    const { result } = renderHook(() =>
+      useStreamEventHandlers({
+        config: mockConfigWithTimeout,
+        settings: mockSettings,
+        addItem: mockAddItem,
+        onDebugMessage: vi.fn(),
+        onCancelSubmit: vi.fn(),
+        sanitizeContent: (text: string) => ({ text, blocked: false }),
+        flushPendingHistoryItem: vi.fn(),
+        pendingHistoryItemRef,
+        thinkingBlocksRef,
+        turnCancelledRef,
+        queuedSubmissionsRef,
+        setPendingHistoryItem,
+        setIsResponding: vi.fn(),
+        setThought,
+        setLastGeminiActivityTime,
+        scheduleToolCalls: mockScheduleToolCalls,
+        abortActiveStream,
+        handleShellCommand: vi.fn(() => false),
+        handleSlashCommand: vi.fn().mockResolvedValue(false),
+        logger: null,
+        shellModeActive: false,
+        loopDetectedRef,
+        lastProfileNameRef,
+      }),
+    );
+
+    const signalController = new AbortController();
+    const stalledStream =
+      (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Starting...',
+        };
+        await iteratorPromise; // Stalled until manually resolved
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Finally done',
+        };
+      })();
+
+    const runPromise = result.current.processGeminiStreamEvents(
+      stalledStream,
+      123,
+      signalController.signal,
+    );
+
+    // Advance 30 minutes - no timeout because watchdog disabled
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    await Promise.resolve();
+
+    // No timeout
+    expect(abortActiveStream).not.toHaveBeenCalled();
+
+    // Resolve the iterator to let the test complete
+    resolveIterator!();
+    await vi.runAllTimersAsync();
+    await runPromise;
+  });
+
+  it('env var precedence: env var overrides config setting', async () => {
+    const envTimeoutMs = 15_000; // 15 seconds from env
+    const configTimeoutMs = 60_000; // 60 seconds from config (ignored)
+
+    process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
+
+    const mockConfigWithTimeout = {
+      getModel: vi.fn(() => 'gemini-2.5-pro'),
+      getMaxSessionTurns: vi.fn(() => 42),
+      getEphemeralSetting: vi.fn((key: string) => {
+        if (key === 'stream-idle-timeout-ms') {
+          return configTimeoutMs;
+        }
+        return undefined;
+      }),
+    } as unknown as Config;
+
+    const mockSettings = {
+      merged: { ui: { showCitations: false } },
+    } as LoadedSettings;
+
+    const mockAddItem = vi.fn();
+    const mockScheduleToolCalls = vi.fn().mockResolvedValue(undefined);
+    const abortActiveStream = vi.fn();
+    const setThought = vi.fn();
+    const setLastGeminiActivityTime = vi.fn();
+
+    const pendingHistoryItemRef = {
+      current: null as HistoryItemWithoutId | null,
+    };
+    const setPendingHistoryItem = vi.fn((value) => {
+      pendingHistoryItemRef.current =
+        typeof value === 'function'
+          ? value(pendingHistoryItemRef.current)
+          : value;
+    });
+    const thinkingBlocksRef = { current: [] as ThinkingBlock[] };
+    const turnCancelledRef = { current: false };
+    const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
+    const loopDetectedRef = { current: false };
+    const lastProfileNameRef = { current: undefined as string | undefined };
+
+    const { result } = renderHook(() =>
+      useStreamEventHandlers({
+        config: mockConfigWithTimeout,
+        settings: mockSettings,
+        addItem: mockAddItem,
+        onDebugMessage: vi.fn(),
+        onCancelSubmit: vi.fn(),
+        sanitizeContent: (text: string) => ({ text, blocked: false }),
+        flushPendingHistoryItem: vi.fn(),
+        pendingHistoryItemRef,
+        thinkingBlocksRef,
+        turnCancelledRef,
+        queuedSubmissionsRef,
+        setPendingHistoryItem,
+        setIsResponding: vi.fn(),
+        setThought,
+        setLastGeminiActivityTime,
+        scheduleToolCalls: mockScheduleToolCalls,
+        abortActiveStream,
+        handleShellCommand: vi.fn(() => false),
+        handleSlashCommand: vi.fn().mockResolvedValue(false),
+        logger: null,
+        shellModeActive: false,
+        loopDetectedRef,
+        lastProfileNameRef,
+      }),
+    );
+
+    const signalController = new AbortController();
+    const stalledStream =
+      (async function* (): AsyncGenerator<ServerGeminiStreamEvent> {
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Partial output',
+        };
+        await vi.advanceTimersByTimeAsync(30_000);
+        yield {
+          type: ServerGeminiEventType.Content,
+          value: 'Late response',
+        };
+      })();
+
+    const runPromise = result.current.processGeminiStreamEvents(
+      stalledStream,
+      123,
+      signalController.signal,
+    );
+
+    // Attach rejection handler before advancing timers to prevent unhandled rejection
+    const runRejection = runPromise.then(
+      () => {
+        throw new Error('Expected stalled stream to timeout');
+      },
+      (error) => {
+        expect(error).toMatchObject({
+          name: 'StreamIdleTimeoutError',
+        });
+      },
+    );
+
+    // Advance past env timeout (15s) but before config timeout (60s)
+    await vi.advanceTimersByTimeAsync(20_000);
+    await Promise.resolve();
+
+    await vi.runAllTimersAsync();
+    await runRejection;
+
+    // Should have timed out at env value (15s), not config (60s)
+    expect(abortActiveStream).toHaveBeenCalledWith(expect.any(Error));
   });
 });

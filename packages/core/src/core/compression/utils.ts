@@ -18,9 +18,11 @@
 import type {
   ContentBlock,
   IContent,
+  MediaBlock,
   TextBlock,
 } from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
+import { classifyMediaBlock } from '../../providers/utils/mediaUtils.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -337,15 +339,40 @@ export async function runVerificationPass(
 }
 
 /**
- * Convert tool_call and tool_response blocks to plain text representations
- * so the compression request doesn't trip Anthropic's strict tool_use /
- * tool_result pairing validation.  Orphaned tool blocks (from interrupted
- * loops or the loop-detector halting mid-tool-call) would otherwise cause
- * 400 errors when sent to the LLM for summarisation.
+ * Convert a MediaBlock to a concise text placeholder for compression.
+ * This prevents provider-specific media types (like PDF "file" parts) from
+ * reaching the compression LLM call, which would cause 400 errors on providers
+ * that don't support certain media types.
+ *
+ * Format: [Attached <category>: <caption | filename | mimeType | unknown>]
+ * The identifier prefers caption for accessibility/context, then falls back to
+ * filename, mimeType, and finally "unknown".
+ */
+export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
+  const category = classifyMediaBlock(media);
+  // Prefer caption first (for accessibility/context), then filename, then mimeType, then 'unknown'
+  const identifier =
+    media.caption?.trim() ||
+    media.filename?.trim() ||
+    media.mimeType ||
+    'unknown';
+  // Capitalize PDF label for display, keep other categories as-is
+  const label = category === 'pdf' ? 'PDF' : category;
+  return `[Attached ${label}: ${identifier}]`;
+}
+
+/**
+ * Convert tool_call, tool_response, and media blocks to plain text representations
+ * so the compression request doesn't trip provider-specific validation errors.
+ *
+ * - Tool blocks: Anthropic's strict tool_use / tool_result pairing validation
+ *   would reject orphaned tool blocks (from interrupted loops).
+ * - Media blocks: Providers like Kimi don't support certain media types (e.g.,
+ *   PDF "file" parts) and would return 400 errors.
  *
  * Messages whose speaker is 'tool' are re-tagged as 'human' since they
- * no longer carry structural tool_result blocks.  All other block types
- * (text, thinking, code, media) pass through unchanged.
+ * no longer carry structural tool_result blocks. Messages with media blocks
+ * keep their original speaker since media is not speaker-specific.
  */
 export function sanitizeHistoryForCompression(
   messages: readonly IContent[],
@@ -354,7 +381,8 @@ export function sanitizeHistoryForCompression(
     const hasToolBlocks = msg.blocks.some(
       (b) => b.type === 'tool_call' || b.type === 'tool_response',
     );
-    if (!hasToolBlocks && msg.speaker !== 'tool') {
+    const hasMediaBlocks = msg.blocks.some((b) => b.type === 'media');
+    if (!hasToolBlocks && !hasMediaBlocks && msg.speaker !== 'tool') {
       return msg;
     }
 
@@ -388,6 +416,10 @@ export function sanitizeHistoryForCompression(
               text += '\nResult: [unserializable]';
             }
           }
+          return { type: 'text', text } as TextBlock;
+        }
+        if (block.type === 'media') {
+          const text = mediaBlockToCompressionPlaceholder(block);
           return { type: 'text', text } as TextBlock;
         }
         return block;

@@ -363,7 +363,7 @@ describe('AuthPrecedenceResolver', () => {
         'anthropic',
         expect.objectContaining({
           providerId: 'anthropic',
-          profileId: 'default',
+          profileId: undefined,
         }),
       );
     });

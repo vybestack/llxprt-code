@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { IContent } from '../../services/history/IContent.js';
+import type { IContent, MediaBlock } from '../../services/history/IContent.js';
 import {
   adjustForToolCallBoundary,
   findForwardValidSplitPoint,
@@ -63,6 +63,38 @@ function toolResponseMsg(
         result,
       },
     ],
+  };
+}
+function mediaBlock(
+  mimeType: string,
+  filename?: string,
+  data = 'base64data',
+  caption?: string,
+): MediaBlock {
+  return {
+    type: 'media',
+    mimeType,
+    filename,
+    data,
+    encoding: 'base64',
+    caption,
+  };
+}
+
+function humanMsgWithMedia(
+  text: string,
+  ...mediaBlocks: MediaBlock[]
+): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text }, ...mediaBlocks],
+  };
+}
+
+function humanMsgOnlyMedia(...mediaBlocks: MediaBlock[]): IContent {
+  return {
+    speaker: 'human',
+    blocks: mediaBlocks,
   };
 }
 
@@ -619,5 +651,186 @@ describe('sanitizeHistoryForCompression', () => {
     };
     const result = sanitizeHistoryForCompression([msg]);
     expect(result[0].speaker).toBe('human');
+  });
+
+  // Media block tests (Issue #1875)
+  it('converts media blocks to text placeholders with filename', () => {
+    const history = [
+      humanMsgOnlyMedia(mediaBlock('application/pdf', 'document.pdf')),
+    ];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].speaker).toBe('human');
+    expect(result[0].blocks).toHaveLength(1);
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached PDF: document.pdf]',
+    );
+  });
+
+  it('converts media blocks to text placeholders using mimeType when no filename', () => {
+    const history = [humanMsgOnlyMedia(mediaBlock('image/png'))];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: image/png]',
+    );
+  });
+
+  it('converts media blocks with empty filename to text placeholders using mimeType', () => {
+    const history = [humanMsgOnlyMedia(mediaBlock('image/png', ''))];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: image/png]',
+    );
+  });
+
+  it('handles different media categories (image, pdf, audio, video, unknown)', () => {
+    const imageBlock = mediaBlock('image/jpeg', 'photo.jpg');
+    const pdfBlock = mediaBlock('application/pdf', 'report.pdf');
+    const audioBlock = mediaBlock('audio/mp3', 'song.mp3');
+    const videoBlock = mediaBlock('video/mp4', 'movie.mp4');
+    const unknownBlock = mediaBlock('application/octet-stream', 'data.bin');
+
+    const history = [
+      humanMsgOnlyMedia(
+        imageBlock,
+        pdfBlock,
+        audioBlock,
+        videoBlock,
+        unknownBlock,
+      ),
+    ];
+    const result = sanitizeHistoryForCompression(history);
+    const texts = result[0].blocks.map((b) => (b as { text: string }).text);
+
+    expect(texts).toContain('[Attached image: photo.jpg]');
+    expect(texts).toContain('[Attached PDF: report.pdf]');
+    expect(texts).toContain('[Attached audio: song.mp3]');
+    expect(texts).toContain('[Attached video: movie.mp4]');
+    expect(texts).toContain('[Attached unknown: data.bin]');
+  });
+
+  it('handles mixed content with text + media blocks in same message', () => {
+    const history = [
+      humanMsgWithMedia(
+        'Please analyze this document',
+        mediaBlock('application/pdf', 'report.pdf'),
+      ),
+    ];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result[0].blocks).toHaveLength(2);
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      'Please analyze this document',
+    );
+    expect(result[0].blocks[1].type).toBe('text');
+    expect((result[0].blocks[1] as { text: string }).text).toBe(
+      '[Attached PDF: report.pdf]',
+    );
+  });
+
+  it('converts messages with only media blocks properly', () => {
+    const history = [
+      humanMsgOnlyMedia(mediaBlock('image/png', 'screenshot.png')),
+    ];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].speaker).toBe('human');
+    expect(result[0].blocks).toHaveLength(1);
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: screenshot.png]',
+    );
+  });
+
+  it('does not change speaker for media block messages (unlike tool messages)', () => {
+    // Media blocks keep original speaker, only tool messages get re-tagged
+    const msg: IContent = {
+      speaker: 'ai',
+      blocks: [mediaBlock('image/jpeg', 'photo.jpg')],
+    };
+    const result = sanitizeHistoryForCompression([msg]);
+    expect(result[0].speaker).toBe('ai'); // unchanged
+    expect(result[0].blocks[0].type).toBe('text');
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: photo.jpg]',
+    );
+  });
+
+  it('handles mixed tool and media blocks in same message', () => {
+    const msg: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'text', text: 'Analyzing file and document' },
+        mediaBlock('application/pdf', 'document.pdf'),
+        {
+          type: 'tool_call',
+          id: 'c1',
+          name: 'read_file',
+          parameters: { path: '/tmp/test' },
+        },
+      ],
+    };
+    const result = sanitizeHistoryForCompression([msg]);
+    expect(result[0].blocks).toHaveLength(3);
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      'Analyzing file and document',
+    );
+    expect((result[0].blocks[1] as { text: string }).text).toBe(
+      '[Attached PDF: document.pdf]',
+    );
+    expect((result[0].blocks[2] as { text: string }).text).toContain(
+      '[Tool Call: read_file]',
+    );
+  });
+
+  it('prefers media caption over filename in compression placeholders', () => {
+    const history = [
+      humanMsgOnlyMedia(
+        mediaBlock(
+          'image/png',
+          'diagram.png',
+          'base64data',
+          'Architecture diagram',
+        ),
+      ),
+    ];
+    const result = sanitizeHistoryForCompression(history);
+    expect(result).toHaveLength(1);
+    expect(result[0].blocks).toHaveLength(1);
+    expect((result[0].blocks[0] as { text: string }).text).toBe(
+      '[Attached image: Architecture diagram]',
+    );
+  });
+
+  it('re-tags tool speaker to human and placeholderizes media blocks in tool messages', () => {
+    const msg: IContent = {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'c1',
+          toolName: 'read_file',
+          result: 'file contents here',
+        },
+        mediaBlock('image/png', 'screenshot.png'),
+      ],
+    };
+    const result = sanitizeHistoryForCompression([msg]);
+    expect(result[0].speaker).toBe('human');
+    expect(result[0].blocks).toHaveLength(2);
+    expect((result[0].blocks[0] as { text: string }).text).toContain(
+      '[Tool Result: read_file]',
+    );
+    expect((result[0].blocks[0] as { text: string }).text).toContain(
+      'file contents here',
+    );
+    expect((result[0].blocks[1] as { text: string }).text).toBe(
+      '[Attached image: screenshot.png]',
+    );
   });
 });

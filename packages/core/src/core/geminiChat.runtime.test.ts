@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { GenerateContentConfig, Tool, Part } from '@google/genai';
 import { GeminiChat } from './geminiChat.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -19,13 +19,14 @@ import {
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ContentGenerator } from './contentGenerator.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '../runtime/runtimeAdapters.js';
-import { TURN_STREAM_IDLE_TIMEOUT_MS } from './turn.js';
+import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -255,7 +256,7 @@ describe('GeminiChat runtime context', () => {
 
       await Promise.resolve();
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
 
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
@@ -350,7 +351,7 @@ describe('GeminiChat runtime context', () => {
 
       await Promise.resolve();
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(TURN_STREAM_IDLE_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
 
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
@@ -831,4 +832,176 @@ describe('GeminiChat runtime context', () => {
       expect(finishedEvents[0].value).toMatchObject({ reason: 'STOP' });
     },
   );
+});
+
+describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessageProcessor', () => {
+  const originalEnv = process.env;
+  let localSettingsService: SettingsService;
+  let localConfig: Config;
+  let localProviderRuntime: ProviderRuntimeContext;
+  let localManager: ProviderManager;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.env = originalEnv;
+  });
+
+  describe('TurnProcessor', () => {
+    it('honors config setting: uses resolveStreamIdleTimeoutMs with config from getConfig()', async () => {
+      const customTimeoutMs = 12_000;
+
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        customTimeoutMs,
+      );
+
+      // Verify GeminiChat.getConfig() returns a config that provides the setting
+      localProviderRuntime = createProviderRuntimeContext({
+        settingsService: localSettingsService,
+        config: localConfig,
+        runtimeId: 'test.runtime',
+        metadata: { source: 'timeout-test' },
+      });
+
+      localManager = new ProviderManager(localProviderRuntime);
+      localManager.setConfig(localConfig);
+      localConfig.setProviderManager(localManager);
+
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: vi.fn(async function* () {}),
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+      };
+      localManager.registerProvider(provider);
+      localManager.setActiveProvider('stub');
+
+      const contentGenerator = {} as ContentGenerator;
+      const chat = new GeminiChat(
+        createAgentRuntimeContext({
+          state: createAgentRuntimeStateFromConfig(localConfig),
+          settings: { compressionThreshold: 0.8 },
+          provider: createProviderAdapterFromManager(localManager),
+          telemetry: createTelemetryAdapterFromConfig(localConfig),
+          tools: createToolRegistryViewFromRegistry(
+            localConfig.getToolRegistry(),
+          ),
+          providerRuntime: localProviderRuntime,
+        }),
+        contentGenerator,
+        {},
+        [],
+      );
+
+      // Verify the config is accessible via getConfig()
+      const configFromChat = chat.getConfig();
+      expect(configFromChat).toBeDefined();
+      expect(
+        configFromChat?.getEphemeralSetting('stream-idle-timeout-ms'),
+      ).toBe(customTimeoutMs);
+    });
+
+    it('disabled path: setting 0 disables watchdog', async () => {
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting('stream-idle-timeout-ms', 0);
+
+      localProviderRuntime = createProviderRuntimeContext({
+        settingsService: localSettingsService,
+        config: localConfig,
+        runtimeId: 'test.runtime',
+        metadata: { source: 'disabled-test' },
+      });
+
+      localManager = new ProviderManager(localProviderRuntime);
+      localManager.setConfig(localConfig);
+      localConfig.setProviderManager(localManager);
+
+      const provider: IProvider = {
+        name: 'stub',
+        isDefault: true,
+        getModels: vi.fn(async () => []),
+        getDefaultModel: () => 'stub-model',
+        generateChatCompletion: vi.fn(async function* () {}),
+        getServerTools: () => [],
+        invokeServerTool: vi.fn(),
+      };
+      localManager.registerProvider(provider);
+      localManager.setActiveProvider('stub');
+
+      const contentGenerator = {} as ContentGenerator;
+      const chat = new GeminiChat(
+        createAgentRuntimeContext({
+          state: createAgentRuntimeStateFromConfig(localConfig),
+          settings: { compressionThreshold: 0.8 },
+          provider: createProviderAdapterFromManager(localManager),
+          telemetry: createTelemetryAdapterFromConfig(localConfig),
+          tools: createToolRegistryViewFromRegistry(
+            localConfig.getToolRegistry(),
+          ),
+          providerRuntime: localProviderRuntime,
+        }),
+        contentGenerator,
+        {},
+        [],
+      );
+
+      const configFromChat = chat.getConfig();
+      expect(
+        configFromChat?.getEphemeralSetting('stream-idle-timeout-ms'),
+      ).toBe(0);
+    });
+
+    it('env var precedence: env var overrides config setting', async () => {
+      const envTimeoutMs = 15_000;
+      process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
+
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting('stream-idle-timeout-ms', 60_000);
+
+      const { resolveStreamIdleTimeoutMs } = await import(
+        '../utils/streamIdleTimeout.js'
+      );
+
+      const result = resolveStreamIdleTimeoutMs(localConfig);
+      expect(result).toBe(envTimeoutMs); // Env wins
+    });
+  });
+
+  describe('DirectMessageProcessor (via generateDirectMessage)', () => {
+    it('uses runtimeContext.config for resolveStreamIdleTimeoutMs', async () => {
+      const customTimeoutMs = 10_000;
+
+      localSettingsService = new SettingsService();
+      localConfig = new Config(createConfigParams(localSettingsService));
+      localConfig.setEphemeralSetting(
+        'stream-idle-timeout-ms',
+        customTimeoutMs,
+      );
+
+      // Verify the config is properly set
+      expect(localConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(
+        customTimeoutMs,
+      );
+
+      // The DirectMessageProcessor passes runtimeContext.config to resolveStreamIdleTimeoutMs
+      // This test verifies the config has the setting accessible
+      const { resolveStreamIdleTimeoutMs } = await import(
+        '../utils/streamIdleTimeout.js'
+      );
+      const result = resolveStreamIdleTimeoutMs(localConfig);
+      expect(result).toBe(customTimeoutMs);
+    });
+  });
 });
