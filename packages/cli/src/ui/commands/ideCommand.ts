@@ -6,19 +6,19 @@
 
 import * as path from 'node:path';
 import {
-  Config,
+  type Config,
   IDEConnectionStatus,
   IDE_DEFINITIONS,
   getIdeInstaller,
-  IdeClient,
+  type IdeClient,
   type File,
   ideContext,
   LLXPRT_CODE_COMPANION_EXTENSION_NAME,
 } from '@vybestack/llxprt-code-core';
 import {
-  CommandContext,
-  SlashCommand,
-  SlashCommandActionReturn,
+  type CommandContext,
+  type SlashCommand,
+  type SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
 import { SettingScope } from '../../config/settings.js';

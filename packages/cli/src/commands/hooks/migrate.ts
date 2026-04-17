@@ -8,7 +8,7 @@ import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
 import {
-  HookEventName,
+  type HookEventName,
   type HookDefinition,
   debugLogger,
 } from '@vybestack/llxprt-code-core';

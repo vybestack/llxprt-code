@@ -24,7 +24,7 @@ import {
   type OAuthManager as CoreOAuthManager,
   SettingsService,
   ProfileManager,
-  Profile,
+  type Profile,
   SecureStore,
   type KeyringAdapter,
 } from '@vybestack/llxprt-code-core';

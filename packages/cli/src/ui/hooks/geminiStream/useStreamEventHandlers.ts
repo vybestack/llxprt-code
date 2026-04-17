@@ -13,15 +13,15 @@
 import type React from 'react';
 import { useCallback } from 'react';
 import {
-  Config,
+  type Config,
   GeminiEventType as ServerGeminiEventType,
-  ServerGeminiStreamEvent as GeminiEvent,
-  ServerGeminiContentEvent as ContentEvent,
-  ServerGeminiErrorEvent as ErrorEvent,
-  ServerGeminiChatCompressedEvent,
-  ServerGeminiFinishedEvent,
+  type ServerGeminiStreamEvent as GeminiEvent,
+  type ServerGeminiContentEvent as ContentEvent,
+  type ServerGeminiErrorEvent as ErrorEvent,
+  type ServerGeminiChatCompressedEvent,
+  type ServerGeminiFinishedEvent,
   MessageSenderType,
-  ToolCallRequestInfo,
+  type ToolCallRequestInfo,
   logUserPrompt,
   UserPromptEvent,
   parseAndFormatApiError,
@@ -34,19 +34,19 @@ import {
   type ThoughtSummary,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
-import { LoadedSettings } from '../../../config/settings.js';
+import { type LoadedSettings } from '../../../config/settings.js';
 import {
-  HistoryItem,
-  HistoryItemWithoutId,
-  HistoryItemToolGroup,
-  HistoryItemGemini,
-  HistoryItemGeminiContent,
+  type HistoryItem,
+  type HistoryItemWithoutId,
+  type HistoryItemToolGroup,
+  type HistoryItemGemini,
+  type HistoryItemGeminiContent,
   MessageType,
-  SlashCommandProcessorResult,
+  type SlashCommandProcessorResult,
   ToolCallStatus,
 } from '../../types.js';
 import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
-import { UseHistoryManagerReturn } from '../useHistoryManager.js';
+import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import {
   SYSTEM_NOTICE_EVENT,
   showCitations,

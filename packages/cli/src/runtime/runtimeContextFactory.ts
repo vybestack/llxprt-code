@@ -14,7 +14,7 @@ import * as path from 'node:path';
 
 import {
   Config,
-  KeyringTokenStore,
+  type KeyringTokenStore,
   ProviderManager,
   SettingsService,
   MessageBus,

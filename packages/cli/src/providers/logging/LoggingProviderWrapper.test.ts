@@ -6,9 +6,9 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  IProvider,
-  IContent,
-  ITool,
+  type IProvider,
+  type IContent,
+  type ITool,
   type Config,
 } from '@vybestack/llxprt-code-core';
 

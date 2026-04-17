@@ -29,7 +29,7 @@ import {
   SessionRecordingService,
   SessionDiscovery,
   SessionLockManager,
-  RecordingIntegration,
+  type RecordingIntegration,
   type SessionRecordingServiceConfig,
   type IContent,
   type LockHandle,

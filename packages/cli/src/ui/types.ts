@@ -5,10 +5,10 @@
  */
 
 import {
-  CompressionStatus,
-  GeminiCLIExtension,
-  ToolCallConfirmationDetails,
-  ToolResultDisplay,
+  type CompressionStatus,
+  type GeminiCLIExtension,
+  type ToolCallConfirmationDetails,
+  type ToolResultDisplay,
   type ThinkingBlock,
   type SkillDefinition,
   type SkillSource,

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
 import {
-  Config,
+  type Config,
   FileDiscoveryService,
   GlobTool,
   type MessageBus,

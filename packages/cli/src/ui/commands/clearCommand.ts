@@ -5,14 +5,18 @@
  */
 
 import {
-  GeminiClient,
+  type GeminiClient,
   uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
 } from '@vybestack/llxprt-code-core';
-import { CommandKind, SlashCommand, type CommandContext } from './types.js';
+import {
+  CommandKind,
+  type SlashCommand,
+  type CommandContext,
+} from './types.js';
 import { getCliRuntimeServices } from '../../runtime/runtimeSettings.js';
 
 function resolveForegroundGeminiClient(

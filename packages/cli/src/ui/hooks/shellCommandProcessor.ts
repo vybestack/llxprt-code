@@ -5,22 +5,22 @@
  */
 
 import {
-  HistoryItemWithoutId,
-  IndividualToolCallDisplay,
+  type HistoryItemWithoutId,
+  type IndividualToolCallDisplay,
   ToolCallStatus,
 } from '../types.js';
 import { useCallback, useState } from 'react';
 import {
-  Config,
-  GeminiClient,
+  type Config,
+  type GeminiClient,
   isBinary,
-  ShellExecutionResult,
+  type ShellExecutionResult,
   ShellExecutionService,
   DEFAULT_AGENT_ID,
   type AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
+import { type UseHistoryManagerReturn } from './useHistoryManager.js';
 import { SHELL_COMMAND_NAME } from '../constants.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import crypto from 'crypto';

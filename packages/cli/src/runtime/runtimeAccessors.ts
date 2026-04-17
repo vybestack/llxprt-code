@@ -18,7 +18,7 @@
  */
 
 import {
-  Config,
+  type Config,
   DebugLogger,
   SettingsService,
   type ProviderManager,
@@ -28,7 +28,7 @@ import {
   getProviderConfigKeys,
   type HydratedModel,
 } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import { type OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
 import {

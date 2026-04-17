@@ -25,7 +25,7 @@ import * as os from 'node:os';
 import {
   SessionRecordingService,
   SessionLockManager,
-  RecordingIntegration,
+  type RecordingIntegration,
   type LockHandle,
   type SessionRecordingServiceConfig,
   type SessionRecordLine,

@@ -5,7 +5,7 @@
  */
 
 import {
-  Config,
+  type Config,
   ProviderManager,
   OpenAIProvider,
   OpenAIResponsesProvider,
@@ -15,17 +15,17 @@ import {
   FakeProvider,
   sanitizeForByteString,
   needsSanitization,
-  SettingsService,
+  type SettingsService,
   getSettingsService,
   DebugLogger,
   debugLogger,
-  MessageBus,
+  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
-import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
+import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import {
-  Settings,
+  type Settings,
   LoadedSettings,
   USER_SETTINGS_PATH,
   type MergedSettings,
@@ -35,9 +35,9 @@ import { OAuthManager } from '../auth/oauth-manager.js';
 import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { createTokenStore } from '../auth/proxy/credential-store-factory.js';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import { type HistoryItemWithoutId } from '../ui/types.js';
 
-import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
+import { type IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasEntry,

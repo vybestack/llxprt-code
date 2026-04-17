@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import type React from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TodoStore,
-  Todo,
+  type Todo,
   todoEvents,
   type TodoUpdateEvent,
   DEFAULT_AGENT_ID,

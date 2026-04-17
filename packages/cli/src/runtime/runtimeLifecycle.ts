@@ -17,7 +17,7 @@
  */
 
 import {
-  Config,
+  type Config,
   DebugLogger,
   type SettingsService,
   type ProfileManager,
@@ -26,7 +26,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import { type OAuthManager } from '../auth/oauth-manager.js';
 import { registerProviderManagerSingleton } from '../providers/providerManagerInstance.js';
 import {
   type IsolatedRuntimeActivationOptions,
