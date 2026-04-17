@@ -275,7 +275,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   private async attemptRefreshBeforeBrowser(
     providerName: string,
     bucket: string | undefined,
-    diskToken: import('./types.js').OAuthToken | undefined,
+    diskToken: OAuthToken | undefined,
   ): Promise<boolean> {
     if (
       !diskToken ||

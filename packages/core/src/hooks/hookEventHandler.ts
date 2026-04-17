@@ -43,6 +43,11 @@ import {
 import { coreEvents } from '../utils/events.js';
 import { logHookCall } from '../telemetry/loggers.js';
 import { HookCallEvent } from '../telemetry/types.js';
+import type {
+  MessageBusType,
+  MessageBusMessage,
+} from '../confirmation-bus/types.js';
+import type { HookExecutionResponse } from './hookBusContracts.js';
 
 const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
@@ -155,7 +160,7 @@ export class HookEventHandler {
     // @pseudocode message-bus-integration.md lines 54-55
     if (this.messageBus !== undefined) {
       const unsubscribeFn = this.messageBus.subscribe(
-        'HOOK_EXECUTION_REQUEST' as import('../confirmation-bus/types.js').MessageBusType,
+        'HOOK_EXECUTION_REQUEST' as MessageBusType,
         (msg: unknown) => {
           void this.onBusRequest(msg);
         },
@@ -874,16 +879,14 @@ export class HookEventHandler {
    * @requirement DELTA-HEVT-002
    * @pseudocode message-bus-integration.md lines 120-123
    */
-  private publishResponse = (
-    response: import('./hookBusContracts.js').HookExecutionResponse,
-  ): void => {
+  private publishResponse = (response: HookExecutionResponse): void => {
     // Line 121: CALL this.messageBus.publish('HOOK_EXECUTION_RESPONSE', response)
     // Note: HOOK_EXECUTION_RESPONSE is a hook-specific message type not yet in
     // the MessageBusMessage union; cast through unknown for now
     this.messageBus?.publish({
       type: 'HOOK_EXECUTION_RESPONSE',
       payload: response,
-    } as unknown as import('../confirmation-bus/types.js').MessageBusMessage);
+    } as unknown as MessageBusMessage);
   };
 
   /**

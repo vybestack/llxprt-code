@@ -498,6 +498,10 @@ export default tseslint.config(
 
       // Relax complexity rules for test files
       'max-lines-per-function': 'off',
+
+      // Test files use `typeof import('pkg')` for vi mock typing; it's idiomatic.
+      '@typescript-eslint/consistent-type-imports': 'off',
+
     },
   },
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.

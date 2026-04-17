@@ -9,14 +9,20 @@ import type { ToolRegistry } from '../tools/tool-registry.js';
 import type { CallableTool, Tool, Part, FunctionCall } from '@google/genai';
 import type { Config } from './config.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import type { LspConfig } from '../lsp/types.js';
+import type { LspServiceClient } from '../lsp/lsp-service-client.js';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { Readable, Writable } from 'node:stream';
+import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 
 export interface LspState {
-  lspConfig?: import('../lsp/types.js').LspConfig;
-  lspServiceClient?: import('../lsp/lsp-service-client.js').LspServiceClient;
-  lspMcpClient?: import('@modelcontextprotocol/sdk/client/index.js').Client;
-  lspMcpTransport?: import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
+  lspConfig?: LspConfig;
+  lspServiceClient?: LspServiceClient;
+  lspMcpClient?: Client;
+  lspMcpTransport?: Transport;
 }
 
 /** Narrow interface for LSP integration — avoids full Config dependency */
@@ -94,8 +100,8 @@ export async function initializeLsp(
  * Returns undefined if disabled, LspConfig if enabled.
  */
 export function parseLspConfig(
-  lsp: boolean | import('../lsp/types.js').LspConfig | undefined,
-): import('../lsp/types.js').LspConfig | undefined {
+  lsp: boolean | LspConfig | undefined,
+): LspConfig | undefined {
   if (lsp === false || lsp === undefined) {
     return undefined;
   }
@@ -112,15 +118,10 @@ async function registerMcpNavigationTools(
   state: LspState,
   host: LspHost,
   streams: {
-    readable: import('node:stream').Readable;
-    writable: import('node:stream').Writable;
+    readable: Readable;
+    writable: Writable;
   },
 ): Promise<void> {
-  type JSONRPCMessage =
-    import('@modelcontextprotocol/sdk/types.js').JSONRPCMessage;
-  type Transport =
-    import('@modelcontextprotocol/sdk/shared/transport.js').Transport;
-
   const registry = host.getToolRegistry();
 
   const cleanup = async () => {
@@ -259,7 +260,7 @@ async function registerMcpNavigationTools(
 
     class LspNavigationCallableTool implements CallableTool {
       constructor(
-        private readonly mcpClient: import('@modelcontextprotocol/sdk/client/index.js').Client,
+        private readonly mcpClient: Client,
         private readonly toolDef: {
           name: string;
           description?: string;

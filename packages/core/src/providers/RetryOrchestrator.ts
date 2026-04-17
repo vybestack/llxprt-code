@@ -42,6 +42,7 @@ import {
 import { delay, createAbortError } from '../utils/delay.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { AllBucketsExhaustedError } from './errors.js';
+import type { OnAuthErrorHandler } from '../config/configTypes.js';
 
 export interface RetryOrchestratorConfig {
   /** Maximum retry attempts (default: 6) */
@@ -646,7 +647,7 @@ export class RetryOrchestrator implements IProvider {
    */
   private getOnAuthErrorHandler(
     options: GenerateChatOptions,
-  ): import('../config/configTypes.js').OnAuthErrorHandler | undefined {
+  ): OnAuthErrorHandler | undefined {
     return (
       options.runtime?.config?.getOnAuthErrorHandler?.() ??
       options.config?.getOnAuthErrorHandler?.()

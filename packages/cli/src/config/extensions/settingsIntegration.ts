@@ -13,6 +13,7 @@ import {
 import {
   EXTENSIONS_CONFIG_FILENAME,
   EXTENSIONS_CONFIG_FILENAME_FALLBACK,
+  type ExtensionSetting as ExtensionConfigSetting,
 } from '../extension.js';
 import { ExtensionSettingsStorage } from './settingsStorage.js';
 import { maybePromptForSettings } from './settingsPrompt.js';
@@ -336,7 +337,7 @@ export async function getEnvContents(
 export async function getMissingSettings(
   extensionName: string,
   extensionDir: string,
-): Promise<Array<import('../extension.js').ExtensionSetting>> {
+): Promise<ExtensionConfigSetting[]> {
   const settings = loadExtensionSettingsFromManifest(extensionDir);
 
   if (settings.length === 0) {
@@ -345,7 +346,7 @@ export async function getMissingSettings(
 
   // Get existing settings from both scopes
   const existingSettings = await getExtensionEnvironment(extensionDir);
-  const missingSettings: Array<import('../extension.js').ExtensionSetting> = [];
+  const missingSettings: ExtensionConfigSetting[] = [];
 
   for (const setting of settings) {
     if (

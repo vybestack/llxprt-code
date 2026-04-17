@@ -45,7 +45,7 @@ import type { IProvider } from '../providers/IProvider.js';
 import { initializeTestConfig } from '../test-utils/config.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import type { ToolRegistry } from '../tools/tool-registry.js';
+import { ToolRegistry } from '../tools/tool-registry.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import type {
   Content,

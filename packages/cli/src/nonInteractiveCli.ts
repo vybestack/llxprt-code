@@ -551,7 +551,7 @@ export async function runNonInteractive({
                 requestInfo: ToolCallRequestInfo,
                 abortSignal: AbortSignal,
                 dependencies: {
-                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                  messageBus?: MessageBus;
                 },
               ) => Promise<Awaited<ReturnType<typeof executeToolCall>>>)
           )(config, requestInfo, abortController.signal, {

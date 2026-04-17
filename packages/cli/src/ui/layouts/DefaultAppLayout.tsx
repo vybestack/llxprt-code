@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, type DOMElement, Static, Text } from 'ink';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, MessageBus } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -416,7 +416,7 @@ export const DefaultAppLayout = ({
               messageBus={
                 (
                   getCliRuntimeContext() as {
-                    messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                    messageBus?: MessageBus;
                   }
                 ).messageBus
               }
@@ -584,7 +584,7 @@ export const DefaultAppLayout = ({
             messageBus={
               (
                 getCliRuntimeContext() as {
-                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                  messageBus?: MessageBus;
                 }
               ).messageBus
             }

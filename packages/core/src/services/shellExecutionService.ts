@@ -21,6 +21,8 @@ import {
   type AnsiOutput,
 } from '../utils/terminalSerializer.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import type { EnvironmentSanitizationConfig } from './environmentSanitization.js';
+
 const { Terminal } = pkg;
 
 const shellDebug = new DebugLogger('llxprt:shell:render');
@@ -100,7 +102,7 @@ export interface ShellExecutionConfig {
   scrollback?: number;
   inactivityTimeoutMs?: number;
   isSandboxOrCI?: boolean;
-  sanitizationConfig?: import('./environmentSanitization.js').EnvironmentSanitizationConfig;
+  sanitizationConfig?: EnvironmentSanitizationConfig;
 }
 
 export type ShellOutputEvent =

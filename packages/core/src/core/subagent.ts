@@ -11,11 +11,7 @@
  */
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { Config } from '../config/config.js';
-import {
-  type ToolCallRequestInfo,
-  GeminiEventType,
-  Turn,
-} from './turn.js';
+import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '../utils/delay.js';
 import {
@@ -28,7 +24,11 @@ import {
   type FunctionCall,
   type FunctionDeclaration,
 } from '@google/genai';
-import { StreamEventType, type StreamEvent } from './geminiChat.js';
+import {
+  StreamEventType,
+  type StreamEvent,
+  type GeminiChat,
+} from './geminiChat.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
@@ -82,6 +82,7 @@ import {
   type ModelConfig,
   type RunConfig,
 } from './subagentTypes.js';
+import type { ContentGenerator } from './contentGenerator.js';
 
 // Types, interfaces, enums, and ContextState are now in subagentTypes.ts
 // Runtime setup helpers are now in subagentRuntimeSetup.ts
@@ -122,7 +123,7 @@ export class SubAgentScope {
     private readonly modelConfig: ModelConfig,
     private readonly runConfig: RunConfig,
     private readonly promptConfig: PromptConfig,
-    private readonly contentGenerator: import('./contentGenerator.js').ContentGenerator,
+    private readonly contentGenerator: ContentGenerator,
     private readonly toolExecutorContext: ToolExecutionConfig,
     private readonly environmentContextLoader: EnvironmentContextLoader,
     private readonly config: Config,
@@ -429,7 +430,7 @@ export class SubAgentScope {
   }
 
   private async runInteractiveTurn(
-    chat: import('./geminiChat.js').GeminiChat,
+    chat: GeminiChat,
     currentMessages: Content[],
     abortController: AbortController,
     turnIndex: number,
@@ -660,7 +661,7 @@ export class SubAgentScope {
   }
 
   private async runNonInteractiveTurn(
-    chat: import('./geminiChat.js').GeminiChat,
+    chat: GeminiChat,
     currentMessages: Content[],
     toolsList: FunctionDeclaration[],
     abortController: AbortController,

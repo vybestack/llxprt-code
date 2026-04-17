@@ -212,7 +212,7 @@ export class OneShotStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
-    config?: import('./types.js').CompressionContext['config'],
+    config?: CompressionContext['config'],
   ): Promise<{ text: string; usage?: UsageStats }> {
     try {
       const stream = provider.generateChatCompletion({

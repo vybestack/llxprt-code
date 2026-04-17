@@ -12,7 +12,10 @@ import {
 } from '../index.js';
 import { type Part } from '@google/genai';
 import { type Config } from '../config/config.js';
-import { type CompletedToolCall } from './coreToolScheduler.js';
+import {
+  type CompletedToolCall,
+  type CoreToolScheduler,
+} from './coreToolScheduler.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.
@@ -96,7 +99,7 @@ export async function executeToolCall(
         },
         options?: { interactiveMode?: boolean },
         extraDependencies?: { messageBus?: MessageBus },
-      ): Promise<import('./coreToolScheduler.js').CoreToolScheduler>;
+      ): Promise<CoreToolScheduler>;
     }
   ).getOrCreateScheduler(
     sessionId,

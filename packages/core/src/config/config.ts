@@ -93,6 +93,7 @@ import { McpClientManager } from '../tools/mcp-client-manager.js';
 import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
+import type { CoreToolScheduler } from '../core/coreToolScheduler.js';
 
 export class Config extends ConfigBase {
   constructor(params: ConfigParameters) {
@@ -747,7 +748,7 @@ export class Config extends ConfigBase {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
+  ): Promise<CoreToolScheduler> {
     const schedulerMessageBus = dependencies?.messageBus;
     if (!schedulerMessageBus) {
       throw new Error(

@@ -204,6 +204,11 @@ export function initializeTestProviderRuntime(
   return { settingsService, config, runtime };
 }
 
+// Vitest is a devDependency and must NOT be statically imported from a file
+// that lives under src/. The `typeof import('vitest')` form below is the only
+// way to reference its type without creating a runtime edge. Disable the
+// consistent-type-imports rule for this narrow use.
+/* eslint-disable @typescript-eslint/consistent-type-imports */
 function requireVi() {
   const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
   if (viGlobal) {
@@ -214,6 +219,7 @@ function requireVi() {
     fn: (impl?: (...args: unknown[]) => unknown) => createSpy(impl),
   } as unknown as (typeof import('vitest'))['vi'];
 }
+/* eslint-enable @typescript-eslint/consistent-type-imports */
 
 interface GeminiChatConfigShape {
   getSessionId: () => string;

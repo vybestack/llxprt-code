@@ -80,8 +80,9 @@ interface GeminiResponseWithUsage {
   usageMetadata?: GeminiUsageMetadata;
 }
 
-type CodeAssistGeneratorFactory =
-  (typeof import('../../code_assist/codeAssist.js'))['createCodeAssistContentGenerator'];
+import type { createCodeAssistContentGenerator as _createCodeAssistContentGenerator } from '../../code_assist/codeAssist.js';
+
+type CodeAssistGeneratorFactory = typeof _createCodeAssistContentGenerator;
 type CodeAssistContentGenerator = Awaited<
   ReturnType<CodeAssistGeneratorFactory>
 >;

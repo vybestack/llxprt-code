@@ -14,6 +14,7 @@ import type {
   ConsoleMessageItem,
   StreamingState,
   ConfirmationRequest,
+  ActiveHook,
 } from '../types.js';
 import type {
   IdeContext,
@@ -156,7 +157,7 @@ export interface UIState {
   coreMemoryFileCount: number;
   branchName: string | undefined;
   errorCount: number;
-  activeHooks?: Array<import('../types.js').ActiveHook>;
+  activeHooks?: ActiveHook[];
 
   // Console and messages
   consoleMessages: ConsoleMessageItem[];

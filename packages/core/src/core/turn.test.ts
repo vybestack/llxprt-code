@@ -10,11 +10,7 @@ import type {
   ServerGeminiErrorEvent,
   ServerGeminiStreamEvent,
 } from './turn.js';
-import {
-  Turn,
-  GeminiEventType,
-  DEFAULT_AGENT_ID,
-} from './turn.js';
+import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
 import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 import type {
   GenerateContentResponse,
