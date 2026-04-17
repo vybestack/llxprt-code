@@ -384,6 +384,66 @@ describe('SchemaValidator', () => {
       expect(error).not.toContain('no schema with key or ref');
     });
 
+    it('preserves draft-07 tuple semantics (items as array)', () => {
+      // Draft-07 allows `items` as an array of schemas for positional tuple
+      // validation. Draft-2020-12 removed this in favour of `prefixItems`,
+      // so compiling a draft-07 tuple schema under an Ajv2020 instance
+      // silently treats `items: [...]` as invalid/ignored and admits junk.
+      // This test pins the dispatch-by-$schema behaviour: when the schema
+      // declares draft-07, tuple semantics must be honoured.
+      const schema = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          coords: {
+            type: 'array',
+            items: [{ type: 'number' }, { type: 'string' }],
+            minItems: 2,
+            maxItems: 2,
+          },
+        },
+        required: ['coords'],
+      };
+
+      expect(
+        SchemaValidator.validate(schema, { coords: [1, 'north'] }),
+      ).toBeNull();
+
+      // Position 0 must be number; passing a string there should fail.
+      const mismatched = SchemaValidator.validate(schema, {
+        coords: ['not-a-number', 'north'],
+      });
+      expect(mismatched).not.toBeNull();
+      expect(mismatched).toContain('must be number');
+    });
+
+    it('enforces draft 2020-12 prefixItems tuple semantics', () => {
+      // Complement to the draft-07 tuple test: when a schema declares
+      // draft-2020-12, `prefixItems` is the tuple keyword and must be
+      // honoured by the Ajv2020 instance.
+      const schema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          entry: {
+            type: 'array',
+            prefixItems: [{ type: 'string' }, { type: 'number' }],
+            items: false,
+          },
+        },
+        required: ['entry'],
+      };
+
+      expect(
+        SchemaValidator.validate(schema, { entry: ['name', 7] }),
+      ).toBeNull();
+      const wrongType = SchemaValidator.validate(schema, {
+        entry: [42, 'not a number'],
+      });
+      expect(wrongType).not.toBeNull();
+      expect(wrongType).toContain('must be string');
+    });
+
     it('enforces draft 2020-12 additionalProperties: false', () => {
       const schema = {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
