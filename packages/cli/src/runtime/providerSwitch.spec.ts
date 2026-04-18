@@ -110,7 +110,7 @@ describe('providerSwitch', () => {
       expect(result.changed).toBe(false);
       expect(result.previousProvider).toBe('openai');
       expect(result.nextProvider).toBe('openai');
-      expect(result.infoMessages).toEqual([]);
+      expect(result.infoMessages).toStrictEqual([]);
     });
 
     it('should throw error when provider name is empty string', async () => {

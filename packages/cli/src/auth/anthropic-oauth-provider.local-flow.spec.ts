@@ -136,7 +136,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
     expect(tokenStore.saveToken).not.toHaveBeenCalled();
 
     // Verify initiateAuth returned the token
-    expect(token).toEqual(
+    expect(token).toStrictEqual(
       expect.objectContaining({ access_token: 'local-token' }),
     );
 

@@ -255,7 +255,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
 
         // After Phase 4, initiateAuth returns the token
         expect(result).toBeDefined();
-        expect(result).toEqual(mockToken);
+        expect(result).toStrictEqual(mockToken);
         // Provider no longer calls saveToken - OAuthManager handles persistence
         expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
       });

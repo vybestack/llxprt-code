@@ -63,9 +63,9 @@ describe('Bridge/UI behavioral scenarios', () => {
     globalOAuthUI.setAddItem(handler);
 
     expect(handler).toHaveBeenCalledTimes(3);
-    expect(delivered[0]).toEqual(first);
-    expect(delivered[1]).toEqual(second);
-    expect(delivered[2]).toEqual(third);
+    expect(delivered[0]).toStrictEqual(first);
+    expect(delivered[1]).toStrictEqual(second);
+    expect(delivered[2]).toStrictEqual(third);
     expect(globalOAuthUI.getPendingCount()).toBe(0);
   });
 

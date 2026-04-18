@@ -314,7 +314,7 @@ describe('AgentRuntimeState - Event Emission', () => {
     expect(callback).toHaveBeenCalledTimes(1);
     const event = callback.mock.calls[0][0] as RuntimeStateChangedEvent;
     expect(event.runtimeId).toBe('test-runtime');
-    expect(event.changes.model).toEqual({
+    expect(event.changes.model).toStrictEqual({
       old: 'gemini-2.0-flash',
       new: 'gemini-2.5-flash',
     });
@@ -739,7 +739,7 @@ describe('AgentRuntimeState - Synchronous Accessors', () => {
 
     const modelParams = getModelParams(state);
 
-    expect(modelParams).toEqual({ temperature: 0.7 });
+    expect(modelParams).toStrictEqual({ temperature: 0.7 });
     expect(() => {
       (modelParams as Record<string, unknown>).temperature = 0.9;
     }).toThrow();
@@ -769,7 +769,7 @@ describe('AgentRuntimeState - Error Handling', () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(error.code).toBe(RuntimeStateErrorCode.PROVIDER_MISSING);
-    expect(error.details).toEqual({ provider: '' });
+    expect(error.details).toStrictEqual({ provider: '' });
     expect(error.message).toContain('provider.missing');
   });
 });

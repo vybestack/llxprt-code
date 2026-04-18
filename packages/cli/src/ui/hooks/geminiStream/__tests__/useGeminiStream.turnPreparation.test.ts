@@ -53,14 +53,14 @@ describe('prepareTurnForQuery', () => {
       thinkingBlocksRef,
     );
 
-    expect(callOrder).toEqual([
+    expect(callOrder).toStrictEqual([
       'startNewPrompt',
       'setThought',
       'reset',
       'invalidate:runtime-1739',
       'ensure',
     ]);
-    expect(thinkingBlocksRef.current).toEqual([]);
+    expect(thinkingBlocksRef.current).toStrictEqual([]);
     expect(handler.resetSession).not.toHaveBeenCalled();
   });
 
@@ -101,12 +101,12 @@ describe('prepareTurnForQuery', () => {
       thinkingBlocksRef,
     );
 
-    expect(callOrder).toEqual(['resetSession', 'ensure']);
+    expect(callOrder).toStrictEqual(['resetSession', 'ensure']);
     expect(handler.reset).not.toHaveBeenCalled();
     expect(handler.invalidateAuthCache).not.toHaveBeenCalled();
     expect(startNewPrompt).not.toHaveBeenCalled();
     expect(setThought).not.toHaveBeenCalled();
-    expect(thinkingBlocksRef.current).toEqual([existingThinkingBlock]);
+    expect(thinkingBlocksRef.current).toStrictEqual([existingThinkingBlock]);
   });
 
   it('falls back to the default runtime id when session id is unavailable', async () => {

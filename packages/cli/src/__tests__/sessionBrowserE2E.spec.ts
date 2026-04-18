@@ -1162,7 +1162,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
         PROJECT_HASH,
       );
 
-      expect(sessions).toEqual([]);
+      expect(sessions).toStrictEqual([]);
     });
 
     it('reads session metadata from headers', async () => {

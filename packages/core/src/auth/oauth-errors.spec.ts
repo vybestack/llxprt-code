@@ -102,7 +102,7 @@ describe('OAuthError', () => {
     );
 
     expect(error.originalError).toBe(originalError);
-    expect(error.technicalDetails).toEqual(technicalDetails);
+    expect(error.technicalDetails).toStrictEqual(technicalDetails);
   });
 
   it('should create proper log entry', () => {
@@ -120,7 +120,7 @@ describe('OAuthError', () => {
 
     const logEntry = error.toLogEntry();
 
-    expect(logEntry).toEqual({
+    expect(logEntry).toStrictEqual({
       type: OAuthErrorType.NETWORK_ERROR,
       category: OAuthErrorCategory.TRANSIENT,
       provider: 'test-provider',
@@ -149,7 +149,7 @@ describe('OAuthErrorFactory', () => {
 
     expect(error.type).toBe(OAuthErrorType.AUTHENTICATION_REQUIRED);
     expect(error.provider).toBe('test-provider');
-    expect(error.technicalDetails).toEqual({ reason: 'expired' });
+    expect(error.technicalDetails).toStrictEqual({ reason: 'expired' });
   });
 
   it('should create authorization expired error', () => {
@@ -171,7 +171,7 @@ describe('OAuthErrorFactory', () => {
     expect(error.provider).toBe('test-provider');
     expect(error.originalError).toBe(originalError);
     expect(error.retryAfterMs).toBe(1000);
-    expect(error.technicalDetails).toEqual({ host: 'api.test.com' });
+    expect(error.technicalDetails).toStrictEqual({ host: 'api.test.com' });
   });
 
   it('should create rate limited error with custom retry delay', () => {
@@ -182,7 +182,7 @@ describe('OAuthErrorFactory', () => {
     expect(error.type).toBe(OAuthErrorType.RATE_LIMITED);
     expect(error.provider).toBe('test-provider');
     expect(error.retryAfterMs).toBe(120000); // 120 seconds in milliseconds
-    expect(error.technicalDetails).toEqual({ limit: 100 });
+    expect(error.technicalDetails).toStrictEqual({ limit: 100 });
   });
 
   it('should create storage error', () => {
@@ -196,7 +196,7 @@ describe('OAuthErrorFactory', () => {
     expect(error.type).toBe(OAuthErrorType.STORAGE_ERROR);
     expect(error.provider).toBe('test-provider');
     expect(error.originalError).toBe(originalError);
-    expect(error.technicalDetails).toEqual({ path: '/restricted' });
+    expect(error.technicalDetails).toStrictEqual({ path: '/restricted' });
   });
 
   it('should create corrupted data error', () => {
@@ -206,7 +206,7 @@ describe('OAuthErrorFactory', () => {
 
     expect(error.type).toBe(OAuthErrorType.CORRUPTED_DATA);
     expect(error.provider).toBe('test-provider');
-    expect(error.technicalDetails).toEqual({ file: 'tokens.json' });
+    expect(error.technicalDetails).toStrictEqual({ file: 'tokens.json' });
   });
 
   describe('fromUnknown', () => {

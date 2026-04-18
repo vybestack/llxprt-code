@@ -433,7 +433,7 @@ describe('OAuthBucketManager', () => {
      */
     it('should return empty array when provider has no buckets', async () => {
       const statuses = await bucketManager.getAllBucketStatus('anthropic');
-      expect(statuses).toEqual([]);
+      expect(statuses).toStrictEqual([]);
     });
 
     /**

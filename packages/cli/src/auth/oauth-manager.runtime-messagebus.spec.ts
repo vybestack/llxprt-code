@@ -130,7 +130,7 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
     manager.registerProvider(createMockProvider('anthropic'));
     manager.registerProvider(createMockProvider('gemini'));
 
-    expect(manager.getSupportedProviders().sort()).toEqual([
+    expect(manager.getSupportedProviders().sort()).toStrictEqual([
       'anthropic',
       'gemini',
     ]);

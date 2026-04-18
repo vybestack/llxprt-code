@@ -144,8 +144,8 @@ describe('bucketFailoverIntegration', () => {
       const result = await executeProviderWithBucketFailover(options, config);
 
       expect(result.bucket).toBe('bucket1');
-      expect(result.content).toEqual(responseContent);
-      expect(result.attemptedBuckets).toEqual(['bucket1']);
+      expect(result.content).toStrictEqual(responseContent);
+      expect(result.attemptedBuckets).toStrictEqual(['bucket1']);
       expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -182,8 +182,8 @@ describe('bucketFailoverIntegration', () => {
       const result = await executeProviderWithBucketFailover(options, config);
 
       expect(result.bucket).toBe('bucket2');
-      expect(result.content).toEqual(responseContent);
-      expect(result.attemptedBuckets).toEqual(['bucket1', 'bucket2']);
+      expect(result.content).toStrictEqual(responseContent);
+      expect(result.attemptedBuckets).toStrictEqual(['bucket1', 'bucket2']);
       expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(2);
       expect(notificationSpy).toHaveBeenCalledWith('bucket1', 'bucket2');
       expect(tokenRefreshSpy).toHaveBeenCalledTimes(2);
@@ -407,7 +407,7 @@ describe('bucketFailoverIntegration', () => {
       const result = await executeProviderWithBucketFailover(options, config);
 
       // Should return the last chunk
-      expect(result.content).toEqual(chunk2);
+      expect(result.content).toStrictEqual(chunk2);
     });
     it('handles 403 permission_error (OAuth token revoked)', async () => {
       const responseContent: IContent = {

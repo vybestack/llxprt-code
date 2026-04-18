@@ -708,7 +708,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Should not have reasons from first call
       expect(secondReasons).toBeDefined();
       // First call had bucket-a as quota-exhausted, second call should have different/new reasons
-      expect(secondReasons).not.toEqual(firstReasons);
+      expect(secondReasons).not.toStrictEqual(firstReasons);
     });
 
     /**

@@ -87,8 +87,8 @@ describe('Turn', () => {
 
   describe('constructor', () => {
     it('should initialize pendingToolCalls and debugResponses', () => {
-      expect(turn.pendingToolCalls).toEqual([]);
-      expect(turn.getDebugResponses()).toEqual([]);
+      expect(turn.pendingToolCalls).toStrictEqual([]);
+      expect(turn.getDebugResponses()).toStrictEqual([]);
     });
   });
 
@@ -127,9 +127,9 @@ describe('Turn', () => {
         'prompt-id-1',
       );
 
-      expect(events).toEqual([
-        { type: GeminiEventType.Content, value: 'Hello' },
-        { type: GeminiEventType.Content, value: ' world' },
+      expect(events).toStrictEqual([
+        { type: GeminiEventType.Content, value: 'Hello', traceId: undefined },
+        { type: GeminiEventType.Content, value: ' world', traceId: undefined },
       ]);
       expect(turn.getDebugResponses().length).toBe(2);
     });
@@ -169,7 +169,7 @@ describe('Turn', () => {
       expect(events.length).toBe(2);
       const event1 = events[0] as ServerGeminiToolCallRequestEvent;
       expect(event1.type).toBe(GeminiEventType.ToolCallRequest);
-      expect(event1.value).toEqual(
+      expect(event1.value).toStrictEqual(
         expect.objectContaining({
           callId: 'fc1',
           name: 'tool1',
@@ -177,21 +177,21 @@ describe('Turn', () => {
           isClientInitiated: false,
         }),
       );
-      expect(turn.pendingToolCalls[0]).toEqual(event1.value);
+      expect(turn.pendingToolCalls[0]).toStrictEqual(event1.value);
 
       const event2 = events[1] as ServerGeminiToolCallRequestEvent;
       expect(event2.type).toBe(GeminiEventType.ToolCallRequest);
-      expect(event2.value).toEqual(
+      expect(event2.value).toStrictEqual(
         expect.objectContaining({
           name: 'tool2',
           args: { arg2: 'val2' },
           isClientInitiated: false,
         }),
       );
-      expect(event2.value.callId).toEqual(
+      expect(event2.value.callId).toStrictEqual(
         expect.stringMatching(/^tool2-\d{13}-\w{10,}$/),
       );
-      expect(turn.pendingToolCalls[1]).toEqual(event2.value);
+      expect(turn.pendingToolCalls[1]).toStrictEqual(event2.value);
       expect(turn.getDebugResponses().length).toBe(1);
     });
 
@@ -225,8 +225,12 @@ describe('Turn', () => {
       for await (const event of turn.run(reqParts, abortController.signal)) {
         events.push(event);
       }
-      expect(events).toEqual([
-        { type: GeminiEventType.Content, value: 'First part' },
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.Content,
+          value: 'First part',
+          traceId: undefined,
+        },
         { type: GeminiEventType.UserCancelled },
       ]);
       expect(turn.getDebugResponses().length).toBe(1);
@@ -405,7 +409,7 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([{ type: GeminiEventType.InvalidStream }]);
+      expect(events).toStrictEqual([{ type: GeminiEventType.InvalidStream }]);
       expect(turn.getDebugResponses().length).toBe(0);
       expect(reportError).not.toHaveBeenCalled(); // Should not report as error
     });
@@ -430,7 +434,7 @@ describe('Turn', () => {
       expect(events.length).toBe(1);
       const errorEvent = events[0] as ServerGeminiErrorEvent;
       expect(errorEvent.type).toBe(GeminiEventType.Error);
-      expect(errorEvent.value).toEqual({
+      expect(errorEvent.value).toStrictEqual({
         error: { message: 'API Error', status: undefined },
       });
       expect(turn.getDebugResponses().length).toBe(0);
@@ -523,8 +527,12 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
-        { type: GeminiEventType.Content, value: 'Partial response' },
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.Content,
+          value: 'Partial response',
+          traceId: undefined,
+        },
         {
           type: GeminiEventType.Finished,
           value: {
@@ -570,10 +578,11 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
+      expect(events).toStrictEqual([
         {
           type: GeminiEventType.Content,
           value: 'This is a long response that was cut off...',
+          traceId: undefined,
         },
         {
           type: GeminiEventType.Finished,
@@ -607,8 +616,12 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
-        { type: GeminiEventType.Content, value: 'Content blocked' },
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.Content,
+          value: 'Content blocked',
+          traceId: undefined,
+        },
         {
           type: GeminiEventType.Finished,
           value: { reason: 'SAFETY', usageMetadata: undefined },
@@ -643,10 +656,11 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
+      expect(events).toStrictEqual([
         {
           type: GeminiEventType.Content,
           value: 'Response without finish reason',
+          traceId: undefined,
         },
       ]);
       // No Finished event should be emitted
@@ -688,9 +702,17 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
-        { type: GeminiEventType.Content, value: 'First part' },
-        { type: GeminiEventType.Content, value: 'Second part' },
+      expect(events).toStrictEqual([
+        {
+          type: GeminiEventType.Content,
+          value: 'First part',
+          traceId: undefined,
+        },
+        {
+          type: GeminiEventType.Content,
+          value: 'Second part',
+          traceId: undefined,
+        },
         {
           type: GeminiEventType.Finished,
           value: { reason: 'OTHER', usageMetadata: undefined },
@@ -719,7 +741,7 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([{ type: GeminiEventType.UserCancelled }]);
+      expect(events).toStrictEqual([{ type: GeminiEventType.UserCancelled }]);
 
       expect(reportError).not.toHaveBeenCalled();
     });
@@ -741,9 +763,9 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
+      expect(events).toStrictEqual([
         { type: GeminiEventType.Retry },
-        { type: GeminiEventType.Content, value: 'Success' },
+        { type: GeminiEventType.Content, value: 'Success', traceId: undefined },
       ]);
     });
 
@@ -786,8 +808,12 @@ describe('Turn', () => {
         await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
         const events = await eventsPromise;
 
-        expect(events).toEqual([
-          { type: GeminiEventType.Content, value: 'First part' },
+        expect(events).toStrictEqual([
+          {
+            type: GeminiEventType.Content,
+            value: 'First part',
+            traceId: undefined,
+          },
           {
             type: GeminiEventType.StreamIdleTimeout,
             value: {
@@ -909,7 +935,7 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
+      expect(events).toStrictEqual([
         { type: GeminiEventType.Content, value: 'Hello', traceId: 'trace-123' },
       ]);
     });
@@ -941,7 +967,7 @@ describe('Turn', () => {
         events.push(event);
       }
 
-      expect(events).toEqual([
+      expect(events).toStrictEqual([
         {
           type: GeminiEventType.Thought,
           value: { subject: '', description: '[Thought: thinking]' },
@@ -968,7 +994,7 @@ describe('Turn', () => {
       for await (const _ of turn.run(reqParts, new AbortController().signal)) {
         // consume stream
       }
-      expect(turn.getDebugResponses()).toEqual([resp1, resp2]);
+      expect(turn.getDebugResponses()).toStrictEqual([resp1, resp2]);
     });
   });
 
@@ -989,7 +1015,7 @@ describe('Turn', () => {
       )) {
         events.push(event.type);
       }
-      expect(events).toEqual([GeminiEventType.AgentExecutionStopped]);
+      expect(events).toStrictEqual([GeminiEventType.AgentExecutionStopped]);
     });
 
     it('should yield AgentExecutionBlocked event and continue processing', async () => {

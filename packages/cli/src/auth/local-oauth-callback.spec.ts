@@ -67,7 +67,7 @@ describe('startLocalOAuthCallback', () => {
 
     await server.shutdown();
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       code: 'auth-code-456',
       state: 'state-123',
     });
@@ -108,7 +108,7 @@ describe('startLocalOAuthCallback', () => {
 
     await server.shutdown();
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       code: 'auth-code-456',
       state: 'state-123',
     });

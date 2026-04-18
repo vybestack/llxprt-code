@@ -29,7 +29,7 @@ describe('sanitizeEnvironment', () => {
       LANG: 'en_US.UTF-8',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual(env);
+    expect(sanitized).toStrictEqual(env);
   });
 
   it('should allow variables prefixed with LLXPRT_CLI_', () => {
@@ -38,7 +38,7 @@ describe('sanitizeEnvironment', () => {
       LLXPRT_CLI_BAZ: 'qux',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual(env);
+    expect(sanitized).toStrictEqual(env);
   });
 
   it('should redact variables with sensitive names from the denylist', () => {
@@ -49,7 +49,7 @@ describe('sanitizeEnvironment', () => {
       SAFE_VAR: 'is-safe',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       SAFE_VAR: 'is-safe',
     });
   });
@@ -71,7 +71,7 @@ describe('sanitizeEnvironment', () => {
       USEFUL_INFO: 'is-ok',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       USEFUL_INFO: 'is-ok',
     });
   });
@@ -86,7 +86,7 @@ describe('sanitizeEnvironment', () => {
       SAFE_VAR: 'is-safe',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       SAFE_VAR: 'is-safe',
     });
   });
@@ -125,7 +125,7 @@ describe('sanitizeEnvironment', () => {
       SAFE_VAR: 'is-safe',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       SAFE_VAR: 'is-safe',
     });
   });
@@ -147,7 +147,7 @@ describe('sanitizeEnvironment', () => {
       PRIVATE_JET_OWNER: 'false',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       SAFE_URL: 'https://example.com/foo/bar',
       NOT_A_JWT: 'this.is.not.a.jwt',
     });
@@ -160,8 +160,9 @@ describe('sanitizeEnvironment', () => {
       ANOTHER_SAFE_VAR: 'value',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       EMPTY_VAR: '',
+      UNDEFINED_VAR: undefined,
       ANOTHER_SAFE_VAR: 'value',
     });
   });
@@ -172,13 +173,13 @@ describe('sanitizeEnvironment', () => {
       APP_VERSION: '1.0.0',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual(env);
+    expect(sanitized).toStrictEqual(env);
   });
 
   it('should handle an empty environment', () => {
     const env = {};
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({});
+    expect(sanitized).toStrictEqual({});
   });
 
   it('should handle a mixed environment with allowed and redacted variables', () => {
@@ -198,7 +199,7 @@ describe('sanitizeEnvironment', () => {
       RANDOM_VAR: '-----BEGIN CERTIFICATE-----...',
     };
     const sanitized = sanitizeEnvironment(env, EMPTY_OPTIONS);
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       PATH: '/usr/bin',
       HOME: '/home/user',
       LLXPRT_CLI_VERSION: '1.2.3',
@@ -235,7 +236,7 @@ describe('sanitizeEnvironment', () => {
       blockedEnvironmentVariables: [],
       enableEnvironmentVariableRedaction: true,
     });
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       MY_TOKEN: 'secret-token',
     });
   });
@@ -251,7 +252,7 @@ describe('sanitizeEnvironment', () => {
       blockedEnvironmentVariables: blocked,
       enableEnvironmentVariableRedaction: true,
     });
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       SAFE_VAR: 'safe-value',
     });
   });
@@ -267,7 +268,7 @@ describe('sanitizeEnvironment', () => {
       blockedEnvironmentVariables: blocked,
       enableEnvironmentVariableRedaction: true,
     });
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       CONFLICT_VAR: 'value',
     });
   });
@@ -284,7 +285,7 @@ describe('sanitizeEnvironment', () => {
       blockedEnvironmentVariables: blocked,
       enableEnvironmentVariableRedaction: true,
     });
-    expect(sanitized).toEqual({
+    expect(sanitized).toStrictEqual({
       MY_TOKEN: 'secret-token',
     });
   });
@@ -304,6 +305,6 @@ describe('sanitizeEnvironment', () => {
       enableEnvironmentVariableRedaction: false,
     };
     const sanitized = sanitizeEnvironment(env, options);
-    expect(sanitized).toEqual(env);
+    expect(sanitized).toStrictEqual(env);
   });
 });

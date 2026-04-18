@@ -124,7 +124,7 @@ describe('TodoContinuationService', () => {
           createConfig({ taskDescription, isYoloMode: true }),
         );
 
-        expect(standardPrompt).not.toEqual(yoloPrompt);
+        expect(standardPrompt).not.toStrictEqual(yoloPrompt);
         expect(yoloPrompt).toMatch(/urgent|critical|immediately/i);
         expect(standardPrompt).not.toMatch(/urgent|critical|immediately/i);
       });
@@ -355,7 +355,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(true);
-        expect(result.activeTodo).toEqual(inProgressTodo);
+        expect(result.activeTodo).toStrictEqual(inProgressTodo);
       });
 
       it('falls back to pending todos when no in_progress todos exist', () => {
@@ -372,7 +372,7 @@ describe('TodoContinuationService', () => {
         const result = service.checkContinuationConditions(context);
 
         expect(result.shouldContinue).toBe(true);
-        expect(result.activeTodo).toEqual(pendingTodo1); // Should pick first alphabetically
+        expect(result.activeTodo).toStrictEqual(pendingTodo1); // Should pick first alphabetically
       });
 
       it('formats todo content into readable task description', () => {
@@ -408,7 +408,7 @@ describe('TodoContinuationService', () => {
 
         const result = service.checkContinuationConditions(context);
 
-        expect(result.activeTodo).toEqual(todoF); // 'Fix' comes before 'Update' alphabetically
+        expect(result.activeTodo).toStrictEqual(todoF); // 'Fix' comes before 'Update' alphabetically
       });
     });
   });
@@ -519,7 +519,7 @@ describe('TodoContinuationService', () => {
 
         expect(standardPrompt).toContain(taskDescription);
         expect(yoloPrompt).toContain(taskDescription);
-        expect(standardPrompt).not.toEqual(yoloPrompt);
+        expect(standardPrompt).not.toStrictEqual(yoloPrompt);
       });
     });
 

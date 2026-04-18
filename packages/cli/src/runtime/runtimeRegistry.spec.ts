@@ -40,7 +40,7 @@ describe('runtimeRegistry', () => {
     it('should return legacy-singleton after reset', () => {
       const identity = resolveActiveRuntimeIdentity();
       expect(identity.runtimeId).toBe(LEGACY_RUNTIME_ID);
-      expect(identity.metadata).toEqual({});
+      expect(identity.metadata).toStrictEqual({});
     });
 
     it('should have empty registry after reset', () => {
@@ -56,7 +56,7 @@ describe('runtimeRegistry', () => {
       });
 
       expect(entry.runtimeId).toBe(runtimeId);
-      expect(entry.metadata).toEqual({ testKey: 'testValue' });
+      expect(entry.metadata).toStrictEqual({ testKey: 'testValue' });
       expect(entry.config).toBeNull();
       expect(entry.providerManager).toBeNull();
       expect(entry.settingsService).toBeNull();
@@ -92,7 +92,7 @@ describe('runtimeRegistry', () => {
 
       expect(runtimeRegistry.size).toBe(1);
       const entry = requireRuntimeEntry(runtimeId);
-      expect(entry.metadata).toEqual({ a: 1, b: 2 });
+      expect(entry.metadata).toStrictEqual({ a: 1, b: 2 });
     });
 
     it('should merge metadata on update', () => {

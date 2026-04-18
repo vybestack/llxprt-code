@@ -278,7 +278,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.history).toHaveLength(1);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'target session content',
         });
@@ -315,7 +315,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'newer session',
         });
@@ -352,7 +352,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.metadata.sessionId).toBe(sessionId);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'newest session for index',
         });
@@ -680,7 +680,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
           .filter((e) => e.type === 'content')
           .pop();
         const payload = lastContentEvent?.payload as { content: IContent };
-        expect(payload.content.blocks[0]).toEqual({
+        expect(payload.content.blocks[0]).toStrictEqual({
           type: 'text',
           text: 'new event after resume',
         });
@@ -958,7 +958,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.metadata.sessionId).toBe(olderSessionId);
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'older session message',
         });
@@ -1001,12 +1001,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       if (result.ok) {
         expect(result.history).toHaveLength(2);
         expect(result.history[0].speaker).toBe('human');
-        expect(result.history[0].blocks[0]).toEqual({
+        expect(result.history[0].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'user question',
         });
         expect(result.history[1].speaker).toBe('ai');
-        expect(result.history[1].blocks[0]).toEqual({
+        expect(result.history[1].blocks[0]).toStrictEqual({
           type: 'text',
           text: 'ai response',
         });
@@ -1478,7 +1478,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
                 expect(result.history).toHaveLength(contents.length);
                 for (let i = 0; i < contents.length; i++) {
                   expect(result.history[i].speaker).toBe(contents[i].speaker);
-                  expect(result.history[i].blocks[0]).toEqual(
+                  expect(result.history[i].blocks[0]).toStrictEqual(
                     contents[i].blocks[0],
                   );
                 }

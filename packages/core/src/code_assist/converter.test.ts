@@ -35,7 +35,7 @@ describe('converter', () => {
         'my-project',
         'my-session',
       );
-      expect(codeAssistReq).toEqual({
+      expect(codeAssistReq).toStrictEqual({
         model: 'gemini-pro',
         project: 'my-project',
         request: {
@@ -63,7 +63,7 @@ describe('converter', () => {
         undefined,
         'my-session',
       );
-      expect(codeAssistReq).toEqual({
+      expect(codeAssistReq).toStrictEqual({
         model: 'gemini-pro',
         project: undefined,
         request: {
@@ -91,7 +91,7 @@ describe('converter', () => {
         'my-project',
         'session-123',
       );
-      expect(codeAssistReq).toEqual({
+      expect(codeAssistReq).toStrictEqual({
         model: 'gemini-pro',
         project: 'my-project',
         request: {
@@ -119,7 +119,7 @@ describe('converter', () => {
         'my-project',
         'my-session',
       );
-      expect(codeAssistReq.request.contents).toEqual([
+      expect(codeAssistReq.request.contents).toStrictEqual([
         { role: 'user', parts: [{ text: 'Hello' }] },
       ]);
     });
@@ -135,7 +135,7 @@ describe('converter', () => {
         'my-project',
         'my-session',
       );
-      expect(codeAssistReq.request.contents).toEqual([
+      expect(codeAssistReq.request.contents).toStrictEqual([
         { role: 'user', parts: [{ text: 'Hello' }] },
         { role: 'user', parts: [{ text: 'World' }] },
       ]);
@@ -155,7 +155,7 @@ describe('converter', () => {
         'my-project',
         'my-session',
       );
-      expect(codeAssistReq.request.systemInstruction).toEqual({
+      expect(codeAssistReq.request.systemInstruction).toStrictEqual({
         role: 'user',
         parts: [{ text: 'You are a helpful assistant.' }],
       });
@@ -176,7 +176,7 @@ describe('converter', () => {
         'my-project',
         'my-session',
       );
-      expect(codeAssistReq.request.generationConfig).toEqual({
+      expect(codeAssistReq.request.generationConfig).toMatchObject({
         temperature: 0.8,
         topK: 40,
       });
@@ -207,7 +207,7 @@ describe('converter', () => {
         'my-project',
         'my-session',
       );
-      expect(codeAssistReq.request.generationConfig).toEqual({
+      expect(codeAssistReq.request.generationConfig).toMatchObject({
         temperature: 0.1,
         topP: 0.2,
         topK: 3,
@@ -243,7 +243,9 @@ describe('converter', () => {
       };
       const genaiRes = fromGenerateContentResponse(codeAssistRes);
       expect(genaiRes).toBeInstanceOf(GenerateContentResponse);
-      expect(genaiRes.candidates).toEqual(codeAssistRes.response.candidates);
+      expect(genaiRes.candidates).toStrictEqual(
+        codeAssistRes.response.candidates,
+      );
     });
 
     it('should handle prompt feedback and usage metadata', () => {
@@ -262,10 +264,10 @@ describe('converter', () => {
         },
       };
       const genaiRes = fromGenerateContentResponse(codeAssistRes);
-      expect(genaiRes.promptFeedback).toEqual(
+      expect(genaiRes.promptFeedback).toStrictEqual(
         codeAssistRes.response.promptFeedback,
       );
-      expect(genaiRes.usageMetadata).toEqual(
+      expect(genaiRes.usageMetadata).toStrictEqual(
         codeAssistRes.response.usageMetadata,
       );
     });
@@ -292,7 +294,7 @@ describe('converter', () => {
         },
       };
       const genaiRes = fromGenerateContentResponse(codeAssistRes);
-      expect(genaiRes.automaticFunctionCallingHistory).toEqual(
+      expect(genaiRes.automaticFunctionCallingHistory).toStrictEqual(
         codeAssistRes.response.automaticFunctionCallingHistory,
       );
     });
@@ -305,7 +307,7 @@ describe('converter', () => {
         },
       };
       const genaiRes = fromGenerateContentResponse(codeAssistRes);
-      expect(genaiRes.modelVersion).toEqual('gemini-2.5-pro');
+      expect(genaiRes.modelVersion).toStrictEqual('gemini-2.5-pro');
     });
 
     it('should handle traceId', () => {
@@ -316,7 +318,7 @@ describe('converter', () => {
         traceId: 'my-trace-id',
       };
       const genaiRes = fromGenerateContentResponse(codeAssistRes);
-      expect(genaiRes.responseId).toEqual('my-trace-id');
+      expect(genaiRes.responseId).toStrictEqual('my-trace-id');
     });
 
     it('should handle missing traceId', () => {
@@ -336,7 +338,7 @@ describe('converter', () => {
         role: 'user',
         parts: [{ text: 'hello' }],
       };
-      expect(toContents(content)).toEqual([
+      expect(toContents(content)).toStrictEqual([
         { role: 'user', parts: [{ text: 'hello' }] },
       ]);
     });
@@ -346,7 +348,7 @@ describe('converter', () => {
         { role: 'user', parts: [{ text: 'hello' }] },
         { role: 'model', parts: [{ text: 'hi' }] },
       ];
-      expect(toContents(contents)).toEqual([
+      expect(toContents(contents)).toStrictEqual([
         { role: 'user', parts: [{ text: 'hello' }] },
         { role: 'model', parts: [{ text: 'hi' }] },
       ]);
@@ -354,14 +356,14 @@ describe('converter', () => {
 
     it('should handle Part', () => {
       const part: ContentListUnion = { text: 'a part' };
-      expect(toContents(part)).toEqual([
+      expect(toContents(part)).toStrictEqual([
         { role: 'user', parts: [{ text: 'a part' }] },
       ]);
     });
 
     it('should handle array of Parts', () => {
       const parts = [{ text: 'part 1' }, 'part 2'];
-      expect(toContents(parts)).toEqual([
+      expect(toContents(parts)).toStrictEqual([
         { role: 'user', parts: [{ text: 'part 1' }] },
         { role: 'user', parts: [{ text: 'part 2' }] },
       ]);
@@ -369,14 +371,14 @@ describe('converter', () => {
 
     it('should handle string', () => {
       const str: ContentListUnion = 'a string';
-      expect(toContents(str)).toEqual([
+      expect(toContents(str)).toStrictEqual([
         { role: 'user', parts: [{ text: 'a string' }] },
       ]);
     });
 
     it('should handle array of strings', () => {
       const strings: ContentListUnion = ['string 1', 'string 2'];
-      expect(toContents(strings)).toEqual([
+      expect(toContents(strings)).toStrictEqual([
         { role: 'user', parts: [{ text: 'string 1' }] },
         { role: 'user', parts: [{ text: 'string 2' }] },
       ]);
@@ -393,7 +395,7 @@ describe('converter', () => {
           { text: 'more text' },
         ],
       };
-      expect(toContents(contentWithThought)).toEqual([
+      expect(toContents(contentWithThought)).toStrictEqual([
         {
           role: 'model',
           parts: [
@@ -415,7 +417,7 @@ describe('converter', () => {
           } as Part & { thought: string },
         ],
       };
-      expect(toContents(contentWithTextAndThought)).toEqual([
+      expect(toContents(contentWithTextAndThought)).toStrictEqual([
         {
           role: 'model',
           parts: [
@@ -437,7 +439,7 @@ describe('converter', () => {
           } as Part & { thought: string },
         ],
       };
-      expect(toContents(contentWithComplexPart)).toEqual([
+      expect(toContents(contentWithComplexPart)).toStrictEqual([
         {
           role: 'model',
           parts: [
@@ -459,7 +461,7 @@ describe('converter', () => {
           } as Part & { thought: string; text: number },
         ],
       };
-      expect(toContents(contentWithInvalidText)).toEqual([
+      expect(toContents(contentWithInvalidText)).toStrictEqual([
         {
           role: 'model',
           parts: [

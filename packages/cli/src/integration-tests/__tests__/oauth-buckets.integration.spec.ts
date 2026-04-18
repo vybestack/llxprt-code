@@ -423,7 +423,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
 
       expect(loadedProfile.auth).toBeDefined();
       expect(loadedProfile.auth?.type).toBe('oauth');
-      expect(loadedProfile.auth?.buckets).toEqual([
+      expect(loadedProfile.auth?.buckets).toStrictEqual([
         'bucket1',
         'bucket2',
         'bucket3',
@@ -533,7 +533,10 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       const loaded = JSON.parse(content) as StandardProfile;
 
       expect(loaded.auth).toBeDefined();
-      expect(loaded.auth?.buckets).toEqual(['work-company', 'personal-gmail']);
+      expect(loaded.auth?.buckets).toStrictEqual([
+        'work-company',
+        'personal-gmail',
+      ]);
 
       // Verify buckets are accessible via OAuth manager
       const workToken = await oauthManager.getOAuthToken(
@@ -831,7 +834,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(updated.modelParams?.max_tokens).toBe(4096);
       expect(updated.auth).toBeDefined();
       expect(updated.auth?.type).toBe('oauth');
-      expect(updated.auth?.buckets).toEqual(['work-company']);
+      expect(updated.auth?.buckets).toStrictEqual(['work-company']);
     });
   });
 

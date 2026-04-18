@@ -419,7 +419,7 @@ describe('AuthFlowOrchestrator', () => {
       ]);
 
       expect(confirmationCalls).toHaveLength(1);
-      expect(confirmationCalls[0]).toEqual({
+      expect(confirmationCalls[0]).toStrictEqual({
         bucketIndex: 1,
         totalBuckets: 1,
       });

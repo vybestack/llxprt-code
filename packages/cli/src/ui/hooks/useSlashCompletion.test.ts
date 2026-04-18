@@ -96,7 +96,7 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);
@@ -131,7 +131,7 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);
@@ -169,10 +169,10 @@ describe('useSlashCompletion', () => {
 
         // Wait for async suggestions clearing
         await waitFor(() => {
-          expect(result.current.suggestions).toEqual([]);
+          expect(result.current.suggestions).toStrictEqual([]);
         });
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);
@@ -416,7 +416,7 @@ describe('useSlashCompletion', () => {
         );
 
         expect(result.current.suggestions.length).toBe(slashCommands.length);
-        expect(result.current.suggestions.map((s) => s.label)).toEqual(
+        expect(result.current.suggestions.map((s) => s.label)).toStrictEqual(
           expect.arrayContaining(['help', 'clear', 'memory', 'chat', 'stats']),
         );
       });
@@ -438,7 +438,7 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([
+        expect(result.current.suggestions).toStrictEqual([
           { label: 'memory', value: 'memory', description: 'Manage memory' },
         ]);
         expect(result.current.showSuggestions).toBe(true);
@@ -463,7 +463,7 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([
+        expect(result.current.suggestions).toStrictEqual([
           {
             label: 'stats',
             value: 'stats',
@@ -642,7 +642,7 @@ describe('useSlashCompletion', () => {
         await waitFor(() => {
           // Should show subcommands of 'chat'
           expect(result.current.suggestions).toHaveLength(2);
-          expect(result.current.suggestions.map((s) => s.label)).toEqual(
+          expect(result.current.suggestions.map((s) => s.label)).toStrictEqual(
             expect.arrayContaining(['list', 'save']),
           );
         });
@@ -722,7 +722,7 @@ describe('useSlashCompletion', () => {
 
         // Assert that suggestions for sub-commands are shown immediately
         expect(result.current.suggestions).toHaveLength(2);
-        expect(result.current.suggestions).toEqual(
+        expect(result.current.suggestions).toStrictEqual(
           expect.arrayContaining([
             { label: 'show', value: 'show', description: 'Show memory' },
             { label: 'add', value: 'add', description: 'Add to memory' },
@@ -765,7 +765,7 @@ describe('useSlashCompletion', () => {
         // Should verify that we see BOTH 'memory' and 'memory-leak'
         await waitFor(() => {
           expect(result.current.suggestions).toHaveLength(2);
-          expect(result.current.suggestions).toEqual(
+          expect(result.current.suggestions).toStrictEqual(
             expect.arrayContaining([
               {
                 label: 'memory',
@@ -810,7 +810,7 @@ describe('useSlashCompletion', () => {
         );
 
         expect(result.current.suggestions).toHaveLength(2);
-        expect(result.current.suggestions).toEqual(
+        expect(result.current.suggestions).toStrictEqual(
           expect.arrayContaining([
             { label: 'show', value: 'show', description: 'Show memory' },
             { label: 'add', value: 'add', description: 'Add to memory' },
@@ -845,7 +845,7 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([
+        expect(result.current.suggestions).toStrictEqual([
           { label: 'add', value: 'add', description: 'Add to memory' },
         ]);
       });
@@ -937,9 +937,17 @@ describe('useSlashCompletion', () => {
           expect.objectContaining({ partialToken: 'my-ch' }),
         );
 
-        expect(result.current.suggestions).toEqual([
-          { label: 'my-chat-tag-1', value: 'my-chat-tag-1' },
-          { label: 'my-chat-tag-2', value: 'my-chat-tag-2' },
+        expect(result.current.suggestions).toStrictEqual([
+          {
+            label: 'my-chat-tag-1',
+            value: 'my-chat-tag-1',
+            description: undefined,
+          },
+          {
+            label: 'my-chat-tag-2',
+            value: 'my-chat-tag-2',
+            description: undefined,
+          },
         ]);
       });
 
@@ -1067,7 +1075,7 @@ describe('useSlashCompletion', () => {
         });
 
         expect(result.current.suggestions).toHaveLength(2);
-        expect(result.current.suggestions).toEqual(
+        expect(result.current.suggestions).toStrictEqual(
           expect.arrayContaining([
             {
               label: 'derp/script.ts',
@@ -1103,7 +1111,7 @@ describe('useSlashCompletion', () => {
         });
 
         // Should filter out .log files but include matching .tsx files
-        expect(result.current.suggestions).toEqual([
+        expect(result.current.suggestions).toStrictEqual([
           { label: 'component.tsx', value: 'component.tsx' },
         ]);
       });
@@ -1130,7 +1138,7 @@ describe('useSlashCompletion', () => {
           await new Promise((resolve) => setTimeout(resolve, 150));
         });
 
-        expect(result.current.suggestions).toEqual([
+        expect(result.current.suggestions).toStrictEqual([
           { label: '.env', value: '.env' },
           { label: '.gitignore', value: '.gitignore' },
         ]);
@@ -1161,7 +1169,7 @@ describe('useSlashCompletion', () => {
         );
 
         await waitFor(() => {
-          expect(result.current.suggestions).toEqual([
+          expect(result.current.suggestions).toStrictEqual([
             { label: 'data/', value: 'data/' },
             { label: 'dist/', value: 'dist/' },
           ]);
@@ -1190,7 +1198,7 @@ describe('useSlashCompletion', () => {
 
         // Without config, should include all files
         expect(result.current.suggestions).toHaveLength(3);
-        expect(result.current.suggestions).toEqual(
+        expect(result.current.suggestions).toStrictEqual(
           expect.arrayContaining([
             { label: 'src/', value: 'src/' },
             { label: 'node_modules/', value: 'node_modules/' },
@@ -1259,7 +1267,7 @@ describe('useSlashCompletion', () => {
           await new Promise((resolve) => setTimeout(resolve, 150)); // Account for debounce
         });
 
-        expect(result.current.suggestions).toEqual(
+        expect(result.current.suggestions).toStrictEqual(
           expect.arrayContaining([{ label: 'data', value: 'data' }]),
         );
         expect(result.current.showSuggestions).toBe(true);
@@ -1295,7 +1303,7 @@ describe('useSlashCompletion', () => {
           await new Promise((resolve) => setTimeout(resolve, 150)); // Account for debounce
         });
 
-        expect(result.current.suggestions).toEqual([
+        expect(result.current.suggestions).toStrictEqual([
           { label: 'README.md', value: 'README.md' },
           { label: 'src/', value: 'src/' },
         ]);
@@ -1371,7 +1379,7 @@ describe('useSlashCompletion', () => {
         return { ...completion, textBuffer };
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'memory',
       ]);
 
@@ -1406,7 +1414,9 @@ describe('useSlashCompletion', () => {
         return { ...completion, textBuffer };
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual(['help']);
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+        'help',
+      ]);
 
       let returnedText: string | undefined;
       act(() => {
@@ -1482,7 +1492,7 @@ describe('useSlashCompletion', () => {
       });
 
       // Suggestions are populated by useEffect
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'show',
         'add',
       ]);

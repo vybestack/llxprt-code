@@ -248,7 +248,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
 
       // All three sub-profiles should qualify for proactive wiring
       expect(qualifyingProfiles).toHaveLength(3);
-      expect(qualifyingProfiles.map((p) => p.provider)).toEqual([
+      expect(qualifyingProfiles.map((p) => p.provider)).toStrictEqual([
         'anthropic',
         'openai',
         'google',
@@ -413,7 +413,7 @@ describe('RuntimeSettings - Proactive Failover Handler Wiring for LoadBalancer (
 
       // Only the two multi-bucket OAuth sub-profiles should qualify
       expect(qualifyingProfiles).toHaveLength(2);
-      expect(qualifyingProfiles.map((p) => p.provider)).toEqual([
+      expect(qualifyingProfiles.map((p) => p.provider)).toStrictEqual([
         'anthropic',
         'google',
       ]);

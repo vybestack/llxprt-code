@@ -251,7 +251,7 @@ describe('TokenAccessCoordinator – getOAuthToken refresh lock parameters', () 
 
     const result = await coordinator.getOAuthToken('anthropic', 'default');
 
-    expect(result).toEqual(validToken);
+    expect(result).toStrictEqual(validToken);
     expect(tokenStore.acquireRefreshLock).not.toHaveBeenCalled();
   });
 
@@ -273,7 +273,7 @@ describe('TokenAccessCoordinator – getOAuthToken refresh lock parameters', () 
 
     const result = await coordinator.getOAuthToken('anthropic', 'default');
 
-    expect(result).toEqual(freshToken);
+    expect(result).toStrictEqual(freshToken);
     // Provider refresh should NOT have been called because recheck showed fresh token
     expect(provider.refreshToken).not.toHaveBeenCalled();
   });
@@ -362,7 +362,7 @@ describe('TokenAccessCoordinator – peekStoredToken', () => {
 
     const result = await coordinator.peekStoredToken('anthropic');
 
-    expect(result).toEqual(storedToken);
+    expect(result).toStrictEqual(storedToken);
     expect(tokenStore.acquireRefreshLock).not.toHaveBeenCalled();
     expect(tokenStore.acquireAuthLock).not.toHaveBeenCalled();
   });
@@ -404,8 +404,8 @@ describe('TokenAccessCoordinator – withBucketResolutionLock serialisation', ()
       coordinator.getOAuthToken('anthropic'),
     ]);
 
-    expect(r1).toEqual(validToken);
-    expect(r2).toEqual(validToken);
+    expect(r1).toStrictEqual(validToken);
+    expect(r2).toStrictEqual(validToken);
   });
 });
 

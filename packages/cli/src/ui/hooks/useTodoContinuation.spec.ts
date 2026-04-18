@@ -391,7 +391,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       );
 
       // Then: Should return pause event structure
-      expect(pauseResult).toEqual({
+      expect(pauseResult).toStrictEqual({
         type: 'pause',
         reason: 'User requested pause',
         message: expect.stringContaining('paused'),

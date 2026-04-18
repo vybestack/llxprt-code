@@ -492,7 +492,7 @@ export default tseslint.config(
       'vitest/no-conditional-expect': 'warn',
       'vitest/no-conditional-in-test': 'warn',
       'vitest/require-to-throw-message': 'warn',
-      'vitest/prefer-strict-equal': 'warn',
+      'vitest/prefer-strict-equal': 'error',
       'vitest/max-nested-describe': ['warn', { max: 3 }],
       'vitest/require-top-level-describe': 'warn',
 

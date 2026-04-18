@@ -156,7 +156,7 @@ describe('AllBucketsExhaustedError', () => {
         lastError,
       );
 
-      expect(error.attemptedBuckets).toEqual(buckets);
+      expect(error.attemptedBuckets).toStrictEqual(buckets);
       // Verify it's a copy, not the same reference
       expect(error.attemptedBuckets).not.toBe(buckets);
     });
@@ -187,7 +187,7 @@ describe('AllBucketsExhaustedError', () => {
         reasons,
       );
 
-      expect(error.bucketFailureReasons).toEqual(reasons);
+      expect(error.bucketFailureReasons).toStrictEqual(reasons);
     });
 
     it('should include bucket details in message when failure reasons provided', () => {

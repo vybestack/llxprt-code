@@ -92,7 +92,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       const result = await handler(mockContext, '', '/subagent ');
       expect(result.hint).toBe('Create a resource');
-      expect(result.suggestions).toEqual([
+      expect(result.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'create' }),
       ]);
       expect(result.position).toBe(1);
@@ -107,7 +107,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const handler = createCompletionHandler(schema);
       const result = await handler(mockContext, '', '/subagent cr');
 
-      expect(result.suggestions).toEqual([
+      expect(result.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'create' }),
       ]);
     });
@@ -121,7 +121,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const handler = createCompletionHandler(schema);
       const result = await handler(mockContext, '', '/subagent zz');
 
-      expect(result.suggestions).toEqual([]);
+      expect(result.suggestions).toStrictEqual([]);
     });
 
     it('prefers string hints on value arguments over descriptions @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-004', async () => {
@@ -133,7 +133,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       const result = await handler(mockContext, '', '/command ');
       expect(result.hint).toBe('Select mode');
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'manual' }),
           expect.objectContaining({ value: 'auto' }),
@@ -153,7 +153,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const result = await handler(mockContext, '', '/command m');
       expect(dynamicHint).toHaveBeenCalledTimes(1);
       expect(result.hint).toBe('Dynamic mode hint');
-      expect(result.suggestions).toEqual([
+      expect(result.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'manual' }),
       ]);
       expect(result.position).toBe(2);
@@ -190,7 +190,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
           const schema: CommandArgumentSchema = [value('mode', '', undefined)];
           const handler = createCompletionHandler(schema);
           const result = await handler(mockContext, '', `/command ${input}`);
-          expect(result.suggestions).toEqual([]);
+          expect(result.suggestions).toStrictEqual([]);
         }),
       );
     });
@@ -203,7 +203,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const handler = createCompletionHandler(schema);
       const result = await handler(mockContext, '', '/command ar');
 
-      expect(result.suggestions).toEqual([
+      expect(result.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'archive' }),
       ]);
     });
@@ -216,7 +216,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             .mockImplementation(() => {});
           const handler = createCompletionHandler([]);
           const result = await handler(mockContext, '', input);
-          expect(result.suggestions).toEqual([]);
+          expect(result.suggestions).toStrictEqual([]);
           expect(result.hint).toBe('');
           expect(warnSpy).not.toHaveBeenCalled();
           warnSpy.mockRestore();
@@ -240,7 +240,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const handler = createCompletionHandler(schema);
 
       const result = await handler(mockContext, '', '/command ');
-      expect(result.suggestions).toEqual([]);
+      expect(result.suggestions).toStrictEqual([]);
       expect(result.hint).toBe('');
       expect(warnSpy).toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
@@ -260,7 +260,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       // Test after 'create' with trailing space - should suggest type options
       const afterCreateResult = await handler(mockContext, '', '/create ');
-      expect(afterCreateResult.suggestions).toEqual([
+      expect(afterCreateResult.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'create' }),
       ]);
       expect(afterCreateResult.position).toBe(1);
@@ -297,7 +297,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize handles quoted segments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
       const info = tokenize('/cmd "quoted value" next');
 
-      expect(info.tokens).toEqual(['cmd', 'quoted value', 'next']);
+      expect(info.tokens).toStrictEqual(['cmd', 'quoted value', 'next']);
       expect(info.partialToken).toBe('next');
       expect(info.hasTrailingSpace).toBe(false);
     });
@@ -305,7 +305,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize handles single quoted segments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
       const info = tokenize("/cmd 'single quoted' next");
 
-      expect(info.tokens).toEqual(['cmd', 'single quoted', 'next']);
+      expect(info.tokens).toStrictEqual(['cmd', 'single quoted', 'next']);
       expect(info.partialToken).toBe('next');
       expect(info.hasTrailingSpace).toBe(false);
     });
@@ -313,7 +313,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize splits unquoted segments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
       const info = tokenize('/cmd alpha beta');
 
-      expect(info.tokens).toEqual(['cmd', 'alpha', 'beta']);
+      expect(info.tokens).toStrictEqual(['cmd', 'alpha', 'beta']);
       expect(info.partialToken).toBe('beta');
       expect(info.hasTrailingSpace).toBe(false);
     });
@@ -328,7 +328,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       expect(result1).toHaveProperty('suggestions');
       expect(result1).toHaveProperty('hint');
       const prefixInfo = tokenize('/command arg1');
-      expect(prefixInfo.tokens).toEqual(['command', 'arg1']);
+      expect(prefixInfo.tokens).toStrictEqual(['command', 'arg1']);
 
       // Test that "@command arg1" correctly removes "@command"
       const result2 = await handler(mockContext, '', '@command arg1');
@@ -344,14 +344,14 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize removes command prefix tokens even without additional args @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
       const info = tokenize('/command');
 
-      expect(info.tokens).toEqual(['/command']);
+      expect(info.tokens).toStrictEqual(['/command']);
       expect(info.partialToken).toBe('/command');
     });
 
     it('tokenize keeps a single command token without stripping slash when no args present', () => {
       const info = tokenize('/single');
 
-      expect(info.tokens).toEqual(['/single']);
+      expect(info.tokens).toStrictEqual(['/single']);
       expect(info.partialToken).toBe('/single');
       expect(info.hasTrailingSpace).toBe(false);
     });
@@ -359,21 +359,21 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize strips prefix when arguments follow the command', () => {
       const info = tokenize('/cmd argument');
 
-      expect(info.tokens).toEqual(['cmd', 'argument']);
+      expect(info.tokens).toStrictEqual(['cmd', 'argument']);
       expect(info.partialToken).toBe('argument');
     });
 
     it('tokenize strips @ prefix when arguments follow the command', () => {
       const info = tokenize('@cmd argument');
 
-      expect(info.tokens).toEqual(['cmd', 'argument']);
+      expect(info.tokens).toStrictEqual(['cmd', 'argument']);
       expect(info.partialToken).toBe('argument');
     });
 
     it('tokenize returns empty partial token when trailing space follows command', () => {
       const info = tokenize('/cmd ');
 
-      expect(info.tokens).toEqual(['cmd']);
+      expect(info.tokens).toStrictEqual(['cmd']);
       expect(info.partialToken).toBe('');
       expect(info.hasTrailingSpace).toBe(true);
     });
@@ -381,14 +381,14 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize removes prefix-only commands', () => {
       const info = tokenize('/');
 
-      expect(info.tokens).toEqual([]);
+      expect(info.tokens).toStrictEqual([]);
       expect(info.partialToken).toBe('');
     });
 
     it('tokenize leaves tokens untouched when no prefix is present', () => {
       const info = tokenize('plain argument');
 
-      expect(info.tokens).toEqual(['plain', 'argument']);
+      expect(info.tokens).toStrictEqual(['plain', 'argument']);
       expect(info.partialToken).toBe('argument');
       expect(info.hasTrailingSpace).toBe(false);
     });
@@ -396,13 +396,13 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize does not emit empty tokens for repeated spaces', () => {
       const info = tokenize('/cmd    value');
 
-      expect(info.tokens).toEqual(['cmd', 'value']);
+      expect(info.tokens).toStrictEqual(['cmd', 'value']);
     });
 
     it('tokenize only strips known prefix characters', () => {
       const info = tokenize('!cmd argument');
 
-      expect(info.tokens).toEqual(['!cmd', 'argument']);
+      expect(info.tokens).toStrictEqual(['!cmd', 'argument']);
     });
 
     it('computeHintForLiterals falls back to first description when endings differ', async () => {
@@ -429,7 +429,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
     it('tokenize detects trailing space @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
       const info = tokenize('/cmd value ');
 
-      expect(info.tokens).toEqual(['cmd', 'value']);
+      expect(info.tokens).toStrictEqual(['cmd', 'value']);
       expect(info.partialToken).toBe('');
       expect(info.hasTrailingSpace).toBe(true);
     });
@@ -444,7 +444,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       // After "/create", should suggest type options
       const result1 = await handler(mockContext, '', '/create ');
-      expect(result1.suggestions).toEqual([
+      expect(result1.suggestions).toStrictEqual([
         expect.objectContaining({ value: 'create' }),
       ]);
 
@@ -464,7 +464,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       // After "/subagent create", should suggest mode options (not be stuck on 'create')
       const result1 = await handler(mockContext, '', '/subagent create ');
-      expect(result1.suggestions).toEqual(
+      expect(result1.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'manual' }),
           expect.objectContaining({ value: 'auto' }),
@@ -497,7 +497,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       // After "/subagent create", position should reflect we're at mode argument (position 0 of schema after command)
       const result1 = await handler(mockContext, '', '/subagent create ');
-      expect(result1.suggestions).toEqual(
+      expect(result1.suggestions).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ value: 'manual' }),
           expect.objectContaining({ value: 'auto' }),
@@ -576,7 +576,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const result = await handler(mockContext, '', '/subagent create ma');
 
       // Should suggest manual for the mode argument (partial match)
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'manual' })]),
       );
 
@@ -588,14 +588,14 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
 
       // Test with partial "au" as well
       const result2 = await handler(mockContext, '', '/subagent create au');
-      expect(result2.suggestions).toEqual(
+      expect(result2.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'auto' })]),
       );
       expect(result2.hint).not.toBe('Prompt');
 
       // Test with partial "m" - should suggest manual (not auto since it doesn't start with 'm')
       const result3 = await handler(mockContext, '', '/subagent create m');
-      expect(result3.suggestions).toEqual(
+      expect(result3.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'manual' })]),
       );
       expect(result3.hint).not.toBe('Prompt');
@@ -678,8 +678,8 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             const results3 = await handler(mockContext, '', '/cmd ');
 
             // Property 1: Results should be stable across calls
-            expect(results1.suggestions).toEqual(results2.suggestions);
-            expect(results2.suggestions).toEqual(results3.suggestions);
+            expect(results1.suggestions).toStrictEqual(results2.suggestions);
+            expect(results2.suggestions).toStrictEqual(results3.suggestions);
 
             // Property 2: No duplicates in suggestions (handle edge case where options might be empty)
             const suggestionValues = results1.suggestions.map((s) => s.value);
@@ -781,7 +781,8 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
               expect(typeof result.hint).toBe('string');
 
               // Property 2: Schema should not be mutated
-              expect(schema).toEqual(originalSchema);
+              // Use toMatchObject since JSON.stringify drops undefined properties
+              expect(schema).toMatchObject(originalSchema);
 
               // Property 3: Suggestions should be valid strings
               result.suggestions.forEach((suggestion) => {

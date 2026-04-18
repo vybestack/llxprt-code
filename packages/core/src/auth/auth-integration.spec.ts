@@ -449,14 +449,14 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const qwenStatus = status.find((s) => s.provider === 'qwen');
       const geminiStatus = status.find((s) => s.provider === 'gemini');
 
-      expect(qwenStatus).toEqual({
+      expect(qwenStatus).toStrictEqual({
         provider: 'qwen',
         authenticated: true,
         oauthEnabled: true,
         expiresIn: 3600,
       });
 
-      expect(geminiStatus).toEqual({
+      expect(geminiStatus).toStrictEqual({
         provider: 'gemini',
         authenticated: false,
         oauthEnabled: false,

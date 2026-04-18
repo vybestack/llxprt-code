@@ -690,7 +690,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
     const usage = await manager.getAnthropicUsageInfo();
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('bucket-b-token');
-    expect(usage).toEqual({ bucket: 'bucket-b' });
+    expect(usage).toStrictEqual({ bucket: 'bucket-b' });
   });
 
   it('falls back to the unscoped foreground session bucket for anthropic usage lookups when no scoped bucket exists', async () => {
@@ -730,7 +730,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
     const usage = await manager.getAnthropicUsageInfo();
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('bucket-b-token');
-    expect(usage).toEqual({ bucket: 'bucket-b' });
+    expect(usage).toStrictEqual({ bucket: 'bucket-b' });
   });
 
   it('uses the only configured profile bucket for logout, auth status, and anthropic usage after a fresh restart', async () => {
@@ -777,7 +777,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
     const usage = await manager.getAnthropicUsageInfo();
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('named-bucket-token');
-    expect(usage).toEqual({ bucket: 'named-bucket' });
+    expect(usage).toStrictEqual({ bucket: 'named-bucket' });
 
     await manager.logout('anthropic');
 
@@ -844,7 +844,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
     const usage = await manager.getAnthropicUsageInfo();
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('named-bucket-token');
-    expect(usage).toEqual({ bucket: 'named-bucket' });
+    expect(usage).toStrictEqual({ bucket: 'named-bucket' });
 
     await manager.logout('anthropic');
 
@@ -883,7 +883,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
       const buckets = await managerInternal.getProfileBuckets('anthropic');
 
-      expect(buckets).toEqual(['gmail', 'work']);
+      expect(buckets).toStrictEqual(['gmail', 'work']);
     });
   });
 
@@ -914,7 +914,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
       // SHOULD return [] because the providers don't match
       const buckets = await managerInternal.getProfileBuckets('codex');
 
-      expect(buckets).toEqual([]);
+      expect(buckets).toStrictEqual([]);
     });
 
     /**
@@ -940,7 +940,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
       const buckets = await managerInternal.getProfileBuckets('anthropic');
 
-      expect(buckets).toEqual([]);
+      expect(buckets).toStrictEqual([]);
     });
   });
 
@@ -961,7 +961,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
       const buckets = await managerInternal.getProfileBuckets('anthropic');
 
-      expect(buckets).toEqual([]);
+      expect(buckets).toStrictEqual([]);
     });
   });
 
@@ -986,7 +986,7 @@ describe('Issue #1468: getProfileBuckets validates provider matches profile', ()
 
       const buckets = await managerInternal.getProfileBuckets('anthropic');
 
-      expect(buckets).toEqual([]);
+      expect(buckets).toStrictEqual([]);
     });
   });
 });
