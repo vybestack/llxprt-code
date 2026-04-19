@@ -708,6 +708,21 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 S6A
   // ============================================================================
+  // Issue #1569: Batch S6B - sonarjs/no-ignored-exceptions enforcement
+  // ============================================================================
+  // Ensure catch blocks handle errors rather than silently ignoring them.
+  {
+    files: [
+      'packages/a2a-server/src/agent/executor.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      'sonarjs/no-ignored-exceptions': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6B
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
