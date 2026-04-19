@@ -738,6 +738,22 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 S6C
   // ============================================================================
+  // Issue #1569: Batch S6D - sonarjs/os-command enforcement
+  // ============================================================================
+  // Enforce safe OS command execution patterns.
+  {
+    files: ['packages/a2a-server/src/agent/executor.ts'],
+    plugins: {
+      sonarjs,
+    },
+    rules: {
+      'sonarjs/os-command': 'error',
+      'sonarjs/no-os-command-from-path': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6D
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
