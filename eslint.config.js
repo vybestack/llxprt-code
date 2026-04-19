@@ -524,6 +524,26 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569
   // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch T1D - vitest/expect-expect enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  // This is a phased rollout; the rule remains at 'warn' for other test files.
+  {
+    files: [
+      'packages/core/src/tools/todo-read.test.ts',
+      'packages/core/src/tools/todo-write.test.ts',
+    ],
+    plugins: {
+      vitest,
+    },
+    rules: {
+      'vitest/expect-expect': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 T1D
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
