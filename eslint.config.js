@@ -676,6 +676,22 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 C5C
   // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch C5D - max-lines enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 C5D
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
