@@ -693,12 +693,22 @@ export async function writeCheckpointsAndUpdateRequests(
 /**
  * Applies a string replacement to content.
  * Pure helper function used by getProposedContent.
+ *
+ * Note: This is a simplified version of the applyReplacement in edit.ts.
+ * It does not support fuzzy matching or strict occurrence counting.
+ *
+ * @param currentContent - The current file content (null for non-existent files)
+ * @param oldString - The text to replace
+ * @param newString - The replacement text
+ * @param isNewFile - Whether this is a new file
+ * @param expectedReplacements - Number of replacements to perform (default: 1)
  */
 export function applyReplacement(
   currentContent: string | null,
   oldString: string,
   newString: string,
   isNewFile: boolean,
+  expectedReplacements: number = 1,
 ): string {
   if (isNewFile) {
     return newString;
@@ -712,6 +722,13 @@ export function applyReplacement(
   if (oldString === '') {
     return currentContent;
   }
+
+  // Align with edit.ts semantics: default to single replacement
+  if (expectedReplacements === 1) {
+    return currentContent.replace(oldString, () => newString);
+  }
+
+  // For multiple replacements, replace all occurrences
   return currentContent.replaceAll(oldString, newString);
 }
 

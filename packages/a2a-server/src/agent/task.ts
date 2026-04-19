@@ -455,8 +455,6 @@ export class Task {
       allPendingAreStable &&
       !this.skipFinalTrueAfterInlineEdit.value
     ) {
-      this.skipFinalTrueAfterInlineEdit.value = false;
-
       // We don't need to send another message, just a final status update.
       this.setTaskStateAndPublishUpdate(
         'input-required',

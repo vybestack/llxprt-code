@@ -201,6 +201,34 @@ TAIL`;
       expect(result.content.split('\n').length).toBeLessThan(80);
     });
 
+    it('should not exceed effective limit in sample mode', () => {
+      // Create lines where sampling needs to stop before exceeding limit
+      // With max-tokens of 100 and ESCAPE_BUFFER_PERCENTAGE of 0.8, effectiveLimit is 80
+      const lines = Array.from(
+        { length: 50 },
+        (_, i) => `Line${i} ` + 'x'.repeat(35), // ~12 tokens each
+      );
+      const content = lines.join('\n');
+      mockConfig.getEphemeralSettings.mockReturnValue({
+        'tool-output-truncate-mode': 'sample',
+        'tool-output-max-tokens': 100,
+      });
+
+      const result = limitOutputTokens(
+        content,
+        mockConfig as unknown as Config,
+        'test-tool',
+      );
+
+      expect(result.wasTruncated).toBe(true);
+      // Verify the sampled content stays within reasonable bounds of the effective limit
+      // (allowing small tolerance for token estimation variance)
+      const sampledContent = result.content.split('\n\n[Sampled')[0];
+      const sampledTokens = estimateTokens(sampledContent);
+      // effectiveLimit is 80 (100 * 0.8), with some tolerance for estimation
+      expect(sampledTokens).toBeLessThanOrEqual(85);
+    });
+
     it('should handle single line content in sample mode', () => {
       // Create single line with many unique words to avoid token compression
       const words = Array.from({ length: 50000 }, (_, i) => `word${i}`).join(

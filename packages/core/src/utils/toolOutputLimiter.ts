@@ -240,6 +240,8 @@ export function limitOutputTokens(
     for (let i = 0; i < lines.length; i += step) {
       sampledLines.push(lines[i]);
       if (estimateTokens(sampledLines.join('\n')) > effectiveLimit) {
+        // Remove the last line that exceeded the limit
+        sampledLines.pop();
         break;
       }
     }

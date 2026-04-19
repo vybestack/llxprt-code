@@ -261,7 +261,8 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           leadingWhitespace={leadingWhitespace}
         />,
       );
-    } else if (line.trim().length === 0 && !inCodeBlock) {
+    } else if (line.trim().length === 0) {
+      // inCodeBlock is always false here due to early return at line 112
       if (!lastLineEmpty) {
         contentBlocks.push(
           <Box key={`spacer-${index}`} height={EMPTY_LINE_HEIGHT} />,

@@ -781,8 +781,10 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
               expect(typeof result.hint).toBe('string');
 
               // Property 2: Schema should not be mutated
-              // Use toMatchObject since JSON.stringify drops undefined properties
-              expect(schema).toMatchObject(originalSchema);
+              // Compare normalized JSON to catch both additions and deletions
+              expect(JSON.parse(JSON.stringify(schema))).toStrictEqual(
+                originalSchema,
+              );
 
               // Property 3: Suggestions should be valid strings
               result.suggestions.forEach((suggestion) => {

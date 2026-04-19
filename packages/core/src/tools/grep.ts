@@ -169,7 +169,7 @@ class GrepToolInvocation extends BaseToolInvocation<
         },
       };
     }
-    signal.addEventListener('abort', onUserAbort);
+    signal.addEventListener('abort', onUserAbort, { once: true });
 
     // Use the combined signal for all operations
     const combinedSignal = timeoutController.signal;
