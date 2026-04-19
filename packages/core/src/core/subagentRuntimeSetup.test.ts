@@ -38,7 +38,7 @@ describe('subagentRuntimeSetup', () => {
     buildChatSystemPrompt = mod.buildChatSystemPrompt;
     createSchedulerConfig = mod.createSchedulerConfig;
     createEmojiFilter = mod.createEmojiFilter;
-  });
+  }, 30000); // Increase timeout for dynamic import during full test suite runs
 
   describe('convertMetadataToFunctionDeclaration', () => {
     it('should convert tool metadata to FunctionDeclaration with fallbackName and description', () => {

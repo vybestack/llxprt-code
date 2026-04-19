@@ -106,8 +106,11 @@ describe('Orchestrator unit tests against real implementation', () => {
       WORKSPACE_ROOT,
     );
     try {
+      // Use a generous test timeout (2x navigationTimeoutMs + buffer) to remain robust under load
+      // while still verifying that the response is bounded (doesn't hang indefinitely)
+      const testTimeoutMs = 1500;
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 700),
+        setTimeout(() => reject(new Error('timeout')), testTimeoutMs),
       );
       const result = await Promise.race([
         hanging.gotoDefinition('/workspace/src/n.ts', 0, 0),

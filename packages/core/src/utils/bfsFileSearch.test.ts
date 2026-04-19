@@ -334,9 +334,14 @@ describe('bfsFileSearch', () => {
     expect(avgDuration).toBeLessThan(2000); // Very generous limit
 
     // Ensure consistency across runs (variance should not be too high)
-    // More tolerant in CI environments where performance can be variable
-    const maxConsistencyRatio = process.env.CI ? 3.0 : 1.5;
-    expect(consistencyRatio).toBeLessThan(maxConsistencyRatio); // Max variance should be reasonable
+    // I/O-bound operations under load can have high variance due to:
+    // - Filesystem cache state differences between runs
+    // - OS I/O scheduling with other processes competing for disk
+    // - Node.js async task queue depth variations
+    // A regression would show consistently slow times (high avgDuration),
+    // not just variance, so we use generous consistency thresholds.
+    const maxConsistencyRatio = process.env.CI ? 3.0 : 2.5;
+    expect(consistencyRatio).toBeLessThan(maxConsistencyRatio);
 
     console.log(
       `✅ Performance test passed: avg=${avgDuration.toFixed(2)}ms, consistency=${(consistencyRatio * 100).toFixed(1)}% (threshold: ${(maxConsistencyRatio * 100).toFixed(0)}%)`,

@@ -1070,20 +1070,18 @@ describe('useSlashCompletion', () => {
           ),
         );
 
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitFor(() => {
+          expect(result.current.suggestions).toHaveLength(2);
+          expect(result.current.suggestions).toStrictEqual(
+            expect.arrayContaining([
+              {
+                label: 'derp/script.ts',
+                value: 'derp/script.ts',
+              },
+              { label: 'src', value: 'src' },
+            ]),
+          );
         });
-
-        expect(result.current.suggestions).toHaveLength(2);
-        expect(result.current.suggestions).toStrictEqual(
-          expect.arrayContaining([
-            {
-              label: 'derp/script.ts',
-              value: 'derp/script.ts',
-            },
-            { label: 'src', value: 'src' },
-          ]),
-        );
       });
 
       it('should handle directory-specific completions with git filtering', async () => {
@@ -1736,14 +1734,15 @@ describe('useSlashCompletion', () => {
         ),
       );
 
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+      // Use waitFor to robustly poll for the suggestion under load
+      let suggestion: { label: string; value: string } | undefined;
+      await waitFor(() => {
+        suggestion = result.current.suggestions.find(
+          (s) => s.label === 'my file (backup) [v1.2].txt',
+        );
+        expect(suggestion).toBeDefined();
       });
 
-      const suggestion = result.current.suggestions.find(
-        (s) => s.label === 'my file (backup) [v1.2].txt',
-      );
-      expect(suggestion).toBeDefined();
       expect(suggestion!.value).toBe(
         'my\\ file\\ \\(backup\\)\\ \\[v1.2\\].txt',
       );

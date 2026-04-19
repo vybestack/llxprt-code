@@ -612,6 +612,9 @@ describe('ast-edit characterization tests', () => {
         new AbortController().signal,
       );
 
+      expect(confirmationDetails).toBeDefined();
+      expect(confirmationDetails?.onConfirm).toBeDefined();
+
       if (confirmationDetails?.onConfirm) {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
