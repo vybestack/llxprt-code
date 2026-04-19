@@ -650,6 +650,19 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 C5A
   // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch C5B - complexity enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      complexity: ['error', 15],
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 C5B
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
