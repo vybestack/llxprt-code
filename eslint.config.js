@@ -723,6 +723,21 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 S6B
   // ============================================================================
+  // Issue #1569: Batch S6C - sonarjs/regular-expr enforcement
+  // ============================================================================
+  // Enforce proper regular expression construction and usage.
+  {
+    files: [
+      'packages/core/src/providers/anthropic/AnthropicResponseParser.ts',
+      'packages/core/src/providers/anthropic/AnthropicMessageNormalizer.ts',
+    ],
+    rules: {
+      'sonarjs/regular-expr': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6C
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
