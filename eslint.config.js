@@ -504,6 +504,26 @@ export default tseslint.config(
 
     },
   },
+  // ============================================================================
+  // Issue #1569: Batch T1C - vitest/require-to-throw-message enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  // This is a phased rollout; the rule remains at 'warn' for other test files.
+  {
+    files: [
+      'packages/a2a-server/src/agent/task.test.ts',
+      'packages/a2a-server/src/commands/restore.test.ts',
+    ],
+    plugins: {
+      vitest,
+    },
+    rules: {
+      'vitest/require-to-throw-message': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
