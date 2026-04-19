@@ -157,7 +157,7 @@ export class Task {
     const serverStatuses = getAllMCPServerStatuses();
     const servers = Object.keys(mcpServers).map((serverName) => ({
       name: serverName,
-      status: serverStatuses.get(serverName) || MCPServerStatus.DISCONNECTED,
+      status: serverStatuses.get(serverName) ?? MCPServerStatus.DISCONNECTED,
       tools: toolRegistry.getToolsByServer(serverName).map((tool) => ({
         name: tool.name,
         description: tool.description,
@@ -386,8 +386,7 @@ export class Task {
       }
 
       // When status is 'awaiting_approval', tc is narrowed to WaitingToolCall which always has confirmationDetails.
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (tc.status === 'awaiting_approval' && tc.confirmationDetails) {
+      if (tc.status === 'awaiting_approval') {
         this.pendingToolConfirmationDetails.set(
           tc.request.callId,
           tc.confirmationDetails,
