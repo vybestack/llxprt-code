@@ -692,6 +692,22 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 C5D
   // ============================================================================
+  // Issue #1569: Batch S6A - sonarjs/todo-tag enforcement
+  // ============================================================================
+  // Enforce no TODO/FIXME/XXX/HACK comments in production code.
+  // These tags indicate incomplete work that should be tracked properly.
+  {
+    files: [
+      'packages/a2a-server/src/config/config.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      'sonarjs/todo-tag': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6A
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
