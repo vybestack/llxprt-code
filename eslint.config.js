@@ -603,6 +603,21 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 BN4B
   // ============================================================================
+  // Issue #1569: Batch BN4C - no-unnecessary-condition enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: [
+      'packages/a2a-server/src/agent/executor.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4C
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
