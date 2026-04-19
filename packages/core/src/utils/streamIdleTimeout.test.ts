@@ -176,10 +176,10 @@ describe('resolveStreamIdleTimeoutMs', () => {
     process.env = originalEnv;
   });
 
-  it('returns DEFAULT_STREAM_IDLE_TIMEOUT_MS (600000) when no env var or config', () => {
+  it('returns DEFAULT_STREAM_IDLE_TIMEOUT_MS (0) when no env var or config — watchdog disabled by default', () => {
     const result = resolveStreamIdleTimeoutMs();
     expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
-    expect(result).toBe(600_000);
+    expect(result).toBe(0);
   });
 
   it('env var LLXPRT_STREAM_IDLE_TIMEOUT_MS overrides default', () => {
@@ -337,6 +337,44 @@ describe('resolveStreamIdleTimeoutMs', () => {
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(0);
+    });
+  });
+
+  describe('default-off behavior', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+      delete process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV];
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('default is 0 (watchdog disabled) when no env var or config is set', () => {
+      expect(DEFAULT_STREAM_IDLE_TIMEOUT_MS).toBe(0);
+      const result = resolveStreamIdleTimeoutMs();
+      expect(result).toBe(0);
+    });
+
+    it('env var LLXPRT_STREAM_IDLE_TIMEOUT_MS re-enables the watchdog with a positive value', () => {
+      process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '120000';
+      const result = resolveStreamIdleTimeoutMs();
+      expect(result).toBe(120_000);
+    });
+
+    it('ephemeral setting stream-idle-timeout-ms re-enables the watchdog with a positive value', () => {
+      const mockConfig = {
+        getEphemeralSetting: (key: string) => {
+          if (key === STREAM_IDLE_TIMEOUT_SETTING_KEY) {
+            return 90_000;
+          }
+          return undefined;
+        },
+      };
+      const result = resolveStreamIdleTimeoutMs(mockConfig);
+      expect(result).toBe(90_000);
     });
   });
 });

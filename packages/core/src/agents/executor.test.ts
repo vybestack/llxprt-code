@@ -38,7 +38,6 @@ import { z } from 'zod';
 import type { ToolErrorType } from '../index.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { createAbortError } from '../utils/delay.js';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -825,6 +824,9 @@ describe('AgentExecutor', () => {
     });
 
     it('should actively abort a stalled response stream before the overall timeout expires', async () => {
+      const testTimeoutMs = 30_000; // 30 second timeout for this test
+      mockConfig.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
       const definition = createTestDefinition([LSTool.Name], {
         max_time_minutes: 5,
       });
@@ -877,7 +879,7 @@ describe('AgentExecutor', () => {
         },
       );
 
-      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1_000);
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
       await runRejection;
       expect(capturedSignal?.aborted).toBe(true);
