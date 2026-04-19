@@ -577,6 +577,19 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 R3B
   // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch BN4A - switch-exhaustiveness-check enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4A
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
