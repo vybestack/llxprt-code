@@ -544,6 +544,23 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 T1D
   // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch R3A - no-else-return enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: [
+      'packages/a2a-server/src/config/config.ts',
+      'packages/a2a-server/src/commands/extensions.ts',
+      'packages/a2a-server/src/commands/restore.ts',
+    ],
+    rules: {
+      'no-else-return': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 R3A
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
