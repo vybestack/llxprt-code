@@ -590,6 +590,19 @@ export default tseslint.config(
   // ============================================================================
   // End Issue #1569 BN4A
   // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch BN4B - prefer-nullish-coalescing enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/config/config.ts'],
+    rules: {
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4B
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have
