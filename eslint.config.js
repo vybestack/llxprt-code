@@ -488,7 +488,12 @@ export default tseslint.config(
       ],
 
       // Stricter vitest rules (warnings for now)
-      'vitest/expect-expect': 'warn',
+      // fast-check's `fc.assert` is a real assertion helper; tests using
+      // `fc.assert(fc.property(...))` do assert but use no literal `expect`.
+      'vitest/expect-expect': [
+        'warn',
+        { assertFunctionNames: ['expect', 'fc.assert'] },
+      ],
       'vitest/no-conditional-expect': 'warn',
       'vitest/no-conditional-in-test': 'warn',
       'vitest/require-to-throw-message': 'error',
@@ -518,7 +523,10 @@ export default tseslint.config(
       vitest,
     },
     rules: {
-      'vitest/expect-expect': 'error',
+      'vitest/expect-expect': [
+        'error',
+        { assertFunctionNames: ['expect', 'fc.assert'] },
+      ],
     },
   },
   // ============================================================================
