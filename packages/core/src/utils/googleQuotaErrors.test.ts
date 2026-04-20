@@ -341,6 +341,7 @@ describe('classifyGoogleError', () => {
     const originalError = new Error();
     const result = classifyGoogleError(originalError);
     expect(result).toBeInstanceOf(RetryableQuotaError);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result instanceof RetryableQuotaError) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
@@ -383,6 +384,7 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(errorWithEmptyDetails);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result instanceof RetryableQuotaError) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBe(5000);
@@ -405,6 +407,7 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(generic429);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result instanceof RetryableQuotaError) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
@@ -423,6 +426,7 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(errorWithEmptyDetails);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result instanceof RetryableQuotaError) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
@@ -450,6 +454,7 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(errorWithEmptyDetails);
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result instanceof RetryableQuotaError) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();

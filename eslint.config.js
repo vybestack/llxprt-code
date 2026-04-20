@@ -495,7 +495,7 @@ export default tseslint.config(
         { assertFunctionNames: ['expect', 'fc.assert'] },
       ],
       'vitest/no-conditional-expect': 'error',
-      'vitest/no-conditional-in-test': 'warn',
+      'vitest/no-conditional-in-test': 'error',
       'vitest/require-to-throw-message': 'error',
       'vitest/prefer-strict-equal': 'error',
       'vitest/max-nested-describe': ['warn', { max: 3 }],

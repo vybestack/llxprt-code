@@ -567,6 +567,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
 
       expect(token1).not.toBeNull();
       expect(token2).not.toBeNull();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (token1 && token2) {
         const now = Math.floor(Date.now() / 1000);
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -961,6 +962,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(geminiWork).not.toBeNull();
 
       // Verify expiry is tracked correctly
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (anthropicWork && geminiWork) {
         const now = Math.floor(Date.now() / 1000);
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -975,6 +977,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'personal-gmail',
       );
       expect(anthropicPersonal).not.toBeNull();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!anthropicPersonal) throw new Error('unreachable: narrowing failed');
       const now = Math.floor(Date.now() / 1000);
       expect(anthropicPersonal.expiry).toBeLessThan(now); // Expired

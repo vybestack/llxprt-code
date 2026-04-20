@@ -85,6 +85,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Act: Simulate the useEffect logic
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -115,6 +116,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
 
       // Act: Simulate the useEffect logic
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -143,6 +145,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Auto-dismiss should trigger (using distinct flag, not __oauth_needs_code)
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -161,6 +164,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = false;
 
       // Dialog should NOT auto-dismiss (flag is false)
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -175,6 +179,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
       (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
 
       // Now dialog should auto-dismiss
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===
@@ -198,6 +203,7 @@ describe('OAuthCodeDialog auto-dismiss behavior', () => {
         undefined;
 
       // Dialog should NOT auto-dismiss - user can still paste code manually
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         isOAuthCodeDialogOpen &&
         (global as Record<string, unknown>).__oauth_browser_auth_complete ===

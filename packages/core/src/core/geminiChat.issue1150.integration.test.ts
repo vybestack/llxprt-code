@@ -127,6 +127,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Process thinking chunk
       const content1 = thinkingChunk.candidates?.[0]?.content;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (content1?.parts) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...content1.parts);
@@ -141,6 +142,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Process tool call chunk
       const content2 = toolCallChunk.candidates?.[0]?.content;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (content2?.parts) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...content2.parts);
@@ -258,6 +260,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Simulate recordHistory's attachment logic
       let didAttachThoughtBlocks = false;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
         outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
         didAttachThoughtBlocks = true;
@@ -314,6 +317,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       };
 
       let didAttachThoughtBlocks = false;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
         outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
         didAttachThoughtBlocks = true;

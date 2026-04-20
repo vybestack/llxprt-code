@@ -386,6 +386,7 @@ describe('Profile with Keyfile Integration Tests', () => {
 
       let appliedKey: string | undefined;
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (authKey) {
         // Direct auth-key takes precedence
         appliedKey = authKey;

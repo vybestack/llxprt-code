@@ -279,6 +279,7 @@ describe('getPathSuggestions', () => {
     const results = await getPathSuggestions('./', testRootDir);
     const firstDirIdx = results.findIndex((r) => r.isDirectory);
     const firstFileIdx = results.findIndex((r) => !r.isDirectory);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (firstDirIdx !== -1 && firstFileIdx !== -1) {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(firstDirIdx).toBeLessThan(firstFileIdx);

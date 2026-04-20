@@ -63,6 +63,7 @@ describe('clearCommand', () => {
   });
 
   it('should set debug message, reset chat, reset telemetry, update history token count, and clear UI when config is available', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
@@ -101,6 +102,7 @@ describe('clearCommand', () => {
   });
 
   it('should fallback to runtime services when command context lacks config', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
@@ -137,6 +139,7 @@ describe('clearCommand', () => {
   });
 
   it('should skip reset when no config is available anywhere', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
@@ -174,6 +177,7 @@ describe('clearCommand', () => {
    */
 
   it('should trigger SessionEnd hook before resetChat when clearing', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
@@ -207,6 +211,7 @@ describe('clearCommand', () => {
   });
 
   it('should complete clear even if SessionEnd hook throws', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
@@ -227,6 +232,7 @@ describe('clearCommand', () => {
   });
 
   it('should complete clear even if SessionStart hook throws', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }

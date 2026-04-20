@@ -127,6 +127,7 @@ describe('Tool Confirmation Policy Updates', () => {
         const params = getParams();
 
         // For file-based tools, ensure the file exists if needed
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (params.file_path) {
           const fullPath = path.isAbsolute(params.file_path)
             ? params.file_path
@@ -146,9 +147,11 @@ describe('Tool Confirmation Policy Updates', () => {
         );
         expect(confirmation).not.toBe(false);
 
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (!confirmation) throw new Error('unreachable: narrowing failed');
         await confirmation.onConfirm(outcome);
 
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (shouldPublish) {
           // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockMessageBus.publish).toHaveBeenCalledWith(
@@ -168,6 +171,7 @@ describe('Tool Confirmation Policy Updates', () => {
           expect(hasUpdatePolicy).toBe(false);
         }
 
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (expectedApprovalMode !== undefined) {
           // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(

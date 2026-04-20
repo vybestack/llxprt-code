@@ -90,6 +90,7 @@ describe('initCommand', () => {
   it('should return an error if config is not available', async () => {
     // Arrange: Create a context without config
     const noConfigContext = createMockCommandContext();
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (noConfigContext.services) {
       noConfigContext.services.config = null;
     }

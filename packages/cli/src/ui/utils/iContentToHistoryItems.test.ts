@@ -76,6 +76,7 @@ describe('iContentToHistoryItems', () => {
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
     expect(output[0]).toMatchObject({ type: 'tool_group' });
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (output[0].type !== 'tool_group')
       throw new Error('unreachable: narrowing failed');
     expect(output[0].tools[0]).toMatchObject({
@@ -141,6 +142,7 @@ describe('iContentToHistoryItems', () => {
 
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (output[0].type !== 'tool_group')
       throw new Error('unreachable: narrowing failed');
     expect(output[0].tools[0].status).toBe(ToolCallStatus.Error);
@@ -170,6 +172,7 @@ describe('iContentToHistoryItems', () => {
 
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (output[0].type !== 'tool_group')
       throw new Error('unreachable: narrowing failed');
     expect(typeof output[0].tools[0].resultDisplay).toBe('string');

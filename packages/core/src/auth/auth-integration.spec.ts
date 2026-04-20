@@ -295,6 +295,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that triggers lazy authentication
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!mockQwenProvider.makeApiCall)
         throw new Error('unreachable: narrowing failed');
       vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
@@ -338,6 +339,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that checks authentication
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!mockQwenProvider.makeApiCall)
         throw new Error('unreachable: narrowing failed');
       vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
@@ -484,6 +486,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(
         'oauth-token-from-lazy-trigger',
       );
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!mockQwenProvider.makeApiCall)
         throw new Error('unreachable: narrowing failed');
       vi.mocked(mockQwenProvider.makeApiCall).mockResolvedValue('api-success');

@@ -202,6 +202,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       const modelResponseParts: Part[] = [];
 
       // Process thinking chunk
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (thinkingChunk.parts) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...thinkingChunk.parts);
@@ -209,6 +210,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       }
 
       // Process tool call chunk
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (toolCallChunk.parts) {
         if (includeThoughtsInHistory) {
           modelResponseParts.push(...toolCallChunk.parts);
@@ -305,6 +307,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
 
       // Simulate recordHistory's attachment logic
       let didAttachThoughtBlocks = false;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
         outputContent.blocks = [...thoughtBlocks, ...outputContent.blocks];
         didAttachThoughtBlocks = true;
@@ -377,6 +380,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
 
       // Step 4: Accumulate in processStreamResponse
       const modelResponseParts: Part[] = [];
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (includeThoughtsInHistory) {
         modelResponseParts.push(...(thinkingContent.parts ?? []));
         modelResponseParts.push(...(toolCallContent.parts ?? []));
@@ -428,6 +432,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       };
 
       // Attach thinking blocks
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (thoughtBlocks.length > 0) {
         outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
       }

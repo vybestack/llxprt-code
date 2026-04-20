@@ -45,6 +45,7 @@ describe('resolveTextSearchTarget', () => {
   it('should return kind directory for valid directory path', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, 'sub');
     expect(result.kind).toBe('directory');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'directory')
       throw new Error('unreachable: narrowing failed');
     expect(result.searchDir).toBe(path.join(tempDir, 'sub'));
@@ -57,6 +58,7 @@ describe('resolveTextSearchTarget', () => {
       'file.txt',
     );
     expect(result.kind).toBe('file');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'file')
       throw new Error('unreachable: narrowing failed');
     expect(result.filePath).toBe(path.join(tempDir, 'file.txt'));
@@ -71,6 +73,7 @@ describe('resolveTextSearchTarget', () => {
       path.join('sub', 'nested.txt'),
     );
     expect(result.kind).toBe('file');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'file')
       throw new Error('unreachable: narrowing failed');
     expect(result.filePath).toBe(path.join(tempDir, 'sub', 'nested.txt'));
@@ -94,6 +97,7 @@ describe('resolveTextSearchTarget', () => {
     const absPath = path.join(tempDir, 'sub');
     const result = resolveTextSearchTarget(tempDir, workspaceContext, absPath);
     expect(result.kind).toBe('directory');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'directory')
       throw new Error('unreachable: narrowing failed');
     expect(result.searchDir).toBe(absPath);
@@ -103,6 +107,7 @@ describe('resolveTextSearchTarget', () => {
     const absPath = path.join(tempDir, 'file.txt');
     const result = resolveTextSearchTarget(tempDir, workspaceContext, absPath);
     expect(result.kind).toBe('file');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'file')
       throw new Error('unreachable: narrowing failed');
     expect(result.filePath).toBe(absPath);
@@ -113,6 +118,7 @@ describe('resolveTextSearchTarget', () => {
   it('should handle relative path with dot prefix', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, './sub');
     expect(result.kind).toBe('directory');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'directory')
       throw new Error('unreachable: narrowing failed');
     expect(result.searchDir).toBe(path.join(tempDir, 'sub'));
@@ -121,6 +127,7 @@ describe('resolveTextSearchTarget', () => {
   it('should handle dot path as directory', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, '.');
     expect(result.kind).toBe('directory');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (result.kind !== 'directory')
       throw new Error('unreachable: narrowing failed');
     expect(result.searchDir).toBe(tempDir);

@@ -105,6 +105,7 @@ describe('tools governance integration', () => {
       ui: { addItem: uiAddItem },
     });
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!toolsCommand.action) {
       throw new Error('toolsCommand action not defined');
     }

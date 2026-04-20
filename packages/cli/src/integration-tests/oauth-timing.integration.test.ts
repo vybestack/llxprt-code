@@ -147,6 +147,7 @@ describe('OAuth Timing Integration Tests', () => {
       const loadedProfile = await profileManager.loadProfile('test-profile');
 
       // Apply profile settings to settings service
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (loadedProfile.ephemeralSettings) {
         for (const [key, value] of Object.entries(
           loadedProfile.ephemeralSettings,
@@ -182,6 +183,7 @@ describe('OAuth Timing Integration Tests', () => {
         await profileManager.loadProfile('anthropic-profile');
 
       // Apply profile settings
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (loadedProfile.ephemeralSettings) {
         for (const [key, value] of Object.entries(
           loadedProfile.ephemeralSettings,
@@ -214,6 +216,7 @@ describe('OAuth Timing Integration Tests', () => {
       const loadedProfile = await profileManager.loadProfile('no-auth-profile');
 
       // Apply profile settings
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (loadedProfile.ephemeralSettings) {
         for (const [key, value] of Object.entries(
           loadedProfile.ephemeralSettings,

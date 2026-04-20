@@ -312,6 +312,7 @@ describe('useSelectionList', () => {
       );
 
       // Simulate rapid inputs with separate act blocks to allow effects to run
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!activeKeypressHandler) throw new Error('Handler not active');
 
       const handler = activeKeypressHandler;

@@ -522,6 +522,7 @@ describe('ReadManyFilesTool', () => {
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
       const content = result.llmContent as string[];
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!Array.isArray(content)) {
         throw new Error(`llmContent is not an array: ${content}`);
       }

@@ -1449,6 +1449,7 @@ describe('SettingsDialog', () => {
 
         const { lastFrame, stdin } = renderDialog(settings, onSelect);
 
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (stdinActions) {
           stdinActions(stdin);
         }

@@ -315,6 +315,7 @@ describe('MiddleOutStrategy', () => {
       // Check: top messages shouldn't end with an orphaned tool call
       // (i.e., an AI with tool_call whose response isn't also in top)
       const lastTop = topMessages[topMessages.length - 1];
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (lastTop?.speaker === 'ai') {
         const toolCalls = lastTop.blocks.filter((b) => b.type === 'tool_call');
         if (toolCalls.length > 0) {
@@ -338,6 +339,7 @@ describe('MiddleOutStrategy', () => {
       }
 
       // Bottom messages should not start with an orphaned tool response
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (bottomMessages.length > 0) {
         const firstBottom = bottomMessages[0];
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context

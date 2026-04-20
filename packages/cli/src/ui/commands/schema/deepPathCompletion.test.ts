@@ -164,6 +164,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
     it('works with fuzzy matching enabled @requirement:REQ-005', async () => {
       // Create context with fuzzy matching explicitly enabled
       const fuzzyContext = createMockCommandContext();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (fuzzyContext.services.settings?.merged) {
         fuzzyContext.services.settings.merged.enableFuzzyFiltering = true;
       }
@@ -191,6 +192,7 @@ describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
     it('works with fuzzy matching disabled (prefix only) @requirement:REQ-006', async () => {
       // Create context with fuzzy matching explicitly disabled
       const prefixContext = createMockCommandContext();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (prefixContext.services.settings?.merged) {
         prefixContext.services.settings.merged.enableFuzzyFiltering = false;
       }

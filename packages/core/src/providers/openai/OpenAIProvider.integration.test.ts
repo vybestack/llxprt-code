@@ -69,6 +69,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should fetch real models from OpenAI API', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!provider) return; // Skip if no API key
     const models = await provider.getModels();
 
@@ -97,6 +98,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should generate real chat completion', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!provider) return; // Skip if no API key
     const messages: IContent[] = [
       {
@@ -141,6 +143,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   });
 
   it('should handle tool calls', { timeout: 10000 }, async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!provider) return; // Skip if no API key
     const messages: IContent[] = [
       {

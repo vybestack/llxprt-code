@@ -199,6 +199,7 @@ describe('/key — Table-Driven Parsing (R27.2)', () => {
       const result = await runKey(tc.input);
       expect(result.type).toBe('message');
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (tc.expectsSubcommand) {
         // Subcommand stubs return 'not yet implemented' during P14;
         // after P15, they return real results. Either way, dispatched.

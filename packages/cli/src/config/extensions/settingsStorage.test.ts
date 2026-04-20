@@ -157,6 +157,7 @@ describe('ExtensionSettingsStorage', () => {
       await storage.saveSettings(settings, values);
 
       const envPath = getSettingsEnvFilePath(tmpDir);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (fs.existsSync(envPath)) {
         const content = await fs.promises.readFile(envPath, 'utf-8');
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context

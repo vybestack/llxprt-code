@@ -87,6 +87,7 @@ describe('Deprecation Guards (P36)', () => {
 
       const violations = filterMatches(matches, allowedPaths);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (violations.length > 0) {
         console.error('Found direct KeyringTokenStore instantiation:');
         violations.forEach((v) => {
@@ -114,6 +115,7 @@ describe('Deprecation Guards (P36)', () => {
 
       const violations = filterMatches(matches, allowedPaths);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (violations.length > 0) {
         console.error('Found direct getProviderKeyStorage() calls:');
         violations.forEach((v) => {
@@ -140,6 +142,7 @@ describe('Deprecation Guards (P36)', () => {
         m.includes('export function mergeRefreshedToken'),
       );
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (definitions.length !== 1) {
         console.error('Expected exactly 1 mergeRefreshedToken definition:');
         definitions.forEach((d) => {
@@ -160,6 +163,7 @@ describe('Deprecation Guards (P36)', () => {
       );
 
       // Should find zero - no variable assignments creating duplicate implementations
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (matches.length > 0) {
         console.error('Found mergeRefreshedToken assignments:');
         matches.forEach((m) => {

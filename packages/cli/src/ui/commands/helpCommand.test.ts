@@ -23,6 +23,7 @@ describe('helpCommand', () => {
   });
 
   it("should add a HELP history item for '/help'", async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!helpCommand.action) {
       throw new Error('Help command has no action');
     }

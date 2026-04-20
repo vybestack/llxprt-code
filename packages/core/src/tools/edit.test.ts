@@ -1008,6 +1008,7 @@ describe('EditTool', () => {
 
       expect(ideClient.openDiff).toHaveBeenCalledWith(filePath, newContent);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (confirmation && 'onConfirm' in confirmation) {
         await confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
       }

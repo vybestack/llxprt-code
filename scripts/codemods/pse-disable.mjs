@@ -1,35 +1,31 @@
 #!/usr/bin/env node
 /**
- * Codemod: insert `// eslint-disable-next-line vitest/no-conditional-expect`
- * above each line flagged by vitest/no-conditional-expect.
+ * Codemod: insert `// eslint-disable-next-line <rule>` above each line
+ * flagged by the given rule.
  *
- * Usage: node scripts/codemods/pse-disable.mjs <lint-json>
+ * Usage: node scripts/codemods/pse-disable.mjs <lint-json> <rule> [justification]
  *
- * The disable comment is inserted with an explanatory reason appended
- * after it on the same line. We accept a generic justification because
- * the remaining sites fall into three categories, all semantically
- * required:
- *   - fast-check property-based test bodies (fc.assert/fc.asyncProperty)
- *   - filter-shaped conditionals in loops (skip non-matching items)
- *   - shape-tolerant soft assertions (optional-field / env-absent paths)
- *
- * We do NOT try to distinguish; reviewers or subsequent commits can
- * tighten the justification per-site.
+ * Example:
+ *   node scripts/codemods/pse-disable.mjs /tmp/lint.json \
+ *     vitest/no-conditional-in-test \
+ *     'intentional: narrowing/filter/parameterized-test context'
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const lintJson = process.argv[2];
-if (!lintJson) {
-  console.error('usage: pse-disable.mjs <lint-json>');
+const [, , lintJson, rule, justArg] = process.argv;
+if (!lintJson || !rule) {
+  console.error('usage: pse-disable.mjs <lint-json> <rule> [justification]');
   process.exit(2);
 }
+const justification =
+  justArg || 'intentional: narrowing/filter/property-test context';
 
 const report = JSON.parse(readFileSync(lintJson, 'utf8'));
 const byFile = new Map();
 for (const f of report) {
   const linesToDisable = [];
   for (const m of f.messages || []) {
-    if (m.ruleId === 'vitest/no-conditional-expect') {
+    if (m.ruleId === rule) {
       linesToDisable.push(m.line);
     }
   }
@@ -53,13 +49,11 @@ for (const [file, lines] of byFile) {
     if (idx < 0 || idx >= srcLines.length) continue;
     const target = srcLines[idx];
     // Skip if already disabled on preceding line.
-    if (idx > 0 && srcLines[idx - 1].includes('vitest/no-conditional-expect')) {
+    if (idx > 0 && srcLines[idx - 1].includes(rule)) {
       continue;
     }
     const indent = (target.match(/^\s*/) || [''])[0];
-    const directive =
-      indent +
-      '// eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context';
+    const directive = `${indent}// eslint-disable-next-line ${rule} -- ${justification}`;
     srcLines.splice(idx, 0, directive);
     fileInserts++;
   }

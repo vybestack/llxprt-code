@@ -827,6 +827,7 @@ describe('ShellTool', () => {
       expect(confirmation).not.toBe(false);
       expect(confirmation && confirmation.type).toBe('exec');
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!confirmation || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
@@ -848,6 +849,7 @@ describe('ShellTool', () => {
       );
 
       expect(confirmation).not.toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!confirmation || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }
@@ -866,6 +868,7 @@ describe('ShellTool', () => {
       );
 
       expect(confirmation).not.toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!confirmation || confirmation.type !== 'exec') {
         throw new Error('Expected exec confirmation details');
       }

@@ -16,6 +16,7 @@ import {
 describe('clipboardUtils', () => {
   describe('clipboardHasImage', () => {
     it('should return false on unsupported platforms', async () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (process.platform !== 'darwin' && process.platform !== 'win32') {
         const result = await clipboardHasImage();
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -28,6 +29,7 @@ describe('clipboardUtils', () => {
     });
 
     it('should return boolean on macOS or Windows', async () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (process.platform === 'darwin' || process.platform === 'win32') {
         const result = await clipboardHasImage();
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -42,6 +44,7 @@ describe('clipboardUtils', () => {
 
   describe('saveClipboardImage', () => {
     it('should return null on unsupported platforms', async () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (process.platform !== 'darwin' && process.platform !== 'win32') {
         const result = await saveClipboardImage();
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -59,6 +62,7 @@ describe('clipboardUtils', () => {
         '/invalid/path/that/does/not/exist',
       );
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (process.platform === 'darwin' || process.platform === 'win32') {
         // On macOS/Windows, might return null due to various errors
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context

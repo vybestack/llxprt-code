@@ -1101,6 +1101,7 @@ describe('mcpCommand', () => {
       const result = await authCommand!.action!(context, '');
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');
@@ -1128,6 +1129,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');
@@ -1186,6 +1188,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');
@@ -1215,6 +1218,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('error');
@@ -1240,6 +1244,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('error');
@@ -1293,6 +1298,7 @@ describe('mcpCommand', () => {
 
       expect(isMessageAction(result)).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result)) throw new Error('Expected message action');
 
       expect(result.messageType).toBe('info');

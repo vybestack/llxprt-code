@@ -231,6 +231,7 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
       };
 
       // 2. Provider adds fragments to pipeline with ID preservation
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (deltaChunk1.delta.tool_calls) {
         for (const deltaToolCall of deltaChunk1.delta.tool_calls) {
           pipeline.addFragment(deltaToolCall.index, {
@@ -241,6 +242,7 @@ describe('Issue #981: Pipeline mode tool_call_id preservation', () => {
         }
       }
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (deltaChunk2.delta.tool_calls) {
         for (const deltaToolCall of deltaChunk2.delta.tool_calls) {
           pipeline.addFragment(deltaToolCall.index, {

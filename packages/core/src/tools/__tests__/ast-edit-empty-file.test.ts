@@ -67,6 +67,7 @@ describe('empty-file characterization tests', () => {
       // Nonexistent file in preview may error with ENOENT or show preview
       // depending on how readFileContent handles the error
       expect(result).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.error) {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.llmContent).toContain('LLXPRT EDIT PREVIEW');
@@ -115,6 +116,7 @@ describe('empty-file characterization tests', () => {
       const result = await invocation.execute(new AbortController().signal);
       // May succeed (file creation) or error (directory doesn't exist)
       expect(result).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.error) {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.llmContent).toContain('Successfully applied edit');

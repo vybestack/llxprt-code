@@ -489,6 +489,7 @@ describe('TopDownTruncationStrategy', () => {
       const result = await strategy.compress(ctx);
 
       // Verify no orphaned tool responses: first message should not be a tool response
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.newHistory.length > 0) {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.newHistory[0].speaker).not.toBe('tool');

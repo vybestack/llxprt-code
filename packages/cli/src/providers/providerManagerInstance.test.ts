@@ -96,6 +96,7 @@ describe('API key sanitization regression tests', () => {
 
     // Simulate BOM removal and sanitization
     let content = bomString;
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (content.charCodeAt(0) === 0xfeff) {
       content = content.slice(1);
     }

@@ -30,6 +30,7 @@ describe('LSP entry path resolution', () => {
       }
     ).resolve;
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (typeof resolveImportMeta === 'function') {
       let packageUrl: string;
       try {

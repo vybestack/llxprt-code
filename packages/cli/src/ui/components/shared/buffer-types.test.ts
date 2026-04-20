@@ -34,6 +34,7 @@ describe('buffer-types', () => {
     it('should narrow insert action correctly', () => {
       const action: TextBufferAction = { type: 'insert', payload: 'hello' };
       expect(action.type).toBe('insert');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (action.type !== 'insert')
         throw new Error('unreachable: narrowing failed');
       expect(action.payload).toBe('hello');
@@ -45,6 +46,7 @@ describe('buffer-types', () => {
         payload: { dir: 'right' },
       };
       expect(action.type).toBe('move');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (action.type !== 'move')
         throw new Error('unreachable: narrowing failed');
       expect(action.payload.dir).toBe('right');
@@ -56,6 +58,7 @@ describe('buffer-types', () => {
         payload: 'hello world',
       };
       expect(action.type).toBe('set_text');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (action.type !== 'set_text')
         throw new Error('unreachable: narrowing failed');
       expect(action.payload).toBe('hello world');

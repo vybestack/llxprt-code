@@ -583,6 +583,7 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result) {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result).toHaveProperty('metadata');
@@ -619,6 +620,7 @@ describe('ast-edit characterization tests', () => {
       expect(confirmationDetails).toBeDefined();
       expect(confirmationDetails?.onConfirm).toBeDefined();
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (confirmationDetails?.onConfirm) {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
@@ -651,6 +653,7 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.execute(new AbortController().signal);
       // String.replace only replaces first occurrence
       // So 'hello hello hello' becomes 'goodbye hello hello'
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.error) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -702,6 +705,7 @@ describe('ast-edit characterization tests', () => {
       });
 
       const result = await invocation.execute(new AbortController().signal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.error) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
@@ -736,6 +740,7 @@ describe('ast-edit characterization tests', () => {
       );
 
       // Only proceed if preview succeeded
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!previewResult.error) {
         const previewDisplay = previewResult.returnDisplay as ToolReturnDisplay;
         const previewNewContent = previewDisplay.newContent;
@@ -822,6 +827,7 @@ describe('ast-edit characterization tests', () => {
       });
 
       const result = await invocation.execute(new AbortController().signal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.error) {
         const display = result.returnDisplay as ToolReturnDisplay;
         // AST validation may pass or fail depending on the parser

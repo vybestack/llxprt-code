@@ -276,6 +276,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.history).toHaveLength(1);
       expect(result.history[0].blocks[0]).toStrictEqual({
@@ -285,6 +286,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -313,6 +315,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
@@ -322,6 +325,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -348,6 +352,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('1', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(sessionId);
       expect(result.history[0].blocks[0]).toStrictEqual({
@@ -357,6 +362,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -380,11 +386,13 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('unique-prefix', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(targetId);
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
   });
@@ -414,6 +422,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBe('That session is already active.');
     });
@@ -442,6 +451,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toContain('in use');
     });
@@ -465,6 +475,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('nonexistent-session-id', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBeTruthy();
     });
@@ -495,6 +506,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('ambig-', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toContain('ambiguous');
       expect(result.error).toContain('ambig-first-session');
@@ -522,6 +534,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('999', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toMatch(/out of range|not found/i);
     });
@@ -650,6 +663,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
       expect(result.ok).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // Get the new recording from callbacks
       const newRecording = context.recordingCallbacks.getCurrentRecording();
@@ -718,6 +732,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -745,6 +760,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -785,6 +801,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -822,6 +839,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // New session should be operational
       const newRecording = context.recordingCallbacks.getCurrentRecording();
@@ -831,6 +849,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
   });
@@ -872,6 +891,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toMatch(/no.*session|in use|locked/);
     });
@@ -909,6 +929,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // "latest" should skip empty sessions and return an error
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toMatch(/no.*session|empty/);
     });
@@ -941,6 +962,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(olderSessionId);
       expect(result.history[0].blocks[0]).toStrictEqual({
@@ -950,6 +972,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
   });
@@ -982,6 +1005,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.history).toHaveLength(2);
       expect(result.history[0].speaker).toBe('human');
@@ -997,6 +1021,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1020,11 +1045,13 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(targetId);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1048,11 +1075,13 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(Array.isArray(result.warnings)).toBe(true);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1073,6 +1102,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // The warnings should include something about parse error
       expect(result.warnings.length).toBeGreaterThan(0);
@@ -1083,6 +1113,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1106,11 +1137,13 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.warnings.length).toBe(0);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1134,6 +1167,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       const newRecording = context.recordingCallbacks.getCurrentRecording();
       expect(newRecording).not.toBeNull();
@@ -1155,6 +1189,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1182,6 +1217,7 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
       expect(newLock).not.toBeNull();

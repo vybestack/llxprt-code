@@ -290,6 +290,7 @@ describe('generateDynamicToolSettings', () => {
       let newExcludeTools = [...currentExcludeTools];
       const newAllowedTools = [...currentAllowedTools];
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newValue) {
         // Tool is being enabled - remove from excludeTools if present
         newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
@@ -313,6 +314,7 @@ describe('generateDynamicToolSettings', () => {
       const newExcludeTools = [...currentExcludeTools];
       let newAllowedTools = [...currentAllowedTools];
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!newValue) {
         // Tool is being disabled - add to excludeTools
         if (!newExcludeTools.includes(toolName)) {
@@ -337,6 +339,7 @@ describe('generateDynamicToolSettings', () => {
       let newExcludeTools = [...currentExcludeTools];
       const newAllowedTools = [...currentAllowedTools];
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newValue) {
         // Tool is being enabled - remove from excludeTools if present
         newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
@@ -357,6 +360,7 @@ describe('generateDynamicToolSettings', () => {
       // Test that the function handles missing config
       const config = undefined;
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!config) {
         console.error('Config is not available for core tool toggle');
       }
@@ -374,6 +378,7 @@ describe('generateDynamicToolSettings', () => {
         return toolName === toolKey;
       });
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!actualTool) {
         console.error(`Tool not found for key: ${toolKey}`);
       }

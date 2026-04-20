@@ -233,6 +233,7 @@ describe('fileUtils', () => {
 
     it('should return false if file access fails (e.g., ENOENT)', async () => {
       // Ensure the file does not exist
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (actualNodeFs.existsSync(filePathForBinaryTest)) {
         actualNodeFs.unlinkSync(filePathForBinaryTest);
       }

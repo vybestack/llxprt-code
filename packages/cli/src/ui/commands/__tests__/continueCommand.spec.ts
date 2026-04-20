@@ -81,6 +81,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isDialogAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isDialogAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.dialog).toBe('sessionBrowser');
@@ -98,6 +99,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isMessageAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.messageType).toBe('error');
@@ -110,6 +112,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.sessionRef).toBe('latest');
@@ -119,6 +122,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'abc123');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.sessionRef).toBe('abc123');
@@ -128,6 +132,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '3');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.sessionRef).toBe('3');
@@ -137,6 +142,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'abc');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.sessionRef).toBe('abc');
@@ -160,6 +166,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       // When active conversation exists, requiresConfirmation should be true
@@ -182,6 +189,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isMessageAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.messageType).toBe('error');
@@ -203,6 +211,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       // No confirmation flag when no active conversation
@@ -224,6 +233,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isMessageAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.messageType).toBe('error');
@@ -238,6 +248,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isMessageAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isMessageAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.messageType).toBe('error');
@@ -252,6 +263,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.sessionRef).toBe('latest');
@@ -272,6 +284,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const schema = continueCommand.schema;
       expect(schema).toBeDefined();
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (schema && schema.length > 0) {
         const firstArg = schema[0];
         if (firstArg.kind === 'value' && firstArg.completer) {
@@ -304,6 +317,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       expect(schema).toBeDefined();
 
       // The completer should be able to return session-related completions
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (schema && schema.length > 0) {
         const firstArg = schema[0];
         if (firstArg.kind === 'value' && firstArg.completer) {
@@ -330,6 +344,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
       // When non-interactive, completion may return empty or limited results
       const schema = continueCommand.schema;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (schema && schema.length > 0) {
         const firstArg = schema[0];
         if (firstArg.kind === 'value' && firstArg.completer) {
@@ -361,6 +376,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '   ');
 
       expect(isDialogAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isDialogAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.dialog).toBe('sessionBrowser');
@@ -370,6 +386,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '  abc123  ');
 
       expect(isPerformResumeAction(result)).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isPerformResumeAction(result))
         throw new Error('unreachable: narrowing failed');
       expect(result.sessionRef).toBe('abc123');

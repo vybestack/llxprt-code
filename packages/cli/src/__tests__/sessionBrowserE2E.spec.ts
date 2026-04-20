@@ -359,6 +359,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(newerSessionId);
       expect(result.history[0].blocks[0]).toMatchObject({
@@ -367,6 +368,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       });
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -393,6 +395,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('1', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(newestSessionId);
       expect(result.history[0].blocks[0]).toMatchObject({
@@ -401,6 +404,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       });
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -422,6 +426,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.metadata.sessionId).toBe(targetId);
       expect(result.history[0].blocks[0]).toMatchObject({
@@ -430,6 +435,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       });
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -455,6 +461,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toContain('in use');
     });
@@ -476,6 +483,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('nonexistent-session-id-xyz', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBeTruthy();
       expect(result.error.toLowerCase()).toMatch(/not found|no.*session/);
@@ -499,6 +507,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBe('That session is already active.');
     });
@@ -542,6 +551,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // New recording should be installed
       const newRecording = context.recordingCallbacks.getCurrentRecording();
@@ -550,6 +560,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       recordingsToDispose.push(newRecording!);
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -618,6 +629,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
       expect(result.ok).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // Get the new recording from callbacks
       const newRecording = context.recordingCallbacks.getCurrentRecording();
@@ -633,6 +645,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       expect(fileContent).toContain('new event after resume');
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -654,6 +667,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
       expect(result.ok).toBe(true);
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       const newRecording = context.recordingCallbacks.getCurrentRecording();
       expect(newRecording).not.toBeNull();
@@ -672,6 +686,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       }
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
   });
@@ -724,6 +739,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.history).toHaveLength(4);
       expect(result.history[0].speaker).toBe('human');
@@ -748,6 +764,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       });
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
   });
@@ -780,6 +797,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
       expect(result).toBeDefined();
       expect(result.type).toBe('message');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.type === 'message') {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.messageType).toBe('error');
@@ -832,6 +850,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
       expect(result).toBeDefined();
       expect(result.type).toBe('perform_resume');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.type === 'perform_resume') {
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.sessionRef).toBe('latest');
@@ -860,6 +879,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
       // Discovery should return empty list, so "latest" should fail
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBeTruthy();
     });
@@ -892,6 +912,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // Should have skipped the empty session and picked the one with content
       expect(result.metadata.sessionId).toBe(contentSessionId);
@@ -901,6 +922,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       });
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
   });
@@ -1200,6 +1222,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toContain('in use');
     });
@@ -1218,6 +1241,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
       expect(newLock).not.toBeNull();
@@ -1252,11 +1276,13 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.ok) throw new Error('unreachable: narrowing failed');
       // Should skip empty and pick the one with content
       expect(result.metadata.sessionId).toBe(contentSessionId);
 
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (newLock) lockHandles.push(newLock);
     });
 
@@ -1274,6 +1300,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBe('That session is already active.');
     });
@@ -1295,6 +1322,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('prefix-', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error.toLowerCase()).toContain('ambiguous');
     });
@@ -1314,6 +1342,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('999', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toMatch(/out of range/i);
     });
@@ -1330,6 +1359,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('nonexistent-session-xyz', context);
 
       expect(result.ok).toBe(false);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.ok) throw new Error('unreachable: narrowing failed');
       expect(result.error).toBeTruthy();
     });

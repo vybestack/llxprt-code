@@ -25,6 +25,7 @@ describe('statsCommand - load balancer stats', () => {
       const lbSubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'lb',
       );
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!lbSubCommand?.action) throw new Error('lb subcommand has no action');
 
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -88,6 +89,7 @@ describe('statsCommand - load balancer stats', () => {
         (sc) => sc.name === 'lb',
       );
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!lbSubCommand?.action) {
         throw new Error('lb subcommand has no action');
       }

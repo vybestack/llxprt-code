@@ -995,6 +995,7 @@ describe('TaskTool', () => {
 
       // The timeout should fire and the reject function we captured
       // simulates the subagent detecting the abort and rejecting
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (rejectPromise) {
         const abortError = new Error('Aborted');
         abortError.name = 'AbortError';

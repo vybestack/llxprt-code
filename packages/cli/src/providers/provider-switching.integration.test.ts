@@ -49,6 +49,7 @@ describe('Provider Switching Integration', () => {
   it('supports switching between providers and back to Gemini', () => {
     const manager = createManager();
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (manager.hasActiveProvider()) {
       manager.clearActiveProvider();
     }

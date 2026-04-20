@@ -165,6 +165,7 @@ describe('RadioButtonSelect', () => {
 
       const children = result?.props?.children;
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!Array.isArray(children) || children.length < 3) {
         throw new Error(
           'Expected children to be an array with at least 3 elements for theme display',

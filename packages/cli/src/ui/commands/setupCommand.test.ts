@@ -33,6 +33,7 @@ describe('setupCommand', () => {
   });
 
   it('should reset welcome config and return dialog action', async () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!setupCommand.action) {
       throw new Error('setupCommand must have an action.');
     }

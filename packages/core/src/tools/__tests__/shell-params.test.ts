@@ -194,6 +194,7 @@ describe('shell parameter consistency', () => {
 
     // Assert
     // directory description should mention it's for backward compatibility
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!directoryDesc) throw new Error('unreachable: narrowing failed');
     expect(directoryDesc.toLowerCase()).toMatch(
       /alternative|backward|legacy|compat/,

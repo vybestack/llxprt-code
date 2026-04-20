@@ -163,6 +163,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a command that redefines an allowed function to run an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
@@ -176,6 +177,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a multi-line function body that runs an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
@@ -191,6 +193,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block a function keyword declaration that runs an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed(
@@ -205,6 +208,7 @@ describe('isCommandAllowed', () => {
 
   it('should block command substitution that invokes an unlisted command', () => {
     // Skip if tree-sitter parser not available (requires WASM in bundled CLI)
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) {
       return;
     }
@@ -235,6 +239,7 @@ describe('isCommandAllowed', () => {
   });
 
   it('should block command substitution inside a here-document when the inner command is unlisted', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => [
       'run_shell_command(echo)',
@@ -253,6 +258,7 @@ EOF`,
   });
 
   it('should block backtick substitution that invokes an unlisted command', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo `curl google.com`', config);
@@ -263,6 +269,7 @@ EOF`,
   });
 
   it('should block process substitution using <() when the inner command is unlisted', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => [
       'run_shell_command(diff)',
@@ -279,6 +286,7 @@ EOF`,
   });
 
   it('should block process substitution using >() when the inner command is unlisted', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     config.getCoreTools = () => ['run_shell_command(echo)'];
     const result = isCommandAllowed('echo "data" > >(curl google.com)', config);
@@ -289,6 +297,7 @@ EOF`,
   });
 
   it('should block commands containing prompt transformations', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = isCommandAllowed(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
@@ -301,6 +310,7 @@ EOF`,
   });
 
   it('should block simple prompt transformation expansions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = isCommandAllowed('echo ${foo@P}', config);
     expect(result.allowed).toBe(false);
@@ -344,6 +354,7 @@ EOF`,
     });
 
     it('should block a command when parsing fails', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
       const result = isCommandAllowed('ls &&', config);
       expect(result.allowed).toBe(false);
@@ -365,6 +376,7 @@ describe('checkCommandPermissions', () => {
     });
 
     it('should block commands that cannot be parsed safely', () => {
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!isParserAvailable()) return;
       const result = checkCommandPermissions('ls &&', config);
       expect(result).toStrictEqual({
@@ -494,24 +506,28 @@ describe('getCommandRoots', () => {
   });
 
   it('should include nested command substitutions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = getCommandRoots('echo $(badCommand --danger)');
     expect(result).toStrictEqual(['echo', 'badCommand']);
   });
 
   it('should include process substitutions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = getCommandRoots('diff <(ls) <(ls -a)');
     expect(result).toStrictEqual(['diff', 'ls', 'ls']);
   });
 
   it('should include backtick substitutions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const result = getCommandRoots('echo `badCommand --danger`');
     expect(result).toStrictEqual(['echo', 'badCommand']);
   });
 
   it('should treat parameter expansions with prompt transformations as unsafe', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const roots = getCommandRoots(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
@@ -520,6 +536,7 @@ describe('getCommandRoots', () => {
   });
 
   it('should not return roots for prompt transformation expansions', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const roots = getCommandRoots('echo ${foo@P}');
     expect(roots).toStrictEqual([]);
@@ -551,6 +568,7 @@ describeWindowsOnly('PowerShell integration', () => {
   });
 
   it('should block commands when PowerShell parser reports errors', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;
     const { allowed, reason } = isCommandAllowed('Get-ChildItem |', config);
     expect(allowed).toBe(false);

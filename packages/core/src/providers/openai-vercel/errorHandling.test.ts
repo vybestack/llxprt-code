@@ -721,6 +721,7 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       const iterator = provider.generateChatCompletion(options);
       const result = { stream: iterator };
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.stream) {
         throw new Error('Expected streaming result');
       }

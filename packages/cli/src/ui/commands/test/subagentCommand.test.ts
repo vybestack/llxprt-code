@@ -698,6 +698,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     // Verify success message type and content
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -722,6 +723,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -753,6 +755,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!result || result.type !== 'message') {
       throw new Error('Expected message action return');
     }
@@ -803,6 +806,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     );
     expect(actionResult).toBeDefined();
     expect(actionResult?.type).toBe('message');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!actionResult || actionResult.type !== 'message') {
       throw new Error('Expected message action return');
     }

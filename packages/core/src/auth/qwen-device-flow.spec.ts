@@ -500,6 +500,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         expect(timestamps.length).toBeGreaterThanOrEqual(3);
 
         // Verify the intervals are at least close to 5 seconds (allowing some variance)
+        // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
         if (timestamps.length > 1) {
           const intervals = timestamps
             .slice(1)

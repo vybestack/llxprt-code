@@ -360,6 +360,7 @@ describe('hasValidRefreshToken', () => {
 
   it('acts as a type predicate narrowing refresh_token to string', () => {
     const token = makeToken({ refresh_token: 'valid' });
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!hasValidRefreshToken(token))
       throw new Error('unreachable: narrowing failed');
     // TypeScript should consider token.refresh_token a string here

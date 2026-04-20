@@ -113,6 +113,7 @@ describe('setupGithubCommand', async () => {
       .catch(() => false);
     expect(gitignoreExists).toBe(true);
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!gitignoreExists) throw new Error('unreachable: narrowing failed');
     const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
     expect(gitignoreContent).toContain('.llxprt/');
@@ -182,6 +183,7 @@ describe('setupGithubCommand', async () => {
       .catch(() => false);
     expect(gitignoreExists).toBe(true);
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!gitignoreExists) throw new Error('unreachable: narrowing failed');
     const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
     expect(gitignoreContent).toContain('.llxprt/');

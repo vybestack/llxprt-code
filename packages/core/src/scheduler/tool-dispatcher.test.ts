@@ -169,6 +169,7 @@ describe('ToolDispatcher', () => {
       expect(results).toHaveLength(1);
       const result = results[0];
       expect(result.status).toBe('error');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (result.status !== 'error')
         throw new Error('unreachable: narrowing failed');
       expect(result.response.errorType).toBe(ToolErrorType.TOOL_NOT_REGISTERED);
@@ -189,6 +190,7 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (results[0].status !== 'error')
         throw new Error('unreachable: narrowing failed');
       const responseStr = JSON.stringify(results[0].response.responseParts);
@@ -211,6 +213,7 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (results[0].status !== 'error')
         throw new Error('unreachable: narrowing failed');
       expect(results[0].response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
@@ -229,6 +232,7 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('error');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (results[0].status !== 'error')
         throw new Error('unreachable: narrowing failed');
       expect(results[0].response.errorType).toBe(
@@ -266,6 +270,7 @@ describe('ToolDispatcher', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].status).toBe('validating');
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (results[0].status !== 'validating')
         throw new Error('unreachable: narrowing failed');
       expect(results[0].tool).toBe(tool);

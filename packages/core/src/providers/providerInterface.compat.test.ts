@@ -116,6 +116,7 @@ describe('generateChatCompletion compatibility', () => {
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!runtime.config) {
       runtime.config = fakeConfig;
     }

@@ -77,6 +77,7 @@ describe('toolkeyfileCommand', () => {
   describe('schema completion', () => {
     it('suggests tool names for first argument with descriptions', async () => {
       const schema = toolkeyfileCommand.schema;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!schema) {
         throw new Error('toolkeyfile schema missing');
       }
@@ -101,6 +102,7 @@ describe('toolkeyfileCommand', () => {
 
     it('suggests none and shows filepath hint after selecting tool', async () => {
       const schema = toolkeyfileCommand.schema;
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!schema) {
         throw new Error('toolkeyfile schema missing');
       }

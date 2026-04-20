@@ -734,6 +734,7 @@ describe('useReactToolScheduler', () => {
     const failedCall = completionArgs[0];
     expect(failedCall.status).toBe('error');
     expect(failedCall.request.agentId).toBe('primary');
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!failedCall.response.error) {
       throw new Error('Expected tool response error');
     }
@@ -862,6 +863,7 @@ describe('useReactToolScheduler', () => {
     const details = waitingCall.confirmationDetails;
     const hasConfirm = hasOnConfirm(details);
     expect(hasConfirm).toBe(true);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!hasConfirm) {
       throw new Error('Expected confirmationDetails to include onConfirm');
     }
@@ -942,6 +944,7 @@ describe('useReactToolScheduler', () => {
     const details = waitingCall.confirmationDetails;
     const hasConfirm = hasOnConfirm(details);
     expect(hasConfirm).toBe(true);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!hasConfirm) {
       throw new Error('Expected confirmationDetails to include onConfirm');
     }

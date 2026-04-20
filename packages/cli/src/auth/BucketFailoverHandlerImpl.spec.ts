@@ -499,6 +499,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail (token was revoked server-side)
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }
@@ -543,6 +544,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }
@@ -588,6 +590,7 @@ describe('BucketFailoverHandlerImpl', () => {
       const refreshedToken = makeToken('refreshed-token');
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (provider) {
         provider.refreshToken = vi.fn(async () => refreshedToken);
       }
@@ -735,6 +738,7 @@ describe('BucketFailoverHandlerImpl', () => {
       const reasons = handler.getLastFailoverReasons?.();
       expect(reasons).toBeDefined();
 
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!reasons) throw new Error('unreachable: narrowing failed');
       const originalBucketAReason = reasons['bucket-a'];
       // Try to mutate the returned object
@@ -805,6 +809,7 @@ describe('BucketFailoverHandlerImpl', () => {
       const refreshedToken = makeToken('refreshed-b');
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (provider) {
         provider.refreshToken = vi.fn(async () => refreshedToken);
       }
@@ -848,6 +853,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }
@@ -1073,6 +1079,7 @@ describe('BucketFailoverHandlerImpl', () => {
       // Mock refresh to fail for all
       const provider = oauthManager.getProvider('anthropic');
       expect(provider).toBeDefined();
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (provider) {
         provider.refreshToken = vi.fn(async () => null);
       }

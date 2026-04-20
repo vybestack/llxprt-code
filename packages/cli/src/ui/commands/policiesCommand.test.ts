@@ -32,6 +32,7 @@ describe('policiesCommand', () => {
   });
 
   it('should return an error when config is not available', () => {
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -59,6 +60,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -104,6 +106,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -152,6 +155,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -186,6 +190,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -220,6 +225,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -253,6 +259,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }
@@ -289,6 +296,7 @@ describe('policiesCommand', () => {
       getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as CommandContext['services']['config'];
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!policiesCommand.action) {
       throw new Error('Policies command has no action');
     }

@@ -1959,6 +1959,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     // Cancel the edit
     const confirmationDetails = awaitingCall.confirmationDetails;
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (confirmationDetails) {
       await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
     }

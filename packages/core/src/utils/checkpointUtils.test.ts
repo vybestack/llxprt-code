@@ -129,6 +129,7 @@ describe('checkpointUtils', () => {
 
       const result = schema.safeParse(dataWithExtra);
       expect(result.success).toBe(true);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (!result.success) throw new Error('unreachable: narrowing failed');
       expect(
         (result.data as unknown as { extraField: string }).extraField,

@@ -68,6 +68,7 @@ describe('ActivateSkillTool', () => {
     );
 
     expect(details).not.toBe(false);
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (details === false) throw new Error('unreachable: narrowing failed');
     expect(details.title).toBe('Activate Skill: test-skill');
     expect(details.prompt).toContain('enable the specialized agent skill');

@@ -650,6 +650,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
 
     const stat = await fs.stat(nestedDir);
     // On macOS/Linux, check permissions (skip on Windows)
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (process.platform === 'win32')
       throw new Error('unreachable: narrowing failed');
     const perms = stat.mode & 0o777;
@@ -671,6 +672,7 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const filePath = path.join(tempDir, 'perm-key.enc');
     const stat = await fs.stat(filePath);
 
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (process.platform === 'win32')
       throw new Error('unreachable: narrowing failed');
     const perms = stat.mode & 0o777;
@@ -1472,6 +1474,7 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
     expect(fallbackDir).not.toContain(path.join('.llxprt', 'secure-store'));
 
     // Should use platform-standard paths
+    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (process.platform === 'darwin') {
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('Library/Application Support');

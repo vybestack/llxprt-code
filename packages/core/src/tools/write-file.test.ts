@@ -305,6 +305,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
 
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
@@ -340,6 +341,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
 
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
@@ -373,6 +375,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
 
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
@@ -395,6 +398,7 @@ describe('WriteFileTool', () => {
       const params = { file_path: filePath, content };
       const invocation = tool.build(params);
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
@@ -420,6 +424,7 @@ describe('WriteFileTool', () => {
       const invocation = tool.build(params);
       // Simulate confirmation if your logic requires it before execute, or remove if not needed for this path
       const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
