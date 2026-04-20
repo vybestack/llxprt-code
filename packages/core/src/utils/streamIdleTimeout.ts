@@ -14,10 +14,12 @@ export class StreamIdleTimeoutError extends Error {
 }
 
 /**
- * Default stream idle timeout in milliseconds (10 minutes).
- * Used as fallback when no config or env var is set.
+ * Default stream idle timeout in milliseconds.
+ * Disabled by default (0). Set to a positive number via
+ * LLXPRT_STREAM_IDLE_TIMEOUT_MS env var or 'stream-idle-timeout-ms'
+ * ephemeral setting to enable the watchdog.
  */
-export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 600_000;
+export const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 0;
 
 /**
  * Environment variable name for stream idle timeout override.
@@ -37,7 +39,7 @@ export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
  * Priority order:
  * 1. Environment variable LLXPRT_STREAM_IDLE_TIMEOUT_MS (if set and valid)
  * 2. Config ephemeral setting 'stream-idle-timeout-ms' (if config provided and valid)
- * 3. DEFAULT_STREAM_IDLE_TIMEOUT_MS (600_000)
+ * 3. DEFAULT_STREAM_IDLE_TIMEOUT_MS (0 — disabled)
  *
  * Values <= 0 disable the watchdog (return 0).
  * Invalid string values (including empty/whitespace) fall back to the next priority level.

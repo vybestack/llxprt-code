@@ -1183,7 +1183,7 @@ export const SETTINGS_REGISTRY: readonly SettingSpec[] = [
     key: 'stream-idle-timeout-ms',
     category: 'cli-behavior',
     description:
-      'Stream idle timeout in milliseconds. Set to 0 or negative to disable. Default: 600000 (10 minutes).',
+      'Stream idle timeout in milliseconds. Disabled by default (0). Set to a positive number of milliseconds to enable the watchdog.',
     type: 'number',
     persistToProfile: true,
     validate: (value: unknown): ValidationResult => {
