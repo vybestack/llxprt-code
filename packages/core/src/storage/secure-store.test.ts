@@ -512,13 +512,15 @@ describe('SecureStore — CRUD Operations', () => {
       fallbackDir: tempDir,
     });
 
+    let err: unknown;
     try {
       await store.has('locked-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('LOCKED');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('LOCKED');
   });
 });
 
@@ -600,14 +602,16 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const badEnvelope = JSON.stringify({ v: 99, crypto: {}, data: 'abc' });
     await fs.writeFile(path.join(tempDir, 'bad-version.enc'), badEnvelope);
 
+    let err: unknown;
     try {
       await store.get('bad-version');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      expect((err as SecureStoreError).remediation).toContain('upgrade');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation).toContain('upgrade');
   });
 
   /**
@@ -703,13 +707,15 @@ describe('SecureStore — No Backward Compatibility', () => {
     const legacyContent = 'aabbccdd:eeff0011:2233445566778899';
     await fs.writeFile(path.join(tempDir, 'legacy-key.enc'), legacyContent);
 
+    let err: unknown;
     try {
       await store.get('legacy-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -726,17 +732,18 @@ describe('SecureStore — No Backward Compatibility', () => {
     // Write plaintext (simulates old plaintext storage)
     await fs.writeFile(path.join(tempDir, 'plain-key.enc'), 'plain-secret');
 
+    let err: unknown;
     try {
       await store.get('plain-key');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
-      // Remediation should suggest re-saving, not migration
-      expect((err as SecureStoreError).remediation.toLowerCase()).toContain(
-        're-save',
-      );
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
+    expect((err as SecureStoreError).remediation.toLowerCase()).toContain(
+      're-save',
+    );
   });
 });
 
@@ -764,14 +771,16 @@ describe('SecureStore — Error Taxonomy', () => {
       fallbackPolicy: 'deny',
     });
 
+    let err: unknown;
     try {
       await store.set('denied-key', 'denied-value');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
-      expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
+    expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
   });
 
   /**
@@ -791,13 +800,15 @@ describe('SecureStore — Error Taxonomy', () => {
       JSON.stringify({ v: 1, crypto: { alg: 'rot13' }, data: 'not-real' }),
     );
 
+    let err: unknown;
     try {
       await store.get('bad-data');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -924,21 +935,25 @@ describe('SecureStore — Key Validation', () => {
       fallbackPolicy: 'allow',
     });
 
+    let err1: unknown;
     try {
       await store.set('path/traversal', 'evil');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err1 = __caught;
     }
+    expect(err1).toBeDefined();
+    expect(err1).toBeInstanceOf(SecureStoreError);
+    expect((err1 as SecureStoreError).code).toBe('CORRUPT');
 
+    let err2: unknown;
     try {
       await store.set('path\\traversal', 'evil');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err2 = __caught;
     }
+    expect(err2).toBeDefined();
+    expect(err2).toBeInstanceOf(SecureStoreError);
+    expect((err2 as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -952,13 +967,15 @@ describe('SecureStore — Key Validation', () => {
       fallbackPolicy: 'allow',
     });
 
+    let err: unknown;
     try {
       await store.set('null\0byte', 'evil');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -972,21 +989,25 @@ describe('SecureStore — Key Validation', () => {
       fallbackPolicy: 'allow',
     });
 
+    let err1: unknown;
     try {
       await store.set('.', 'evil');
-      expect.unreachable('should have thrown for "."');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err1 = __caught;
     }
+    expect(err1).toBeDefined();
+    expect(err1).toBeInstanceOf(SecureStoreError);
+    expect((err1 as SecureStoreError).code).toBe('CORRUPT');
 
+    let err2: unknown;
     try {
       await store.set('..', 'evil');
-      expect.unreachable('should have thrown for ".."');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('CORRUPT');
+    } catch (__caught) {
+      err2 = __caught;
     }
+    expect(err2).toBeDefined();
+    expect(err2).toBeInstanceOf(SecureStoreError);
+    expect((err2 as SecureStoreError).code).toBe('CORRUPT');
   });
 
   /**
@@ -1337,14 +1358,16 @@ describe('SecureStore — Fallback Policy', () => {
       fallbackPolicy: 'deny',
     });
 
+    let err: unknown;
     try {
       await store.set('denied', 'value');
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SecureStoreError);
-      expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
-      expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
+    } catch (__caught) {
+      err = __caught;
     }
+    expect(err).toBeDefined();
+    expect(err).toBeInstanceOf(SecureStoreError);
+    expect((err as SecureStoreError).code).toBe('UNAVAILABLE');
+    expect((err as SecureStoreError).remediation.length).toBeGreaterThan(0);
   });
 
   /**

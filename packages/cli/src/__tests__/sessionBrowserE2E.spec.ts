@@ -359,16 +359,15 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(newerSessionId);
-        expect(result.history[0].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'newer message',
-        });
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(newerSessionId);
+      expect(result.history[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'newer message',
+      });
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -394,16 +393,15 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('1', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(newestSessionId);
-        expect(result.history[0].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'second session',
-        });
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(newestSessionId);
+      expect(result.history[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'second session',
+      });
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -424,16 +422,15 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(targetId);
-        expect(result.history[0].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'target content',
-        });
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(targetId);
+      expect(result.history[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'target content',
+      });
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -458,9 +455,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toContain('in use');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toContain('in use');
     });
 
     /**
@@ -480,10 +476,9 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('nonexistent-session-id-xyz', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBeTruthy();
-        expect(result.error.toLowerCase()).toMatch(/not found|no.*session/);
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBeTruthy();
+      expect(result.error.toLowerCase()).toMatch(/not found|no.*session/);
     });
 
     /**
@@ -504,9 +499,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe('That session is already active.');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBe('That session is already active.');
     });
   });
 
@@ -548,16 +542,15 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        // New recording should be installed
-        const newRecording = context.recordingCallbacks.getCurrentRecording();
-        expect(newRecording).not.toBeNull();
-        expect(newRecording!.isActive()).toBe(true);
-        recordingsToDispose.push(newRecording!);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // New recording should be installed
+      const newRecording = context.recordingCallbacks.getCurrentRecording();
+      expect(newRecording).not.toBeNull();
+      expect(newRecording!.isActive()).toBe(true);
+      recordingsToDispose.push(newRecording!);
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -625,23 +618,22 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
       expect(result.ok).toBe(true);
 
-      if (result.ok) {
-        // Get the new recording from callbacks
-        const newRecording = context.recordingCallbacks.getCurrentRecording();
-        expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // Get the new recording from callbacks
+      const newRecording = context.recordingCallbacks.getCurrentRecording();
+      expect(newRecording).not.toBeNull();
+      recordingsToDispose.push(newRecording!);
 
-        // Record new event
-        newRecording!.recordContent(makeContent('new event after resume'));
-        await newRecording!.flush();
+      // Record new event
+      newRecording!.recordContent(makeContent('new event after resume'));
+      await newRecording!.flush();
 
-        // Verify the content is in the file
-        const fileContent = await fs.readFile(targetFilePath, 'utf-8');
-        expect(fileContent).toContain('new event after resume');
+      // Verify the content is in the file
+      const fileContent = await fs.readFile(targetFilePath, 'utf-8');
+      expect(fileContent).toContain('new event after resume');
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     /**
@@ -662,26 +654,25 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
       expect(result.ok).toBe(true);
 
-      if (result.ok) {
-        const newRecording = context.recordingCallbacks.getCurrentRecording();
-        expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      const newRecording = context.recordingCallbacks.getCurrentRecording();
+      expect(newRecording).not.toBeNull();
+      recordingsToDispose.push(newRecording!);
 
-        // Write multiple events to verify no write errors
-        for (let i = 0; i < 5; i++) {
-          newRecording!.recordContent(makeContent(`message ${i}`));
-        }
-        await newRecording!.flush();
-
-        // Verify all events were written
-        const fileContent = await fs.readFile(targetFilePath, 'utf-8');
-        for (let i = 0; i < 5; i++) {
-          expect(fileContent).toContain(`message ${i}`);
-        }
-
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
+      // Write multiple events to verify no write errors
+      for (let i = 0; i < 5; i++) {
+        newRecording!.recordContent(makeContent(`message ${i}`));
       }
+      await newRecording!.flush();
+
+      // Verify all events were written
+      const fileContent = await fs.readFile(targetFilePath, 'utf-8');
+      for (let i = 0; i < 5; i++) {
+        expect(fileContent).toContain(`message ${i}`);
+      }
+
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
   });
 
@@ -733,32 +724,31 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.history).toHaveLength(4);
-        expect(result.history[0].speaker).toBe('human');
-        expect(result.history[0].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'first question',
-        });
-        expect(result.history[1].speaker).toBe('ai');
-        expect(result.history[1].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'first answer',
-        });
-        expect(result.history[2].speaker).toBe('human');
-        expect(result.history[2].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'second question',
-        });
-        expect(result.history[3].speaker).toBe('ai');
-        expect(result.history[3].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'second answer',
-        });
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.history).toHaveLength(4);
+      expect(result.history[0].speaker).toBe('human');
+      expect(result.history[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'first question',
+      });
+      expect(result.history[1].speaker).toBe('ai');
+      expect(result.history[1].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'first answer',
+      });
+      expect(result.history[2].speaker).toBe('human');
+      expect(result.history[2].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'second question',
+      });
+      expect(result.history[3].speaker).toBe('ai');
+      expect(result.history[3].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'second answer',
+      });
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
   });
 
@@ -867,9 +857,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
 
       // Discovery should return empty list, so "latest" should fail
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBeTruthy();
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBeTruthy();
     });
 
     /**
@@ -900,17 +889,16 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        // Should have skipped the empty session and picked the one with content
-        expect(result.metadata.sessionId).toBe(contentSessionId);
-        expect(result.history[0].blocks[0]).toMatchObject({
-          type: 'text',
-          text: 'has content',
-        });
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // Should have skipped the empty session and picked the one with content
+      expect(result.metadata.sessionId).toBe(contentSessionId);
+      expect(result.history[0].blocks[0]).toMatchObject({
+        type: 'text',
+        text: 'has content',
+      });
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
   });
 
@@ -956,15 +944,13 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
               const result = await performResume(String(validIndex), context);
 
               expect(result.ok).toBe(true);
-              if (result.ok) {
-                // Index is 1-based, newest first
-                const expectedSessionId = sessionIds[sessionCount - validIndex];
-                expect(result.metadata.sessionId).toBe(expectedSessionId);
+              if (!result.ok) throw new Error('unreachable: narrowing failed');
+              // Index is 1-based, newest first
+              const expectedSessionId = sessionIds[sessionCount - validIndex];
+              expect(result.metadata.sessionId).toBe(expectedSessionId);
 
-                const newLock =
-                  context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
-              }
+              const newLock = context.recordingCallbacks.getCurrentLockHandle();
+              if (newLock) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1007,13 +993,11 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
               const result = await performResume('unique-', context);
 
               expect(result.ok).toBe(true);
-              if (result.ok) {
-                expect(result.metadata.sessionId).toBe(sessionId);
+              if (!result.ok) throw new Error('unreachable: narrowing failed');
+              expect(result.metadata.sessionId).toBe(sessionId);
 
-                const newLock =
-                  context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
-              }
+              const newLock = context.recordingCallbacks.getCurrentLockHandle();
+              if (newLock) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1205,9 +1189,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toContain('in use');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toContain('in use');
     });
 
     it('acquires lock on resumed session', async () => {
@@ -1224,13 +1207,12 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        expect(newLock).not.toBeNull();
-        expect(newLock!.lockPath).toContain(chatsDir);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      expect(newLock).not.toBeNull();
+      expect(newLock!.lockPath).toContain(chatsDir);
 
-        lockHandles.push(newLock!);
-      }
+      lockHandles.push(newLock!);
     });
   });
 
@@ -1259,13 +1241,12 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        // Should skip empty and pick the one with content
-        expect(result.metadata.sessionId).toBe(contentSessionId);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // Should skip empty and pick the one with content
+      expect(result.metadata.sessionId).toBe(contentSessionId);
 
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        if (newLock) lockHandles.push(newLock);
-      }
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      if (newLock) lockHandles.push(newLock);
     });
 
     it('handles same-session resume attempt', async () => {
@@ -1282,9 +1263,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe('That session is already active.');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBe('That session is already active.');
     });
 
     it('handles ambiguous prefix', async () => {
@@ -1304,9 +1284,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('prefix-', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toContain('ambiguous');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toContain('ambiguous');
     });
 
     it('handles out-of-range index', async () => {
@@ -1324,9 +1303,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('999', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toMatch(/out of range/i);
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toMatch(/out of range/i);
     });
 
     it('handles non-existent session ID', async () => {
@@ -1341,9 +1319,8 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       const result = await performResume('nonexistent-session-xyz', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBeTruthy();
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBeTruthy();
     });
   });
 

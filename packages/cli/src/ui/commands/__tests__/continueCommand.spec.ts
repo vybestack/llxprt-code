@@ -81,9 +81,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isDialogAction(result)).toBe(true);
-      if (isDialogAction(result)) {
-        expect(result.dialog).toBe('sessionBrowser');
-      }
+      if (!isDialogAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.dialog).toBe('sessionBrowser');
     });
 
     it('returns error when non-interactive with no args @requirement:REQ-RC-012', async () => {
@@ -98,10 +98,10 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content.toLowerCase()).toContain('interactive');
-      }
+      if (!isMessageAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.messageType).toBe('error');
+      expect(result.content.toLowerCase()).toContain('interactive');
     });
   });
 
@@ -110,36 +110,36 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('latest');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('latest');
     });
 
     it('/continue <id> returns perform_resume with ID', async () => {
       const result = await continueCommand.action!(ctx, 'abc123');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('abc123');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('abc123');
     });
 
     it('/continue <number> returns perform_resume with index', async () => {
       const result = await continueCommand.action!(ctx, '3');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('3');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('3');
     });
 
     it('/continue <prefix> returns perform_resume with prefix', async () => {
       const result = await continueCommand.action!(ctx, 'abc');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('abc');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('abc');
     });
   });
 
@@ -160,10 +160,10 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        // When active conversation exists, requiresConfirmation should be true
-        expect(result.requiresConfirmation).toBe(true);
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      // When active conversation exists, requiresConfirmation should be true
+      expect(result.requiresConfirmation).toBe(true);
     });
 
     it('returns error when active conversation exists in non-interactive mode @requirement:REQ-RC-011', async () => {
@@ -182,10 +182,10 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content.toLowerCase()).toMatch(/conversation|replace/);
-      }
+      if (!isMessageAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.messageType).toBe('error');
+      expect(result.content.toLowerCase()).toMatch(/conversation|replace/);
     });
 
     it('does not require confirmation when no active conversation exists', async () => {
@@ -203,10 +203,10 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        // No confirmation flag when no active conversation
-        expect(result.requiresConfirmation).toBeFalsy();
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      // No confirmation flag when no active conversation
+      expect(result.requiresConfirmation).toBeFalsy();
     });
   });
 
@@ -224,11 +224,11 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content.toLowerCase()).toContain('request');
-        expect(result.content.toLowerCase()).toContain('progress');
-      }
+      if (!isMessageAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.messageType).toBe('error');
+      expect(result.content.toLowerCase()).toContain('request');
+      expect(result.content.toLowerCase()).toContain('progress');
     });
 
     it('returns error when isProcessing=true with latest', async () => {
@@ -238,11 +238,11 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content.toLowerCase()).toContain('request');
-        expect(result.content.toLowerCase()).toContain('progress');
-      }
+      if (!isMessageAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.messageType).toBe('error');
+      expect(result.content.toLowerCase()).toContain('request');
+      expect(result.content.toLowerCase()).toContain('progress');
     });
 
     it('proceeds normally when isProcessing=false', async () => {
@@ -252,9 +252,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('latest');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('latest');
     });
   });
 
@@ -358,18 +358,18 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const result = await continueCommand.action!(ctx, '   ');
 
       expect(isDialogAction(result)).toBe(true);
-      if (isDialogAction(result)) {
-        expect(result.dialog).toBe('sessionBrowser');
-      }
+      if (!isDialogAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.dialog).toBe('sessionBrowser');
     });
 
     it('trims whitespace around session ref', async () => {
       const result = await continueCommand.action!(ctx, '  abc123  ');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('abc123');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('abc123');
     });
   });
 

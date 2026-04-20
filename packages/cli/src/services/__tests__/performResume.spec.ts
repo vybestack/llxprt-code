@@ -276,13 +276,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.history).toHaveLength(1);
-        expect(result.history[0].blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'target session content',
-        });
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.history).toHaveLength(1);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'target session content',
+      });
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -314,13 +313,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.history[0].blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'newer session',
-        });
-        expect(result.metadata.sessionId).toBe(newerSessionId);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'newer session',
+      });
+      expect(result.metadata.sessionId).toBe(newerSessionId);
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -350,13 +348,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('1', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(sessionId);
-        expect(result.history[0].blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'newest session for index',
-        });
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(sessionId);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'newest session for index',
+      });
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -383,9 +380,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('unique-prefix', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(targetId);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(targetId);
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -418,9 +414,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBe('That session is already active.');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBe('That session is already active.');
     });
 
     /**
@@ -447,9 +442,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(sessionId, context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toContain('in use');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toContain('in use');
     });
 
     /**
@@ -471,9 +465,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('nonexistent-session-id', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toBeTruthy();
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toBeTruthy();
     });
 
     /**
@@ -502,11 +495,10 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('ambig-', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toContain('ambiguous');
-        expect(result.error).toContain('ambig-first-session');
-        expect(result.error).toContain('ambig-second-session');
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toContain('ambiguous');
+      expect(result.error).toContain('ambig-first-session');
+      expect(result.error).toContain('ambig-second-session');
     });
 
     /**
@@ -530,9 +522,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('999', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error).toMatch(/out of range|not found/i);
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error).toMatch(/out of range|not found/i);
     });
   });
 
@@ -659,32 +650,29 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
       expect(result.ok).toBe(true);
 
-      if (result.ok) {
-        // Get the new recording from callbacks
-        const newRecording = context.recordingCallbacks.getCurrentRecording();
-        expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // Get the new recording from callbacks
+      const newRecording = context.recordingCallbacks.getCurrentRecording();
+      expect(newRecording).not.toBeNull();
+      recordingsToDispose.push(newRecording!);
 
-        const eventCountBefore = await countFileEvents(targetFilePath);
+      const eventCountBefore = await countFileEvents(targetFilePath);
 
-        // Record new event
-        newRecording!.recordContent(makeContent('new event after resume'));
-        await newRecording!.flush();
+      // Record new event
+      newRecording!.recordContent(makeContent('new event after resume'));
+      await newRecording!.flush();
 
-        const eventCountAfter = await countFileEvents(targetFilePath);
-        expect(eventCountAfter).toBeGreaterThan(eventCountBefore);
+      const eventCountAfter = await countFileEvents(targetFilePath);
+      expect(eventCountAfter).toBeGreaterThan(eventCountBefore);
 
-        // Verify the content is in the file
-        const events = await readJsonlFile(targetFilePath);
-        const lastContentEvent = events
-          .filter((e) => e.type === 'content')
-          .pop();
-        const payload = lastContentEvent?.payload as { content: IContent };
-        expect(payload.content.blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'new event after resume',
-        });
-      }
+      // Verify the content is in the file
+      const events = await readJsonlFile(targetFilePath);
+      const lastContentEvent = events.filter((e) => e.type === 'content').pop();
+      const payload = lastContentEvent?.payload as { content: IContent };
+      expect(payload.content.blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'new event after resume',
+      });
     });
 
     /**
@@ -834,13 +822,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        // New session should be operational
-        const newRecording = context.recordingCallbacks.getCurrentRecording();
-        expect(newRecording).not.toBeNull();
-        expect(newRecording!.isActive()).toBe(true);
-        recordingsToDispose.push(newRecording!);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // New session should be operational
+      const newRecording = context.recordingCallbacks.getCurrentRecording();
+      expect(newRecording).not.toBeNull();
+      expect(newRecording!.isActive()).toBe(true);
+      recordingsToDispose.push(newRecording!);
 
       // Track new lock for cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -885,9 +872,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toMatch(/no.*session|in use|locked/);
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toMatch(/no.*session|in use|locked/);
     });
 
     /**
@@ -923,9 +909,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
       // "latest" should skip empty sessions and return an error
       expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.toLowerCase()).toMatch(/no.*session|empty/);
-      }
+      if (result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.error.toLowerCase()).toMatch(/no.*session|empty/);
     });
 
     /**
@@ -956,13 +941,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume('latest', context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(olderSessionId);
-        expect(result.history[0].blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'older session message',
-        });
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(olderSessionId);
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'older session message',
+      });
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -998,19 +982,18 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.history).toHaveLength(2);
-        expect(result.history[0].speaker).toBe('human');
-        expect(result.history[0].blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'user question',
-        });
-        expect(result.history[1].speaker).toBe('ai');
-        expect(result.history[1].blocks[0]).toStrictEqual({
-          type: 'text',
-          text: 'ai response',
-        });
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.history).toHaveLength(2);
+      expect(result.history[0].speaker).toBe('human');
+      expect(result.history[0].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'user question',
+      });
+      expect(result.history[1].speaker).toBe('ai');
+      expect(result.history[1].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'ai response',
+      });
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -1037,9 +1020,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.metadata.sessionId).toBe(targetId);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.metadata.sessionId).toBe(targetId);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -1066,9 +1048,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(Array.isArray(result.warnings)).toBe(true);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(Array.isArray(result.warnings)).toBe(true);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -1092,14 +1073,13 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        // The warnings should include something about parse error
-        expect(result.warnings.length).toBeGreaterThan(0);
-        const hasParseWarning = result.warnings.some(
-          (w) => w.includes('parse') || w.includes('JSON'),
-        );
-        expect(hasParseWarning).toBe(true);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      // The warnings should include something about parse error
+      expect(result.warnings.length).toBeGreaterThan(0);
+      const hasParseWarning = result.warnings.some(
+        (w) => w.includes('parse') || w.includes('JSON'),
+      );
+      expect(hasParseWarning).toBe(true);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -1126,9 +1106,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.warnings.length).toBe(0);
-      }
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      expect(result.warnings.length).toBe(0);
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -1155,25 +1134,24 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        const newRecording = context.recordingCallbacks.getCurrentRecording();
-        expect(newRecording).not.toBeNull();
-        recordingsToDispose.push(newRecording!);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      const newRecording = context.recordingCallbacks.getCurrentRecording();
+      expect(newRecording).not.toBeNull();
+      recordingsToDispose.push(newRecording!);
 
-        // Write and flush
-        newRecording!.recordContent(makeContent('new content via result'));
-        await newRecording!.flush();
+      // Write and flush
+      newRecording!.recordContent(makeContent('new content via result'));
+      await newRecording!.flush();
 
-        // Verify content in file
-        const events = await readJsonlFile(targetFilePath);
-        const contentEvents = events.filter((e) => e.type === 'content');
-        const texts = contentEvents.map((e) => {
-          const payload = e.payload as { content: IContent };
-          const textBlock = payload.content.blocks[0] as { text: string };
-          return textBlock.text;
-        });
-        expect(texts).toContain('new content via result');
-      }
+      // Verify content in file
+      const events = await readJsonlFile(targetFilePath);
+      const contentEvents = events.filter((e) => e.type === 'content');
+      const texts = contentEvents.map((e) => {
+        const payload = e.payload as { content: IContent };
+        const textBlock = payload.content.blocks[0] as { text: string };
+        return textBlock.text;
+      });
+      expect(texts).toContain('new content via result');
 
       // Cleanup
       const newLock = context.recordingCallbacks.getCurrentLockHandle();
@@ -1204,22 +1182,21 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
       const result = await performResume(targetId, context);
 
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        const newLock = context.recordingCallbacks.getCurrentLockHandle();
-        expect(newLock).not.toBeNull();
-        // Lock path should be in the chats directory and end with .lock
-        expect(newLock!.lockPath).toContain(chatsDir);
-        expect(newLock!.lockPath).toMatch(/\.lock$/);
+      if (!result.ok) throw new Error('unreachable: narrowing failed');
+      const newLock = context.recordingCallbacks.getCurrentLockHandle();
+      expect(newLock).not.toBeNull();
+      // Lock path should be in the chats directory and end with .lock
+      expect(newLock!.lockPath).toContain(chatsDir);
+      expect(newLock!.lockPath).toMatch(/\.lock$/);
 
-        // Verify lock file actually exists
-        const lockFileExists = await fs
-          .stat(newLock!.lockPath)
-          .then(() => true)
-          .catch(() => false);
-        expect(lockFileExists).toBe(true);
+      // Verify lock file actually exists
+      const lockFileExists = await fs
+        .stat(newLock!.lockPath)
+        .then(() => true)
+        .catch(() => false);
+      expect(lockFileExists).toBe(true);
 
-        lockHandles.push(newLock!);
-      }
+      lockHandles.push(newLock!);
     });
   });
 
@@ -1318,10 +1295,9 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
               const result = await performResume(unmatchableRef, context);
 
-              if (!result.ok) {
-                expect(typeof result.error).toBe('string');
-                expect(result.error.length).toBeGreaterThan(0);
-              }
+              if (result.ok) throw new Error('unreachable: narrowing failed');
+              expect(typeof result.error).toBe('string');
+              expect(result.error.length).toBeGreaterThan(0);
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1369,18 +1345,16 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
 
               const result = await performResume(sessionId, context);
 
-              if (result.ok) {
-                expect(Array.isArray(result.history)).toBe(true);
-                expect(result.history.length).toBe(contents.length);
-                expect(result.metadata).toBeDefined();
-                expect(result.metadata.sessionId).toBe(sessionId);
-                expect(Array.isArray(result.warnings)).toBe(true);
+              if (!result.ok) throw new Error('unreachable: narrowing failed');
+              expect(Array.isArray(result.history)).toBe(true);
+              expect(result.history.length).toBe(contents.length);
+              expect(result.metadata).toBeDefined();
+              expect(result.metadata.sessionId).toBe(sessionId);
+              expect(Array.isArray(result.warnings)).toBe(true);
 
-                // Cleanup lock
-                const newLock =
-                  context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
-              }
+              // Cleanup lock
+              const newLock = context.recordingCallbacks.getCurrentLockHandle();
+              if (newLock) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1423,9 +1397,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
               const result = await performResume(sanitizedId, context);
 
               expect(result.ok).toBe(false);
-              if (!result.ok) {
-                expect(result.error).toBe('That session is already active.');
-              }
+              if (result.ok) throw new Error('unreachable: narrowing failed');
+              expect(result.error).toBe('That session is already active.');
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1474,20 +1447,18 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
               const result = await performResume(sessionId, context);
 
               expect(result.ok).toBe(true);
-              if (result.ok) {
-                expect(result.history).toHaveLength(contents.length);
-                for (let i = 0; i < contents.length; i++) {
-                  expect(result.history[i].speaker).toBe(contents[i].speaker);
-                  expect(result.history[i].blocks[0]).toStrictEqual(
-                    contents[i].blocks[0],
-                  );
-                }
-
-                // Cleanup lock
-                const newLock =
-                  context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
+              if (!result.ok) throw new Error('unreachable: narrowing failed');
+              expect(result.history).toHaveLength(contents.length);
+              for (let i = 0; i < contents.length; i++) {
+                expect(result.history[i].speaker).toBe(contents[i].speaker);
+                expect(result.history[i].blocks[0]).toStrictEqual(
+                  contents[i].blocks[0],
+                );
               }
+
+              // Cleanup lock
+              const newLock = context.recordingCallbacks.getCurrentLockHandle();
+              if (newLock) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1579,14 +1550,12 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
               const result = await performResume(sessionId, context);
 
               expect(result.ok).toBe(true);
-              if (result.ok) {
-                expect(result.metadata.sessionId).toBe(sessionId);
+              if (!result.ok) throw new Error('unreachable: narrowing failed');
+              expect(result.metadata.sessionId).toBe(sessionId);
 
-                // Cleanup lock
-                const newLock =
-                  context.recordingCallbacks.getCurrentLockHandle();
-                if (newLock) await newLock.release();
-              }
+              // Cleanup lock
+              const newLock = context.recordingCallbacks.getCurrentLockHandle();
+              if (newLock) await newLock.release();
             } finally {
               await fs.rm(localTempDir, { recursive: true, force: true });
             }
@@ -1633,9 +1602,8 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
               const result = await performResume(sessionId, context);
 
               expect(result.ok).toBe(false);
-              if (!result.ok) {
-                expect(result.error.toLowerCase()).toContain('in use');
-              }
+              if (result.ok) throw new Error('unreachable: narrowing failed');
+              expect(result.error.toLowerCase()).toContain('in use');
 
               // Cleanup lock
               await lock.release();
