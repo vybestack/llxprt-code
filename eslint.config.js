@@ -491,7 +491,7 @@ export default tseslint.config(
       // fast-check's `fc.assert` is a real assertion helper; tests using
       // `fc.assert(fc.property(...))` do assert but use no literal `expect`.
       'vitest/expect-expect': [
-        'warn',
+        'error',
         { assertFunctionNames: ['expect', 'fc.assert'] },
       ],
       'vitest/no-conditional-expect': 'warn',
@@ -509,29 +509,6 @@ export default tseslint.config(
 
     },
   },
-  // ============================================================================
-  // Issue #1569: Batch T1D - vitest/expect-expect enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  // This is a phased rollout; the rule remains at 'warn' for other test files.
-  {
-    files: [
-      'packages/core/src/tools/todo-read.test.ts',
-      'packages/core/src/tools/todo-write.test.ts',
-    ],
-    plugins: {
-      vitest,
-    },
-    rules: {
-      'vitest/expect-expect': [
-        'error',
-        { assertFunctionNames: ['expect', 'fc.assert'] },
-      ],
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 T1D
-  // ============================================================================
   // ============================================================================
   // Issue #1569: Batch R3A - no-else-return enforcement
   // ============================================================================
