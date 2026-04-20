@@ -1420,7 +1420,7 @@ describe('todoCommand', () => {
     it('rejects invalid position format', () => {
       const todos: Todo[] = [{ id: '1', content: 'Task 1', status: 'pending' }];
 
-      expect(() => parsePosition('invalid', todos)).toThrow();
+      expect(() => parsePosition('invalid', todos)).toThrow(Error);
     });
   });
 
@@ -1468,7 +1468,9 @@ describe('todoCommand', () => {
           ),
           fc.constantFrom('abc', '1.2.3', '-1', '0'),
           (todos, invalidPos) => {
-            expect(() => parsePosition(invalidPos, todos as Todo[])).toThrow();
+            expect(() => parsePosition(invalidPos, todos as Todo[])).toThrow(
+              Error,
+            );
           },
         ),
         { numRuns: 10 },

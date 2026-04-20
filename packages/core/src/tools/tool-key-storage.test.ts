@@ -333,7 +333,7 @@ describe('ToolKeyStorage', () => {
       await storage.deleteKey('exa');
 
       // File should be gone
-      await expect(fs.stat(filePath)).rejects.toThrow();
+      await expect(fs.stat(filePath)).rejects.toThrow(/ENOENT/);
     });
   });
 

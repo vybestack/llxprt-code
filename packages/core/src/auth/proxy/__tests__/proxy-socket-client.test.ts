@@ -231,7 +231,7 @@ describe('ProxySocketClient', () => {
     // Advance past the request timeout
     vi.advanceTimersByTime(REQUEST_TIMEOUT_MS + 100);
 
-    await expect(requestPromise).rejects.toThrow();
+    await expect(requestPromise).rejects.toThrow(/timed out/);
 
     vi.useRealTimers();
   });
@@ -418,7 +418,7 @@ describe('ProxySocketClient', () => {
     // Close the client — should reject pending requests
     client.close();
 
-    await expect(pendingRequest).rejects.toThrow();
+    await expect(pendingRequest).rejects.toThrow(Error);
   });
 
   /**

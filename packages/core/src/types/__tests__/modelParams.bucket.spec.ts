@@ -669,7 +669,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
       type: 'invalid',
     };
 
-    expect(() => schema.parse(invalidAuth)).toThrow();
+    expect(() => schema.parse(invalidAuth)).toThrow(Error);
   });
 
   it('should reject buckets with apikey type using Zod', () => {
@@ -686,7 +686,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     };
 
     // Should either fail validation or strip the buckets field
-    expect(() => schema.parse(invalidAuth)).toThrow();
+    expect(() => schema.parse(invalidAuth)).toThrow(Error);
   });
 
   it('should have hasAuthConfig type guard function', () => {

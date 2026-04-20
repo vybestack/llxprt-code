@@ -137,7 +137,9 @@ describe('runtimeRegistry', () => {
 
   describe('missing entry error', () => {
     it('should throw for nonexistent entry', () => {
-      expect(() => requireRuntimeEntry('nonexistent-runtime')).toThrow();
+      expect(() => requireRuntimeEntry('nonexistent-runtime')).toThrow(
+        /runtime registration/,
+      );
     });
 
     it('should include runtime registration in error message', () => {
@@ -178,7 +180,9 @@ describe('runtimeRegistry', () => {
       upsertRuntimeEntry(runtimeId, {});
       disposeCliRuntime(runtimeId);
 
-      expect(() => requireRuntimeEntry(runtimeId)).toThrow();
+      expect(() => requireRuntimeEntry(runtimeId)).toThrow(
+        /runtime registration/,
+      );
     });
 
     it('should clear active context if runtimeId matches', () => {

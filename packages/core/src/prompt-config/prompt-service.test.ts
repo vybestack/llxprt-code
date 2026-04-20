@@ -131,7 +131,7 @@ describe('PromptService', () => {
         : '/invalid-path/that/cannot/be/created/prompts';
       const service = new PromptService({ baseDir });
 
-      await expect(service.initialize()).rejects.toThrow();
+      await expect(service.initialize()).rejects.toThrow(Error);
     });
 
     it('should continue initialization even if some files fail to load', async () => {

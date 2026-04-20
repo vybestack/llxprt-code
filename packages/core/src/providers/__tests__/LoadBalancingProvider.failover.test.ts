@@ -1124,7 +1124,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         for await (const chunk of provider.generateChatCompletion(options)) {
           results.push(chunk);
         }
-      }).rejects.toThrow();
+      }).rejects.toThrow(/failover exhausted/);
     });
   });
 
@@ -1613,7 +1613,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
         for await (const _chunk of provider.generateChatCompletion(options)) {
           // consume
         }
-      }).rejects.toThrow();
+      }).rejects.toThrow(Error);
 
       // Should try each backend exactly once (no infinite loop)
       expect(totalAttempts).toBe(3);

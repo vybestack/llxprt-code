@@ -505,7 +505,7 @@ describe('integration: full session recording lifecycle', () => {
     expect(deleteResult.ok).toBe(true);
 
     // File should be gone
-    await expect(fs.access(filePath)).rejects.toThrow();
+    await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
   });
 
   // =========================================================================
@@ -937,7 +937,7 @@ describe('integration: full session recording lifecycle', () => {
 
         const result = await deleteSession(sessionId, localChats, PROJECT_HASH);
         expect(result.ok).toBe(true);
-        await expect(fs.access(filePath)).rejects.toThrow();
+        await expect(fs.access(filePath)).rejects.toThrow(/ENOENT/);
       } finally {
         await fs.rm(localTemp, { recursive: true, force: true });
       }

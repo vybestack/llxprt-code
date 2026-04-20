@@ -410,7 +410,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     // Should throw error because id_token is required to extract account_id
     await expect(
       deviceFlow.exchangeCodeForToken(authCode, redirectUri, testState),
-    ).rejects.toThrow();
+    ).rejects.toThrow(Error);
 
     global.fetch = originalFetch;
   });

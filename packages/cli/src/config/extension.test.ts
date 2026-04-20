@@ -856,7 +856,7 @@ describe('extension tests', () => {
             { source: sourceExtDir, type: 'local' },
             async (_) => true,
           ),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/Hook name/);
 
         fs.rmSync(sourceExtDir, { recursive: true, force: true });
       }
@@ -885,7 +885,7 @@ describe('extension tests', () => {
             { source: sourceExtDir, type: 'local' },
             async (_) => true,
           ),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/reserved/);
 
         fs.rmSync(sourceExtDir, { recursive: true, force: true });
       }
@@ -911,7 +911,7 @@ describe('extension tests', () => {
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Invalid extension/);
 
       fs.rmSync(sourceExtDir, { recursive: true, force: true });
     });
@@ -937,7 +937,7 @@ describe('extension tests', () => {
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/cannot exceed 128/);
 
       fs.rmSync(sourceExtDir, { recursive: true, force: true });
     });
@@ -993,7 +993,7 @@ describe('extension tests', () => {
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Hook name/);
 
       fs.rmSync(sourceExtDir, { recursive: true, force: true });
     });
@@ -1045,7 +1045,7 @@ describe('extension tests', () => {
           { source: sourceExtDir, type: 'local' },
           mockConsent,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/declined|cancelled/);
     });
 
     it('should trigger consent on update with new hooks', async () => {
@@ -1125,7 +1125,7 @@ describe('extension tests', () => {
             }),
           ),
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/declined|cancelled/);
 
       // Check that version is still 1.0.0
       const installedConfig = JSON.parse(

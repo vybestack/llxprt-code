@@ -876,7 +876,7 @@ describe('ShellTool', () => {
     });
 
     it('should throw an error if validation fails', () => {
-      expect(() => shellTool.build({ command: '' })).toThrow();
+      expect(() => shellTool.build({ command: '' })).toThrow(Error);
     });
 
     describe('in non-interactive mode', () => {
@@ -1545,7 +1545,7 @@ describe('Shell Tool Filtering Behavior', () => {
             grep_flags: ['-i', '-v', '-invalid'],
           })
           .execute(new AbortController().signal),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Invalid grep flag/);
     });
   });
 });

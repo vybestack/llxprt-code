@@ -500,7 +500,7 @@ describe('OAuthBucketManager', () => {
     it('should throw error for non-existent default bucket', async () => {
       await expect(
         bucketManager.validateBucketExists('anthropic', 'default'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/not found/);
     });
 
     /**
@@ -513,7 +513,7 @@ describe('OAuthBucketManager', () => {
     it('should validate bucket before switching', async () => {
       await expect(
         bucketManager.validateBucketExists('anthropic', 'nonexistent'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/not found/);
     });
 
     /**

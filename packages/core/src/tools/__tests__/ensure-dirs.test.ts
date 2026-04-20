@@ -34,7 +34,7 @@ describe('ensureParentDirectoriesExist', () => {
     const testFilePath = path.join(tempDir, 'a', 'b', 'c', 'file.txt');
 
     // Verify parent directories don't exist
-    await expect(fs.access(path.join(tempDir, 'a'))).rejects.toThrow();
+    await expect(fs.access(path.join(tempDir, 'a'))).rejects.toThrow(/ENOENT/);
 
     // Call the function
     await ensureParentDirectoriesExist(testFilePath);

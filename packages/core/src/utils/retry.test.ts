@@ -266,7 +266,7 @@ describe('retryWithBackoff', () => {
             initialDelayMs: 100,
             maxDelayMs: 1000,
           }),
-        ).rejects.toThrow();
+        ).rejects.toThrow(Error);
       } finally {
         randomSpy.mockRestore();
       }

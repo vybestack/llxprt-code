@@ -192,7 +192,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       });
 
       // Should throw validation error due to missing required fields
-      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow();
+      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow(Error);
     });
   });
 
@@ -531,7 +531,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       });
 
       // Should throw validation error due to missing access_token
-      await expect(deviceFlow.pollForToken('test_device')).rejects.toThrow();
+      await expect(deviceFlow.pollForToken('test_device')).rejects.toThrow(
+        Error,
+      );
     });
   });
 
@@ -737,7 +739,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       });
 
       // Should throw a JSON parsing error
-      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow();
+      await expect(deviceFlow.initiateDeviceFlow()).rejects.toThrow(Error);
     });
 
     /**

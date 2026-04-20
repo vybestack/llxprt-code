@@ -1355,7 +1355,9 @@ describe('mcp-client', () => {
     });
 
     it('should handle error if mcpServerCommand parsing fails', () => {
-      expect(() => populateMcpServerCommand({}, 'derp && herp')).toThrowError();
+      expect(() => populateMcpServerCommand({}, 'derp && herp')).toThrowError(
+        /failed to parse mcpServerCommand/,
+      );
     });
   });
 
@@ -1912,7 +1914,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(Error);
     });
   });
 
@@ -1971,7 +1973,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/404/);
 
       // Should only try once (no SSE fallback on 404)
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -1993,7 +1995,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Connection refused/);
 
       // Should only try once (no fallback with explicit type)
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -2020,7 +2022,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Connection failed/);
 
       expect(mockTransport.close).toHaveBeenCalled();
     });
@@ -2039,7 +2041,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Network timeout/);
 
       // Check that the OAuth flag wasn't set
       // This is a negative assertion - we're testing what DOESN'T happen
@@ -2061,7 +2063,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
     });
@@ -2079,7 +2081,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Not Found/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
     });
@@ -2183,7 +2185,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Request failed/);
 
       // Should NOT attempt SSE fallback because it's a real 404
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -2203,7 +2205,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
     });
@@ -2221,7 +2223,7 @@ describe('connectToMcpServer with OAuth', () => {
           false,
           workspaceContext,
         ),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/status 404/);
 
       expect(mockedClient.connect).toHaveBeenCalledTimes(1);
     });

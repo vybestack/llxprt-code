@@ -1153,7 +1153,7 @@ describe('RetryOrchestrator', () => {
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Rate limit exceeded/);
 
       // resetSession should NOT be called since request never succeeded
       expect(resetSessionCallCount).toBe(0);
@@ -1675,7 +1675,7 @@ describe('RetryOrchestrator', () => {
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/Rate limit exceeded/);
 
       // EXPECTATION: getLastFailoverReasons was called after tryFailover returned false
       expect(getLastFailoverReasonsCalled).toBe(true);

@@ -77,7 +77,7 @@ describe('Runtime Isolation Integration', () => {
       // Attempt to modify should fail silently or throw in strict mode
       expect(() => {
         (snapshot as { provider: string }).provider = 'openai';
-      }).toThrow();
+      }).toThrow(TypeError);
     });
 
     it('should expose runtime state fields via individual getters', () => {

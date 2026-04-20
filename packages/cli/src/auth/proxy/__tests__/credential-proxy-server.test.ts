@@ -261,7 +261,7 @@ describe('CredentialProxyServer', () => {
     server = createServer();
     await server.start();
 
-    await expect(server.start()).rejects.toThrow();
+    await expect(server.start()).rejects.toThrow(/already started/);
   });
 
   // ─── Handshake ─────────────────────────────────────────────────────────────

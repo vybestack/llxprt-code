@@ -37,29 +37,33 @@ describe('ExtensionSettingSchema', () => {
 
   describe('validation errors', () => {
     it('should reject setting without name', () => {
-      expect(() => ExtensionSettingSchema.parse({ envVar: 'X' })).toThrow();
+      expect(() => ExtensionSettingSchema.parse({ envVar: 'X' })).toThrow(
+        /Required/i,
+      );
     });
 
     it('should reject setting without envVar', () => {
-      expect(() => ExtensionSettingSchema.parse({ name: 'x' })).toThrow();
+      expect(() => ExtensionSettingSchema.parse({ name: 'x' })).toThrow(
+        /Required/i,
+      );
     });
 
     it('should reject empty name', () => {
       expect(() =>
         ExtensionSettingSchema.parse({ name: '', envVar: 'X' }),
-      ).toThrow();
+      ).toThrow(/at least 1/i);
     });
 
     it('should reject empty envVar', () => {
       expect(() =>
         ExtensionSettingSchema.parse({ name: 'x', envVar: '' }),
-      ).toThrow();
+      ).toThrow(/at least 1/i);
     });
 
     it('should reject wrong type for name', () => {
       expect(() =>
         ExtensionSettingSchema.parse({ name: 123, envVar: 'X' }),
-      ).toThrow();
+      ).toThrow(/Expected string/i);
     });
 
     it('should reject wrong type for sensitive', () => {
@@ -69,7 +73,7 @@ describe('ExtensionSettingSchema', () => {
           envVar: 'X',
           sensitive: 'yes',
         }),
-      ).toThrow();
+      ).toThrow(/Expected boolean/i);
     });
   });
 
@@ -104,7 +108,9 @@ describe('ExtensionSettingsArraySchema', () => {
       { name: 'valid', envVar: 'VALID' },
       { name: 'invalid' }, // missing envVar
     ];
-    expect(() => ExtensionSettingsArraySchema.parse(settings)).toThrow();
+    expect(() => ExtensionSettingsArraySchema.parse(settings)).toThrow(
+      /Required/i,
+    );
   });
 });
 

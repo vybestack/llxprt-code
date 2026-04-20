@@ -384,7 +384,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           lbConfig,
           undefined as unknown as IProviderManager,
         );
-      }).toThrow();
+      }).toThrow(/requires a ProviderManager dependency/);
     });
   });
 
@@ -453,7 +453,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
-      }).toThrow();
+      }).toThrow(/at least one sub-profile/);
     });
 
     it('should throw error if subProfile lacks required name field', () => {
@@ -475,7 +475,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
-      }).toThrow();
+      }).toThrow(/valid "name" field/);
     });
 
     it('should throw error if subProfile lacks required providerName field', () => {
@@ -497,7 +497,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
       expect(() => {
         new LoadBalancingProvider(lbConfig, providerManager);
-      }).toThrow();
+      }).toThrow(/valid "providerName" field/);
     });
 
     it('should accept minimal valid configuration', () => {
@@ -576,7 +576,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           invalidConfig as unknown as LoadBalancingProviderConfig,
           providerManager,
         );
-      }).toThrow();
+      }).toThrow(/Invalid strategy/);
     });
   });
 
@@ -1675,7 +1675,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             for await (const _chunk of iterator) {
               // Should not get here
             }
-          }).rejects.toThrow();
+          }).rejects.toThrow(/Provider.*not found/);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1789,7 +1789,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             for await (const _chunk of iterator2) {
               // Should not get here
             }
-          }).rejects.toThrow();
+          }).rejects.toThrow(/Provider.*not found/);
 
           // Third call - should succeed (sub-3) - counter should have advanced despite error
           const iterator3 = provider.generateChatCompletion({

@@ -1054,7 +1054,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
     await expect(
       chat['enforceContextWindow'](50_000, 'test-prompt'),
-    ).rejects.toThrow();
+    ).rejects.toThrow(Error);
 
     expect(fallbackApplied).toBe(true);
     expect(

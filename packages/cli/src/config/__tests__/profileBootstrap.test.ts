@@ -325,7 +325,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
    */
   it('should throw error when --profile has no value', () => {
     process.argv = ['node', 'llxprt', '--profile'];
-    expect(() => parseBootstrapArgs()).toThrow();
+    expect(() => parseBootstrapArgs()).toThrow(/--profile requires a value/);
   });
 
   /**
@@ -338,7 +338,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
    */
   it('should throw error when --profile is followed by another flag', () => {
     process.argv = ['node', 'llxprt', '--profile', '--provider', 'openai'];
-    expect(() => parseBootstrapArgs()).toThrow();
+    expect(() => parseBootstrapArgs()).toThrow(/--profile requires a value/);
   });
 
   /**
@@ -1231,7 +1231,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
         config: mockConfig,
         oauthManager: mockOAuthManager,
       });
-    }).toThrow();
+    }).toThrow(/JSON/);
   });
 
   /**
@@ -1261,7 +1261,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
         config: mockConfig,
         oauthManager: mockOAuthManager,
       });
-    }).toThrow();
+    }).toThrow(/provider/);
   });
 
   // Group 4: Backward Compatibility (2 tests)
@@ -1716,7 +1716,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
         config: mockConfig,
         oauthManager: {},
       });
-    }).toThrow();
+    }).toThrow(/JSON/);
   });
 
   /**
@@ -1746,7 +1746,7 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
         config: mockConfig,
         oauthManager: {},
       });
-    }).toThrow();
+    }).toThrow(/model/);
   });
 
   /**
@@ -1816,6 +1816,6 @@ describe('applyBootstrapProfile() with --profile - alternative tests @plan:PLAN-
         config: mockConfig,
         oauthManager: {},
       });
-    }).toThrow();
+    }).toThrow(/provider/);
   });
 });

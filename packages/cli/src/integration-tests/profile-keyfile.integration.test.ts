@@ -211,7 +211,9 @@ describe('Profile with Keyfile Integration Tests', () => {
       expect(loaded.ephemeralSettings['auth-keyfile']).toBe(nonExistentKeyfile);
 
       // But reading the keyfile should fail
-      await expect(fs.readFile(nonExistentKeyfile, 'utf-8')).rejects.toThrow();
+      await expect(fs.readFile(nonExistentKeyfile, 'utf-8')).rejects.toThrow(
+        /ENOENT/,
+      );
     });
 
     it('should handle keyfile with wrong permissions', async () => {

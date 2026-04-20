@@ -378,7 +378,9 @@ describe('Compression Dispatcher Integration (P13)', () => {
       );
       vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
 
-      await expect(chat.performCompression('test-prompt-id')).rejects.toThrow();
+      await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
+        /Provider initialization failed/,
+      );
 
       // historyService must be unlocked — verify by adding a message
       expect(() => {

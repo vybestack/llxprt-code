@@ -431,12 +431,12 @@ describe('TodoContinuationService', () => {
       expect(() => {
         const nullContext = null as unknown as ContinuationContext;
         service.checkContinuationConditions(nullContext);
-      }).toThrow();
+      }).toThrow(/Context is required/);
 
       expect(() => {
         const nullConfig = null as unknown as ContinuationPromptConfig;
         service.generateContinuationPrompt(nullConfig);
-      }).toThrow();
+      }).toThrow(/Configuration is required/);
     });
 
     it('handles empty task description strings', () => {

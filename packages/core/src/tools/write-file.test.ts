@@ -174,7 +174,7 @@ describe('WriteFileTool', () => {
       await expect(async () => {
         const invocation = tool.build(params);
         await invocation.shouldConfirmExecute(abortSignal);
-      }).rejects.toThrow();
+      }).rejects.toThrow(Error);
     });
 
     it('should return false if params are invalid (outside root)', async () => {
@@ -184,7 +184,7 @@ describe('WriteFileTool', () => {
       await expect(async () => {
         const invocation = tool.build(params);
         await invocation.shouldConfirmExecute(abortSignal);
-      }).rejects.toThrow();
+      }).rejects.toThrow(Error);
     });
 
     it('should return false if getCorrectedFileContent returns an error', async () => {

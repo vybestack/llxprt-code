@@ -355,7 +355,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     const token = makeMinimalToken();
     // Pre-verify SecureStore is empty
     const keysBefore = await secureStore.list();
-    await expect(tokenStore.saveToken('bad/name', token)).rejects.toThrow();
+    await expect(tokenStore.saveToken('bad/name', token)).rejects.toThrow(
+      /Invalid.*name/,
+    );
     // Verify no keys were written
     const keysAfter = await secureStore.list();
     expect(keysAfter).toStrictEqual(keysBefore);
@@ -1045,7 +1047,9 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
     await fc.assert(
       fc.asyncProperty(invalidNameArb, async (badName) => {
         const token = makeMinimalToken();
-        await expect(tokenStore.saveToken(badName, token)).rejects.toThrow();
+        await expect(tokenStore.saveToken(badName, token)).rejects.toThrow(
+          /Invalid.*name/,
+        );
       }),
       { numRuns: 20 },
     );
@@ -1382,7 +1386,7 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
         const token = makeMinimalToken();
         await expect(
           tokenStore.saveToken('validprov', token, badBucket),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/Invalid.*name/);
       }),
       { numRuns: 20 },
     );
