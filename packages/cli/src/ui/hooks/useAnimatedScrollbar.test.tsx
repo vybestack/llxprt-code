@@ -120,7 +120,14 @@ describe('useAnimatedScrollbar', () => {
       vi.advanceTimersByTime(50);
     });
 
-    // If it didn't crash, we are good.
+    // Regression: the interval tick must have called Date.now() at least once
+    // (we only mocked it so time could go backwards; if the clamp bug had
+    // caused a throw before Date.now was read, the animation counter would
+    // also have been released prematurely). The component is still mid-
+    // animation, so the counter must still be at 1.
+    expect(dateSpy).toHaveBeenCalled();
+    expect(debugState.debugNumAnimatedComponents).toBe(1);
+
     // Cleanup
     dateSpy.mockRestore();
     // Reset timers to default full fake for other tests (handled by afterEach/beforeEach usually, but here we overrode it)

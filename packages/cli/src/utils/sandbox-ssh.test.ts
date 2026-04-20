@@ -761,8 +761,11 @@ describe('setupCredentialProxyDockerMacOS', () => {
       '/tmp/cred-proxy.sock',
     );
 
-    result.cleanup!();
-    result.cleanup!();
+    expect(result.cleanup).toBeDefined();
+    expect(() => {
+      result.cleanup!();
+      result.cleanup!();
+    }).not.toThrow();
   });
 });
 
@@ -799,8 +802,11 @@ describe('setupSshAgentDockerMacOS - TCP bridge', () => {
   it('cleanup is idempotent', async () => {
     const result = await setupSshAgentDockerMacOS([], '/tmp/auth.sock');
 
-    result.cleanup!();
-    result.cleanup!();
+    expect(result.cleanup).toBeDefined();
+    expect(() => {
+      result.cleanup!();
+      result.cleanup!();
+    }).not.toThrow();
   });
 });
 

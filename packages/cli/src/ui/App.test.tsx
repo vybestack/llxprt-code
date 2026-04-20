@@ -1582,8 +1582,10 @@ describe('App UI', () => {
       // The effect uses setTimeout(100ms) before sending
       await vi.advanceTimersByTimeAsync(100);
 
-      // Note: In the actual implementation, messages would be queued first
-      // This test verifies the auto-send mechanism works when state transitions
+      // No messages were queued, so the Responding→Idle transition must not
+      // trigger an auto-send. Any call here would mean we'd broken the guard
+      // and are resubmitting on every state flip.
+      expect(mockSubmitQueryFn).not.toHaveBeenCalled();
     });
 
     it('should display queued messages with dimmed color', () => {

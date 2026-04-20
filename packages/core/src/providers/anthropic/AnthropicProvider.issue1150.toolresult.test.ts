@@ -1364,6 +1364,12 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
+      // The output stream must still carry at least one user message and
+      // one assistant message and satisfy strict role alternation between
+      // every adjacent pair (the merge/pad logic is what this test guards).
+      expect(request.messages.length).toBeGreaterThanOrEqual(2);
+      expect(request.messages.some((m) => m.role === 'user')).toBe(true);
+      expect(request.messages.some((m) => m.role === 'assistant')).toBe(true);
       assertStrictAlternation(request.messages);
     });
 
@@ -1400,6 +1406,12 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       const request = mockMessagesCreate.mock
         .calls[0][0] as AnthropicRequestBody;
 
+      // The output stream must still carry at least one user message and
+      // one assistant message and satisfy strict role alternation between
+      // every adjacent pair (the merge/pad logic is what this test guards).
+      expect(request.messages.length).toBeGreaterThanOrEqual(2);
+      expect(request.messages.some((m) => m.role === 'user')).toBe(true);
+      expect(request.messages.some((m) => m.role === 'assistant')).toBe(true);
       assertStrictAlternation(request.messages);
     });
   });

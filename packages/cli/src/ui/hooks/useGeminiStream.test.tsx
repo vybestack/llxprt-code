@@ -1736,6 +1736,9 @@ describe('useGeminiStream', () => {
     });
 
     it('should skip tool calls without confirmationDetails', async () => {
+      const debuggerSpy = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation(() => {});
       const awaitingApprovalToolCalls: TrackedToolCall[] = [
         {
           request: {
@@ -1766,6 +1769,14 @@ describe('useGeminiStream', () => {
       await act(async () => {
         await result.current.handleApprovalModeChange(ApprovalMode.YOLO);
       });
+
+      // The skip path must be silent: no auto-approve failure logged.
+      expect(debuggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to auto-approve tool call'),
+        expect.anything(),
+      );
+
+      debuggerSpy.mockRestore();
     });
 
     it('should skip tool calls without onConfirm method in confirmationDetails', async () => {
@@ -1802,12 +1813,25 @@ describe('useGeminiStream', () => {
         } as TrackedWaitingToolCall,
       ];
 
+      const debuggerSpy = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation(() => {});
+
       const { result } = renderTestHook(awaitingApprovalToolCalls);
 
       // Should not throw an error
       await act(async () => {
         await result.current.handleApprovalModeChange(ApprovalMode.YOLO);
       });
+
+      // The skip path (confirmationDetails present but without onConfirm) must
+      // be silent: no auto-approve failure logged.
+      expect(debuggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to auto-approve tool call'),
+        expect.anything(),
+      );
+
+      debuggerSpy.mockRestore();
     });
 
     it('should only process tool calls with awaiting_approval status', async () => {

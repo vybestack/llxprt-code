@@ -1826,6 +1826,12 @@ describe('InputPrompt', () => {
         await vi.runAllTimersAsync();
       });
 
+      // Passing undefined must be a safe no-op: clearing via replaceRange must
+      // not happen as part of the escape-only-bubble path when the callback is
+      // absent. (Pre-existing setText("some text") happened before render and
+      // is excluded by checking the more specific buffer mutator.)
+      expect(props.buffer.replaceRangeByOffset).not.toHaveBeenCalled();
+
       vi.useRealTimers();
       unmount();
     });
