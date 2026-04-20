@@ -491,7 +491,7 @@ export default tseslint.config(
       'vitest/expect-expect': 'warn',
       'vitest/no-conditional-expect': 'warn',
       'vitest/no-conditional-in-test': 'warn',
-      'vitest/require-to-throw-message': 'warn',
+      'vitest/require-to-throw-message': 'error',
       'vitest/prefer-strict-equal': 'error',
       'vitest/max-nested-describe': ['warn', { max: 3 }],
       'vitest/require-top-level-describe': 'warn',
@@ -504,26 +504,6 @@ export default tseslint.config(
 
     },
   },
-  // ============================================================================
-  // Issue #1569: Batch T1C - vitest/require-to-throw-message enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  // This is a phased rollout; the rule remains at 'warn' for other test files.
-  {
-    files: [
-      'packages/a2a-server/src/agent/task.test.ts',
-      'packages/a2a-server/src/commands/restore.test.ts',
-    ],
-    plugins: {
-      vitest,
-    },
-    rules: {
-      'vitest/require-to-throw-message': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569
-  // ============================================================================
   // ============================================================================
   // Issue #1569: Batch T1D - vitest/expect-expect enforcement
   // ============================================================================
