@@ -650,10 +650,10 @@ describe('SecureStore — Encrypted File Fallback', () => {
 
     const stat = await fs.stat(nestedDir);
     // On macOS/Linux, check permissions (skip on Windows)
-    if (process.platform !== 'win32') {
-      const perms = stat.mode & 0o777;
-      expect(perms).toBe(0o700);
-    }
+    if (process.platform === 'win32')
+      throw new Error('unreachable: narrowing failed');
+    const perms = stat.mode & 0o777;
+    expect(perms).toBe(0o700);
   });
 
   /**
@@ -671,10 +671,10 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const filePath = path.join(tempDir, 'perm-key.enc');
     const stat = await fs.stat(filePath);
 
-    if (process.platform !== 'win32') {
-      const perms = stat.mode & 0o777;
-      expect(perms).toBe(0o600);
-    }
+    if (process.platform === 'win32')
+      throw new Error('unreachable: narrowing failed');
+    const perms = stat.mode & 0o777;
+    expect(perms).toBe(0o600);
   });
 });
 

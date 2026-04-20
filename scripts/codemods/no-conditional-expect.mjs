@@ -42,6 +42,20 @@ function invertTest(testNode) {
       return testNode.getOperand().getText();
     }
   }
+  if (testNode.getKind() === SyntaxKind.BinaryExpression) {
+    const opTok = testNode.getOperatorToken().getText();
+    const flip = {
+      '===': '!==',
+      '!==': '===',
+      '==': '!=',
+      '!=': '==',
+    }[opTok];
+    if (flip) {
+      const lhs = testNode.getLeft().getText();
+      const rhs = testNode.getRight().getText();
+      return `${lhs} ${flip} ${rhs}`;
+    }
+  }
   // default: prefix with `!` and wrap in parens for safety
   return `!(${txt})`;
 }
@@ -81,6 +95,10 @@ function shapeOkForInversion(testNode) {
       ik === SyntaxKind.PropertyAccessExpression ||
       ik === SyntaxKind.CallExpression
     );
+  }
+  if (k === SyntaxKind.BinaryExpression) {
+    const opTok = testNode.getOperatorToken().getText();
+    return ['===', '!==', '==', '!='].includes(opTok);
   }
   return false;
 }

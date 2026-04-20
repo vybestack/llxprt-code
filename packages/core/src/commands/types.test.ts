@@ -74,10 +74,10 @@ describe('Command Action Return Types', () => {
       content: 'An error occurred',
     };
 
-    if (action.type === 'message') {
-      // Type should be narrowed to MessageActionReturn
-      expect(action.messageType).toBe('error');
-      expect(action.content).toBe('An error occurred');
-    }
+    if (action.type !== 'message')
+      throw new Error('unreachable: narrowing failed');
+    // Type should be narrowed to MessageActionReturn
+    expect(action.messageType).toBe('error');
+    expect(action.content).toBe('An error occurred');
   });
 });

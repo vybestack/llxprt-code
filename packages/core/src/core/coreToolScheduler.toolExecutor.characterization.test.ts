@@ -319,10 +319,10 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
         .calls[0][0] as ToolCall[];
       const successCall = completedCalls[0];
       expect(successCall.status).toBe('success');
-      if (successCall.status === 'success') {
-        expect(successCall.response).toBeDefined();
-        expect(successCall.response.responseParts).toBeDefined();
-      }
+      if (successCall.status !== 'success')
+        throw new Error('unreachable: narrowing failed');
+      expect(successCall.response).toBeDefined();
+      expect(successCall.response.responseParts).toBeDefined();
     });
   });
 

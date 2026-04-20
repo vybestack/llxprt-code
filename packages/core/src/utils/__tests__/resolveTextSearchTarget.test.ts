@@ -45,9 +45,9 @@ describe('resolveTextSearchTarget', () => {
   it('should return kind directory for valid directory path', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, 'sub');
     expect(result.kind).toBe('directory');
-    if (result.kind === 'directory') {
-      expect(result.searchDir).toBe(path.join(tempDir, 'sub'));
-    }
+    if (result.kind !== 'directory')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.searchDir).toBe(path.join(tempDir, 'sub'));
   });
 
   it('should return kind file with filePath, parentDir, basename for valid file path', () => {
@@ -57,11 +57,11 @@ describe('resolveTextSearchTarget', () => {
       'file.txt',
     );
     expect(result.kind).toBe('file');
-    if (result.kind === 'file') {
-      expect(result.filePath).toBe(path.join(tempDir, 'file.txt'));
-      expect(result.parentDir).toBe(tempDir);
-      expect(result.basename).toBe('file.txt');
-    }
+    if (result.kind !== 'file')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.filePath).toBe(path.join(tempDir, 'file.txt'));
+    expect(result.parentDir).toBe(tempDir);
+    expect(result.basename).toBe('file.txt');
   });
 
   it('should return kind file for nested file path', () => {
@@ -71,11 +71,11 @@ describe('resolveTextSearchTarget', () => {
       path.join('sub', 'nested.txt'),
     );
     expect(result.kind).toBe('file');
-    if (result.kind === 'file') {
-      expect(result.filePath).toBe(path.join(tempDir, 'sub', 'nested.txt'));
-      expect(result.parentDir).toBe(path.join(tempDir, 'sub'));
-      expect(result.basename).toBe('nested.txt');
-    }
+    if (result.kind !== 'file')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.filePath).toBe(path.join(tempDir, 'sub', 'nested.txt'));
+    expect(result.parentDir).toBe(path.join(tempDir, 'sub'));
+    expect(result.basename).toBe('nested.txt');
   });
 
   it('should throw for path outside workspace', () => {
@@ -94,35 +94,35 @@ describe('resolveTextSearchTarget', () => {
     const absPath = path.join(tempDir, 'sub');
     const result = resolveTextSearchTarget(tempDir, workspaceContext, absPath);
     expect(result.kind).toBe('directory');
-    if (result.kind === 'directory') {
-      expect(result.searchDir).toBe(absPath);
-    }
+    if (result.kind !== 'directory')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.searchDir).toBe(absPath);
   });
 
   it('should handle absolute file path', () => {
     const absPath = path.join(tempDir, 'file.txt');
     const result = resolveTextSearchTarget(tempDir, workspaceContext, absPath);
     expect(result.kind).toBe('file');
-    if (result.kind === 'file') {
-      expect(result.filePath).toBe(absPath);
-      expect(result.parentDir).toBe(tempDir);
-      expect(result.basename).toBe('file.txt');
-    }
+    if (result.kind !== 'file')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.filePath).toBe(absPath);
+    expect(result.parentDir).toBe(tempDir);
+    expect(result.basename).toBe('file.txt');
   });
 
   it('should handle relative path with dot prefix', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, './sub');
     expect(result.kind).toBe('directory');
-    if (result.kind === 'directory') {
-      expect(result.searchDir).toBe(path.join(tempDir, 'sub'));
-    }
+    if (result.kind !== 'directory')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.searchDir).toBe(path.join(tempDir, 'sub'));
   });
 
   it('should handle dot path as directory', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, '.');
     expect(result.kind).toBe('directory');
-    if (result.kind === 'directory') {
-      expect(result.searchDir).toBe(tempDir);
-    }
+    if (result.kind !== 'directory')
+      throw new Error('unreachable: narrowing failed');
+    expect(result.searchDir).toBe(tempDir);
   });
 });

@@ -510,9 +510,9 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const sessionArg = continueCommand.schema![0];
       expect(sessionArg.kind).toBe('value');
       // Type guard for ValueArgument which has 'name' property
-      if (sessionArg.kind === 'value') {
-        expect(sessionArg.name).toBe('session');
-      }
+      if (sessionArg.kind !== 'value')
+        throw new Error('unreachable: narrowing failed');
+      expect(sessionArg.name).toBe('session');
 
       // CLI flags (--continue, --list-sessions) are handled in config.ts
       // and gemini.tsx before the REPL starts, so no conflict

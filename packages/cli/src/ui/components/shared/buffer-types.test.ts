@@ -34,9 +34,9 @@ describe('buffer-types', () => {
     it('should narrow insert action correctly', () => {
       const action: TextBufferAction = { type: 'insert', payload: 'hello' };
       expect(action.type).toBe('insert');
-      if (action.type === 'insert') {
-        expect(action.payload).toBe('hello');
-      }
+      if (action.type !== 'insert')
+        throw new Error('unreachable: narrowing failed');
+      expect(action.payload).toBe('hello');
     });
 
     it('should narrow move action correctly', () => {
@@ -45,9 +45,9 @@ describe('buffer-types', () => {
         payload: { dir: 'right' },
       };
       expect(action.type).toBe('move');
-      if (action.type === 'move') {
-        expect(action.payload.dir).toBe('right');
-      }
+      if (action.type !== 'move')
+        throw new Error('unreachable: narrowing failed');
+      expect(action.payload.dir).toBe('right');
     });
 
     it('should narrow set_text action correctly', () => {
@@ -56,9 +56,9 @@ describe('buffer-types', () => {
         payload: 'hello world',
       };
       expect(action.type).toBe('set_text');
-      if (action.type === 'set_text') {
-        expect(action.payload).toBe('hello world');
-      }
+      if (action.type !== 'set_text')
+        throw new Error('unreachable: narrowing failed');
+      expect(action.payload).toBe('hello world');
     });
 
     it('should handle backspace action', () => {

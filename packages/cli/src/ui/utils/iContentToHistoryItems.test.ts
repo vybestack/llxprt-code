@@ -76,14 +76,14 @@ describe('iContentToHistoryItems', () => {
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
     expect(output[0]).toMatchObject({ type: 'tool_group' });
-    if (output[0].type === 'tool_group') {
-      expect(output[0].tools[0]).toMatchObject({
-        callId: 'c1',
-        name: 'read_file',
-        resultDisplay: 'content',
-        status: ToolCallStatus.Success,
-      });
-    }
+    if (output[0].type !== 'tool_group')
+      throw new Error('unreachable: narrowing failed');
+    expect(output[0].tools[0]).toMatchObject({
+      callId: 'c1',
+      name: 'read_file',
+      resultDisplay: 'content',
+      status: ToolCallStatus.Success,
+    });
   });
 
   it('maps ai text + tool_call to gemini + tool_group', () => {
@@ -141,9 +141,9 @@ describe('iContentToHistoryItems', () => {
 
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
-    if (output[0].type === 'tool_group') {
-      expect(output[0].tools[0].status).toBe(ToolCallStatus.Error);
-    }
+    if (output[0].type !== 'tool_group')
+      throw new Error('unreachable: narrowing failed');
+    expect(output[0].tools[0].status).toBe(ToolCallStatus.Error);
   });
 
   it('is safe when tool result stringify fails', () => {
@@ -170,9 +170,9 @@ describe('iContentToHistoryItems', () => {
 
     const output = iContentToHistoryItems(input);
     expect(output).toHaveLength(1);
-    if (output[0].type === 'tool_group') {
-      expect(typeof output[0].tools[0].resultDisplay).toBe('string');
-    }
+    if (output[0].type !== 'tool_group')
+      throw new Error('unreachable: narrowing failed');
+    expect(typeof output[0].tools[0].resultDisplay).toBe('string');
   });
 
   it('returns empty array for empty input', () => {
