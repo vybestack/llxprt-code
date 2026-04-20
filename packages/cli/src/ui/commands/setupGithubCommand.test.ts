@@ -113,11 +113,10 @@ describe('setupGithubCommand', async () => {
       .catch(() => false);
     expect(gitignoreExists).toBe(true);
 
-    if (gitignoreExists) {
-      const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
-      expect(gitignoreContent).toContain('.llxprt/');
-      expect(gitignoreContent).toContain('gha-creds-*.json');
-    }
+    if (!gitignoreExists) throw new Error('unreachable: narrowing failed');
+    const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+    expect(gitignoreContent).toContain('.llxprt/');
+    expect(gitignoreContent).toContain('gha-creds-*.json');
   });
 
   it('downloads workflows, updates gitignore, and does not include pipefail on windows', async () => {
@@ -183,11 +182,10 @@ describe('setupGithubCommand', async () => {
       .catch(() => false);
     expect(gitignoreExists).toBe(true);
 
-    if (gitignoreExists) {
-      const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
-      expect(gitignoreContent).toContain('.llxprt/');
-      expect(gitignoreContent).toContain('gha-creds-*.json');
-    }
+    if (!gitignoreExists) throw new Error('unreachable: narrowing failed');
+    const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+    expect(gitignoreContent).toContain('.llxprt/');
+    expect(gitignoreContent).toContain('gha-creds-*.json');
   });
 
   it('throws an error when download fails', async () => {

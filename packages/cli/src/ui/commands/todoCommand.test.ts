@@ -629,16 +629,16 @@ describe('todoCommand', () => {
             // eslint-disable-next-line @typescript-eslint/no-floating-promises
             removeSubcommand!.action!(ctx, `${start}-${end}`);
 
-            if (ctx.todoContext?.updateTodos) {
-              const calls = (
-                ctx.todoContext.updateTodos as ReturnType<typeof vi.fn>
-              ).mock.calls;
-              if (calls.length > 0) {
-                const updatedTodos = calls[0][0];
-                const expectedRemoved = end - start + 1;
-                const actualRemoved = todos.length - updatedTodos.length;
-                expect(actualRemoved).toBe(expectedRemoved);
-              }
+            if (!ctx.todoContext?.updateTodos)
+              throw new Error('unreachable: narrowing failed');
+            const calls = (
+              ctx.todoContext.updateTodos as ReturnType<typeof vi.fn>
+            ).mock.calls;
+            if (calls.length > 0) {
+              const updatedTodos = calls[0][0];
+              const expectedRemoved = end - start + 1;
+              const actualRemoved = todos.length - updatedTodos.length;
+              expect(actualRemoved).toBe(expectedRemoved);
             }
           },
         ),

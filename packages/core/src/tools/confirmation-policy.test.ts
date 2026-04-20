@@ -146,30 +146,29 @@ describe('Tool Confirmation Policy Updates', () => {
         );
         expect(confirmation).not.toBe(false);
 
-        if (confirmation) {
-          await confirmation.onConfirm(outcome);
+        if (!confirmation) throw new Error('unreachable: narrowing failed');
+        await confirmation.onConfirm(outcome);
 
-          if (shouldPublish) {
-            expect(mockMessageBus.publish).toHaveBeenCalledWith(
-              expect.objectContaining({
-                type: MessageBusType.UPDATE_POLICY,
-                persist,
-              }),
-            );
-          } else {
-            // Should not publish UPDATE_POLICY message for ProceedAlways
-            const publishCalls = (mockMessageBus.publish as any).mock.calls;
-            const hasUpdatePolicy = publishCalls.some(
-              (call: any) => call[0].type === MessageBusType.UPDATE_POLICY,
-            );
-            expect(hasUpdatePolicy).toBe(false);
-          }
+        if (shouldPublish) {
+          expect(mockMessageBus.publish).toHaveBeenCalledWith(
+            expect.objectContaining({
+              type: MessageBusType.UPDATE_POLICY,
+              persist,
+            }),
+          );
+        } else {
+          // Should not publish UPDATE_POLICY message for ProceedAlways
+          const publishCalls = (mockMessageBus.publish as any).mock.calls;
+          const hasUpdatePolicy = publishCalls.some(
+            (call: any) => call[0].type === MessageBusType.UPDATE_POLICY,
+          );
+          expect(hasUpdatePolicy).toBe(false);
+        }
 
-          if (expectedApprovalMode !== undefined) {
-            expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(
-              expectedApprovalMode,
-            );
-          }
+        if (expectedApprovalMode !== undefined) {
+          expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(
+            expectedApprovalMode,
+          );
         }
       },
     );

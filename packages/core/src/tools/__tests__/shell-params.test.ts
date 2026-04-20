@@ -194,10 +194,9 @@ describe('shell parameter consistency', () => {
 
     // Assert
     // directory description should mention it's for backward compatibility
-    if (directoryDesc) {
-      expect(directoryDesc.toLowerCase()).toMatch(
-        /alternative|backward|legacy|compat/,
-      );
-    }
+    if (!directoryDesc) throw new Error('unreachable: narrowing failed');
+    expect(directoryDesc.toLowerCase()).toMatch(
+      /alternative|backward|legacy|compat/,
+    );
   });
 });

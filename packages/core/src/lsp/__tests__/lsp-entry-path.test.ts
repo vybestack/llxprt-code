@@ -64,10 +64,10 @@ describe('LSP entry path resolution', () => {
       const distEntry = join(pkgRoot, 'dist', 'main.js');
       const entryPath = existsSync(srcEntry) ? srcEntry : distEntry;
       expect(existsSync(entryPath)).toBe(true);
-      if (entryPath.endsWith('.ts')) {
-        const content = readFileSync(entryPath, 'utf-8');
-        expect(content).toContain('parseBootstrapFromEnv');
-      }
+      if (!entryPath.endsWith('.ts'))
+        throw new Error('unreachable: narrowing failed');
+      const content = readFileSync(entryPath, 'utf-8');
+      expect(content).toContain('parseBootstrapFromEnv');
     }
   });
 });

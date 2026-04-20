@@ -971,10 +971,9 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'personal-gmail',
       );
       expect(anthropicPersonal).not.toBeNull();
-      if (anthropicPersonal) {
-        const now = Math.floor(Date.now() / 1000);
-        expect(anthropicPersonal.expiry).toBeLessThan(now); // Expired
-      }
+      if (!anthropicPersonal) throw new Error('unreachable: narrowing failed');
+      const now = Math.floor(Date.now() / 1000);
+      expect(anthropicPersonal.expiry).toBeLessThan(now); // Expired
     });
 
     it('should indicate active session bucket in diagnostics', async () => {

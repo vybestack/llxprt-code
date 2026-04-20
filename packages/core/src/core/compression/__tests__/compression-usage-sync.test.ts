@@ -350,15 +350,14 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
 
     const usage = result.metadata.usage;
     expect(usage).toBeDefined();
-    if (usage) {
-      // Verify all required UsageStats fields are numbers
-      expect(typeof usage.promptTokens).toBe('number');
-      expect(typeof usage.completionTokens).toBe('number');
-      expect(typeof usage.totalTokens).toBe('number');
-      // Optional fields — just check they're number or undefined if present
-      if (usage.cachedTokens !== undefined) {
-        expect(typeof usage.cachedTokens).toBe('number');
-      }
+    if (!usage) throw new Error('unreachable: narrowing failed');
+    // Verify all required UsageStats fields are numbers
+    expect(typeof usage.promptTokens).toBe('number');
+    expect(typeof usage.completionTokens).toBe('number');
+    expect(typeof usage.totalTokens).toBe('number');
+    // Optional fields — just check they're number or undefined if present
+    if (usage.cachedTokens !== undefined) {
+      expect(typeof usage.cachedTokens).toBe('number');
     }
   });
 

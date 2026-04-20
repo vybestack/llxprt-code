@@ -735,16 +735,15 @@ describe('BucketFailoverHandlerImpl', () => {
       const reasons = handler.getLastFailoverReasons?.();
       expect(reasons).toBeDefined();
 
-      if (reasons) {
-        const originalBucketAReason = reasons['bucket-a'];
-        // Try to mutate the returned object
-        reasons['bucket-a'] = 'no-token' as BucketFailureReason;
+      if (!reasons) throw new Error('unreachable: narrowing failed');
+      const originalBucketAReason = reasons['bucket-a'];
+      // Try to mutate the returned object
+      reasons['bucket-a'] = 'no-token' as BucketFailureReason;
 
-        // Get reasons again - should not be affected by mutation
-        const reasonsAgain = handler.getLastFailoverReasons?.();
-        expect(reasonsAgain?.['bucket-a']).toBe(originalBucketAReason);
-        expect(reasonsAgain?.['bucket-a']).not.toBe('no-token');
-      }
+      // Get reasons again - should not be affected by mutation
+      const reasonsAgain = handler.getLastFailoverReasons?.();
+      expect(reasonsAgain?.['bucket-a']).toBe(originalBucketAReason);
+      expect(reasonsAgain?.['bucket-a']).not.toBe('no-token');
     });
   });
 

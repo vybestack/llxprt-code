@@ -374,42 +374,42 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
 
         testServer.removeAllListeners('request');
         testServer.on('request', (req, res) => {
-          if (req.url?.includes('token')) {
-            pollCount++;
+          if (!req.url?.includes('token'))
+            throw new Error('unreachable: narrowing failed');
+          pollCount++;
 
-            let body = '';
-            req.on('data', (chunk) => {
-              body += chunk;
-            });
-            req.on('end', () => {
-              const params = new URLSearchParams(body);
-              expect(params.get('grant_type')).toBe(
-                'urn:ietf:params:oauth:grant-type:device_code',
-              );
-              expect(params.get('device_code')).toBe('test_device_code');
-              expect(params.get('client_id')).toBe(
-                'f0304373b74a44d2b584a3fb70ca9e56',
-              );
+          let body = '';
+          req.on('data', (chunk) => {
+            body += chunk;
+          });
+          req.on('end', () => {
+            const params = new URLSearchParams(body);
+            expect(params.get('grant_type')).toBe(
+              'urn:ietf:params:oauth:grant-type:device_code',
+            );
+            expect(params.get('device_code')).toBe('test_device_code');
+            expect(params.get('client_id')).toBe(
+              'f0304373b74a44d2b584a3fb70ca9e56',
+            );
 
-              if (pollCount < 3) {
-                // First few attempts return pending
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'authorization_pending' }));
-              } else {
-                // Eventually return success
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(
-                  JSON.stringify({
-                    access_token: mockToken.access_token,
-                    token_type: mockToken.token_type,
-                    expires_in: 3600,
-                    refresh_token: mockToken.refresh_token,
-                    scope: mockToken.scope,
-                  }),
-                );
-              }
-            });
-          }
+            if (pollCount < 3) {
+              // First few attempts return pending
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'authorization_pending' }));
+            } else {
+              // Eventually return success
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  access_token: mockToken.access_token,
+                  token_type: mockToken.token_type,
+                  expires_in: 3600,
+                  refresh_token: mockToken.refresh_token,
+                  scope: mockToken.scope,
+                }),
+              );
+            }
+          });
         });
 
         // This will actually poll and succeed after the third attempt

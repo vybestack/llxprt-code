@@ -169,9 +169,9 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isDialogAction(result)).toBe(true);
-      if (isDialogAction(result)) {
-        expect(result.dialog).toBe('sessionBrowser');
-      }
+      if (!isDialogAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.dialog).toBe('sessionBrowser');
 
       // Verify the action structure matches what processor expects
       // The processor will call openSessionBrowserDialog() which sets
@@ -221,10 +221,10 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const result = await continueCommand.action!(ctx, 'abc123');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('abc123');
-        // The processor will invoke performResume() which updates metadata
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('abc123');
+      // The processor will invoke performResume() which updates metadata
     });
   });
 
@@ -257,12 +257,12 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result).not.toBeNull();
       expect(result!.type).toBe('dialog');
 
-      if (isDialogAction(result)) {
-        // These fields are what slashCommandProcessor checks
-        expect(result.dialog).toBe('sessionBrowser');
-        // No dialogData expected for sessionBrowser
-        expect(result.dialogData).toBeUndefined();
-      }
+      if (!isDialogAction(result))
+        throw new Error('unreachable: narrowing failed');
+      // These fields are what slashCommandProcessor checks
+      expect(result.dialog).toBe('sessionBrowser');
+      // No dialogData expected for sessionBrowser
+      expect(result.dialogData).toBeUndefined();
     });
 
     /**
@@ -281,10 +281,10 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       expect(result).toBeDefined();
       expect(result!.type).toBe('perform_resume');
 
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('latest');
-        // Processor will call performResume(sessionRef, context)
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('latest');
+      // Processor will call performResume(sessionRef, context)
     });
 
     /**
@@ -310,10 +310,10 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content.length).toBeGreaterThan(0);
-      }
+      if (!isMessageAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.messageType).toBe('error');
+      expect(result.content.length).toBeGreaterThan(0);
     });
   });
 
@@ -552,10 +552,10 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const errorResult = await continueCommand.action!(nonInteractiveCtx, '');
       expect(errorResult).toBeDefined();
       expect(isMessageAction(errorResult)).toBe(true);
-      if (isMessageAction(errorResult)) {
-        expect(errorResult.messageType).toBe('error');
-        expect(errorResult.content.length).toBeGreaterThan(0);
-      }
+      if (!isMessageAction(errorResult))
+        throw new Error('unreachable: narrowing failed');
+      expect(errorResult.messageType).toBe('error');
+      expect(errorResult.content.length).toBeGreaterThan(0);
 
       // Path 3: With args -> perform_resume
       const resumeResult = await continueCommand.action!(ctx, 'session-123');
@@ -593,9 +593,9 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const result = await continueCommand.action!(ctx, 'my-session-123');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('my-session-123');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('my-session-123');
     });
 
     /**
@@ -630,9 +630,9 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const result = await continueCommand.action!(ctx, '');
 
       expect(isDialogAction(result)).toBe(true);
-      if (isDialogAction(result)) {
-        expect(result.dialog).toBe('sessionBrowser');
-      }
+      if (!isDialogAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.dialog).toBe('sessionBrowser');
     });
 
     /**
@@ -645,9 +645,9 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
       const result = await continueCommand.action!(ctx, 'latest');
 
       expect(isPerformResumeAction(result)).toBe(true);
-      if (isPerformResumeAction(result)) {
-        expect(result.sessionRef).toBe('latest');
-      }
+      if (!isPerformResumeAction(result))
+        throw new Error('unreachable: narrowing failed');
+      expect(result.sessionRef).toBe('latest');
     });
   });
 });

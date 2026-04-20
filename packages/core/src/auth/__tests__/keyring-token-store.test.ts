@@ -995,16 +995,18 @@ describe(`KeyringTokenStore (mode: ${MODE_LABEL})`, () => {
    */
   it('error message includes invalid name and allowed character set', async () => {
     const token = makeMinimalToken();
+    let e: unknown;
     try {
       await tokenStore.saveToken('my provider', token);
-      expect.unreachable('Should have thrown');
-    } catch (e) {
-      const msg = (e as Error).message;
-      expect(msg).toContain('my provider');
-      expect(msg).toContain(
-        'Allowed: letters, numbers, dashes, underscores, dots, @ (1-64 chars).',
-      );
+    } catch (__caught) {
+      e = __caught;
     }
+    expect(e).toBeDefined();
+    const msg = (e as Error).message;
+    expect(msg).toContain('my provider');
+    expect(msg).toContain(
+      'Allowed: letters, numbers, dashes, underscores, dots, @ (1-64 chars).',
+    );
   });
 
   // ─── Property-Based Tests ──────────────────────────────────────────────
