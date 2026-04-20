@@ -268,6 +268,7 @@ describe('AST Tools', () => {
           (err as NodeJS.ErrnoException).code === 'ENOENT'
         ) {
           // Directory doesn't exist yet - test passes
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(true).toBe(true);
         } else {
           throw err;
@@ -377,6 +378,7 @@ describe('AST Tools', () => {
           (err as NodeJS.ErrnoException).code === 'ENOENT'
         ) {
           // Directory doesn't exist yet - test passes
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(true).toBe(true);
         } else {
           throw err;

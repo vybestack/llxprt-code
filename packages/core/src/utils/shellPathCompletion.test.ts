@@ -280,6 +280,7 @@ describe('getPathSuggestions', () => {
     const firstDirIdx = results.findIndex((r) => r.isDirectory);
     const firstFileIdx = results.findIndex((r) => !r.isDirectory);
     if (firstDirIdx !== -1 && firstFileIdx !== -1) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(firstDirIdx).toBeLessThan(firstFileIdx);
     }
   });

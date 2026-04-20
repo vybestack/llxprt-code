@@ -584,9 +584,13 @@ describe('ast-edit characterization tests', () => {
         new AbortController().signal,
       );
       if (result) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result).toHaveProperty('metadata');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.metadata).toHaveProperty('astValidation');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.metadata).toHaveProperty('fileFreshness');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result).toHaveProperty('type');
       }
     });
@@ -619,6 +623,7 @@ describe('ast-edit characterization tests', () => {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(setApprovalModeSpy).toHaveBeenCalledWith(ApprovalMode.AUTO_EDIT);
       }
     });
@@ -648,6 +653,7 @@ describe('ast-edit characterization tests', () => {
       // So 'hello hello hello' becomes 'goodbye hello hello'
       if (!result.error) {
         const display = result.returnDisplay as ToolReturnDisplay;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.newContent).toBe('goodbye hello hello');
         // This proves countOccurrences returns 1 (not 3) since there's no "multiple occurrences" error
       }
@@ -698,6 +704,7 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.execute(new AbortController().signal);
       if (!result.error) {
         const display = result.returnDisplay as ToolReturnDisplay;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.fileDiff).toContain('Applied');
       }
     });
@@ -754,13 +761,19 @@ describe('ast-edit characterization tests', () => {
           const applyAstValidation = applyDisplay.metadata?.astValidation;
 
           // Assert identical newContent
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewNewContent).toBe(applyNewContent);
 
           // Assert astValidation shape matches
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewAstValidation).toHaveProperty('valid');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewAstValidation).toHaveProperty('errors');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(applyAstValidation).toHaveProperty('valid');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(applyAstValidation).toHaveProperty('errors');
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(previewAstValidation?.valid).toBe(applyAstValidation?.valid);
         }
       }
@@ -813,8 +826,11 @@ describe('ast-edit characterization tests', () => {
         const display = result.returnDisplay as ToolReturnDisplay;
         // AST validation may pass or fail depending on the parser
         // The key is that the metadata structure exists
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.metadata?.astValidation).toHaveProperty('valid');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(display.metadata?.astValidation).toHaveProperty('errors');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(Array.isArray(display.metadata?.astValidation?.errors)).toBe(
           true,
         );

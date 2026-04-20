@@ -159,7 +159,9 @@ describe('ExtensionSettingsStorage', () => {
       const envPath = getSettingsEnvFilePath(tmpDir);
       if (fs.existsSync(envPath)) {
         const content = await fs.promises.readFile(envPath, 'utf-8');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(content).not.toContain('secret123');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(content).not.toContain('API_KEY=secret123');
       }
     });

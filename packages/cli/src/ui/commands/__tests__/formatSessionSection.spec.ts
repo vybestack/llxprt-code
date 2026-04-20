@@ -243,6 +243,7 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
 
             // If the original ID is longer than 12, it should NOT appear in full
             if (sessionId.length > 12) {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(joinedOutput).not.toContain(sessionId);
             }
           },
@@ -265,8 +266,10 @@ describe('formatSessionSection @plan:PLAN-20260214-SESSIONBROWSER.P25', () => {
           const joinedOutput = result.join('\n').toLowerCase();
 
           if (isResumed) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(joinedOutput).toMatch(/resumed:\s*yes/);
           } else {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(joinedOutput).toMatch(/resumed:\s*no/);
           }
         }),

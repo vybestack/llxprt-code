@@ -781,7 +781,9 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       expect(result).toBeDefined();
       expect(result.type).toBe('message');
       if (result.type === 'message') {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.messageType).toBe('error');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.content).toContain('interactive');
       }
     });
@@ -831,6 +833,7 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
       expect(result).toBeDefined();
       expect(result.type).toBe('perform_resume');
       if (result.type === 'perform_resume') {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.sessionRef).toBe('latest');
       }
     });
@@ -1045,14 +1048,22 @@ describe('Session Browser E2E Integration @plan:PLAN-20260214-SESSIONBROWSER.P30
               expect(result).toHaveProperty('ok');
 
               if (result.ok) {
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('history');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('metadata');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('warnings');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(Array.isArray(result.history)).toBe(true);
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(Array.isArray(result.warnings)).toBe(true);
               } else {
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('error');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(typeof result.error).toBe('string');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result.error.length).toBeGreaterThan(0);
               }
 

@@ -569,7 +569,9 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(token2).not.toBeNull();
       if (token1 && token2) {
         const now = Math.floor(Date.now() / 1000);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(token1.expiry).toBeLessThan(now);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(token2.expiry).toBeLessThan(now);
       }
 
@@ -961,7 +963,9 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Verify expiry is tracked correctly
       if (anthropicWork && geminiWork) {
         const now = Math.floor(Date.now() / 1000);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(anthropicWork.expiry).toBeGreaterThan(now); // Not expired
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(geminiWork.expiry).toBeGreaterThan(now); // Not expired
       }
 

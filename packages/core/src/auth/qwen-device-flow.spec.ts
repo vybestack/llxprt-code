@@ -325,6 +325,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
               const expectedChallenge = createHash('sha256')
                 .update(verifier)
                 .digest('base64url');
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(expectedChallenge).toBe(storedChallenge);
               verifierVerified = true;
             }
@@ -504,6 +505,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
             .slice(1)
             .map((t, i) => t - timestamps[i]);
           intervals.forEach((interval) =>
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(interval).toBeGreaterThanOrEqual(4000),
           ); // Allow some variance
         }
@@ -854,10 +856,12 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
 
           if (req.url?.includes('device/code')) {
             requiredDeviceParams.forEach((param) => {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(params.has(param)).toBe(true);
             });
           } else if (req.url?.includes('token')) {
             requiredTokenParams.forEach((param) => {
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(params.has(param)).toBe(true);
             });
           }

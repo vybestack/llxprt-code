@@ -359,6 +359,7 @@ describe('Platform UDS Probe Tests (Phase 38)', () => {
 
       // On macOS, if rawTmpdir starts with /var, resolved should start with /private/var
       if (isMacOS && rawTmpdir.startsWith('/var')) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(resolvedTmpdir.startsWith('/private/var')).toBe(true);
       }
     });

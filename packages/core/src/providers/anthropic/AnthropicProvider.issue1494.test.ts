@@ -263,6 +263,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     for (const msg of request.messages) {
       if (msg.role === 'assistant') {
         if (typeof msg.content === 'string') {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(msg.content).not.toBe('[No content generated]');
         }
       }
@@ -419,6 +420,7 @@ describe('AnthropicProvider Issue #1494: thinking blocks without signatures must
     // The old thinking should be preserved as text (fallback for redaction without signature)
     for (const msg of request.messages) {
       if (msg.role === 'assistant' && typeof msg.content === 'string') {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(msg.content).not.toBe('[No content generated]');
       }
     }

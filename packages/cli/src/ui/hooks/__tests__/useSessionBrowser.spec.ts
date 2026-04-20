@@ -2433,14 +2433,17 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
                 const b = sessions[i + 1];
 
                 if (result.current.sortOrder === 'newest') {
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.lastModified.getTime()).toBeGreaterThanOrEqual(
                     b.lastModified.getTime(),
                   );
                 } else if (result.current.sortOrder === 'oldest') {
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.lastModified.getTime()).toBeLessThanOrEqual(
                     b.lastModified.getTime(),
                   );
                 } else if (result.current.sortOrder === 'size') {
+                  // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                   expect(a.fileSize).toBeGreaterThanOrEqual(b.fileSize);
                 }
               }
@@ -2500,13 +2503,16 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         // Check priority order
         if (hasDeleteConfirm) {
           // Should have cleared delete confirm
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(result.current.deleteConfirmIndex).toBeNull();
           // Search term should be preserved
           if (hasSearchTerm) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(result.current.searchTerm).toBe('a');
           }
         } else if (hasSearchTerm) {
           // Should have cleared search term
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(result.current.searchTerm).toBe('');
         }
 

@@ -1243,10 +1243,14 @@ describe('performResume @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
               expect(result).toHaveProperty('ok');
 
               if (result.ok) {
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('history');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('metadata');
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('warnings');
               } else {
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(result).toHaveProperty('error');
               }
 

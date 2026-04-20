@@ -147,8 +147,10 @@ describe('runtimeRegistry', () => {
         requireRuntimeEntry('nonexistent-runtime-2');
         expect.fail('Should have thrown');
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(Error);
         const message = (error as Error).message;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(message).toContain('runtime registration');
       }
     });
@@ -158,8 +160,10 @@ describe('runtimeRegistry', () => {
         requireRuntimeEntry('nonexistent-runtime-3');
         expect.fail('Should have thrown');
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(Error);
         const message = (error as Error).message;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(message).toContain('setCliRuntimeContext');
       }
     });

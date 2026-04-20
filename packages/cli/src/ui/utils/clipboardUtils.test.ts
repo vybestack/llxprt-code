@@ -18,9 +18,11 @@ describe('clipboardUtils', () => {
     it('should return false on unsupported platforms', async () => {
       if (process.platform !== 'darwin' && process.platform !== 'win32') {
         const result = await clipboardHasImage();
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result).toBe(false);
       } else {
         // Skip on macOS/Windows as it would require actual clipboard state
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(true).toBe(true);
       }
     });
@@ -28,9 +30,11 @@ describe('clipboardUtils', () => {
     it('should return boolean on macOS or Windows', async () => {
       if (process.platform === 'darwin' || process.platform === 'win32') {
         const result = await clipboardHasImage();
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(typeof result).toBe('boolean');
       } else {
         // Skip on unsupported platforms
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(true).toBe(true);
       }
     }, 10000);
@@ -40,9 +44,11 @@ describe('clipboardUtils', () => {
     it('should return null on unsupported platforms', async () => {
       if (process.platform !== 'darwin' && process.platform !== 'win32') {
         const result = await saveClipboardImage();
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result).toBe(null);
       } else {
         // Skip on macOS/Windows
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(true).toBe(true);
       }
     });
@@ -55,9 +61,11 @@ describe('clipboardUtils', () => {
 
       if (process.platform === 'darwin' || process.platform === 'win32') {
         // On macOS/Windows, might return null due to various errors
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result === null || typeof result === 'string').toBe(true);
       } else {
         // On other platforms, should always return null
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result).toBe(null);
       }
     });

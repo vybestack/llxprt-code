@@ -342,6 +342,7 @@ describe('classifyGoogleError', () => {
     const result = classifyGoogleError(originalError);
     expect(result).toBeInstanceOf(RetryableQuotaError);
     if (result instanceof RetryableQuotaError) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
     }
   });
@@ -383,8 +384,10 @@ describe('classifyGoogleError', () => {
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
     if (result instanceof RetryableQuotaError) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBe(5000);
       // The cause should be the parsed GoogleApiError
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.cause).toStrictEqual({
         code: 429,
         message: 'Resource exhausted. Please retry in 5s',
@@ -403,6 +406,7 @@ describe('classifyGoogleError', () => {
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
     if (result instanceof RetryableQuotaError) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
     }
   });
@@ -420,6 +424,7 @@ describe('classifyGoogleError', () => {
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
     if (result instanceof RetryableQuotaError) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
     }
   });
@@ -446,6 +451,7 @@ describe('classifyGoogleError', () => {
 
     expect(result).toBeInstanceOf(RetryableQuotaError);
     if (result instanceof RetryableQuotaError) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(result.retryDelayMs).toBeUndefined();
     }
   });

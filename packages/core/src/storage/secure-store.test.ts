@@ -1473,20 +1473,27 @@ describe('SecureStore — Default Path Uses Platform Standards', () => {
 
     // Should use platform-standard paths
     if (process.platform === 'darwin') {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('Library/Application Support');
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('llxprt-code');
     } else if (process.platform === 'win32') {
       // Windows: should be under LOCALAPPDATA or AppData
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir.toLowerCase()).toMatch(/appdata|localappdata/i);
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('llxprt-code');
     } else {
       // Linux: XDG_DATA_HOME or ~/.local/share
       const xdgDataHome = process.env.XDG_DATA_HOME;
       if (xdgDataHome) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(fallbackDir).toContain(xdgDataHome);
       } else {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(fallbackDir).toContain('.local/share');
       }
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(fallbackDir).toContain('llxprt-code');
     }
 

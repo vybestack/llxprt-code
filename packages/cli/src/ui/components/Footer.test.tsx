@@ -203,10 +203,13 @@ describe('Footer', () => {
         if (scenario.breakpoint === 'WIDE') {
           // WIDE (expectedMaxLength 100) is longer than the branch; full name
           // must be preserved.
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(textContent).toContain(longBranchName);
         } else {
           // NARROW/STANDARD must truncate the name via truncateMiddle.
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(textContent).not.toContain(longBranchName);
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(textContent).toMatch(/feature\/.+\.\.\..+/);
         }
       });

@@ -49,7 +49,9 @@ describe('LSP entry path resolution', () => {
       }
 
       const packagePath = fileURLToPath(packageUrl);
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(packagePath).toBeTruthy();
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(existsSync(packagePath)).toBe(true);
 
       let pkgRoot = dirname(packagePath);
@@ -63,10 +65,12 @@ describe('LSP entry path resolution', () => {
       const srcEntry = join(pkgRoot, 'src', 'main.ts');
       const distEntry = join(pkgRoot, 'dist', 'main.js');
       const entryPath = existsSync(srcEntry) ? srcEntry : distEntry;
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(existsSync(entryPath)).toBe(true);
       if (!entryPath.endsWith('.ts'))
         throw new Error('unreachable: narrowing failed');
       const content = readFileSync(entryPath, 'utf-8');
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(content).toContain('parseBootstrapFromEnv');
     }
   });

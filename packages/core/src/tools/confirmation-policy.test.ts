@@ -150,7 +150,9 @@ describe('Tool Confirmation Policy Updates', () => {
         await confirmation.onConfirm(outcome);
 
         if (shouldPublish) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockMessageBus.publish).toHaveBeenCalledWith(
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect.objectContaining({
               type: MessageBusType.UPDATE_POLICY,
               persist,
@@ -162,10 +164,12 @@ describe('Tool Confirmation Policy Updates', () => {
           const hasUpdatePolicy = publishCalls.some(
             (call: any) => call[0].type === MessageBusType.UPDATE_POLICY,
           );
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(hasUpdatePolicy).toBe(false);
         }
 
         if (expectedApprovalMode !== undefined) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockConfig.setApprovalMode).toHaveBeenCalledWith(
             expectedApprovalMode,
           );

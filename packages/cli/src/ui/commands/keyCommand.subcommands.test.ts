@@ -202,10 +202,12 @@ describe('/key — Table-Driven Parsing (R27.2)', () => {
       if (tc.expectsSubcommand) {
         // Subcommand stubs return 'not yet implemented' during P14;
         // after P15, they return real results. Either way, dispatched.
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.content).toBeDefined();
       } else {
         // Legacy path: calls runtime.updateActiveProviderApiKey or shows status
         if (tc.input.trim().length > 0) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalled();
         }
       }

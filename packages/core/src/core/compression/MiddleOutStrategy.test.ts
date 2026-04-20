@@ -331,6 +331,7 @@ describe('MiddleOutStrategy', () => {
                     b.callId === (call as { id: string }).id,
                 ),
             );
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(hasResponse).toBe(true);
           }
         }
@@ -339,6 +340,7 @@ describe('MiddleOutStrategy', () => {
       // Bottom messages should not start with an orphaned tool response
       if (bottomMessages.length > 0) {
         const firstBottom = bottomMessages[0];
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(firstBottom.speaker).not.toBe('tool');
       }
     });
@@ -851,7 +853,9 @@ describe('MiddleOutStrategy', () => {
       try {
         await strategy.compress(ctx);
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(EmptySummaryError);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(isTransientCompressionError(error)).toBe(false);
       }
     });
@@ -872,7 +876,9 @@ describe('MiddleOutStrategy', () => {
       try {
         await strategy.compress(ctx);
       } catch (error) {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(EmptySummaryError);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(isTransientCompressionError(error)).toBe(false);
       }
     });

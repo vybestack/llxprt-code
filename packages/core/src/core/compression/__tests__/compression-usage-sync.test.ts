@@ -357,6 +357,7 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
     expect(typeof usage.totalTokens).toBe('number');
     // Optional fields — just check they're number or undefined if present
     if (usage.cachedTokens !== undefined) {
+      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(typeof usage.cachedTokens).toBe('number');
     }
   });

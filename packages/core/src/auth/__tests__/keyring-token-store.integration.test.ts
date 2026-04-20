@@ -581,9 +581,12 @@ describe('KeyringTokenStore Integration', () => {
             for (const [provider, expectedToken] of expectedState) {
               const actual = await setup.tokenStore.getToken(provider);
               if (expectedToken === null) {
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(actual).toBeNull();
               } else {
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(actual).not.toBeNull();
+                // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
                 expect(actual!.access_token).toBe(expectedToken.access_token);
               }
             }

@@ -692,6 +692,7 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     // The file content should be removed from the earlier inclusion
     for (const tb of textBlocks) {
       if (tb.type === 'text') {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(tb.text).not.toContain('version1');
       }
     }
@@ -831,6 +832,7 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
       for (const tb of toolBlocks) {
         if (tb.result === PRUNED_POINTER) {
           // Verify it's one of the old entries (indices 1, 3 = first two tool responses)
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(idx).toBeLessThanOrEqual(3);
         }
       }
@@ -947,6 +949,7 @@ describe('pruneByRecency @plan PLAN-20260211-HIGHDENSITY.P10', () => {
         expect(rb.toolName).toBe('read_file');
         if (rb.result === PRUNED_POINTER) {
           // Structure is preserved — only result changed
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(rb.isComplete).toBe(true);
         }
       }
@@ -1572,6 +1575,7 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
           expect(replacement.speaker).toBe(original.speaker);
           // Metadata should be preserved
           if (original.metadata?.timestamp !== undefined) {
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
             expect(replacement.metadata?.timestamp).toBe(
               original.metadata.timestamp,
             );
@@ -1725,6 +1729,7 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P10', () => {
 
         // Earlier inclusions should be deduplicated
         if (dupCount > 1) {
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(result.metadata.fileDeduplicationsPruned).toBe(dupCount - 1);
         }
       }),

@@ -1728,19 +1728,26 @@ describe('RetryOrchestrator', () => {
         expect.fail('Should have thrown AllBucketsExhaustedError');
       } catch (error) {
         // EXPECTATION: Error includes bucketFailureReasons
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toHaveProperty('bucketFailureReasons');
         const reasons = (
           error as { bucketFailureReasons: Record<string, string> }
         ).bucketFailureReasons;
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(reasons.bucket1).toBe('quota-exhausted');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(reasons.bucket2).toBe('expired-refresh-failed');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(reasons.bucket3).toBe('no-token');
 
         // EXPECTATION: Error message includes detailed failure reasons
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toContain('bucket1: quota-exhausted');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toContain(
           'bucket2: expired-refresh-failed',
         );
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toContain('bucket3: no-token');
       }
     });

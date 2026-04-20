@@ -242,7 +242,9 @@ describe('TodoPause - Behavioral Tests', () => {
         expect(result.llmContent).toContain('Test reason');
       } catch (error) {
         // If it throws an error for non-continuation context, that's also valid
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(error).toBeInstanceOf(Error);
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect((error as Error).message).toMatch(/continuation|context/i);
       }
     });

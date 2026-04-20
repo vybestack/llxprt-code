@@ -283,6 +283,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           const values = completions.map((c) =>
             typeof c === 'string' ? c : c.value,
           );
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(values).toContain('latest');
         }
       }
@@ -312,6 +313,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
             mockTokenInfo(),
           );
           // Should at minimum return 'latest'
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(completions.length).toBeGreaterThanOrEqual(1);
         }
       }
@@ -339,6 +341,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           // In non-interactive mode, the completer might still return 'latest'
           // but session discovery requires interactive mode
           // This test verifies the completer handles non-interactive gracefully
+          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(Array.isArray(completions)).toBe(true);
         }
       }

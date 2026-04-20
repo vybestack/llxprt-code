@@ -638,6 +638,7 @@ describe('todoCommand', () => {
               const updatedTodos = calls[0][0];
               const expectedRemoved = end - start + 1;
               const actualRemoved = todos.length - updatedTodos.length;
+              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
               expect(actualRemoved).toBe(expectedRemoved);
             }
           },

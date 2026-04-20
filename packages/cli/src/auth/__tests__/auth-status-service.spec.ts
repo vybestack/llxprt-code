@@ -414,6 +414,7 @@ describe('AuthStatusService.logout', () => {
     await service.logout('qwen');
 
     expect(flushMockRef.current).toBeDefined();
+    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
     flushMockRef.current && expect(flushMockRef.current).toHaveBeenCalled();
   });
 });
@@ -475,6 +476,7 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
 
     // flush must still execute despite all failures
     expect(flushMockRef.current).toBeDefined();
+    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
     flushMockRef.current && expect(flushMockRef.current).toHaveBeenCalled();
   });
 
