@@ -636,7 +636,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           selections.push(selected.name);
         }
 
-        expect(selections).toEqual(['sub-1', 'sub-2', 'sub-3']);
+        expect(selections).toStrictEqual(['sub-1', 'sub-2', 'sub-3']);
       });
 
       it('should wrap around after last sub-profile', () => {
@@ -664,7 +664,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
         }
 
         // Should cycle: sub-1, sub-2, sub-3, sub-1, sub-2, sub-3
-        expect(selections).toEqual([
+        expect(selections).toStrictEqual([
           'sub-1',
           'sub-2',
           'sub-3',
@@ -697,7 +697,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           firstBatch.push(selected.name);
         }
 
-        expect(firstBatch).toEqual(['sub-1', 'sub-2']);
+        expect(firstBatch).toStrictEqual(['sub-1', 'sub-2']);
 
         // Second batch should continue from where we left off
         const secondBatch: string[] = [];
@@ -710,7 +710,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           secondBatch.push(selected.name);
         }
 
-        expect(secondBatch).toEqual(['sub-1', 'sub-2']);
+        expect(secondBatch).toStrictEqual(['sub-1', 'sub-2']);
       });
     });
 
@@ -737,7 +737,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           selections.push(selected.name);
         }
 
-        expect(selections).toEqual(['sub-1', 'sub-2', 'sub-1', 'sub-2']);
+        expect(selections).toStrictEqual(['sub-1', 'sub-2', 'sub-1', 'sub-2']);
       });
 
       it('should handle 3 sub-profiles correctly', () => {
@@ -763,7 +763,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           selections.push(selected.name);
         }
 
-        expect(selections).toEqual([
+        expect(selections).toStrictEqual([
           'sub-1',
           'sub-2',
           'sub-3',
@@ -797,7 +797,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           selections.push(selected.name);
         }
 
-        expect(selections).toEqual([
+        expect(selections).toStrictEqual([
           'sub-1',
           'sub-2',
           'sub-3',
@@ -834,7 +834,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           selections.push(selected.name);
         }
 
-        expect(selections).toEqual([
+        expect(selections).toStrictEqual([
           'sub-1',
           'sub-2',
           'sub-3',
@@ -876,7 +876,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
         }
 
         // Should always return the same sub-profile
-        expect(selections).toEqual([
+        expect(selections).toStrictEqual([
           'only-sub',
           'only-sub',
           'only-sub',
@@ -917,7 +917,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
         ).selectNextSubProfile();
 
         // Verify all fields are present
-        expect(selected).toEqual({
+        expect(selected).toStrictEqual({
           name: 'complete-sub',
           providerName: 'openai',
           modelId: 'gpt-4',
@@ -1030,7 +1030,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           }
 
           // Verify selectNextSubProfile was called in correct order
-          expect(selectionOrder).toEqual(['sub-1', 'sub-2']);
+          expect(selectionOrder).toStrictEqual(['sub-1', 'sub-2']);
         } finally {
           // Restore original method
           providerManager.getProviderByName = originalGetProvider;
@@ -1104,7 +1104,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           }
 
           // Verify correct providers were requested
-          expect(providerRequests).toEqual(['gemini', 'openai']);
+          expect(providerRequests).toStrictEqual(['gemini', 'openai']);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1374,7 +1374,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           }
 
           // Verify responses came from different providers in order
-          expect(responses).toEqual([
+          expect(responses).toStrictEqual([
             'gemini-response',
             'openai-response',
             'anthropic-response',
@@ -1453,7 +1453,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           }
 
           // Verify correct models were passed to each provider
-          expect(capturedModels).toEqual(['gemini-flash', 'gpt-4-turbo']);
+          expect(capturedModels).toStrictEqual(['gemini-flash', 'gpt-4-turbo']);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1502,7 +1502,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           }
 
           // Verify all chunks were yielded in order
-          expect(chunks).toEqual(['chunk1', 'chunk2', 'chunk3']);
+          expect(chunks).toStrictEqual(['chunk1', 'chunk2', 'chunk3']);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1554,7 +1554,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
           // Verify complex chunk was propagated correctly
           expect(chunks).toHaveLength(1);
-          expect(chunks[0]).toEqual(complexChunk);
+          expect(chunks[0]).toStrictEqual(complexChunk);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1636,8 +1636,8 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           }
 
           // Verify chunks from each provider were propagated correctly
-          expect(chunks1).toEqual(['p1-chunk1', 'p1-chunk2']);
-          expect(chunks2).toEqual(['p2-chunk1', 'p2-chunk2']);
+          expect(chunks1).toStrictEqual(['p1-chunk1', 'p1-chunk2']);
+          expect(chunks2).toStrictEqual(['p2-chunk1', 'p2-chunk2']);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1861,7 +1861,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
           // Verify tools were passed to delegate
           expect(capturedOptions).toBeDefined();
-          expect(capturedOptions!.tools).toEqual(testTools);
+          expect(capturedOptions!.tools).toStrictEqual(testTools);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -1960,7 +1960,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
 
           // Verify metadata was passed to delegate
           expect(capturedOptions).toBeDefined();
-          expect(capturedOptions!.metadata).toEqual(testMetadata);
+          expect(capturedOptions!.metadata).toStrictEqual(testMetadata);
         } finally {
           providerManager.getProviderByName = originalGetProvider;
         }
@@ -2043,7 +2043,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             }
           }
 
-          expect(selectionOrder).toEqual([
+          expect(selectionOrder).toStrictEqual([
             'resolved-sub-1',
             'resolved-sub-2',
             'resolved-sub-1',
@@ -2172,7 +2172,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           expect(capturedOptions).toBeDefined();
           expect(capturedOptions!.resolved).toBeDefined();
           // Verify modelParams are in metadata
-          expect(capturedOptions!.metadata?.modelParams).toEqual({
+          expect(capturedOptions!.metadata?.modelParams).toStrictEqual({
             maxTokens: 500,
             topP: 0.9,
             topK: 40,
@@ -2242,7 +2242,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           expect(capturedOptions).toBeDefined();
           expect(capturedOptions!.resolved).toBeDefined();
           // Verify merged ephemeralSettings are in metadata
-          expect(capturedOptions!.metadata?.ephemeralSettings).toEqual({
+          expect(capturedOptions!.metadata?.ephemeralSettings).toStrictEqual({
             temperature: 0.9,
             topP: 0.8,
             maxTokens: 500,
@@ -2307,7 +2307,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           expect(capturedOptions).toBeDefined();
           expect(capturedOptions!.resolved).toBeDefined();
           // Verify sub-profile ephemeralSettings are in metadata
-          expect(capturedOptions!.metadata?.ephemeralSettings).toEqual({
+          expect(capturedOptions!.metadata?.ephemeralSettings).toStrictEqual({
             temperature: 0.7,
             maxTokens: 300,
           });
@@ -2372,7 +2372,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
           expect(capturedOptions).toBeDefined();
           expect(capturedOptions!.resolved).toBeDefined();
           // Verify LB profile ephemeralSettings are in metadata
-          expect(capturedOptions!.metadata?.ephemeralSettings).toEqual({
+          expect(capturedOptions!.metadata?.ephemeralSettings).toStrictEqual({
             temperature: 0.8,
             topK: 50,
           });
@@ -2445,7 +2445,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             }
           }
 
-          expect(capturedAuthTokens).toEqual([
+          expect(capturedAuthTokens).toStrictEqual([
             'account-1-token',
             'account-2-token',
             'account-1-token',
@@ -2515,7 +2515,7 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
             }
           }
 
-          expect(capturedBaseURLs).toEqual([
+          expect(capturedBaseURLs).toStrictEqual([
             'https://endpoint1.example.com',
             'https://endpoint2.example.com',
             'https://endpoint1.example.com',

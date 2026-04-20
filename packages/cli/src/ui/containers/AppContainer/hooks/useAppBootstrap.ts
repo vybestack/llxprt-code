@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type React from 'react';
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
@@ -30,7 +31,7 @@ import {
 import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
-import { UpdateObject } from '../../../utils/updateCheck.js';
+import type { UpdateObject } from '../../../utils/updateCheck.js';
 import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
@@ -41,7 +42,6 @@ import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItem } from '../../../types.js';
 import type { TodoContinuationHook } from './useTodoContinuationFlow.js';
-import React from 'react';
 
 export interface AppBootstrapProps {
   config: Config;

@@ -11,8 +11,7 @@
  * while maintaining compatibility with the LOGIN_WITH_GOOGLE flow.
  */
 
-import type { OAuthProvider } from './types.js';
-import { OAuthToken, TokenStore } from './types.js';
+import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import {
   clearOauthClientCache,
   OAuthErrorFactory,
@@ -25,8 +24,8 @@ import {
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { Credentials } from 'google-auth-library';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import type { Credentials } from 'google-auth-library';
+import type { HistoryItemWithoutId } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
 import { InitializationGuard, AuthCodeDialog } from './oauth-provider-base.js';
 

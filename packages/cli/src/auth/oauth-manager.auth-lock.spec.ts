@@ -114,7 +114,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
       // authenticate() should NOT be called for default (cross-process token found)
       // authenticate() SHOULD be called for claudius
       expect(authenticateCalls).toHaveLength(1);
-      expect(authenticateCalls[0]).toEqual({
+      expect(authenticateCalls[0]).toStrictEqual({
         provider: 'anthropic',
         bucket: 'claudius',
       });
@@ -470,7 +470,7 @@ describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
 
       // Only bucket1 and bucket3 should be authenticated
       // bucket2 skipped due to cross-process token
-      expect(authenticateCallLog).toEqual(['bucket1', 'bucket3']);
+      expect(authenticateCallLog).toStrictEqual(['bucket1', 'bucket3']);
 
       authenticateSpy.mockRestore();
     });

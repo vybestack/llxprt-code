@@ -348,7 +348,7 @@ describe('subagentExecution', () => {
 
       await channel.handleCompletion([]);
 
-      await expect(channel.awaitCompletedCalls()).resolves.toEqual([]);
+      await expect(channel.awaitCompletedCalls()).resolves.toStrictEqual([]);
     });
   });
 });

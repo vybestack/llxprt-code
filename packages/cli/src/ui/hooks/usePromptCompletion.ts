@@ -5,8 +5,8 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   getResponseText,
   debugLogger,

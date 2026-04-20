@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import type { Part } from '@google/genai';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
@@ -102,8 +102,8 @@ describe('GeminiProvider', () => {
     await generator.next();
 
     const request = generateContentStreamMock.mock.calls[0][0];
-    expect(request.config.serverTools).toEqual([]);
-    expect(request.config.toolConfig).toEqual(overrides.toolConfig);
+    expect(request.config.serverTools).toStrictEqual([]);
+    expect(request.config.toolConfig).toStrictEqual(overrides.toolConfig);
   });
 
   it('applies gemini ephemerals but ignores global tools governance entries', async () => {
@@ -408,7 +408,7 @@ describe('GeminiProvider', () => {
     expect(flashPreview).toBeDefined();
     expect(flashPreview?.name).toBe('Gemini 3 Flash Preview');
     expect(flashPreview?.provider).toBe('gemini');
-    expect(flashPreview?.supportedToolFormats).toEqual([]);
+    expect(flashPreview?.supportedToolFormats).toStrictEqual([]);
   });
 
   describe('GeminiProvider Authentication', () => {

@@ -5,14 +5,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import type { ToolResult, Config } from '../index.js';
 import {
   ToolConfirmationOutcome,
   type ToolInvocation,
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolResult,
   ApprovalMode,
-  Config,
   Kind,
 } from '../index.js';
 import {

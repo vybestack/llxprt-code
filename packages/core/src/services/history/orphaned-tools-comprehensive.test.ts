@@ -73,7 +73,7 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
       // It should be the real response, not synthetic
       const response = toolResponses[0].blocks[0] as ToolResponseBlock;
       expect(response.callId).toBe(toolCallId);
-      expect(response.result).toEqual({ success: true });
+      expect(response.result).toStrictEqual({ success: true });
       expect(response.error).toBeUndefined();
 
       // No synthetic metadata
@@ -240,7 +240,7 @@ describe('Orphaned Tool Calls - Comprehensive Tests', () => {
   describe('Edge cases', () => {
     it('should handle empty history', () => {
       const curated = historyService.getCurated();
-      expect(curated).toEqual([]);
+      expect(curated).toStrictEqual([]);
       expect(() => JSON.stringify(curated)).not.toThrow();
     });
   });

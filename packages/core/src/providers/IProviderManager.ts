@@ -6,7 +6,7 @@
 
 import { type IProvider } from './IProvider.js';
 import { type HydratedModel } from '../models/hydration.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 
 /**
  * Manager for handling multiple providers

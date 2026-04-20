@@ -14,8 +14,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from '../oauth-manager.js';
-import type { OAuthProvider } from '../types.js';
-import type { TokenStore, OAuthToken } from '../types.js';
+import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 
 /**
  * Create a mock token with specified expiry time

@@ -6,10 +6,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GoogleWebFetchTool } from './google-web-fetch.js';
-import { Config } from '../config/config.js';
-import { IProvider } from '../providers/IProvider.js';
-import { IProviderManager } from '../providers/IProviderManager.js';
-import { ContentGeneratorConfig } from '../core/contentGenerator.js';
+import type { Config } from '../config/config.js';
+import type { IProvider } from '../providers/IProvider.js';
+import type { IProviderManager } from '../providers/IProviderManager.js';
+import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import * as fetchUtils from '../utils/fetch.js';
 
 describe('GoogleWebFetchTool Integration Tests', () => {

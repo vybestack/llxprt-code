@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import React from 'react';
+import type React from 'react';
 import {
   GeminiEventType as ServerGeminiEventType,
   type Config,

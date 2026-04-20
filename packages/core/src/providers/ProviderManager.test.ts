@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
-import { IProvider } from './IProvider.js';
+import type { IProvider } from './IProvider.js';
 // import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js'; // Not used in tests
 import {
   registerSettingsService,
@@ -56,7 +56,7 @@ describe('ProviderManager provider ordering', () => {
       manager.registerProvider(createProvider(name));
     }
 
-    expect(manager.listProviders()).toEqual([
+    expect(manager.listProviders()).toStrictEqual([
       'anthropic',
       'gemini',
       'openai',

@@ -138,7 +138,7 @@ describe('AsyncTaskReminderService', () => {
       expect(result!.text).toContain('"terminate_reason": "success"');
 
       // Verify the returned IDs match the tasks included
-      expect(result!.notifiedTaskIds).toEqual(['task-complete-001']);
+      expect(result!.notifiedTaskIds).toStrictEqual(['task-complete-001']);
     });
 
     it('includes running tasks summary in reminder', () => {
@@ -160,7 +160,7 @@ describe('AsyncTaskReminderService', () => {
       expect(result).not.toBeNull();
       expect(result!.text).toContain('2 async task(s) still running.');
       // No completed tasks, so no IDs to notify
-      expect(result!.notifiedTaskIds).toEqual([]);
+      expect(result!.notifiedTaskIds).toStrictEqual([]);
     });
 
     it('includes both pending completions and running tasks', () => {
@@ -187,7 +187,7 @@ describe('AsyncTaskReminderService', () => {
       expect(result).not.toBeNull();
       expect(result!.text).toContain('1 async task(s) completed:');
       expect(result!.text).toContain('1 async task(s) still running.');
-      expect(result!.notifiedTaskIds).toEqual(['task-complete-001']);
+      expect(result!.notifiedTaskIds).toStrictEqual(['task-complete-001']);
     });
 
     it('only includes completed/failed task IDs, not running ones', () => {
@@ -218,7 +218,7 @@ describe('AsyncTaskReminderService', () => {
 
       const result = reminderService.generateReminder();
       expect(result).not.toBeNull();
-      expect(result!.notifiedTaskIds).toEqual(['task-a', 'task-b']);
+      expect(result!.notifiedTaskIds).toStrictEqual(['task-a', 'task-b']);
     });
   });
 
@@ -248,7 +248,10 @@ describe('AsyncTaskReminderService', () => {
       expect(parsed).toHaveProperty('agent_id', task.id);
       expect(parsed).toHaveProperty('terminate_reason', 'success');
       expect(parsed).toHaveProperty('emitted_vars');
-      expect(parsed.emitted_vars).toEqual({ key1: 'value1', key2: 'value2' });
+      expect(parsed.emitted_vars).toStrictEqual({
+        key1: 'value1',
+        key2: 'value2',
+      });
       expect(parsed).toHaveProperty('final_message', 'All done');
     });
 

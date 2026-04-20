@@ -8,9 +8,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { OAuthToken, TokenStore } from '../types.js';
-import type { OAuthProvider } from '../types.js';
 import type {
+  OAuthToken,
+  TokenStore,
+  OAuthProvider,
   BucketFailoverOAuthManagerLike,
   AuthenticatorInterface,
 } from '../types.js';
@@ -418,7 +419,7 @@ describe('AuthFlowOrchestrator', () => {
       ]);
 
       expect(confirmationCalls).toHaveLength(1);
-      expect(confirmationCalls[0]).toEqual({
+      expect(confirmationCalls[0]).toStrictEqual({
         bucketIndex: 1,
         totalBuckets: 1,
       });

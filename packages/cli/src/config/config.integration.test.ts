@@ -8,10 +8,12 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import {
-  Config,
+import type {
   ConfigParameters,
   ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core';
+import {
+  Config,
   DEFAULT_FILE_FILTERING_OPTIONS,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
@@ -234,7 +236,7 @@ describe('Configuration Integration Tests', () => {
         debugMode: false,
       };
       const config = new Config(configParams);
-      expect(config.getExtensionContextFilePaths()).toEqual([]);
+      expect(config.getExtensionContextFilePaths()).toStrictEqual([]);
     });
 
     it('should correctly store and return extension context file paths', () => {
@@ -249,7 +251,7 @@ describe('Configuration Integration Tests', () => {
         extensionContextFilePaths: contextFiles,
       };
       const config = new Config(configParams);
-      expect(config.getExtensionContextFilePaths()).toEqual(contextFiles);
+      expect(config.getExtensionContextFilePaths()).toStrictEqual(contextFiles);
     });
   });
 
@@ -422,7 +424,7 @@ describe('Configuration Integration Tests', () => {
 
         const argv = await parseArguments(settings);
 
-        expect(argv.set).toEqual([
+        expect(argv.set).toStrictEqual([
           'context-limit=32000',
           'tool-output-max-tokens=4096',
         ]);

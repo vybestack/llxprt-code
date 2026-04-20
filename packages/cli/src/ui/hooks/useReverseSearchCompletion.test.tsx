@@ -36,7 +36,7 @@ describe('useReverseSearchCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);
@@ -60,7 +60,7 @@ describe('useReverseSearchCompletion', () => {
         // Simulate reverseSearchActive becoming false
         rerender({ text: 'echo', active: false });
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);
@@ -241,7 +241,7 @@ describe('useReverseSearchCompletion', () => {
       );
 
       // should only return the two entries containing "foo"
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'foo',
         'barfoo',
       ]);
@@ -254,7 +254,7 @@ describe('useReverseSearchCompletion', () => {
         useReverseSearchCompletion(useTextBufferForTest('γ'), history, true),
       );
 
-      expect(result.current.suggestions).toEqual([]);
+      expect(result.current.suggestions).toStrictEqual([]);
       expect(result.current.showSuggestions).toBe(false);
     });
   });

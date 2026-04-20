@@ -16,7 +16,7 @@ import type { HistoryItem } from '../types.js';
 describe('appReducer', () => {
   describe('initial state', () => {
     it('should have correct initial state', () => {
-      expect(initialAppState).toEqual({
+      expect(initialAppState).toStrictEqual({
         openDialogs: {
           theme: false,
           auth: false,
@@ -61,7 +61,7 @@ describe('appReducer', () => {
 
       const result = appReducer(initialAppState, action);
 
-      expect(result.lastAddItemAction).toEqual({
+      expect(result.lastAddItemAction).toStrictEqual({
         itemData,
         baseTimestamp: 1234567890,
       });
@@ -91,7 +91,7 @@ describe('appReducer', () => {
         payload: { itemData: secondItem, baseTimestamp: 2000 },
       });
 
-      expect(state2.lastAddItemAction).toEqual({
+      expect(state2.lastAddItemAction).toStrictEqual({
         itemData: secondItem,
         baseTimestamp: 2000,
       });
@@ -536,7 +536,7 @@ describe('appReducer', () => {
       });
 
       // Verify complete state
-      expect(state.lastAddItemAction).toEqual({
+      expect(state.lastAddItemAction).toStrictEqual({
         itemData: { type: 'user', text: 'test' },
         baseTimestamp: 1000,
       });
@@ -622,7 +622,7 @@ describe('appReducer', () => {
         lastAddItemAction: originalState.lastAddItemAction,
       };
 
-      expect(stateAfter).toEqual(stateCopy);
+      expect(stateAfter).toStrictEqual(stateCopy);
     });
   });
 });

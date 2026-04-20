@@ -358,7 +358,7 @@ describe('checkCommandPermissions', () => {
   describe('in "Default Allow" mode (no sessionAllowlist)', () => {
     it('should return a detailed success object for an allowed command', () => {
       const result = checkCommandPermissions('goodCommand --safe', config);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         allAllowed: true,
         disallowedCommands: [],
       });
@@ -367,7 +367,7 @@ describe('checkCommandPermissions', () => {
     it('should block commands that cannot be parsed safely', () => {
       if (!isParserAvailable()) return;
       const result = checkCommandPermissions('ls &&', config);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         allAllowed: false,
         disallowedCommands: ['ls &&'],
         blockReason: 'Command rejected because it could not be parsed safely',
@@ -378,7 +378,7 @@ describe('checkCommandPermissions', () => {
     it('should return a detailed failure object for a blocked command', () => {
       config.getExcludeTools = () => ['ShellTool(badCommand)'];
       const result = checkCommandPermissions('badCommand --danger', config);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         allAllowed: false,
         disallowedCommands: ['badCommand --danger'],
         blockReason: `Command 'badCommand --danger' is blocked by configuration`,
@@ -392,7 +392,7 @@ describe('checkCommandPermissions', () => {
         'git status && goodCommand',
         config,
       );
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         allAllowed: false,
         disallowedCommands: ['git status'],
         blockReason: `Command(s) not in the allowed commands list. Disallowed commands: "git status"`,
@@ -421,7 +421,7 @@ describe('checkCommandPermissions', () => {
       expect(result.blockReason).toContain(
         'not on the global or session allowlist',
       );
-      expect(result.disallowedCommands).toEqual(['badCommand --danger']);
+      expect(result.disallowedCommands).toStrictEqual(['badCommand --danger']);
     });
 
     it('should allow a command on the global allowlist even if not on the session allowlist', () => {
@@ -463,50 +463,52 @@ describe('checkCommandPermissions', () => {
         new Set(['echo']),
       );
       expect(result.allAllowed).toBe(false);
-      expect(result.disallowedCommands).toEqual(['badCommand --danger']);
+      expect(result.disallowedCommands).toStrictEqual(['badCommand --danger']);
     });
   });
 });
 
 describe('getCommandRoots', () => {
   it('should return a single command', () => {
-    expect(getCommandRoots('ls -l')).toEqual(['ls']);
+    expect(getCommandRoots('ls -l')).toStrictEqual(['ls']);
   });
 
   it('should handle paths and return the binary name', () => {
-    expect(getCommandRoots('/usr/local/bin/node script.js')).toEqual(['node']);
+    expect(getCommandRoots('/usr/local/bin/node script.js')).toStrictEqual([
+      'node',
+    ]);
   });
 
   it('should return an empty array for an empty string', () => {
-    expect(getCommandRoots('')).toEqual([]);
+    expect(getCommandRoots('')).toStrictEqual([]);
   });
 
   it('should handle a mix of operators', () => {
     const result = getCommandRoots('a;b|c&&d||e&f');
-    expect(result).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+    expect(result).toStrictEqual(['a', 'b', 'c', 'd', 'e', 'f']);
   });
 
   it('should correctly parse a chained command with quotes', () => {
     const result = getCommandRoots('echo "hello" && git commit -m "feat"');
-    expect(result).toEqual(['echo', 'git']);
+    expect(result).toStrictEqual(['echo', 'git']);
   });
 
   it('should include nested command substitutions', () => {
     if (!isParserAvailable()) return;
     const result = getCommandRoots('echo $(badCommand --danger)');
-    expect(result).toEqual(['echo', 'badCommand']);
+    expect(result).toStrictEqual(['echo', 'badCommand']);
   });
 
   it('should include process substitutions', () => {
     if (!isParserAvailable()) return;
     const result = getCommandRoots('diff <(ls) <(ls -a)');
-    expect(result).toEqual(['diff', 'ls', 'ls']);
+    expect(result).toStrictEqual(['diff', 'ls', 'ls']);
   });
 
   it('should include backtick substitutions', () => {
     if (!isParserAvailable()) return;
     const result = getCommandRoots('echo `badCommand --danger`');
-    expect(result).toEqual(['echo', 'badCommand']);
+    expect(result).toStrictEqual(['echo', 'badCommand']);
   });
 
   it('should treat parameter expansions with prompt transformations as unsafe', () => {
@@ -514,13 +516,13 @@ describe('getCommandRoots', () => {
     const roots = getCommandRoots(
       'echo "${var1=aa\\140 env| ls -l\\140}${var1@P}"',
     );
-    expect(roots).toEqual([]);
+    expect(roots).toStrictEqual([]);
   });
 
   it('should not return roots for prompt transformation expansions', () => {
     if (!isParserAvailable()) return;
     const roots = getCommandRoots('echo ${foo@P}');
-    expect(roots).toEqual([]);
+    expect(roots).toStrictEqual([]);
   });
 });
 
@@ -560,38 +562,38 @@ describeWindowsOnly('PowerShell integration', () => {
 
 describe('stripShellWrapper', () => {
   it('should strip sh -c with quotes', () => {
-    expect(stripShellWrapper('sh -c "ls -l"')).toEqual('ls -l');
+    expect(stripShellWrapper('sh -c "ls -l"')).toStrictEqual('ls -l');
   });
 
   it('should strip bash -c with extra whitespace', () => {
-    expect(stripShellWrapper('  bash  -c  "ls -l"  ')).toEqual('ls -l');
+    expect(stripShellWrapper('  bash  -c  "ls -l"  ')).toStrictEqual('ls -l');
   });
 
   it('should strip zsh -c without quotes', () => {
-    expect(stripShellWrapper('zsh -c ls -l')).toEqual('ls -l');
+    expect(stripShellWrapper('zsh -c ls -l')).toStrictEqual('ls -l');
   });
 
   it('should strip cmd.exe /c', () => {
-    expect(stripShellWrapper('cmd.exe /c "dir"')).toEqual('dir');
+    expect(stripShellWrapper('cmd.exe /c "dir"')).toStrictEqual('dir');
   });
 
   it('should strip powershell.exe -Command with optional -NoProfile', () => {
     expect(
       stripShellWrapper('powershell.exe -NoProfile -Command "Get-ChildItem"'),
-    ).toEqual('Get-ChildItem');
+    ).toStrictEqual('Get-ChildItem');
     expect(
       stripShellWrapper('powershell.exe -Command "Get-ChildItem"'),
-    ).toEqual('Get-ChildItem');
+    ).toStrictEqual('Get-ChildItem');
   });
 
   it('should strip pwsh -Command wrapper', () => {
     expect(
       stripShellWrapper('pwsh -NoProfile -Command "Get-ChildItem"'),
-    ).toEqual('Get-ChildItem');
+    ).toStrictEqual('Get-ChildItem');
   });
 
   it('should not strip anything if no wrapper is present', () => {
-    expect(stripShellWrapper('ls -l')).toEqual('ls -l');
+    expect(stripShellWrapper('ls -l')).toStrictEqual('ls -l');
   });
 });
 
@@ -711,7 +713,7 @@ describe('getShellConfiguration', () => {
     mockPlatform.mockReturnValue('linux');
     const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
-    expect(config.argsPrefix).toEqual(['-c']);
+    expect(config.argsPrefix).toStrictEqual(['-c']);
     expect(config.shell).toBe('bash');
   });
 
@@ -719,7 +721,7 @@ describe('getShellConfiguration', () => {
     mockPlatform.mockReturnValue('darwin');
     const config = getShellConfiguration();
     expect(config.executable).toBe('bash');
-    expect(config.argsPrefix).toEqual(['-c']);
+    expect(config.argsPrefix).toStrictEqual(['-c']);
     expect(config.shell).toBe('bash');
   });
 
@@ -732,7 +734,7 @@ describe('getShellConfiguration', () => {
       delete process.env['ComSpec'];
       const config = getShellConfiguration();
       expect(config.executable).toBe('powershell.exe');
-      expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
+      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
 
@@ -741,7 +743,7 @@ describe('getShellConfiguration', () => {
       process.env['ComSpec'] = cmdPath;
       const config = getShellConfiguration();
       expect(config.executable).toBe('powershell.exe');
-      expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
+      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
 
@@ -751,7 +753,7 @@ describe('getShellConfiguration', () => {
       process.env['ComSpec'] = psPath;
       const config = getShellConfiguration();
       expect(config.executable).toBe(psPath);
-      expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
+      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
 
@@ -760,7 +762,7 @@ describe('getShellConfiguration', () => {
       process.env['ComSpec'] = pwshPath;
       const config = getShellConfiguration();
       expect(config.executable).toBe(pwshPath);
-      expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
+      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
 
@@ -768,7 +770,7 @@ describe('getShellConfiguration', () => {
       process.env['ComSpec'] = 'C:\\Path\\To\\POWERSHELL.EXE';
       const config = getShellConfiguration();
       expect(config.executable).toBe('C:\\Path\\To\\POWERSHELL.EXE');
-      expect(config.argsPrefix).toEqual(['-NoProfile', '-Command']);
+      expect(config.argsPrefix).toStrictEqual(['-NoProfile', '-Command']);
       expect(config.shell).toBe('powershell');
     });
   });
@@ -777,63 +779,63 @@ describe('getShellConfiguration', () => {
 describe('splitCommands', () => {
   it('should keep 2>&1 redirection within a single command segment', () => {
     const result = splitCommands('ls nonexistent 2>&1');
-    expect(result).toEqual(['ls nonexistent 2>&1']);
+    expect(result).toStrictEqual(['ls nonexistent 2>&1']);
   });
 
   it('should split && chains while preserving 2>&1 redirection in each segment', () => {
     const result = splitCommands('ls nonexistent 2>&1 && echo done');
-    expect(result).toEqual(['ls nonexistent 2>&1', 'echo done']);
+    expect(result).toStrictEqual(['ls nonexistent 2>&1', 'echo done']);
   });
 
   it('should keep >&2 redirection within a single command segment', () => {
     const result = splitCommands('echo hello >&2');
-    expect(result).toEqual(['echo hello >&2']);
+    expect(result).toStrictEqual(['echo hello >&2']);
   });
 
   it('should split && chains while preserving >&2 redirection in each segment', () => {
     const result = splitCommands('echo hello >&2 && echo world');
-    expect(result).toEqual(['echo hello >&2', 'echo world']);
+    expect(result).toStrictEqual(['echo hello >&2', 'echo world']);
   });
 
   it('should handle multiple chained commands each with redirections', () => {
     const result = splitCommands('cmd1 2>&1 && cmd2 2>&1');
-    expect(result).toEqual(['cmd1 2>&1', 'cmd2 2>&1']);
+    expect(result).toStrictEqual(['cmd1 2>&1', 'cmd2 2>&1']);
   });
 
   it('should handle a single command without chaining', () => {
     const result = splitCommands('echo hello');
-    expect(result).toEqual(['echo hello']);
+    expect(result).toStrictEqual(['echo hello']);
   });
 
   it('should split on semicolons correctly', () => {
     const result = splitCommands('echo a; echo b');
-    expect(result).toEqual(['echo a', 'echo b']);
+    expect(result).toStrictEqual(['echo a', 'echo b']);
   });
 
   it('should keep &>file (bash redirect-both) within a single command segment', () => {
     const result = splitCommands('cmd1 &>output.log && cmd2');
-    expect(result).toEqual(['cmd1 &>output.log', 'cmd2']);
+    expect(result).toStrictEqual(['cmd1 &>output.log', 'cmd2']);
   });
 
   it('should keep &>>file (bash append redirect-both) within a single command segment', () => {
     const result = splitCommands('cmd1 &>>output.log && cmd2');
-    expect(result).toEqual(['cmd1 &>>output.log', 'cmd2']);
+    expect(result).toStrictEqual(['cmd1 &>>output.log', 'cmd2']);
   });
 
   it('should still split on standalone & (background job separator)', () => {
     const result = splitCommands('cmd1 & cmd2');
-    expect(result).toEqual(['cmd1', 'cmd2']);
+    expect(result).toStrictEqual(['cmd1', 'cmd2']);
   });
 
   // Default behavior: split on pipes (for security/allowlist checks)
   it('should split on pipes by default (for security checks)', () => {
     const result = splitCommands('cat file | grep foo');
-    expect(result).toEqual(['cat file', 'grep foo']);
+    expect(result).toStrictEqual(['cat file', 'grep foo']);
   });
 
   it('should split complex pipelines by default', () => {
     const result = splitCommands('cat file | grep foo | sort | uniq');
-    expect(result).toEqual(['cat file', 'grep foo', 'sort', 'uniq']);
+    expect(result).toStrictEqual(['cat file', 'grep foo', 'sort', 'uniq']);
   });
 
   // With splitOnPipes: false (for instrumentation - pipelines stay intact)
@@ -841,28 +843,28 @@ describe('splitCommands', () => {
     const result = splitCommands('cat file | grep foo', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo']);
+    expect(result).toStrictEqual(['cat file | grep foo']);
   });
 
   it('should keep complex pipelines as a single command when splitOnPipes: false', () => {
     const result = splitCommands('cat file | grep foo | sort | uniq', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo | sort | uniq']);
+    expect(result).toStrictEqual(['cat file | grep foo | sort | uniq']);
   });
 
   it('should split on && but preserve pipes within each segment when splitOnPipes: false', () => {
     const result = splitCommands('cat file | grep foo && echo done', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo', 'echo done']);
+    expect(result).toStrictEqual(['cat file | grep foo', 'echo done']);
   });
 
   it('should split on || but preserve pipes within each segment when splitOnPipes: false', () => {
     const result = splitCommands('cat file | grep foo || echo not found', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo', 'echo not found']);
+    expect(result).toStrictEqual(['cat file | grep foo', 'echo not found']);
   });
 
   it('should handle multiple chained pipelines when splitOnPipes: false', () => {
@@ -870,14 +872,17 @@ describe('splitCommands', () => {
       'cat file1 | grep foo && cat file2 | grep bar',
       { splitOnPipes: false },
     );
-    expect(result).toEqual(['cat file1 | grep foo', 'cat file2 | grep bar']);
+    expect(result).toStrictEqual([
+      'cat file1 | grep foo',
+      'cat file2 | grep bar',
+    ]);
   });
 
   it('should handle pipe with 2>&1 redirection when splitOnPipes: false', () => {
     const result = splitCommands('cmd 2>&1 | grep error', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cmd 2>&1 | grep error']);
+    expect(result).toStrictEqual(['cmd 2>&1 | grep error']);
   });
 });
 
@@ -903,7 +908,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('ls nonexistent 2>&1');
-    expect(result).toEqual(['ls nonexistent 2>&1']);
+    expect(result).toStrictEqual(['ls nonexistent 2>&1']);
   });
 
   it('should split && chains while preserving 2>&1 (regex path)', async () => {
@@ -911,7 +916,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('ls nonexistent 2>&1 && echo done');
-    expect(result).toEqual(['ls nonexistent 2>&1', 'echo done']);
+    expect(result).toStrictEqual(['ls nonexistent 2>&1', 'echo done']);
   });
 
   it('should keep &>file within a single command segment (regex path)', async () => {
@@ -919,7 +924,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('cmd1 &>output.log && cmd2');
-    expect(result).toEqual(['cmd1 &>output.log', 'cmd2']);
+    expect(result).toStrictEqual(['cmd1 &>output.log', 'cmd2']);
   });
 
   it('should keep &>>file within a single command segment (regex path)', async () => {
@@ -927,7 +932,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('cmd1 &>>output.log && cmd2');
-    expect(result).toEqual(['cmd1 &>>output.log', 'cmd2']);
+    expect(result).toStrictEqual(['cmd1 &>>output.log', 'cmd2']);
   });
 
   it('should still split on standalone & (regex path)', async () => {
@@ -935,7 +940,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('cmd1 & cmd2');
-    expect(result).toEqual(['cmd1', 'cmd2']);
+    expect(result).toStrictEqual(['cmd1', 'cmd2']);
   });
 
   // Default behavior: split on pipes (for security)
@@ -944,7 +949,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('cat file | grep foo');
-    expect(result).toEqual(['cat file', 'grep foo']);
+    expect(result).toStrictEqual(['cat file', 'grep foo']);
   });
 
   it('should split complex pipelines by default (regex path)', async () => {
@@ -952,7 +957,7 @@ describe('splitCommands regex fallback', () => {
       './shell-utils.js'
     );
     const result = splitCommandsRegex('cat file | grep foo | sort | uniq');
-    expect(result).toEqual(['cat file', 'grep foo', 'sort', 'uniq']);
+    expect(result).toStrictEqual(['cat file', 'grep foo', 'sort', 'uniq']);
   });
 
   // With splitOnPipes: false (for instrumentation)
@@ -963,7 +968,7 @@ describe('splitCommands regex fallback', () => {
     const result = splitCommandsRegex('cat file | grep foo', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo']);
+    expect(result).toStrictEqual(['cat file | grep foo']);
   });
 
   it('should keep complex pipelines as a single command when splitOnPipes: false (regex path)', async () => {
@@ -973,7 +978,7 @@ describe('splitCommands regex fallback', () => {
     const result = splitCommandsRegex('cat file | grep foo | sort | uniq', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo | sort | uniq']);
+    expect(result).toStrictEqual(['cat file | grep foo | sort | uniq']);
   });
 
   it('should split on && but preserve pipes within each segment when splitOnPipes: false (regex path)', async () => {
@@ -983,6 +988,6 @@ describe('splitCommands regex fallback', () => {
     const result = splitCommandsRegex('cat file | grep foo && echo done', {
       splitOnPipes: false,
     });
-    expect(result).toEqual(['cat file | grep foo', 'echo done']);
+    expect(result).toStrictEqual(['cat file | grep foo', 'echo done']);
   });
 });

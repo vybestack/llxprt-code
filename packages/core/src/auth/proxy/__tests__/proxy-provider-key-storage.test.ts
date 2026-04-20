@@ -114,7 +114,7 @@ describe('ProxyProviderKeyStorage', () => {
     const result = await storage.getKey('anthropic');
 
     expect(receivedOp).toBe('get_api_key');
-    expect(receivedPayload).toEqual({ name: 'anthropic' });
+    expect(receivedPayload).toStrictEqual({ name: 'anthropic' });
     expect(result).toBe('sk-ant-abc123');
   });
 
@@ -157,7 +157,7 @@ describe('ProxyProviderKeyStorage', () => {
     const keys = await storage.listKeys();
 
     expect(receivedOp).toBe('list_api_keys');
-    expect(keys).toEqual(['anthropic', 'gemini', 'openai']);
+    expect(keys).toStrictEqual(['anthropic', 'gemini', 'openai']);
   });
 
   /**
@@ -175,7 +175,7 @@ describe('ProxyProviderKeyStorage', () => {
     storage = new ProxyProviderKeyStorage(client);
     const keys = await storage.listKeys();
 
-    expect(keys).toEqual([]);
+    expect(keys).toStrictEqual([]);
   });
 
   // ─── hasKey ─────────────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ describe('ProxyProviderKeyStorage', () => {
     const result = await storage.hasKey('anthropic');
 
     expect(receivedOp).toBe('has_api_key');
-    expect(receivedPayload).toEqual({ name: 'anthropic' });
+    expect(receivedPayload).toStrictEqual({ name: 'anthropic' });
     expect(result).toBe(true);
   });
 

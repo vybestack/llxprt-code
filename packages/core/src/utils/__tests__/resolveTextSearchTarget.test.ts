@@ -25,7 +25,7 @@ describe('resolveTextSearchTarget', () => {
 
   it('should return kind all-workspaces when no path provided', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext);
-    expect(result).toEqual({ kind: 'all-workspaces' });
+    expect(result).toStrictEqual({ kind: 'all-workspaces' });
   });
 
   it('should return kind all-workspaces when path is undefined', () => {
@@ -34,12 +34,12 @@ describe('resolveTextSearchTarget', () => {
       workspaceContext,
       undefined,
     );
-    expect(result).toEqual({ kind: 'all-workspaces' });
+    expect(result).toStrictEqual({ kind: 'all-workspaces' });
   });
 
   it('should return kind all-workspaces when path is empty string', () => {
     const result = resolveTextSearchTarget(tempDir, workspaceContext, '');
-    expect(result).toEqual({ kind: 'all-workspaces' });
+    expect(result).toStrictEqual({ kind: 'all-workspaces' });
   });
 
   it('should return kind directory for valid directory path', () => {

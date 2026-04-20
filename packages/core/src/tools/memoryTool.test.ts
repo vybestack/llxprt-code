@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
+import type { Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   MemoryTool,
   setLlxprtMdFilename,
@@ -103,7 +104,7 @@ describe('MemoryTool', () => {
       const newNames = ['CUSTOM_CONTEXT.md', 'ANOTHER_CONTEXT.md'];
       setLlxprtMdFilename(newNames);
       expect(getCurrentLlxprtMdFilename()).toBe('CUSTOM_CONTEXT.md');
-      expect(getAllLlxprtMdFilenames()).toEqual(newNames);
+      expect(getAllLlxprtMdFilenames()).toStrictEqual(newNames);
     });
   });
 
@@ -487,7 +488,7 @@ describe('MemoryTool', () => {
           properties: { scope: unknown };
         }
       ).properties.scope;
-      expect(scopeProperty).toEqual({
+      expect(scopeProperty).toStrictEqual({
         type: 'string',
         enum: ['global', 'project', 'core.global', 'core.project'],
         description: expect.stringContaining('Where to save'),

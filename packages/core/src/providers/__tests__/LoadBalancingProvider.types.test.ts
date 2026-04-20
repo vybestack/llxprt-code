@@ -176,9 +176,9 @@ describe('LoadBalancingProvider Types - Phase 1', () => {
         currentTPM: {},
       };
 
-      expect(stats.backendMetrics).toEqual({});
-      expect(stats.circuitBreakerStates).toEqual({});
-      expect(stats.currentTPM).toEqual({});
+      expect(stats.backendMetrics).toStrictEqual({});
+      expect(stats.circuitBreakerStates).toStrictEqual({});
+      expect(stats.currentTPM).toStrictEqual({});
     });
 
     it('should handle multiple backends with different states', () => {

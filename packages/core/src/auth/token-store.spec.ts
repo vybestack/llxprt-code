@@ -14,7 +14,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { KeyringTokenStore } from './keyring-token-store.js';
 import { SecureStore } from '../storage/secure-store.js';
-import { OAuthToken } from './types.js';
+import type { OAuthToken } from './types.js';
 import type { KeyringAdapter } from '../storage/secure-store.js';
 
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
@@ -93,7 +93,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     it('should retrieve saved token with all fields intact', async () => {
       await tokenStore.saveToken('qwen', validQwenToken);
       const retrievedToken = await tokenStore.getToken('qwen');
-      expect(retrievedToken).toEqual(validQwenToken);
+      expect(retrievedToken).toStrictEqual(validQwenToken);
       expect(retrievedToken?.access_token).toBe('qwen-access-token-123');
       expect(retrievedToken?.refresh_token).toBe('qwen-refresh-token-456');
       expect(retrievedToken?.expiry).toBe(validQwenToken.expiry);
@@ -112,7 +112,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
 
       await tokenStore.saveToken('complex', complexToken);
       const retrieved = await tokenStore.getToken('complex');
-      expect(retrieved).toEqual(complexToken);
+      expect(retrieved).toStrictEqual(complexToken);
       expect(retrieved?.access_token).toContain('special-chars!@#$%');
       expect(retrieved?.refresh_token).toContain('unicode-café');
     });
@@ -131,8 +131,8 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       await tokenStore.saveToken('gemini', _validGeminiToken);
       const qwenToken = await tokenStore.getToken('qwen');
       const geminiToken = await tokenStore.getToken('gemini');
-      expect(qwenToken).toEqual(validQwenToken);
-      expect(geminiToken).toEqual(_validGeminiToken);
+      expect(qwenToken).toStrictEqual(validQwenToken);
+      expect(geminiToken).toStrictEqual(_validGeminiToken);
       expect(qwenToken?.access_token).not.toBe(geminiToken?.access_token);
     });
 
@@ -141,7 +141,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       await tokenStore.saveToken('gemini', _validGeminiToken);
       await tokenStore.saveToken('anthropic', validQwenToken);
       const providers = await tokenStore.listProviders();
-      expect(providers.sort()).toEqual(['anthropic', 'gemini', 'qwen']);
+      expect(providers.sort()).toStrictEqual(['anthropic', 'gemini', 'qwen']);
       expect(providers).toHaveLength(3);
     });
 
@@ -152,9 +152,9 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       const qwenToken = await tokenStore.getToken('qwen');
       const geminiToken = await tokenStore.getToken('gemini');
       expect(qwenToken).toBeNull();
-      expect(geminiToken).toEqual(_validGeminiToken);
+      expect(geminiToken).toStrictEqual(_validGeminiToken);
       const providers = await tokenStore.listProviders();
-      expect(providers).toEqual(['gemini']);
+      expect(providers).toStrictEqual(['gemini']);
     });
   });
 
@@ -184,10 +184,10 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       await tokenStore.saveToken('qwen', validQwenToken);
       await tokenStore.saveToken('qwen', _updatedToken);
       const retrieved = await tokenStore.getToken('qwen');
-      expect(retrieved).toEqual(_updatedToken);
+      expect(retrieved).toStrictEqual(_updatedToken);
       expect(retrieved?.access_token).toBe('updated-access-token');
       expect(retrieved?.scope).toBe('limited-scope');
-      expect(retrieved).not.toEqual(validQwenToken);
+      expect(retrieved).not.toStrictEqual(validQwenToken);
     });
 
     it('should handle tokens with optional fields correctly', async () => {
@@ -199,7 +199,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
 
       await tokenStore.saveToken('minimal', minimalToken);
       const retrieved = await tokenStore.getToken('minimal');
-      expect(retrieved).toEqual(minimalToken);
+      expect(retrieved).toStrictEqual(minimalToken);
       expect(retrieved?.refresh_token).toBeUndefined();
       expect(retrieved?.scope).toBeUndefined();
       expect(retrieved?.access_token).toBe('minimal-access-token');
@@ -217,7 +217,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       for (const provider of specialProviders) {
         await tokenStore.saveToken(provider, validQwenToken);
         const retrieved = await tokenStore.getToken(provider);
-        expect(retrieved).toEqual(validQwenToken);
+        expect(retrieved).toStrictEqual(validQwenToken);
       }
     });
 
@@ -275,33 +275,33 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     it('should save and retrieve token from named bucket', async () => {
       await tokenStore.saveToken('anthropic', workToken, 'work-company');
       const retrieved = await tokenStore.getToken('anthropic', 'work-company');
-      expect(retrieved).toEqual(workToken);
+      expect(retrieved).toStrictEqual(workToken);
       expect(retrieved?.access_token).toBe('work-access-token');
     });
 
     it('should use default bucket when bucket parameter is undefined', async () => {
       await tokenStore.saveToken('anthropic', workToken);
       const retrieved = await tokenStore.getToken('anthropic');
-      expect(retrieved).toEqual(workToken);
+      expect(retrieved).toStrictEqual(workToken);
     });
 
     it('should retrieve from default bucket when bucket parameter is undefined', async () => {
       await tokenStore.saveToken('anthropic', workToken);
       const retrieved = await tokenStore.getToken('anthropic');
-      expect(retrieved).toEqual(workToken);
+      expect(retrieved).toStrictEqual(workToken);
     });
 
     it('should use default bucket when bucket is explicitly "default"', async () => {
       await tokenStore.saveToken('anthropic', workToken, 'default');
       const retrieved = await tokenStore.getToken('anthropic');
-      expect(retrieved).toEqual(workToken);
+      expect(retrieved).toStrictEqual(workToken);
 
       // Verify it's stored as default, not as a named "default" bucket
       const retrievedExplicit = await tokenStore.getToken(
         'anthropic',
         'default',
       );
-      expect(retrievedExplicit).toEqual(workToken);
+      expect(retrievedExplicit).toStrictEqual(workToken);
     });
 
     it('should list all buckets for a provider', async () => {
@@ -319,12 +319,12 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
     it('should return default in list when only default bucket exists', async () => {
       await tokenStore.saveToken('anthropic', workToken);
       const buckets = await tokenStore.listBuckets('anthropic');
-      expect(buckets).toEqual(['default']);
+      expect(buckets).toStrictEqual(['default']);
     });
 
     it('should return empty array when no buckets exist for provider', async () => {
       const buckets = await tokenStore.listBuckets('nonexistent');
-      expect(buckets).toEqual([]);
+      expect(buckets).toStrictEqual([]);
     });
 
     it('should not include other providers buckets in listing', async () => {
@@ -335,8 +335,8 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       const anthropicBuckets = await tokenStore.listBuckets('anthropic');
       const geminiBuckets = await tokenStore.listBuckets('gemini');
 
-      expect(anthropicBuckets).toEqual(['work-company']);
-      expect(geminiBuckets).toEqual(['work-company']);
+      expect(anthropicBuckets).toStrictEqual(['work-company']);
+      expect(geminiBuckets).toStrictEqual(['work-company']);
       expect(anthropicBuckets).not.toContain('personal-gmail');
     });
 
@@ -350,8 +350,8 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       );
       const geminiToken = await tokenStore.getToken('gemini', 'work-company');
 
-      expect(anthropicToken).toEqual(workToken);
-      expect(geminiToken).toEqual(personalToken);
+      expect(anthropicToken).toStrictEqual(workToken);
+      expect(geminiToken).toStrictEqual(personalToken);
       expect(anthropicToken?.access_token).not.toBe(geminiToken?.access_token);
     });
 
@@ -371,10 +371,10 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       );
 
       expect(workTokenRetrieved).toBeNull();
-      expect(personalTokenRetrieved).toEqual(personalToken);
+      expect(personalTokenRetrieved).toStrictEqual(personalToken);
 
       const buckets = await tokenStore.listBuckets('anthropic');
-      expect(buckets).toEqual(['personal-gmail']);
+      expect(buckets).toStrictEqual(['personal-gmail']);
     });
 
     it('should delete default bucket when no bucket parameter provided', async () => {
@@ -385,7 +385,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       expect(retrieved).toBeNull();
 
       const buckets = await tokenStore.listBuckets('anthropic');
-      expect(buckets).toEqual([]);
+      expect(buckets).toStrictEqual([]);
     });
 
     it('should reject bucket names with unsafe characters', async () => {
@@ -423,7 +423,7 @@ describe('KeyringTokenStore - Behavioral Tests (migrated)', () => {
       for (const bucketName of validBucketNames) {
         await tokenStore.saveToken('anthropic', workToken, bucketName);
         const retrieved = await tokenStore.getToken('anthropic', bucketName);
-        expect(retrieved).toEqual(workToken);
+        expect(retrieved).toStrictEqual(workToken);
       }
     });
 

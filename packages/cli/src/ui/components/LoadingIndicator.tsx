@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ThoughtSummary } from '@vybestack/llxprt-code-core';
-import React from 'react';
+import type { ThoughtSummary } from '@vybestack/llxprt-code-core';
+import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { useStreamingContext } from '../contexts/StreamingContext.js';

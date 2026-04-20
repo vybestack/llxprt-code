@@ -66,7 +66,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
     const result = await provider.getToken();
 
     // getToken() should return the expired token as-is
-    expect(result).toEqual(expired);
+    expect(result).toStrictEqual(expired);
     // deviceFlow.refreshToken should NOT be called
     expect(deviceFlow.refreshToken).not.toHaveBeenCalled();
     // tokenStore.acquireRefreshLock should NOT be called from getToken()
@@ -83,7 +83,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
 
     const result = await provider.getToken();
 
-    expect(result).toEqual(valid);
+    expect(result).toStrictEqual(valid);
     expect(tokenStore.acquireRefreshLock).not.toHaveBeenCalled();
   });
 

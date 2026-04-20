@@ -64,7 +64,7 @@ export function isProQuotaExceededError(error: unknown): boolean {
         data?: unknown;
       };
     };
-    if (gaxiosError.response && gaxiosError.response.data) {
+    if (gaxiosError.response?.data) {
       if (typeof gaxiosError.response.data === 'string') {
         return checkMessage(gaxiosError.response.data);
       }

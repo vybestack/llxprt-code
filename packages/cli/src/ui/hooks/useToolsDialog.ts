@@ -5,10 +5,10 @@
  */
 
 import { useCallback, useState } from 'react';
-import { AnyDeclarativeTool, Config } from '@vybestack/llxprt-code-core';
+import type { AnyDeclarativeTool, Config } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { AppState } from '../reducers/appReducer.js';
+import type { AppState } from '../reducers/appReducer.js';
 
 interface UseToolsDialogParams {
   addMessage: (msg: {

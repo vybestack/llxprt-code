@@ -5,10 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  resolveCredentialPrecedence,
-  CredentialInputs,
-} from './credentialPrecedence.js';
+import type { CredentialInputs } from './credentialPrecedence.js';
+import { resolveCredentialPrecedence } from './credentialPrecedence.js';
 
 describe('resolveCredentialPrecedence', () => {
   it('prefers CLI inline key over profile values', () => {

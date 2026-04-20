@@ -12,14 +12,12 @@ import fsp from 'fs/promises';
 
 const abortSignal = new AbortController().signal;
 
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
-import {
-  ReadLineRangeTool,
-  ReadLineRangeToolParams,
-} from './read_line_range.js';
+import type { ReadLineRangeToolParams } from './read_line_range.js';
+import { ReadLineRangeTool } from './read_line_range.js';
 
 describe('ReadLineRangeTool', () => {
   let tempRootDir: string;

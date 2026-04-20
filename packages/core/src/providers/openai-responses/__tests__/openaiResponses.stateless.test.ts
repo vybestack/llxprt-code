@@ -201,7 +201,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       .next();
 
     const sizes = provider.getCacheSizes();
-    expect(sizes).toEqual([0, 0]);
+    expect(sizes).toStrictEqual([0, 0]);
   });
 
   it('injects runtime-specific user memory into responses system prompt @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-003 @pseudocode provider-runtime-handling.md line 13', async () => {

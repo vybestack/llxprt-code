@@ -12,8 +12,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthCommandExecutor } from './authCommand.js';
-import { OAuthManager } from '../../auth/oauth-manager.js';
-import { CommandContext } from './types.js';
+import type { OAuthManager } from '../../auth/oauth-manager.js';
+import type { CommandContext } from './types.js';
 
 describe('AuthCommand Codex OAuth Integration', () => {
   let mockOAuthManager: OAuthManager;
@@ -98,7 +98,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
 
       // Then: Should enable OAuth
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth enabled for codex',
@@ -120,7 +120,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
 
       // Then: Should disable OAuth
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth disabled for codex',
@@ -147,7 +147,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
       // Then: Should show status
       expect(mockIsEnabled).toHaveBeenCalledWith('codex');
       expect(mockIsAuthenticated).toHaveBeenCalledWith('codex');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth for codex: ENABLED (authenticated)',
@@ -168,7 +168,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
       const result = await executor.execute(mockContext, 'codex');
 
       // Then: Should show status
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth for codex: ENABLED (not authenticated)',
@@ -189,7 +189,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
 
       // Then: Should logout (undefined bucket means default/no bucket)
       expect(mockLogout).toHaveBeenCalledWith('codex', undefined);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'Successfully logged out of codex',

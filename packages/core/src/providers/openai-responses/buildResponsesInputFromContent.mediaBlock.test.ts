@@ -38,7 +38,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
+    expect(result[0]).toStrictEqual({
       role: 'user',
       content: [
         {
@@ -79,7 +79,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
+    expect(result[0]).toStrictEqual({
       role: 'user',
       content: [
         {
@@ -137,12 +137,12 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(4);
-    expect(result[2]).toEqual({
+    expect(result[2]).toStrictEqual({
       type: 'function_call_output',
       call_id: 'call_123',
       output: 'Screenshot taken',
     });
-    expect(result[3]).toEqual({
+    expect(result[3]).toStrictEqual({
       role: 'user',
       content: [
         {
@@ -171,7 +171,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
+    expect(result[0]).toStrictEqual({
       role: 'user',
       content: [
         {
@@ -217,12 +217,12 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(3);
-    expect(result[1]).toEqual({
+    expect(result[1]).toStrictEqual({
       type: 'function_call_output',
       call_id: 'call_456',
       output: '',
     });
-    expect(result[2]).toEqual({
+    expect(result[2]).toStrictEqual({
       role: 'user',
       content: [
         {
@@ -251,7 +251,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({
+    expect(result[0]).toStrictEqual({
       role: 'user',
       content: [
         {
@@ -298,7 +298,7 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
 
     const result = buildResponsesInputFromContent(contents);
 
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       { role: 'user', content: 'Hello' },
       { role: 'assistant', content: 'Hi there' },
       {
@@ -338,11 +338,11 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const userMsg = result[0] as { role: string; content: unknown[] };
     expect(userMsg.role).toBe('user');
     expect(userMsg.content).toHaveLength(2);
-    expect(userMsg.content[0]).toEqual({
+    expect(userMsg.content[0]).toStrictEqual({
       type: 'input_text',
       text: 'Summarize this document',
     });
-    expect(userMsg.content[1]).toEqual({
+    expect(userMsg.content[1]).toStrictEqual({
       type: 'input_file',
       file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
       filename: 'report.pdf',
@@ -385,12 +385,12 @@ describe('buildResponsesInputFromContent - MediaBlock support', () => {
     const result = buildResponsesInputFromContent(contents);
 
     expect(result).toHaveLength(3);
-    expect(result[1]).toEqual({
+    expect(result[1]).toStrictEqual({
       type: 'function_call_output',
       call_id: 'call_pdf1',
       output: 'PDF content',
     });
-    expect(result[2]).toEqual({
+    expect(result[2]).toStrictEqual({
       role: 'user',
       content: [
         {

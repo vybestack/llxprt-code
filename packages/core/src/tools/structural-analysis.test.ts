@@ -113,7 +113,7 @@ describe('StructuralAnalysisTool', () => {
         symbol: 'NonExistent',
         path: tempDir,
       });
-      expect(meta(result).results).toEqual([]);
+      expect(meta(result).results).toStrictEqual([]);
       expect(meta(result).truncated).toBe(false);
     });
 

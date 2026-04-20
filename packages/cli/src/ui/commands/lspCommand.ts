@@ -9,12 +9,12 @@
  * @requirement REQ-STATUS-010, REQ-STATUS-020, REQ-STATUS-025
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
-  CommandKind,
   MessageActionReturn,
 } from './types.js';
+import { CommandKind } from './types.js';
 type LspServerConfigLike = {
   id: string;
 };
@@ -101,7 +101,7 @@ async function statusAction(
   }
 
   const lspClient = config.getLspServiceClient?.();
-  if (!lspClient || !lspClient.isAlive()) {
+  if (!lspClient?.isAlive()) {
     const reason =
       lspClient?.getUnavailableReason?.() ?? 'service startup failed';
     return {

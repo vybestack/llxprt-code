@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as os from 'os';
 import { spawn } from 'child_process';
 import EventEmitter from 'events';
-import { Readable } from 'stream';
+import type { Readable } from 'stream';
 import { ShellExecutionService } from './shellExecutionService.js';
 import type { ChildProcess } from 'child_process';
 

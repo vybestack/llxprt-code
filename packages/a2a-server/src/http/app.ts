@@ -211,11 +211,10 @@ export async function createApp() {
           eventBus.off('event', eventHandler);
           eventBus.finished();
           return res.end();
-        } else {
-          const result = await commandToExecute.execute(context, args ?? []);
-          logger.info('[CoreAgent] Sending /executeCommand response: ', result);
-          return res.status(200).json(result);
         }
+        const result = await commandToExecute.execute(context, args ?? []);
+        logger.info('[CoreAgent] Sending /executeCommand response: ', result);
+        return res.status(200).json(result);
       } catch (e) {
         logger.error(
           `Error executing /executeCommand: ${command} with args: ${JSON.stringify(

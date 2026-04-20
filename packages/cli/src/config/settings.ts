@@ -22,11 +22,11 @@ import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import {
-  Settings,
+  type Settings,
   type MergedSettings,
-  MemoryImportFormat,
+  type MemoryImportFormat,
   SETTINGS_SCHEMA,
-  SettingDefinition,
+  type SettingDefinition,
 } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import {
@@ -91,9 +91,8 @@ export function getSystemSettingsPath(): string {
     return '/Library/Application Support/LLxprt-Code/settings.json';
   } else if (platform() === 'win32') {
     return 'C:\\ProgramData\\llxprt-code\\settings.json';
-  } else {
-    return '/etc/llxprt-code/settings.json';
   }
+  return '/etc/llxprt-code/settings.json';
 }
 
 export function getSystemDefaultsPath(): string {

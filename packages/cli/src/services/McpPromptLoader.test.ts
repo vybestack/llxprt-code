@@ -5,9 +5,9 @@
  */
 
 import { McpPromptLoader } from './McpPromptLoader.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import * as cliCore from '@vybestack/llxprt-code-core';
-import { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
+import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommandKind, type CommandContext } from '../ui/commands/types.js';
 
@@ -50,7 +50,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = 'hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ arg1: 'hello', arg2: 'world' });
+      expect(result).toStrictEqual({ arg1: 'hello', arg2: 'world' });
     });
 
     it('should handle quoted multi-word positional arguments', () => {
@@ -61,7 +61,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = '"hello world" foo';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ arg1: 'hello world', arg2: 'foo' });
+      expect(result).toStrictEqual({ arg1: 'hello world', arg2: 'foo' });
     });
 
     it('should handle a single positional argument with multiple words', () => {
@@ -69,7 +69,7 @@ describe('McpPromptLoader', () => {
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = 'hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ arg1: 'hello world' });
+      expect(result).toStrictEqual({ arg1: 'hello world' });
     });
 
     it('should handle escaped quotes in positional arguments', () => {
@@ -77,7 +77,7 @@ describe('McpPromptLoader', () => {
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = '"hello \\"world\\""';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ arg1: 'hello "world"' });
+      expect(result).toStrictEqual({ arg1: 'hello "world"' });
     });
 
     it('should handle escaped backslashes in positional arguments', () => {
@@ -85,7 +85,7 @@ describe('McpPromptLoader', () => {
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = '"hello\\\\world"';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ arg1: 'hello\\world' });
+      expect(result).toStrictEqual({ arg1: 'hello\\world' });
     });
 
     it('should handle named args followed by positional args', () => {
@@ -96,7 +96,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = '--named="value" positional';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ named: 'value', pos: 'positional' });
+      expect(result).toStrictEqual({ named: 'value', pos: 'positional' });
     });
 
     it('should handle positional args followed by named args', () => {
@@ -107,7 +107,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = 'positional --named="value"';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ pos: 'positional', named: 'value' });
+      expect(result).toStrictEqual({ pos: 'positional', named: 'value' });
     });
 
     it('should handle positional args interspersed with named args', () => {
@@ -119,7 +119,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = 'p1 --named="value" p2';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ pos1: 'p1', named: 'value', pos2: 'p2' });
+      expect(result).toStrictEqual({ pos1: 'p1', named: 'value', pos2: 'p2' });
     });
 
     it('should treat an escaped quote at the start as a literal', () => {
@@ -130,7 +130,7 @@ describe('McpPromptLoader', () => {
       ];
       const userArgs = '\\"hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({ arg1: '"hello', arg2: 'world' });
+      expect(result).toStrictEqual({ arg1: '"hello', arg2: 'world' });
     });
 
     it('should handle a complex mix of args', () => {
@@ -145,7 +145,7 @@ describe('McpPromptLoader', () => {
       const userArgs =
         'p1 --named1="value 1" "p2 has spaces" --named2=value2 "p3 \\"with quotes\\""';
       const result = loader.parseArgs(userArgs, promptArgs);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         pos1: 'p1',
         named1: 'value 1',
         pos2: 'p2 has spaces',
@@ -221,7 +221,7 @@ describe('McpPromptLoader', () => {
         age: '123',
         species: 'tiger',
       });
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'submit_prompt',
         content: JSON.stringify('Hello, world!'),
       });
@@ -233,7 +233,7 @@ describe('McpPromptLoader', () => {
       const action = commands[0].action!;
       const context = {} as CommandContext;
       const result = await action(context, 'test-name');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Missing required argument(s): --age, --species',
@@ -249,7 +249,7 @@ describe('McpPromptLoader', () => {
       const action = commands[0].action!;
       const context = {} as CommandContext;
       const result = await action(context, 'test-name 123 tiger');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Error: Invocation failed!',
@@ -259,7 +259,7 @@ describe('McpPromptLoader', () => {
     it('should return an empty array if config is not available', async () => {
       const loader = new McpPromptLoader(null);
       const commands = await loader.loadCommands(new AbortController().signal);
-      expect(commands).toEqual([]);
+      expect(commands).toStrictEqual([]);
     });
 
     describe('autoExecute', () => {

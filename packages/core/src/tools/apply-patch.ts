@@ -24,7 +24,8 @@ import {
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
-import { Config, ApprovalMode } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
@@ -369,7 +370,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       // Append LSP diagnostics after successful patch for content-write files
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient && lspClient.isAlive()) {
+        if (lspClient?.isAlive()) {
           // Only check files that had content writes (triggers LSP analysis)
           for (const contentFile of classification.contentWriteFiles) {
             const absoluteFilePath = path.resolve(

@@ -27,8 +27,6 @@ import {
   findWordEndInLine,
   findNextWordStartInLine,
   isWordCharStrict,
-} from './text-buffer.js';
-import {
   getTransformedImagePath,
   calculateTransformationsForLine,
   getTransformUnderCursor,
@@ -65,7 +63,7 @@ describe('textBufferReducer', () => {
     const action = { type: 'unknown_action' } as unknown as TextBufferAction;
     const state = textBufferReducer(initialState, action);
     expect(state).toHaveOnlyValidCharacters();
-    expect(state).toEqual(initialState);
+    expect(state).toStrictEqual(initialState);
   });
 
   describe('set_text action', () => {
@@ -76,7 +74,7 @@ describe('textBufferReducer', () => {
       };
       const state = textBufferReducer(initialState, action);
       expect(state).toHaveOnlyValidCharacters();
-      expect(state.lines).toEqual(['hello', 'world']);
+      expect(state.lines).toStrictEqual(['hello', 'world']);
       expect(state.cursorRow).toBe(1);
       expect(state.cursorCol).toBe(5);
       expect(state.undoStack.length).toBe(1);
@@ -90,7 +88,7 @@ describe('textBufferReducer', () => {
       };
       const state = textBufferReducer(initialState, action);
       expect(state).toHaveOnlyValidCharacters();
-      expect(state.lines).toEqual(['no undo']);
+      expect(state.lines).toStrictEqual(['no undo']);
       expect(state.undoStack.length).toBe(0);
     });
   });
@@ -100,7 +98,7 @@ describe('textBufferReducer', () => {
       const action: TextBufferAction = { type: 'insert', payload: 'a' };
       const state = textBufferReducer(initialState, action);
       expect(state).toHaveOnlyValidCharacters();
-      expect(state.lines).toEqual(['a']);
+      expect(state.lines).toStrictEqual(['a']);
       expect(state.cursorCol).toBe(1);
     });
 
@@ -109,7 +107,7 @@ describe('textBufferReducer', () => {
       const action: TextBufferAction = { type: 'insert', payload: '\n' };
       const state = textBufferReducer(stateWithText, action);
       expect(state).toHaveOnlyValidCharacters();
-      expect(state.lines).toEqual(['', 'hello']);
+      expect(state.lines).toStrictEqual(['', 'hello']);
       expect(state.cursorRow).toBe(1);
       expect(state.cursorCol).toBe(0);
     });
@@ -122,7 +120,7 @@ describe('textBufferReducer', () => {
         inputFilter: (text) => text.replace(/[0-9]/g, ''),
       };
       const state = textBufferReducer(initialState, action, options);
-      expect(state.lines).toEqual(['abc']);
+      expect(state.lines).toStrictEqual(['abc']);
       expect(state.cursorCol).toBe(3);
     });
 
@@ -133,7 +131,7 @@ describe('textBufferReducer', () => {
       };
       const options: TextBufferOptions = { singleLine: true };
       const state = textBufferReducer(initialState, action, options);
-      expect(state.lines).toEqual(['helloworld']);
+      expect(state.lines).toStrictEqual(['helloworld']);
       expect(state.cursorCol).toBe(10);
     });
 
@@ -147,7 +145,7 @@ describe('textBufferReducer', () => {
         inputFilter: (text) => text.replace(/[0-9]/g, ''),
       };
       const state = textBufferReducer(initialState, action, options);
-      expect(state.lines).toEqual(['hello']);
+      expect(state.lines).toStrictEqual(['hello']);
       expect(state.cursorCol).toBe(5);
     });
   });
@@ -163,7 +161,7 @@ describe('textBufferReducer', () => {
       const action: TextBufferAction = { type: 'backspace' };
       const state = textBufferReducer(stateWithText, action);
       expect(state).toHaveOnlyValidCharacters();
-      expect(state.lines).toEqual(['']);
+      expect(state.lines).toStrictEqual(['']);
       expect(state.cursorCol).toBe(0);
     });
 
@@ -177,7 +175,7 @@ describe('textBufferReducer', () => {
       const action: TextBufferAction = { type: 'backspace' };
       const state = textBufferReducer(stateWithText, action);
       expect(state).toHaveOnlyValidCharacters();
-      expect(state.lines).toEqual(['helloworld']);
+      expect(state.lines).toStrictEqual(['helloworld']);
       expect(state.cursorRow).toBe(0);
       expect(state.cursorCol).toBe(5);
     });
@@ -192,14 +190,14 @@ describe('textBufferReducer', () => {
       };
       const stateAfterInsert = textBufferReducer(initialState, insertAction);
       expect(stateAfterInsert).toHaveOnlyValidCharacters();
-      expect(stateAfterInsert.lines).toEqual(['test']);
+      expect(stateAfterInsert.lines).toStrictEqual(['test']);
       expect(stateAfterInsert.undoStack.length).toBe(1);
 
       // 2. Undo
       const undoAction: TextBufferAction = { type: 'undo' };
       const stateAfterUndo = textBufferReducer(stateAfterInsert, undoAction);
       expect(stateAfterUndo).toHaveOnlyValidCharacters();
-      expect(stateAfterUndo.lines).toEqual(['']);
+      expect(stateAfterUndo.lines).toStrictEqual(['']);
       expect(stateAfterUndo.undoStack.length).toBe(0);
       expect(stateAfterUndo.redoStack.length).toBe(1);
 
@@ -207,7 +205,7 @@ describe('textBufferReducer', () => {
       const redoAction: TextBufferAction = { type: 'redo' };
       const stateAfterRedo = textBufferReducer(stateAfterUndo, redoAction);
       expect(stateAfterRedo).toHaveOnlyValidCharacters();
-      expect(stateAfterRedo.lines).toEqual(['test']);
+      expect(stateAfterRedo.lines).toStrictEqual(['test']);
       expect(stateAfterRedo.undoStack.length).toBe(1);
       expect(stateAfterRedo.redoStack.length).toBe(0);
     });
@@ -225,11 +223,11 @@ describe('textBufferReducer', () => {
       const state = textBufferReducer(stateWithText, action);
       expect(state).toHaveOnlyValidCharacters();
 
-      expect(state.lines).toEqual(['hello']);
+      expect(state.lines).toStrictEqual(['hello']);
       expect(state.cursorRow).toBe(0);
       expect(state.cursorCol).toBe(5);
       expect(state.undoStack.length).toBe(1);
-      expect(state.undoStack[0].lines).toEqual(['hello']);
+      expect(state.undoStack[0].lines).toStrictEqual(['hello']);
       expect(state.undoStack[0].cursorRow).toBe(0);
       expect(state.undoStack[0].cursorCol).toBe(5);
     });
@@ -275,7 +273,7 @@ describe('textBufferReducer', () => {
           createSingleLineState(input, cursorCol),
           { type: 'delete_word_left' },
         );
-        expect(state.lines).toEqual(expectedLines);
+        expect(state.lines).toStrictEqual(expectedLines);
         expect(state.cursorCol).toBe(expectedCol);
       },
     );
@@ -290,7 +288,7 @@ describe('textBufferReducer', () => {
       const state = textBufferReducer(stateWithText, {
         type: 'delete_word_left',
       });
-      expect(state.lines).toEqual(['helloworld']);
+      expect(state.lines).toStrictEqual(['helloworld']);
       expect(state.cursorRow).toBe(0);
       expect(state.cursorCol).toBe(5);
     });
@@ -329,7 +327,7 @@ describe('textBufferReducer', () => {
           createSingleLineState(input, cursorCol),
           { type: 'delete_word_right' },
         );
-        expect(state.lines).toEqual(expectedLines);
+        expect(state.lines).toStrictEqual(expectedLines);
         expect(state.cursorCol).toBe(expectedCol);
       },
     );
@@ -344,9 +342,9 @@ describe('textBufferReducer', () => {
       let state = textBufferReducer(stateWithText, {
         type: 'delete_word_right',
       });
-      expect(state.lines).toEqual(['/to/file']);
+      expect(state.lines).toStrictEqual(['/to/file']);
       state = textBufferReducer(state, { type: 'delete_word_right' });
-      expect(state.lines).toEqual(['to/file']);
+      expect(state.lines).toStrictEqual(['to/file']);
     });
 
     it('should act like delete at the end of a line', () => {
@@ -359,7 +357,7 @@ describe('textBufferReducer', () => {
       const state = textBufferReducer(stateWithText, {
         type: 'delete_word_right',
       });
-      expect(state.lines).toEqual(['helloworld']);
+      expect(state.lines).toStrictEqual(['helloworld']);
       expect(state.cursorRow).toBe(0);
       expect(state.cursorCol).toBe(5);
     });
@@ -398,11 +396,11 @@ describe('useTextBuffer', () => {
       );
       const state = getBufferState(result);
       expect(state.text).toBe('');
-      expect(state.lines).toEqual(['']);
-      expect(state.cursor).toEqual([0, 0]);
-      expect(state.allVisualLines).toEqual(['']);
-      expect(state.viewportVisualLines).toEqual(['']);
-      expect(state.visualCursor).toEqual([0, 0]);
+      expect(state.lines).toStrictEqual(['']);
+      expect(state.cursor).toStrictEqual([0, 0]);
+      expect(state.allVisualLines).toStrictEqual(['']);
+      expect(state.viewportVisualLines).toStrictEqual(['']);
+      expect(state.visualCursor).toStrictEqual([0, 0]);
       expect(state.visualScrollRow).toBe(0);
     });
 
@@ -416,11 +414,11 @@ describe('useTextBuffer', () => {
       );
       const state = getBufferState(result);
       expect(state.text).toBe('hello');
-      expect(state.lines).toEqual(['hello']);
-      expect(state.cursor).toEqual([0, 0]); // Default cursor if offset not given
-      expect(state.allVisualLines).toEqual(['hello']);
-      expect(state.viewportVisualLines).toEqual(['hello']);
-      expect(state.visualCursor).toEqual([0, 0]);
+      expect(state.lines).toStrictEqual(['hello']);
+      expect(state.cursor).toStrictEqual([0, 0]); // Default cursor if offset not given
+      expect(state.allVisualLines).toStrictEqual(['hello']);
+      expect(state.viewportVisualLines).toStrictEqual(['hello']);
+      expect(state.visualCursor).toStrictEqual([0, 0]);
     });
 
     it('should initialize with initialText and initialCursorOffset', () => {
@@ -434,10 +432,10 @@ describe('useTextBuffer', () => {
       );
       const state = getBufferState(result);
       expect(state.text).toBe('hello\nworld');
-      expect(state.lines).toEqual(['hello', 'world']);
-      expect(state.cursor).toEqual([1, 1]); // Logical cursor at 'o' in "world"
-      expect(state.allVisualLines).toEqual(['hello', 'world']);
-      expect(state.viewportVisualLines).toEqual(['hello', 'world']);
+      expect(state.lines).toStrictEqual(['hello', 'world']);
+      expect(state.cursor).toStrictEqual([1, 1]); // Logical cursor at 'o' in "world"
+      expect(state.allVisualLines).toStrictEqual(['hello', 'world']);
+      expect(state.viewportVisualLines).toStrictEqual(['hello', 'world']);
       expect(state.visualCursor[0]).toBe(1); // On the second visual line
       expect(state.visualCursor[1]).toBe(1); // At 'o' in "world"
     });
@@ -452,7 +450,7 @@ describe('useTextBuffer', () => {
         }),
       );
       const state = getBufferState(result);
-      expect(state.allVisualLines).toEqual([
+      expect(state.allVisualLines).toStrictEqual([
         'The quick',
         'brown fox',
         'jumps over the',
@@ -472,7 +470,7 @@ describe('useTextBuffer', () => {
       // Including multiple spaces at the end of the lines like this is
       // consistent with Google docs behavior and makes it intuitive to edit
       // the spaces as needed.
-      expect(state.allVisualLines).toEqual([
+      expect(state.allVisualLines).toStrictEqual([
         'The  quick ',
         'brown fox   ',
         'jumps over the',
@@ -492,7 +490,10 @@ describe('useTextBuffer', () => {
       // Including multiple spaces at the end of the lines like this is
       // consistent with Google docs behavior and makes it intuitive to edit
       // the spaces as needed.
-      expect(state.allVisualLines).toEqual(['123456789012345', 'ABCDEFG']);
+      expect(state.allVisualLines).toStrictEqual([
+        '123456789012345',
+        'ABCDEFG',
+      ]);
     });
 
     it('should initialize with multi-byte unicode characters and correct cursor offset', () => {
@@ -506,11 +507,11 @@ describe('useTextBuffer', () => {
       );
       const state = getBufferState(result);
       expect(state.text).toBe('你好世界');
-      expect(state.lines).toEqual(['你好世界']);
-      expect(state.cursor).toEqual([0, 2]);
+      expect(state.lines).toStrictEqual(['你好世界']);
+      expect(state.cursor).toStrictEqual([0, 2]);
       // Visual: "你好" (width 4), "世"界" (width 4) with viewport width 5
-      expect(state.allVisualLines).toEqual(['你好', '世界']);
-      expect(state.visualCursor).toEqual([1, 0]);
+      expect(state.allVisualLines).toStrictEqual(['你好', '世界']);
+      expect(state.visualCursor).toStrictEqual([1, 0]);
     });
   });
 
@@ -522,14 +523,14 @@ describe('useTextBuffer', () => {
       act(() => result.current.insert('a'));
       let state = getBufferState(result);
       expect(state.text).toBe('a');
-      expect(state.cursor).toEqual([0, 1]);
-      expect(state.visualCursor).toEqual([0, 1]);
+      expect(state.cursor).toStrictEqual([0, 1]);
+      expect(state.visualCursor).toStrictEqual([0, 1]);
 
       act(() => result.current.insert('b'));
       state = getBufferState(result);
       expect(state.text).toBe('ab');
-      expect(state.cursor).toEqual([0, 2]);
-      expect(state.visualCursor).toEqual([0, 2]);
+      expect(state.cursor).toStrictEqual([0, 2]);
+      expect(state.visualCursor).toStrictEqual([0, 2]);
     });
 
     it('insert: should insert text in the middle of a line', () => {
@@ -544,7 +545,7 @@ describe('useTextBuffer', () => {
       act(() => result.current.insert('-NEW-'));
       const state = getBufferState(result);
       expect(state.text).toBe('a-NEW-bc');
-      expect(state.cursor).toEqual([0, 6]);
+      expect(state.cursor).toStrictEqual([0, 6]);
     });
 
     it('newline: should create a new line and move cursor', () => {
@@ -559,11 +560,11 @@ describe('useTextBuffer', () => {
       act(() => result.current.newline());
       const state = getBufferState(result);
       expect(state.text).toBe('ab\n');
-      expect(state.lines).toEqual(['ab', '']);
-      expect(state.cursor).toEqual([1, 0]);
-      expect(state.allVisualLines).toEqual(['ab', '']);
-      expect(state.viewportVisualLines).toEqual(['ab', '']); // viewport height 3
-      expect(state.visualCursor).toEqual([1, 0]); // On the new visual line
+      expect(state.lines).toStrictEqual(['ab', '']);
+      expect(state.cursor).toStrictEqual([1, 0]);
+      expect(state.allVisualLines).toStrictEqual(['ab', '']);
+      expect(state.viewportVisualLines).toStrictEqual(['ab', '']); // viewport height 3
+      expect(state.visualCursor).toStrictEqual([1, 0]); // On the new visual line
     });
 
     it('backspace: should delete char to the left or merge lines', () => {
@@ -583,15 +584,15 @@ describe('useTextBuffer', () => {
       act(() => result.current.backspace()); // delete 'b'
       let state = getBufferState(result);
       expect(state.text).toBe('a\n');
-      expect(state.cursor).toEqual([1, 0]);
+      expect(state.cursor).toStrictEqual([1, 0]);
 
       act(() => result.current.backspace()); // merge lines
       state = getBufferState(result);
       expect(state.text).toBe('a');
-      expect(state.cursor).toEqual([0, 1]); // cursor after 'a'
-      expect(state.allVisualLines).toEqual(['a']);
-      expect(state.viewportVisualLines).toEqual(['a']);
-      expect(state.visualCursor).toEqual([0, 1]);
+      expect(state.cursor).toStrictEqual([0, 1]); // cursor after 'a'
+      expect(state.allVisualLines).toStrictEqual(['a']);
+      expect(state.viewportVisualLines).toStrictEqual(['a']);
+      expect(state.visualCursor).toStrictEqual([0, 1]);
     });
 
     it('del: should delete char to the right or merge lines', () => {
@@ -606,15 +607,15 @@ describe('useTextBuffer', () => {
       act(() => result.current.del()); // delete 'a'
       let state = getBufferState(result);
       expect(state.text).toBe('\nb');
-      expect(state.cursor).toEqual([0, 0]);
+      expect(state.cursor).toStrictEqual([0, 0]);
 
       act(() => result.current.del()); // merge lines (deletes newline)
       state = getBufferState(result);
       expect(state.text).toBe('b');
-      expect(state.cursor).toEqual([0, 0]);
-      expect(state.allVisualLines).toEqual(['b']);
-      expect(state.viewportVisualLines).toEqual(['b']);
-      expect(state.visualCursor).toEqual([0, 0]);
+      expect(state.cursor).toStrictEqual([0, 0]);
+      expect(state.allVisualLines).toStrictEqual(['b']);
+      expect(state.viewportVisualLines).toStrictEqual(['b']);
+      expect(state.visualCursor).toStrictEqual([0, 0]);
     });
   });
 
@@ -766,19 +767,19 @@ describe('useTextBuffer', () => {
       // Initial cursor [0,0] logical, visual [0,0] ("l" of "long ")
 
       act(() => result.current.move('right')); // visual [0,1] ("o")
-      expect(getBufferState(result).visualCursor).toEqual([0, 1]);
+      expect(getBufferState(result).visualCursor).toStrictEqual([0, 1]);
       act(() => result.current.move('right')); // visual [0,2] ("n")
       act(() => result.current.move('right')); // visual [0,3] ("g")
       act(() => result.current.move('right')); // visual [0,4] (" ")
-      expect(getBufferState(result).visualCursor).toEqual([0, 4]);
+      expect(getBufferState(result).visualCursor).toStrictEqual([0, 4]);
 
       act(() => result.current.move('right')); // visual [1,0] ("l" of "line1")
-      expect(getBufferState(result).visualCursor).toEqual([1, 0]);
-      expect(getBufferState(result).cursor).toEqual([0, 5]); // logical cursor
+      expect(getBufferState(result).visualCursor).toStrictEqual([1, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 5]); // logical cursor
 
       act(() => result.current.move('left')); // visual [0,4] (" " of "long ")
-      expect(getBufferState(result).visualCursor).toEqual([0, 4]);
-      expect(getBufferState(result).cursor).toEqual([0, 4]); // logical cursor
+      expect(getBufferState(result).visualCursor).toStrictEqual([0, 4]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 4]); // logical cursor
     });
 
     it('move: up/down should preserve preferred visual column', () => {
@@ -790,7 +791,11 @@ describe('useTextBuffer', () => {
           isValidPath: () => false,
         }),
       );
-      expect(result.current.allVisualLines).toEqual(['abcde', 'xy', '12345']);
+      expect(result.current.allVisualLines).toStrictEqual([
+        'abcde',
+        'xy',
+        '12345',
+      ]);
       // Place cursor at the end of "abcde" -> logical [0,5]
       act(() => {
         result.current.move('home'); // to [0,0]
@@ -800,22 +805,22 @@ describe('useTextBuffer', () => {
           result.current.move('right'); // to [0,5]
         });
       }
-      expect(getBufferState(result).cursor).toEqual([0, 5]);
-      expect(getBufferState(result).visualCursor).toEqual([0, 5]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 5]);
+      expect(getBufferState(result).visualCursor).toStrictEqual([0, 5]);
 
       // Set preferredCol by moving up then down to the same spot, then test.
       act(() => {
         result.current.move('down'); // to xy, logical [1,2], visual [1,2], preferredCol should be 5
       });
       let state = getBufferState(result);
-      expect(state.cursor).toEqual([1, 2]); // Logical cursor at end of 'xy'
-      expect(state.visualCursor).toEqual([1, 2]); // Visual cursor at end of 'xy'
+      expect(state.cursor).toStrictEqual([1, 2]); // Logical cursor at end of 'xy'
+      expect(state.visualCursor).toStrictEqual([1, 2]); // Visual cursor at end of 'xy'
       expect(state.preferredCol).toBe(5);
 
       act(() => result.current.move('down')); // to '12345', preferredCol=5.
       state = getBufferState(result);
-      expect(state.cursor).toEqual([2, 5]); // Logical cursor at end of '12345'
-      expect(state.visualCursor).toEqual([2, 5]); // Visual cursor at end of '12345'
+      expect(state.cursor).toStrictEqual([2, 5]); // Logical cursor at end of '12345'
+      expect(state.visualCursor).toStrictEqual([2, 5]); // Visual cursor at end of '12345'
       expect(state.preferredCol).toBe(5); // Preferred col is maintained
 
       act(() => result.current.move('left')); // preferredCol should reset
@@ -832,7 +837,7 @@ describe('useTextBuffer', () => {
           isValidPath: () => false,
         }),
       );
-      expect(result.current.allVisualLines).toEqual([
+      expect(result.current.allVisualLines).toStrictEqual([
         'line',
         'one',
         'secon',
@@ -842,13 +847,13 @@ describe('useTextBuffer', () => {
       // Initial cursor [0,0] (start of "line")
       act(() => result.current.move('down')); // visual cursor from [0,0] to [1,0] ("o" of "one")
       act(() => result.current.move('right')); // visual cursor to [1,1] ("n" of "one")
-      expect(getBufferState(result).visualCursor).toEqual([1, 1]);
+      expect(getBufferState(result).visualCursor).toStrictEqual([1, 1]);
 
       act(() => result.current.move('home')); // visual cursor to [1,0] (start of "one")
-      expect(getBufferState(result).visualCursor).toEqual([1, 0]);
+      expect(getBufferState(result).visualCursor).toStrictEqual([1, 0]);
 
       act(() => result.current.move('end')); // visual cursor to [1,3] (end of "one")
-      expect(getBufferState(result).visualCursor).toEqual([1, 3]); // "one" is 3 chars
+      expect(getBufferState(result).visualCursor).toStrictEqual([1, 3]); // "one" is 3 chars
     });
   });
 
@@ -884,14 +889,14 @@ describe('useTextBuffer', () => {
       );
       // Initial: l1, l2, l3 visible. visualScrollRow = 0. visualCursor = [0,0]
       expect(getBufferState(result).visualScrollRow).toBe(0);
-      expect(getBufferState(result).allVisualLines).toEqual([
+      expect(getBufferState(result).allVisualLines).toStrictEqual([
         'l1',
         'l2',
         'l3',
         'l4',
         'l5',
       ]);
-      expect(getBufferState(result).viewportVisualLines).toEqual([
+      expect(getBufferState(result).viewportVisualLines).toStrictEqual([
         'l1',
         'l2',
         'l3',
@@ -905,9 +910,15 @@ describe('useTextBuffer', () => {
       // Now: l2, l3, l4 visible. visualScrollRow = 1.
       let state = getBufferState(result);
       expect(state.visualScrollRow).toBe(1);
-      expect(state.allVisualLines).toEqual(['l1', 'l2', 'l3', 'l4', 'l5']);
-      expect(state.viewportVisualLines).toEqual(['l2', 'l3', 'l4']);
-      expect(state.visualCursor).toEqual([3, 0]);
+      expect(state.allVisualLines).toStrictEqual([
+        'l1',
+        'l2',
+        'l3',
+        'l4',
+        'l5',
+      ]);
+      expect(state.viewportVisualLines).toStrictEqual(['l2', 'l3', 'l4']);
+      expect(state.visualCursor).toStrictEqual([3, 0]);
 
       act(() => result.current.move('up')); // vc=[2,0] (l3)
       act(() => result.current.move('up')); // vc=[1,0] (l2)
@@ -917,9 +928,15 @@ describe('useTextBuffer', () => {
       // Now: l1, l2, l3 visible. visualScrollRow = 0
       state = getBufferState(result); // Assign to the existing `state` variable
       expect(state.visualScrollRow).toBe(0);
-      expect(state.allVisualLines).toEqual(['l1', 'l2', 'l3', 'l4', 'l5']);
-      expect(state.viewportVisualLines).toEqual(['l1', 'l2', 'l3']);
-      expect(state.visualCursor).toEqual([0, 0]);
+      expect(state.allVisualLines).toStrictEqual([
+        'l1',
+        'l2',
+        'l3',
+        'l4',
+        'l5',
+      ]);
+      expect(state.viewportVisualLines).toStrictEqual(['l1', 'l2', 'l3']);
+      expect(state.visualCursor).toStrictEqual([0, 0]);
     });
   });
 
@@ -933,11 +950,11 @@ describe('useTextBuffer', () => {
 
       act(() => result.current.undo());
       expect(getBufferState(result).text).toBe('');
-      expect(getBufferState(result).cursor).toEqual([0, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 0]);
 
       act(() => result.current.redo());
       expect(getBufferState(result).text).toBe('a');
-      expect(getBufferState(result).cursor).toEqual([0, 1]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 1]);
     });
 
     it('should undo and redo a newline operation', () => {
@@ -954,11 +971,11 @@ describe('useTextBuffer', () => {
 
       act(() => result.current.undo());
       expect(getBufferState(result).text).toBe('test');
-      expect(getBufferState(result).cursor).toEqual([0, 4]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 4]);
 
       act(() => result.current.redo());
       expect(getBufferState(result).text).toBe('test\n');
-      expect(getBufferState(result).cursor).toEqual([1, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([1, 0]);
     });
   });
 
@@ -970,8 +987,8 @@ describe('useTextBuffer', () => {
       act(() => result.current.insert('你好'));
       const state = getBufferState(result);
       expect(state.text).toBe('你好');
-      expect(state.cursor).toEqual([0, 2]); // Cursor is 2 (char count)
-      expect(state.visualCursor).toEqual([0, 2]);
+      expect(state.cursor).toStrictEqual([0, 2]); // Cursor is 2 (char count)
+      expect(state.visualCursor).toStrictEqual([0, 2]);
     });
 
     it('backspace: should correctly delete multi-byte unicode characters', () => {
@@ -986,12 +1003,12 @@ describe('useTextBuffer', () => {
       act(() => result.current.backspace()); // delete '好'
       let state = getBufferState(result);
       expect(state.text).toBe('你');
-      expect(state.cursor).toEqual([0, 1]);
+      expect(state.cursor).toStrictEqual([0, 1]);
 
       act(() => result.current.backspace()); // delete '你'
       state = getBufferState(result);
       expect(state.text).toBe('');
-      expect(state.cursor).toEqual([0, 0]);
+      expect(state.cursor).toStrictEqual([0, 0]);
     });
 
     it('move: left/right should treat multi-byte chars as single units for visual cursor', () => {
@@ -1005,18 +1022,18 @@ describe('useTextBuffer', () => {
       // Initial: visualCursor [0,0]
       act(() => result.current.move('right')); // visualCursor [0,1] (after 🐶)
       let state = getBufferState(result);
-      expect(state.cursor).toEqual([0, 1]);
-      expect(state.visualCursor).toEqual([0, 1]);
+      expect(state.cursor).toStrictEqual([0, 1]);
+      expect(state.visualCursor).toStrictEqual([0, 1]);
 
       act(() => result.current.move('right')); // visualCursor [0,2] (after 🐱)
       state = getBufferState(result);
-      expect(state.cursor).toEqual([0, 2]);
-      expect(state.visualCursor).toEqual([0, 2]);
+      expect(state.cursor).toStrictEqual([0, 2]);
+      expect(state.visualCursor).toStrictEqual([0, 2]);
 
       act(() => result.current.move('left')); // visualCursor [0,1] (before 🐱 / after 🐶)
       state = getBufferState(result);
-      expect(state.cursor).toEqual([0, 1]);
-      expect(state.visualCursor).toEqual([0, 1]);
+      expect(state.cursor).toStrictEqual([0, 1]);
+      expect(state.visualCursor).toStrictEqual([0, 1]);
     });
 
     it('moveToVisualPosition: should correctly handle wide characters (Chinese)', () => {
@@ -1032,19 +1049,19 @@ describe('useTextBuffer', () => {
 
       // Click on '你' (first half, x=0) -> index 0
       act(() => result.current.moveToVisualPosition(0, 0));
-      expect(getBufferState(result).cursor).toEqual([0, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 0]);
 
       // Click on '你' (second half, x=1) -> index 1 (after first char)
       act(() => result.current.moveToVisualPosition(0, 1));
-      expect(getBufferState(result).cursor).toEqual([0, 1]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 1]);
 
       // Click on '好' (first half, x=2) -> index 1 (before second char)
       act(() => result.current.moveToVisualPosition(0, 2));
-      expect(getBufferState(result).cursor).toEqual([0, 1]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 1]);
 
       // Click on '好' (second half, x=3) -> index 2 (after second char)
       act(() => result.current.moveToVisualPosition(0, 3));
-      expect(getBufferState(result).cursor).toEqual([0, 2]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 2]);
     });
   });
 
@@ -1087,7 +1104,7 @@ describe('useTextBuffer', () => {
           sequence: '\r',
         }),
       );
-      expect(getBufferState(result).lines).toEqual(['', '']);
+      expect(getBufferState(result).lines).toStrictEqual(['', '']);
     });
 
     it('should handle Ctrl+J as newline', () => {
@@ -1104,7 +1121,7 @@ describe('useTextBuffer', () => {
           sequence: '\n',
         }),
       );
-      expect(getBufferState(result).lines).toEqual(['', '']);
+      expect(getBufferState(result).lines).toStrictEqual(['', '']);
     });
 
     it('should do nothing for a tab key press', () => {
@@ -1169,7 +1186,7 @@ describe('useTextBuffer', () => {
         }),
       );
       act(() => result.current.move('end')); // cursor at the end
-      expect(getBufferState(result).cursor).toEqual([0, 5]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 5]);
 
       act(() => {
         result.current.handleInput({
@@ -1195,7 +1212,7 @@ describe('useTextBuffer', () => {
         });
       });
       expect(getBufferState(result).text).toBe('ab');
-      expect(getBufferState(result).cursor).toEqual([0, 2]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 2]);
     });
 
     it('should handle inserts that contain delete characters', () => {
@@ -1207,13 +1224,13 @@ describe('useTextBuffer', () => {
         }),
       );
       act(() => result.current.move('end')); // cursor at the end
-      expect(getBufferState(result).cursor).toEqual([0, 5]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 5]);
 
       act(() => {
         result.current.insert('\x7f\x7f\x7f');
       });
       expect(getBufferState(result).text).toBe('ab');
-      expect(getBufferState(result).cursor).toEqual([0, 2]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 2]);
     });
 
     it('should handle inserts with a mix of regular and delete characters', () => {
@@ -1225,13 +1242,13 @@ describe('useTextBuffer', () => {
         }),
       );
       act(() => result.current.move('end')); // cursor at the end
-      expect(getBufferState(result).cursor).toEqual([0, 5]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 5]);
 
       act(() => {
         result.current.insert('\x7fI\x7f\x7fNEW');
       });
       expect(getBufferState(result).text).toBe('abcNEW');
-      expect(getBufferState(result).cursor).toEqual([0, 6]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 6]);
     });
 
     it('should handle arrow keys for movement', () => {
@@ -1252,7 +1269,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[D',
         }),
       ); // cursor [0,1]
-      expect(getBufferState(result).cursor).toEqual([0, 1]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 1]);
       act(() =>
         result.current.handleInput({
           name: 'right',
@@ -1262,7 +1279,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[C',
         }),
       ); // cursor [0,2]
-      expect(getBufferState(result).cursor).toEqual([0, 2]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 2]);
     });
 
     it('should handle up/down arrow keys for vertical movement via handleInput', () => {
@@ -1283,7 +1300,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[B',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([1, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([1, 0]);
       act(() =>
         result.current.handleInput({
           name: 'down',
@@ -1293,7 +1310,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[B',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([2, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([2, 0]);
       act(() =>
         result.current.handleInput({
           name: 'up',
@@ -1303,7 +1320,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[A',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([1, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([1, 0]);
     });
 
     it('should use keyMatchers for MOVE_UP/MOVE_DOWN (honors command mapping)', () => {
@@ -1318,7 +1335,7 @@ describe('useTextBuffer', () => {
       );
       // Move to line 1
       act(() => result.current.move('down'));
-      expect(getBufferState(result).cursor).toEqual([1, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([1, 0]);
 
       // Press up with meta (command) held — should NOT move up because
       // the default binding requires command=false.
@@ -1331,7 +1348,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[A',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([1, 0]); // Still on line 1
+      expect(getBufferState(result).cursor).toStrictEqual([1, 0]); // Still on line 1
 
       // Press plain up — should move up
       act(() =>
@@ -1343,7 +1360,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[A',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([0, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([0, 0]);
 
       // Press down with ctrl held — should NOT move down because
       // the default binding requires ctrl=false.
@@ -1356,7 +1373,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[B',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([0, 0]); // Still on line 0
+      expect(getBufferState(result).cursor).toStrictEqual([0, 0]); // Still on line 0
 
       // Press plain down — should move down
       act(() =>
@@ -1368,7 +1385,7 @@ describe('useTextBuffer', () => {
           sequence: '\x1b[B',
         }),
       );
-      expect(getBufferState(result).cursor).toEqual([1, 0]);
+      expect(getBufferState(result).cursor).toStrictEqual([1, 0]);
     });
 
     it('should strip ANSI escape codes when pasting text', () => {
@@ -1402,7 +1419,7 @@ describe('useTextBuffer', () => {
           sequence: '\r',
         }),
       ); // Simulates Shift+Enter in VSCode terminal
-      expect(getBufferState(result).lines).toEqual(['', '']);
+      expect(getBufferState(result).lines).toStrictEqual(['', '']);
     });
 
     it('should correctly handle repeated pasting of long text', () => {
@@ -1434,7 +1451,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
         state.text,
         state.text.length,
       );
-      expect(state.cursor).toEqual(expectedCursorPos);
+      expect(state.cursor).toStrictEqual(expectedCursorPos);
     });
   });
 
@@ -1458,7 +1475,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 1, 0, 4, 'packages'));
       const state = getBufferState(result);
       expect(state.text).toBe('@packages');
-      expect(state.cursor).toEqual([0, 9]); // cursor after 'typescript'
+      expect(state.cursor).toStrictEqual([0, 9]); // cursor after 'typescript'
     });
 
     it('should replace a multi-line range with single-line text', () => {
@@ -1472,7 +1489,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 2, 1, 3, ' new ')); // replace 'llo\nwor' with ' new '
       const state = getBufferState(result);
       expect(state.text).toBe('he new ld\nagain');
-      expect(state.cursor).toEqual([0, 7]); // cursor after ' new '
+      expect(state.cursor).toStrictEqual([0, 7]); // cursor after ' new '
     });
 
     it('should delete a range when replacing with an empty string', () => {
@@ -1486,7 +1503,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 5, 0, 11, '')); // delete ' world'
       const state = getBufferState(result);
       expect(state.text).toBe('hello');
-      expect(state.cursor).toEqual([0, 5]);
+      expect(state.cursor).toStrictEqual([0, 5]);
     });
 
     it('should handle replacing at the beginning of the text', () => {
@@ -1500,7 +1517,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 0, 0, 0, 'hello '));
       const state = getBufferState(result);
       expect(state.text).toBe('hello world');
-      expect(state.cursor).toEqual([0, 6]);
+      expect(state.cursor).toStrictEqual([0, 6]);
     });
 
     it('should handle replacing at the end of the text', () => {
@@ -1514,7 +1531,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 5, 0, 5, ' world'));
       const state = getBufferState(result);
       expect(state.text).toBe('hello world');
-      expect(state.cursor).toEqual([0, 11]);
+      expect(state.cursor).toStrictEqual([0, 11]);
     });
 
     it('should handle replacing the entire buffer content', () => {
@@ -1528,7 +1545,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 0, 0, 8, 'new text'));
       const state = getBufferState(result);
       expect(state.text).toBe('new text');
-      expect(state.cursor).toEqual([0, 8]);
+      expect(state.cursor).toStrictEqual([0, 8]);
     });
 
     it('should correctly replace with unicode characters', () => {
@@ -1542,7 +1559,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 6, 0, 9, '你好'));
       const state = getBufferState(result);
       expect(state.text).toBe('hello 你好 world');
-      expect(state.cursor).toEqual([0, 8]); // after '你好'
+      expect(state.cursor).toStrictEqual([0, 8]); // after '你好'
     });
 
     it('should handle invalid range by returning false and not changing text', () => {
@@ -1576,7 +1593,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.replaceRange(0, 2, 2, 3, 'X')); // Replace 'rst\nsecond\nthi'
       const state = getBufferState(result);
       expect(state.text).toBe('fiXrd');
-      expect(state.cursor).toEqual([0, 3]); // After 'X'
+      expect(state.cursor).toStrictEqual([0, 3]); // After 'X'
     });
 
     it('should replace a single-line range with multi-line text', () => {
@@ -1590,9 +1607,9 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       // Replace "two" with "new\nline"
       act(() => result.current.replaceRange(0, 4, 0, 7, 'new\nline'));
       const state = getBufferState(result);
-      expect(state.lines).toEqual(['one new', 'line three']);
+      expect(state.lines).toStrictEqual(['one new', 'line three']);
       expect(state.text).toBe('one new\nline three');
-      expect(state.cursor).toEqual([1, 4]); // cursor after 'line'
+      expect(state.cursor).toStrictEqual([1, 4]); // cursor after 'line'
     });
   });
 
@@ -1871,7 +1888,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.insert('\n'));
       const state = getBufferState(result);
       expect(state.text).toBe('');
-      expect(state.lines).toEqual(['']);
+      expect(state.lines).toStrictEqual(['']);
     });
 
     it('should not create a new line when newline() is called and singleLine is true', () => {
@@ -1887,8 +1904,8 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.newline());
       const state = getBufferState(result);
       expect(state.text).toBe('ab');
-      expect(state.lines).toEqual(['ab']);
-      expect(state.cursor).toEqual([0, 2]);
+      expect(state.lines).toStrictEqual(['ab']);
+      expect(state.cursor).toStrictEqual([0, 2]);
     });
 
     it('should not handle "Enter" key as newline when singleLine is true', () => {
@@ -1908,7 +1925,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
           sequence: '\r',
         }),
       );
-      expect(getBufferState(result).lines).toEqual(['']);
+      expect(getBufferState(result).lines).toStrictEqual(['']);
     });
 
     it('should strip newlines from pasted text when singleLine is true', () => {
@@ -1922,7 +1939,7 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       act(() => result.current.insert('hello\nworld', { paste: true }));
       const state = getBufferState(result);
       expect(state.text).toBe('helloworld');
-      expect(state.lines).toEqual(['helloworld']);
+      expect(state.lines).toStrictEqual(['helloworld']);
     });
   });
 });
@@ -2060,7 +2077,7 @@ describe('offsetToLogicalPos', () => {
     { text: '🐶🐱', offset: 1, expected: [0, 1], desc: 'emoji - middle' },
     { text: '🐶🐱', offset: 2, expected: [0, 2], desc: 'emoji - end' },
   ])('should handle $desc', ({ text, offset, expected }) => {
-    expect(offsetToLogicalPos(text, offset)).toEqual(expected);
+    expect(offsetToLogicalPos(text, offset)).toStrictEqual(expected);
   });
 
   describe('multi-line text', () => {
@@ -2080,7 +2097,7 @@ describe('offsetToLogicalPos', () => {
     ])(
       'should return $expected for $desc (offset $offset)',
       ({ offset, expected }) => {
-        expect(offsetToLogicalPos(text, offset)).toEqual(expected);
+        expect(offsetToLogicalPos(text, offset)).toStrictEqual(expected);
       },
     );
   });
@@ -2182,7 +2199,7 @@ describe('textBufferReducer vim operations', () => {
       expect(result).toHaveOnlyValidCharacters();
 
       // After deleting line2, we should have line1 and line3, with cursor on line3 (now at index 1)
-      expect(result.lines).toEqual(['line1', 'line3']);
+      expect(result.lines).toStrictEqual(['line1', 'line3']);
       expect(result.cursorRow).toBe(1);
       expect(result.cursorCol).toBe(0);
     });
@@ -2199,7 +2216,7 @@ describe('textBufferReducer vim operations', () => {
       expect(result).toHaveOnlyValidCharacters();
 
       // Should delete line2 and line3, leaving line1 and line4
-      expect(result.lines).toEqual(['line1', 'line4']);
+      expect(result.lines).toStrictEqual(['line1', 'line4']);
       expect(result.cursorRow).toBe(1);
       expect(result.cursorCol).toBe(0);
     });
@@ -2216,7 +2233,7 @@ describe('textBufferReducer vim operations', () => {
       expect(result).toHaveOnlyValidCharacters();
 
       // Should clear the line content but keep the line
-      expect(result.lines).toEqual(['']);
+      expect(result.lines).toStrictEqual(['']);
       expect(result.cursorRow).toBe(0);
       expect(result.cursorCol).toBe(0);
     });
@@ -2233,7 +2250,7 @@ describe('textBufferReducer vim operations', () => {
       expect(result).toHaveOnlyValidCharacters();
 
       // Should delete the last line completely, not leave empty line
-      expect(result.lines).toEqual(['line1']);
+      expect(result.lines).toStrictEqual(['line1']);
       expect(result.cursorRow).toBe(0);
       expect(result.cursorCol).toBe(0);
     });
@@ -2251,7 +2268,7 @@ describe('textBufferReducer vim operations', () => {
       expect(afterDelete).toHaveOnlyValidCharacters();
 
       // After deleting all lines, should have one empty line
-      expect(afterDelete.lines).toEqual(['']);
+      expect(afterDelete.lines).toStrictEqual(['']);
       expect(afterDelete.cursorRow).toBe(0);
       expect(afterDelete.cursorCol).toBe(0);
 
@@ -2265,7 +2282,7 @@ describe('textBufferReducer vim operations', () => {
       expect(afterPaste).toHaveOnlyValidCharacters();
 
       // All lines including the first one should be present
-      expect(afterPaste.lines).toEqual(['new1', 'new2', 'new3', 'new4']);
+      expect(afterPaste.lines).toStrictEqual(['new1', 'new2', 'new3', 'new4']);
       expect(afterPaste.cursorRow).toBe(3);
       expect(afterPaste.cursorCol).toBe(4);
     });
@@ -2528,12 +2545,12 @@ describe('Transformation Utilities', () => {
     it('should handle no transformations', () => {
       const line = 'Just some regular text';
       const result = calculateTransformationsForLine(line);
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should handle empty line', () => {
       const result = calculateTransformationsForLine('');
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should keep adjacent image paths as separate transformations', () => {
@@ -2570,17 +2587,17 @@ describe('Transformation Utilities', () => {
 
     it('should find transformation when cursor is inside it', () => {
       const result = getTransformUnderCursor(0, 7, [transformations]);
-      expect(result).toEqual(transformations[0]);
+      expect(result).toStrictEqual(transformations[0]);
     });
 
     it('should find transformation when cursor is at start', () => {
       const result = getTransformUnderCursor(0, 5, [transformations]);
-      expect(result).toEqual(transformations[0]);
+      expect(result).toStrictEqual(transformations[0]);
     });
 
     it('should find transformation when cursor is at end', () => {
       const result = getTransformUnderCursor(0, 14, [transformations]);
-      expect(result).toEqual(transformations[0]);
+      expect(result).toStrictEqual(transformations[0]);
     });
 
     it('should return null when cursor is not on a transformation', () => {
@@ -2640,7 +2657,7 @@ describe('Transformation Utilities', () => {
     it('should handle empty line', () => {
       const result = calculateTransformedLine('', 0, [0, 0], []);
       expect(result.transformedLine).toBe('');
-      expect(result.transformedToLogMap).toEqual([0]); // Just the trailing position
+      expect(result.transformedToLogMap).toStrictEqual([0]); // Just the trailing position
     });
   });
 

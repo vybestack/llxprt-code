@@ -14,8 +14,8 @@
 
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import type { Config } from '../config/config.js';
 import {
-  Config,
   ApprovalMode,
   type SchedulerCallbacks,
   type SchedulerOptions,
@@ -41,8 +41,8 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import { EmojiFilter, type EmojiFilterMode } from '../filters/EmojiFilter.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import type { ContextState } from './subagentTypes.js';
 import {
-  ContextState,
   templateString,
   type ToolConfig,
   type OutputConfig,
@@ -309,7 +309,7 @@ export function buildRuntimeFunctionDeclarations(
 export function getScopeLocalFuncDefs(
   outputConfig?: OutputConfig,
 ): FunctionDeclaration[] {
-  if (!outputConfig || !outputConfig.outputs) {
+  if (!outputConfig?.outputs) {
     return [];
   }
 
@@ -351,7 +351,7 @@ export function buildChatSystemPrompt(
 
   let finalPrompt = templateString(promptConfig.systemPrompt, context);
 
-  if (outputConfig && outputConfig.outputs) {
+  if (outputConfig?.outputs) {
     let outputInstructions =
       '\n\nAfter you have achieved all other goals, you MUST emit the required output variables. For each expected output, make one final call to the `self_emitvalue` tool.';
 

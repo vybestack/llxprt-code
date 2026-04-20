@@ -461,7 +461,7 @@ describe('compression settings', () => {
     it('returns spec with enumValues matching COMPRESSION_STRATEGIES', () => {
       const spec = getSettingSpec('compression.strategy');
 
-      expect(spec?.enumValues).toEqual([...COMPRESSION_STRATEGIES]);
+      expect(spec?.enumValues).toStrictEqual([...COMPRESSION_STRATEGIES]);
     });
 
     it('returns spec with persistToProfile true', () => {

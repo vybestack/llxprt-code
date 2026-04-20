@@ -5,8 +5,8 @@
  */
 
 import {
-  MCPServerConfig,
-  GeminiCLIExtension,
+  type MCPServerConfig,
+  type GeminiCLIExtension,
   Storage,
   getErrorMessage,
   type SkillDefinition,

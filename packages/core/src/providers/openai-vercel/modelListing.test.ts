@@ -29,11 +29,11 @@ describe('OpenAIVercelProvider - Model Listing', () => {
       expect(found).toBeDefined();
       expect(found?.provider).toBe('openaivercel');
       expect(found?.contextWindow).toBe(expected.contextWindow);
-      expect(found?.supportedToolFormats).toEqual(['openai']);
+      expect(found?.supportedToolFormats).toStrictEqual(['openai']);
     }
 
     // Ensure all required IDs are present
-    expect(modelIds).toEqual(
+    expect(modelIds).toStrictEqual(
       expect.arrayContaining(expectedModels.map((m) => m.id)),
     );
   });
@@ -45,6 +45,6 @@ describe('OpenAIVercelProvider - Model Listing', () => {
     const names = models.map((m) => m.name);
     const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
 
-    expect(names).toEqual(sortedNames);
+    expect(names).toStrictEqual(sortedNames);
   });
 });

@@ -7,11 +7,8 @@
 import { type MutableRefObject } from 'react';
 import { render, renderHook } from '../test-utils/render.js';
 import { act } from 'react-dom/test-utils';
-import {
-  SessionStatsProvider,
-  useSessionStats,
-  SessionMetrics,
-} from './SessionContext.js';
+import type { SessionMetrics } from './SessionContext.js';
+import { SessionStatsProvider, useSessionStats } from './SessionContext.js';
 import { describe, it, expect, vi } from 'vitest';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 
@@ -45,7 +42,7 @@ describe('SessionStatsContext', () => {
 
     expect(stats?.sessionStartTime).toBeInstanceOf(Date);
     expect(stats?.metrics).toBeDefined();
-    expect(stats?.metrics.models).toEqual({});
+    expect(stats?.metrics.models).toStrictEqual({});
   });
 
   it('should update metrics when the uiTelemetryService emits an update', () => {
@@ -112,7 +109,7 @@ describe('SessionStatsContext', () => {
     });
 
     const stats = contextRef.current?.stats;
-    expect(stats?.metrics).toEqual(newMetrics);
+    expect(stats?.metrics).toStrictEqual(newMetrics);
     expect(stats?.lastPromptTokenCount).toBe(100);
   });
 

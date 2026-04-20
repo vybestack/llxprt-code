@@ -65,7 +65,7 @@ import type {
   ExtensionUpdateState,
   ExtensionUpdateAction,
 } from '../state/extensions.js';
-import { SubagentView } from '../components/SubagentManagement/types.js';
+import type { SubagentView } from '../components/SubagentManagement/types.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 const confirmationLogger = new DebugLogger('llxprt:ui:selection');

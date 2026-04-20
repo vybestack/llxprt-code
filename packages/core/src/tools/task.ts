@@ -281,8 +281,7 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     taskLogger.debug(() => {
       const summary =
-        launchRequest.toolConfig &&
-        launchRequest.toolConfig.tools &&
+        launchRequest.toolConfig?.tools &&
         launchRequest.toolConfig.tools.length > 0
           ? `${launchRequest.toolConfig.tools.length} tools`
           : 'no tools provided';

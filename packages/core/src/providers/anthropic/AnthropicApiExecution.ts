@@ -11,7 +11,7 @@
  * @issue #1572 - Decomposing AnthropicProvider (Step 5)
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import type { DumpMode } from '../utils/dumpContext.js';
 import {
   shouldDumpSDKContext,

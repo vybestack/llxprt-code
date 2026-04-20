@@ -14,8 +14,8 @@ import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
 import { CodexOAuthProvider } from '../auth/codex-oauth-provider.js';
 import type { TokenStore } from '../auth/types.js';
-import { OAuthManager } from '../auth/oauth-manager.js';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import type { OAuthManager } from '../auth/oauth-manager.js';
+import type { HistoryItemWithoutId } from '../ui/types.js';
 
 /**
  * Track which OAuth providers have been registered to avoid duplicate registration

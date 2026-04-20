@@ -316,7 +316,7 @@ describe('OpenFilesManager', () => {
     await vi.advanceTimersByTimeAsync(100);
 
     const file = manager.state.workspaceState!.openFiles![0];
-    expect(file.cursor).toEqual({ line: 11, character: 21 });
+    expect(file.cursor).toStrictEqual({ line: 11, character: 21 });
   });
 
   it('updates the selected text on selection change', async () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PromptResolver } from './prompt-resolver.js';
-import { PromptContext } from './types.js';
+import type { PromptContext } from './types.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DebugLogger } from '../debug/DebugLogger.js';

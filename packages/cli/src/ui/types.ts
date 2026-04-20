@@ -5,13 +5,14 @@
  */
 
 import {
-  CompressionStatus,
-  GeminiCLIExtension,
-  ToolCallConfirmationDetails,
-  ToolResultDisplay,
+  type CompressionStatus,
+  type GeminiCLIExtension,
+  type ToolCallConfirmationDetails,
+  type ToolResultDisplay,
   type ThinkingBlock,
   type SkillDefinition,
   type SkillSource,
+  type HookRegistryEntry,
 } from '@vybestack/llxprt-code-core';
 
 export type { SkillDefinition, SkillSource };
@@ -201,7 +202,7 @@ export type HistoryItemExtensionsList = HistoryItemBase & {
 
 export type HistoryItemHooksList = HistoryItemBase & {
   type: 'hooks_list';
-  hooks: Array<import('@vybestack/llxprt-code-core').HookRegistryEntry>;
+  hooks: HookRegistryEntry[];
 };
 
 export interface ChatDetail {

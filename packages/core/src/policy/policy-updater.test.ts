@@ -128,7 +128,7 @@ describe('createPolicyUpdater', () => {
     const parsed = toml.parse(content) as unknown as ParsedPolicy;
 
     expect(parsed.rule).toHaveLength(1);
-    expect(parsed.rule![0].commandPrefix).toEqual(['echo', 'ls']);
+    expect(parsed.rule![0].commandPrefix).toStrictEqual(['echo', 'ls']);
   });
 });
 
@@ -162,7 +162,7 @@ describe('ShellToolInvocation Policy Update', () => {
     const options = (
       invocation as unknown as TestableShellToolInvocation
     ).getPolicyUpdateOptions(ToolConfirmationOutcome.ProceedAlways);
-    expect(options!.commandPrefix).toEqual(['git', 'npm']);
+    expect(options!.commandPrefix).toStrictEqual(['git', 'npm']);
     expect(shellUtils.getCommandRoots).toHaveBeenCalledWith(
       'git status && npm test',
     );
@@ -184,7 +184,7 @@ describe('ShellToolInvocation Policy Update', () => {
     const options = (
       invocation as unknown as TestableShellToolInvocation
     ).getPolicyUpdateOptions(ToolConfirmationOutcome.ProceedAlways);
-    expect(options!.commandPrefix).toEqual(['ls']);
+    expect(options!.commandPrefix).toStrictEqual(['ls']);
     expect(shellUtils.getCommandRoots).toHaveBeenCalledWith('ls -la /tmp');
   });
 });

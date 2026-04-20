@@ -17,7 +17,7 @@ import { Config } from '../../config/config.js';
 import type { LspConfig } from '../types.js';
 import { initializeTestConfig } from '../../test-utils/config.js';
 
-import { Diagnostic } from '../types.js';
+import type { Diagnostic } from '../types.js';
 import * as lspServiceClientModule from '../lsp-service-client.js';
 import { LspServiceClient } from '../lsp-service-client.js';
 
@@ -392,10 +392,10 @@ describe('LSP E2E integration (P36)', () => {
     expect(client.isAlive()).toBe(false);
 
     const diagnostics = await client.checkFile('/tmp/somefile.ts');
-    expect(diagnostics).toEqual([]);
+    expect(diagnostics).toStrictEqual([]);
 
     const all = await client.getAllDiagnostics();
-    expect(all).toEqual({});
+    expect(all).toStrictEqual({});
   });
 
   // --- 6. Graceful: Service Start Failure ---
@@ -411,7 +411,7 @@ describe('LSP E2E integration (P36)', () => {
       await expect(initializeTestConfig(config)).resolves.toBeUndefined();
 
       expect(config.getLspServiceClient()).toBeUndefined();
-      expect(config.getLspConfig()).toEqual({ servers: [] });
+      expect(config.getLspConfig()).toStrictEqual({ servers: [] });
     } finally {
       spy.mockRestore();
     }
@@ -447,7 +447,7 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(createBaseConfigParams({ lsp: true }));
       await initializeTestConfig(config);
 
-      expect(config.getLspConfig()).toEqual({ servers: [] });
+      expect(config.getLspConfig()).toStrictEqual({ servers: [] });
       expect(config.getLspServiceClient()).toBeDefined();
       expect(config.getLspServiceClient()!.isAlive()).toBe(true);
     } finally {
@@ -695,9 +695,9 @@ describe('LSP E2E integration (P36)', () => {
 
     expect(client.isAlive()).toBe(false);
     const diagnostics = await client.checkFile('/tmp/after-shutdown.ts');
-    expect(diagnostics).toEqual([]);
+    expect(diagnostics).toStrictEqual([]);
 
     const all = await client.getAllDiagnostics();
-    expect(all).toEqual({});
+    expect(all).toStrictEqual({});
   });
 });

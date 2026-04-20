@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QwenOAuthProvider } from './qwen-oauth-provider.js';
-import { TokenStore } from '@vybestack/llxprt-code-core';
+import type { TokenStore } from '@vybestack/llxprt-code-core';
 
 // Mock the ClipboardService class - do this before importing it
 vi.mock('../services/ClipboardService.js', () => ({
@@ -194,7 +194,7 @@ describe('Qwen Provider Refactor Tests (Issue #1652 Phase 3)', () => {
       const result = await provider.getToken();
 
       // Should return expired token as-is (read-only, no refresh attempt)
-      expect(result).toEqual(expiredToken);
+      expect(result).toStrictEqual(expiredToken);
       expect(mockTokenStore.saveToken).not.toHaveBeenCalled();
       expect(mockTokenStore.removeToken).not.toHaveBeenCalled();
     });

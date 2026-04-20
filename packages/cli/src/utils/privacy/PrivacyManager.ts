@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  ConversationDataRedactor,
-  RedactionConfig,
-} from './ConversationDataRedactor.js';
+import type { RedactionConfig } from './ConversationDataRedactor.js';
+import { ConversationDataRedactor } from './ConversationDataRedactor.js';
 
 // Define interface for config dependency to avoid circular imports
 export interface PrivacyConfig {

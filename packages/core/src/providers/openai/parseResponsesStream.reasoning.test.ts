@@ -154,7 +154,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
     );
     expect(hasText).toBe(true);
     const usageMessage = messages.find((m) => m.metadata?.usage);
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 150,
@@ -289,7 +289,7 @@ describe('parseResponsesStream - Reasoning/Thinking Support', () => {
       )
       .map((block) => block.thought)
       .filter((thought) => thought.trim().length > 0);
-    expect(thoughtTexts).toEqual(['First second']);
+    expect(thoughtTexts).toStrictEqual(['First second']);
   });
 
   it('should yield reasoning before response.completed', async () => {

@@ -199,7 +199,7 @@ describe('executeWithBucketFailover - failover execution', () => {
 
     const result = await executeWithBucketFailover(request, buckets, executor);
     expect(result.content).toBe('success from bucket3');
-    expect(calledBuckets).toEqual(['bucket1', 'bucket2', 'bucket3']);
+    expect(calledBuckets).toStrictEqual(['bucket1', 'bucket2', 'bucket3']);
   });
 
   it('should NOT failover on 400 bad request errors', async () => {
@@ -216,7 +216,7 @@ describe('executeWithBucketFailover - failover execution', () => {
       executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow('400');
 
-    expect(calledBuckets).toEqual(['bucket1']); // Should only try first bucket
+    expect(calledBuckets).toStrictEqual(['bucket1']); // Should only try first bucket
   });
 
   it('should throw error when all buckets exhausted', async () => {
@@ -276,7 +276,7 @@ describe('profile bucket resolution for failover', () => {
 
     const buckets = resolveBucketsForFailover(config);
 
-    expect(buckets).toEqual([
+    expect(buckets).toStrictEqual([
       'work@company.com',
       'personal@gmail.com',
       'backup@example.com',
@@ -291,7 +291,7 @@ describe('profile bucket resolution for failover', () => {
 
     const buckets = resolveBucketsForFailover(config, 'personal@gmail.com');
 
-    expect(buckets).toEqual(['personal@gmail.com']);
+    expect(buckets).toStrictEqual(['personal@gmail.com']);
   });
 
   it('should use default bucket when profile has no auth field', () => {
@@ -302,7 +302,7 @@ describe('profile bucket resolution for failover', () => {
 
     const buckets = resolveBucketsForFailover(config);
 
-    expect(buckets).toEqual(['default']);
+    expect(buckets).toStrictEqual(['default']);
   });
 
   it('should preserve bucket order from profile for failover sequence', () => {
@@ -313,7 +313,7 @@ describe('profile bucket resolution for failover', () => {
 
     const buckets = resolveBucketsForFailover(config);
 
-    expect(buckets).toEqual(['bucket3', 'bucket1', 'bucket2']);
+    expect(buckets).toStrictEqual(['bucket3', 'bucket1', 'bucket2']);
   });
 });
 

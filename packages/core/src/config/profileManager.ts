@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  Profile,
-  LoadBalancerProfile,
-  isLoadBalancerProfile,
-} from '../types/modelParams.js';
+import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+import { isLoadBalancerProfile } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';

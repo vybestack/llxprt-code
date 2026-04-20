@@ -16,7 +16,8 @@ import {
   readSettingsFile,
   writeSettingsFile,
 } from './test-utils.js';
-import { Config, Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import { loadSettings } from '../config/settings.js';
 
 describe('API Key Security Integration Tests', () => {
@@ -70,7 +71,7 @@ describe('API Key Security Integration Tests', () => {
       // Verify expected settings are present
       expect(parsedSettings.theme).toBe('default');
       expect(parsedSettings.sandbox).toBe(true);
-      expect(parsedSettings.coreTools).toEqual(['ls', 'grep']);
+      expect(parsedSettings.coreTools).toStrictEqual(['ls', 'grep']);
     });
 
     it('should not persist providerApiKeys to settings.json', async () => {

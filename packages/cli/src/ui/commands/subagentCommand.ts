@@ -8,12 +8,12 @@
 
 import React from 'react';
 import { Text } from 'ink';
-import {
+import type {
   SlashCommand,
   CommandContext,
   SlashCommandActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
 import { Colors } from '../colors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
@@ -287,31 +287,30 @@ const saveCommand: SlashCommand = {
       return handleManualMode(context, name, profile, finalSystemPrompt, {
         existed: exists,
       });
-    } else {
-      // Auto mode: generate using LLM
-      const configService = services.config; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
-      if (!configService) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content:
-            'Configuration service unavailable. Set up the CLI before using auto mode.',
-        };
-      }
-
-      try {
-        finalSystemPrompt = await generateAutoPrompt(configService, input);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Error: Failed to generate system prompt (${errorMessage}). Try manual mode or check your connection.`,
-        };
-      }
-      return saveSubagent(context, name, profile, finalSystemPrompt, exists);
     }
+    // Auto mode: generate using LLM
+    const configService = services.config; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
+    if (!configService) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Configuration service unavailable. Set up the CLI before using auto mode.',
+      };
+    }
+
+    try {
+      finalSystemPrompt = await generateAutoPrompt(configService, input);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error: Failed to generate system prompt (${errorMessage}). Try manual mode or check your connection.`,
+      };
+    }
+    return saveSubagent(context, name, profile, finalSystemPrompt, exists);
   },
 };
 

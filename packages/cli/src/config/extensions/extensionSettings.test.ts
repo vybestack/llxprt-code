@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import type { ExtensionSetting } from './extensionSettings.js';
 import {
   ExtensionSettingSchema,
   ExtensionSettingsArraySchema,
-  ExtensionSetting,
 } from './extensionSettings.js';
 
 describe('ExtensionSettingSchema', () => {
@@ -85,7 +85,7 @@ describe('ExtensionSettingSchema', () => {
 describe('ExtensionSettingsArraySchema', () => {
   it('should validate empty array', () => {
     const result = ExtensionSettingsArraySchema.parse([]);
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it('should validate array of settings', () => {

@@ -52,7 +52,7 @@ describe('cleanup', () => {
 
     await runExitCleanup();
 
-    expect(executionOrder).toEqual([1, 2]);
+    expect(executionOrder).toStrictEqual([1, 2]);
   });
 
   it('should continue executing cleanup functions even if one throws an error', async () => {
@@ -172,7 +172,7 @@ describe('cleanup', () => {
 
     await runExitCleanup();
 
-    expect(executionOrder).toEqual(['cleanup', 'file-output']);
+    expect(executionOrder).toStrictEqual(['cleanup', 'file-output']);
     expect(disposeSpy).toHaveBeenCalledOnce();
     disposeSpy.mockRestore();
   });

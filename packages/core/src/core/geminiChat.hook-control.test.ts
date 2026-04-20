@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
-import { HookSystem } from '../hooks/HookSystem.js';
+import type { HookSystem } from '../hooks/HookSystem.js';
 import { BeforeModelHookOutput, AfterModelHookOutput } from '../hooks/types.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';
@@ -148,7 +148,7 @@ describe('GeminiChat hook execution control', () => {
       }
 
       expect(events).toHaveLength(1);
-      expect(events[0]).toEqual({
+      expect(events[0]).toStrictEqual({
         type: StreamEventType.AGENT_EXECUTION_STOPPED,
         reason: 'BeforeModel stopped execution',
       });
@@ -195,7 +195,7 @@ describe('GeminiChat hook execution control', () => {
       }
 
       expect(events).toHaveLength(2);
-      expect(events[0]).toEqual({
+      expect(events[0]).toStrictEqual({
         type: StreamEventType.AGENT_EXECUTION_BLOCKED,
         reason: 'BeforeModel blocked execution',
         value: undefined,

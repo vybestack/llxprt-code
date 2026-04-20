@@ -11,11 +11,8 @@ import { act } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useShellPathCompletion } from './useShellPathCompletion.js';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import {
-  createTmpDir,
-  cleanupTmpDir,
-  FileSystemStructure,
-} from '@vybestack/llxprt-code-test-utils';
+import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
+import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
 
 describe('useShellPathCompletion', () => {
   let testRootDir: string;
@@ -54,7 +51,7 @@ describe('useShellPathCompletion', () => {
       return useShellPathCompletion(buffer, testRootDir, true, false);
     });
 
-    expect(result.current.suggestions).toEqual([]);
+    expect(result.current.suggestions).toStrictEqual([]);
     expect(result.current.showSuggestions).toBe(false);
   });
 

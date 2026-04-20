@@ -286,7 +286,7 @@ export class ExtensionAutoUpdater {
         continue;
       }
       const extension = extensionsByName.get(name);
-      if (!extension || !extension.installMetadata) {
+      if (!extension?.installMetadata) {
         entry.pendingInstall = false;
         entry.lastError = `Extension "${name}" is no longer installed.`;
         entry.state = ExtensionUpdateState.ERROR;

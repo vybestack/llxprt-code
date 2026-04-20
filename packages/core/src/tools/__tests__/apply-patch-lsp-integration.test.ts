@@ -9,10 +9,11 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ApplyPatchTool, classifyPatchOperations } from '../apply-patch.js';
-import { ApprovalMode, Config } from '../../config/config.js';
+import type { Config } from '../../config/config.js';
+import { ApprovalMode } from '../../config/config.js';
 import { createMockWorkspaceContext } from '../../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../../services/fileSystemService.js';
-import * as Diff from 'diff';
+import type * as Diff from 'diff';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -189,7 +190,7 @@ describe('apply_patch tool LSP integration', () => {
       const result = classifyPatchOperations(patches);
 
       expect(result.hasAnyContentWrites).toBe(true);
-      expect(result.contentWriteFiles).toEqual(['file.ts']);
+      expect(result.contentWriteFiles).toStrictEqual(['file.ts']);
     });
 
     it('should classify patch with no hunks as no content write', () => {
@@ -206,7 +207,7 @@ describe('apply_patch tool LSP integration', () => {
       const result = classifyPatchOperations(patches);
 
       expect(result.hasAnyContentWrites).toBe(false);
-      expect(result.contentWriteFiles).toEqual([]);
+      expect(result.contentWriteFiles).toStrictEqual([]);
     });
 
     it('should handle patches with newFileName', () => {
@@ -231,7 +232,7 @@ describe('apply_patch tool LSP integration', () => {
       const result = classifyPatchOperations(patches);
 
       expect(result.hasAnyContentWrites).toBe(true);
-      expect(result.contentWriteFiles).toEqual(['new.ts']);
+      expect(result.contentWriteFiles).toStrictEqual(['new.ts']);
     });
 
     it('should handle multiple patches', () => {
@@ -278,7 +279,7 @@ describe('apply_patch tool LSP integration', () => {
       const result = classifyPatchOperations(patches);
 
       expect(result.hasAnyContentWrites).toBe(true);
-      expect(result.contentWriteFiles).toEqual(['a.ts', 'c.ts']);
+      expect(result.contentWriteFiles).toStrictEqual(['a.ts', 'c.ts']);
     });
 
     it('should handle empty patches', () => {
@@ -287,7 +288,7 @@ describe('apply_patch tool LSP integration', () => {
       const result = classifyPatchOperations(patches);
 
       expect(result.hasAnyContentWrites).toBe(false);
-      expect(result.contentWriteFiles).toEqual([]);
+      expect(result.contentWriteFiles).toStrictEqual([]);
     });
   });
 
@@ -309,7 +310,7 @@ describe('apply_patch tool LSP integration', () => {
 
     // Assert
     expect(classification.hasAnyContentWrites).toBe(false);
-    expect(classification.contentWriteFiles).toEqual([]);
+    expect(classification.contentWriteFiles).toStrictEqual([]);
   });
 
   it('should check file diagnostics for patch with hunks', async () => {
@@ -338,7 +339,7 @@ describe('apply_patch tool LSP integration', () => {
 
     // Assert
     expect(classification.hasAnyContentWrites).toBe(true);
-    expect(classification.contentWriteFiles).toEqual(['new.ts']);
+    expect(classification.contentWriteFiles).toStrictEqual(['new.ts']);
   });
 
   it('should succeed with no lsp client', async () => {

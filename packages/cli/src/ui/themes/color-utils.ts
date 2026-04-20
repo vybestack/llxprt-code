@@ -213,9 +213,8 @@ export function resolveColor(colorValue: string): string | undefined {
   if (lowerColor.startsWith('#')) {
     if (/^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$/.test(colorValue)) {
       return lowerColor;
-    } else {
-      return undefined;
     }
+    return undefined;
   }
   // 2. Check if it's an Ink supported name (lowercase)
   else if (INK_SUPPORTED_NAMES.has(lowerColor)) {

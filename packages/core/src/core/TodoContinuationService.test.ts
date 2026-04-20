@@ -363,7 +363,7 @@ describe('TodoContinuationService', () => {
       const result = service.appendTodoSuffixToRequest(req);
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
-      expect(arr[0]).toEqual({ text: 'plain string request' });
+      expect(arr[0]).toStrictEqual({ text: 'plain string request' });
       expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
     });
 
@@ -372,7 +372,7 @@ describe('TodoContinuationService', () => {
       const result = service.appendTodoSuffixToRequest(req);
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
-      expect(arr[0]).toEqual({ text: 'do this task' });
+      expect(arr[0]).toStrictEqual({ text: 'do this task' });
       expect(arr.some((p) => p.text?.includes('TODO List'))).toBe(true);
     });
 
@@ -380,7 +380,7 @@ describe('TodoContinuationService', () => {
       const req = [{ text: 'Do something' }];
       const original = [...req];
       service.appendTodoSuffixToRequest(req);
-      expect(req).toEqual(original);
+      expect(req).toStrictEqual(original);
     });
   });
 
@@ -527,7 +527,7 @@ describe('TodoContinuationService', () => {
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
       expect(arr).toHaveLength(2);
-      expect(arr[0]).toEqual({ text: 'plain string' });
+      expect(arr[0]).toStrictEqual({ text: 'plain string' });
       expect(arr[1].text).toBe('System reminder text');
     });
 
@@ -539,7 +539,7 @@ describe('TodoContinuationService', () => {
       expect(Array.isArray(result)).toBe(true);
       const arr = result as Array<{ text?: string }>;
       expect(arr).toHaveLength(2);
-      expect(arr[0]).toEqual({ text: 'single part' });
+      expect(arr[0]).toStrictEqual({ text: 'single part' });
       expect(arr[1].text).toBe('Reminder');
     });
   });
@@ -859,7 +859,7 @@ describe('TodoContinuationService', () => {
     it('reads todos from the store using config session id', async () => {
       todoStoreReadMock.mockResolvedValue([pendingTodo]);
       const result = await service.readTodoSnapshot();
-      expect(result).toEqual([pendingTodo]);
+      expect(result).toStrictEqual([pendingTodo]);
       expect(mockTodoStoreConstructor).toHaveBeenCalledWith(
         'test-session',
         expect.anything(),
@@ -869,7 +869,7 @@ describe('TodoContinuationService', () => {
     it('returns empty array on error', async () => {
       todoStoreReadMock.mockRejectedValue(new Error('disk error'));
       const result = await service.readTodoSnapshot();
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
   });
 });

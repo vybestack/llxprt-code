@@ -131,7 +131,7 @@ describe('ProviderRegistry', () => {
 
   describe('getSupportedProviders', () => {
     it('returns empty array when no providers registered', () => {
-      expect(registry.getSupportedProviders()).toEqual([]);
+      expect(registry.getSupportedProviders()).toStrictEqual([]);
     });
 
     it('returns all registered provider names sorted', () => {
@@ -139,7 +139,7 @@ describe('ProviderRegistry', () => {
       registry.registerProvider(createMockProvider('anthropic'));
       registry.registerProvider(createMockProvider('gemini'));
 
-      expect(registry.getSupportedProviders()).toEqual([
+      expect(registry.getSupportedProviders()).toStrictEqual([
         'anthropic',
         'gemini',
         'qwen',

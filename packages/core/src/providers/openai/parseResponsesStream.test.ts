@@ -37,11 +37,11 @@ describe('parseResponsesStream', () => {
     }
 
     expect(messages).toHaveLength(2);
-    expect(messages[0]).toEqual({
+    expect(messages[0]).toStrictEqual({
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello' }],
     });
-    expect(messages[1]).toEqual({
+    expect(messages[1]).toStrictEqual({
       speaker: 'ai',
       blocks: [{ type: 'text', text: ' world' }],
     });
@@ -69,7 +69,7 @@ describe('parseResponsesStream', () => {
     const toolCallBlock = toolCallMessage!.blocks.find(
       (b) => b.type === 'tool_call',
     );
-    expect(toolCallBlock).toEqual({
+    expect(toolCallBlock).toStrictEqual({
       type: 'tool_call',
       id: 'call_123',
       name: 'search',
@@ -94,7 +94,7 @@ describe('parseResponsesStream', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 10,
       completionTokens: 2,
       totalTokens: 12,
@@ -219,7 +219,7 @@ describe('parseErrorResponse', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 100,
       completionTokens: 20,
       totalTokens: 120,
@@ -244,7 +244,7 @@ describe('parseErrorResponse', () => {
     expect(messages.length).toBeGreaterThanOrEqual(2);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage).toBeDefined();
-    expect(usageMessage?.metadata?.usage).toEqual({
+    expect(usageMessage?.metadata?.usage).toStrictEqual({
       promptTokens: 100,
       completionTokens: 20,
       totalTokens: 120,

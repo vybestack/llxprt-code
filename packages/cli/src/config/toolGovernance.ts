@@ -11,8 +11,8 @@ import {
   SHELL_TOOL_NAMES,
   type ApprovalMode,
   ApprovalMode as ApprovalModeEnum,
+  type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';

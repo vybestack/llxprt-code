@@ -265,7 +265,7 @@ describe('calculateEdit characterization tests', () => {
       const result = await invocation.execute(new AbortController().signal);
       const display = result.returnDisplay as ToolReturnDisplay;
       expect(display.metadata?.astValidation?.valid).toBe(true);
-      expect(display.metadata?.astValidation?.errors).toEqual([]);
+      expect(display.metadata?.astValidation?.errors).toStrictEqual([]);
     });
   });
 });

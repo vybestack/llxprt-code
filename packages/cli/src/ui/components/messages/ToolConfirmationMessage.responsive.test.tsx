@@ -14,7 +14,7 @@ import {
   type MockedFunction,
 } from 'vitest';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
-import {
+import type {
   ToolCallConfirmationDetails,
   Config,
 } from '@vybestack/llxprt-code-core';

@@ -37,7 +37,9 @@ describe('useDialogOrchestration', () => {
     });
 
     expect(result.current.isLoggingDialogOpen).toBe(true);
-    expect(result.current.loggingDialogData).toEqual({ entries: ['a', 'b'] });
+    expect(result.current.loggingDialogData).toStrictEqual({
+      entries: ['a', 'b'],
+    });
 
     act(() => {
       result.current.closeLoggingDialog();
@@ -49,7 +51,7 @@ describe('useDialogOrchestration', () => {
       result.current.openLoggingDialog();
     });
 
-    expect(result.current.loggingDialogData).toEqual({ entries: [] });
+    expect(result.current.loggingDialogData).toStrictEqual({ entries: [] });
   });
 
   it('resets subagent initial state when closing the subagent dialog', () => {
@@ -83,7 +85,7 @@ describe('useDialogOrchestration', () => {
     });
 
     expect(result.current.isModelsDialogOpen).toBe(true);
-    expect(result.current.modelsDialogData).toEqual({
+    expect(result.current.modelsDialogData).toStrictEqual({
       initialSearch: 'claude',
       includeDeprecated: true,
     });

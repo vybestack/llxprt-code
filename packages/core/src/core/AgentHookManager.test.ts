@@ -67,7 +67,7 @@ describe('AgentHookManager', () => {
       const hookOutput = { someField: 'value' };
       mockBefore.mockResolvedValue(hookOutput);
       const result = await manager.fireBeforeAgentHookSafe('p1', 'test');
-      expect(result).toEqual(hookOutput);
+      expect(result).toStrictEqual(hookOutput);
     });
 
     it('increments activeCalls on each call', async () => {
@@ -145,7 +145,7 @@ describe('AgentHookManager', () => {
         false,
       );
       expect(mockAfter).toHaveBeenCalledOnce();
-      expect(result).toEqual({ done: true });
+      expect(result).toStrictEqual({ done: true });
     });
 
     it('does not fire when hasPendingToolCalls=true even at activeCalls=0', async () => {
@@ -233,7 +233,7 @@ describe('AgentHookManager', () => {
         'response',
         false,
       );
-      expect(result).toEqual({ continued: true });
+      expect(result).toStrictEqual({ continued: true });
     });
   });
 

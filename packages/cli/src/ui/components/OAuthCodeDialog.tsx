@@ -10,10 +10,12 @@
  * Allows users to paste authorization code from browser
  */
 
-import React, { useState, useCallback } from 'react';
+import type React from 'react';
+import { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { useKeypress, Key } from '../hooks/useKeypress.js';
+import type { Key } from '../hooks/useKeypress.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 interface OAuthCodeDialogProps {
   provider: string;
@@ -45,12 +47,11 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         'Please paste it into your browser to authenticate with Google.',
         'After authenticating, paste the verification code you receive below:',
       ];
-    } else {
-      return [
-        'Please check your browser and authorize the application.',
-        'After authorizing, paste the authorization code below:',
-      ];
     }
+    return [
+      'Please check your browser and authorize the application.',
+      'After authorizing, paste the authorization code below:',
+    ];
   }, [provider]);
 
   /**

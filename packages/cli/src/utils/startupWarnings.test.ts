@@ -39,7 +39,7 @@ describe('startupWarnings', () => {
     expect(fs.access).toHaveBeenCalled();
     expect(fs.readFile).toHaveBeenCalled();
     expect(fs.unlink).toHaveBeenCalled();
-    expect(warnings).toEqual(['Warning 1', 'Warning 2']);
+    expect(warnings).toStrictEqual(['Warning 1', 'Warning 2']);
   });
 
   it('should return an empty array if the file does not exist', async () => {
@@ -49,7 +49,7 @@ describe('startupWarnings', () => {
 
     const warnings = await getStartupWarnings();
 
-    expect(warnings).toEqual([]);
+    expect(warnings).toStrictEqual([]);
   });
 
   it('should return an error message if reading the file fails', async () => {
@@ -59,7 +59,7 @@ describe('startupWarnings', () => {
 
     const warnings = await getStartupWarnings();
 
-    expect(warnings).toEqual([
+    expect(warnings).toStrictEqual([
       'Error checking/reading warnings file: Permission denied',
     ]);
   });
@@ -72,7 +72,7 @@ describe('startupWarnings', () => {
 
     const warnings = await getStartupWarnings();
 
-    expect(warnings).toEqual([
+    expect(warnings).toStrictEqual([
       'Warning 1',
       'Warning: Could not delete temporary warnings file.',
     ]);

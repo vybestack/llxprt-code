@@ -9,29 +9,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Text } from 'ink';
 import { renderWithProviders } from '../test-utils/render.js';
 import { AppWrapper as App } from './App.js';
-import {
-  Config as ServerConfig,
+import type {
   MCPServerConfig,
-  ApprovalMode,
   ToolRegistry,
   AccessibilitySettings,
   SandboxConfig,
   LLxprtClient,
+} from '@vybestack/llxprt-code-core';
+import {
+  Config as ServerConfig,
+  ApprovalMode,
   ideContext,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
+import type { SettingsFile, Settings } from '../config/settings.js';
+import { LoadedSettings } from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/geminiStream/index.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
-import {
-  StreamingState,
-  ConsoleMessageItem,
-  MessageType,
-  HistoryItem,
-} from './types.js';
+import type { ConsoleMessageItem, HistoryItem } from './types.js';
+import { StreamingState, MessageType } from './types.js';
 import { Tips } from './components/Tips.js';
-import { checkForUpdates, UpdateObject } from './utils/updateCheck.js';
+import type { UpdateObject } from './utils/updateCheck.js';
+import { checkForUpdates } from './utils/updateCheck.js';
 import { EventEmitter } from 'events';
 import { updateEventEmitter } from '../utils/updateEventEmitter.js';
 import * as useTerminalSize from './hooks/useTerminalSize.js';

@@ -119,7 +119,7 @@ describe('keyBindings config', () => {
 
     it('has a description entry for every command', () => {
       const describedCommands = Object.keys(commandDescriptions);
-      expect(describedCommands.sort()).toEqual([...commandValues].sort());
+      expect(describedCommands.sort()).toStrictEqual([...commandValues].sort());
 
       for (const command of commandValues) {
         expect(typeof commandDescriptions[command]).toBe('string');

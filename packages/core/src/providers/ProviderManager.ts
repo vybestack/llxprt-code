@@ -7,7 +7,7 @@
 
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { isContainerSandbox } from './utils/containerSandbox.js';
 import {
   hydrateModelsWithRegistry,

@@ -5,8 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CodeSearchTool, CodeSearchToolParams } from './codesearch.js';
-import { Config } from '../config/config.js';
+import type { CodeSearchToolParams } from './codesearch.js';
+import { CodeSearchTool } from './codesearch.js';
+import type { Config } from '../config/config.js';
 import { type ToolResult as _ToolResult } from './tools.js';
 import fetch from 'node-fetch';
 

@@ -7,10 +7,10 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { ConfirmationRequiredError, ShellProcessor } from './shellProcessor.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { CommandContext } from '../../ui/commands/types.js';
+import type { CommandContext } from '../../ui/commands/types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
-  Config,
   escapeShellArg,
   getShellConfiguration,
 } from '@vybestack/llxprt-code-core';
@@ -237,7 +237,7 @@ describe('ShellProcessor', () => {
     const promise = processor.process(prompt, context);
     await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
     const error = await promise.catch((e) => e);
-    expect(error.commandsToConfirm).toEqual(['rm -rf /']);
+    expect(error.commandsToConfirm).toStrictEqual(['rm -rf /']);
 
     expect(mockShellExecute).not.toHaveBeenCalled();
   });
@@ -258,7 +258,7 @@ describe('ShellProcessor', () => {
     const promise = processor.process(prompt, context);
     await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
     const error = await promise.catch((e) => e);
-    expect(error.commandsToConfirm).toEqual(['cmd1', 'cmd2']);
+    expect(error.commandsToConfirm).toStrictEqual(['cmd1', 'cmd2']);
   });
 
   it('should not execute any commands if at least one requires confirmation', async () => {
@@ -292,7 +292,7 @@ describe('ShellProcessor', () => {
     const promise = processor.process(prompt, context);
     await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
     const error = await promise.catch((e) => e);
-    expect(error.commandsToConfirm).toEqual(['rm -rf /']);
+    expect(error.commandsToConfirm).toStrictEqual(['rm -rf /']);
   });
 
   it('should execute all commands if they are on the session allowlist', async () => {

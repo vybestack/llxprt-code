@@ -8,13 +8,13 @@ import * as fsPromises from 'fs/promises';
 import React from 'react';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
-import {
+import type {
   CommandContext,
   SlashCommand,
   MessageActionReturn,
-  CommandKind,
   SlashCommandActionReturn,
 } from './types.js';
+import { CommandKind } from './types.js';
 import {
   decodeTagName,
   EmojiFilter,
@@ -165,13 +165,12 @@ const saveCommand: SlashCommand = {
         messageType: 'info',
         content: `Conversation checkpoint saved with tag: ${decodeTagName(tag)}.`,
       };
-    } else {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No conversation found to save.',
-      };
     }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'No conversation found to save.',
+    };
   },
 };
 

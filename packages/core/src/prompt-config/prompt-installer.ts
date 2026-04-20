@@ -1277,7 +1277,7 @@ export class PromptInstaller {
     manifest: InstalledManifest | null,
     relativePath: string,
   ): string | null {
-    if (!manifest || !manifest.files[relativePath]) {
+    if (!manifest?.files[relativePath]) {
       return null;
     }
     return manifest.files[relativePath].hash;

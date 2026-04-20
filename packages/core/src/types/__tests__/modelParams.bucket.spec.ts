@@ -51,7 +51,7 @@ describe('AuthConfig Type Structure Validation', () => {
 
       // Should compile without errors
       expect(profile.auth?.type).toBe('oauth');
-      expect(profile.auth?.buckets).toEqual(['work@company.com']);
+      expect(profile.auth?.buckets).toStrictEqual(['work@company.com']);
     });
 
     it('should accept AuthConfig with oauth type and multiple buckets', () => {
@@ -70,7 +70,11 @@ describe('AuthConfig Type Structure Validation', () => {
 
       expect(profile.auth?.type).toBe('oauth');
       expect(profile.auth?.buckets).toHaveLength(3);
-      expect(profile.auth?.buckets).toEqual(['bucket1', 'bucket2', 'bucket3']);
+      expect(profile.auth?.buckets).toStrictEqual([
+        'bucket1',
+        'bucket2',
+        'bucket3',
+      ]);
     });
 
     it('should accept AuthConfig with apikey type', () => {
@@ -122,7 +126,7 @@ describe('AuthConfig Type Structure Validation', () => {
       };
 
       expect(profile.auth?.type).toBe('oauth');
-      expect(profile.auth?.buckets).toEqual([]);
+      expect(profile.auth?.buckets).toStrictEqual([]);
     });
   });
 
@@ -398,7 +402,7 @@ describe('Multi-bucket failover scenarios', () => {
     };
 
     // Order must be preserved for failover sequence
-    expect(profile.auth?.buckets).toEqual([
+    expect(profile.auth?.buckets).toStrictEqual([
       'bucket1',
       'bucket2',
       'bucket3',
@@ -617,7 +621,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     };
 
     const result = schema.parse(validAuth);
-    expect(result).toEqual(validAuth);
+    expect(result).toStrictEqual(validAuth);
   });
 
   it('should validate oauth AuthConfig with multiple buckets using Zod', () => {
@@ -634,7 +638,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     };
 
     const result = schema.parse(validAuth);
-    expect(result).toEqual(validAuth);
+    expect(result).toStrictEqual(validAuth);
   });
 
   it('should validate apikey AuthConfig without buckets using Zod', () => {
@@ -650,7 +654,7 @@ describe('Zod Schema Validation (RED tests - should fail until implementation)',
     };
 
     const result = schema.parse(validAuth);
-    expect(result).toEqual(validAuth);
+    expect(result).toStrictEqual(validAuth);
   });
 
   it('should reject invalid auth type using Zod', () => {

@@ -14,7 +14,7 @@ import {
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
 } from '../tools/memoryTool.js';
-import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
 import type { FileFilteringOptions } from '../config/constants.js';
 import { DEFAULT_MEMORY_FILE_FILTERING_OPTIONS } from '../config/constants.js';

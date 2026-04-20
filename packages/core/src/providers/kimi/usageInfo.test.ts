@@ -68,7 +68,7 @@ describe('kimiUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should handle HTTP errors gracefully', async () => {
@@ -293,7 +293,7 @@ describe('kimiUsageInfo', () => {
           signal: expect.any(AbortSignal),
         },
       );
-      expect(result).toEqual(mockResponse);
+      expect(result).toStrictEqual(mockResponse);
     });
 
     it('should derive endpoint from baseUrl containing kimi.com', async () => {

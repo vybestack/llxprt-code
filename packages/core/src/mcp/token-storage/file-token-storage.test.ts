@@ -81,7 +81,7 @@ describe('FileTokenStorage', () => {
       mockFs.readFile.mockResolvedValue(encryptedData);
 
       const result = await storage.getCredentials('test-server');
-      expect(result).toEqual(credentials);
+      expect(result).toStrictEqual(credentials);
     });
 
     it('should return credentials for valid tokens', async () => {
@@ -101,7 +101,7 @@ describe('FileTokenStorage', () => {
       mockFs.readFile.mockResolvedValue(encryptedData);
 
       const result = await storage.getCredentials('test-server');
-      expect(result).toEqual(credentials);
+      expect(result).toStrictEqual(credentials);
     });
 
     it('should throw error for corrupted files', async () => {
@@ -170,7 +170,7 @@ describe('FileTokenStorage', () => {
 
       const writeCall = mockFs.writeFile.mock.calls[0];
       expect(writeCall[1]).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
-      expect(writeCall[2]).toEqual({ mode: 0o600 });
+      expect(writeCall[2]).toStrictEqual({ mode: 0o600 });
     });
 
     it('should update existing credentials', async () => {
@@ -196,7 +196,7 @@ describe('FileTokenStorage', () => {
       const decrypted = storage['decrypt'](writeCall[1]);
       const saved = JSON.parse(decrypted);
 
-      expect(saved['existing-server']).toEqual(existingCredentials);
+      expect(saved['existing-server']).toStrictEqual(existingCredentials);
       expect(saved['test-server'].token.accessToken).toBe('new-token');
     });
   });
@@ -268,7 +268,7 @@ describe('FileTokenStorage', () => {
       const saved = JSON.parse(decrypted);
 
       expect(saved['server1']).toBeUndefined();
-      expect(saved['server2']).toEqual(credentials2);
+      expect(saved['server2']).toStrictEqual(credentials2);
     });
   });
 
@@ -277,7 +277,7 @@ describe('FileTokenStorage', () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
       const result = await storage.listServers();
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
 
     it('should return list of server names', async () => {
@@ -298,7 +298,7 @@ describe('FileTokenStorage', () => {
       mockFs.readFile.mockResolvedValue(encryptedData);
 
       const result = await storage.listServers();
-      expect(result).toEqual(['server1', 'server2']);
+      expect(result).toStrictEqual(['server1', 'server2']);
     });
   });
 

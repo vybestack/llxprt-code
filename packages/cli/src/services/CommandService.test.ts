@@ -54,7 +54,7 @@ describe('CommandService', () => {
 
     expect(mockLoader.loadCommands).toHaveBeenCalledTimes(1);
     expect(commands).toHaveLength(2);
-    expect(commands).toEqual(
+    expect(commands).toStrictEqual(
       expect.arrayContaining([mockCommandA, mockCommandB]),
     );
   });
@@ -72,7 +72,7 @@ describe('CommandService', () => {
     expect(loader1.loadCommands).toHaveBeenCalledTimes(1);
     expect(loader2.loadCommands).toHaveBeenCalledTimes(1);
     expect(commands).toHaveLength(2);
-    expect(commands).toEqual(
+    expect(commands).toStrictEqual(
       expect.arrayContaining([mockCommandA, mockCommandC]),
     );
   });
@@ -96,10 +96,10 @@ describe('CommandService', () => {
     const commandB = commands.find((cmd) => cmd.name === 'command-b');
     expect(commandB).toBeDefined();
     expect(commandB?.kind).toBe(CommandKind.FILE); // Verify it's the overridden version.
-    expect(commandB).toEqual(mockCommandB_Override);
+    expect(commandB).toStrictEqual(mockCommandB_Override);
 
     // Ensure the other commands are still present.
-    expect(commands).toEqual(
+    expect(commands).toStrictEqual(
       expect.arrayContaining([
         mockCommandA,
         mockCommandC,
@@ -121,7 +121,7 @@ describe('CommandService', () => {
 
     expect(emptyLoader.loadCommands).toHaveBeenCalledTimes(1);
     expect(commands).toHaveLength(2);
-    expect(commands).toEqual(
+    expect(commands).toStrictEqual(
       expect.arrayContaining([mockCommandA, mockCommandB]),
     );
   });
@@ -143,7 +143,7 @@ describe('CommandService', () => {
 
     const commands = service.getCommands();
     expect(commands).toHaveLength(1);
-    expect(commands).toEqual([mockCommandA]);
+    expect(commands).toStrictEqual([mockCommandA]);
     expect(debugSpy).toHaveBeenCalledWith('A command loader failed:', error);
 
     debugSpy.mockRestore();

@@ -7,16 +7,10 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { setTimeout as setTimeoutPromise } from 'node:timers/promises';
 import { AsyncFzf } from 'fzf';
-import {
-  Config,
-  FileSearch,
-  FileSearchFactory,
-  escapePath,
-} from '@vybestack/llxprt-code-core';
-import {
-  Suggestion,
-  MAX_SUGGESTIONS_TO_SHOW,
-} from '../components/SuggestionsDisplay.js';
+import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
+import { FileSearchFactory, escapePath } from '@vybestack/llxprt-code-core';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
+import { MAX_SUGGESTIONS_TO_SHOW } from '../components/SuggestionsDisplay.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 5000;
 

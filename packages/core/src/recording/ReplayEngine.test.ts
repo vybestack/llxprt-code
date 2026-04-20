@@ -273,12 +273,12 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       expect(result.history).toHaveLength(2);
       expect(result.history[0].speaker).toBe('human');
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Hello from user',
       });
       expect(result.history[1].speaker).toBe('ai');
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Hello from AI',
       });
@@ -306,11 +306,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       expect(result.history).toHaveLength(2);
       expect(result.history[1].speaker).toBe('ai');
       expect(result.history[1].blocks).toHaveLength(2);
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Calling readFile',
       });
-      expect(result.history[1].blocks[1]).toEqual({
+      expect(result.history[1].blocks[1]).toStrictEqual({
         type: 'tool_call',
         id: 'call_readFile',
         name: 'readFile',
@@ -348,15 +348,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       expect(result.history).toHaveLength(3);
       expect(result.history[0].speaker).toBe('ai');
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Summary of 5 messages',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post-compression 1',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post-compression 2',
       });
@@ -386,15 +386,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       if (!result.ok) return;
 
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Second summary',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'final 1',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'final 2',
       });
@@ -427,15 +427,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       if (!result.ok) return;
 
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'msg 0',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'msg 1',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'msg 2',
       });
@@ -485,15 +485,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + 2 remaining post-compression items
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Summary',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post 1',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post 2',
       });
@@ -735,7 +735,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.metadata.workspaceDirs).toEqual([
+      expect(result.metadata.workspaceDirs).toStrictEqual([
         '/new/project',
         '/other/dir',
       ]);
@@ -853,11 +853,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // sessionEvents should have the 2 session_event entries
       expect(result.sessionEvents).toHaveLength(2);
-      expect(result.sessionEvents[0]).toEqual({
+      expect(result.sessionEvents[0]).toStrictEqual({
         severity: 'info',
         message: 'Turn completed successfully',
       });
-      expect(result.sessionEvents[1]).toEqual({
+      expect(result.sessionEvents[1]).toStrictEqual({
         severity: 'warning',
         message: 'Token limit approaching',
       });
@@ -981,15 +981,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       if (!result.ok) return;
 
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Summary of 4 msgs',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post-comp 1',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post-comp 2',
       });
@@ -1055,15 +1055,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + post-comp + final msg = 3
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Big summary',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post-comp',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'final msg',
       });
@@ -1102,15 +1102,15 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + post 1 (post 2 rewound) + replacement = 3
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Summary',
       });
-      expect(result.history[1].blocks[0]).toEqual({
+      expect(result.history[1].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'post 1',
       });
-      expect(result.history[2].blocks[0]).toEqual({
+      expect(result.history[2].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'replacement',
       });
@@ -1143,12 +1143,18 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       // summary + e + f = 3
       expect(result.history).toHaveLength(3);
-      expect(result.history[0].blocks[0]).toEqual({
+      expect(result.history[0].blocks[0]).toStrictEqual({
         type: 'text',
         text: 'AB summary',
       });
-      expect(result.history[1].blocks[0]).toEqual({ type: 'text', text: 'e' });
-      expect(result.history[2].blocks[0]).toEqual({ type: 'text', text: 'f' });
+      expect(result.history[1].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'e',
+      });
+      expect(result.history[2].blocks[0]).toStrictEqual({
+        type: 'text',
+        text: 'f',
+      });
     });
   });
 
@@ -1418,7 +1424,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      expect(result.metadata.workspaceDirs).toEqual(['/original']);
+      expect(result.metadata.workspaceDirs).toStrictEqual(['/original']);
     });
 
     /**
@@ -1518,7 +1524,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
       const texts = result.history.map(
         (h) => (h.blocks[0] as { type: 'text'; text: string }).text,
       );
-      expect(texts).toEqual([
+      expect(texts).toStrictEqual([
         'cycle1-msg1',
         'cycle1-msg2',
         'cycle2-msg1',
@@ -1804,10 +1810,10 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
           expect(result2.ok).toBe(true);
           if (!result1.ok || !result2.ok) return;
 
-          expect(result1.history).toEqual(result2.history);
+          expect(result1.history).toStrictEqual(result2.history);
           expect(result1.lastSeq).toBe(result2.lastSeq);
           expect(result1.eventCount).toBe(result2.eventCount);
-          expect(result1.warnings).toEqual(result2.warnings);
+          expect(result1.warnings).toStrictEqual(result2.warnings);
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -1986,7 +1992,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
           expect(result.ok).toBe(true);
           if (!result.ok) return;
           expect(result.history).toHaveLength(1);
-          expect(result.history[0]).toEqual(content);
+          expect(result.history[0]).toStrictEqual(content);
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -2335,7 +2341,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
           if (!result.ok) return;
 
           const lastDirs = dirChanges[dirChanges.length - 1];
-          expect(result.metadata.workspaceDirs).toEqual(lastDirs);
+          expect(result.metadata.workspaceDirs).toStrictEqual(lastDirs);
         } finally {
           await fs.rm(localTempDir, { recursive: true, force: true });
         }
@@ -2458,7 +2464,7 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
           if (!result.ok) return;
           // last summary (1) + postLast content
           expect(result.history).toHaveLength(1 + postLast);
-          expect(result.history[0].blocks[0]).toEqual({
+          expect(result.history[0].blocks[0]).toStrictEqual({
             type: 'text',
             text: 'Last summary',
           });

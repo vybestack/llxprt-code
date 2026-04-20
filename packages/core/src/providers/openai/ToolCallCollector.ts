@@ -112,7 +112,7 @@ export class ToolCallCollector {
     }
 
     // Check if name exists
-    const hasName = fragments.some((f) => f.name && f.name.trim());
+    const hasName = fragments.some((f) => f.name?.trim());
     if (!hasName) {
       return false;
     }

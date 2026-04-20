@@ -4,18 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
-  createContext,
-  useContext,
-  useReducer,
-  ReactNode,
-  useMemo,
-} from 'react';
-import {
-  sessionReducer,
+import type { ReactNode } from 'react';
+import type React from 'react';
+import { createContext, useContext, useReducer, useMemo } from 'react';
+import type {
   SessionState,
   SessionAction,
 } from '../reducers/sessionReducer.js';
+import { sessionReducer } from '../reducers/sessionReducer.js';
 
 // Context type with strict typing for [state, dispatch]
 type SessionStateContextType = [SessionState, React.Dispatch<SessionAction>];

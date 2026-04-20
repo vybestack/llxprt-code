@@ -10,7 +10,7 @@ import {
   type LogAttributes,
 } from '@opentelemetry/api-logs';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import {
   EVENT_API_ERROR,
   EVENT_API_REQUEST,
@@ -31,7 +31,7 @@ import {
   EVENT_EXTENSION_ENABLE,
   EVENT_EXTENSION_DISABLE,
 } from './constants.js';
-import {
+import type {
   ApiErrorEvent,
   ApiRequestEvent,
   ApiResponseEvent,
@@ -58,6 +58,7 @@ import {
   ExtensionEnableEvent,
   ExtensionDisableEvent,
 } from './types.js';
+import type { FileOperation } from './metrics.js';
 import {
   recordApiErrorMetrics,
   recordTokenUsageMetrics,
@@ -65,7 +66,6 @@ import {
   recordToolCallMetrics,
   recordFileOperationMetric,
   recordModelRoutingMetrics,
-  FileOperation,
 } from './metrics.js';
 import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';

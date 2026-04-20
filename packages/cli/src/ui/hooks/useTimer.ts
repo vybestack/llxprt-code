@@ -46,11 +46,9 @@ export const useTimer = (isActive: boolean, resetKey: unknown) => {
       timerRef.current = setInterval(() => {
         setElapsedTime((prev) => prev + 1);
       }, 1000);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
 
     return () => {

@@ -10,7 +10,8 @@ import * as path from 'path';
 import * as cache from './crawlCache.js';
 import { crawl } from './crawler.js';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
-import { Ignore, loadIgnoreRules } from './ignore.js';
+import type { Ignore } from './ignore.js';
+import { loadIgnoreRules } from './ignore.js';
 
 describe('crawler', () => {
   let tmpDir: string;
@@ -43,7 +44,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining([
         '.',
         'src/',
@@ -77,7 +78,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining([
         '.',
         'src/',
@@ -109,7 +110,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['.', 'src/', 'src/main.js']),
     );
   });
@@ -141,7 +142,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining([
         '.',
         'build/',
@@ -176,7 +177,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['.', '.gitignore', 'Foo.mk', 'bar.mk']),
     );
   });
@@ -214,7 +215,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining([
         '.',
         'third_party/',
@@ -248,7 +249,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining([
         '.',
         'dist/',
@@ -279,7 +280,7 @@ describe('crawler', () => {
       cache: false,
       cacheTtl: 0,
     });
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['.', 'src/', 'src/file1.js']),
     );
   });
@@ -305,7 +306,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['.', 'src/', '.gitignore', 'src/main.js']),
     );
   });
@@ -331,7 +332,7 @@ describe('crawler', () => {
       cacheTtl: 0,
     });
 
-    expect(results).toEqual(
+    expect(results).toStrictEqual(
       expect.arrayContaining(['.', 'src/', 'src/main.js']),
     );
   });
@@ -403,7 +404,7 @@ describe('crawler', () => {
       // Initial crawl to populate the cache
       const ignore1 = getIgnore();
       const results1 = await crawl(getOptions(ignore1));
-      expect(results1).toEqual(
+      expect(results1).toStrictEqual(
         expect.arrayContaining(['.', '.gitignore', 'b.txt']),
       );
 
@@ -413,7 +414,7 @@ describe('crawler', () => {
       // Second crawl should miss the cache and trigger a recrawl
       const ignore2 = getIgnore();
       const results2 = await crawl(getOptions(ignore2));
-      expect(results2).toEqual(
+      expect(results2).toStrictEqual(
         expect.arrayContaining(['.', '.gitignore', 'a.txt']),
       );
     });
@@ -521,14 +522,14 @@ describe('crawler', () => {
 
     it('should only crawl top-level files when maxDepth is 0', async () => {
       const results = await getCrawlResults(0);
-      expect(results).toEqual(
+      expect(results).toStrictEqual(
         expect.arrayContaining(['.', 'level1/', 'file-root.txt']),
       );
     });
 
     it('should crawl one level deep when maxDepth is 1', async () => {
       const results = await getCrawlResults(1);
-      expect(results).toEqual(
+      expect(results).toStrictEqual(
         expect.arrayContaining([
           '.',
           'level1/',
@@ -541,7 +542,7 @@ describe('crawler', () => {
 
     it('should crawl two levels deep when maxDepth is 2', async () => {
       const results = await getCrawlResults(2);
-      expect(results).toEqual(
+      expect(results).toStrictEqual(
         expect.arrayContaining([
           '.',
           'level1/',
@@ -556,7 +557,7 @@ describe('crawler', () => {
 
     it('should perform a full recursive crawl when maxDepth is undefined', async () => {
       const results = await getCrawlResults(undefined);
-      expect(results).toEqual(
+      expect(results).toStrictEqual(
         expect.arrayContaining([
           '.',
           'level1/',

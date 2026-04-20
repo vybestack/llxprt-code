@@ -9,12 +9,14 @@
  * These functions handle loading profiles and extracting OAuth bucket configurations.
  */
 
+import type { ProfileManager as ProfileManagerClass } from '@vybestack/llxprt-code-core';
+
 /**
  * Type alias for the ProfileManager constructor.
- * Uses dynamic import to avoid pulling in the core package at module load time.
+ * The `import type` above is erased at compile time, so it does not pull the
+ * core package in at module load.
  */
-type ProfileManagerCtor =
-  (typeof import('@vybestack/llxprt-code-core'))['ProfileManager'];
+type ProfileManagerCtor = typeof ProfileManagerClass;
 
 /**
  * Cached promise for the ProfileManager constructor.

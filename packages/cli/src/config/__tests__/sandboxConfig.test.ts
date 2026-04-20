@@ -73,7 +73,7 @@ describe('loadSandboxConfig', () => {
       sandboxEngine: 'auto',
     });
 
-    expect(config).toEqual({
+    expect(config).toStrictEqual({
       command: 'docker',
       image: 'ghcr.io/vybestack/llxprt-code/sandbox:0.7.0',
     });

@@ -103,7 +103,10 @@ describe('Provider Settings Integration', () => {
     const testParams = { temperature: 0.8, max_tokens: 2048 };
     await testProvider.setModelParamsInSettings(testParams);
     const retrievedParams = await testProvider.getModelParamsFromSettings();
-    expect(retrievedParams).toEqual({ temperature: 0.8, max_tokens: 2048 });
+    expect(retrievedParams).toStrictEqual({
+      temperature: 0.8,
+      max_tokens: 2048,
+    });
 
     // Verify settings are persisted in memory
     const allSettings = await settingsService.getSettings();

@@ -4,15 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  MockInstance,
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from 'vitest';
+import type { MockInstance } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
 import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
@@ -147,7 +140,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: '[CONNECTED] Connected to VS Code',
@@ -163,7 +156,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: `[CONNECTING] Connecting...`,
@@ -178,7 +171,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: `[DISCONNECTED] Disconnected`,
@@ -196,7 +189,7 @@ describe('ideCommand', () => {
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
       expect(mockGetConnectionStatus).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: `[DISCONNECTED] Disconnected: ${details}`,

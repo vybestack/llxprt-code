@@ -201,8 +201,8 @@ describe('Migration Completeness (P35)', () => {
       mergeRefreshedToken(current, next);
 
       // Originals should be unchanged
-      expect(current).toEqual(currentCopy);
-      expect(next).toEqual(nextCopy);
+      expect(current).toStrictEqual(currentCopy);
+      expect(next).toStrictEqual(nextCopy);
     });
   });
 });

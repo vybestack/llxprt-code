@@ -62,7 +62,7 @@ describe('relaunchAppInChildProcess', () => {
     // First should be the node args
     expect(spawnArgs[0]).toBe('--max-old-space-size=4096');
     // Remaining should be from process.argv.slice(1)
-    expect(spawnArgs.slice(1)).toEqual(process.argv.slice(1));
+    expect(spawnArgs.slice(1)).toStrictEqual(process.argv.slice(1));
   });
 
   it('should set LLXPRT_CODE_NO_RELAUNCH env var to prevent infinite loops', async () => {

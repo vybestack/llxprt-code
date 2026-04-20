@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { SubagentManager } from '../subagentManager.js';
 import { ProfileManager } from '../profileManager.js';
-import { SubagentConfig } from '../config/types.js';
+import type { SubagentConfig } from '../config/types.js';
 
 /**
  * SubagentManager behavioral tests
@@ -276,7 +276,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
   describe('listSubagents @requirement:REQ-002 @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
     it('should return empty array when no subagents exist', async () => {
       const list = await subagentManager.listSubagents();
-      expect(list).toEqual([]);
+      expect(list).toStrictEqual([]);
     });
 
     it('should list all subagent names', async () => {
@@ -295,7 +295,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
     it('should handle directory not existing', async () => {
       // Don't create any subagents (directory won't exist)
       const list = await subagentManager.listSubagents();
-      expect(list).toEqual([]);
+      expect(list).toStrictEqual([]);
     });
 
     it('should ignore non-json files', async () => {
@@ -342,7 +342,7 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
 
         const list = await subagentManager.listSubagents();
         const expected = [...uniqueNames].sort();
-        expect(list).toEqual(expected);
+        expect(list).toStrictEqual(expected);
       },
     );
   });

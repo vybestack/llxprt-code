@@ -25,7 +25,7 @@ describe('themeCommand', () => {
     const result = themeCommand.action(mockContext, '');
 
     // Assert that the action returns the correct object to trigger the theme dialog.
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'dialog',
       dialog: 'theme',
     });

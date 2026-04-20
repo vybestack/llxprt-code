@@ -14,13 +14,11 @@ import {
   type Mocked,
 } from 'vitest';
 import { WriteFileTool } from './write-file.js';
-import {
-  FileDiff,
-  ToolConfirmationOutcome,
-  ToolEditConfirmationDetails,
-} from './tools.js';
-import { ApprovalMode, Config } from '../config/config.js';
-import { ToolRegistry } from './tool-registry.js';
+import type { FileDiff, ToolEditConfirmationDetails } from './tools.js';
+import { ToolConfirmationOutcome } from './tools.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
+import type { ToolRegistry } from './tool-registry.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -216,7 +214,7 @@ describe('WriteFileTool', () => {
         abortSignal,
       )) as ToolEditConfirmationDetails;
 
-      expect(confirmation).toEqual(
+      expect(confirmation).toStrictEqual(
         expect.objectContaining({
           title: `Confirm Write: ${path.basename(filePath)}`,
           fileName: 'confirm_new_file.txt',
@@ -243,7 +241,7 @@ describe('WriteFileTool', () => {
         abortSignal,
       )) as ToolEditConfirmationDetails;
 
-      expect(confirmation).toEqual(
+      expect(confirmation).toStrictEqual(
         expect.objectContaining({
           title: `Confirm Write: ${path.basename(filePath)}`,
           fileName: 'confirm_existing_file.txt',

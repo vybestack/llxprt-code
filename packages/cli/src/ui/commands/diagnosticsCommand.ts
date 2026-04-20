@@ -7,12 +7,12 @@
  * @requirement REQ-INT-001.3
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
   MessageActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger, MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
 import process from 'node:process';

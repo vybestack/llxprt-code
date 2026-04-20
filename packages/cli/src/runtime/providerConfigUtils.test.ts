@@ -51,7 +51,7 @@ describe('providerConfigUtils runtime wrappers', () => {
     expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
       'sanitized-api-key',
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       success: true,
       message: 'API key set',
       isPaidMode: false,

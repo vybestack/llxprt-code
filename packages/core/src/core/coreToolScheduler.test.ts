@@ -10,30 +10,31 @@ import type {
   WaitingToolCall,
   CompletedToolCall,
   ErroredToolCall,
-} from './coreToolScheduler.js';
-import {
-  CoreToolScheduler,
   ToolCall,
   WaitingToolCall,
 } from './coreToolScheduler.js';
+import { CoreToolScheduler } from './coreToolScheduler.js';
 import { convertToFunctionResponse } from '../utils/generateContentResponseUtilities.js';
-import {
-  BaseDeclarativeTool,
-  BaseToolInvocation,
+import type {
   ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
   ToolConfirmationPayload,
   ToolInvocation,
   ToolResult,
   Config,
+  ToolRegistry,
+} from '../index.js';
+import {
+  BaseDeclarativeTool,
+  BaseToolInvocation,
+  ToolConfirmationOutcome,
   Kind,
   ApprovalMode,
-  ToolRegistry,
 } from '../index.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
-import { Part, PartListUnion, type Content } from '@google/genai';
+import type { Part, PartListUnion } from '@google/genai';
+import { type Content } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import {
@@ -1442,7 +1443,7 @@ describe('CoreToolScheduler with payload', () => {
     expect(completedCalls[0].status).toBe('success');
     const executeCall =
       mockTool.executeFn.mock.calls[mockTool.executeFn.mock.calls.length - 1];
-    expect(executeCall?.[0]).toEqual({ newContent: 'final version' });
+    expect(executeCall?.[0]).toStrictEqual({ newContent: 'final version' });
     expect(executeCall?.[1]).toBeInstanceOf(AbortSignal);
   });
 
@@ -1573,7 +1574,7 @@ describe('CoreToolScheduler with payload', () => {
     );
 
     const executeCall = executeFn.mock.calls[executeFn.mock.calls.length - 1];
-    expect(executeCall?.[0]).toEqual({ command: 'npm install' });
+    expect(executeCall?.[0]).toStrictEqual({ command: 'npm install' });
   });
 });
 
@@ -1584,7 +1585,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle simple string llmContent', () => {
     const llmContent = 'Simple text output';
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1598,7 +1599,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as a single Part with text', () => {
     const llmContent: Part = { text: 'Text from Part object' };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1612,7 +1613,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as a PartListUnion array with a single text Part', () => {
     const llmContent: PartListUnion = [{ text: 'Text from array' }];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1628,7 +1629,7 @@ describe('convertToFunctionResponse', () => {
       inlineData: { mimeType: 'image/png', data: 'base64...' },
     };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1647,7 +1648,7 @@ describe('convertToFunctionResponse', () => {
       fileData: { mimeType: 'application/pdf', fileUri: 'gs://...' },
     };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1668,7 +1669,7 @@ describe('convertToFunctionResponse', () => {
       { text: 'Another text part' },
     ];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1685,7 +1686,7 @@ describe('convertToFunctionResponse', () => {
       { inlineData: { mimeType: 'image/gif', data: 'gifdata...' } },
     ];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1702,7 +1703,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as a generic Part (not text, inlineData, or fileData)', () => {
     const llmContent: Part = { functionCall: { name: 'test', args: {} } };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1716,7 +1717,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle empty string llmContent', () => {
     const llmContent = '';
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1730,7 +1731,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as an empty array', () => {
     const llmContent: PartListUnion = [];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1744,7 +1745,7 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as a Part with undefined inlineData/fileData/text', () => {
     const llmContent: Part = {}; // An empty part object
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           name: toolName,
@@ -1763,7 +1764,7 @@ describe('convertToFunctionResponse', () => {
       },
     };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           id: callId,
@@ -1783,7 +1784,7 @@ describe('convertToFunctionResponse', () => {
       },
     };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       {
         functionResponse: {
           id: callId,
@@ -2100,7 +2101,7 @@ describe('CoreToolScheduler queue handling', () => {
       // 1. The tool's execute method was called directly.
       const executeCall =
         mockTool.executeFn.mock.calls[mockTool.executeFn.mock.calls.length - 1];
-      expect(executeCall?.[0]).toEqual({ param: 'value' });
+      expect(executeCall?.[0]).toStrictEqual({ param: 'value' });
       expect(executeCall?.[1]).toBeInstanceOf(AbortSignal);
 
       // 2. The tool call status never entered 'awaiting_approval'.
@@ -2108,7 +2109,7 @@ describe('CoreToolScheduler queue handling', () => {
         .map((call) => (call[0][0] as ToolCall)?.status)
         .filter(Boolean);
       expect(statusUpdates).not.toContain('awaiting_approval');
-      expect(statusUpdates).toEqual([
+      expect(statusUpdates).toStrictEqual([
         'validating',
         'scheduled',
         'executing',
@@ -2246,10 +2247,10 @@ describe('CoreToolScheduler queue handling', () => {
       });
 
       // Verify parallel execution (completion order != request order)
-      expect(completionOrder).toEqual([2, 3, 1]); // Fastest to slowest
+      expect(completionOrder).toStrictEqual([2, 3, 1]); // Fastest to slowest
 
       // Verify ordered publishing (publish order == request order)
-      expect(publishOrder).toEqual([1, 2, 3]); // Request order maintained
+      expect(publishOrder).toStrictEqual([1, 2, 3]); // Request order maintained
     });
 
     it('should handle errors in parallel execution without blocking subsequent results', async () => {
@@ -2368,10 +2369,10 @@ describe('CoreToolScheduler queue handling', () => {
       });
 
       // Verify parallel execution
-      expect(completionOrder).toEqual([2, 3, 1]); // Fastest to slowest
+      expect(completionOrder).toStrictEqual([2, 3, 1]); // Fastest to slowest
 
       // Verify ordered publishing despite error in tool 2
-      expect(publishOrder).toEqual([1, 2, 3]); // Request order maintained
+      expect(publishOrder).toStrictEqual([1, 2, 3]); // Request order maintained
     });
 
     it('should handle race condition when later tools complete while publishBufferedResults is exiting', async () => {
@@ -2517,7 +2518,7 @@ describe('CoreToolScheduler queue handling', () => {
 
       // Verify that despite the out-of-order completion, all results were published
       // and in the correct request order
-      expect(publishOrder).toEqual([1, 2, 3, 4, 5]);
+      expect(publishOrder).toStrictEqual([1, 2, 3, 4, 5]);
     });
 
     it('should recover when all later tools complete before first tool', async () => {
@@ -2617,10 +2618,10 @@ describe('CoreToolScheduler queue handling', () => {
       );
 
       // Completion order: 2, 3, 4, 5, 1 (first is slowest)
-      expect(completionOrder).toEqual([2, 3, 4, 5, 1]);
+      expect(completionOrder).toStrictEqual([2, 3, 4, 5, 1]);
 
       // But publish order should still be in request order
-      expect(publishOrder).toEqual([1, 2, 3, 4, 5]);
+      expect(publishOrder).toStrictEqual([1, 2, 3, 4, 5]);
     });
   });
 
@@ -2694,7 +2695,7 @@ describe('CoreToolScheduler queue handling', () => {
 
     await scheduler.schedule([request], abortController.signal);
 
-    expect(contextAwareTool.context).toEqual({
+    expect(contextAwareTool.context).toStrictEqual({
       sessionId: 'session-123',
       agentId: 'agent-sub-42',
       interactiveMode: true,
@@ -3325,7 +3326,7 @@ describe('CoreToolScheduler queue handling', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         call[0].map((t: any) => t.status),
       );
-      expect(allStatuses).toEqual(['success', 'success']);
+      expect(allStatuses).toStrictEqual(['success', 'success']);
 
       expect(onAllToolCallsComplete).toHaveBeenCalledTimes(1);
     });

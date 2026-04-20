@@ -521,7 +521,7 @@ describe('sanitizeHistoryForCompression', () => {
   it('passes through messages with only text blocks unchanged', () => {
     const history = [humanMsg('hello'), aiTextMsg('world')];
     const result = sanitizeHistoryForCompression(history);
-    expect(result).toEqual(history);
+    expect(result).toStrictEqual(history);
   });
 
   it('converts tool_call blocks to text blocks', () => {

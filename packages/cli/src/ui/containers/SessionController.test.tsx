@@ -28,7 +28,7 @@ import {
   type SessionContextType,
 } from './SessionController.js';
 import { MessageType } from '../types.js';
-import { Config, IProvider } from '@vybestack/llxprt-code-core';
+import type { Config, IProvider } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 
@@ -140,7 +140,7 @@ describe('SessionController', () => {
     );
 
     expect(contextValue).toBeDefined();
-    expect(contextValue!.history).toEqual([]);
+    expect(contextValue!.history).toStrictEqual([]);
     expect(typeof contextValue!.addItem).toBe('function');
     expect(typeof contextValue!.updateItem).toBe('function');
     expect(typeof contextValue!.clearItems).toBe('function');

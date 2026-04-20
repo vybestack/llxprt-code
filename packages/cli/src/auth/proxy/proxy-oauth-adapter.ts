@@ -6,7 +6,7 @@
  */
 
 import {
-  ProxySocketClient,
+  type ProxySocketClient,
   type OAuthToken,
 } from '@vybestack/llxprt-code-core';
 

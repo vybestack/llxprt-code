@@ -16,9 +16,11 @@ import {
   DebugLogger,
   type Config,
   type OAuthTokenRequestMetadata,
+  type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-core';
-import type { OAuthToken, TokenStore } from './types.js';
 import type {
+  OAuthToken,
+  TokenStore,
   AuthenticatorInterface,
   BucketFailoverOAuthManagerLike,
 } from './types.js';
@@ -906,8 +908,6 @@ export class TokenAccessCoordinator {
       const { mergeRefreshedToken } = await import(
         '@vybestack/llxprt-code-core'
       );
-      type OAuthTokenWithExtras =
-        import('@vybestack/llxprt-code-core').OAuthTokenWithExtras;
       const mergedToken = mergeRefreshedToken(
         storedToken as OAuthTokenWithExtras,
         refreshedToken as Partial<OAuthTokenWithExtras>,

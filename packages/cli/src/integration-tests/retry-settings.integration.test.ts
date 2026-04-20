@@ -33,7 +33,7 @@ describe('retry settings integration tests', () => {
       3,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -49,7 +49,7 @@ describe('retry settings integration tests', () => {
       10000,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'info',
       content:
@@ -60,7 +60,7 @@ describe('retry settings integration tests', () => {
   it('should validate retries setting', async () => {
     const result = await setCommand.action!(context, 'retries -1');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content: 'retries must be a non-negative integer (e.g., 3)',
@@ -70,7 +70,7 @@ describe('retry settings integration tests', () => {
   it('should validate retrywait setting', async () => {
     const result = await setCommand.action!(context, 'retrywait 0');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       messageType: 'error',
       content:

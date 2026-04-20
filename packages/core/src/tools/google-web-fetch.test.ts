@@ -6,7 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GoogleWebFetchTool, parsePrompt } from './google-web-fetch.js';
-import { Config, ApprovalMode } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
 import { ToolConfirmationOutcome } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import * as fetchUtils from '../utils/fetch.js';
@@ -268,7 +269,7 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
-      expect(confirmationDetails).toEqual({
+      expect(confirmationDetails).toStrictEqual({
         type: 'info',
         title: 'Confirm Web Fetch',
         prompt: 'fetch https://example.com',
@@ -288,7 +289,7 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
-      expect(confirmationDetails).toEqual({
+      expect(confirmationDetails).toStrictEqual({
         type: 'info',
         title: 'Confirm Web Fetch',
         prompt:
@@ -311,7 +312,7 @@ describe('GoogleWebFetchTool', () => {
         new AbortController().signal,
       );
 
-      expect(confirmationDetails).toEqual({
+      expect(confirmationDetails).toStrictEqual({
         type: 'info',
         title: 'Confirm Web Fetch',
         prompt: `fetch ${maliciousUrl}`,

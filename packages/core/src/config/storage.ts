@@ -73,9 +73,8 @@ export class Storage {
       return '/Library/Application Support/LlxprtCode/settings.json';
     } else if (os.platform() === 'win32') {
       return 'C:\\ProgramData\\llxprt-code\\settings.json';
-    } else {
-      return '/etc/llxprt-code/settings.json';
     }
+    return '/etc/llxprt-code/settings.json';
   }
 
   static getSystemPoliciesDir(): string {

@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { MessageBus, Config } from '@vybestack/llxprt-code-core';
+import type {
+  MessageBus,
+  Config,
+  OAuthToken,
+  OAuthTokenRequestMetadata,
+  TokenStore,
+} from '@vybestack/llxprt-code-core';
 
 // Re-export core auth types for CLI usage
 export type {
@@ -38,30 +44,26 @@ export interface OAuthProvider {
    * This starts the device flow or opens browser for auth.
    * @returns The OAuth token obtained from the authentication flow
    */
-  initiateAuth(): Promise<import('@vybestack/llxprt-code-core').OAuthToken>;
+  initiateAuth(): Promise<OAuthToken>;
 
   /**
    * Get current OAuth token for this provider.
    * @returns OAuth token if available, null otherwise
    */
-  getToken(): Promise<import('@vybestack/llxprt-code-core').OAuthToken | null>;
+  getToken(): Promise<OAuthToken | null>;
 
   /**
    * Refresh a specific token (bucket-aware via the passed token).
    * Implementations must NOT persist; OAuthManager owns persistence.
    * @returns Refreshed token or null if refresh failed
    */
-  refreshToken(
-    currentToken: import('@vybestack/llxprt-code-core').OAuthToken,
-  ): Promise<import('@vybestack/llxprt-code-core').OAuthToken | null>;
+  refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null>;
 
   /**
    * Optional provider-side logout/revoke for a specific token.
    * OAuthManager always clears local storage for the selected bucket.
    */
-  logout?(
-    token?: import('@vybestack/llxprt-code-core').OAuthToken,
-  ): Promise<void>;
+  logout?(token?: OAuthToken): Promise<void>;
 
   /**
    * Optional method to check authentication status independently of the token store.
@@ -89,7 +91,7 @@ export interface AuthenticatorInterface {
   authenticateMultipleBuckets(
     providerName: string,
     buckets: string[],
-    requestMetadata?: import('@vybestack/llxprt-code-core').OAuthTokenRequestMetadata,
+    requestMetadata?: OAuthTokenRequestMetadata,
   ): Promise<void>;
 }
 
@@ -101,24 +103,24 @@ export interface AuthenticatorInterface {
 export interface BucketFailoverOAuthManagerLike {
   getSessionBucket(
     provider: string,
-    metadata?: import('@vybestack/llxprt-code-core').OAuthTokenRequestMetadata,
+    metadata?: OAuthTokenRequestMetadata,
   ): string | undefined;
   setSessionBucket(
     provider: string,
     bucket: string,
-    metadata?: import('@vybestack/llxprt-code-core').OAuthTokenRequestMetadata,
+    metadata?: OAuthTokenRequestMetadata,
   ): void;
   getOAuthToken(
     providerName: string,
     bucket?: string,
-  ): Promise<import('@vybestack/llxprt-code-core').OAuthToken | null>;
+  ): Promise<OAuthToken | null>;
   authenticate(providerName: string, bucket?: string): Promise<void>;
   authenticateMultipleBuckets(
     providerName: string,
     buckets: string[],
-    requestMetadata?: import('@vybestack/llxprt-code-core').OAuthTokenRequestMetadata,
+    requestMetadata?: OAuthTokenRequestMetadata,
   ): Promise<void>;
-  getTokenStore(): import('@vybestack/llxprt-code-core').TokenStore;
+  getTokenStore(): TokenStore;
   /**
    * Force refresh a token when it is known to be revoked (401/403 error).
    * @fix issue1861 - Token revocation handling
@@ -127,5 +129,5 @@ export interface BucketFailoverOAuthManagerLike {
     providerName: string,
     failedAccessToken: string,
     bucket?: string,
-  ): Promise<import('@vybestack/llxprt-code-core').OAuthToken | null>;
+  ): Promise<OAuthToken | null>;
 }

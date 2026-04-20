@@ -25,6 +25,7 @@ import type { ProviderManager } from '../providers/ProviderManager.js';
 import type { IdeClient } from '../ide/ide-client.js';
 import type { AnyToolInvocation } from '../tools/tools.js';
 import { TelemetryTarget } from '../telemetry/index.js';
+import type { LspConfig } from '../lsp/types.js';
 
 export type { MCPOAuthConfig, AnyToolInvocation, SkillDefinition };
 export { TelemetryTarget };
@@ -350,7 +351,7 @@ export interface ConfigParameters {
   toolCallCommand?: string;
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
-  lsp?: import('../lsp/types.js').LspConfig | boolean;
+  lsp?: LspConfig | boolean;
   userMemory?: string;
   llxprtMdFileCount?: number;
   llxprtMdFilePaths?: string[];

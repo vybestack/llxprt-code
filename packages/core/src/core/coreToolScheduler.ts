@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolRegistry, Config } from '../index.js';
 import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   ToolConfirmationOutcome,
   type ToolCallConfirmationDetails,
-  ToolRegistry,
   type EditorType,
-  Config,
   logToolCall,
   ToolCallEvent,
   type ToolConfirmationPayload,

@@ -12,7 +12,7 @@ import type {
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { GoogleAuth } from 'google-auth-library';
-import { MCPServerConfig } from '../config/config.js';
+import type { MCPServerConfig } from '../config/config.js';
 import { FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
 import { debugLogger } from '../utils/debugLogger.js';
 

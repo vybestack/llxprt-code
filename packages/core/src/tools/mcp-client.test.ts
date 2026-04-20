@@ -405,7 +405,7 @@ describe('mcp-client', () => {
       expect(mockedToolRegistry.registerTool).toHaveBeenCalledOnce();
       const registeredTool = vi.mocked(mockedToolRegistry.registerTool).mock
         .calls[0][0];
-      expect(registeredTool.schema.parametersJsonSchema).toEqual({
+      expect(registeredTool.schema.parametersJsonSchema).toStrictEqual({
         type: 'object',
         properties: {
           param1: {
@@ -637,7 +637,7 @@ describe('mcp-client', () => {
       await client.connect();
       const result = await client.readResource('file:///tmp/readme.txt');
 
-      expect(result).toEqual(readResult);
+      expect(result).toStrictEqual(readResult);
       expect(mockedClient.request).toHaveBeenCalledWith(
         {
           method: 'resources/read',
@@ -1340,13 +1340,13 @@ describe('mcp-client', () => {
   describe('appendMcpServerCommand', () => {
     it('should do nothing if no MCP servers or command are configured', () => {
       const out = populateMcpServerCommand({}, undefined);
-      expect(out).toEqual({});
+      expect(out).toStrictEqual({});
     });
 
     it('should discover tools via mcpServerCommand', () => {
       const commandString = 'command --arg1 value1';
       const out = populateMcpServerCommand({}, commandString);
-      expect(out).toEqual({
+      expect(out).toStrictEqual({
         mcp: {
           command: 'command',
           args: ['--arg1', 'value1'],

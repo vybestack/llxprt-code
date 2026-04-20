@@ -11,7 +11,7 @@ import {
   type Config,
   type WorkspaceContext,
 } from '@vybestack/llxprt-code-core';
-import { CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
@@ -385,7 +385,7 @@ describe('directoryCommand', () => {
       const result = await addCommand.action(mockContext, trustedPath);
 
       // Should return early with restrictive sandbox message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:

@@ -110,7 +110,7 @@ priority = 100
 `);
 
       expect(result.rules).toHaveLength(3);
-      expect(result.rules.map((r) => r.toolName)).toEqual([
+      expect(result.rules.map((r) => r.toolName)).toStrictEqual([
         'glob',
         'grep',
         'read',

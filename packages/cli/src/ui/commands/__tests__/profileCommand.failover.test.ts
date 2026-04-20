@@ -189,7 +189,7 @@ describe('profileCommand - failover policy parsing', () => {
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
 
-      expect(savedProfile).toEqual({
+      expect(savedProfile).toStrictEqual({
         version: 1,
         type: 'loadbalancer',
         policy: 'failover',
@@ -214,7 +214,7 @@ describe('profileCommand - failover policy parsing', () => {
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
 
-      expect(savedProfile).toEqual({
+      expect(savedProfile).toStrictEqual({
         version: 1,
         type: 'loadbalancer',
         policy: 'roundrobin',
@@ -239,7 +239,7 @@ describe('profileCommand - failover policy parsing', () => {
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
 
-      expect(savedProfile.profiles).toEqual([
+      expect(savedProfile.profiles).toStrictEqual([
         'profile1',
         'profile2',
         'profile3',

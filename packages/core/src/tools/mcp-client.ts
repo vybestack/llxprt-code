@@ -58,7 +58,7 @@ import type {
   WorkspaceContext,
 } from '../utils/workspaceContext.js';
 import type { ToolRegistry } from './tool-registry.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { DebugLogger } from '../debug/index.js';
 import { coreEvents } from '../utils/events.js';
 
@@ -1513,10 +1513,9 @@ export async function connectToMcpServer(
           httpReturned404,
         );
         return mcpClient;
-      } else {
-        // No stored token, show auth required message
-        await showAuthRequiredMessage(mcpServerName);
       }
+      // No stored token, show auth required message
+      await showAuthRequiredMessage(mcpServerName);
     }
 
     // If not 401 and URL config has no explicit type, try SSE fallback
@@ -1545,9 +1544,8 @@ export async function connectToMcpServer(
               storedToken,
             );
             return mcpClient;
-          } else {
-            await showAuthRequiredMessage(mcpServerName);
           }
+          await showAuthRequiredMessage(mcpServerName);
         }
         // SSE fallback failed for non-auth reason, fall through to original error handling
       }
@@ -1972,7 +1970,7 @@ export function isEnabled(
   const { includeTools, excludeTools } = mcpServerConfig;
 
   // excludeTools takes precedence over includeTools
-  if (excludeTools && excludeTools.includes(funcDecl.name)) {
+  if (excludeTools?.includes(funcDecl.name)) {
     return false;
   }
 

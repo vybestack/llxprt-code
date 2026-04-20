@@ -215,7 +215,7 @@ export default tseslint.config(
         },
       ],
       '@typescript-eslint/consistent-type-imports': [
-        'warn',
+        'error',
         { prefer: 'type-imports' },
       ],
       '@typescript-eslint/switch-exhaustiveness-check': 'warn',
@@ -333,6 +333,50 @@ export default tseslint.config(
       // Expensive heuristic — NLP analysis on comments with no value for this codebase
       'sonarjs/no-commented-code': 'off',
 
+      // TypeScript-incompatible rules — SonarJS doesn't understand TS global types
+      'sonarjs/no-reference-error': 'off', // Flags NodeJS, describe, it, beforeEach as undefined
+
+      // CLI-inappropriate rules — this is a CLI tool, not a web server
+      'sonarjs/process-argv': 'off', // CLI needs command line args
+      'sonarjs/standard-input': 'off', // CLI needs stdin for pipes
+      'sonarjs/publicly-writable-directories': 'off', // CLI needs temp files
+      'sonarjs/sockets': 'off', // MCP server uses stdio sockets
+
+      // Module-scope misunderstanding — ESM module scope IS local scope
+      'sonarjs/declarations-in-global-scope': 'off', // Top-level module decls are NOT global
+
+      // API naming conflicts — tool API uses snake_case
+      'sonarjs/variable-name': 'off', // file_path, old_string, new_string match tool params
+
+      // Redundant with TypeScript-ESLint / other plugins (already have better versions)
+      'sonarjs/cyclomatic-complexity': 'off', // ESLint 'complexity' already enabled
+      'sonarjs/max-lines-per-function': 'off', // ESLint rule already enabled
+      'sonarjs/max-lines': 'off', // ESLint rule already enabled
+      'sonarjs/no-unused-vars': 'off', // @typescript-eslint/no-unused-vars handles this
+      'sonarjs/no-unused-function-argument': 'off', // Covered by TS no-unused-vars with argsIgnorePattern
+      'sonarjs/unused-import': 'off', // import plugin handles this
+      'sonarjs/no-implicit-dependencies': 'off', // import plugin handles this
+      'sonarjs/deprecation': 'off', // TypeScript compiler already warns on deprecated APIs
+
+      // TypeScript-idiomatic patterns that SonarJS misunderstands
+      'sonarjs/void-use': 'off', // Fire-and-forget promises are valid TS pattern
+      'sonarjs/no-nested-functions': 'off', // Closures are idiomatic; nested-control-flow catches real issues
+      'sonarjs/no-undefined-assignment': 'off', // TS uses undefined for optional properties (idiomatic)
+
+      // Issue #1569c: Misfit SonarJS style rules turned off as documented noise.
+      // These rules either conflict with Prettier, are pure stylistic preference,
+      // or produce high false-positive rates with no correctness value for this codebase.
+      'sonarjs/arrow-function-convention': 'off', // Conflicts with Prettier parens handling
+      'sonarjs/no-duplicate-string': 'off', // 3-occurrence threshold produces pure noise
+      'sonarjs/shorthand-property-grouping': 'off', // Pure ordering preference, no correctness value
+      'sonarjs/elseif-without-else': 'off', // Pure style; conflicts with early-return pattern
+      'sonarjs/max-union-size': 'off', // Discriminated unions legitimately exceed arbitrary limit
+      'sonarjs/no-alphabetical-sort': 'off', // Heuristic is false-positive prone on typed arrays
+      'sonarjs/prefer-regexp-exec': 'off', // String.match and RegExp.exec are both idiomatic
+      'sonarjs/function-name': 'off', // Conflicts with TS class/method naming conventions
+      'sonarjs/prefer-immediate-return': 'off', // Named intermediates improve readability/debuggability
+      'sonarjs/pseudo-random': 'off', // CLI context: Math.random for IDs/jitter, not cryptography
+
       // ESLint comments (recommended rules downgraded to warn)
       ...Object.fromEntries(
         Object.entries(eslintComments.configs.recommended.rules ?? {}).map(
@@ -428,7 +472,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['packages/*/src/**/*.test.{ts,tsx}'],
+    files: ['packages/*/src/**/*.{test,spec}.{ts,tsx}'],
     plugins: {
       vitest,
     },
@@ -448,14 +492,268 @@ export default tseslint.config(
       'vitest/no-conditional-expect': 'warn',
       'vitest/no-conditional-in-test': 'warn',
       'vitest/require-to-throw-message': 'warn',
-      'vitest/prefer-strict-equal': 'warn',
+      'vitest/prefer-strict-equal': 'error',
       'vitest/max-nested-describe': ['warn', { max: 3 }],
       'vitest/require-top-level-describe': 'warn',
 
       // Relax complexity rules for test files
       'max-lines-per-function': 'off',
+
+      // Test files use `typeof import('pkg')` for vi mock typing; it's idiomatic.
+      '@typescript-eslint/consistent-type-imports': 'off',
+
     },
   },
+  // ============================================================================
+  // Issue #1569: Batch T1C - vitest/require-to-throw-message enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  // This is a phased rollout; the rule remains at 'warn' for other test files.
+  {
+    files: [
+      'packages/a2a-server/src/agent/task.test.ts',
+      'packages/a2a-server/src/commands/restore.test.ts',
+    ],
+    plugins: {
+      vitest,
+    },
+    rules: {
+      'vitest/require-to-throw-message': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch T1D - vitest/expect-expect enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  // This is a phased rollout; the rule remains at 'warn' for other test files.
+  {
+    files: [
+      'packages/core/src/tools/todo-read.test.ts',
+      'packages/core/src/tools/todo-write.test.ts',
+    ],
+    plugins: {
+      vitest,
+    },
+    rules: {
+      'vitest/expect-expect': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 T1D
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch R3A - no-else-return enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: [
+      'packages/a2a-server/src/config/config.ts',
+      'packages/a2a-server/src/commands/extensions.ts',
+      'packages/a2a-server/src/commands/restore.ts',
+    ],
+    rules: {
+      'no-else-return': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 R3A
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch R3B - prefer-optional-chain enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: [
+      'packages/a2a-server/src/config/config.ts',
+      'packages/a2a-server/src/commands/restore.ts',
+    ],
+    rules: {
+      '@typescript-eslint/prefer-optional-chain': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 R3B
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch BN4A - switch-exhaustiveness-check enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4A
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch BN4B - prefer-nullish-coalescing enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/config/config.ts'],
+    rules: {
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4B
+  // ============================================================================
+  // Issue #1569: Batch BN4C - no-unnecessary-condition enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: [
+      'packages/a2a-server/src/agent/executor.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4C
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch BN4D - strict-boolean-expressions enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: [
+      'packages/a2a-server/src/config/config.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      '@typescript-eslint/strict-boolean-expressions': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 BN4D
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch C5A - max-lines-per-function enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/executor.ts'],
+    rules: {
+      'max-lines-per-function': [
+        'error',
+        { max: 80, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 C5A
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch C5B - complexity enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      complexity: ['error', 15],
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 C5B
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch C5C - sonarjs/cognitive-complexity enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      'sonarjs/cognitive-complexity': ['error', 30],
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 C5C
+  // ============================================================================
+  // ============================================================================
+  // Issue #1569: Batch C5D - max-lines enforcement
+  // ============================================================================
+  // Promote this rule from warn to error for the specific batch scope.
+  {
+    files: ['packages/a2a-server/src/agent/task.ts'],
+    rules: {
+      'max-lines': [
+        'error',
+        { max: 800, skipBlankLines: true, skipComments: true },
+      ],
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 C5D
+  // ============================================================================
+  // Issue #1569: Batch S6A - sonarjs/todo-tag enforcement
+  // ============================================================================
+  // Enforce no TODO/FIXME/XXX/HACK comments in production code.
+  // These tags indicate incomplete work that should be tracked properly.
+  {
+    files: [
+      'packages/a2a-server/src/config/config.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      'sonarjs/todo-tag': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6A
+  // ============================================================================
+  // Issue #1569: Batch S6B - sonarjs/no-ignored-exceptions enforcement
+  // ============================================================================
+  // Ensure catch blocks handle errors rather than silently ignoring them.
+  {
+    files: [
+      'packages/a2a-server/src/agent/executor.ts',
+      'packages/a2a-server/src/agent/task.ts',
+    ],
+    rules: {
+      'sonarjs/no-ignored-exceptions': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6B
+  // ============================================================================
+  // Issue #1569: Batch S6C - sonarjs/regular-expr enforcement
+  // ============================================================================
+  // Enforce proper regular expression construction and usage.
+  {
+    files: [
+      'packages/core/src/providers/anthropic/AnthropicResponseParser.ts',
+      'packages/core/src/providers/anthropic/AnthropicMessageNormalizer.ts',
+    ],
+    rules: {
+      'sonarjs/regular-expr': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6C
+  // ============================================================================
+  // Issue #1569: Batch S6D - sonarjs/os-command enforcement
+  // ============================================================================
+  // Enforce safe OS command execution patterns.
+  {
+    files: ['packages/a2a-server/src/agent/executor.ts'],
+    plugins: {
+      sonarjs,
+    },
+    rules: {
+      'sonarjs/os-command': 'error',
+      'sonarjs/no-os-command-from-path': 'error',
+    },
+  },
+  // ============================================================================
+  // End Issue #1569 S6D
+  // ============================================================================
   // Issue #1576: Enforce strict line-limit errors on AppContainer module files.
   // These files are being decomposed; error-level rules catch regressions during
   // and after the decomposition. Test files are excluded (they already have

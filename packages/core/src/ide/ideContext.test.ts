@@ -41,7 +41,7 @@ describe('ideContext', () => {
       ideContext.setIdeContext(testFile);
 
       const activeFile = ideContext.getIdeContext();
-      expect(activeFile).toEqual(testFile);
+      expect(activeFile).toStrictEqual(testFile);
     });
 
     it('should update the ide context when called multiple times', () => {
@@ -74,7 +74,7 @@ describe('ideContext', () => {
       ideContext.setIdeContext(secondFile);
 
       const activeFile = ideContext.getIdeContext();
-      expect(activeFile).toEqual(secondFile);
+      expect(activeFile).toStrictEqual(secondFile);
     });
 
     it('should handle empty string for file path', () => {
@@ -91,7 +91,7 @@ describe('ideContext', () => {
         },
       };
       ideContext.setIdeContext(testFile);
-      expect(ideContext.getIdeContext()).toEqual(testFile);
+      expect(ideContext.getIdeContext()).toStrictEqual(testFile);
     });
 
     it('should notify subscribers when ide context changes', () => {
@@ -197,7 +197,7 @@ describe('ideContext', () => {
 
       ideContext.setIdeContext(testFile);
 
-      expect(ideContext.getIdeContext()).toEqual(testFile);
+      expect(ideContext.getIdeContext()).toStrictEqual(testFile);
 
       ideContext.clearIdeContext();
 

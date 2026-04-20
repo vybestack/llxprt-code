@@ -4,16 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
+import type { RefObject } from 'react';
+import type React from 'react';
+import {
   createContext,
   useContext,
   useState,
   useMemo,
   useEffect,
   useRef,
-  RefObject,
 } from 'react';
-import { DOMElement, measureElement } from 'ink';
+import type { DOMElement } from 'ink';
+import { measureElement } from 'ink';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
 interface LayoutContextValue {

@@ -29,7 +29,7 @@ import type {
   HookExecutionRequest,
   HookExecutionResponse,
 } from '../hookBusContracts.js';
-import { DebugLogger } from '../../debug/index.js';
+import type { DebugLogger } from '../../debug/index.js';
 import type { Config } from '../../config/config.js';
 import type { MessageBus } from '../../confirmation-bus/message-bus.js';
 import type { MessageBusType } from '../../confirmation-bus/types.js';
@@ -675,7 +675,7 @@ describe('Integration: failure envelope from buildFailureEnvelope (DELTA-HFAIL-0
     expect(Array.isArray(envelope.errors)).toBe(true);
     expect(envelope.errors.length).toBeGreaterThan(0);
     expect(envelope.errors[0].message).toContain('hook script crashed');
-    expect(envelope.allOutputs).toEqual([]);
+    expect(envelope.allOutputs).toStrictEqual([]);
 
     system.dispose();
   });

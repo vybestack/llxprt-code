@@ -11,7 +11,10 @@ import {
   calculateErrorRate,
   computeSessionStats,
 } from './computeStats';
-import { ModelMetrics, SessionMetrics } from '../contexts/SessionContext.js';
+import type {
+  ModelMetrics,
+  SessionMetrics,
+} from '../contexts/SessionContext.js';
 
 describe('calculateErrorRate', () => {
   it('should return 0 if totalRequests is 0', () => {
@@ -135,7 +138,7 @@ describe('computeSessionStats', () => {
 
     const result = computeSessionStats(metrics);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       totalApiTime: 0,
       totalToolTime: 0,
       agentActiveTime: 0,

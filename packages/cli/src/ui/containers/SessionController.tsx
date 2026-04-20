@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
+import type React from 'react';
+import {
   createContext,
   useMemo,
   useCallback,
@@ -12,11 +13,12 @@ import React, {
   useRef,
   useReducer,
 } from 'react';
-import { HistoryItem, MessageType } from '../types.js';
+import type { HistoryItem } from '../types.js';
+import { MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
-  Config,
   getErrorMessage,
   loadCoreMemoryContent,
   debugLogger,
@@ -27,14 +29,13 @@ import {
   SessionStateProvider,
   useSessionState,
 } from '../contexts/SessionStateContext.js';
-import { SessionState, SessionAction } from '../reducers/sessionReducer.js';
+import type {
+  SessionState,
+  SessionAction,
+} from '../reducers/sessionReducer.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
-import {
-  appReducer,
-  initialAppState,
-  AppAction,
-  AppState,
-} from '../reducers/appReducer.js';
+import type { AppAction, AppState } from '../reducers/appReducer.js';
+import { appReducer, initialAppState } from '../reducers/appReducer.js';
 
 // Context type
 export interface SessionContextType {

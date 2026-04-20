@@ -5,7 +5,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
+import type React from 'react';
+import { Component } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 

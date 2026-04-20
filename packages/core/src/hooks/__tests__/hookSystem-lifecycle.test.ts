@@ -25,7 +25,7 @@ import * as fc from 'fast-check';
 import { HookSystem } from '../hookSystem.js';
 import { HookEventHandler } from '../hookEventHandler.js';
 import { SessionStartSource, SessionEndReason } from '../types.js';
-import { DebugLogger } from '../../debug/index.js';
+import type { DebugLogger } from '../../debug/index.js';
 import type { Config } from '../../config/config.js';
 import type { MessageBus } from '../../confirmation-bus/message-bus.js';
 

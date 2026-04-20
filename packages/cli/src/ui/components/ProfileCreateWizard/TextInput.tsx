@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import type React from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
-import { useKeypress, Key } from '../../hooks/useKeypress.js';
+import type { Key } from '../../hooks/useKeypress.js';
+import { useKeypress } from '../../hooks/useKeypress.js';
 import { Colors } from '../../colors.js';
 
 export interface TextInputProps {

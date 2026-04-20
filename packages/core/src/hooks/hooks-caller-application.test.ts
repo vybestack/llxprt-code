@@ -33,12 +33,12 @@ import type {
   SuccessfulToolCall,
 } from '../core/coreToolScheduler.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import type { ToolRegistry } from '../index.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   type ToolResult,
   Kind,
-  ToolRegistry,
   ApprovalMode,
   type Config,
 } from '../index.js';
@@ -314,7 +314,7 @@ describe('Hook Caller Application', () => {
       const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
         path: '/etc/passwd',
       });
-      expect(hookResult?.getModifiedToolInput()).toEqual({
+      expect(hookResult?.getModifiedToolInput()).toStrictEqual({
         path: '/safe/sanitized/path',
       });
 
@@ -335,7 +335,7 @@ describe('Hook Caller Application', () => {
       );
 
       // Assert: Tool should have been called with MODIFIED args
-      expect(TrackingToolInvocation.lastArgs).toEqual({
+      expect(TrackingToolInvocation.lastArgs).toStrictEqual({
         path: '/safe/sanitized/path',
       });
     });

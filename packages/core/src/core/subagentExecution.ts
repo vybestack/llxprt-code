@@ -16,8 +16,8 @@
  */
 
 import type { DebugLogger } from '../debug/DebugLogger.js';
+import type { Config } from '../config/config.js';
 import {
-  Config,
   type SchedulerCallbacks,
   type SchedulerOptions,
 } from '../config/config.js';

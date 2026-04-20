@@ -136,9 +136,8 @@ export function generateOAuthEndpointMismatchError(
   if (oauthProvider === 'qwen' && !validation.supportsQwenOAuth) {
     if (validation.isOpenAIEndpoint) {
       return `Qwen OAuth is enabled but baseURL (${baseURL}) is an OpenAI endpoint that doesn't support Qwen OAuth. Either use an API key for OpenAI, or change the baseURL to a Qwen endpoint like ${QWEN_ENDPOINTS[0]}.`;
-    } else {
-      return `Qwen OAuth is enabled but baseURL (${baseURL}) is not a Qwen endpoint. Either use an API key, or change the baseURL to a Qwen endpoint like ${QWEN_ENDPOINTS[0]}.`;
     }
+    return `Qwen OAuth is enabled but baseURL (${baseURL}) is not a Qwen endpoint. Either use an API key, or change the baseURL to a Qwen endpoint like ${QWEN_ENDPOINTS[0]}.`;
   }
 
   return `OAuth provider '${oauthProvider}' is not supported for endpoint ${baseURL}. Please use appropriate authentication for this endpoint.`;

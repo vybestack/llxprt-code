@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import type React from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';

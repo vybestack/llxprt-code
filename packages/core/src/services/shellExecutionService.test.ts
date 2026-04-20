@@ -14,7 +14,7 @@ import {
   type Mock,
 } from 'vitest';
 import EventEmitter from 'events';
-import { Readable } from 'stream';
+import type { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
 import type {
   ShellOutputEvent,
@@ -582,13 +582,13 @@ describe('ShellExecutionService', () => {
         },
       );
 
-      expect(result.rawOutput).toEqual(
+      expect(result.rawOutput).toStrictEqual(
         Buffer.concat([binaryChunk1, binaryChunk2]),
       );
       // PTY binary detection emits binary_detected, then subsequent chunks emit binary_progress
       // Due to the async processing chain, we verify at least binary_detected and one progress
       expect(onOutputEventMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-      expect(onOutputEventMock.mock.calls[0][0]).toEqual({
+      expect(onOutputEventMock.mock.calls[0][0]).toStrictEqual({
         type: 'binary_detected',
       });
       // Verify at least one binary_progress event was emitted
@@ -616,7 +616,7 @@ describe('ShellExecutionService', () => {
       );
       // PTY mode with xterm terminal may not emit initial data event before binary detection
       // depending on timing; the key invariant is no 'data' after 'binary_detected'
-      expect(eventTypes).toEqual([
+      expect(eventTypes).toStrictEqual([
         'binary_detected',
         'binary_progress',
         'binary_progress',
@@ -1321,18 +1321,18 @@ describe('ShellExecutionService child_process fallback', () => {
         cp.emit('exit', 0, null);
       });
 
-      expect(result.rawOutput).toEqual(
+      expect(result.rawOutput).toStrictEqual(
         Buffer.concat([binaryChunk1, binaryChunk2]),
       );
       expect(onOutputEventMock).toHaveBeenCalledTimes(3);
-      expect(onOutputEventMock.mock.calls[0][0]).toEqual({
+      expect(onOutputEventMock.mock.calls[0][0]).toStrictEqual({
         type: 'binary_detected',
       });
-      expect(onOutputEventMock.mock.calls[1][0]).toEqual({
+      expect(onOutputEventMock.mock.calls[1][0]).toStrictEqual({
         type: 'binary_progress',
         bytesReceived: 4,
       });
-      expect(onOutputEventMock.mock.calls[2][0]).toEqual({
+      expect(onOutputEventMock.mock.calls[2][0]).toStrictEqual({
         type: 'binary_progress',
         bytesReceived: 8,
       });
@@ -1351,7 +1351,7 @@ describe('ShellExecutionService child_process fallback', () => {
       const eventTypes = onOutputEventMock.mock.calls.map(
         (call: [ShellOutputEvent]) => call[0].type,
       );
-      expect(eventTypes).toEqual([
+      expect(eventTypes).toStrictEqual([
         'data',
         'binary_detected',
         'binary_progress',
@@ -1682,7 +1682,7 @@ describe('Shell Environment Sanitization', () => {
 
       // Result should contain exactly the allowlisted vars that exist in env
       // All LLXPRT_* vars are now allowed (changed from LLXPRT_CODE* only)
-      expect(Object.keys(sanitized).sort()).toEqual(
+      expect(Object.keys(sanitized).sort()).toStrictEqual(
         [
           'HOME',
           'LLXPRT_CODE_TEST_FOO',

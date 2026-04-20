@@ -195,21 +195,21 @@ describe('checkpointUtils', () => {
       const filenames = ['checkpoint1.json', 'checkpoint2.json'];
       const result = getTruncatedCheckpointNames(filenames);
 
-      expect(result).toEqual(['checkpoint1', 'checkpoint2']);
+      expect(result).toStrictEqual(['checkpoint1', 'checkpoint2']);
     });
 
     it('handles filenames without extension', () => {
       const filenames = ['checkpoint1', 'checkpoint2'];
       const result = getTruncatedCheckpointNames(filenames);
 
-      expect(result).toEqual(['checkpoint1', 'checkpoint2']);
+      expect(result).toStrictEqual(['checkpoint1', 'checkpoint2']);
     });
 
     it('handles filenames with multiple dots correctly', () => {
       const filenames = ['file.backup.json', 'test.old.json'];
       const result = getTruncatedCheckpointNames(filenames);
 
-      expect(result).toEqual(['file.backup', 'test.old']);
+      expect(result).toStrictEqual(['file.backup', 'test.old']);
     });
   });
 
@@ -302,8 +302,8 @@ describe('checkpointUtils', () => {
       const parsed = JSON.parse(checkpointContent) as ToolCallData;
 
       expect(parsed.commitHash).toBe('commit-hash-123');
-      expect(parsed.clientHistory).toEqual(mockClientHistory);
-      expect(parsed.history).toEqual({ customHistory: 'data' });
+      expect(parsed.clientHistory).toStrictEqual(mockClientHistory);
+      expect(parsed.history).toStrictEqual({ customHistory: 'data' });
       expect(parsed.messageId).toBe('prompt-2');
     });
 
@@ -450,7 +450,7 @@ describe('checkpointUtils', () => {
       const checkpointFiles = new Map<string, string>();
       const result = getCheckpointInfoList(checkpointFiles);
 
-      expect(result).toEqual([]);
+      expect(result).toStrictEqual([]);
     });
   });
 });

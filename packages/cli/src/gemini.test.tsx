@@ -12,8 +12,8 @@ import {
   startInteractiveUI,
   formatNonInteractiveError,
 } from './gemini.js';
+import type { LoadedSettings } from './config/settings.js';
 import {
-  LoadedSettings,
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
@@ -886,7 +886,7 @@ describe('startInteractiveUI', () => {
     const [reactElement, options] = renderSpy.mock.calls[0];
 
     // Verify render options
-    expect(options).toEqual(
+    expect(options).toStrictEqual(
       expect.objectContaining({
         exitOnCtrlC: false,
       }),

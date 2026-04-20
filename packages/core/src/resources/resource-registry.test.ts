@@ -80,6 +80,6 @@ describe('ResourceRegistry', () => {
 
     registry.clear();
 
-    expect(registry.getAllResources()).toEqual([]);
+    expect(registry.getAllResources()).toStrictEqual([]);
   });
 });

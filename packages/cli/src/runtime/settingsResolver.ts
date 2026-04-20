@@ -12,7 +12,7 @@
 
 import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
-import { Config, SettingsService } from '@vybestack/llxprt-code-core';
+import type { Config, SettingsService } from '@vybestack/llxprt-code-core';
 import { applyCliSetArguments } from '../config/cliEphemeralSettings.js';
 import { getCliRuntimeServices } from './runtimeAccessors.js';
 import {

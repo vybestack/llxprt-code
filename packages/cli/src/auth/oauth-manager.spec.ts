@@ -6,8 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager } from './oauth-manager.js';
-import type { OAuthProvider } from './types.js';
-import { OAuthToken, TokenStore } from './types.js';
+import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import {
@@ -230,7 +229,7 @@ describe.skipIf(skipInCI)(
         manager.registerProvider(geminiProvider);
 
         const providers = manager.getSupportedProviders();
-        expect(providers).toEqual(['gemini', 'qwen']); // Should be sorted
+        expect(providers).toStrictEqual(['gemini', 'qwen']); // Should be sorted
       });
     });
 
@@ -609,7 +608,7 @@ describe.skipIf(skipInCI)(
        */
       it('should return empty list when no providers registered', () => {
         const providers = manager.getSupportedProviders();
-        expect(providers).toEqual([]);
+        expect(providers).toStrictEqual([]);
       });
 
       /**
@@ -648,8 +647,8 @@ describe.skipIf(skipInCI)(
         manager2.registerProvider(qwenProvider);
         const secondOrder = manager2.getSupportedProviders();
 
-        expect(firstOrder).toEqual(secondOrder);
-        expect(firstOrder).toEqual(['gemini', 'qwen']);
+        expect(firstOrder).toStrictEqual(secondOrder);
+        expect(firstOrder).toStrictEqual(['gemini', 'qwen']);
       });
 
       it('should list buckets through the public OAuthManager API', async () => {
@@ -668,7 +667,7 @@ describe.skipIf(skipInCI)(
           scope: 'read',
         });
 
-        await expect(manager.listBuckets('qwen')).resolves.toEqual([
+        await expect(manager.listBuckets('qwen')).resolves.toStrictEqual([
           'personal',
           'work',
         ]);

@@ -11,11 +11,8 @@ import fs from 'fs';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from './diffOptions.js';
 import { isNodeError } from '../utils/errors.js';
-import {
-  type AnyDeclarativeTool,
-  DeclarativeTool,
-  type ToolResult,
-} from './tools.js';
+import type { DeclarativeTool } from './tools.js';
+import { type AnyDeclarativeTool, type ToolResult } from './tools.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:tools:modifiable-tool');

@@ -42,7 +42,7 @@ describe('detect-ide.ts antigravity + isCloudShell', () => {
   });
 
   it('IDE_DEFINITIONS includes antigravity', () => {
-    expect(IDE_DEFINITIONS.antigravity).toEqual({
+    expect(IDE_DEFINITIONS.antigravity).toStrictEqual({
       name: 'antigravity',
       displayName: 'Antigravity',
     });
@@ -50,17 +50,17 @@ describe('detect-ide.ts antigravity + isCloudShell', () => {
 
   it('detectIdeFromEnv returns antigravity when ANTIGRAVITY_CLI_ALIAS is set', () => {
     process.env.ANTIGRAVITY_CLI_ALIAS = '1';
-    expect(detectIdeFromEnv()).toEqual(IDE_DEFINITIONS.antigravity);
+    expect(detectIdeFromEnv()).toStrictEqual(IDE_DEFINITIONS.antigravity);
   });
 
   it('detectIdeFromEnv returns cloudshell for CLOUD_SHELL env', () => {
     process.env.CLOUD_SHELL = '1';
-    expect(detectIdeFromEnv()).toEqual(IDE_DEFINITIONS.cloudshell);
+    expect(detectIdeFromEnv()).toStrictEqual(IDE_DEFINITIONS.cloudshell);
   });
 
   it('detectIdeFromEnv returns cloudshell for EDITOR_IN_CLOUD_SHELL env', () => {
     process.env.EDITOR_IN_CLOUD_SHELL = '1';
-    expect(detectIdeFromEnv()).toEqual(IDE_DEFINITIONS.cloudshell);
+    expect(detectIdeFromEnv()).toStrictEqual(IDE_DEFINITIONS.cloudshell);
   });
 });
 

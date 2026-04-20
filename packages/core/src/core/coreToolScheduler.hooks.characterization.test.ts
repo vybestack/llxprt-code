@@ -9,7 +9,8 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import { ApprovalMode, Config, ToolRegistry } from '../index.js';
+import type { Config, ToolRegistry } from '../index.js';
+import { ApprovalMode } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { PolicyDecision } from '../policy/types.js';
 import { getTestRuntimeMessageBus } from '../test-utils/config.js';
@@ -247,7 +248,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
       prompt_id: 'prompt-1',
     });
 
-    expect(receivedArgs).toEqual([{ rewritten: true, count: 2 }]);
+    expect(receivedArgs).toStrictEqual([{ rewritten: true, count: 2 }]);
   });
 
   it('appends after-hook systemMessage text to the successful result content', async () => {
@@ -287,7 +288,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(completedCalls[0].status).toBe('success');
     if (completedCalls[0].status === 'success') {
       const responsePart = completedCalls[0].response.responseParts[0];
-      expect(responsePart.functionResponse?.response).toEqual({
+      expect(responsePart.functionResponse?.response).toStrictEqual({
         output: 'tool output\n\nafter hook note',
       });
     }
@@ -330,7 +331,7 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     expect(completedCalls[0].status).toBe('success');
     if (completedCalls[0].status === 'success') {
       const responsePart = completedCalls[0].response.responseParts[0];
-      expect(responsePart.functionResponse?.response).toEqual({
+      expect(responsePart.functionResponse?.response).toStrictEqual({
         output: 'tool output\n\nbefore hook note',
       });
     }
@@ -544,12 +545,12 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     const completedCalls = await completionPromise;
 
     expect(maxConcurrentExecutions).toBeGreaterThan(1);
-    expect(completedCalls.map((call) => call.request.callId)).toEqual([
+    expect(completedCalls.map((call) => call.request.callId)).toStrictEqual([
       'batch-1',
       'batch-2',
       'batch-3',
     ]);
-    expect(completedCalls.map((call) => call.status)).toEqual([
+    expect(completedCalls.map((call) => call.status)).toStrictEqual([
       'success',
       'success',
       'success',

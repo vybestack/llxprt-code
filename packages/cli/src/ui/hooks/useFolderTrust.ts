@@ -10,7 +10,7 @@ import {
   DebugLogger,
   ExitCodes,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings, Settings } from '../../config/settings.js';
+import type { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
   loadTrustedFolders,

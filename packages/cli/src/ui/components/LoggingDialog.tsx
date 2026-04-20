@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import type React from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
@@ -54,17 +55,16 @@ const formatTimestamp = (timestamp: string, isNarrow: boolean): string => {
       minute: '2-digit',
       hour12: false,
     });
-  } else {
-    // Full format for wider screens
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
   }
+  // Full format for wider screens
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 };
 
 const formatContent = (content: string, maxLength: number): string => {

@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback } from 'react';
+import type React from 'react';
+import { useState, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 
@@ -32,9 +33,8 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
   const availableTools = tools.filter((tool) => {
     if (action === 'disable') {
       return !disabledTools.includes(tool.name);
-    } else {
-      return disabledTools.includes(tool.name);
     }
+    return disabledTools.includes(tool.name);
   });
 
   // Create items for RadioButtonSelect

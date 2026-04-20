@@ -16,6 +16,7 @@ import type {
   HookToolConfig,
 } from './hookTranslator.js';
 import { defaultHookTranslator } from './hookTranslator.js';
+import type { ConfigSource } from './hookRegistry.js';
 
 /**
  * Generate a unique key for a hook configuration
@@ -53,7 +54,7 @@ export interface CommandHookConfig {
   name?: string;
   description?: string;
   timeout?: number;
-  source?: import('./hookRegistry.js').ConfigSource;
+  source?: ConfigSource;
 }
 
 export type HookConfig = CommandHookConfig;

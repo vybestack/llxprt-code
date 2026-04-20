@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { Text } from 'ink';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiMessage } from './GeminiMessage.js';

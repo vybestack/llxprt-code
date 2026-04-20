@@ -5,11 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  Profile,
-  isLoadBalancerProfile,
-  isStandardProfile,
-} from './modelParams.js';
+import type { Profile } from './modelParams.js';
+import { isLoadBalancerProfile, isStandardProfile } from './modelParams.js';
 
 describe('Profile Type Guards', () => {
   describe('isLoadBalancerProfile', () => {

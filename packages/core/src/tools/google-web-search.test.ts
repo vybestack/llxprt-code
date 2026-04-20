@@ -6,8 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GoogleWebSearchTool } from './google-web-search.js';
-import { Config } from '../config/config.js';
-import { WebSearchToolParams } from './google-web-search-invocation.js';
+import type { Config } from '../config/config.js';
+import type { WebSearchToolParams } from './google-web-search-invocation.js';
 
 // Mock dependencies
 vi.mock('../config/config.js');

@@ -6,9 +6,9 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  IProvider,
-  IContent,
-  ITool,
+  type IProvider,
+  type IContent,
+  type ITool,
   type Config,
 } from '@vybestack/llxprt-code-core';
 
@@ -445,6 +445,6 @@ describe('Multi-Provider Conversation Logging', () => {
       results
         .map((r) => r.blocks[0])
         .map((block) => (block as { text: string }).text),
-    ).toEqual(['Chunk 1', 'Chunk 2', 'Chunk 3']);
+    ).toStrictEqual(['Chunk 1', 'Chunk 2', 'Chunk 3']);
   });
 });

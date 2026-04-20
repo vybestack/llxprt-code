@@ -83,11 +83,7 @@ export function getResponseText(
   if (response.candidates && response.candidates.length > 0) {
     const candidate = response.candidates[0];
 
-    if (
-      candidate.content &&
-      candidate.content.parts &&
-      candidate.content.parts.length > 0
-    ) {
+    if (candidate.content?.parts && candidate.content.parts.length > 0) {
       return candidate.content.parts
         .filter((part) => part.text)
         .map((part) => part.text)

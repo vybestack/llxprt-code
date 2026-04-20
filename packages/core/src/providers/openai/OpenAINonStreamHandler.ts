@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import {
   type IContent,
   type TextBlock,

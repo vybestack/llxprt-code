@@ -10,12 +10,12 @@
  * @pseudocode lines 317-381
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
   MessageActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import {
   ToolKeyStorage,
@@ -102,13 +102,12 @@ export const toolkeyfileCommand: SlashCommand = {
           messageType: 'info',
           content: `${entry.displayName} keyfile: ${currentPath}`,
         };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `No keyfile configured for '${entry.displayName}'`,
-        };
       }
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `No keyfile configured for '${entry.displayName}'`,
+      };
     }
 
     // @pseudocode lines 355-358: Clear keyfile (case-insensitive "none")

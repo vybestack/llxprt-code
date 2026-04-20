@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 describe('buildResponsesRequest - tool_calls stripping', () => {
   it('should strip tool_calls from messages when building request', () => {
     const messages: IContent[] = [
@@ -43,13 +43,13 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
     expect(request.input?.length).toBe(4); // 2 regular messages + 1 function_call + 1 function_call_output
 
     // First message should be unchanged
-    expect(request.input?.[0]).toEqual({
+    expect(request.input?.[0]).toStrictEqual({
       role: 'user',
       content: 'What is the weather?',
     });
 
     // Second message should have tool_calls stripped
-    expect(request.input?.[1]).toEqual({
+    expect(request.input?.[1]).toStrictEqual({
       role: 'assistant',
     });
     expect(
@@ -57,7 +57,7 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
     ).toBeUndefined();
 
     // Third entry should be the function_call
-    expect(request.input?.[2]).toEqual({
+    expect(request.input?.[2]).toStrictEqual({
       type: 'function_call',
       call_id: 'call_123',
       name: 'get_weather',
@@ -65,7 +65,7 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
     });
 
     // Fourth entry should be the function_call_output
-    expect(request.input?.[3]).toEqual({
+    expect(request.input?.[3]).toStrictEqual({
       type: 'function_call_output',
       call_id: 'call_123',
       output:
@@ -98,7 +98,7 @@ Diff: ...`,
     });
 
     expect(request.input?.length).toBe(1);
-    expect(request.input?.[0]).toEqual({
+    expect(request.input?.[0]).toStrictEqual({
       type: 'function_call_output',
       call_id: 'call_doublewrap',
       output: `status:
@@ -140,7 +140,7 @@ Failed to edit file`);
       messages,
     });
 
-    expect(request.input).toEqual([
+    expect(request.input).toStrictEqual([
       {
         role: 'user',
         content: 'Hello',
@@ -181,7 +181,7 @@ Failed to edit file`);
     });
 
     // Should strip tool_calls but keep usage
-    expect(request.input?.[0]).toEqual({
+    expect(request.input?.[0]).toStrictEqual({
       role: 'assistant',
       content: 'Let me check the weather',
       usage: {

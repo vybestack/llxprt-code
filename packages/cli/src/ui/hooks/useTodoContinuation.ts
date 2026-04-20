@@ -5,12 +5,8 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  Config,
-  GeminiClient,
-  Todo,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+import type { Config, GeminiClient, Todo } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { useTodoContext } from '../contexts/TodoContext.js';
 
 export interface ContinuationState {
@@ -221,11 +217,7 @@ export const useTodoContinuation = (
       // Find the most relevant active todo
       const activeTodo = _findMostRelevantActiveTodo(todoContext.todos);
 
-      if (
-        !activeTodo ||
-        !activeTodo.content ||
-        activeTodo.content.trim() === ''
-      ) {
+      if (!activeTodo?.content || activeTodo.content.trim() === '') {
         return;
       }
 

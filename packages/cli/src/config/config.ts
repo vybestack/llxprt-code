@@ -8,12 +8,12 @@
 
 import process from 'node:process';
 import {
-  Config,
+  type Config,
   type GeminiCLIExtension,
-  SettingsService,
+  type SettingsService,
 } from '@vybestack/llxprt-code-core';
 
-import { Settings } from './settings.js';
+import { type Settings } from './settings.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { resolveMcpServers } from './mcpServerConfig.js';
 import { type CliArgs } from './cliArgParser.js';

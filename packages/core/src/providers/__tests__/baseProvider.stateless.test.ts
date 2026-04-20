@@ -251,10 +251,10 @@ describe('BaseProvider stateless contract', () => {
     expect(snapshots).not.toHaveLength(0);
     expect(
       Array.from(new Set(snapshots.map((entry) => entry.model))).sort(),
-    ).toEqual([call.model]);
+    ).toStrictEqual([call.model]);
     expect(
       Array.from(new Set(snapshots.map((entry) => entry.baseUrl))).sort(),
-    ).toEqual([call.baseUrl]);
+    ).toStrictEqual([call.baseUrl]);
   });
 
   it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-5 isolates overlapping calls without leaking settings', async () => {
@@ -301,17 +301,17 @@ describe('BaseProvider stateless contract', () => {
 
     expect(
       Array.from(new Set(snapshotsA.map((entry) => entry.model))).sort(),
-    ).toEqual([callA.model]);
+    ).toStrictEqual([callA.model]);
     expect(
       Array.from(new Set(snapshotsA.map((entry) => entry.baseUrl))).sort(),
-    ).toEqual([callA.baseUrl]);
+    ).toStrictEqual([callA.baseUrl]);
 
     expect(
       Array.from(new Set(snapshotsB.map((entry) => entry.model))).sort(),
-    ).toEqual([callB.model]);
+    ).toStrictEqual([callB.model]);
     expect(
       Array.from(new Set(snapshotsB.map((entry) => entry.baseUrl))).sort(),
-    ).toEqual([callB.baseUrl]);
+    ).toStrictEqual([callB.baseUrl]);
   });
 
   it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-7 resets overrides and auth resolver state after completion', async () => {
@@ -365,7 +365,7 @@ describe('BaseProvider stateless contract', () => {
       ),
     ).sort();
 
-    expect(baselineTokens).toEqual(['']);
+    expect(baselineTokens).toStrictEqual(['']);
   });
 
   it('does not leak global base-url from another active provider', () => {

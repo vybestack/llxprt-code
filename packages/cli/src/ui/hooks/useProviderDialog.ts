@@ -7,8 +7,11 @@
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { AppState } from '../reducers/appReducer.js';
-import { Config, type RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { type AppState } from '../reducers/appReducer.js';
+import {
+  type Config,
+  type RecordingIntegration,
+} from '@vybestack/llxprt-code-core';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseProviderDialogParams {

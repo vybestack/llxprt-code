@@ -7,8 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageBus, PolicyEngine } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from './oauth-manager.js';
-import type { OAuthProvider } from './types.js';
-import type { OAuthToken, TokenStore } from './types.js';
+import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 
 const mockEphemeralSettings = new Map<string, unknown>();
 
@@ -131,7 +130,7 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
     manager.registerProvider(createMockProvider('anthropic'));
     manager.registerProvider(createMockProvider('gemini'));
 
-    expect(manager.getSupportedProviders().sort()).toEqual([
+    expect(manager.getSupportedProviders().sort()).toStrictEqual([
       'anthropic',
       'gemini',
     ]);

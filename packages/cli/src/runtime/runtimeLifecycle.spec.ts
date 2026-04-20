@@ -16,14 +16,14 @@ import {
   resetCliProviderInfrastructure,
   activateIsolatedRuntimeContext,
 } from './runtimeLifecycle.js';
-import {
+import type {
   Config,
   SettingsService,
   ProviderManager,
-  clearActiveProviderRuntimeContext,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '../auth/oauth-manager.js';
+import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '../auth/oauth-manager.js';
 import { getCliProviderManager } from './runtimeAccessors.js';
 
 /**

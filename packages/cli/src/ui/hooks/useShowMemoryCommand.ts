@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Message, MessageType } from '../types.js';
-import { Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
+import type { Message } from '../types.js';
+import { MessageType } from '../types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { LoadedSettings } from '../../config/settings.js';
 
 export function createShowMemoryAction(
   config: Config | null,

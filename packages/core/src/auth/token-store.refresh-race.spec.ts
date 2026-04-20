@@ -16,7 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { KeyringTokenStore } from './keyring-token-store.js';
 import { SecureStore } from '../storage/secure-store.js';
-import { OAuthToken } from './types.js';
+import type { OAuthToken } from './types.js';
 import type { KeyringAdapter } from '../storage/secure-store.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -189,10 +189,9 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
           await tokenStore.saveToken('anthropic', newToken);
           await tokenStore.releaseRefreshLock('anthropic');
           return { client: i, refreshed: true, token: newToken };
-        } else {
-          const updatedToken = await tokenStore.getToken('anthropic');
-          return { client: i, refreshed: false, token: updatedToken };
         }
+        const updatedToken = await tokenStore.getToken('anthropic');
+        return { client: i, refreshed: false, token: updatedToken };
       } catch (error) {
         return { client: i, error: String(error) };
       }

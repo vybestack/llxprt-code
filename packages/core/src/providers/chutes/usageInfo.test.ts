@@ -85,7 +85,7 @@ describe('chutesUsageInfo', () => {
         signal: expect.any(AbortSignal),
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         quotas: mockQuotas,
         balance: 4.5,
         username: 'testuser',

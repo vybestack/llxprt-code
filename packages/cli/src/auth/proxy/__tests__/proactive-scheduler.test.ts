@@ -387,10 +387,10 @@ describe('ProactiveScheduler', () => {
       expect(refreshFn.calls.length).toBe(3);
 
       const providers = refreshFn.calls.map((c) => c.provider).sort();
-      expect(providers).toEqual(['anthropic', 'gemini', 'openai']);
+      expect(providers).toStrictEqual(['anthropic', 'gemini', 'openai']);
 
       const buckets = refreshFn.calls.map((c) => c.bucket).sort();
-      expect(buckets).toEqual(['default', 'prod', 'staging']);
+      expect(buckets).toStrictEqual(['default', 'prod', 'staging']);
     });
   });
 });

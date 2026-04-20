@@ -11,7 +11,7 @@ import * as path from 'path';
 import { restoreCommand } from './restoreCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { Config, GitService } from '@vybestack/llxprt-code-core';
+import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 
 describe('restoreCommand', () => {
@@ -69,7 +69,7 @@ describe('restoreCommand', () => {
   });
 
   it('should return the command if checkpointing is enabled', () => {
-    expect(restoreCommand(mockConfig)).toEqual(
+    expect(restoreCommand(mockConfig)).toStrictEqual(
       expect.objectContaining({
         name: 'restore',
         description: expect.any(String),
@@ -87,7 +87,7 @@ describe('restoreCommand', () => {
 
       expect(
         await restoreCommand(mockConfig)?.action?.(mockContext, ''),
-      ).toEqual({
+      ).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Could not determine the configuration directory path.',
@@ -99,7 +99,7 @@ describe('restoreCommand', () => {
       await fs.rm(checkpointsDir, { recursive: true, force: true });
       const command = restoreCommand(mockConfig);
 
-      expect(await command?.action?.(mockContext, '')).toEqual({
+      expect(await command?.action?.(mockContext, '')).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'No restorable tool calls found.',
@@ -113,7 +113,7 @@ describe('restoreCommand', () => {
       await fs.writeFile(path.join(checkpointsDir, 'test2.json'), '{}');
       const command = restoreCommand(mockConfig);
 
-      expect(await command?.action?.(mockContext, '')).toEqual({
+      expect(await command?.action?.(mockContext, '')).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'Available tool calls to restore:\n\ntest1\ntest2',
@@ -124,7 +124,7 @@ describe('restoreCommand', () => {
       await fs.writeFile(path.join(checkpointsDir, 'test1.json'), '{}');
       const command = restoreCommand(mockConfig);
 
-      expect(await command?.action?.(mockContext, 'test2')).toEqual({
+      expect(await command?.action?.(mockContext, 'test2')).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'File not found: test2.json',
@@ -141,7 +141,9 @@ describe('restoreCommand', () => {
       await fs.mkdir(checkpointPath);
       const command = restoreCommand(mockConfig);
 
-      expect(await command?.action?.(mockContext, checkpointName)).toEqual({
+      expect(
+        await command?.action?.(mockContext, checkpointName),
+      ).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining(
@@ -163,7 +165,9 @@ describe('restoreCommand', () => {
       );
       const command = restoreCommand(mockConfig);
 
-      expect(await command?.action?.(mockContext, 'my-checkpoint')).toEqual({
+      expect(
+        await command?.action?.(mockContext, 'my-checkpoint'),
+      ).toStrictEqual({
         type: 'tool',
         toolName: 'run_shell_command',
         toolArgs: 'ls',
@@ -195,7 +199,9 @@ describe('restoreCommand', () => {
 
       const command = restoreCommand(mockConfig);
 
-      expect(await command?.action?.(mockContext, 'my-checkpoint')).toEqual({
+      expect(
+        await command?.action?.(mockContext, 'my-checkpoint'),
+      ).toStrictEqual({
         type: 'tool',
         toolName: 'run_shell_command',
         toolArgs: 'ls',
@@ -215,7 +221,7 @@ describe('restoreCommand', () => {
     );
     const command = restoreCommand(mockConfig);
 
-    expect(await command?.action?.(mockContext, checkpointName)).toEqual({
+    expect(await command?.action?.(mockContext, checkpointName)).toStrictEqual({
       type: 'message',
       messageType: 'error',
       // A more specific error message would be ideal, but for now, we can assert the current behavior.
@@ -249,12 +255,12 @@ describe('restoreCommand', () => {
 
     it('returns an empty array if temp dir is not found', async () => {
       vi.mocked(mockConfig.storage.getProjectTempDir).mockReturnValueOnce('');
-      expect(await runCompletion('')).toEqual([]);
+      expect(await runCompletion('')).toStrictEqual([]);
     });
 
     it('returns an empty array on readdir error', async () => {
       await fs.rm(checkpointsDir, { recursive: true, force: true });
-      expect(await runCompletion('')).toEqual([]);
+      expect(await runCompletion('')).toStrictEqual([]);
     });
 
     it('returns a filtered list of checkpoint names', async () => {
@@ -266,9 +272,9 @@ describe('restoreCommand', () => {
         '{}',
       );
 
-      expect(await runCompletion('')).toEqual(['test1', 'test2']);
-      expect(await runCompletion('test')).toEqual(['test1', 'test2']);
-      expect(await runCompletion('test2')).toEqual(['test2']);
+      expect(await runCompletion('')).toStrictEqual(['test1', 'test2']);
+      expect(await runCompletion('test')).toStrictEqual(['test1', 'test2']);
+      expect(await runCompletion('test2')).toStrictEqual(['test2']);
     });
   });
 });

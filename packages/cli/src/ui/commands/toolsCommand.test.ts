@@ -90,7 +90,7 @@ describe('toolsCommand', () => {
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'disable "File Reader"');
 
-    expect(settings.get('tools.disabled')).toEqual(['file-reader']);
+    expect(settings.get('tools.disabled')).toStrictEqual(['file-reader']);
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
     expect(output).toContain("Disabled tool 'File Reader'");
   });
@@ -135,7 +135,7 @@ describe('toolsCommand', () => {
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
-    expect(settings.get('tools.disabled')).toEqual([]);
+    expect(settings.get('tools.disabled')).toStrictEqual([]);
     const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
     expect(output).toContain("Enabled tool 'Code Editor'");
   });
@@ -179,8 +179,8 @@ describe('toolsCommand', () => {
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
-    expect(settings.get('tools.disabled')).toEqual([]);
-    expect(settings.get('tools.allowed')).toEqual([]);
+    expect(settings.get('tools.disabled')).toStrictEqual([]);
+    expect(settings.get('tools.allowed')).toStrictEqual([]);
   });
 
   it('enabling a tool preserves existing allowed whitelist', async () => {
@@ -205,8 +205,8 @@ describe('toolsCommand', () => {
     if (!toolsCommand.action) throw new Error('Action not defined');
     await toolsCommand.action(mockContext, 'enable code-editor');
 
-    expect(settings.get('tools.disabled')).toEqual([]);
-    expect(settings.get('tools.allowed')).toEqual(
+    expect(settings.get('tools.disabled')).toStrictEqual([]);
+    expect(settings.get('tools.allowed')).toStrictEqual(
       expect.arrayContaining(['file-reader', 'code-editor']),
     );
   });

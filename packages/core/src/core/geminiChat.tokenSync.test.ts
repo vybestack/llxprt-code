@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GeminiChat } from './geminiChat.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';
 import {
   createAgentRuntimeState,

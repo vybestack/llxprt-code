@@ -131,7 +131,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
 
       const contentPayload = events[1].payload as { content: IContent };
       expect(contentPayload.content.speaker).toBe('human');
-      expect(contentPayload.content.blocks[0]).toEqual({
+      expect(contentPayload.content.blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Hello from user',
       });
@@ -375,7 +375,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       expect(switchPayload.model).toBe('gpt-5');
 
       const dirsPayload = events[2].payload as { directories: string[] };
-      expect(dirsPayload.directories).toEqual(['/new/path']);
+      expect(dirsPayload.directories).toStrictEqual(['/new/path']);
     });
 
     /**
@@ -645,7 +645,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       };
       expect(payload.itemsCompressed).toBe(48);
       expect(payload.summary.speaker).toBe('ai');
-      expect(payload.summary.blocks[0]).toEqual({
+      expect(payload.summary.blocks[0]).toStrictEqual({
         type: 'text',
         text: 'Summary of prior conversation',
       });
@@ -729,7 +729,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       expect(events[3].type).toBe('content');
 
       // Monotonic seq: 1, 2, 3, 4
-      expect(events.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+      expect(events.map((e) => e.seq)).toStrictEqual([1, 2, 3, 4]);
 
       // All have valid ISO-8601 timestamps
       for (const event of events) {
@@ -786,7 +786,10 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
 
           const payload = contentEvent!.payload as { content: IContent };
           expect(payload.content.speaker).toBe(speaker);
-          expect(payload.content.blocks[0]).toEqual({ type: 'text', text });
+          expect(payload.content.blocks[0]).toStrictEqual({
+            type: 'text',
+            text,
+          });
 
           await svc.dispose();
         } finally {
@@ -1206,7 +1209,9 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
           expect(startPayload.projectHash).toBe(config.projectHash);
           expect(startPayload.provider).toBe(provider);
           expect(startPayload.model).toBe(model);
-          expect(startPayload.workspaceDirs).toEqual(config.workspaceDirs);
+          expect(startPayload.workspaceDirs).toStrictEqual(
+            config.workspaceDirs,
+          );
           expect(typeof startPayload.startTime).toBe('string');
           expect(isValidIso8601(startPayload.startTime as string)).toBe(true);
 

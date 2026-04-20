@@ -39,14 +39,14 @@ describe('WorkspaceContext with real filesystem', () => {
       const workspaceContext = new WorkspaceContext(cwd);
       const directories = workspaceContext.getDirectories();
 
-      expect(directories).toEqual([cwd]);
+      expect(directories).toStrictEqual([cwd]);
     });
 
     it('should validate and resolve directories to absolute paths', () => {
       const workspaceContext = new WorkspaceContext(cwd, [otherDir]);
       const directories = workspaceContext.getDirectories();
 
-      expect(directories).toEqual([cwd, otherDir]);
+      expect(directories).toStrictEqual([cwd, otherDir]);
     });
 
     it('should handle empty initialization', () => {
@@ -63,7 +63,7 @@ describe('WorkspaceContext with real filesystem', () => {
       workspaceContext.addDirectory(otherDir);
       const directories = workspaceContext.getDirectories();
 
-      expect(directories).toEqual([cwd, otherDir]);
+      expect(directories).toStrictEqual([cwd, otherDir]);
     });
 
     it('should resolve relative paths to absolute', () => {
@@ -72,7 +72,7 @@ describe('WorkspaceContext with real filesystem', () => {
       workspaceContext.addDirectory(relativePath, cwd);
       const directories = workspaceContext.getDirectories();
 
-      expect(directories).toEqual([cwd, otherDir]);
+      expect(directories).toStrictEqual([cwd, otherDir]);
     });
 
     it('should prevent duplicate directories', () => {
@@ -96,7 +96,7 @@ describe('WorkspaceContext with real filesystem', () => {
 
         const directories = workspaceContext.getDirectories();
 
-        expect(directories).toEqual([cwd, realDir]);
+        expect(directories).toStrictEqual([cwd, realDir]);
       },
     );
   });
@@ -371,7 +371,7 @@ describe('WorkspaceContext with real filesystem', () => {
       const dirs2 = workspaceContext.getDirectories();
 
       expect(dirs1).not.toBe(dirs2);
-      expect(dirs1).toEqual(dirs2);
+      expect(dirs1).toStrictEqual(dirs2);
     });
   });
 });
@@ -410,7 +410,7 @@ describe('WorkspaceContext with optional directories', () => {
       existingDir1,
     ]);
     const directories = workspaceContext.getDirectories();
-    expect(directories).toEqual([cwd, existingDir1]);
+    expect(directories).toStrictEqual([cwd, existingDir1]);
     expect(debugLogger.warn).toHaveBeenCalledTimes(1);
     expect(debugLogger.warn).toHaveBeenCalledWith(
       `[WARN] Skipping unreadable directory: ${nonExistentDir} (Directory does not exist: ${nonExistentDir})`,
@@ -420,7 +420,7 @@ describe('WorkspaceContext with optional directories', () => {
   it('should include an existing optional directory', () => {
     const workspaceContext = new WorkspaceContext(cwd, [existingDir1]);
     const directories = workspaceContext.getDirectories();
-    expect(directories).toEqual([cwd, existingDir1]);
+    expect(directories).toStrictEqual([cwd, existingDir1]);
     expect(debugLogger.warn).not.toHaveBeenCalled();
   });
 });

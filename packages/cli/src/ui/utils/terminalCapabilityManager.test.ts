@@ -323,7 +323,7 @@ describe('TerminalCapabilityManager', () => {
     manager.disableKittyProtocolOnExit();
     expect(manager.isKittyProtocolEnabled()).toBe(false);
 
-    expect(vi.mocked(writeSync).mock.calls).toEqual([
+    expect(vi.mocked(writeSync).mock.calls).toStrictEqual([
       [stdout.fd, '\x1b[<u'],
       [stdout.fd, '\x1b[?1049l'],
       [stdout.fd, '\x1b[<u'],

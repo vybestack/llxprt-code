@@ -25,7 +25,8 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
-import { Config, ApprovalMode } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
 import { DEFAULT_CREATE_PATCH_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
 import {
@@ -135,38 +136,33 @@ export function applyReplacement(
       return `${result}\n`;
     }
     return result;
-  } else {
-    // For multiple replacements, we need to count and limit replacements
-    let result = currentContent;
-    let replacementCount = 0;
-    let searchIndex = 0;
-
-    while (replacementCount < expectedReplacements) {
-      const foundIndex = result.indexOf(oldString, searchIndex);
-      if (foundIndex === -1) {
-        break; // No more occurrences found
-      }
-
-      // Replace only this specific occurrence
-      result =
-        result.substring(0, foundIndex) +
-        newString +
-        result.substring(foundIndex + oldString.length);
-
-      replacementCount++;
-      // Update search index to continue after the replacement
-      searchIndex = foundIndex + newString.length;
-    }
-
-    if (
-      preserveTrailingNewline &&
-      result.length > 0 &&
-      !result.endsWith('\n')
-    ) {
-      return `${result}\n`;
-    }
-    return result;
   }
+  // For multiple replacements, we need to count and limit replacements
+  let result = currentContent;
+  let replacementCount = 0;
+  let searchIndex = 0;
+
+  while (replacementCount < expectedReplacements) {
+    const foundIndex = result.indexOf(oldString, searchIndex);
+    if (foundIndex === -1) {
+      break; // No more occurrences found
+    }
+
+    // Replace only this specific occurrence
+    result =
+      result.substring(0, foundIndex) +
+      newString +
+      result.substring(foundIndex + oldString.length);
+
+    replacementCount++;
+    // Update search index to continue after the replacement
+    searchIndex = foundIndex + newString.length;
+  }
+
+  if (preserveTrailingNewline && result.length > 0 && !result.endsWith('\n')) {
+    return `${result}\n`;
+  }
+  return result;
 }
 
 /**

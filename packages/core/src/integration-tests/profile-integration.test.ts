@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProfileManager } from '../config/profileManager.js';
-import { SettingsService } from '../settings/SettingsService.js';
-import { Profile } from '../types/modelParams.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import type { Profile } from '../types/modelParams.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import fs from 'fs/promises';
 import os from 'os';
@@ -281,7 +281,7 @@ describe('Profile Integration Tests', () => {
     await expect(
       manager.saveProfile('test-profile', testProfile),
     ).resolves.not.toThrow();
-    await expect(manager.loadProfile('test-profile')).resolves.toEqual(
+    await expect(manager.loadProfile('test-profile')).resolves.toStrictEqual(
       testProfile,
     );
   });
@@ -295,6 +295,6 @@ describe('Profile Integration Tests', () => {
 
     // Load using integrated method should still work
     const loadedProfile = await profileManager.loadProfile('legacy-profile');
-    expect(loadedProfile).toEqual(testProfile);
+    expect(loadedProfile).toStrictEqual(testProfile);
   });
 });

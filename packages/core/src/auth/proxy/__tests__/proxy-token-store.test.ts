@@ -122,11 +122,11 @@ describe('ProxyTokenStore', () => {
     const result = await store.getToken('anthropic', 'my-bucket');
 
     expect(receivedOp).toBe('get_token');
-    expect(receivedPayload).toEqual({
+    expect(receivedPayload).toStrictEqual({
       provider: 'anthropic',
       bucket: 'my-bucket',
     });
-    expect(result).toEqual(token);
+    expect(result).toStrictEqual(token);
   });
 
   /**
@@ -164,9 +164,9 @@ describe('ProxyTokenStore', () => {
     store = new ProxyTokenStore(socketPath);
     await store.getToken('gemini');
 
-    expect(receivedPayload).toEqual({
+    // When bucket is undefined, the payload omits the key entirely (strict equality behavior)
+    expect(receivedPayload).toStrictEqual({
       provider: 'gemini',
-      bucket: undefined,
     });
   });
 
@@ -192,7 +192,7 @@ describe('ProxyTokenStore', () => {
     await store.saveToken('anthropic', token, 'work');
 
     expect(receivedOp).toBe('save_token');
-    expect(receivedPayload).toEqual({
+    expect(receivedPayload).toStrictEqual({
       provider: 'anthropic',
       bucket: 'work',
       token,
@@ -234,7 +234,7 @@ describe('ProxyTokenStore', () => {
     await store.removeToken('gemini', 'personal');
 
     expect(receivedOp).toBe('remove_token');
-    expect(receivedPayload).toEqual({
+    expect(receivedPayload).toStrictEqual({
       provider: 'gemini',
       bucket: 'personal',
     });
@@ -270,7 +270,7 @@ describe('ProxyTokenStore', () => {
     store = new ProxyTokenStore(socketPath);
     const providers = await store.listProviders();
 
-    expect(providers).toEqual(['anthropic', 'gemini', 'qwen']);
+    expect(providers).toStrictEqual(['anthropic', 'gemini', 'qwen']);
   });
 
   /**
@@ -287,7 +287,7 @@ describe('ProxyTokenStore', () => {
     store = new ProxyTokenStore(socketPath);
     const providers = await store.listProviders();
 
-    expect(providers).toEqual([]);
+    expect(providers).toStrictEqual([]);
   });
 
   // ─── listBuckets ─────────────────────────────────────────────────────────
@@ -311,8 +311,8 @@ describe('ProxyTokenStore', () => {
     store = new ProxyTokenStore(socketPath);
     const buckets = await store.listBuckets('anthropic');
 
-    expect(receivedPayload).toEqual({ provider: 'anthropic' });
-    expect(buckets).toEqual(['default', 'work', 'personal']);
+    expect(receivedPayload).toStrictEqual({ provider: 'anthropic' });
+    expect(buckets).toStrictEqual(['default', 'work', 'personal']);
   });
 
   /**
@@ -329,7 +329,7 @@ describe('ProxyTokenStore', () => {
     store = new ProxyTokenStore(socketPath);
     const buckets = await store.listBuckets('anthropic');
 
-    expect(buckets).toEqual([]);
+    expect(buckets).toStrictEqual([]);
   });
 
   // ─── getBucketStats ──────────────────────────────────────────────────────
@@ -348,7 +348,7 @@ describe('ProxyTokenStore', () => {
     store = new ProxyTokenStore(socketPath);
     const stats = await store.getBucketStats('anthropic', 'default');
 
-    expect(stats).toEqual({
+    expect(stats).toStrictEqual({
       bucket: 'default',
       requestCount: 0,
       percentage: 0,

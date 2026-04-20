@@ -21,7 +21,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
 import { SettingsService } from '../../settings/SettingsService.js';
@@ -392,7 +392,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         r.blocks.filter((b) => b.type === 'tool_call'),
       );
       expect(toolCalls.length).toBe(2);
-      expect(toolCalls.map((tc) => tc.id)).toEqual(
+      expect(toolCalls.map((tc) => tc.id)).toStrictEqual(
         expect.arrayContaining(['hist_tool_123', 'hist_tool_456']),
       );
     });

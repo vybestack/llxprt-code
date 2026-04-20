@@ -120,6 +120,6 @@ describe('Subagent isolation behavioral scenarios', () => {
       subMetadata,
     );
 
-    expect(handler.getRequestMetadata()).toEqual(subMetadata);
+    expect(handler.getRequestMetadata()).toStrictEqual(subMetadata);
   });
 });

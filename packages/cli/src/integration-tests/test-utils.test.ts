@@ -7,7 +7,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile } from '@vybestack/llxprt-code-core';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -101,7 +101,7 @@ describe('Test Utilities', () => {
       const content = await fs.readFile(profilePath, 'utf8');
       const savedProfile = JSON.parse(content);
 
-      expect(savedProfile).toEqual(profile);
+      expect(savedProfile).toStrictEqual(profile);
     });
   });
 
@@ -161,7 +161,7 @@ describe('Test Utilities', () => {
       await writeSettingsFile(dir, settings);
 
       const readSettings = await readSettingsFile(dir);
-      expect(readSettings).toEqual(settings);
+      expect(readSettings).toStrictEqual(settings);
     });
 
     it('should return empty object if settings file does not exist', async () => {
@@ -169,7 +169,7 @@ describe('Test Utilities', () => {
       tempDirs.push(dir);
 
       const settings = await readSettingsFile(dir);
-      expect(settings).toEqual({});
+      expect(settings).toStrictEqual({});
     });
   });
 
@@ -193,7 +193,7 @@ describe('Test Utilities', () => {
       const content = await fs.readFile(settingsPath, 'utf8');
       const parsedSettings = JSON.parse(content);
 
-      expect(parsedSettings).toEqual(settings);
+      expect(parsedSettings).toStrictEqual(settings);
       // Check formatting (2 spaces)
       expect(content).toContain('  "provider"');
     });

@@ -275,12 +275,11 @@ export function withSafeRawMode<T>(
             manager.disable();
           }
         });
-      } else {
-        if (enabled) {
-          manager.disable();
-        }
-        return result;
       }
+      if (enabled) {
+        manager.disable();
+      }
+      return result;
     } catch (err) {
       if (enabled) {
         manager.disable();

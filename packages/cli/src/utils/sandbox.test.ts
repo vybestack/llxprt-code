@@ -44,7 +44,7 @@ describe('getPassthroughEnvVars', () => {
 
     const result = getPassthroughEnvVars(env);
 
-    expect(result).toEqual({});
+    expect(result).toStrictEqual({});
   });
 
   it('should return LLXPRT_CODE_IDE_SERVER_PORT when set', () => {
@@ -80,7 +80,7 @@ describe('getPassthroughEnvVars', () => {
   it('should return all passthrough variables when all are set', () => {
     const result = getPassthroughEnvVars(mockEnv);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       LLXPRT_CODE_IDE_SERVER_PORT: '3000',
       LLXPRT_CODE_IDE_WORKSPACE_PATH: '/workspace',
       LLXPRT_CODE_WELCOME_CONFIG_PATH: '/config.json',
@@ -97,7 +97,7 @@ describe('getPassthroughEnvVars', () => {
 
     const result = getPassthroughEnvVars(env);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       LLXPRT_CODE_IDE_WORKSPACE_PATH: '/workspace',
       TERM_PROGRAM: 'VSCode',
     });
@@ -112,7 +112,7 @@ describe('getPassthroughEnvVars', () => {
 
     const result = getPassthroughEnvVars(env);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       LLXPRT_CODE_IDE_WORKSPACE_PATH: '/workspace',
       TERM_PROGRAM: 'VSCode',
     });
@@ -127,7 +127,7 @@ describe('getPassthroughEnvVars', () => {
 
     const result = getPassthroughEnvVars(env);
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       LLXPRT_CODE_IDE_SERVER_PORT: '3000:3001',
       LLXPRT_CODE_IDE_WORKSPACE_PATH: '/path/to/workspace with spaces',
       TERM_PROGRAM: 'iTerm.app',
@@ -138,7 +138,7 @@ describe('getPassthroughEnvVars', () => {
     const env: NodeJS.ProcessEnv = { ...mockEnv };
     getPassthroughEnvVars(env);
 
-    expect(env).toEqual(mockEnv);
+    expect(env).toStrictEqual(mockEnv);
   });
 
   it('should return a new object', () => {
@@ -189,7 +189,7 @@ describe('buildSandboxEnvArgs', () => {
 
     const result = buildSandboxEnvArgs(env);
 
-    expect(result).toEqual([]);
+    expect(result).toStrictEqual([]);
   });
 
   it('should format passthrough vars as CLI args with --env prefix', () => {
@@ -198,7 +198,7 @@ describe('buildSandboxEnvArgs', () => {
       TERM_PROGRAM: 'VSCode',
     });
 
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       '--env',
       'LLXPRT_CODE_IDE_SERVER_PORT=3000',
       '--env',
@@ -209,7 +209,7 @@ describe('buildSandboxEnvArgs', () => {
   it('should include all set passthrough variables', () => {
     const result = buildSandboxEnvArgs(mockEnv);
 
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       '--env',
       'LLXPRT_CODE_IDE_SERVER_PORT=3000',
       '--env',
@@ -226,7 +226,10 @@ describe('buildSandboxEnvArgs', () => {
       LLXPRT_CODE_IDE_SERVER_PORT: '3000=3001',
     });
 
-    expect(result).toEqual(['--env', 'LLXPRT_CODE_IDE_SERVER_PORT=3000=3001']);
+    expect(result).toStrictEqual([
+      '--env',
+      'LLXPRT_CODE_IDE_SERVER_PORT=3000=3001',
+    ]);
   });
 
   it('should handle values with spaces', () => {
@@ -234,7 +237,7 @@ describe('buildSandboxEnvArgs', () => {
       LLXPRT_CODE_IDE_WORKSPACE_PATH: '/path/to/workspace with spaces',
     });
 
-    expect(result).toEqual([
+    expect(result).toStrictEqual([
       '--env',
       'LLXPRT_CODE_IDE_WORKSPACE_PATH=/path/to/workspace with spaces',
     ]);
@@ -245,7 +248,7 @@ describe('buildSandboxEnvArgs', () => {
     const originalEnv = { ...env };
     buildSandboxEnvArgs(env);
 
-    expect(env).toEqual(originalEnv);
+    expect(env).toStrictEqual(originalEnv);
   });
 
   it('should return a new array', () => {

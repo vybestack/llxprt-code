@@ -5,13 +5,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import {
-  DeclarativeTool,
-  hasCycleInSchema,
-  Kind,
-  ToolInvocation,
-  ToolResult,
-} from './tools.js';
+import type { ToolInvocation, ToolResult } from './tools.js';
+import { DeclarativeTool, hasCycleInSchema, Kind } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import type { AnsiOutput } from '../utils/terminalSerializer.js';
 
@@ -72,7 +67,7 @@ describe('DeclarativeTool', () => {
       const result = await tool.validateBuildAndExecute(params, abortSignal);
 
       expect(buildFn).toHaveBeenCalledWith(params);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent: `Error: Invalid parameters provided. Reason: ${buildError.message}`,
         returnDisplay: buildError.message,
         error: {
@@ -94,7 +89,7 @@ describe('DeclarativeTool', () => {
 
       expect(buildFn).toHaveBeenCalledWith(params);
       expect(executeFn).toHaveBeenCalled();
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent: `Error: Tool call execution failed. Reason: ${executeError.message}`,
         returnDisplay: executeError.message,
         error: {
@@ -119,7 +114,7 @@ describe('DeclarativeTool', () => {
 
       expect(buildFn).toHaveBeenCalledWith(params);
       expect(executeFn).toHaveBeenCalled();
-      expect(result).toEqual(successResult);
+      expect(result).toStrictEqual(successResult);
     });
   });
 });

@@ -135,7 +135,7 @@ describe('shell-parser', () => {
       const command = 'ls -la';
       const result = parseCommandDetails(command);
       // When parseShellCommand times out, parseCommandDetails returns hasError: true
-      expect(result).toEqual({ details: [], hasError: true });
+      expect(result).toStrictEqual({ details: [], hasError: true });
     });
   });
 
@@ -159,7 +159,7 @@ describe('shell-parser', () => {
       const tree = parseShellCommand('cat file.txt | grep pattern | wc -l');
       expect(tree).not.toBeNull();
       const names = extractCommandNames(tree!);
-      expect(names).toEqual(['cat', 'grep', 'wc']);
+      expect(names).toStrictEqual(['cat', 'grep', 'wc']);
     });
 
     it('should extract commands from && chain when parser available', () => {
@@ -168,7 +168,7 @@ describe('shell-parser', () => {
       const tree = parseShellCommand('npm install && npm test && npm build');
       expect(tree).not.toBeNull();
       const names = extractCommandNames(tree!);
-      expect(names).toEqual(['npm', 'npm', 'npm']);
+      expect(names).toStrictEqual(['npm', 'npm', 'npm']);
     });
 
     it('should extract commands from || chain when parser available', () => {
@@ -177,7 +177,7 @@ describe('shell-parser', () => {
       const tree = parseShellCommand('test -f file || touch file');
       expect(tree).not.toBeNull();
       const names = extractCommandNames(tree!);
-      expect(names).toEqual(['test', 'touch']);
+      expect(names).toStrictEqual(['test', 'touch']);
     });
 
     it('should handle commands with paths when parser available', () => {

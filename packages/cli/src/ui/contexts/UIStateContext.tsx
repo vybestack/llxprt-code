@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext } from 'react';
+import type React from 'react';
+import { createContext, useContext } from 'react';
 import type { DOMElement } from 'ink';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type {
@@ -13,6 +14,7 @@ import type {
   ConsoleMessageItem,
   StreamingState,
   ConfirmationRequest,
+  ActiveHook,
 } from '../types.js';
 import type {
   IdeContext,
@@ -155,7 +157,7 @@ export interface UIState {
   coreMemoryFileCount: number;
   branchName: string | undefined;
   errorCount: number;
-  activeHooks?: Array<import('../types.js').ActiveHook>;
+  activeHooks?: ActiveHook[];
 
   // Console and messages
   consoleMessages: ConsoleMessageItem[];

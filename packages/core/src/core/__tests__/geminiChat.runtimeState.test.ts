@@ -34,7 +34,7 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '../../runtime/runtimeAdapters.js';
-import { HistoryService } from '../../services/history/HistoryService.js';
+import type { HistoryService } from '../../services/history/HistoryService.js';
 import type { ContentGenerator } from '../contentGenerator.js';
 import { createProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../../settings/SettingsService.js';

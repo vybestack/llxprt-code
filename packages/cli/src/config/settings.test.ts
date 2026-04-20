@@ -163,17 +163,17 @@ describe('Settings Loading and Merging', () => {
   describe('loadSettings', () => {
     it('should load empty settings if no files exist', () => {
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.system.settings).toEqual({});
-      expect(settings.user.settings).toEqual({});
-      expect(settings.workspace.settings).toEqual({});
+      expect(settings.system.settings).toStrictEqual({});
+      expect(settings.user.settings).toStrictEqual({});
+      expect(settings.workspace.settings).toStrictEqual({});
       // Schema defaults are now recursively extracted for nested objects
       // Test key nested defaults that demonstrate the fix is working
-      expect(settings.merged.accessibility).toEqual({
+      expect(settings.merged.accessibility).toStrictEqual({
         enableLoadingPhrases: true,
         screenReader: false,
       });
-      expect(settings.merged.checkpointing).toEqual({ enabled: false });
-      expect(settings.merged.fileFiltering).toEqual({
+      expect(settings.merged.checkpointing).toStrictEqual({ enabled: false });
+      expect(settings.merged.fileFiltering).toStrictEqual({
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
         enableRecursiveFileSearch: true,
@@ -181,7 +181,7 @@ describe('Settings Loading and Merging', () => {
         maxFileCount: 20000,
         searchTimeout: 5000,
       });
-      expect(settings.merged.security).toEqual({
+      expect(settings.merged.security).toStrictEqual({
         disableYoloMode: false,
         folderTrust: { enabled: false },
         auth: {},
@@ -197,8 +197,8 @@ describe('Settings Loading and Merging', () => {
         autoAccept: false,
         enableToolOutputTruncation: true,
       });
-      expect(settings.merged.mcp).toEqual({});
-      expect(settings.merged.output).toEqual({ format: 'text' });
+      expect(settings.merged.mcp).toStrictEqual({});
+      expect(settings.merged.output).toStrictEqual({ format: 'text' });
       expect(settings.merged.selectedAuthType).toBeUndefined();
       expect(settings.errors.length).toBe(0);
     });
@@ -227,8 +227,8 @@ describe('Settings Loading and Merging', () => {
       );
       // Migration adds enableAutoUpdate/enableAutoUpdateNotification — use toMatchObject
       expect(settings.system.settings).toMatchObject(systemSettingsContent);
-      expect(settings.user.settings).toEqual({});
-      expect(settings.workspace.settings).toEqual({});
+      expect(settings.user.settings).toStrictEqual({});
+      expect(settings.workspace.settings).toStrictEqual({});
       expect(settings.merged).toMatchObject({
         accessibility: {},
         chatCompression: {},
@@ -423,7 +423,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.excludedProjectEnvVars).toEqual([
+      expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
         'DEBUG',
         'NODE_ENV',
         'CUSTOM_VAR',
@@ -446,7 +446,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.excludedProjectEnvVars).toEqual([
+      expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
         'WORKSPACE_DEBUG',
         'WORKSPACE_VAR',
       ]);
@@ -473,16 +473,16 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.user.settings.excludedProjectEnvVars).toEqual([
+      expect(settings.user.settings.excludedProjectEnvVars).toStrictEqual([
         'DEBUG',
         'NODE_ENV',
         'USER_VAR',
       ]);
-      expect(settings.workspace.settings.excludedProjectEnvVars).toEqual([
+      expect(settings.workspace.settings.excludedProjectEnvVars).toStrictEqual([
         'WORKSPACE_DEBUG',
         'WORKSPACE_VAR',
       ]);
-      expect(settings.merged.excludedProjectEnvVars).toEqual([
+      expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
         'WORKSPACE_DEBUG',
         'WORKSPACE_VAR',
       ]);
@@ -559,9 +559,9 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false); // No settings files exist
       (fs.readFileSync as Mock).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.telemetry).toEqual({});
-      expect(settings.merged.ui.customThemes).toEqual({});
-      expect(settings.merged.mcpServers).toEqual({});
+      expect(settings.merged.telemetry).toStrictEqual({});
+      expect(settings.merged.ui.customThemes).toStrictEqual({});
+      expect(settings.merged.mcpServers).toStrictEqual({});
     });
 
     it('should merge MCP servers correctly, with workspace taking precedence', () => {
@@ -605,9 +605,11 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.user.settings).toEqual(userSettingsContent);
-      expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged.mcpServers).toEqual({
+      expect(settings.user.settings).toStrictEqual(userSettingsContent);
+      expect(settings.workspace.settings).toStrictEqual(
+        workspaceSettingsContent,
+      );
+      expect(settings.merged.mcpServers).toStrictEqual({
         'user-server': {
           command: 'user-command',
           args: ['--user-arg'],
@@ -646,7 +648,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.mcpServers).toEqual({
+      expect(settings.merged.mcpServers).toStrictEqual({
         'user-only-server': {
           command: 'user-only-command',
           description: 'User only server',
@@ -675,7 +677,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.mcpServers).toEqual({
+      expect(settings.merged.mcpServers).toStrictEqual({
         'workspace-only-server': {
           command: 'workspace-only-command',
           description: 'Workspace only server',
@@ -687,7 +689,7 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false); // No settings files exist
       (fs.readFileSync as Mock).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.mcpServers).toEqual({});
+      expect(settings.merged.mcpServers).toStrictEqual({});
     });
 
     it('should merge chatCompression settings, with workspace taking precedence', () => {
@@ -711,13 +713,13 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.user.settings.chatCompression).toEqual({
+      expect(settings.user.settings.chatCompression).toStrictEqual({
         contextPercentageThreshold: 0.5,
       });
-      expect(settings.workspace.settings.chatCompression).toEqual({
+      expect(settings.workspace.settings.chatCompression).toStrictEqual({
         contextPercentageThreshold: 0.8,
       });
-      expect(settings.merged.chatCompression).toEqual({
+      expect(settings.merged.chatCompression).toStrictEqual({
         contextPercentageThreshold: 0.8,
       });
     });
@@ -738,7 +740,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.chatCompression).toEqual({
+      expect(settings.merged.chatCompression).toStrictEqual({
         contextPercentageThreshold: 0.5,
       });
     });
@@ -747,7 +749,7 @@ describe('Settings Loading and Merging', () => {
       (mockFsExistsSync as Mock).mockReturnValue(false); // No settings files exist
       (fs.readFileSync as Mock).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.chatCompression).toEqual({});
+      expect(settings.merged.chatCompression).toStrictEqual({});
     });
 
     it('should deep merge chatCompression settings', () => {
@@ -771,7 +773,7 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.merged.chatCompression).toEqual({
+      expect(settings.merged.chatCompression).toStrictEqual({
         contextPercentageThreshold: 0.5,
       });
     });
@@ -807,7 +809,7 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.merged.includeDirectories).toEqual([
+      expect(settings.merged.includeDirectories).toStrictEqual([
         '/system/defaults/dir',
         '/user/dir1',
         '/user/dir2',
@@ -1078,7 +1080,7 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.user.settings.list).toEqual([
+      expect(settings.user.settings.list).toStrictEqual([
         'item1_env',
         'item2_env',
         'literal',
@@ -1566,7 +1568,7 @@ describe('Settings Loading and Merging', () => {
         const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
         // Verify the settings were loaded correctly
-        expect(settings.merged.excludedProjectEnvVars).toEqual([
+        expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
           'DEBUG',
           'DEBUG_MODE',
         ]);
@@ -1599,11 +1601,11 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.user.settings.excludedProjectEnvVars).toEqual([
+      expect(settings.user.settings.excludedProjectEnvVars).toStrictEqual([
         'NODE_ENV',
         'DEBUG',
       ]);
-      expect(settings.merged.excludedProjectEnvVars).toEqual([
+      expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
         'NODE_ENV',
         'DEBUG',
       ]);
@@ -1631,16 +1633,16 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.user.settings.excludedProjectEnvVars).toEqual([
+      expect(settings.user.settings.excludedProjectEnvVars).toStrictEqual([
         'DEBUG',
         'NODE_ENV',
         'USER_VAR',
       ]);
-      expect(settings.workspace.settings.excludedProjectEnvVars).toEqual([
+      expect(settings.workspace.settings.excludedProjectEnvVars).toStrictEqual([
         'WORKSPACE_DEBUG',
         'WORKSPACE_VAR',
       ]);
-      expect(settings.merged.excludedProjectEnvVars).toEqual([
+      expect(settings.merged.excludedProjectEnvVars).toStrictEqual([
         'WORKSPACE_DEBUG',
         'WORKSPACE_VAR',
       ]);
@@ -1773,10 +1775,10 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.user.settings).toEqual(complexSettingsContent);
+      expect(settings.user.settings).toStrictEqual(complexSettingsContent);
       expect(settings.merged.mcpServers).toHaveProperty('test-server');
       expect(settings.merged.customThemes).toHaveProperty('my-theme');
-      expect(settings.merged.mcpServers['test-server'].env).toEqual({
+      expect(settings.merged.mcpServers['test-server'].env).toStrictEqual({
         NODE_ENV: 'production',
         PORT: '3000',
       });
@@ -1925,7 +1927,9 @@ describe('Settings Loading and Merging', () => {
         '/system/admin',
       ];
 
-      expect(settings.merged.includeDirectories).toEqual(expectedDirectories);
+      expect(settings.merged.includeDirectories).toStrictEqual(
+        expectedDirectories,
+      );
       expect(settings.merged.includeDirectories).toHaveLength(
         expectedDirectories.length,
       );
@@ -1953,10 +1957,10 @@ describe('Settings Loading and Merging', () => {
         'complex-server': complexMcpServer,
       });
 
-      expect(loadedSettings.user.settings.mcpServers).toEqual({
+      expect(loadedSettings.user.settings.mcpServers).toStrictEqual({
         'complex-server': complexMcpServer,
       });
-      expect(loadedSettings.merged.mcpServers).toEqual({
+      expect(loadedSettings.merged.mcpServers).toStrictEqual({
         'complex-server': complexMcpServer,
       });
 
@@ -1990,7 +1994,7 @@ describe('Settings Loading and Merging', () => {
         'CONTEXT.md',
       );
 
-      expect(loadedSettings.user.settings).toEqual({
+      expect(loadedSettings.user.settings).toStrictEqual({
         theme: 'dark',
         sandbox: true,
         contextFileName: 'CONTEXT.md',
@@ -2037,14 +2041,14 @@ describe('Settings Loading and Merging', () => {
       setup({ isFolderTrustEnabled: false, isWorkspaceTrustedValue: true });
       loadEnvironment(loadSettings(MOCK_WORKSPACE_DIR).merged);
 
-      expect(process.env['TESTTEST']).toEqual('1234');
+      expect(process.env['TESTTEST']).toStrictEqual('1234');
     });
 
     it('does not load env files from untrusted spaces', () => {
       setup({ isFolderTrustEnabled: true, isWorkspaceTrustedValue: false });
       loadEnvironment(loadSettings(MOCK_WORKSPACE_DIR).merged);
 
-      expect(process.env['TESTTEST']).not.toEqual('1234');
+      expect(process.env['TESTTEST']).not.toStrictEqual('1234');
     });
   });
 
@@ -2179,7 +2183,7 @@ describe('Settings Loading and Merging', () => {
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
       // Both event keys should be present in merged hooks
-      expect(settings.merged.hooks).toEqual({
+      expect(settings.merged.hooks).toStrictEqual({
         BeforeTool: userHooks.BeforeTool,
         AfterTool: workspaceHooks.AfterTool,
       });
@@ -2219,10 +2223,10 @@ describe('Settings Loading and Merging', () => {
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
       // Workspace BeforeTool should replace user BeforeTool
-      expect(settings.merged.hooks.BeforeTool).toEqual(
+      expect(settings.merged.hooks.BeforeTool).toStrictEqual(
         workspaceHooks.BeforeTool,
       );
-      expect(settings.merged.hooks.BeforeTool).not.toEqual(
+      expect(settings.merged.hooks.BeforeTool).not.toStrictEqual(
         userHooks.BeforeTool,
       );
     });

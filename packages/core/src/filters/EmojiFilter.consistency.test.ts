@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
+import type { FilterConfiguration } from './EmojiFilter';
+import { EmojiFilter } from './EmojiFilter';
 
 describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   const commonEmojis = [
@@ -200,7 +201,7 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
 
       expect(result.emojiDetected).toBe(true);
       expect(result.blocked).toBe(false);
-      expect(result.filtered).toEqual({
+      expect(result.filtered).toStrictEqual({
         filePath: '/src/test.js',
         content: 'console.log("[OK] Success!"); //  Celebration',
         message: 'Update complete WARNING: Check warnings',

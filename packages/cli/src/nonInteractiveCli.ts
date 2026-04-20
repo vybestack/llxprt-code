@@ -5,8 +5,8 @@
  */
 
 import {
-  Config,
-  ToolCallRequestInfo,
+  type Config,
+  type ToolCallRequestInfo,
   executeToolCall,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
@@ -31,7 +31,7 @@ import {
   type ServerGeminiStreamEvent,
   debugLogger,
 } from '@vybestack/llxprt-code-core';
-import { Part } from '@google/genai';
+import { type Part } from '@google/genai';
 import readline from 'node:readline';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
 import type { LoadedSettings } from './config/settings.js';
@@ -551,7 +551,7 @@ export async function runNonInteractive({
                 requestInfo: ToolCallRequestInfo,
                 abortSignal: AbortSignal,
                 dependencies: {
-                  messageBus?: import('@vybestack/llxprt-code-core').MessageBus;
+                  messageBus?: MessageBus;
                 },
               ) => Promise<Awaited<ReturnType<typeof executeToolCall>>>)
           )(config, requestInfo, abortController.signal, {

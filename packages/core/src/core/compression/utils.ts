@@ -23,6 +23,7 @@ import type {
 } from '../../services/history/IContent.js';
 import type { IProvider } from '../../providers/IProvider.js';
 import { classifyMediaBlock } from '../../providers/utils/mediaUtils.js';
+import type { CompressionContext } from './types.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -272,7 +273,7 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
-  config?: import('./types.js').CompressionContext['config'],
+  config?: CompressionContext['config'],
 ): Promise<string> {
   const verificationRequest: IContent[] = [
     COMPRESSION_SECURITY_PREAMBLE,

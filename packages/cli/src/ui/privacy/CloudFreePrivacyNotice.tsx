@@ -9,7 +9,7 @@ import { useCallback } from 'react';
 import { RadioButtonSelect } from '../components/shared/RadioButtonSelect.js';
 import { usePrivacySettings } from '../hooks/usePrivacySettings.js';
 import { CloudPaidPrivacyNotice } from './CloudPaidPrivacyNotice.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 

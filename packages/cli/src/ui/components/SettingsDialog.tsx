@@ -340,9 +340,8 @@ export function SettingsDialog({
   const generateSettingsItems = () => {
     if (subSettingsMode.isActive) {
       return generateSubSettingsItems(subSettingsMode.parentKey);
-    } else {
-      return generateNormalSettingsItems();
     }
+    return generateNormalSettingsItems();
   };
 
   const generateSubSettingsItems = (parentKey: string) => {

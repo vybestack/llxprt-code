@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 describe('buildResponsesRequest - undefined message handling', () => {
   it('should filter out undefined messages', () => {
     const messages: Array<IContent | undefined | null> = [

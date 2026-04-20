@@ -5,12 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ReadFileTool, ReadFileToolParams } from './read-file.js';
+import type { ReadFileToolParams } from './read-file.js';
+import { ReadFileTool } from './read-file.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import fsp from 'fs/promises';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
@@ -60,7 +61,7 @@ describe('ReadFileTool', () => {
       const result = tool.build(params);
       expect(result).not.toBeTypeOf('string');
       expect(typeof result).toBe('object');
-      expect(result.params).toEqual(params);
+      expect(result.params).toStrictEqual(params);
     });
 
     it('should return an invocation for valid params with offset and limit', () => {
@@ -193,7 +194,7 @@ describe('ReadFileTool', () => {
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
         const result = await invocation.execute(abortSignal);
-        expect(result).toEqual({
+        expect(result).toStrictEqual({
           error: {
             message: `File not found: ${filePath}`,
             type: 'file_not_found',
@@ -211,7 +212,7 @@ describe('ReadFileTool', () => {
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
 
-        expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toStrictEqual({
           llmContent: fileContent,
           returnDisplay: '',
         });
@@ -230,7 +231,7 @@ describe('ReadFileTool', () => {
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
 
-        expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toStrictEqual({
           llmContent: {
             inlineData: {
               mimeType: 'image/png',
@@ -248,7 +249,7 @@ describe('ReadFileTool', () => {
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
 
-        expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toStrictEqual({
           llmContent: {
             inlineData: {
               mimeType: 'image/png',
@@ -286,7 +287,7 @@ Line 6
 Line 7
 Line 8`;
 
-        expect(result.llmContent).toEqual(expectedLlmContent);
+        expect(result.llmContent).toStrictEqual(expectedLlmContent);
         expect(result.returnDisplay).toBe(
           'Read lines 6-8 of 20 from paginated.txt',
         );
@@ -320,7 +321,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
    7| Line 7
    8| Line 8`;
 
-        expect(result.llmContent).toEqual(expectedLlmContent);
+        expect(result.llmContent).toStrictEqual(expectedLlmContent);
       });
 
       it('should prefix returned lines with virtual line numbers when showLineNumbers is true (non-truncated)', async () => {
@@ -342,7 +343,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
           '   3| Line 3',
         ].join('\n');
 
-        expect(result.llmContent).toEqual(expectedLlmContent);
+        expect(result.llmContent).toStrictEqual(expectedLlmContent);
       });
 
       it('should include a warning (but still return content) when showGitChanges is enabled and file is not in a git repo', async () => {
@@ -557,7 +558,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
 
-        expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toStrictEqual({
           llmContent: fileContent,
           returnDisplay: '',
         });
@@ -576,7 +577,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
 
-        expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toStrictEqual({
           llmContent: {
             inlineData: {
               mimeType: 'image/png',
@@ -594,7 +595,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         const params: ReadFileToolParams = { absolute_path: filePath };
         const invocation = tool.build(params);
 
-        expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toStrictEqual({
           llmContent: {
             inlineData: {
               mimeType: 'image/png',
@@ -632,7 +633,7 @@ Line 6
 Line 7
 Line 8`;
 
-        expect(result.llmContent).toEqual(expectedLlmContent);
+        expect(result.llmContent).toStrictEqual(expectedLlmContent);
         expect(result.returnDisplay).toBe(
           'Read lines 6-8 of 20 from paginated.txt',
         );
@@ -646,7 +647,7 @@ Line 8`;
       const invocation = tool.build(params);
 
       const result = await invocation.execute(abortSignal);
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         llmContent:
           'Could not read file because the provided path is a directory, not a file.',
         returnDisplay: 'Path is a directory.',
@@ -700,7 +701,7 @@ Line 8`;
       const invocation = tool.build(params);
 
       const result = await invocation.execute(abortSignal);
-      expect(result.llmContent).toEqual({
+      expect(result.llmContent).toStrictEqual({
         inlineData: {
           data: pngHeader.toString('base64'),
           mimeType: 'image/png',
@@ -718,7 +719,7 @@ Line 8`;
       const invocation = tool.build(params);
 
       const result = await invocation.execute(abortSignal);
-      expect(result.llmContent).toEqual({
+      expect(result.llmContent).toStrictEqual({
         inlineData: {
           data: pdfHeader.toString('base64'),
           mimeType: 'application/pdf',

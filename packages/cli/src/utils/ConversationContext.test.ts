@@ -5,10 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  ConversationContext,
-  IConversationContext,
-} from './ConversationContext.js';
+import type { IConversationContext } from './ConversationContext.js';
+import { ConversationContext } from './ConversationContext.js';
 
 describe('ConversationContextManager', () => {
   // Reset the singleton before each test to ensure isolation
@@ -29,7 +27,7 @@ describe('ConversationContextManager', () => {
     const secondContext = ConversationContext.getContext();
 
     expect(secondContext.conversationId).toBeDefined();
-    expect(secondContext.conversationId).not.toEqual(
+    expect(secondContext.conversationId).not.toStrictEqual(
       firstContext.conversationId,
     );
     expect(secondContext.parentId).toBeUndefined();
@@ -41,7 +39,7 @@ describe('ConversationContextManager', () => {
     ConversationContext.setParentId(parentId);
     const context = ConversationContext.getContext();
 
-    expect(context.parentId).toEqual(parentId);
+    expect(context.parentId).toStrictEqual(parentId);
   });
 
   it('should correctly restore a full context object', () => {
@@ -52,7 +50,7 @@ describe('ConversationContextManager', () => {
     ConversationContext.setContext(newContext);
     const restoredContext = ConversationContext.getContext();
 
-    expect(restoredContext).toEqual(newContext);
+    expect(restoredContext).toStrictEqual(newContext);
   });
 
   it('should reset the context and start fresh', () => {
@@ -69,7 +67,7 @@ describe('ConversationContextManager', () => {
     const freshContext = ConversationContext.getContext();
 
     expect(freshContext.conversationId).toBeDefined();
-    expect(freshContext.conversationId).not.toEqual('initial_conv');
+    expect(freshContext.conversationId).not.toStrictEqual('initial_conv');
     expect(freshContext.parentId).toBeUndefined();
   });
 

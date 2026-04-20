@@ -37,7 +37,10 @@ describe('nextStreamEventWithIdleTimeout', () => {
     });
 
     await Promise.resolve();
-    expect(await nextEventPromise).toEqual({ done: false, value: 'fast' });
+    expect(await nextEventPromise).toStrictEqual({
+      done: false,
+      value: 'fast',
+    });
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -109,17 +112,17 @@ describe('nextStreamEventWithIdleTimeout', () => {
 
     await expect(
       nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
-    ).resolves.toEqual({ done: false, value: 'one' });
+    ).resolves.toStrictEqual({ done: false, value: 'one' });
     expect(vi.getTimerCount()).toBe(0);
 
     await expect(
       nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
-    ).resolves.toEqual({ done: false, value: 'two' });
+    ).resolves.toStrictEqual({ done: false, value: 'two' });
     expect(vi.getTimerCount()).toBe(0);
 
     await expect(
       nextStreamEventWithIdleTimeout({ iterator, timeoutMs: 30_000 }),
-    ).resolves.toEqual({ done: false, value: 'three' });
+    ).resolves.toStrictEqual({ done: false, value: 'three' });
     expect(vi.getTimerCount()).toBe(0);
   });
 

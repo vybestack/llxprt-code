@@ -132,7 +132,7 @@ describe('profileBootstrap helpers', () => {
       '--set=shell-replacement=true',
     ];
     const parsed = parseArgs();
-    expect(parsed.bootstrapArgs.setOverrides).toEqual([
+    expect(parsed.bootstrapArgs.setOverrides).toStrictEqual([
       'modelparam.temperature=1',
       'context-limit=190000',
       'shell-replacement=true',
@@ -310,7 +310,7 @@ describe('--profile flag parsing @plan:PLAN-20251118-ISSUE533.P04', () => {
     const result = parseBootstrapArgs();
     expect(result.bootstrapArgs.profileJson).toBe('{"model":"gpt-4"}');
     expect(result.bootstrapArgs.keyOverride).toBe('test-key');
-    expect(result.bootstrapArgs.setOverrides).toEqual(['debug=true']);
+    expect(result.bootstrapArgs.setOverrides).toStrictEqual(['debug=true']);
   });
 
   // Group 2: Error Cases (4 tests)
@@ -510,7 +510,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
 
     expect(result.providerName).toBe('anthropic');
     expect(result.modelName).toBe('claude-3-5-sonnet-20241022');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -534,7 +534,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
 
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-4');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -558,7 +558,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
 
     expect(result.providerName).toBe('anthropic');
     expect(result.modelName).toBe('claude-3-5-sonnet-20241022');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -584,7 +584,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
 
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-4');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -611,7 +611,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
       const result = parseInlineProfile(JSON.stringify(profile));
       expect(result.providerName).toBe(profile.provider);
       expect(result.modelName).toBe(profile.model);
-      expect(result.warnings).toEqual([]);
+      expect(result.warnings).toStrictEqual([]);
     });
   });
 
@@ -732,7 +732,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
     expect(result.error).toBeUndefined();
     expect(result.providerName).toBe('Synthetic');
     expect(result.modelName).toBe('hf:zai-org/GLM-4.6');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -821,7 +821,7 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
 
     expect(result.providerName).toBe('anthropic');
     expect(result.modelName).toBe('claude-3-5-sonnet-20241022');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -936,7 +936,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
 
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-4');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -974,7 +974,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
 
     expect(result.providerName).toBe('anthropic');
     expect(result.modelName).toBe('claude-3-5-sonnet-20241022');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -1012,7 +1012,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
 
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-4');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -1049,7 +1049,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
 
     expect(result.providerName).toBeNull();
     expect(result.modelName).toBeNull();
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   // Group 2: Override Precedence (4 tests)
@@ -1088,7 +1088,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
 
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-3.5-turbo');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 
   /**
@@ -1347,7 +1347,7 @@ describe('applyBootstrapProfile() with --profile @plan:PLAN-20251118-ISSUE533.P0
 
     expect(result.providerName).toBe('openai');
     expect(result.modelName).toBe('gpt-4');
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toStrictEqual([]);
   });
 });
 

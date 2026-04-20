@@ -454,7 +454,7 @@ describe('Density Optimization Orchestration (P19)', () => {
       }));
 
       // History should be completely unchanged
-      expect(historyAfter).toEqual(historyBefore);
+      expect(historyAfter).toStrictEqual(historyBefore);
     });
 
     /**

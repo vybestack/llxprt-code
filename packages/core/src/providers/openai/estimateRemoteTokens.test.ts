@@ -5,7 +5,7 @@ import {
   MODEL_CONTEXT_SIZE,
 } from './estimateRemoteTokens.js';
 import { ConversationCache } from './ConversationCache.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 describe('estimateRemoteTokens', () => {
   let cache: ConversationCache;
 
@@ -22,7 +22,7 @@ describe('estimateRemoteTokens', () => {
       1000, // prompt tokens
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       totalTokens: 1000,
       remoteTokens: 0,
       promptTokens: 1000,
@@ -44,7 +44,7 @@ describe('estimateRemoteTokens', () => {
       2000, // prompt tokens
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       totalTokens: 52000,
       remoteTokens: 50000,
       promptTokens: 2000,
@@ -66,7 +66,7 @@ describe('estimateRemoteTokens', () => {
       5000, // prompt tokens
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       totalTokens: 130000,
       remoteTokens: 125000,
       promptTokens: 5000,

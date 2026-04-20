@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
 import {
-  Config,
+  type Config,
   FileDiscoveryService,
   GlobTool,
   type MessageBus,
@@ -191,7 +191,7 @@ describe('handleAtCommand', () => {
       `${serverName}:${resourceUri}`,
     );
     expect(readResource).toHaveBeenCalledWith(resourceUri);
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: query },
         { text: `\nContent from @${serverName}:${resourceUri}:\n` },
@@ -226,7 +226,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [{ text: query }],
     });
   });
@@ -243,7 +243,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [{ text: queryWithSpaces }],
     });
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -275,7 +275,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
@@ -311,7 +311,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: `@${resolvedGlob}` },
         { text: '\n--- Content from referenced files ---' },
@@ -342,7 +342,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: `${textBefore}@${relativePath}${textAfter}` },
         { text: '\n--- Content from referenced files ---' },
@@ -369,7 +369,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
@@ -406,7 +406,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: query },
         { text: '\n--- Content from referenced files ---' },
@@ -440,7 +440,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: query },
         { text: '\n--- Content from referenced files ---' },
@@ -476,7 +476,7 @@ describe('handleAtCommand', () => {
     expect(result.error).toBeUndefined();
     expect(result.processedQuery).toBeDefined();
     const processedQuery = result.processedQuery!;
-    expect((processedQuery as Array<{ text: string }>)[0]).toEqual({
+    expect((processedQuery as Array<{ text: string }>)[0]).toStrictEqual({
       text: `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`,
     });
 
@@ -515,7 +515,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [{ text: 'Check @nonexistent.txt and @ also' }],
     });
   });
@@ -548,7 +548,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [{ text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -581,7 +581,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: `@${relativePath}` },
           { text: '\n--- Content from referenced files ---' },
@@ -612,7 +612,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: `@${relativePath1} @${relativePath2}` },
           { text: '\n--- Content from referenced files ---' },
@@ -645,7 +645,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [{ text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -678,7 +678,7 @@ describe('handleAtCommand', () => {
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
         `Glob tool not found. Path ${invalidFile} will be skipped.`,
       );
-      expect(result.processedQuery).toEqual([{ text: query }]);
+      expect(result.processedQuery).toStrictEqual([{ text: query }]);
       expect(result.processedQuery).not.toBeNull();
       expect(result.error).toBeUndefined();
     });
@@ -705,7 +705,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [{ text: query }],
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
@@ -737,7 +737,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: `@${relativePath}` },
         { text: '\n--- Content from referenced files ---' },
@@ -774,7 +774,7 @@ describe('handleAtCommand', () => {
       signal: abortController.signal,
     });
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       processedQuery: [
         { text: `@${relativePath1} @${relativePath2}` },
         { text: '\n--- Content from referenced files ---' },
@@ -900,7 +900,7 @@ describe('handleAtCommand', () => {
 
         const fileInQuery = fileName;
 
-        expect(result).toEqual({
+        expect(result).toStrictEqual({
           processedQuery: [
             { text: query },
             { text: '\n--- Content from referenced files ---' },
@@ -928,7 +928,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },
@@ -959,7 +959,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: 'Check @spaced file.txt, it has spaces.' },
           { text: '\n--- Content from referenced files ---' },
@@ -984,7 +984,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },
@@ -1009,7 +1009,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },
@@ -1034,7 +1034,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },
@@ -1062,7 +1062,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },
@@ -1087,7 +1087,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },
@@ -1115,7 +1115,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: 'Check @file$with&special#chars.txt for content.' },
           { text: '\n--- Content from referenced files ---' },
@@ -1143,7 +1143,7 @@ describe('handleAtCommand', () => {
         signal: abortController.signal,
       });
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         processedQuery: [
           { text: query },
           { text: '\n--- Content from referenced files ---' },

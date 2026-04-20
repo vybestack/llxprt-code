@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FileSystemService } from '@vybestack/llxprt-code-core';
+import type { FileSystemService } from '@vybestack/llxprt-code-core';
 import type * as acp from '@agentclientprotocol/sdk';
 
 /**

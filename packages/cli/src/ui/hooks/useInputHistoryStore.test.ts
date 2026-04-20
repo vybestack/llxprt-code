@@ -18,7 +18,7 @@ describe('useInputHistoryStore', () => {
   it('should initialize with empty input history', () => {
     const { result } = renderHook(() => useInputHistoryStore());
 
-    expect(result.current.inputHistory).toEqual([]);
+    expect(result.current.inputHistory).toStrictEqual([]);
   });
 
   it('should add input to history', () => {
@@ -28,13 +28,13 @@ describe('useInputHistoryStore', () => {
       result.current.addInput('test message 1');
     });
 
-    expect(result.current.inputHistory).toEqual(['test message 1']);
+    expect(result.current.inputHistory).toStrictEqual(['test message 1']);
 
     act(() => {
       result.current.addInput('test message 2');
     });
 
-    expect(result.current.inputHistory).toEqual([
+    expect(result.current.inputHistory).toStrictEqual([
       'test message 1',
       'test message 2',
     ]);
@@ -47,13 +47,13 @@ describe('useInputHistoryStore', () => {
       result.current.addInput('');
     });
 
-    expect(result.current.inputHistory).toEqual([]);
+    expect(result.current.inputHistory).toStrictEqual([]);
 
     act(() => {
       result.current.addInput('   ');
     });
 
-    expect(result.current.inputHistory).toEqual([]);
+    expect(result.current.inputHistory).toStrictEqual([]);
   });
 
   it('should deduplicate consecutive identical messages', () => {
@@ -67,7 +67,7 @@ describe('useInputHistoryStore', () => {
       result.current.addInput('test message'); // Same as previous
     });
 
-    expect(result.current.inputHistory).toEqual(['test message']);
+    expect(result.current.inputHistory).toStrictEqual(['test message']);
 
     act(() => {
       result.current.addInput('different message');
@@ -77,7 +77,7 @@ describe('useInputHistoryStore', () => {
       result.current.addInput('test message'); // Same as first, but not consecutive
     });
 
-    expect(result.current.inputHistory).toEqual([
+    expect(result.current.inputHistory).toStrictEqual([
       'test message',
       'different message',
       'test message',
@@ -98,7 +98,11 @@ describe('useInputHistoryStore', () => {
     });
 
     // Should reverse the order to oldest first
-    expect(result.current.inputHistory).toEqual(['oldest', 'middle', 'newest']);
+    expect(result.current.inputHistory).toStrictEqual([
+      'oldest',
+      'middle',
+      'newest',
+    ]);
     expect(mockLogger.getPreviousUserMessages).toHaveBeenCalledTimes(1);
   });
 
@@ -119,7 +123,7 @@ describe('useInputHistoryStore', () => {
       await result.current.initializeFromLogger(mockLogger);
     });
 
-    expect(result.current.inputHistory).toEqual([]);
+    expect(result.current.inputHistory).toStrictEqual([]);
     expect(debugWarnSpy).toHaveBeenCalledWith(
       'Failed to initialize input history from logger:',
       expect.any(Error),
@@ -148,7 +152,7 @@ describe('useInputHistoryStore', () => {
 
     // Should be called only once
     expect(mockLogger.getPreviousUserMessages).toHaveBeenCalledTimes(1);
-    expect(result.current.inputHistory).toEqual(['message2', 'message1']);
+    expect(result.current.inputHistory).toStrictEqual(['message2', 'message1']);
   });
 
   it('should handle null logger gracefully', async () => {
@@ -158,7 +162,7 @@ describe('useInputHistoryStore', () => {
       await result.current.initializeFromLogger(null);
     });
 
-    expect(result.current.inputHistory).toEqual([]);
+    expect(result.current.inputHistory).toStrictEqual([]);
   });
 
   it('should trim input before adding to history', () => {
@@ -168,7 +172,7 @@ describe('useInputHistoryStore', () => {
       result.current.addInput('  test message  ');
     });
 
-    expect(result.current.inputHistory).toEqual(['test message']);
+    expect(result.current.inputHistory).toStrictEqual(['test message']);
   });
 
   describe('deduplication logic from previous implementation', () => {
@@ -192,7 +196,7 @@ describe('useInputHistoryStore', () => {
       });
 
       // Should deduplicate consecutive messages and reverse to oldest first
-      expect(result.current.inputHistory).toEqual([
+      expect(result.current.inputHistory).toStrictEqual([
         'message3',
         'message2',
         'message1',
@@ -217,13 +221,17 @@ describe('useInputHistoryStore', () => {
       });
 
       // Should deduplicate across session boundary
-      expect(result.current.inputHistory).toEqual(['old1', 'old2']);
+      expect(result.current.inputHistory).toStrictEqual(['old1', 'old2']);
 
       act(() => {
         result.current.addInput('new1');
       });
 
-      expect(result.current.inputHistory).toEqual(['old1', 'old2', 'new1']);
+      expect(result.current.inputHistory).toStrictEqual([
+        'old1',
+        'old2',
+        'new1',
+      ]);
     });
 
     it('should preserve non-consecutive duplicates', async () => {
@@ -240,7 +248,7 @@ describe('useInputHistoryStore', () => {
       });
 
       // Non-consecutive duplicates should be preserved
-      expect(result.current.inputHistory).toEqual([
+      expect(result.current.inputHistory).toStrictEqual([
         'message2',
         'message1',
         'message2',
@@ -268,7 +276,11 @@ describe('useInputHistoryStore', () => {
       });
 
       // Should have deduplicated consecutive ones
-      expect(result.current.inputHistory).toEqual(['hello', 'world', 'hello']);
+      expect(result.current.inputHistory).toStrictEqual([
+        'hello',
+        'world',
+        'hello',
+      ]);
     });
 
     it('should maintain oldest-first order in final output', async () => {
@@ -293,7 +305,7 @@ describe('useInputHistoryStore', () => {
       });
 
       // Should maintain oldest-first order
-      expect(result.current.inputHistory).toEqual([
+      expect(result.current.inputHistory).toStrictEqual([
         'oldest',
         'middle',
         'newest',

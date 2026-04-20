@@ -185,7 +185,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         ],
       });
 
-      expect(result.authenticatedBuckets).toEqual([
+      expect(result.authenticatedBuckets).toStrictEqual([
         'work@company.com',
         'personal@gmail.com',
         'backup@example.com',
@@ -273,9 +273,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       expect(delayLog).toHaveLength(3); // Delay before ALL buckets including first
-      expect(delayLog[0]).toEqual({ ms: 3000, bucket: 'bucket1' });
-      expect(delayLog[1]).toEqual({ ms: 3000, bucket: 'bucket2' });
-      expect(delayLog[2]).toEqual({ ms: 3000, bucket: 'bucket3' });
+      expect(delayLog[0]).toStrictEqual({ ms: 3000, bucket: 'bucket1' });
+      expect(delayLog[1]).toStrictEqual({ ms: 3000, bucket: 'bucket2' });
+      expect(delayLog[2]).toStrictEqual({ ms: 3000, bucket: 'bucket3' });
     });
   });
 
@@ -383,8 +383,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2', 'bucket3', 'bucket4'],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['bucket1', 'bucket2']);
-      expect(result.failedBuckets).toEqual(['bucket3', 'bucket4']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1', 'bucket2']);
+      expect(result.failedBuckets).toStrictEqual(['bucket3', 'bucket4']);
       expect(result.cancelled).toBe(true);
     });
 
@@ -404,7 +404,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2', 'bucket3'],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1']);
       expect(result.authenticatedBuckets).toHaveLength(1);
     });
 
@@ -428,11 +428,11 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         ],
       });
 
-      expect(result.authenticatedBuckets).toEqual([
+      expect(result.authenticatedBuckets).toStrictEqual([
         'work@company.com',
         'personal@gmail.com',
       ]);
-      expect(result.failedBuckets).toEqual(['backup@example.com']);
+      expect(result.failedBuckets).toStrictEqual(['backup@example.com']);
       expect(result.cancelled).toBe(true);
     });
 
@@ -453,7 +453,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       expect(result.authenticatedBuckets).toHaveLength(0);
-      expect(result.failedBuckets).toEqual(['bucket1', 'bucket2']);
+      expect(result.failedBuckets).toStrictEqual(['bucket1', 'bucket2']);
       expect(result.cancelled).toBe(true);
     });
 
@@ -630,8 +630,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2', 'bucket3', 'bucket4'],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['bucket1', 'bucket2']);
-      expect(result.failedBuckets).toEqual(['bucket3', 'bucket4']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1', 'bucket2']);
+      expect(result.failedBuckets).toStrictEqual(['bucket3', 'bucket4']);
       expect(result.cancelled).toBe(true);
     });
 
@@ -650,7 +650,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['single-bucket'],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['single-bucket']);
+      expect(result.authenticatedBuckets).toStrictEqual(['single-bucket']);
       expect(delayLog).toHaveLength(1); // Delay applied for rate-limit protection
       expect(delayLog[0].ms).toBe(5000);
     });
@@ -705,8 +705,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2', 'bucket3'],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['bucket1', 'bucket3']);
-      expect(result.failedBuckets).toEqual(['bucket2']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1', 'bucket3']);
+      expect(result.failedBuckets).toStrictEqual(['bucket2']);
       expect(result.error).toContain('Auth failed for bucket2');
     });
 
@@ -733,7 +733,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       expect(result.authenticatedBuckets).toHaveLength(0);
-      expect(result.failedBuckets).toEqual(['bucket1', 'bucket2']);
+      expect(result.failedBuckets).toStrictEqual(['bucket1', 'bucket2']);
     });
   });
 
@@ -790,7 +790,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       const result = await authPromise;
 
       // Should have waited for full MessageBus response, not timed out
-      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1']);
       expect(result.cancelled).toBe(false);
 
       vi.useRealTimers();
@@ -829,7 +829,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1'],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1']);
       // Verify stdin.setRawMode was never called (no stdin fallback occurred)
       expect(setRawModeSpy).not.toHaveBeenCalled();
 
@@ -876,7 +876,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       const result = await authPromise;
 
-      expect(result.authenticatedBuckets).toEqual(['bucket1']);
+      expect(result.authenticatedBuckets).toStrictEqual(['bucket1']);
 
       vi.useRealTimers();
     });
@@ -919,7 +919,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       // Prompt should be called BEFORE auth
-      expect(callOrder).toEqual(['prompt:single-bucket', 'auth:single-bucket']);
+      expect(callOrder).toStrictEqual([
+        'prompt:single-bucket',
+        'auth:single-bucket',
+      ]);
     });
 
     /**
@@ -952,7 +955,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['default'],
       });
 
-      expect(callOrder).toEqual(['prompt:default', 'auth:default']);
+      expect(callOrder).toStrictEqual(['prompt:default', 'auth:default']);
     });
   });
 
@@ -991,7 +994,11 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       // All 3 buckets should be authenticated upfront
-      expect(authenticatedBuckets).toEqual(['bucket1', 'bucket2', 'bucket3']);
+      expect(authenticatedBuckets).toStrictEqual([
+        'bucket1',
+        'bucket2',
+        'bucket3',
+      ]);
       expect(result.authenticatedBuckets).toHaveLength(3);
     });
 
@@ -1040,8 +1047,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       // (bucket2 was already authenticated)
       // NOTE: Current implementation prompts for ALL buckets - this test
       // documents the EXPECTED behavior after the fix
-      expect(promptedBuckets).toEqual(['bucket1', 'bucket3']);
-      expect(authenticatedBuckets).toEqual(['bucket1', 'bucket3']);
+      expect(promptedBuckets).toStrictEqual(['bucket1', 'bucket3']);
+      expect(authenticatedBuckets).toStrictEqual(['bucket1', 'bucket3']);
     });
   });
 });

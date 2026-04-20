@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
 import crypto from 'node:crypto';
 import { colorizeCode, colorizeLine } from '../../utils/CodeColorizer.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
+import type { Theme } from '../../themes/theme.js';
 
 interface DiffLine {
   type: 'add' | 'del' | 'context' | 'hunk' | 'other';
@@ -93,7 +94,7 @@ interface DiffRendererProps {
   tabWidth?: number;
   availableTerminalHeight?: number;
   terminalWidth: number;
-  theme?: import('../../themes/theme.js').Theme;
+  theme?: Theme;
 }
 
 const DEFAULT_TAB_WIDTH = 4; // Spaces per tab for normalization

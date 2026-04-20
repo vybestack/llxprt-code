@@ -5,8 +5,8 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { GenerateContentResponseUsageMetadata } from '@google/genai';
-import { Config } from '../config/config.js';
+import type { GenerateContentResponseUsageMetadata } from '@google/genai';
+import type { Config } from '../config/config.js';
 import { type CompletedToolCall } from '../core/coreToolScheduler.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import { ToolConfirmationOutcome } from '../tools/tools.js';
@@ -18,11 +18,8 @@ import type {
   ToolCall,
   ProviderPerformanceMetrics,
 } from '../providers/types.js';
-import {
-  HookEventName,
-  type HookExecutionResult,
-  type HookInput,
-} from '../hooks/types.js';
+import type { HookEventName } from '../hooks/types.js';
+import { type HookExecutionResult, type HookInput } from '../hooks/types.js';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',

@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ConfigurationManager } from './ConfigurationManager.js';
-import { DebugSettings } from './types.js';
+import type { DebugSettings } from './types.js';
 
 describe('ConfigurationManager', () => {
   beforeEach(() => {
@@ -161,10 +161,14 @@ describe('ConfigurationManager', () => {
       const manager = ConfigurationManager.getInstance();
       const config = manager.getEffectiveConfig();
       expect(config.enabled).toBe(false);
-      expect(config.namespaces).toEqual([]);
+      expect(config.namespaces).toStrictEqual([]);
       expect(config.level).toBe('info');
       expect(config.lazyEvaluation).toBe(true);
-      expect(config.redactPatterns).toEqual(['apiKey', 'token', 'password']);
+      expect(config.redactPatterns).toStrictEqual([
+        'apiKey',
+        'token',
+        'password',
+      ]);
     });
   });
 
@@ -182,7 +186,7 @@ describe('ConfigurationManager', () => {
       const config = manager.getEffectiveConfig();
       expect(config.enabled).toBe(true);
       expect(config.level).toBe('debug');
-      expect(config.namespaces).toEqual(['test:*']);
+      expect(config.namespaces).toStrictEqual(['test:*']);
     });
 
     it('should persist ephemeral configuration to user config', () => {

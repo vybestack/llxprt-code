@@ -68,7 +68,11 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
     expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
     const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0];
     expect(handlerArg).toBeDefined();
-    expect(handlerArg.getBuckets()).toEqual(['bucket1', 'bucket2', 'bucket3']);
+    expect(handlerArg.getBuckets()).toStrictEqual([
+      'bucket1',
+      'bucket2',
+      'bucket3',
+    ]);
   });
 
   it('should reuse existing handler if buckets match in the same scope', async () => {
@@ -143,7 +147,7 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
       reset: () => void;
     };
 
-    expect(handlerArg.getRequestMetadata()).toEqual(metadata);
+    expect(handlerArg.getRequestMetadata()).toStrictEqual(metadata);
     expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
   });
 
@@ -176,7 +180,11 @@ describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
 
     expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
     const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0];
-    expect(handlerArg.getBuckets()).toEqual(['bucket1', 'bucket3', 'bucket4']);
+    expect(handlerArg.getBuckets()).toStrictEqual([
+      'bucket1',
+      'bucket3',
+      'bucket4',
+    ]);
   });
 
   it('should warn if buckets configured but no config available', async () => {

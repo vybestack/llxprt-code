@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import type React from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';

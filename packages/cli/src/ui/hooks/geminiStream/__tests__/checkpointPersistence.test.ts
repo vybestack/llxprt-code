@@ -152,7 +152,7 @@ describe('createToolCheckpoint', () => {
     expect(writtenContent.commitHash).toBe('snap456');
     expect(writtenContent.filePath).toBe('/project/src/foo.ts');
     expect(writtenContent.toolCall.name).toBe('replace');
-    expect(writtenContent.history).toEqual(mockHistory);
+    expect(writtenContent.history).toStrictEqual(mockHistory);
     expect(onDebugMessage).not.toHaveBeenCalled();
   });
 

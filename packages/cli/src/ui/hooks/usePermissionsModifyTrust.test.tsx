@@ -59,7 +59,7 @@ describe('usePermissionsModifyTrust', () => {
     const folders = loadTrustedFolders();
 
     expect(folders).toBeDefined();
-    expect(folders.rules).toEqual([]);
+    expect(folders.rules).toStrictEqual([]);
     expect(folders.setValue).toBeDefined();
   });
 

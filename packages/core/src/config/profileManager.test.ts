@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProfileManager } from './profileManager.js';
-import { ISettingsService } from '../settings/types.js';
-import { Profile, LoadBalancerProfile } from '../types/modelParams.js';
+import type { ISettingsService } from '../settings/types.js';
+import type { Profile, LoadBalancerProfile } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';
@@ -110,7 +110,7 @@ describe('ProfileManager', () => {
         '/home/test/.llxprt/profiles/test-profile.json',
         'utf8',
       );
-      expect(result).toEqual(testProfile);
+      expect(result).toStrictEqual(testProfile);
     });
 
     it('should throw error for missing profile', async () => {
@@ -228,10 +228,10 @@ describe('ProfileManager', () => {
       const serialized = payloadCapture.value as {
         ephemeralSettings?: Record<string, unknown>;
       };
-      expect(serialized.ephemeralSettings?.['tools.allowed']).toEqual([
+      expect(serialized.ephemeralSettings?.['tools.allowed']).toStrictEqual([
         'file-reader',
       ]);
-      expect(serialized.ephemeralSettings?.['tools.disabled']).toEqual([
+      expect(serialized.ephemeralSettings?.['tools.disabled']).toStrictEqual([
         'code-editor',
       ]);
     });
@@ -262,7 +262,9 @@ describe('ProfileManager', () => {
       const serialized = payloadCapture.value as {
         ephemeralSettings?: Record<string, unknown>;
       };
-      expect(serialized.ephemeralSettings?.['tool-format']).toEqual('kimi');
+      expect(serialized.ephemeralSettings?.['tool-format']).toStrictEqual(
+        'kimi',
+      );
     });
   });
 
@@ -390,8 +392,8 @@ describe('ProfileManager', () => {
       const imported = capturedData.value as {
         tools?: { allowed?: string[]; disabled?: string[] };
       };
-      expect(imported.tools?.allowed).toEqual(['tool-a', 'tool-b']);
-      expect(imported.tools?.disabled).toEqual(['tool-c']);
+      expect(imported.tools?.allowed).toStrictEqual(['tool-a', 'tool-b']);
+      expect(imported.tools?.disabled).toStrictEqual(['tool-c']);
     });
   });
 
@@ -448,7 +450,7 @@ describe('ProfileManager', () => {
 
       const profiles = await profileManager.listProfiles();
 
-      expect(profiles).toEqual(['profile1', 'profile2']);
+      expect(profiles).toStrictEqual(['profile1', 'profile2']);
       expect(mockFs.mkdir).toHaveBeenCalledWith(testProfilesDir, {
         recursive: true,
       });
@@ -460,7 +462,7 @@ describe('ProfileManager', () => {
 
       const profiles = await profileManager.listProfiles();
 
-      expect(profiles).toEqual([]);
+      expect(profiles).toStrictEqual([]);
     });
   });
 
@@ -509,7 +511,7 @@ describe('ProfileManager', () => {
 
       const result = await profileManager.loadProfile('lb-profile');
 
-      expect(result).toEqual(lbProfile);
+      expect(result).toStrictEqual(lbProfile);
       expect(result.type).toBe('loadbalancer');
     });
 
@@ -631,7 +633,7 @@ describe('ProfileManager', () => {
 
       const result = await profileManager.loadProfile('standard-profile');
 
-      expect(result).toEqual(standardProfile);
+      expect(result).toStrictEqual(standardProfile);
       expect(result.provider).toBe('openai');
       expect(result.model).toBe('gpt-4');
     });
@@ -845,7 +847,7 @@ describe('ProfileManager', () => {
       await profileManager.saveLoadBalancerProfile('lb-profile', lbProfile);
       const loadedProfile = await profileManager.loadProfile('lb-profile');
 
-      expect(loadedProfile).toEqual(lbProfile);
+      expect(loadedProfile).toStrictEqual(lbProfile);
     });
   });
 });

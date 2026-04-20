@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { triggerToolNotificationHook } from '../core/coreToolHookTriggers.js';
 import { NotificationType } from './types.js';
 import type { Config } from '../config/config.js';
-import { HookSystem } from './hookSystem.js';
+import type { HookSystem } from './hookSystem.js';
 import type { ToolCallConfirmationDetails } from '../tools/tools.js';
 
 describe('Notification Hook (ToolPermission)', () => {

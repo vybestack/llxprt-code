@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
-import { AppState } from '../reducers/appReducer.js';
+import type { AppState } from '../reducers/appReducer.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { Profile } from '@vybestack/llxprt-code-core';
 import type { ProfileListItem } from '../components/ProfileListDialog.js';

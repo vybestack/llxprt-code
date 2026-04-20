@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
+import type React from 'react';
+import {
   createContext,
   useCallback,
   useContext,
@@ -14,12 +15,12 @@ import React, {
   useEffect,
 } from 'react';
 
-import {
-  uiTelemetryService,
+import type {
   SessionMetrics,
   ModelMetrics,
   ToolCallStats,
 } from '@vybestack/llxprt-code-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',

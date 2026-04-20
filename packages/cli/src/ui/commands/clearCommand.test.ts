@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import type { Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { clearCommand } from './clearCommand';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -26,9 +27,8 @@ vi.mock('../../runtime/runtimeSettings.js', () => ({
   getCliRuntimeServices: vi.fn(),
 }));
 
+import type { Config, GeminiClient } from '@vybestack/llxprt-code-core';
 import {
-  Config,
-  GeminiClient,
   uiTelemetryService,
   triggerSessionEndHook,
   triggerSessionStartHook,

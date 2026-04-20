@@ -11,7 +11,7 @@ import {
   type SettingCollectionDefinition,
   type SettingDefinition,
   SETTINGS_SCHEMA,
-  Settings,
+  type Settings,
   getEnableHooks,
   getEnableHooksUI,
 } from './settingsSchema.js';
@@ -233,7 +233,7 @@ describe('SettingsSchema', () => {
 
       // TypeScript should not complain about these properties
       expect(settings.ui?.theme).toBe('dark');
-      expect(settings.includeDirectories).toEqual(['/path/to/dir']);
+      expect(settings.includeDirectories).toStrictEqual(['/path/to/dir']);
       expect(settings.loadMemoryFromIncludeDirectories).toBe(true);
     });
 
@@ -241,7 +241,7 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.includeDirectories).toBeDefined();
       expect(SETTINGS_SCHEMA.includeDirectories.type).toBe('array');
       expect(SETTINGS_SCHEMA.includeDirectories.category).toBe('General');
-      expect(SETTINGS_SCHEMA.includeDirectories.default).toEqual([]);
+      expect(SETTINGS_SCHEMA.includeDirectories.default).toStrictEqual([]);
     });
 
     it('should have loadMemoryFromIncludeDirectories setting in schema', () => {
@@ -269,7 +269,7 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.defaultDisabledTools).toBeDefined();
       expect(SETTINGS_SCHEMA.defaultDisabledTools.type).toBe('array');
       expect(SETTINGS_SCHEMA.defaultDisabledTools.category).toBe('Advanced');
-      expect(SETTINGS_SCHEMA.defaultDisabledTools.default).toEqual([
+      expect(SETTINGS_SCHEMA.defaultDisabledTools.default).toStrictEqual([
         'google_web_fetch',
       ]);
       expect(SETTINGS_SCHEMA.defaultDisabledTools.showInDialog).toBe(false);
@@ -318,13 +318,13 @@ describe('SettingsSchema', () => {
       Object.values(schema).forEach(visitDefinition);
 
       // Check all referenced definitions exist
-      expect(missing).toEqual([]);
+      expect(missing).toStrictEqual([]);
 
       // Ensure definitions map doesn't accumulate stale entries.
       const unreferenced = Object.keys(SETTINGS_SCHEMA_DEFINITIONS).filter(
         (key) => !referenced.has(key),
       );
-      expect(unreferenced).toEqual([]);
+      expect(unreferenced).toStrictEqual([]);
     });
   });
 });

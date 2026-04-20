@@ -9,12 +9,11 @@ import {
   executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
+import type { ToolRegistry, Config } from '../index.js';
 import {
-  ToolRegistry,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   type ToolResult,
-  Config,
   ToolErrorType,
   ApprovalMode,
   DEFAULT_AGENT_ID,

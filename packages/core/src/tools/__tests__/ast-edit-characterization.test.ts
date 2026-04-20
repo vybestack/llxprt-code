@@ -368,7 +368,7 @@ describe('ast-edit characterization tests', () => {
           mockConfig,
         ) as unknown as TestableASTEditTool;
         const schema = tool.schema.parametersJsonSchema;
-        expect(schema.required).toEqual([
+        expect(schema.required).toStrictEqual([
           'file_path',
           'old_string',
           'new_string',
@@ -385,7 +385,7 @@ describe('ast-edit characterization tests', () => {
         const optionalParams = allParams
           .filter((p) => !requiredParams.includes(p))
           .sort();
-        expect(optionalParams).toEqual(['force', 'last_modified']);
+        expect(optionalParams).toStrictEqual(['force', 'last_modified']);
       });
 
       it('should have correct property types and descriptions', () => {
@@ -414,7 +414,7 @@ describe('ast-edit characterization tests', () => {
           mockConfig,
         ) as unknown as TestableASTReadFileTool;
         const schema = tool.schema.parametersJsonSchema;
-        expect(schema.required).toEqual(['file_path']);
+        expect(schema.required).toStrictEqual(['file_path']);
       });
 
       it('should have exactly the expected optional parameters', () => {
@@ -427,7 +427,7 @@ describe('ast-edit characterization tests', () => {
         const optionalParams = allParams
           .filter((p) => !requiredParams.includes(p))
           .sort();
-        expect(optionalParams).toEqual(['limit', 'offset']);
+        expect(optionalParams).toStrictEqual(['limit', 'offset']);
       });
 
       it('should have correct property types and constraints', () => {
@@ -612,7 +612,10 @@ describe('ast-edit characterization tests', () => {
         new AbortController().signal,
       );
 
-      if (confirmationDetails && confirmationDetails.onConfirm) {
+      expect(confirmationDetails).toBeDefined();
+      expect(confirmationDetails?.onConfirm).toBeDefined();
+
+      if (confirmationDetails?.onConfirm) {
         await confirmationDetails.onConfirm(
           ToolConfirmationOutcome.ProceedAlways,
         );

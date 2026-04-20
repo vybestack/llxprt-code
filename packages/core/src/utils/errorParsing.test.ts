@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { parseAndFormatApiError } from './errorParsing.js';
 import { isProQuotaExceededError } from './quotaErrorDetection.js';
 import { UserTierId } from '../code_assist/types.js';
-import { StructuredError } from '../core/turn.js';
+import type { StructuredError } from '../core/turn.js';
 import { STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
 describe('parseAndFormatApiError', () => {

@@ -6,7 +6,7 @@
  */
 
 import util from 'util';
-import { ConsoleMessageItem } from '../types.js';
+import type { ConsoleMessageItem } from '../types.js';
 
 interface ConsolePatcherParams {
   onNewMessage?: (message: Omit<ConsoleMessageItem, 'id'>) => void;
@@ -52,14 +52,12 @@ export class ConsolePatcher {
         if (type !== 'debug' || this.params.debugMode) {
           this.originalConsoleError(this.formatArgs(args));
         }
-      } else {
-        if (type !== 'debug' || this.params.debugMode) {
-          this.params.onNewMessage?.({
-            type,
-            content: this.formatArgs(args),
-            count: 1,
-          });
-        }
+      } else if (type !== 'debug' || this.params.debugMode) {
+        this.params.onNewMessage?.({
+          type,
+          content: this.formatArgs(args),
+          count: 1,
+        });
       }
     };
 }

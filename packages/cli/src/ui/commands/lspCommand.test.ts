@@ -392,7 +392,7 @@ describe('lspCommand (P34)', () => {
         .slice(1);
       const serverIds = lines.map((line) => line.trim().split(':')[0]);
       const sorted = [...serverIds].sort((a, b) => a.localeCompare(b));
-      expect(serverIds).toEqual(sorted);
+      expect(serverIds).toStrictEqual(sorted);
     });
 
     it('remains usable when navigationTools is false', async () => {

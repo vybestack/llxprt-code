@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { themeManager } from './theme-manager.js';
-import { SemanticColors } from './semantic-tokens.js';
+import type { SemanticColors } from './semantic-tokens.js';
 import { getColorMigrationMapping } from './theme-compat.js';
 import { Colors } from '../colors.js';
 
@@ -253,7 +253,7 @@ describe('semantic tokens system', () => {
       const semanticColors = themeManager.getSemanticColors();
 
       // Verify structure matches interface
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: expect.any(String),
           secondary: expect.any(String),

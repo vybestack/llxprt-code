@@ -5,11 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  BaseTokenStore,
-  MCPOAuthToken,
-  MCPOAuthCredentials,
-} from './token-store.js';
+import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
+import { BaseTokenStore } from './token-store.js';
 
 // Test implementation of BaseTokenStore for testing protected methods
 class TestTokenStore extends BaseTokenStore {
@@ -248,7 +245,7 @@ describe('BaseTokenStore', () => {
         'https://mcp.url',
       );
 
-      expect(credentials).toEqual({
+      expect(credentials).toStrictEqual({
         serverName: 'test-server',
         token: mockToken,
         clientId: 'client-id',
@@ -265,7 +262,7 @@ describe('BaseTokenStore', () => {
         mockToken,
       );
 
-      expect(credentials).toEqual({
+      expect(credentials).toStrictEqual({
         serverName: 'test-server',
         token: mockToken,
         clientId: undefined,
@@ -296,7 +293,7 @@ describe('BaseTokenStore', () => {
 
       const tokens = await testStore.loadTokens();
       expect(tokens.size).toBe(1);
-      expect(tokens.get('server1')).toEqual({
+      expect(tokens.get('server1')).toStrictEqual({
         serverName: 'server1',
         token: mockToken,
         clientId: 'client1',

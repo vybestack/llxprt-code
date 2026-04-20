@@ -13,17 +13,17 @@ import {
   afterEach,
   afterAll,
 } from 'vitest';
+import type { LogEntry } from './logger.js';
 import {
   Logger,
   MessageSenderType,
-  LogEntry,
   encodeTagName,
   decodeTagName,
 } from './logger.js';
 import { Storage } from '../config/storage.js';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
-import { Content } from '@google/genai';
+import type { Content } from '@google/genai';
 import { debugLogger } from '../utils/debugLogger.js';
 
 import crypto from 'node:crypto';
@@ -119,7 +119,7 @@ describe('Logger', () => {
       expect(fileExists).toBe(true);
 
       const logContent = await readLogFile();
-      expect(logContent).toEqual([]);
+      expect(logContent).toStrictEqual([]);
     });
 
     it('should load existing logs and set correct messageId for the current session', async () => {
@@ -158,7 +158,7 @@ describe('Logger', () => {
       );
       await newLogger.initialize();
       expect(newLogger['messageId']).toBe(2);
-      expect(newLogger['logs']).toEqual(existingLogs);
+      expect(newLogger['logs']).toStrictEqual(existingLogs);
       newLogger.close();
     });
 
@@ -209,7 +209,7 @@ describe('Logger', () => {
         expect.any(SyntaxError),
       );
       const logContent = await readLogFile();
-      expect(logContent).toEqual([]);
+      expect(logContent).toStrictEqual([]);
       const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
       expect(
         dirContents.some(
@@ -236,7 +236,7 @@ describe('Logger', () => {
         `Log file at ${TEST_LOG_FILE_PATH} is not a valid JSON array. Starting with empty logs.`,
       );
       const logContent = await readLogFile();
-      expect(logContent).toEqual([]);
+      expect(logContent).toStrictEqual([]);
       const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
       expect(
         dirContents.some(
@@ -262,7 +262,7 @@ describe('Logger', () => {
         timestamp: new Date('2025-01-01T12:00:00.000Z').toISOString(),
       });
       expect(logger['logs'].length).toBe(1);
-      expect(logger['logs'][0]).toEqual(logsFromFile[0]);
+      expect(logger['logs'][0]).toStrictEqual(logsFromFile[0]);
       expect(logger['messageId']).toBe(1);
     });
 
@@ -308,7 +308,7 @@ describe('Logger', () => {
         new Storage(process.cwd()),
       );
       await logger2.initialize();
-      expect(logger2['sessionId']).toEqual(logger1['sessionId']);
+      expect(logger2['sessionId']).toStrictEqual(logger1['sessionId']);
 
       await logger1.logMessage(MessageSenderType.USER, 'L1M1');
       vi.advanceTimersByTime(10);
@@ -323,12 +323,12 @@ describe('Logger', () => {
       const messageIdsInFile = logsFromFile
         .map((log) => log.messageId)
         .sort((a, b) => a - b);
-      expect(messageIdsInFile).toEqual([0, 1, 2, 3]);
+      expect(messageIdsInFile).toStrictEqual([0, 1, 2, 3]);
 
       const messagesInFile = logsFromFile
         .sort((a, b) => a.messageId - b.messageId)
         .map((l) => l.message);
-      expect(messagesInFile).toEqual(['L1M1', 'L2M1', 'L1M2', 'L2M2']);
+      expect(messagesInFile).toStrictEqual(['L1M1', 'L2M1', 'L1M2', 'L2M2']);
 
       // Check internal state (next messageId each logger would use for that session)
       expect(logger1['messageId']).toBe(3);
@@ -386,7 +386,7 @@ describe('Logger', () => {
       await finalLogger.initialize();
 
       const messages = await finalLogger.getPreviousUserMessages();
-      expect(messages).toEqual([
+      expect(messages).toStrictEqual([
         'S2M1_ts104000',
         'S2M0_ts102000',
         'S1M1_ts101000',
@@ -398,7 +398,7 @@ describe('Logger', () => {
     it('should return empty array if no user messages exist', async () => {
       await logger.logMessage('system' as MessageSenderType, 'System boot');
       const messages = await logger.getPreviousUserMessages();
-      expect(messages).toEqual([]);
+      expect(messages).toStrictEqual([]);
     });
 
     it('should return empty array if logger not initialized', async () => {
@@ -408,7 +408,7 @@ describe('Logger', () => {
       );
       uninitializedLogger.close();
       const messages = await uninitializedLogger.getPreviousUserMessages();
-      expect(messages).toEqual([]);
+      expect(messages).toStrictEqual([]);
       uninitializedLogger.close();
     });
   });
@@ -444,7 +444,7 @@ describe('Logger', () => {
         `checkpoint-${encodedTag}.json`,
       );
       const fileContent = await fs.readFile(taggedFilePath, 'utf-8');
-      expect(JSON.parse(fileContent)).toEqual({ history: conversation });
+      expect(JSON.parse(fileContent)).toStrictEqual({ history: conversation });
     });
 
     it('should not throw if logger is not initialized', async () => {
@@ -512,20 +512,20 @@ describe('Logger', () => {
       );
 
       const loaded = await logger.loadCheckpoint(tag);
-      expect(loaded).toEqual({ history: taggedConversation });
+      expect(loaded).toStrictEqual({ history: taggedConversation });
       expect(encodeTagName(tag)).toBe(encodedTag);
       expect(decodeTagName(encodedTag)).toBe(tag);
     });
 
     it('should return an empty array if a tagged checkpoint file does not exist', async () => {
       const loaded = await logger.loadCheckpoint('non-existent-tag');
-      expect(loaded).toEqual({ history: [] });
+      expect(loaded).toStrictEqual({ history: [] });
     });
 
     it('should return an empty array if the checkpoint file does not exist', async () => {
       await fs.unlink(TEST_CHECKPOINT_FILE_PATH); // Ensure it's gone
       const loaded = await logger.loadCheckpoint('missing');
-      expect(loaded).toEqual({ history: [] });
+      expect(loaded).toStrictEqual({ history: [] });
     });
 
     it('should return an empty array if the file contains invalid JSON', async () => {
@@ -540,7 +540,7 @@ describe('Logger', () => {
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
       const loadedCheckpoint = await logger.loadCheckpoint(tag);
-      expect(loadedCheckpoint).toEqual({ history: [] });
+      expect(loadedCheckpoint).toStrictEqual({ history: [] });
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to read or parse checkpoint file'),
         expect.any(Error),
@@ -557,7 +557,7 @@ describe('Logger', () => {
         .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
       const loadedCheckpoint = await uninitializedLogger.loadCheckpoint('tag');
-      expect(loadedCheckpoint).toEqual({ history: [] });
+      expect(loadedCheckpoint).toStrictEqual({ history: [] });
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Logger not initialized or checkpoint file path not set. Cannot load checkpoint.',
       );
@@ -732,7 +732,7 @@ describe('Logger', () => {
       );
 
       const loaded = await logger.loadCheckpoint(tag);
-      expect(loaded).toEqual({ history: taggedConversation });
+      expect(loaded).toStrictEqual({ history: taggedConversation });
     });
   });
 
@@ -748,10 +748,10 @@ describe('Logger', () => {
         'Logger not initialized or session ID missing. Cannot log message.',
       );
       const messages = await logger.getPreviousUserMessages();
-      expect(messages).toEqual([]);
+      expect(messages).toStrictEqual([]);
       expect(logger['initialized']).toBe(false);
       expect(logger['logFilePath']).toBeUndefined();
-      expect(logger['logs']).toEqual([]);
+      expect(logger['logs']).toStrictEqual([]);
       expect(logger['sessionId']).toBeUndefined();
       expect(logger['messageId']).toBe(0);
     });

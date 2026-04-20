@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
   MessageActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const logoutCommand: SlashCommand = {
@@ -65,14 +65,13 @@ export const logoutCommand: SlashCommand = {
           messageType: 'info',
           content: `Successfully logged out of ${provider}`,
         };
-      } else {
-        // User wasn't authenticated but we cleaned up any stale tokens
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Cleaned up authentication state for ${provider} (was not authenticated)`,
-        };
       }
+      // User wasn't authenticated but we cleaned up any stale tokens
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Cleaned up authentication state for ${provider} (was not authenticated)`,
+      };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

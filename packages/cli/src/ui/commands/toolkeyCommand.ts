@@ -10,12 +10,12 @@
  * @pseudocode lines 259-316
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
   MessageActionReturn,
-  CommandKind,
 } from './types.js';
+import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import {
   ToolKeyStorage,
@@ -99,13 +99,12 @@ export const toolkeyCommand: SlashCommand = {
           messageType: 'info',
           content: `${entry.displayName} API key: ${masked}`,
         };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `No API key configured for '${entry.displayName}'`,
-        };
       }
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `No API key configured for '${entry.displayName}'`,
+      };
     }
 
     // @pseudocode lines 305-308: Clear key (case-insensitive "none")

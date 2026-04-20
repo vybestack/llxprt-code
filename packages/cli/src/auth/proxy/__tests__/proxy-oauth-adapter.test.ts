@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { ProxySocketClient } from '@vybestack/llxprt-code-core';
+import type { ProxySocketClient } from '@vybestack/llxprt-code-core';
 import { ProxyOAuthAdapter } from '../proxy-oauth-adapter.js';
 
 describe('ProxyOAuthAdapter', () => {
@@ -82,7 +82,7 @@ describe('ProxyOAuthAdapter', () => {
 
     const result = await adapter.login('anthropic');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       status: 'complete',
       access_token: 'token',
     });

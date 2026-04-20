@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import OpenAI from 'openai';
+import type OpenAI from 'openai';
 import type { IContent } from '../../services/history/IContent.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -208,18 +208,16 @@ function processAssistantMessage(
       const isStrictOpenAI = toolFormat === 'openai';
       if (isStrictOpenAI) {
         return baseMessage;
-      } else {
-        const messageWithReasoning = baseMessage as unknown as Record<
-          string,
-          unknown
-        >;
-        messageWithReasoning.reasoning_content =
-          thinkingToReasoningField(thinkingBlocks);
-        return messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam;
       }
-    } else {
-      return baseMessage;
+      const messageWithReasoning = baseMessage as unknown as Record<
+        string,
+        unknown
+      >;
+      messageWithReasoning.reasoning_content =
+        thinkingToReasoningField(thinkingBlocks);
+      return messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam;
     }
+    return baseMessage;
   } else if (textBlocks.length > 0 || thinkingBlocks.length > 0) {
     const baseMessage: OpenAI.Chat.ChatCompletionAssistantMessageParam = {
       role: 'assistant',
@@ -234,9 +232,8 @@ function processAssistantMessage(
       messageWithReasoning.reasoning_content =
         thinkingToReasoningField(thinkingBlocks);
       return messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam;
-    } else {
-      return baseMessage;
     }
+    return baseMessage;
   }
 
   return null;

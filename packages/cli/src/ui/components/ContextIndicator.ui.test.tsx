@@ -8,7 +8,8 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { ProviderManager, IProvider } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '@vybestack/llxprt-code-core';
 
 // Mock the hooks
 vi.mock('../hooks/useResponsive.js', () => ({

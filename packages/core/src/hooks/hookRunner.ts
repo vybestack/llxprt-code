@@ -11,7 +11,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import type { HookConfig } from './types.js';
+import type { HookConfig, BeforeToolInput } from './types.js';
 import { HookEventName } from './types.js';
 import type {
   HookInput,
@@ -193,11 +193,8 @@ export class HookRunner {
               'tool_input' in modifiedInput
             ) {
               // Merge modified input with existing tool_input
-              (
-                modifiedInput as import('./types.js').BeforeToolInput
-              ).tool_input = {
-                ...(modifiedInput as import('./types.js').BeforeToolInput)
-                  .tool_input,
+              (modifiedInput as BeforeToolInput).tool_input = {
+                ...(modifiedInput as BeforeToolInput).tool_input,
                 ...(modifiedToolInput as Record<string, unknown>),
               };
             }
@@ -443,12 +440,11 @@ export class HookRunner {
         decision: 'deny',
         reason: text,
       };
-    } else {
-      // Non-blocking error (EXIT_CODE_NON_BLOCKING_ERROR or any other code)
-      return {
-        decision: 'allow',
-        systemMessage: `Warning: ${text}`,
-      };
     }
+    // Non-blocking error (EXIT_CODE_NON_BLOCKING_ERROR or any other code)
+    return {
+      decision: 'allow',
+      systemMessage: `Warning: ${text}`,
+    };
   }
 }

@@ -387,7 +387,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
       const toolCallChunk = chunks.find((c) =>
         c.blocks.some((b) => b.type === 'tool_call'),
       );
-      expect(toolCallChunk?.blocks).toEqual(
+      expect(toolCallChunk?.blocks).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: 'hist_tool_1' }),
           expect.objectContaining({ id: 'hist_tool_2' }),

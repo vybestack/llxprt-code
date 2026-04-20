@@ -36,7 +36,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
   });
 }
 
-import React, { ErrorInfo, useState, useEffect } from 'react';
+import React, { type ErrorInfo, useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
@@ -61,12 +61,12 @@ import {
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import chalk from 'chalk';
 import {
-  DnsResolutionOrder,
-  LoadedSettings,
+  type DnsResolutionOrder,
+  type LoadedSettings,
   loadSettings,
 } from './config/settings.js';
 import {
-  Config,
+  type Config,
   sessionId,
   setGitStatsService,
   FatalConfigError,

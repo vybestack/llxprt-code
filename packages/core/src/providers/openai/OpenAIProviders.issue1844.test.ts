@@ -266,20 +266,20 @@ describe('issue #1844 – OpenAI terminal metadata propagation', () => {
     // After removing isKimiK2Model buffering, text emits immediately (not buffered)
     // So we get 2 text chunks + 1 metadata chunk = 3 total
     expect(results).toHaveLength(3);
-    expect(results[0].blocks).toEqual([
+    expect(results[0].blocks).toStrictEqual([
       {
         type: 'text',
         text: 'Hello there this buffered reply',
       },
     ]);
-    expect(results[1].blocks).toEqual([
+    expect(results[1].blocks).toStrictEqual([
       {
         type: 'text',
         text: ' ends only at the terminal chunk',
       },
     ]);
     // Final chunk is metadata-only
-    expect(results[2].blocks).toEqual([]);
+    expect(results[2].blocks).toStrictEqual([]);
     expect(results[2].metadata?.stopReason).toBe('end_turn');
     expect(results[2].metadata?.finishReason).toBe('stop');
   });

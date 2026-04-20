@@ -7,7 +7,8 @@
 // File for 'llxprt mcp add' command
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
-import { MCPServerConfig, debugLogger } from '@vybestack/llxprt-code-core';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
+import { debugLogger } from '@vybestack/llxprt-code-core';
 import { exitCli } from '../utils.js';
 
 async function addMcpServer(

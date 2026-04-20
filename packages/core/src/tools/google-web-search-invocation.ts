@@ -8,7 +8,7 @@ import { type GroundingMetadata } from '@google/genai';
 import { BaseToolInvocation, type ToolResult } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from './tool-names.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { ToolErrorType } from './tool-error.js';
@@ -152,7 +152,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
         | GroundingSupportItem[]
         | undefined;
 
-      if (!responseText || !responseText.trim()) {
+      if (!responseText?.trim()) {
         return {
           llmContent: `No search results or information found for query: "${this.params.query}"`,
           returnDisplay: 'No information found.',

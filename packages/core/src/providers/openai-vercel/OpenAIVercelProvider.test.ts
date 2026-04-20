@@ -14,7 +14,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import { BaseProvider } from '../BaseProvider.js';
-import { IProvider } from '../IProvider.js';
+import type { IProvider } from '../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
@@ -104,7 +104,7 @@ describe('OpenAIVercelProvider', () => {
     it('should return empty array for getServerTools', () => {
       const provider = new OpenAIVercelProvider('test-api-key');
       const serverTools = provider.getServerTools();
-      expect(serverTools).toEqual([]);
+      expect(serverTools).toStrictEqual([]);
     });
 
     it('should throw error for invokeServerTool', async () => {
@@ -180,7 +180,7 @@ describe('OpenAIVercelProvider', () => {
             },
           },
         );
-        expect(models).toEqual(
+        expect(models).toStrictEqual(
           expect.arrayContaining([
             expect.objectContaining({
               id: 'custom-model',
@@ -207,7 +207,7 @@ describe('OpenAIVercelProvider', () => {
 
         const models = await provider.getModels();
 
-        expect(models).toEqual(
+        expect(models).toStrictEqual(
           expect.arrayContaining([
             expect.objectContaining({ id: 'gpt-4o', provider: 'openaivercel' }),
           ]),

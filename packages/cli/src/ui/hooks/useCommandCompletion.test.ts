@@ -10,11 +10,12 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
-import { CommandContext } from '../commands/types.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import type { CommandContext } from '../commands/types.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
-import { UseAtCompletionProps, useAtCompletion } from './useAtCompletion.js';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { UseAtCompletionProps } from './useAtCompletion.js';
+import { useAtCompletion } from './useAtCompletion.js';
 import {
   UseSlashCompletionProps as _UseSlashCompletionProps,
   useSlashCompletion,
@@ -264,7 +265,7 @@ describe('useCommandCompletion', () => {
           ),
         );
 
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
         expect(result.current.activeSuggestionIndex).toBe(-1);
         expect(result.current.visibleStartIndex).toBe(0);
         expect(result.current.showSuggestions).toBe(false);

@@ -100,7 +100,7 @@ describe('memoryDiscovery', () => {
         false, // untrusted
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         memoryContent: '',
         fileCount: 0,
         filePaths: [],
@@ -129,9 +129,9 @@ describe('memoryDiscovery', () => {
           false, // untrusted
         );
 
-      expect(fileCount).toEqual(1);
+      expect(fileCount).toStrictEqual(1);
       expect(memoryContent).toContain(path.relative(cwd, filepath).toString());
-      expect(filePaths).toEqual([filepath]);
+      expect(filePaths).toStrictEqual([filepath]);
     });
   });
 
@@ -145,7 +145,7 @@ describe('memoryDiscovery', () => {
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: '',
       fileCount: 0,
       filePaths: [],
@@ -167,7 +167,7 @@ describe('memoryDiscovery', () => {
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, defaultContextFile)} ---
 default context content
 --- End of Context from: ${path.relative(cwd, defaultContextFile)} ---`,
@@ -194,7 +194,7 @@ default context content
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, customContextFile)} ---
 custom context content
 --- End of Context from: ${path.relative(cwd, customContextFile)} ---`,
@@ -225,7 +225,7 @@ custom context content
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, projectContextFile)} ---
 project context content
 --- End of Context from: ${path.relative(cwd, projectContextFile)} ---
@@ -260,7 +260,7 @@ cwd context content
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${customFilename} ---
 CWD custom memory
 --- End of Context from: ${customFilename} ---
@@ -292,7 +292,7 @@ Subdir custom memory
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, projectRootGeminiFile)} ---
 Project root memory
 --- End of Context from: ${path.relative(cwd, projectRootGeminiFile)} ---
@@ -324,7 +324,7 @@ Src directory memory
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${DEFAULT_CONTEXT_FILENAME} ---
 CWD memory
 --- End of Context from: ${DEFAULT_CONTEXT_FILENAME} ---
@@ -368,7 +368,7 @@ Subdir memory
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, defaultContextFile)} ---
 default context content
 --- End of Context from: ${path.relative(cwd, defaultContextFile)} ---
@@ -427,7 +427,7 @@ Subdir memory
       200, // maxDirs parameter
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, regularSubDirGeminiFile)} ---
 My code memory
 --- End of Context from: ${path.relative(cwd, regularSubDirGeminiFile)} ---`,
@@ -477,7 +477,7 @@ My code memory
         DEFAULT_FOLDER_TRUST,
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         memoryContent: '',
         fileCount: 0,
         filePaths: [],
@@ -636,7 +636,7 @@ My code memory
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, extensionFilePath)} ---
 Extension memory content
 --- End of Context from: ${path.relative(cwd, extensionFilePath)} ---`,
@@ -663,7 +663,7 @@ Extension memory content
       DEFAULT_FOLDER_TRUST,
     );
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       memoryContent: `--- Context from: ${path.relative(cwd, includedFile)} ---
 included directory memory
 --- End of Context from: ${path.relative(cwd, includedFile)} ---`,
@@ -701,7 +701,7 @@ included directory memory
     // Should have loaded all files
     expect(result.fileCount).toBe(numDirs);
     expect(result.filePaths.length).toBe(numDirs);
-    expect(result.filePaths.sort()).toEqual(createdFiles.sort());
+    expect(result.filePaths.sort()).toStrictEqual(createdFiles.sort());
 
     // Content should include all project contents
     for (let i = 0; i < numDirs; i++) {
@@ -737,7 +737,9 @@ included directory memory
     expect(result.fileCount).toBe(2);
     expect(result.memoryContent).toContain('Parent content');
     expect(result.memoryContent).toContain('Child content');
-    expect(result.filePaths.sort()).toEqual([parentFile, childFile].sort());
+    expect(result.filePaths.sort()).toStrictEqual(
+      [parentFile, childFile].sort(),
+    );
 
     // Check that files are not duplicated
     const parentOccurrences = (
@@ -1037,7 +1039,7 @@ included directory memory
       );
 
       expect(result.files).toHaveLength(2);
-      expect(result.files.map((f) => f.path).sort()).toEqual(
+      expect(result.files.map((f) => f.path).sort()).toStrictEqual(
         [directFile, llxprtFile].sort(),
       );
     });
@@ -1300,7 +1302,7 @@ included directory memory
       const result = await loadCoreMemory([trustedRoot]);
 
       expect(result.files).toHaveLength(2);
-      expect(result.files.map((f) => f.path)).toEqual([
+      expect(result.files.map((f) => f.path)).toStrictEqual([
         projectCoreFile,
         globalCoreFile,
       ]);

@@ -5,11 +5,8 @@
  */
 
 import { useEffect } from 'react';
-import {
-  useKeypressContext,
-  KeypressHandler,
-  Key,
-} from '../contexts/KeypressContext.js';
+import type { KeypressHandler } from '../contexts/KeypressContext.js';
+import { useKeypressContext, Key } from '../contexts/KeypressContext.js';
 
 export { Key };
 

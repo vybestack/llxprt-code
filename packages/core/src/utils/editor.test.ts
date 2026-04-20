@@ -193,7 +193,7 @@ describe('editor utils', () => {
           Buffer.from(`/usr/bin/${commands[0]}`),
         );
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-        expect(diffCommand).toEqual({
+        expect(diffCommand).toStrictEqual({
           command: commands[0],
           args: ['--wait', '--diff', 'old.txt', 'new.txt'],
         });
@@ -209,7 +209,7 @@ describe('editor utils', () => {
             .mockReturnValueOnce(Buffer.from(`/usr/bin/${commands[1]}`)); // second command found
 
           const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-          expect(diffCommand).toEqual({
+          expect(diffCommand).toStrictEqual({
             command: commands[1],
             args: ['--wait', '--diff', 'old.txt', 'new.txt'],
           });
@@ -223,7 +223,7 @@ describe('editor utils', () => {
         });
 
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-        expect(diffCommand).toEqual({
+        expect(diffCommand).toStrictEqual({
           command: commands[commands.length - 1],
           args: ['--wait', '--diff', 'old.txt', 'new.txt'],
         });
@@ -236,7 +236,7 @@ describe('editor utils', () => {
           Buffer.from(`C:\\Program Files\\...\\${win32Commands[0]}`),
         );
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-        expect(diffCommand).toEqual({
+        expect(diffCommand).toStrictEqual({
           command: win32Commands[0],
           args: ['--wait', '--diff', 'old.txt', 'new.txt'],
         });
@@ -254,7 +254,7 @@ describe('editor utils', () => {
             ); // second command found
 
           const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-          expect(diffCommand).toEqual({
+          expect(diffCommand).toStrictEqual({
             command: win32Commands[1],
             args: ['--wait', '--diff', 'old.txt', 'new.txt'],
           });
@@ -268,7 +268,7 @@ describe('editor utils', () => {
         });
 
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-        expect(diffCommand).toEqual({
+        expect(diffCommand).toStrictEqual({
           command: win32Commands[win32Commands.length - 1],
           args: ['--wait', '--diff', 'old.txt', 'new.txt'],
         });
@@ -286,7 +286,7 @@ describe('editor utils', () => {
     for (const { editor, command } of terminalEditors) {
       it(`should return the correct command for ${editor}`, () => {
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor);
-        expect(diffCommand).toEqual({
+        expect(diffCommand).toStrictEqual({
           command,
           args: [
             '-d',
@@ -313,7 +313,7 @@ describe('editor utils', () => {
 
     it('should return the correct command for emacs', () => {
       const command = getDiffCommand('old.txt', 'new.txt', 'emacs');
-      expect(command).toEqual({
+      expect(command).toStrictEqual({
         command: 'emacs',
         args: ['--eval', '(ediff "old.txt" "new.txt")'],
       });
@@ -321,7 +321,7 @@ describe('editor utils', () => {
 
     it('should return the correct command for helix', () => {
       const command = getDiffCommand('old.txt', 'new.txt', 'hx');
-      expect(command).toEqual({
+      expect(command).toStrictEqual({
         command: 'hx',
         args: ['--vsplit', '--', 'old.txt', 'new.txt'],
       });

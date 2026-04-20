@@ -61,7 +61,7 @@ describe('useConsoleMessages', () => {
 
   it('should initialize with an empty array of console messages', () => {
     const { result } = renderConsoleMessagesHook();
-    expect(result.current.consoleMessages).toEqual([]);
+    expect(result.current.consoleMessages).toStrictEqual([]);
   });
 
   it('should add a new message when log is called', async () => {
@@ -75,7 +75,7 @@ describe('useConsoleMessages', () => {
       await vi.advanceTimersByTimeAsync(20);
     });
 
-    expect(result.current.consoleMessages).toEqual([
+    expect(result.current.consoleMessages).toStrictEqual([
       { type: 'log', content: 'Test message', count: 1 },
     ]);
   });
@@ -93,7 +93,7 @@ describe('useConsoleMessages', () => {
       await vi.advanceTimersByTimeAsync(20);
     });
 
-    expect(result.current.consoleMessages).toEqual([
+    expect(result.current.consoleMessages).toStrictEqual([
       { type: 'log', content: 'Test message', count: 3 },
     ]);
   });
@@ -110,7 +110,7 @@ describe('useConsoleMessages', () => {
       await vi.advanceTimersByTimeAsync(20);
     });
 
-    expect(result.current.consoleMessages).toEqual([
+    expect(result.current.consoleMessages).toStrictEqual([
       { type: 'log', content: 'First message', count: 1 },
       { type: 'error', content: 'Second message', count: 1 },
     ]);

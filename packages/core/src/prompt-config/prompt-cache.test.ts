@@ -5,8 +5,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PromptCache, CacheEntry } from './prompt-cache.js';
-import { PromptContext } from './types.js';
+import type { CacheEntry } from './prompt-cache.js';
+import { PromptCache } from './prompt-cache.js';
+import type { PromptContext } from './types.js';
 
 describe('PromptCache', () => {
   let cache: PromptCache;
@@ -188,7 +189,7 @@ describe('PromptCache', () => {
 
       expect(result).not.toBeNull();
       expect(result!.assembledPrompt).toBe(prompt);
-      expect(result!.metadata.files).toEqual(metadata.files);
+      expect(result!.metadata.files).toStrictEqual(metadata.files);
       expect(result!.metadata.tokenCount).toBe(metadata.tokenCount);
       expect(result!.metadata.assemblyTimeMs).toBe(metadata.assemblyTimeMs);
     });
@@ -575,7 +576,7 @@ describe('PromptCache', () => {
 
       // Retrieved metadata should not be affected
       const result = cache.get(context);
-      expect(result!.metadata.files).toEqual(['test.txt']);
+      expect(result!.metadata.files).toStrictEqual(['test.txt']);
       expect(result!.metadata.tokenCount).toBe(100);
     });
 

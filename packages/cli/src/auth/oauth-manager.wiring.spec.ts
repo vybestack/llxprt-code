@@ -288,7 +288,7 @@ describe('OAuthManager wiring', () => {
     expect(manager.getProvider('anthropic')).toBe(provider);
     expect(providerRegistry.getProvider).toHaveBeenCalledWith('anthropic');
 
-    expect(manager.getSupportedProviders()).toEqual(['anthropic']);
+    expect(manager.getSupportedProviders()).toStrictEqual(['anthropic']);
 
     await expect(manager.toggleOAuthEnabled('anthropic')).resolves.toBe(true);
     expect(providerRegistry.toggleOAuthEnabled).toHaveBeenCalledWith(
@@ -389,10 +389,12 @@ describe('OAuthManager wiring', () => {
       undefined,
     );
 
-    await expect(manager.peekStoredToken('anthropic')).resolves.toEqual(
+    await expect(manager.peekStoredToken('anthropic')).resolves.toStrictEqual(
       tokenObj,
     );
-    await expect(manager.getOAuthToken('anthropic')).resolves.toEqual(tokenObj);
+    await expect(manager.getOAuthToken('anthropic')).resolves.toStrictEqual(
+      tokenObj,
+    );
 
     await manager.authenticate('anthropic', 'bucket-a');
     expect(authFlowOrchestrator.authenticate).toHaveBeenCalledWith(
@@ -405,7 +407,7 @@ describe('OAuthManager wiring', () => {
       authFlowOrchestrator.authenticateMultipleBuckets,
     ).toHaveBeenCalledWith('anthropic', ['bucket-a'], undefined);
 
-    await expect(manager.getAuthStatus()).resolves.toEqual([
+    await expect(manager.getAuthStatus()).resolves.toStrictEqual([
       { provider: 'anthropic', authenticated: true, oauthEnabled: true },
     ]);
     await expect(manager.isAuthenticated('anthropic')).resolves.toBe(true);
@@ -424,12 +426,12 @@ describe('OAuthManager wiring', () => {
       'anthropic',
     );
 
-    await expect(manager.listBuckets('anthropic')).resolves.toEqual([
+    await expect(manager.listBuckets('anthropic')).resolves.toStrictEqual([
       'bucket-a',
     ]);
     await expect(
       manager.getAuthStatusWithBuckets('anthropic'),
-    ).resolves.toEqual([
+    ).resolves.toStrictEqual([
       {
         bucket: 'bucket-a',
         authenticated: true,
@@ -445,7 +447,7 @@ describe('OAuthManager wiring', () => {
       settings,
     );
 
-    await expect(manager.getAnthropicUsageInfo()).resolves.toEqual({
+    await expect(manager.getAnthropicUsageInfo()).resolves.toStrictEqual({
       usage: 1,
     });
     expect(wiring.getAnthropicUsageInfo).toHaveBeenCalledWith(
@@ -453,12 +455,12 @@ describe('OAuthManager wiring', () => {
       'bucket-a',
     );
 
-    await expect(manager.getAllAnthropicUsageInfo()).resolves.toEqual(
+    await expect(manager.getAllAnthropicUsageInfo()).resolves.toStrictEqual(
       new Map([['bucket-a', { usage: 1 }]]),
     );
     expect(wiring.getAllAnthropicUsageInfo).toHaveBeenCalledWith(tokenStore);
 
-    await expect(manager.getAllCodexUsageInfo()).resolves.toEqual(
+    await expect(manager.getAllCodexUsageInfo()).resolves.toStrictEqual(
       new Map([['bucket-a', { usage: 2 }]]),
     );
     expect(wiring.getAllCodexUsageInfo).toHaveBeenCalledWith(
@@ -466,7 +468,7 @@ describe('OAuthManager wiring', () => {
       config,
     );
 
-    await expect(manager.getAllGeminiUsageInfo()).resolves.toEqual(
+    await expect(manager.getAllGeminiUsageInfo()).resolves.toStrictEqual(
       new Map([['bucket-a', { usage: 3 }]]),
     );
     expect(wiring.getAllGeminiUsageInfo).toHaveBeenCalledWith(tokenStore);

@@ -14,8 +14,9 @@ import {
   getMCPDiscoveryState,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-core';
-import { MessageActionReturn } from './types.js';
-import { Type, CallableTool } from '@google/genai';
+import type { MessageActionReturn } from './types.js';
+import type { CallableTool } from '@google/genai';
+import { Type } from '@google/genai';
 
 // Mock external dependencies
 vi.mock('open', () => ({
@@ -140,7 +141,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(contextWithoutConfig, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Config not loaded.',
@@ -162,7 +163,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(contextWithNoRegistry, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Could not retrieve tool registry.',
@@ -182,7 +183,7 @@ describe('mcpCommand', () => {
     it('should display a message with a URL when no MCP servers are configured', async () => {
       const result = await mcpCommand.action!(mockContext, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -257,7 +258,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Configured MCP servers:'),
@@ -386,7 +387,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, 'desc');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Configured MCP servers:'),
@@ -448,7 +449,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, 'nodesc');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Configured MCP servers:'),
@@ -742,7 +743,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, 'schema');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Configured MCP servers:'),
@@ -796,7 +797,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, 'schema');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Configured MCP servers:'),
@@ -1031,7 +1032,7 @@ describe('mcpCommand', () => {
 
       const result = await mcpCommand.action!(testContext, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: expect.stringContaining('Configured MCP servers:'),
@@ -1310,7 +1311,7 @@ describe('mcpCommand', () => {
       );
       const result = await refreshCommand!.action!(contextWithoutConfig, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Config not loaded.',
@@ -1335,7 +1336,7 @@ describe('mcpCommand', () => {
       );
       const result = await refreshCommand!.action!(contextWithNoRegistry, '');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Could not retrieve tool registry.',

@@ -266,7 +266,7 @@ describe('AgentExecutor', () => {
       const agentRegistry = executor['toolRegistry'];
 
       expect(agentRegistry).not.toBe(parentToolRegistry);
-      expect(agentRegistry.getAllToolNames()).toEqual(
+      expect(agentRegistry.getAllToolNames()).toStrictEqual(
         expect.arrayContaining([LSTool.Name, ReadFileTool.Name]),
       );
       expect(agentRegistry.getAllToolNames()).toHaveLength(2);
@@ -344,7 +344,7 @@ describe('AgentExecutor', () => {
       const sentTools = firstToolGroup.functionDeclarations;
       expect(sentTools).toBeDefined();
 
-      expect(sentTools).toEqual(
+      expect(sentTools).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: LSTool.Name }),
           expect.objectContaining({ name: TASK_COMPLETE_TOOL_NAME }),
@@ -359,7 +359,7 @@ describe('AgentExecutor', () => {
       expect(output.result).toBe('Found file1.txt');
       expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
 
-      expect(activities).toEqual(
+      expect(activities).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({
             type: 'THOUGHT_CHUNK',
@@ -439,7 +439,7 @@ describe('AgentExecutor', () => {
       const completeToolDef = sentTools!.find(
         (t) => t.name === TASK_COMPLETE_TOOL_NAME,
       );
-      expect(completeToolDef?.parameters?.required).toEqual([]);
+      expect(completeToolDef?.parameters?.required).toStrictEqual([]);
       expect(completeToolDef?.description).toContain(
         'signal that you have completed',
       );
@@ -549,7 +549,7 @@ describe('AgentExecutor', () => {
       expect(turn2Parts).toBeDefined();
       expect(turn2Parts).toHaveLength(1);
 
-      expect(turn2Parts![0]).toEqual(
+      expect(turn2Parts![0]).toStrictEqual(
         expect.objectContaining({
           functionResponse: expect.objectContaining({
             name: TASK_COMPLETE_TOOL_NAME,
@@ -675,7 +675,7 @@ describe('AgentExecutor', () => {
       const parts = turn2Params.message;
       expect(parts).toBeDefined();
       expect(parts).toHaveLength(2);
-      expect(parts).toEqual(
+      expect(parts).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({
             functionResponse: expect.objectContaining({ id: 'c1' }),
@@ -734,7 +734,7 @@ describe('AgentExecutor', () => {
       const turn2Params = getMockMessageParams(1);
       const parts = turn2Params.message;
       expect(parts).toBeDefined();
-      expect(parts![0]).toEqual(
+      expect(parts![0]).toStrictEqual(
         expect.objectContaining({
           functionResponse: expect.objectContaining({
             id: badCallId,

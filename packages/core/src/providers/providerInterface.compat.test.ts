@@ -6,13 +6,13 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  BaseProvider,
+import type {
   BaseProviderConfig,
   NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
+import { BaseProvider } from './BaseProvider.js';
 import type { IContent } from '../services/history/IContent.js';
-import { IModel } from './IModel.js';
+import type { IModel } from './IModel.js';
 import type { Config } from '../config/config.js';
 import { createProviderWithRuntime } from '../test-utils/runtime.js';
 import {
@@ -82,7 +82,7 @@ describe('generateChatCompletion compatibility', () => {
 
     await legacyProvider.generateChatCompletion(options).next();
 
-    expect(legacyProvider.lastOptions?.contents).toEqual([message]);
+    expect(legacyProvider.lastOptions?.contents).toStrictEqual([message]);
     expect(legacyProvider.lastOptions?.tools).toBeUndefined();
     expect(legacyProvider.lastOptions?.settings).toBe(options.settings);
   });

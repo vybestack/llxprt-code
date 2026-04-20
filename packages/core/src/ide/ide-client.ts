@@ -21,7 +21,10 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { EnvHttpProxyAgent } from 'undici';
+import {
+  EnvHttpProxyAgent,
+  type RequestInit as UndiciRequestInit,
+} from 'undici';
 import { debugLogger } from '../utils/debugLogger.js';
 
 const logger = {
@@ -439,7 +442,7 @@ export class IdeClient {
         ...init,
         dispatcher: agent,
       };
-      const options = fetchOptions as unknown as import('undici').RequestInit;
+      const options = fetchOptions as unknown as UndiciRequestInit;
       const response = await fetchFn(url, options);
       // Convert undici headers to standard headers format
       const headers: Record<string, string> = {};

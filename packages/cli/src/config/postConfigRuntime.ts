@@ -9,6 +9,7 @@ import {
   DebugLogger,
   ProfileManager,
   type Config,
+  type SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { getCliRuntimeContext } from '../runtime/runtimeAccessors.js';
 import { setCliRuntimeContext } from '../runtime/runtimeLifecycle.js';
@@ -30,7 +31,6 @@ import type { CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
 import type { ProfileLoadResult } from './profileResolution.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
-import type { SettingsService } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 

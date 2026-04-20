@@ -22,10 +22,8 @@ import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
 } from '../telemetry/index.js';
-import {
-  ContentGeneratorConfig,
-  createContentGeneratorConfig,
-} from '../core/contentGenerator.js';
+import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
+import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { GeminiClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
@@ -37,7 +35,7 @@ import { ShellTool } from '../tools/shell.js';
 import { ReadFileTool } from '../tools/read-file.js';
 
 vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
+  const actual = await importOriginal();
   return {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
@@ -80,8 +78,7 @@ vi.mock('../tools/memoryTool', () => ({
 }));
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../core/contentGenerator.js')>();
+  const actual = await importOriginal();
   return {
     ...actual,
     createContentGeneratorConfig: vi.fn(),
@@ -194,7 +191,7 @@ const mockCoreEvents = vi.hoisted(() => ({
 const mockSetGlobalProxy = vi.hoisted(() => vi.fn());
 
 vi.mock('../utils/events.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/events.js')>();
+  const actual = await importOriginal();
   return {
     ...actual,
     coreEvents: {
@@ -322,7 +319,9 @@ describe('Server Config (config.ts)', () => {
 
       expect(createContentGeneratorConfig).toHaveBeenCalledWith(config);
       // Verify that contentGeneratorConfig is updated with the new model
-      expect(config.getContentGeneratorConfig()).toEqual(mockContentConfig);
+      expect(config.getContentGeneratorConfig()).toStrictEqual(
+        mockContentConfig,
+      );
       expect(config.getContentGeneratorConfig()?.model).toBe(newModel);
       expect(config.getModel()).toBe(newModel); // getModel() should return the updated model
       expect(GeminiClient).toHaveBeenCalledWith(
@@ -479,7 +478,7 @@ describe('Server Config (config.ts)', () => {
       // Get the actual call arguments to verify thoughts stripping
       const storedHistory =
         mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
-      expect(storedHistory).toEqual(mockExistingHistory);
+      expect(storedHistory).toStrictEqual(mockExistingHistory);
     });
 
     it('should not strip thoughts when switching from Vertex to GenAI', async () => {
@@ -1060,10 +1059,10 @@ describe('Server Config (config.ts)', () => {
       expect(config.getEphemeralSetting('stringValue')).toBe('test string');
       expect(config.getEphemeralSetting('numberValue')).toBe(42);
       expect(config.getEphemeralSetting('booleanValue')).toBe(true);
-      expect(config.getEphemeralSetting('objectValue')).toEqual({
+      expect(config.getEphemeralSetting('objectValue')).toStrictEqual({
         nested: 'object',
       });
-      expect(config.getEphemeralSetting('arrayValue')).toEqual([1, 2, 3]);
+      expect(config.getEphemeralSetting('arrayValue')).toStrictEqual([1, 2, 3]);
       expect(config.getEphemeralSetting('undefinedValue')).toBeUndefined();
 
       expect(mockSettingsService.get).toHaveBeenCalledTimes(6);
@@ -1399,7 +1398,7 @@ describe('Config getHooks', () => {
       ...baseParams,
       hooks: {},
     });
-    expect(configWithEmptyHooks.getHooks()).toEqual({});
+    expect(configWithEmptyHooks.getHooks()).toStrictEqual({});
   });
 
   it('should return the hooks configuration when provided', () => {
@@ -1435,7 +1434,7 @@ describe('Config getHooks', () => {
     });
 
     const retrievedHooks = config.getHooks();
-    expect(retrievedHooks).toEqual(mockHooks);
+    expect(retrievedHooks).toStrictEqual(mockHooks);
     expect(retrievedHooks).toBe(mockHooks); // Should return the same reference
   });
 
@@ -1482,7 +1481,7 @@ describe('Config getHooks', () => {
     });
 
     const retrievedHooks = config.getHooks();
-    expect(retrievedHooks).toEqual(allEventHooks);
+    expect(retrievedHooks).toStrictEqual(allEventHooks);
     expect(Object.keys(retrievedHooks!)).toHaveLength(11); // All hook event types
   });
 });

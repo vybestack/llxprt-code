@@ -18,7 +18,7 @@ test('ResultCache basic usage', async () => {
   ];
   const cache = new ResultCache(files);
   const { files: resultFiles, isExactMatch } = await cache.get('*.js');
-  expect(resultFiles).toEqual(files);
+  expect(resultFiles).toStrictEqual(files);
   expect(isExactMatch).toBe(false);
 });
 
@@ -28,7 +28,7 @@ test('ResultCache cache hit/miss', async () => {
   // First call: miss
   const { files: result1Files, isExactMatch: isExactMatch1 } =
     await cache.get('*.js');
-  expect(result1Files).toEqual(files);
+  expect(result1Files).toStrictEqual(files);
   expect(isExactMatch1).toBe(false);
 
   // Simulate FileSearch applying the filter and setting the result
@@ -37,7 +37,7 @@ test('ResultCache cache hit/miss', async () => {
   // Second call: hit
   const { files: result2Files, isExactMatch: isExactMatch2 } =
     await cache.get('*.js');
-  expect(result2Files).toEqual(['bar.js']);
+  expect(result2Files).toStrictEqual(['bar.js']);
   expect(isExactMatch2).toBe(true);
 });
 
@@ -50,6 +50,6 @@ test('ResultCache best base query', async () => {
 
   // Search for a more specific query that starts with the broader one
   const { files: resultFiles, isExactMatch } = await cache.get('foobar');
-  expect(resultFiles).toEqual(['foo.txt', 'foobar.js']);
+  expect(resultFiles).toStrictEqual(['foo.txt', 'foobar.js']);
   expect(isExactMatch).toBe(false);
 });

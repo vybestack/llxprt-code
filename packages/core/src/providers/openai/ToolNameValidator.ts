@@ -90,14 +90,13 @@ export class ToolNameValidator {
           );
         }
         return result;
-      } else {
-        result.name = 'undefined_tool_name';
-        result.warnings.push(
-          `Tool "${normalized}" not found in available tools, using fallback`,
-        );
-        result.isValid = false;
-        return result;
       }
+      result.name = 'undefined_tool_name';
+      result.warnings.push(
+        `Tool "${normalized}" not found in available tools, using fallback`,
+      );
+      result.isValid = false;
+      return result;
     }
 
     // Step 4: Return normalized name if no validation against available tools

@@ -67,7 +67,7 @@ describe('statsCommand - load balancer stats', () => {
 
       expect(lbSubCommand).toBeDefined();
       expect(lbSubCommand?.name).toBe('lb');
-      expect(lbSubCommand?.altNames).toEqual(['loadbalancer']);
+      expect(lbSubCommand?.altNames).toStrictEqual(['loadbalancer']);
       expect(lbSubCommand?.description).toContain('load balancer');
     });
   });
@@ -80,7 +80,7 @@ describe('statsCommand - load balancer stats', () => {
 
       expect(lbSubCommand).toBeDefined();
       expect(lbSubCommand?.name).toBe('lb');
-      expect(lbSubCommand?.altNames).toEqual(['loadbalancer']);
+      expect(lbSubCommand?.altNames).toStrictEqual(['loadbalancer']);
     });
 
     it('should use MessageType.LB_STATS when invoked', () => {

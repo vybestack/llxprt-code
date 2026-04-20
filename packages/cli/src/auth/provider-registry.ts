@@ -6,7 +6,8 @@
 
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { OAuthProvider } from './types.js';
-import { LoadedSettings, SettingScope } from '../config/settings.js';
+import type { LoadedSettings } from '../config/settings.js';
+import { SettingScope } from '../config/settings.js';
 
 const logger = new DebugLogger('llxprt:oauth:registry');
 

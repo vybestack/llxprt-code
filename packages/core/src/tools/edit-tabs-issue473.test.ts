@@ -14,10 +14,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { ApprovalMode, Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
-import { EditTool, EditToolParams } from './edit.js';
+import type { EditToolParams } from './edit.js';
+import { EditTool } from './edit.js';
 
 describe('EditTool - Issue 473 Tab Characters Bug', () => {
   let tool: EditTool;

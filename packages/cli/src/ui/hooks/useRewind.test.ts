@@ -71,7 +71,7 @@ describe('useRewindLogic', () => {
     });
 
     expect(result.current.selectedMessageId).toBe('msg-1');
-    expect(result.current.confirmationStats).toEqual(mockStats);
+    expect(result.current.confirmationStats).toStrictEqual(mockStats);
     expect(rewindFileOps.calculateRewindImpact).toHaveBeenCalledWith(
       mockConversation,
       mockUserMessage,
@@ -126,7 +126,7 @@ describe('useRewindLogic', () => {
 
     const stats = result.current.getStats(mockUserMessage);
 
-    expect(stats).toEqual(mockStats);
+    expect(stats).toStrictEqual(mockStats);
     expect(rewindFileOps.calculateTurnStats).toHaveBeenCalledWith(
       mockConversation,
       mockUserMessage,

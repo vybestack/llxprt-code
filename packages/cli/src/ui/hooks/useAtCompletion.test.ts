@@ -10,17 +10,11 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { act, useState } from 'react';
 import { renderHook, waitFor } from '../../test-utils/render.js';
 import { useAtCompletion } from './useAtCompletion.js';
-import {
-  Config,
-  FileSearch,
-  FileSearchFactory,
-} from '@vybestack/llxprt-code-core';
-import {
-  createTmpDir,
-  cleanupTmpDir,
-  FileSystemStructure,
-} from '@vybestack/llxprt-code-test-utils';
-import { Suggestion } from '../components/SuggestionsDisplay.js';
+import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
+import { FileSearchFactory } from '@vybestack/llxprt-code-core';
+import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
+import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
+import type { Suggestion } from '../components/SuggestionsDisplay.js';
 
 // Test harness to capture the state from the hook's callbacks.
 function useTestHarnessForAtCompletion(
@@ -86,7 +80,7 @@ describe('useAtCompletion', () => {
         expect(result.current.suggestions.length).toBeGreaterThan(0);
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'src/',
         'src/components/',
         'file.txt',
@@ -116,7 +110,7 @@ describe('useAtCompletion', () => {
         expect(result.current.suggestions.length).toBeGreaterThan(0);
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'src/',
         'src/components/',
         'src/index.js',
@@ -139,7 +133,7 @@ describe('useAtCompletion', () => {
         expect(result.current.suggestions.length).toBeGreaterThan(0);
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'dir/',
         'file.txt',
       ]);
@@ -172,7 +166,7 @@ describe('useAtCompletion', () => {
 
       // The hook should find 'cRaZycAsE.txt' even though the pattern is 'CrAzYCaSe'.
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'cRaZycAsE.txt',
         ]);
       });
@@ -206,7 +200,7 @@ describe('useAtCompletion', () => {
       );
 
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'a.txt',
         ]);
       });
@@ -216,7 +210,7 @@ describe('useAtCompletion', () => {
 
       // Wait for the final result
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'b.txt',
         ]);
       });
@@ -259,7 +253,7 @@ describe('useAtCompletion', () => {
 
       // Wait for the initial search to complete (using real timers)
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'a.txt',
         ]);
       });
@@ -282,14 +276,14 @@ describe('useAtCompletion', () => {
 
       // Now loading should be true and suggestions should be cleared
       expect(result.current.isLoadingSuggestions).toBe(true);
-      expect(result.current.suggestions).toEqual([]);
+      expect(result.current.suggestions).toStrictEqual([]);
 
       // Switch back to real timers for the final waitFor
       vi.useRealTimers();
 
       // Wait for the search results to be processed
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'b.txt',
         ]);
       });
@@ -337,7 +331,9 @@ describe('useAtCompletion', () => {
       // Wait for the final result, which should be from the second, faster search.
       await waitFor(
         () => {
-          expect(result.current.suggestions.map((s) => s.value)).toEqual(['b']);
+          expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
+            'b',
+          ]);
         },
         { timeout: 1000 },
       );
@@ -363,7 +359,7 @@ describe('useAtCompletion', () => {
 
       // Wait for the hook to be ready and have suggestions
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'a.txt',
         ]);
       });
@@ -372,7 +368,7 @@ describe('useAtCompletion', () => {
       rerender({ enabled: false });
 
       // The suggestions should be cleared immediately because of the RESET action
-      expect(result.current.suggestions).toEqual([]);
+      expect(result.current.suggestions).toStrictEqual([]);
     });
 
     it('should reset the state when disabled after being in an ERROR state', async () => {
@@ -397,7 +393,7 @@ describe('useAtCompletion', () => {
       await waitFor(() => {
         expect(result.current.isLoadingSuggestions).toBe(false);
       });
-      expect(result.current.suggestions).toEqual([]); // No suggestions on error
+      expect(result.current.suggestions).toStrictEqual([]); // No suggestions on error
 
       // Now, disable the hook
       rerender({ enabled: false });
@@ -405,7 +401,7 @@ describe('useAtCompletion', () => {
       // The state should still be reset (though visually it's the same)
       // We can't directly inspect the internal state, but we can ensure it doesn't crash
       // and the suggestions remain empty.
-      expect(result.current.suggestions).toEqual([]);
+      expect(result.current.suggestions).toStrictEqual([]);
     });
   });
 
@@ -429,7 +425,7 @@ describe('useAtCompletion', () => {
         expect(result.current.suggestions.length).toBeGreaterThan(0);
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'src/',
         '.gitignore',
       ]);
@@ -450,7 +446,7 @@ describe('useAtCompletion', () => {
         expect(result.current.suggestions.length).toBeGreaterThan(0);
       });
 
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'node_modules/',
         'src/',
       ]);
@@ -475,7 +471,7 @@ describe('useAtCompletion', () => {
 
       // Wait for initial suggestions from the first directory
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'file1.txt',
         ]);
       });
@@ -488,12 +484,12 @@ describe('useAtCompletion', () => {
       // After CWD changes, suggestions should be cleared and it should load again.
       await waitFor(() => {
         expect(result.current.isLoadingSuggestions).toBe(true);
-        expect(result.current.suggestions).toEqual([]);
+        expect(result.current.suggestions).toStrictEqual([]);
       });
 
       // Wait for the new suggestions from the second directory
       await waitFor(() => {
-        expect(result.current.suggestions.map((s) => s.value)).toEqual([
+        expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
           'file2.txt',
         ]);
       });
@@ -535,7 +531,7 @@ describe('useAtCompletion', () => {
       });
 
       // Should only contain top-level items
-      expect(result.current.suggestions.map((s) => s.value)).toEqual([
+      expect(result.current.suggestions.map((s) => s.value)).toStrictEqual([
         'src/',
         'file.txt',
       ]);
@@ -600,7 +596,7 @@ describe('useAtCompletion', () => {
         (s) => s.description === 'subagent',
       );
       expect(subagentSuggestions.length).toBe(3);
-      expect(subagentSuggestions.map((s) => s.value)).toEqual(
+      expect(subagentSuggestions.map((s) => s.value)).toStrictEqual(
         expect.arrayContaining([
           'codeanalyzer',
           'deepthinker',

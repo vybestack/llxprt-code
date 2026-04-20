@@ -36,7 +36,7 @@ import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { EventEmitter } from 'node:events';
+import type { EventEmitter } from 'node:events';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
@@ -244,7 +244,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
         return (payload.content.blocks[0] as { type: 'text'; text: string })
           .text;
       });
-      expect(texts).toEqual(['a', 'b', 'c']);
+      expect(texts).toStrictEqual(['a', 'b', 'c']);
     });
 
     it('preserves tool_call content blocks through recording', async () => {
@@ -317,7 +317,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
           .text;
       });
       expect(contentEvents).toHaveLength(1);
-      expect(contentTexts).toEqual(['baseline-materialize']);
+      expect(contentTexts).toStrictEqual(['baseline-materialize']);
       expect(
         events.filter((event) => event.type === 'compressed'),
       ).toHaveLength(1);
@@ -570,7 +570,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
       if (replay.ok) {
         expect(replay.metadata.provider).toBe('openai');
         expect(replay.metadata.model).toBe('gpt-5');
-        expect(replay.metadata.workspaceDirs).toEqual(['/x', '/y']);
+        expect(replay.metadata.workspaceDirs).toStrictEqual(['/x', '/y']);
       }
     });
 
@@ -723,7 +723,7 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
                   (content) =>
                     (content.blocks[0] as { type: 'text'; text: string }).text,
                 );
-                expect(replayed).toEqual(messages);
+                expect(replayed).toStrictEqual(messages);
               }
             });
           },
@@ -780,7 +780,9 @@ describe('RecordingIntegration @plan:PLAN-20260211-SESSIONRECORDING.P13', () => 
               );
               expect(replay.ok).toBe(true);
               if (replay.ok) {
-                expect(replay.metadata.workspaceDirs).toEqual(directories);
+                expect(replay.metadata.workspaceDirs).toStrictEqual(
+                  directories,
+                );
               }
             });
           },

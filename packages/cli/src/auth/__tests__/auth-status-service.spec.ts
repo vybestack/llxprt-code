@@ -511,7 +511,7 @@ describe('AuthStatusService.getAuthStatus', () => {
   it('returns empty array when no providers registered', async () => {
     const service = makeService({ providers: [] });
     const statuses = await service.getAuthStatus();
-    expect(statuses).toEqual([]);
+    expect(statuses).toStrictEqual([]);
   });
 
   it('reports authenticated=false when OAuth disabled', async () => {
@@ -633,7 +633,7 @@ describe('AuthStatusService.listBuckets', () => {
     });
     const service = makeService({ tokenStore });
     const buckets = await service.listBuckets('qwen');
-    expect(buckets).toEqual(['default', 'bucket-a']);
+    expect(buckets).toStrictEqual(['default', 'bucket-a']);
     expect(tokenStore.listBuckets).toHaveBeenCalledWith('qwen');
   });
 });

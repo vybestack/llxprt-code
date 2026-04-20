@@ -7,7 +7,8 @@
 import fs from 'fs';
 import path from 'path';
 import * as Diff from 'diff';
-import { Config, ApprovalMode } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { ApprovalMode } from '../config/config.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -443,7 +444,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
        */
       try {
         const lspClient = this.config.getLspServiceClient();
-        if (lspClient && lspClient.isAlive()) {
+        if (lspClient?.isAlive()) {
           // Check the written file to trigger diagnostics
           await lspClient.checkFile(filePath);
 

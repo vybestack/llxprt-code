@@ -188,8 +188,7 @@ function resolveExtensions(
 }
 
 function resolveInteractiveMode(argv: CliArgs): boolean {
-  const hasPromptWords =
-    argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
+  const hasPromptWords = argv.promptWords?.some((word) => word.trim() !== '');
   return (
     !!argv.promptInteractive ||
     !!argv.experimentalAcp ||

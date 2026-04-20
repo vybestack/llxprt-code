@@ -8,7 +8,7 @@ import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import {
   Config,
   ProviderManager,
-  SettingsService,
+  type SettingsService,
   MessageBus,
   type IProvider,
 } from '@vybestack/llxprt-code-core';
@@ -123,16 +123,16 @@ describe('CLI model parameter command integration', () => {
 
   it('sets provider-scoped model params via /set modelparam', async () => {
     await runSetCommand('modelparam temperature 0.9');
-    expect(getActiveModelParams()).toEqual({ temperature: 0.9 });
+    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.9 });
     expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.9);
   });
 
   it('clears model params using /set unset modelparam', async () => {
     await runSetCommand('modelparam max_tokens 4096');
-    expect(getActiveModelParams()).toEqual({ max_tokens: 4096 });
+    expect(getActiveModelParams()).toStrictEqual({ max_tokens: 4096 });
 
     await runSetCommand('unset modelparam max_tokens');
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').max_tokens,
     ).toBeUndefined();
@@ -144,7 +144,7 @@ describe('CLI model parameter command integration', () => {
 
     const snapshot = buildRuntimeProfileSnapshot();
     expect(snapshot.provider).toBe('alpha');
-    expect(snapshot.modelParams).toEqual({
+    expect(snapshot.modelParams).toStrictEqual({
       response_format: { type: 'json_object' },
       top_p: 0.92,
     });
@@ -152,9 +152,9 @@ describe('CLI model parameter command integration', () => {
 
   it('supports clearing params directly through helper', async () => {
     await runSetCommand('modelparam temperature 0.7');
-    expect(getActiveModelParams()).toEqual({ temperature: 0.7 });
+    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.7 });
 
     clearActiveModelParam('temperature');
-    expect(getActiveModelParams()).toEqual({});
+    expect(getActiveModelParams()).toStrictEqual({});
   });
 });

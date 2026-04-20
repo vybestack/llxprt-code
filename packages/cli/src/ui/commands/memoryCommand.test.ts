@@ -10,7 +10,7 @@ import { memoryCommand } from './memoryCommand.js';
 import type { SlashCommand, CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { LoadedSettings } from '../../config/settings.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import {
   getErrorMessage,
   type FileDiscoveryService,
@@ -136,7 +136,7 @@ describe('memoryCommand', () => {
       if (!addCommand.action) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, '  ');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -150,7 +150,7 @@ describe('memoryCommand', () => {
       if (!addCommand.action) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, 'global');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -164,7 +164,7 @@ describe('memoryCommand', () => {
       if (!addCommand.action) throw new Error('Command has no action');
 
       const result = addCommand.action(mockContext, 'project');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -188,7 +188,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact },
@@ -209,7 +209,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact, scope: 'global' },
@@ -230,7 +230,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact, scope: 'project' },
@@ -251,7 +251,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact, scope: 'project' },
@@ -272,7 +272,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact, scope: 'global' },
@@ -293,7 +293,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact },
@@ -305,7 +305,7 @@ describe('memoryCommand', () => {
 
       const result = addCommand.action(mockContext, 'core.project');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('Usage'),
@@ -317,7 +317,7 @@ describe('memoryCommand', () => {
 
       const result = addCommand.action(mockContext, 'core.global');
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: expect.stringContaining('Usage'),

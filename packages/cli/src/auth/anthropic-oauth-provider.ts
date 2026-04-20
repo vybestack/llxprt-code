@@ -9,12 +9,11 @@
  */
 
 import type { OAuthProvider } from './types.js';
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import {
-  OAuthToken,
   AnthropicDeviceFlow,
   openBrowserSecurely,
   shouldLaunchBrowser,
-  TokenStore,
   OAuthError,
   OAuthErrorFactory,
   GracefulErrorHandler,
@@ -23,11 +22,9 @@ import {
   debugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
-import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
-import {
-  LocalOAuthCallbackServer,
-  startLocalOAuthCallback,
-} from './local-oauth-callback.js';
+import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
+import type { LocalOAuthCallbackServer } from './local-oauth-callback.js';
+import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
 import {
   InitializationGuard,

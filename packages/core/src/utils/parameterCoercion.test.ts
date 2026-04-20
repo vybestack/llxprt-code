@@ -21,7 +21,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ offset: 50, limit: 100 });
+      expect(result).toStrictEqual({ offset: 50, limit: 100 });
     });
 
     it('should convert string floats to numbers when schema expects number', () => {
@@ -35,7 +35,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ temperature: 0.7 });
+      expect(result).toStrictEqual({ temperature: 0.7 });
     });
 
     it('should convert negative string numbers to numbers', () => {
@@ -49,7 +49,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ offset: -10 });
+      expect(result).toStrictEqual({ offset: -10 });
     });
 
     it('should convert string integers to integers when schema expects integer', () => {
@@ -64,7 +64,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ start_line: 50, end_line: 120 });
+      expect(result).toStrictEqual({ start_line: 50, end_line: 120 });
     });
 
     it('should not convert non-numeric strings when schema expects number', () => {
@@ -78,7 +78,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ count: 'not-a-number' });
+      expect(result).toStrictEqual({ count: 'not-a-number' });
     });
 
     it('should leave actual numbers unchanged', () => {
@@ -92,7 +92,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ offset: 50 });
+      expect(result).toStrictEqual({ offset: 50 });
     });
   });
 
@@ -108,7 +108,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ showLineNumbers: true });
+      expect(result).toStrictEqual({ showLineNumbers: true });
     });
 
     it('should convert "false" string to boolean false', () => {
@@ -122,7 +122,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ recursive: false });
+      expect(result).toStrictEqual({ recursive: false });
     });
 
     it('should leave actual booleans unchanged', () => {
@@ -136,7 +136,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ enabled: true });
+      expect(result).toStrictEqual({ enabled: true });
     });
 
     it('should not convert non-boolean strings when schema expects boolean', () => {
@@ -150,7 +150,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ flag: 'yes' });
+      expect(result).toStrictEqual({ flag: 'yes' });
     });
   });
 
@@ -166,7 +166,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ paths: ['file.txt'] });
+      expect(result).toStrictEqual({ paths: ['file.txt'] });
     });
 
     it('should wrap single number in array when schema expects array', () => {
@@ -180,7 +180,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ ids: [42] });
+      expect(result).toStrictEqual({ ids: [42] });
     });
 
     it('should leave arrays unchanged', () => {
@@ -194,7 +194,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ paths: ['file1.txt', 'file2.txt'] });
+      expect(result).toStrictEqual({ paths: ['file1.txt', 'file2.txt'] });
     });
 
     it('should coerce items within arrays', () => {
@@ -208,7 +208,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ numbers: [1, 2, 3] });
+      expect(result).toStrictEqual({ numbers: [1, 2, 3] });
     });
 
     it('should parse JSON string array when schema expects array', () => {
@@ -222,7 +222,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ items: ['a', 'b', 'c'] });
+      expect(result).toStrictEqual({ items: ['a', 'b', 'c'] });
     });
 
     it('should parse JSON string array of objects (TodoWrite case)', () => {
@@ -248,7 +248,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         todos: [
           {
             id: '1',
@@ -281,7 +281,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         todos: [{ id: '1', content: 'Task one' }],
       });
     });
@@ -298,7 +298,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ offset: 50, limit: 100 });
+      expect(result).toStrictEqual({ offset: 50, limit: 100 });
     });
 
     it('should not coerce float string to integer when schema expects integer', () => {
@@ -313,7 +313,7 @@ describe('coerceParametersToSchema', () => {
       const result = coerceParametersToSchema(params, schema);
 
       // Should NOT coerce because 1.5 is not an integer
-      expect(result).toEqual({ count: '1.5' });
+      expect(result).toStrictEqual({ count: '1.5' });
     });
 
     it('should coerce whole number float string to integer when schema expects integer', () => {
@@ -328,7 +328,7 @@ describe('coerceParametersToSchema', () => {
       const result = coerceParametersToSchema(params, schema);
 
       // Should coerce because 10.0 is effectively an integer
-      expect(result).toEqual({ count: 10 });
+      expect(result).toStrictEqual({ count: 10 });
     });
 
     it('should handle complex nested JSON string arrays', () => {
@@ -364,7 +364,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         todos: [
           {
             id: '1',
@@ -388,7 +388,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ config: { key: 'value' } });
+      expect(result).toStrictEqual({ config: { key: 'value' } });
     });
 
     it('should leave non-JSON strings unchanged when schema expects object', () => {
@@ -402,7 +402,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ config: 'not-json' });
+      expect(result).toStrictEqual({ config: 'not-json' });
     });
 
     it('should leave actual objects unchanged', () => {
@@ -416,7 +416,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ config: { key: 'value' } });
+      expect(result).toStrictEqual({ config: { key: 'value' } });
     });
   });
 
@@ -443,7 +443,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         options: {
           limit: 100,
           enabled: true,
@@ -472,7 +472,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         offset: 50,
         limit: 100,
         showLineNumbers: true,
@@ -498,7 +498,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         absolute_path:
           '/Users/acoliver/projects/llxprt/branch-2/llxprt-code/packages/core/src/providers/BaseProvider.ts',
         offset: 50,
@@ -524,7 +524,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         absolute_path:
           '/Users/acoliver/projects/llxprt/branch-2/llxprt-code/packages/core/src/providers/BaseProvider.ts',
         start_line: 50,
@@ -539,7 +539,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, null);
 
-      expect(result).toEqual({ offset: '50' });
+      expect(result).toStrictEqual({ offset: '50' });
     });
 
     it('should handle undefined schema gracefully', () => {
@@ -547,7 +547,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, undefined);
 
-      expect(result).toEqual({ offset: '50' });
+      expect(result).toStrictEqual({ offset: '50' });
     });
 
     it('should handle null params gracefully', () => {
@@ -587,7 +587,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({});
+      expect(result).toStrictEqual({});
     });
 
     it('should handle properties not in schema (pass through unchanged)', () => {
@@ -601,7 +601,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ offset: 50, unknown: 'value' });
+      expect(result).toStrictEqual({ offset: 50, unknown: 'value' });
     });
 
     it('should handle schema without properties', () => {
@@ -610,7 +610,7 @@ describe('coerceParametersToSchema', () => {
 
       const result = coerceParametersToSchema(params, schema);
 
-      expect(result).toEqual({ offset: '50' });
+      expect(result).toStrictEqual({ offset: '50' });
     });
   });
 });

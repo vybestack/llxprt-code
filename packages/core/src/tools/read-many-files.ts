@@ -24,14 +24,15 @@ import {
   DEFAULT_MAX_LINES_TEXT_FILE,
 } from '../utils/fileUtils.js';
 import { type PartListUnion } from '@google/genai';
-import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
 import { stat } from 'fs/promises';
 import { ToolErrorType } from './tool-error.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 
 // Simple token estimation - roughly 4 characters per token

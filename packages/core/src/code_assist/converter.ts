@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  CountTokensResponse,
+  MediaResolution,
+  GenerateContentResponsePromptFeedback,
+  GenerateContentResponseUsageMetadata,
+} from '@google/genai';
 import {
   type Content,
   type ContentListUnion,
@@ -11,14 +17,10 @@ import {
   type GenerateContentConfig,
   type GenerateContentParameters,
   type CountTokensParameters,
-  CountTokensResponse,
   GenerateContentResponse,
   type GenerationConfigRoutingConfig,
-  MediaResolution,
   type Candidate,
   type ModelSelectionConfig,
-  GenerateContentResponsePromptFeedback,
-  GenerateContentResponseUsageMetadata,
   type Part,
   type SafetySetting,
   type PartUnion,

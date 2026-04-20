@@ -23,7 +23,7 @@ describe('providerMutations', () => {
         { pattern: 'gpt', ephemeralSettings: { temp: 0.7 } },
       ];
       const result = computeModelDefaults('claude-3', rules);
-      expect(result).toEqual({});
+      expect(result).toStrictEqual({});
     });
 
     it('matches rules case-insensitively', () => {
@@ -31,7 +31,7 @@ describe('providerMutations', () => {
         { pattern: 'GPT', ephemeralSettings: { temp: 0.7 } },
       ];
       const result = computeModelDefaults('gpt-4o', rules);
-      expect(result).toEqual({ temp: 0.7 });
+      expect(result).toStrictEqual({ temp: 0.7 });
     });
 
     it('later rules override earlier for same key', () => {
@@ -40,7 +40,7 @@ describe('providerMutations', () => {
         { pattern: 'gpt-4', ephemeralSettings: { temp: 0.7 } },
       ];
       const result = computeModelDefaults('gpt-4o', rules);
-      expect(result).toEqual({ temp: 0.7 });
+      expect(result).toStrictEqual({ temp: 0.7 });
     });
 
     it('multiple rules contribute different keys', () => {
@@ -49,7 +49,7 @@ describe('providerMutations', () => {
         { pattern: '4o', ephemeralSettings: { top_p: 0.9 } },
       ];
       const result = computeModelDefaults('gpt-4o', rules);
-      expect(result).toEqual({ temp: 0.5, top_p: 0.9 });
+      expect(result).toStrictEqual({ temp: 0.5, top_p: 0.9 });
     });
 
     it('merges all matching rules', () => {
@@ -59,7 +59,7 @@ describe('providerMutations', () => {
         { pattern: '4o', ephemeralSettings: { top_p: 0.9 } },
       ];
       const result = computeModelDefaults('gpt-4o', rules);
-      expect(result).toEqual({ temp: 0.7, streaming: true, top_p: 0.9 });
+      expect(result).toStrictEqual({ temp: 0.7, streaming: true, top_p: 0.9 });
     });
   });
 

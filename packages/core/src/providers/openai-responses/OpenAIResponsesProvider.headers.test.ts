@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 const mockSettingsService = vi.hoisted(() => ({

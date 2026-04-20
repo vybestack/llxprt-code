@@ -85,7 +85,7 @@ describe('extension skills loading', () => {
     });
 
     expect(extension).not.toBeNull();
-    expect(extension!.skills).toEqual([]);
+    expect(extension!.skills).toStrictEqual([]);
   });
 
   it('should load skills from a skills subdirectory', () => {
@@ -145,7 +145,7 @@ describe('extension skills loading', () => {
     expect(extension).not.toBeNull();
     expect(extension!.skills).toHaveLength(2);
     const names = extension!.skills!.map((s) => s.name).sort();
-    expect(names).toEqual(['skill-alpha', 'skill-beta']);
+    expect(names).toStrictEqual(['skill-alpha', 'skill-beta']);
   });
 
   it('should return empty skills when skills directory exists but has no valid SKILL.md files', () => {
@@ -165,7 +165,7 @@ describe('extension skills loading', () => {
     });
 
     expect(extension).not.toBeNull();
-    expect(extension!.skills).toEqual([]);
+    expect(extension!.skills).toStrictEqual([]);
   });
 
   it('should skip SKILL.md files with invalid frontmatter', () => {
@@ -188,7 +188,7 @@ describe('extension skills loading', () => {
     });
 
     expect(extension).not.toBeNull();
-    expect(extension!.skills).toEqual([]);
+    expect(extension!.skills).toStrictEqual([]);
   });
 
   it('should make skills available through loadExtensions', () => {

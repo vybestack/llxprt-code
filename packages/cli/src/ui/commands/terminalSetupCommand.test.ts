@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { terminalSetupCommand } from './terminalSetupCommand.js';
 import * as terminalSetupModule from '../utils/terminalSetup.js';
-import { CommandContext } from './types.js';
+import type { CommandContext } from './types.js';
 
 vi.mock('../utils/terminalSetup.js');
 
@@ -30,7 +30,7 @@ describe('terminalSetupCommand', () => {
 
     const result = await terminalSetupCommand.action({} as CommandContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       content: 'Terminal configured successfully',
       messageType: 'info',
@@ -46,7 +46,7 @@ describe('terminalSetupCommand', () => {
 
     const result = await terminalSetupCommand.action({} as CommandContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       content:
         'Terminal configured successfully\n\nPlease restart your terminal for the changes to take effect.',
@@ -62,7 +62,7 @@ describe('terminalSetupCommand', () => {
 
     const result = await terminalSetupCommand.action({} as CommandContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       content: 'Failed to detect terminal',
       messageType: 'error',
@@ -76,7 +76,7 @@ describe('terminalSetupCommand', () => {
 
     const result = await terminalSetupCommand.action({} as CommandContext, '');
 
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       type: 'message',
       content: 'Failed to configure terminal: Error: Unexpected error',
       messageType: 'error',

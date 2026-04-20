@@ -17,7 +17,7 @@ import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { Todo } from '@vybestack/llxprt-code-core';
+import type { Todo } from '@vybestack/llxprt-code-core';
 
 vi.mock('../hooks/useTerminalSize.js');
 

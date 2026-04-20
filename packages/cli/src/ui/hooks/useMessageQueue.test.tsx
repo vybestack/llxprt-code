@@ -55,7 +55,7 @@ describe('useMessageQueue', () => {
       isMcpReady: true,
     });
 
-    expect(result.current.messageQueue).toEqual([]);
+    expect(result.current.messageQueue).toStrictEqual([]);
     expect(mockSubmitQuery).not.toHaveBeenCalled();
   });
 
@@ -71,7 +71,7 @@ describe('useMessageQueue', () => {
       result.current.addMessage('hello');
     });
 
-    expect(result.current.messageQueue).toEqual(['hello']);
+    expect(result.current.messageQueue).toStrictEqual(['hello']);
     expect(mockSubmitQuery).not.toHaveBeenCalled();
   });
 
@@ -87,13 +87,13 @@ describe('useMessageQueue', () => {
       result.current.addMessage('Delayed message');
     });
 
-    expect(result.current.messageQueue).toEqual(['Delayed message']);
+    expect(result.current.messageQueue).toStrictEqual(['Delayed message']);
     expect(mockSubmitQuery).not.toHaveBeenCalled();
 
     rerender({ isMcpReady: true });
 
     expect(mockSubmitQuery).toHaveBeenCalledWith('Delayed message');
-    expect(result.current.messageQueue).toEqual([]);
+    expect(result.current.messageQueue).toStrictEqual([]);
   });
 
   it('does not flush queue while streaming even when MCP ready', () => {
@@ -108,7 +108,9 @@ describe('useMessageQueue', () => {
       result.current.addMessage('queued while streaming');
     });
 
-    expect(result.current.messageQueue).toEqual(['queued while streaming']);
+    expect(result.current.messageQueue).toStrictEqual([
+      'queued while streaming',
+    ]);
     expect(mockSubmitQuery).not.toHaveBeenCalled();
 
     // Still streaming — should not flush
@@ -139,7 +141,7 @@ describe('useMessageQueue', () => {
 
     expect(mockSubmitQuery).toHaveBeenCalledTimes(1);
     expect(mockSubmitQuery).toHaveBeenCalledWith('first\n\nsecond\n\nthird');
-    expect(result.current.messageQueue).toEqual([]);
+    expect(result.current.messageQueue).toStrictEqual([]);
   });
 
   it('no-server startup: isMcpReady=true immediately, no queueing needed', () => {
@@ -159,6 +161,6 @@ describe('useMessageQueue', () => {
 
     // With isMcpReady=true and Idle, the message is flushed immediately.
     expect(mockSubmitQuery).toHaveBeenCalledWith('immediate');
-    expect(result.current.messageQueue).toEqual([]);
+    expect(result.current.messageQueue).toStrictEqual([]);
   });
 });

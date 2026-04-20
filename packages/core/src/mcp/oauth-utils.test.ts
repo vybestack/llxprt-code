@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  OAuthUtils,
+import type {
   OAuthAuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
 } from './oauth-utils.js';
+import { OAuthUtils } from './oauth-utils.js';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -92,7 +92,7 @@ describe('OAuthUtils', () => {
         'https://example.com/.well-known/oauth-protected-resource',
       );
 
-      expect(result).toEqual(mockResourceMetadata);
+      expect(result).toStrictEqual(mockResourceMetadata);
     });
 
     it('should return null when fetch fails', async () => {
@@ -126,7 +126,7 @@ describe('OAuthUtils', () => {
         'https://auth.example.com/.well-known/oauth-authorization-server',
       );
 
-      expect(result).toEqual(mockAuthServerMetadata);
+      expect(result).toStrictEqual(mockAuthServerMetadata);
     });
 
     it('should return null when fetch fails', async () => {
@@ -164,7 +164,7 @@ describe('OAuthUtils', () => {
         'https://auth.example.com/',
       );
 
-      expect(result).toEqual(mockAuthServerMetadata);
+      expect(result).toStrictEqual(mockAuthServerMetadata);
 
       expect(mockFetch).nthCalledWith(
         1,
@@ -193,7 +193,7 @@ describe('OAuthUtils', () => {
         'https://auth.example.com/mcp',
       );
 
-      expect(result).toEqual(mockAuthServerMetadata);
+      expect(result).toStrictEqual(mockAuthServerMetadata);
 
       expect(mockFetch).nthCalledWith(
         1,
@@ -241,10 +241,11 @@ describe('OAuthUtils', () => {
         'https://example.com/mcp',
       );
 
-      expect(config).toEqual({
+      expect(config).toStrictEqual({
         authorizationUrl: 'https://auth.example.com/authorize',
         tokenUrl: 'https://auth.example.com/token',
         scopes: ['read', 'write'],
+        registrationUrl: undefined,
       });
     });
 
@@ -275,10 +276,11 @@ describe('OAuthUtils', () => {
 
       const config = OAuthUtils.metadataToOAuthConfig(metadata);
 
-      expect(config).toEqual({
+      expect(config).toStrictEqual({
         authorizationUrl: 'https://auth.example.com/authorize',
         tokenUrl: 'https://auth.example.com/token',
         scopes: ['read', 'write'],
+        registrationUrl: undefined,
       });
     });
 
@@ -291,7 +293,7 @@ describe('OAuthUtils', () => {
 
       const config = OAuthUtils.metadataToOAuthConfig(metadata);
 
-      expect(config.scopes).toEqual([]);
+      expect(config.scopes).toStrictEqual([]);
     });
   });
 

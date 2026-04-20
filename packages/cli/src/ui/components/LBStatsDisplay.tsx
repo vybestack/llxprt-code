@@ -7,7 +7,7 @@
  * Issue #489 Phase 8
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text } from 'ink';
 import type { ExtendedLoadBalancerStats } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';

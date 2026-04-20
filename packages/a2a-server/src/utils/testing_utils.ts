@@ -56,6 +56,7 @@ export function createMockConfig(
     getDebugMode: vi.fn().mockReturnValue(false),
     getContentGeneratorConfig: vi.fn().mockReturnValue({ model: 'gemini-pro' }),
     getModel: vi.fn().mockReturnValue('gemini-pro'),
+    getProvider: vi.fn().mockReturnValue('gemini'),
     getMcpServers: vi.fn().mockReturnValue({}),
     getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
     getComplexityAnalyzerSettings: vi.fn().mockReturnValue({}),

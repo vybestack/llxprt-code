@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
+import type React from 'react';
+import {
   createContext,
   useContext,
   useState,
@@ -12,7 +13,7 @@ import React, {
   useEffect,
   useMemo,
 } from 'react';
-import {
+import type {
   Config,
   ProviderMessage as Message,
   ConversationCache,

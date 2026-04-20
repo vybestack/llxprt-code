@@ -5,10 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  validateNonInteractiveAuth,
-  NonInteractiveConfig,
-} from './validateNonInterActiveAuth.js';
+import type { NonInteractiveConfig } from './validateNonInterActiveAuth.js';
+import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 describe('validateNonInterActiveAuth', () => {

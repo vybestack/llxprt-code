@@ -102,7 +102,11 @@ describe('getCliVersion', () => {
       getCliVersion(),
     ]);
 
-    expect(results).toEqual(['3.0.0-stable', '3.0.0-stable', '3.0.0-stable']);
+    expect(results).toStrictEqual([
+      '3.0.0-stable',
+      '3.0.0-stable',
+      '3.0.0-stable',
+    ]);
     expect(mockGetPackageJson).toHaveBeenCalledTimes(1);
   });
 

@@ -6,8 +6,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthCommandExecutor } from './authCommand.js';
-import { OAuthManager } from '../../auth/oauth-manager.js';
-import { CommandContext } from './types.js';
+import type { OAuthManager } from '../../auth/oauth-manager.js';
+import type { CommandContext } from './types.js';
 
 // Mock OAuth manager and dependencies
 const peekStoredTokenMock = vi.fn();
@@ -55,7 +55,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext);
 
       // Then: Should show OAuth dialog
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'dialog',
         dialog: 'auth',
       });
@@ -66,7 +66,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext);
 
       // Then: Should return dialog action (OAuth-only architecture)
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'dialog',
         dialog: 'auth',
       });
@@ -91,7 +91,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       // Then: Should show provider status
       expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
       expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth for gemini: ENABLED (authenticated)',
@@ -122,7 +122,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
         const result = await executor.execute(mockContext, 'gemini');
 
-        expect(result).toEqual({
+        expect(result).toStrictEqual({
           type: 'message',
           messageType: 'info',
           content:
@@ -153,7 +153,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should toggle OAuth enablement and return success
       expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth enabled for gemini',
@@ -175,7 +175,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should toggle OAuth enablement and return success
       expect(mockToggleOAuth).toHaveBeenCalledWith('qwen');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth disabled for qwen',
@@ -198,7 +198,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       // Then: Should trim and show provider status
       expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
       expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth for gemini: DISABLED',
@@ -210,7 +210,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'gemini invalid');
 
       // Then: Should return error message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -228,7 +228,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext);
 
       // Then: Should return dialog action (OAuth-only, no API key options)
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'dialog',
         dialog: 'auth',
       });
@@ -247,7 +247,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'unknown-provider');
 
       // Then: Should return error message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content:
@@ -260,7 +260,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, '   ');
 
       // Then: Should show OAuth menu
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'dialog',
         dialog: 'auth',
       });
@@ -291,7 +291,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should enable OAuth and show success message
       expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth enabled for gemini',
@@ -313,7 +313,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should disable OAuth and show success message
       expect(mockToggleOAuth).toHaveBeenCalledWith('qwen');
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth disabled for qwen',
@@ -332,7 +332,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should show already enabled message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth for gemini is already enabled',
@@ -351,7 +351,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'qwen disable');
 
       // Then: Should show already disabled message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content: 'OAuth for qwen is already disabled',
@@ -374,7 +374,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should show warning about precedence
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
         content:
@@ -411,7 +411,9 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getAuthStatus as unknown) = mockGetAuthStatus;
 
       const result = await executor.getAuthStatus();
-      expect(result).toEqual(['[] gemini: not authenticated [OAuth enabled]']);
+      expect(result).toStrictEqual([
+        '[] gemini: not authenticated [OAuth enabled]',
+      ]);
     });
   });
 
@@ -437,7 +439,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.getAuthStatus();
 
       // Then: Should return formatted status indicators with enablement info
-      expect(result).toEqual([
+      expect(result).toStrictEqual([
         '[✓] gemini: authenticated (expires in 60m) [OAuth enabled]',
         '[] qwen: not authenticated [OAuth disabled]',
       ]);
@@ -461,7 +463,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should return error message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Failed to enable OAuth for gemini: Toggle failed',
@@ -484,7 +486,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const result = await executor.execute(mockContext, 'qwen disable');
 
       // Then: Should return user-friendly error message
-      expect(result).toEqual({
+      expect(result).toStrictEqual({
         type: 'message',
         messageType: 'error',
         content: 'Failed to disable OAuth for qwen: Cannot save configuration',

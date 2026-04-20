@@ -6,7 +6,8 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
-import { Config, ApprovalMode, ToolRegistry } from '../index.js';
+import type { Config, ToolRegistry } from '../index.js';
+import { ApprovalMode } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { PolicyDecision } from '../policy/types.js';
 

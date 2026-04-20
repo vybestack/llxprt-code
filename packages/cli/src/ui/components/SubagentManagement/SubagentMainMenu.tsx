@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { RadioButtonSelect } from '../shared/RadioButtonSelect.js';
-import { SubagentView, MENU_ACTIONS } from './types.js';
+import type { SubagentView } from './types.js';
+import { MENU_ACTIONS } from './types.js';
 
 interface SubagentMainMenuProps {
   onSelect: (view: SubagentView) => void;

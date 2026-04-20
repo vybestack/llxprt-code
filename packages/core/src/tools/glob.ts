@@ -12,7 +12,7 @@ import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
 import { shortenPath, makeRelative } from '../utils/paths.js';
 import { type Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
 
@@ -45,9 +45,8 @@ export function sortFileEntries(
       return -1;
     } else if (bIsRecent) {
       return 1;
-    } else {
-      return a.fullpath().localeCompare(b.fullpath());
     }
+    return a.fullpath().localeCompare(b.fullpath());
   });
   return sortedEntries;
 }

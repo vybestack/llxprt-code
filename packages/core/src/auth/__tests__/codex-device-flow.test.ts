@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { CodexOAuthTokenSchema } from '../types.js';
 import { CodexDeviceFlow } from '../codex-device-flow.js';
 import { createServer, type Server } from 'http';
-import { AddressInfo } from 'net';
+import type { AddressInfo } from 'net';
 
 describe('CodexOAuthTokenSchema', () => {
   /**

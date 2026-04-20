@@ -5,13 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
+import type {
   IProvider,
   IContent,
   GenerateChatOptions,
   ProviderToolset,
+  Config,
 } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
 interface LoggingProviderWrapper {
@@ -402,7 +402,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     // Verify logging across providers
     const entries = storage.getEntries();
     expect(entries).toHaveLength(3);
-    expect(entries.map((e) => e.provider_name)).toEqual([
+    expect(entries.map((e) => e.provider_name)).toStrictEqual([
       'openai',
       'anthropic',
       'gemini',
@@ -692,7 +692,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     // Verify each provider was logged correctly
     const providerNames = entries.map((e) => e.provider_name).sort();
-    expect(providerNames).toEqual([
+    expect(providerNames).toStrictEqual([
       'concurrent-1',
       'concurrent-2',
       'concurrent-3',

@@ -93,7 +93,7 @@ describe('toolkeyfileCommand', () => {
         '/toolkeyfile ex',
       );
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'exa' })]),
       );
       expect(result.hint).toBe('Select built-in tool');
@@ -117,7 +117,7 @@ describe('toolkeyfileCommand', () => {
         '/toolkeyfile exa ',
       );
 
-      expect(result.suggestions).toEqual(
+      expect(result.suggestions).toStrictEqual(
         expect.arrayContaining([expect.objectContaining({ value: 'none' })]),
       );
       expect(result.hint).toBe(

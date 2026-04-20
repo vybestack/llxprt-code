@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { Colors } from '../colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
-import { TextBuffer, logicalPosToOffset } from './shared/text-buffer.js';
+import type { TextBuffer } from './shared/text-buffer.js';
+import { logicalPosToOffset } from './shared/text-buffer.js';
 import {
   cpSlice,
   cpLen,
@@ -22,7 +24,8 @@ import { useShellHistory } from '../hooks/useShellHistory.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
 import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
 import { useShellPathCompletion } from '../hooks/useShellPathCompletion.js';
-import { useKeypress, Key } from '../hooks/useKeypress.js';
+import type { Key } from '../hooks/useKeypress.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { Config, ApprovalMode } from '@vybestack/llxprt-code-core';
@@ -433,7 +436,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
-      if (vimHandleInput && vimHandleInput(key)) {
+      if (vimHandleInput?.(key)) {
         return;
       }
 

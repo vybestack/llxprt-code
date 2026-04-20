@@ -8,14 +8,14 @@ import process from 'node:process';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
-import { ToolRegistry } from '../tools/tool-registry.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
 import { ActivateSkillTool } from '../tools/activate-skill.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import { HookSystem } from '../hooks/hookSystem.js';
-import { HistoryService } from '../services/history/HistoryService.js';
+import type { HistoryService } from '../services/history/HistoryService.js';
 import { ContextManager } from '../services/contextManager.js';
 // @plan PLAN-20260130-ASYNCTASK.P09
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
@@ -86,13 +86,14 @@ export {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
 } from './constants.js';
 
-import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
 import { getCoreVersion } from '../utils/version.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
+import type { CoreToolScheduler } from '../core/coreToolScheduler.js';
 
 export class Config extends ConfigBase {
   constructor(params: ConfigParameters) {
@@ -747,7 +748,7 @@ export class Config extends ConfigBase {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<import('../core/coreToolScheduler.js').CoreToolScheduler> {
+  ): Promise<CoreToolScheduler> {
     const schedulerMessageBus = dependencies?.messageBus;
     if (!schedulerMessageBus) {
       throw new Error(

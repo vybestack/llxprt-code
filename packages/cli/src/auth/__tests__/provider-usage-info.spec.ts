@@ -133,7 +133,7 @@ describe('getAnthropicUsageInfo', () => {
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(
       'sk-ant-api03-not-oauth',
     );
-    expect(result).toEqual({ plan: 'legacy-single-bucket' });
+    expect(result).toStrictEqual({ plan: 'legacy-single-bucket' });
   });
 
   it('returns null when fetch throws an error', async () => {
@@ -157,7 +157,7 @@ describe('getAnthropicUsageInfo', () => {
     const result = await getAnthropicUsageInfo(store, 'my-bucket');
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(token.access_token);
-    expect(result).toEqual({ plan: 'max' });
+    expect(result).toStrictEqual({ plan: 'max' });
   });
 
   it('defaults to "default" bucket when no bucket specified', async () => {
@@ -266,8 +266,14 @@ describe('getAllAnthropicUsageInfo', () => {
     const result = await getAllAnthropicUsageInfo(store);
 
     expect(result.size).toBe(2);
-    expect(result.get('bucket-a')).toEqual({ plan: 'max', bucket: 'bucket-a' });
-    expect(result.get('bucket-b')).toEqual({ plan: 'pro', bucket: 'bucket-b' });
+    expect(result.get('bucket-a')).toStrictEqual({
+      plan: 'max',
+      bucket: 'bucket-a',
+    });
+    expect(result.get('bucket-b')).toStrictEqual({
+      plan: 'pro',
+      bucket: 'bucket-b',
+    });
   });
 
   it('continues processing remaining buckets when one fetch fails', async () => {
@@ -290,7 +296,7 @@ describe('getAllAnthropicUsageInfo', () => {
     const result = await getAllAnthropicUsageInfo(store);
 
     expect(result.size).toBe(1);
-    expect(result.get('bucket-b')).toEqual({ plan: 'pro' });
+    expect(result.get('bucket-b')).toStrictEqual({ plan: 'pro' });
   });
 
   it('skips null usage results', async () => {
@@ -390,7 +396,7 @@ describe('getAllCodexUsageInfo', () => {
       undefined,
     );
     expect(result.size).toBe(1);
-    expect(result.get('default')).toEqual({ quota: 1000 });
+    expect(result.get('default')).toStrictEqual({ quota: 1000 });
   });
 
   it('passes base-url from config when available', async () => {
@@ -480,7 +486,7 @@ describe('getAllCodexUsageInfo', () => {
 
     const result = await getAllCodexUsageInfo(store);
     expect(result.size).toBe(1);
-    expect(result.get('bucket-b')).toEqual({ quota: 999 });
+    expect(result.get('bucket-b')).toStrictEqual({ quota: 999 });
   });
 });
 
@@ -546,7 +552,7 @@ describe('getAllGeminiUsageInfo', () => {
 
     expect(mockFetchGeminiQuota).toHaveBeenCalledWith('gemini-valid-token');
     expect(result.size).toBe(1);
-    expect(result.get('default')).toEqual({ remainingUnits: 42 });
+    expect(result.get('default')).toStrictEqual({ remainingUnits: 42 });
   });
 
   it('collects quota for multiple valid buckets', async () => {
@@ -577,8 +583,8 @@ describe('getAllGeminiUsageInfo', () => {
     const result = await getAllGeminiUsageInfo(store);
 
     expect(result.size).toBe(2);
-    expect(result.get('bucket-a')).toEqual({ remaining: 100 });
-    expect(result.get('bucket-b')).toEqual({ remaining: 200 });
+    expect(result.get('bucket-a')).toStrictEqual({ remaining: 100 });
+    expect(result.get('bucket-b')).toStrictEqual({ remaining: 200 });
   });
 
   it('continues processing remaining buckets when one fetch fails', async () => {
@@ -608,7 +614,7 @@ describe('getAllGeminiUsageInfo', () => {
 
     const result = await getAllGeminiUsageInfo(store);
     expect(result.size).toBe(1);
-    expect(result.get('bucket-b')).toEqual({ remaining: 50 });
+    expect(result.get('bucket-b')).toStrictEqual({ remaining: 50 });
   });
 
   it('skips null quota results', async () => {

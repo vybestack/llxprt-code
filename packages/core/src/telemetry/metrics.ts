@@ -22,7 +22,7 @@ import {
   METRIC_SESSION_COUNT,
   METRIC_FILE_OPERATION_COUNT,
 } from './constants.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { type DiffStat } from '../tools/tools.js';
 
 export enum FileOperation {

@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   SlashCommand,
   CommandContext,
   OpenDialogActionReturn,
   MessageActionReturn,
-  CommandKind,
   ModelsDialogData,
 } from './types.js';
+import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 /**

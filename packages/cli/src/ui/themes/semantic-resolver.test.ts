@@ -6,8 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveSemanticColors } from './semantic-resolver.js';
-import { SemanticColors } from './semantic-tokens.js';
-import { ColorsTheme } from './theme.js';
+import type { SemanticColors } from './semantic-tokens.js';
+import type { ColorsTheme } from './theme.js';
 
 describe('semantic-resolver', () => {
   describe('resolveSemanticColors', () => {
@@ -33,7 +33,7 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(darkTheme);
 
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: '#CDD6F4',
           secondary: '#6C7086',
@@ -88,7 +88,7 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(lightTheme);
 
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: '#3C3C43',
           secondary: '#97a0b0',
@@ -143,7 +143,7 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(ansiTheme);
 
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: 'white',
           secondary: 'gray',
@@ -198,7 +198,7 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(customTheme);
 
-      expect(semanticColors).toEqual({
+      expect(semanticColors).toStrictEqual({
         text: {
           primary: '#EDF2F4',
           secondary: '#6C757D',

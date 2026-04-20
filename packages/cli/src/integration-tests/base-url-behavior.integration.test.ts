@@ -5,14 +5,16 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import {
-  Config,
+import type {
   Profile,
-  ProfileManager,
   ProviderManager,
   IProvider,
-  createProviderRuntimeContext,
   SettingsService,
+} from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  ProfileManager,
+  createProviderRuntimeContext,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import {

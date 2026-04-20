@@ -11,7 +11,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import fsp from 'fs/promises';
-import { Config } from '../../config/config.js';
+import type { Config } from '../../config/config.js';
 import { FileDiscoveryService } from '../../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../../test-utils/mockWorkspaceContext.js';

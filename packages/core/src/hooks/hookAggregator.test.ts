@@ -297,7 +297,7 @@ describe('HookAggregator', () => {
       const output = aggregated.finalOutput as BeforeToolSelectionOutput;
       const toolConfig = output.hookSpecificOutput?.toolConfig;
       expect(toolConfig?.mode).toBe('NONE');
-      expect(toolConfig?.allowedFunctionNames).toEqual([]);
+      expect(toolConfig?.allowedFunctionNames).toStrictEqual([]);
     });
 
     it('should merge tool configurations with ANY mode', () => {
@@ -351,7 +351,7 @@ describe('HookAggregator', () => {
       const output = aggregated.finalOutput as BeforeToolSelectionOutput;
       const toolConfig = output.hookSpecificOutput?.toolConfig;
       expect(toolConfig?.mode).toBe('ANY');
-      expect(toolConfig?.allowedFunctionNames).toEqual([
+      expect(toolConfig?.allowedFunctionNames).toStrictEqual([
         'tool1',
         'tool2',
         'tool3',
@@ -409,7 +409,10 @@ describe('HookAggregator', () => {
       const output = aggregated.finalOutput as BeforeToolSelectionOutput;
       const toolConfig = output.hookSpecificOutput?.toolConfig;
       expect(toolConfig?.mode).toBe('AUTO');
-      expect(toolConfig?.allowedFunctionNames).toEqual(['tool1', 'tool2']);
+      expect(toolConfig?.allowedFunctionNames).toStrictEqual([
+        'tool1',
+        'tool2',
+      ]);
     });
   });
 

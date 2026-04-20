@@ -25,7 +25,7 @@ import {
   updateAgentRuntimeState,
   type AgentRuntimeState,
 } from '../../runtime/AgentRuntimeState.js';
-import { HistoryService } from '../../services/history/HistoryService.js';
+import type { HistoryService } from '../../services/history/HistoryService.js';
 
 /**
  * Test helper: Create minimal Config for testing

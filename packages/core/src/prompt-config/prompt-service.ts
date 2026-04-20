@@ -299,12 +299,12 @@ export class PromptService {
     let result = basePrompt;
 
     // Core memory: injected as system directives (no --- separator)
-    if (coreMemory && coreMemory.trim()) {
+    if (coreMemory?.trim()) {
       result += `\n\n${coreMemory.trim()}`;
     }
 
     // User memory: injected as user context with --- separator
-    if (userMemory && userMemory.trim()) {
+    if (userMemory?.trim()) {
       result += `\n\n---\n\n${userMemory.trim()}`;
     }
 

@@ -474,6 +474,7 @@ describe('SessionDiscovery extensions', () => {
         try {
           await fs.chmod(filePath, 0o000);
           const result = await SessionDiscovery.readFirstUserMessage(filePath);
+          // eslint-disable-next-line vitest/no-standalone-expect -- runUnreadableFileTest is an aliased `it`/`it.skip` test block
           expect(result).toBeNull();
         } finally {
           // Restore permissions for cleanup

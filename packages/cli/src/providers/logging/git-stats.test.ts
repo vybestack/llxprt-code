@@ -82,7 +82,7 @@ describe('Git Statistics Tracking', () => {
         'line1\nline2\nline3\nline4',
       );
 
-      expect(stats).toEqual({
+      expect(stats).toStrictEqual({
         linesAdded: 2,
         linesRemoved: 0,
         filesChanged: 1,

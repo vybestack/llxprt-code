@@ -5,11 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  DirectWebFetchTool,
-  DirectWebFetchToolParams,
-} from './direct-web-fetch.js';
-import { Config } from '../config/config.js';
+import type { DirectWebFetchToolParams } from './direct-web-fetch.js';
+import { DirectWebFetchTool } from './direct-web-fetch.js';
+import type { Config } from '../config/config.js';
 import { type ToolResult as _ToolResult } from './tools.js';
 import fetch from 'node-fetch';
 

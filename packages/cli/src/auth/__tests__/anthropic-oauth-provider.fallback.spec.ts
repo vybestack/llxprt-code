@@ -232,7 +232,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       expect(tokenStore.saveToken).not.toHaveBeenCalled();
 
       // Verify initiateAuth returned the token
-      expect(token).toEqual(
+      expect(token).toStrictEqual(
         expect.objectContaining({ access_token: 'local-token' }),
       );
     });

@@ -50,7 +50,7 @@ describe('HookTranslator', () => {
 
       const hookRequest = translator.toHookLLMRequest(sdkRequest);
 
-      expect(hookRequest).toEqual({
+      expect(hookRequest).toStrictEqual({
         model: 'gemini-1.5-flash',
         messages: [
           {
@@ -75,7 +75,7 @@ describe('HookTranslator', () => {
 
       const hookRequest = translator.toHookLLMRequest(sdkRequest);
 
-      expect(hookRequest.messages).toEqual([
+      expect(hookRequest.messages).toStrictEqual([
         {
           role: 'user',
           content: 'Simple string message',
@@ -92,7 +92,7 @@ describe('HookTranslator', () => {
       const hookRequest = translator.toHookLLMRequest(sdkRequest);
 
       // When contents are invalid, the translator skips them and returns empty messages
-      expect(hookRequest.messages).toEqual([]);
+      expect(hookRequest.messages).toStrictEqual([]);
       expect(hookRequest.model).toBe('gemini-1.5-flash');
     });
 
@@ -114,7 +114,7 @@ describe('HookTranslator', () => {
       const sdkRequest = translator.fromHookLLMRequest(hookRequest);
 
       expect(sdkRequest.model).toBe('gemini-1.5-flash');
-      expect(sdkRequest.contents).toEqual([
+      expect(sdkRequest.contents).toStrictEqual([
         {
           role: 'user',
           parts: [{ text: 'Hello world' }],
@@ -146,7 +146,7 @@ describe('HookTranslator', () => {
 
       const hookResponse = translator.toHookLLMResponse(sdkResponse);
 
-      expect(hookResponse).toEqual({
+      expect(hookResponse).toStrictEqual({
         text: 'Hello response',
         candidates: [
           {
@@ -202,7 +202,7 @@ describe('HookTranslator', () => {
 
       const hookToolConfig = translator.toHookToolConfig(sdkToolConfig);
 
-      expect(hookToolConfig).toEqual({
+      expect(hookToolConfig).toStrictEqual({
         mode: 'ANY',
         allowedFunctionNames: ['tool1', 'tool2'],
       });
@@ -216,7 +216,7 @@ describe('HookTranslator', () => {
 
       const sdkToolConfig = translator.fromHookToolConfig(hookToolConfig);
 
-      expect(sdkToolConfig.functionCallingConfig).toEqual({
+      expect(sdkToolConfig.functionCallingConfig).toStrictEqual({
         mode: 'AUTO',
         allowedFunctionNames: ['tool1', 'tool2'],
       });
@@ -227,7 +227,7 @@ describe('HookTranslator', () => {
 
       const hookToolConfig = translator.toHookToolConfig(sdkToolConfig);
 
-      expect(hookToolConfig).toEqual({
+      expect(hookToolConfig).toStrictEqual({
         mode: undefined,
         allowedFunctionNames: undefined,
       });
