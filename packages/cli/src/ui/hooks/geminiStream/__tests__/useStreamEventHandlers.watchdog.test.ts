@@ -23,9 +23,17 @@ import { MessageType, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
 
 describe('useStreamEventHandlers stalled-stream watchdog', () => {
+  const testTimeoutMs = 30_000; // 30 second timeout for watchdog tests
+
   const mockConfig = {
     getModel: vi.fn(() => 'gemini-2.5-pro'),
     getMaxSessionTurns: vi.fn(() => 42),
+    getEphemeralSetting: vi.fn((key: string) => {
+      if (key === 'stream-idle-timeout-ms') {
+        return testTimeoutMs;
+      }
+      return undefined;
+    }),
   } as unknown as Config;
 
   const mockSettings = {
@@ -129,9 +137,7 @@ describe('useStreamEventHandlers stalled-stream watchdog', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    await vi.advanceTimersByTimeAsync(
-      __testing.DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1,
-    );
+    await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
     await runPromiseExpectation;
     expect(abortActiveStream).toHaveBeenCalledWith(expect.any(Error));

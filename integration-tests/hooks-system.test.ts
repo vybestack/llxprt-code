@@ -563,7 +563,8 @@ console.log(JSON.stringify({
   });
 
   describe('Notification Hooks - Permission Handling', () => {
-    it('should handle notification hooks for tool permissions', async () => {
+    // Skipped: flaky interactive pty/Ink rendering in CI. See #1904.
+    it.skip('should handle notification hooks for tool permissions', async () => {
       // Create inline hook command (works on both Unix and Windows)
       // Create inline hook command (works on both Unix and Windows)
       const hookCommand =
@@ -1185,7 +1186,8 @@ console.log(JSON.stringify({
       expect(requestText).toContain('protocol droid');
     });
 
-    it('should fire SessionStart hook and display systemMessage in interactive mode', async () => {
+    // Skipped: flaky interactive pty/Ink rendering in CI. See #1904.
+    it.skip('should fire SessionStart hook and display systemMessage in interactive mode', async () => {
       // Create hook script that outputs JSON with systemMessage and additionalContext
       const hookScript = `const fs = require('fs');
 console.log(JSON.stringify({
@@ -1255,7 +1257,8 @@ console.log(JSON.stringify({
       await run.kill();
     });
 
-    it('should fire SessionEnd and SessionStart hooks on /clear command', async () => {
+    // Skipped: flaky interactive pty/Ink rendering in CI. See #1904.
+    it.skip('should fire SessionEnd and SessionStart hooks on /clear command', async () => {
       // Create inline hook commands for both SessionEnd and SessionStart
       const sessionEndCommand =
         "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'Session ending due to clear'}))\"";

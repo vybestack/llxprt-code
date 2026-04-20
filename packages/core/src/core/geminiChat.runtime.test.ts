@@ -26,7 +26,6 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '../runtime/runtimeAdapters.js';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -173,8 +172,12 @@ describe('GeminiChat runtime context', () => {
   });
   it('aborts a stalled non-stream sendMessage response after partial provider output instead of hanging forever', async () => {
     vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
 
     try {
+      // Set explicit timeout via ephemeral setting
+      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
         options: GenerateChatOptions,
@@ -256,7 +259,7 @@ describe('GeminiChat runtime context', () => {
 
       await Promise.resolve();
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);
@@ -268,8 +271,12 @@ describe('GeminiChat runtime context', () => {
 
   it('aborts a stalled direct-message response after partial provider output instead of hanging forever', async () => {
     vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
 
     try {
+      // Set explicit timeout via ephemeral setting
+      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
         options: GenerateChatOptions,
@@ -351,7 +358,7 @@ describe('GeminiChat runtime context', () => {
 
       await Promise.resolve();
       await Promise.resolve();
-      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
 
       await rejection;
       expect(capturedSignal?.aborted).toBe(true);

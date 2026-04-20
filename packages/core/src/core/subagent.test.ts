@@ -7,7 +7,6 @@
 import type { Mock } from 'vitest';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createAbortError } from '../utils/delay.js';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -1813,6 +1812,9 @@ describe('subagent.ts', () => {
         vi.useFakeTimers();
 
         const { config } = await createMockConfig();
+        const testTimeoutMs = 30_000; // 30 second timeout for this test
+        config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+
         const runConfig: RunConfig = { max_time_minutes: 5, max_turns: 100 };
         let capturedSignal: AbortSignal | undefined;
 
@@ -1875,9 +1877,7 @@ describe('subagent.ts', () => {
           },
         );
 
-        await vi.advanceTimersByTimeAsync(
-          DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1_000,
-        );
+        await vi.advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
         await runRejection;
 

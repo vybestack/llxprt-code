@@ -11,7 +11,6 @@ import type {
   ServerGeminiStreamEvent,
 } from './turn.js';
 import { Turn, GeminiEventType, DEFAULT_AGENT_ID } from './turn.js';
-import { DEFAULT_STREAM_IDLE_TIMEOUT_MS } from '../utils/streamIdleTimeout.js';
 import type {
   GenerateContentResponse,
   Part,
@@ -236,76 +235,109 @@ describe('Turn', () => {
       expect(turn.getDebugResponses().length).toBe(1);
     });
     it('should call return() on stream iterator when aborted', async () => {
-      const abortController = new AbortController();
-      const returnSpy = vi.fn().mockResolvedValue(undefined);
+      vi.useFakeTimers();
+      try {
+        const abortController = new AbortController();
+        const returnSpy = vi.fn().mockResolvedValue(undefined);
 
-      // Create a mock async generator with a spyable return method
-      async function* mockGenerator() {
-        try {
-          yield {
-            type: StreamEventType.CHUNK,
-            value: {
-              candidates: [{ content: { parts: [{ text: 'First part' }] } }],
-            } as GenerateContentResponse,
-          };
-          // This will wait until aborted
-          await new Promise<void>((resolve) => {
-            abortController.signal.addEventListener('abort', () => resolve(), {
-              once: true,
-            });
-          });
-          yield {
-            type: StreamEventType.CHUNK,
-            value: {
-              candidates: [
+        // Set explicit timeout for this test
+        mockChatInstance = {
+          sendMessageStream: mockSendMessageStream,
+          getHistory: mockGetHistory,
+          getConfig: () => ({
+            getEphemeralSetting: (key: string) => {
+              if (key === 'stream-idle-timeout-ms') {
+                return 30_000; // 30 second timeout
+              }
+              return undefined;
+            },
+          }),
+        };
+        turn = new Turn(
+          mockChatInstance as unknown as GeminiChat,
+          'prompt-id-1',
+          DEFAULT_AGENT_ID,
+          'test',
+        );
+
+        // Create a mock async generator with a spyable return method
+        async function* mockGenerator() {
+          try {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [{ content: { parts: [{ text: 'First part' }] } }],
+              } as GenerateContentResponse,
+            };
+            // This will wait until aborted
+            await new Promise<void>((resolve) => {
+              abortController.signal.addEventListener(
+                'abort',
+                () => resolve(),
                 {
-                  content: {
-                    parts: [{ text: 'Second part - should not be processed' }],
-                  },
+                  once: true,
                 },
-              ],
-            } as GenerateContentResponse,
-          };
-        } finally {
-          // This ensures return() is called when iterator is closed
-        }
-      }
-
-      const generator = mockGenerator();
-      // Wrap the generator to spy on return()
-      const mockResponseStream = {
-        [Symbol.asyncIterator]: () => ({
-          next: () => generator.next(),
-          return: returnSpy,
-          throw: (e: unknown) => {
-            if (generator.throw) return generator.throw(e);
-            throw e;
-          },
-        }),
-      };
-
-      mockSendMessageStream.mockResolvedValue(mockResponseStream);
-
-      // Start consuming and abort after first chunk
-      const events: ServerGeminiStreamEvent[] = [];
-      const runPromise = (async () => {
-        for await (const event of turn.run(
-          [{ text: 'Test iterator cleanup' }],
-          abortController.signal,
-        )) {
-          events.push(event);
-          if (event.type === GeminiEventType.Content) {
-            // Abort after first content event
-            abortController.abort();
+              );
+            });
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [
+                  {
+                    content: {
+                      parts: [
+                        { text: 'Second part - should not be processed' },
+                      ],
+                    },
+                  },
+                ],
+              } as GenerateContentResponse,
+            };
+          } finally {
+            // This ensures return() is called when iterator is closed
           }
         }
-      })();
 
-      await runPromise;
+        const generator = mockGenerator();
+        // Wrap the generator to spy on return()
+        const mockResponseStream = {
+          [Symbol.asyncIterator]: () => ({
+            next: () => generator.next(),
+            return: returnSpy,
+            throw: (e: unknown) => {
+              if (generator.throw) return generator.throw(e);
+              throw e;
+            },
+          }),
+        };
 
-      // Verify that return() was called on the iterator
-      expect(returnSpy).toHaveBeenCalled();
-      expect(events).toContainEqual({ type: GeminiEventType.UserCancelled });
+        mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+        // Start consuming and abort after first chunk
+        const events: ServerGeminiStreamEvent[] = [];
+        const runPromise = (async () => {
+          for await (const event of turn.run(
+            [{ text: 'Test iterator cleanup' }],
+            abortController.signal,
+          )) {
+            events.push(event);
+            if (event.type === GeminiEventType.Content) {
+              // Abort after first content event
+              abortController.abort();
+            }
+          }
+        })();
+
+        // Advance timers to let the abort propagate
+        await vi.advanceTimersByTimeAsync(100);
+        await runPromise;
+
+        // Verify that return() was called on the iterator
+        expect(returnSpy).toHaveBeenCalled();
+        expect(events).toContainEqual({ type: GeminiEventType.UserCancelled });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should allow subsequent calls after abort (sendPromise resolved)', async () => {
@@ -769,10 +801,31 @@ describe('Turn', () => {
       ]);
     });
 
-    it('should yield StreamIdleTimeout when the stream goes idle after partial output', async () => {
+    it('should yield StreamIdleTimeout when the stream goes idle after partial output with explicit timeout config', async () => {
       vi.useFakeTimers();
       try {
+        const testTimeoutMs = 30_000; // 30 second timeout for this test
         const abortSignals: AbortSignal[] = [];
+
+        // Create mock config that returns explicit timeout
+        mockChatInstance = {
+          sendMessageStream: mockSendMessageStream,
+          getHistory: mockGetHistory,
+          getConfig: () => ({
+            getEphemeralSetting: (key: string) => {
+              if (key === 'stream-idle-timeout-ms') {
+                return testTimeoutMs;
+              }
+              return undefined;
+            },
+          }),
+        };
+        turn = new Turn(
+          mockChatInstance as unknown as GeminiChat,
+          'prompt-id-1',
+          DEFAULT_AGENT_ID,
+          'test',
+        );
 
         const mockResponseStream = (async function* () {
           yield {
@@ -805,7 +858,7 @@ describe('Turn', () => {
           return events;
         })();
 
-        await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
+        await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
         const events = await eventsPromise;
 
         expect(events).toStrictEqual([
@@ -835,8 +888,29 @@ describe('Turn', () => {
     it('should allow subsequent calls after idle timeout (sendPromise deadlock prevention)', async () => {
       vi.useFakeTimers();
       try {
+        const testTimeoutMs = 30_000; // 30 second timeout for this test
         let callCount = 0;
         const abortSignals: AbortSignal[] = [];
+
+        // Create mock config that returns explicit timeout
+        mockChatInstance = {
+          sendMessageStream: mockSendMessageStream,
+          getHistory: mockGetHistory,
+          getConfig: () => ({
+            getEphemeralSetting: (key: string) => {
+              if (key === 'stream-idle-timeout-ms') {
+                return testTimeoutMs;
+              }
+              return undefined;
+            },
+          }),
+        };
+        turn = new Turn(
+          mockChatInstance as unknown as GeminiChat,
+          'prompt-id-1',
+          DEFAULT_AGENT_ID,
+          'test',
+        );
 
         const createMockStream = (shouldHang: boolean) =>
           (async function* () {
@@ -881,7 +955,7 @@ describe('Turn', () => {
           return events;
         })();
 
-        await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
+        await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
         const events1 = await events1Promise;
 
         expect(events1).toContainEqual(
@@ -1457,6 +1531,84 @@ describe('Turn', () => {
         (e) => e.type === GeminiEventType.StreamIdleTimeout,
       );
       expect(timeoutEvent).toBeDefined();
+    });
+
+    it('default-off: no watchdog timer when no env var and no ephemeral setting', async () => {
+      // Ensure no env var is set
+      delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
+
+      // Config returns undefined for the setting (default-off)
+      const mockGetConfig = vi.fn().mockReturnValue({
+        getEphemeralSetting: (key: string) => {
+          if (key === 'stream-idle-timeout-ms') {
+            return undefined; // Not set — default-off
+          }
+          return undefined;
+        },
+      });
+
+      mockChatInstance = {
+        sendMessageStream: mockSendMessageStream,
+        getHistory: mockGetHistory,
+        getConfig: mockGetConfig,
+      } as unknown as MockedChatInstance;
+
+      turn = new Turn(
+        mockChatInstance as unknown as GeminiChat,
+        'prompt-id-1',
+        DEFAULT_AGENT_ID,
+        'test',
+      );
+      mockGetHistory.mockReturnValue([]);
+
+      // Iterator that never yields naturally (simulates a slow-thinking model)
+      let resolveIterator: () => void;
+      const iteratorPromise = new Promise<void>((resolve) => {
+        resolveIterator = resolve;
+      });
+
+      const mockResponseStream = (async function* () {
+        await iteratorPromise;
+        yield {
+          type: StreamEventType.CHUNK,
+          value: {
+            candidates: [{ content: { parts: [{ text: 'Finally' }] } }],
+          } as GenerateContentResponse,
+        };
+      })();
+      mockSendMessageStream.mockResolvedValue(mockResponseStream);
+
+      const events: ServerGeminiStreamEvent[] = [];
+      const reqParts: Part[] = [{ text: 'Hi' }];
+      const abortController = new AbortController();
+
+      const runPromise = (async () => {
+        for await (const event of turn.run(reqParts, abortController.signal)) {
+          events.push(event);
+        }
+      })();
+
+      // Advance well past the old 10-minute default (600_000ms)
+      // No timers should be scheduled because watchdog is disabled by default
+      await vi.advanceTimersByTimeAsync(700_000);
+      await Promise.resolve();
+
+      // No timeout event should have been emitted
+      expect(
+        events.find((e) => e.type === GeminiEventType.StreamIdleTimeout),
+      ).toBeUndefined();
+
+      // Timer count should be 0 (no watchdog scheduled)
+      expect(vi.getTimerCount()).toBe(0);
+
+      // Resolve the iterator to let the test complete
+      resolveIterator!();
+      await vi.runAllTimersAsync();
+      await runPromise;
+
+      // Should have the content event, no timeout
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe(GeminiEventType.Content);
     });
   });
 });

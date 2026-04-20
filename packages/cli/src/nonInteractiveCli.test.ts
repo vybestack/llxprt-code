@@ -17,7 +17,6 @@ import {
   GeminiEventType,
   StreamIdleTimeoutError,
   DebugLogger,
-  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
 } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
@@ -38,7 +37,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     delay: original.delay,
     nextStreamEventWithIdleTimeout: original.nextStreamEventWithIdleTimeout,
     StreamIdleTimeoutError: original.StreamIdleTimeoutError,
-    DEFAULT_STREAM_IDLE_TIMEOUT_MS: original.DEFAULT_STREAM_IDLE_TIMEOUT_MS,
   };
 });
 
@@ -186,9 +184,18 @@ describe('runNonInteractive', () => {
     }
   }
 
-  it('should cancel the turn when the stream goes idle after partial output', async () => {
+  it('should cancel the turn when the stream goes idle after partial output with explicit timeout', async () => {
     vi.useFakeTimers();
+    const testTimeoutMs = 30_000; // 30 second timeout for this test
     try {
+      // Configure mock to return explicit timeout
+      const mockGetEphemeralSetting = vi.fn((key: string) => {
+        if (key === 'stream-idle-timeout-ms') {
+          return testTimeoutMs;
+        }
+        return undefined;
+      });
+
       let capturedSignal: AbortSignal | undefined;
       mockGeminiClient.sendMessageStream.mockImplementation(
         (_messages: Part[], signal: AbortSignal) => {
@@ -201,7 +208,10 @@ describe('runNonInteractive', () => {
       );
 
       const runPromise = runNonInteractive({
-        config: mockConfig,
+        config: {
+          ...mockConfig,
+          getEphemeralSetting: mockGetEphemeralSetting,
+        } as unknown as Config,
         settings: mockSettings,
         input: 'Test input',
         prompt_id: 'prompt-id-idle',
@@ -216,7 +226,7 @@ describe('runNonInteractive', () => {
         caughtError = err;
       });
 
-      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_IDLE_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(testTimeoutMs + 1);
       await runPromise.catch(() => {});
 
       expect(caughtError).toBeInstanceOf(StreamIdleTimeoutError);
