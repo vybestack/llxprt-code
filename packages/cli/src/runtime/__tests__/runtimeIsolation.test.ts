@@ -39,10 +39,12 @@ interface RuntimeFixture {
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   resetCliProviderInfrastructure();
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(async () => {
   resetCliProviderInfrastructure();
   while (runtimeFixtures.length > 0) {

@@ -191,6 +191,7 @@ const collectResults = async (
   return results;
 };
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   googleGenAIState.instances.length = 0;
   googleGenAIState.streamCalls.length = 0;
@@ -208,6 +209,7 @@ beforeEach(() => {
   );
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   clearActiveProviderRuntimeContext();
 });

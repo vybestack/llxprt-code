@@ -97,6 +97,7 @@ function buildCallOptions(
   });
 }
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   FakeOpenAIClass.reset();
   vi.stubEnv('OPENAI_API_KEY', '');
@@ -110,6 +111,7 @@ beforeEach(() => {
   );
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   clearActiveProviderRuntimeContext();
   vi.unstubAllEnvs();

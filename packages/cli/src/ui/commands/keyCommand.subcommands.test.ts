@@ -108,6 +108,7 @@ let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 let tempDir: string;
 let context: CommandContext;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(async () => {
   vi.clearAllMocks();
   mockKeyring = createMockKeyring();
@@ -129,6 +130,7 @@ beforeEach(async () => {
   });
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(async () => {
   await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
 });

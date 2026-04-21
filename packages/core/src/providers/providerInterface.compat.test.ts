@@ -67,6 +67,7 @@ class OptionRecorderProvider extends BaseProvider {
 
 let legacyProvider: OptionRecorderProvider;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   legacyProvider = new OptionRecorderProvider({ name: 'compat' });
 });

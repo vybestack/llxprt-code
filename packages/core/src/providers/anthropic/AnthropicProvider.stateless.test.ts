@@ -188,6 +188,7 @@ function buildCallOptions(
   });
 }
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   FakeAnthropicClass.reset();
   // Set up default runtime context for tests
@@ -199,6 +200,7 @@ beforeEach(() => {
   );
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   clearActiveProviderRuntimeContext();
 });

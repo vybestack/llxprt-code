@@ -246,6 +246,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   runtimeSettingsState.context = null;
   runtimeSettingsState.providerManager = null;

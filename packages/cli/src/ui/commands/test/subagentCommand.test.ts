@@ -73,6 +73,7 @@ let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 const findSubCommand = (name: string) =>
   subagentCommand.subCommands!.find((cmd) => cmd.name === name)!;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
   vi.resetModules();

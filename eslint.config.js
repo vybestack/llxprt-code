@@ -499,7 +499,7 @@ export default tseslint.config(
       'vitest/require-to-throw-message': 'error',
       'vitest/prefer-strict-equal': 'error',
       'vitest/max-nested-describe': ['warn', { max: 3 }],
-      'vitest/require-top-level-describe': 'warn',
+      'vitest/require-top-level-describe': 'error',
 
       // Relax complexity rules for test files
       'max-lines-per-function': 'off',

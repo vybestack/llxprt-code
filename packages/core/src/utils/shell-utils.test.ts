@@ -50,11 +50,13 @@ let config: Config;
 const isWindowsRuntime = process.platform === 'win32';
 const describeWindowsOnly = isWindowsRuntime ? describe : describe.skip;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
 beforeAll(async () => {
   mockPlatform.mockReturnValue('linux');
   await initializeShellParsers();
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
 beforeEach(() => {
   mockPlatform.mockReturnValue('linux');
   mockQuote.mockImplementation((args: string[]) =>
@@ -69,6 +71,7 @@ beforeEach(() => {
   } as unknown as Config;
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -546,6 +549,7 @@ describe('getCommandRoots', () => {
 describeWindowsOnly('PowerShell integration', () => {
   const originalComSpec = process.env['ComSpec'];
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   beforeEach(() => {
     mockPlatform.mockReturnValue('win32');
     const systemRoot = process.env['SystemRoot'] || 'C:\\\\Windows';
@@ -553,6 +557,7 @@ describeWindowsOnly('PowerShell integration', () => {
       `${systemRoot}\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe`;
   });
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   afterEach(() => {
     if (originalComSpec === undefined) {
       delete process.env['ComSpec'];
@@ -561,12 +566,14 @@ describeWindowsOnly('PowerShell integration', () => {
     }
   });
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   it('should return command roots using PowerShell AST output', () => {
     const roots = getCommandRoots('Get-ChildItem | Select-Object Name');
     expect(roots.length).toBeGreaterThan(0);
     expect(roots).toContain('Get-ChildItem');
   });
 
+  // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   it('should block commands when PowerShell parser reports errors', () => {
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
     if (!isParserAvailable()) return;

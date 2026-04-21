@@ -190,6 +190,7 @@ const keyStorageStub = {
 let savedGcpProject: string | undefined;
 let savedGcpLocation: string | undefined;
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 beforeEach(() => {
   savedGcpProject = process.env.GOOGLE_CLOUD_PROJECT;
   savedGcpLocation = process.env.GOOGLE_CLOUD_LOCATION;
@@ -233,6 +234,7 @@ beforeEach(() => {
   isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 });
 
+// eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hook runs before all describes in this file
 afterEach(() => {
   if (savedGcpProject === undefined) {
     delete process.env.GOOGLE_CLOUD_PROJECT;
