@@ -4,10 +4,17 @@
  * Usage:
  *   node scripts/codemods/apply-suggestions.mjs <ruleId> <file...>
  *
- * Some rules (e.g. @typescript-eslint/prefer-optional-chain) only provide
- * suggestions, not auto-fixes. This script loads each file, asks ESLint for
- * messages, and applies the first suggestion per message that targets the
- * requested rule. Iterates per file until no messages remain.
+ * Some rules (e.g. @typescript-eslint/prefer-optional-chain,
+ * @typescript-eslint/prefer-nullish-coalescing) only provide suggestions,
+ * not auto-fixes. This script loads each file, asks ESLint for messages,
+ * applies the first suggestion per message that targets the requested rule
+ * (bottom-to-top, skipping overlapping ranges), and re-lints until stable.
+ *
+ * Overlap-skipping is important because chained binary expressions such as
+ *   a || b || c || d
+ * produce nested suggestion fixes whose ranges contain each other; naively
+ * applying all of them in one pass corrupts the source. Skipping overlaps
+ * and relying on the next iteration after re-lint produces correct chains.
  */
 import { ESLint } from 'eslint';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -25,26 +32,33 @@ const eslint = new ESLint({
 let total = 0;
 for (const file of files) {
   let iterations = 0;
-  while (iterations++ < 20) {
+  while (iterations++ < 300) {
     const results = await eslint.lintFiles([file]);
     const r = results[0];
     const msgs = (r.messages || []).filter(
       (m) => m.ruleId === ruleId && m.suggestions?.length,
     );
     if (msgs.length === 0) break;
-    // Apply from bottom to top to keep offsets stable
-    msgs.sort((a, b) => b.line - a.line || b.column - a.column);
-    let text = readFileSync(file, 'utf8');
-    for (const m of msgs) {
-      const suggestion = m.suggestions[0];
-      const { range, text: replacement } = suggestion.fix;
-      text = text.slice(0, range[0]) + replacement + text.slice(range[1]);
-    }
-    writeFileSync(file, text);
-    total += msgs.length;
-    console.log(
-      `[${file}] applied ${msgs.length} suggestions (iter ${iterations})`,
+    // Apply only the single suggestion with the highest start offset in
+    // this pass. Two ESLint suggestions from this rule on chained
+    // expressions (a || b || c) frequently overlap via shared tokens, and
+    // any attempt to apply more than one per pass — even with overlap
+    // skipping on original ranges — has produced corrupted output in
+    // practice. Re-linting after each single application yields a fresh
+    // set of non-conflicting suggestions.
+    msgs.sort(
+      (a, b) => b.suggestions[0].fix.range[0] - a.suggestions[0].fix.range[0],
     );
+    const m = msgs[0];
+    const { range, text: replacement } = m.suggestions[0].fix;
+    const [start, end] = range;
+    const src = readFileSync(file, 'utf8');
+    const next = src.slice(0, start) + replacement + src.slice(end);
+    writeFileSync(file, next);
+    total += 1;
+    if (iterations % 10 === 1 || msgs.length <= 1) {
+      console.log(`[${file}] iter ${iterations}, applied 1/${msgs.length}`);
+    }
   }
 }
 console.log(`total suggestions applied: ${total}`);
