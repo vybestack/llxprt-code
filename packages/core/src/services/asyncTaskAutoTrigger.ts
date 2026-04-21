@@ -51,7 +51,9 @@ export class AsyncTaskAutoTrigger {
    */
   onTaskCompleted(_task: AsyncTaskInfo): void {
     // Schedule check (don't block the event handler)
-    setImmediate(() => this.maybeAutoTrigger());
+    setImmediate(() => {
+      void this.maybeAutoTrigger();
+    });
   }
 
   /**
@@ -60,7 +62,9 @@ export class AsyncTaskAutoTrigger {
    */
   onTaskFailed(_task: AsyncTaskInfo): void {
     // Same logic as completion
-    setImmediate(() => this.maybeAutoTrigger());
+    setImmediate(() => {
+      void this.maybeAutoTrigger();
+    });
   }
 
   /**

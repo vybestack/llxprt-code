@@ -118,6 +118,7 @@ export function createAnthropicApiCall(
 
     const promise = apiCall();
     // The promise has a withResponse() method we can call
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Checking if Promise object has withResponse method, not using Promise in boolean context
     if (promise && typeof promise === 'object' && 'withResponse' in promise) {
       return (
         promise as {

@@ -501,15 +501,19 @@ export async function main() {
     stdinManager.enable();
 
     // This cleanup isn't strictly needed but may help in certain situations.
-    process.on('SIGTERM', async () => {
+    process.on('SIGTERM', () => {
       stdinManager.disable(true); // Restore to wasRaw
-      await runExitCleanup();
-      process.exit(0);
+      void (async () => {
+        await runExitCleanup();
+        process.exit(0);
+      })();
     });
-    process.on('SIGINT', async () => {
+    process.on('SIGINT', () => {
       stdinManager.disable(true); // Restore to wasRaw
-      await runExitCleanup();
-      process.exit(130); // Standard exit code for SIGINT
+      void (async () => {
+        await runExitCleanup();
+        process.exit(130); // Standard exit code for SIGINT
+      })();
     });
 
     // Register cleanup for the stdin manager to ensure error handler is removed

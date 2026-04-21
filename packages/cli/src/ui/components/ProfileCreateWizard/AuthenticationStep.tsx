@@ -91,48 +91,50 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
     setIsPathValidated(false);
   }, []);
 
-  const handleAuthInputSubmit = useCallback(async () => {
-    // OAuth bucket input
-    if (authMethod === 'oauth') {
-      const buckets = oauthBuckets
-        .split(',')
-        .map((b) => b.trim())
-        .filter((b) => b.length > 0);
-      onUpdateAuth({
-        type: 'oauth',
-        buckets: buckets.length > 0 ? buckets : ['default'],
-      });
-      onContinue();
-      return;
-    }
-
-    // API key or keyfile
-    if (!authInput.trim()) {
-      setValidationError('This field cannot be empty');
-      return;
-    }
-
-    // Validate keyfile path if keyfile method
-    if (authMethod === 'keyfile') {
-      const validation = await validateKeyFile(authInput);
-      if (!validation.valid) {
-        setValidationError(validation.error || 'Invalid file path');
+  const handleAuthInputSubmit = useCallback(() => {
+    void (async () => {
+      // OAuth bucket input
+      if (authMethod === 'oauth') {
+        const buckets = oauthBuckets
+          .split(',')
+          .map((b) => b.trim())
+          .filter((b) => b.length > 0);
+        onUpdateAuth({
+          type: 'oauth',
+          buckets: buckets.length > 0 ? buckets : ['default'],
+        });
+        onContinue();
         return;
       }
-      setIsPathValidated(true);
-    }
 
-    setValidationError(null);
+      // API key or keyfile
+      if (!authInput.trim()) {
+        setValidationError('This field cannot be empty');
+        return;
+      }
 
-    // Store auth value and proceed
-    if (authMethod === 'apikey') {
-      onUpdateAuth({ type: 'apikey', value: authInput });
-    } else if (authMethod === 'keyfile') {
-      onUpdateAuth({ type: 'keyfile', value: authInput });
-    }
+      // Validate keyfile path if keyfile method
+      if (authMethod === 'keyfile') {
+        const validation = await validateKeyFile(authInput);
+        if (!validation.valid) {
+          setValidationError(validation.error || 'Invalid file path');
+          return;
+        }
+        setIsPathValidated(true);
+      }
 
-    // Proceed to next step
-    onContinue();
+      setValidationError(null);
+
+      // Store auth value and proceed
+      if (authMethod === 'apikey') {
+        onUpdateAuth({ type: 'apikey', value: authInput });
+      } else if (authMethod === 'keyfile') {
+        onUpdateAuth({ type: 'keyfile', value: authInput });
+      }
+
+      // Proceed to next step
+      onContinue();
+    })();
   }, [authInput, authMethod, oauthBuckets, onUpdateAuth, onContinue]);
 
   // Build auth options based on provider

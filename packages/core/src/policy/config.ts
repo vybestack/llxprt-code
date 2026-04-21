@@ -488,21 +488,38 @@ export function createPolicyUpdater(
 ) {
   messageBus.subscribe(
     MessageBusType.UPDATE_POLICY,
-    async (message: UpdatePolicy) => {
-      const toolName = message.toolName;
+    (message: UpdatePolicy) => {
+      void (async () => {
+        const toolName = message.toolName;
 
-      if (message.commandPrefix) {
-        // Convert commandPrefix(es) to argsPatterns for in-memory rules
-        const prefixes = Array.isArray(message.commandPrefix)
-          ? message.commandPrefix
-          : [message.commandPrefix];
+        if (message.commandPrefix) {
+          // Convert commandPrefix(es) to argsPatterns for in-memory rules
+          const prefixes = Array.isArray(message.commandPrefix)
+            ? message.commandPrefix
+            : [message.commandPrefix];
 
-        for (const prefix of prefixes) {
-          const escapedPrefix = escapeRegex(prefix);
-          // Use robust regex to match whole words (e.g. "git" but not "github")
-          const argsPattern = new RegExp(
-            `"command":"${escapedPrefix}(?:[\\s"]|$)`,
-          );
+          for (const prefix of prefixes) {
+            const escapedPrefix = escapeRegex(prefix);
+            // Use robust regex to match whole words (e.g. "git" but not "github")
+            const argsPattern = new RegExp(
+              `"command":"${escapedPrefix}(?:[\\s"]|$)`,
+            );
+
+            policyEngine.addRule({
+              toolName,
+              decision: PolicyDecision.ALLOW,
+              // User tier (2) + high priority (950/1000) = 2.95
+              // This ensures user "always allow" selections are high priority
+              // but still lose to admin policies (3.xxx) and settings excludes (200)
+              priority: 2.95,
+              argsPattern,
+              source: 'Dynamic (Confirmed)',
+            });
+          }
+        } else {
+          const argsPattern = message.argsPattern
+            ? new RegExp(message.argsPattern)
+            : undefined;
 
           policyEngine.addRule({
             toolName,
@@ -515,93 +532,78 @@ export function createPolicyUpdater(
             source: 'Dynamic (Confirmed)',
           });
         }
-      } else {
-        const argsPattern = message.argsPattern
-          ? new RegExp(message.argsPattern)
-          : undefined;
 
-        policyEngine.addRule({
-          toolName,
-          decision: PolicyDecision.ALLOW,
-          // User tier (2) + high priority (950/1000) = 2.95
-          // This ensures user "always allow" selections are high priority
-          // but still lose to admin policies (3.xxx) and settings excludes (200)
-          priority: 2.95,
-          argsPattern,
-          source: 'Dynamic (Confirmed)',
-        });
-      }
-
-      // PERSISTENCE LOGIC - Save to TOML if persist=true
-      if (message.persist) {
-        try {
-          const userPoliciesDir = Storage.getUserPoliciesDir();
-          await fs.mkdir(userPoliciesDir, { recursive: true });
-          const policyFile = path.join(userPoliciesDir, 'auto-saved.toml');
-
-          // Read existing file (if any)
-          let existingData: { rule?: TomlRule[] } = {};
+        // PERSISTENCE LOGIC - Save to TOML if persist=true
+        if (message.persist) {
           try {
-            const fileContent = await fs.readFile(policyFile, 'utf-8');
-            existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              debugLogger.warn(
-                `Failed to parse ${policyFile}, overwriting with new policy.`,
-                error,
-              );
+            const userPoliciesDir = Storage.getUserPoliciesDir();
+            await fs.mkdir(userPoliciesDir, { recursive: true });
+            const policyFile = path.join(userPoliciesDir, 'auto-saved.toml');
+
+            // Read existing file (if any)
+            let existingData: { rule?: TomlRule[] } = {};
+            try {
+              const fileContent = await fs.readFile(policyFile, 'utf-8');
+              existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+                debugLogger.warn(
+                  `Failed to parse ${policyFile}, overwriting with new policy.`,
+                  error,
+                );
+              }
             }
+
+            // Initialize rule array if needed
+            if (!existingData.rule) {
+              existingData.rule = [];
+            }
+
+            // Build new rule
+            const newRule: TomlRule = {};
+
+            if (message.mcpName) {
+              // MCP tool policy
+              newRule.mcpName = message.mcpName;
+              // Extract simple tool name (remove "mcpName__" prefix)
+              const simpleToolName = toolName.startsWith(`${message.mcpName}__`)
+                ? toolName.slice(message.mcpName.length + 2)
+                : toolName;
+              newRule.toolName = simpleToolName;
+              newRule.decision = 'allow';
+              newRule.priority = 200;
+            } else {
+              // Standard tool policy
+              newRule.toolName = toolName;
+              newRule.decision = 'allow';
+              newRule.priority = 100;
+            }
+
+            if (message.commandPrefix) {
+              newRule.commandPrefix = message.commandPrefix;
+            } else if (message.argsPattern) {
+              newRule.argsPattern = message.argsPattern;
+            }
+
+            // Append to existing rules
+            existingData.rule.push(newRule);
+
+            // Serialize to TOML
+            const newContent = toml.stringify(existingData as toml.JsonMap);
+
+            // Atomic write: tmp file + rename
+            const tmpFile = `${policyFile}.tmp`;
+            await fs.writeFile(tmpFile, newContent, 'utf-8');
+            await fs.rename(tmpFile, policyFile);
+          } catch (error) {
+            coreEvents.emitFeedback(
+              'error',
+              `Failed to persist policy for ${toolName}`,
+              error,
+            );
           }
-
-          // Initialize rule array if needed
-          if (!existingData.rule) {
-            existingData.rule = [];
-          }
-
-          // Build new rule
-          const newRule: TomlRule = {};
-
-          if (message.mcpName) {
-            // MCP tool policy
-            newRule.mcpName = message.mcpName;
-            // Extract simple tool name (remove "mcpName__" prefix)
-            const simpleToolName = toolName.startsWith(`${message.mcpName}__`)
-              ? toolName.slice(message.mcpName.length + 2)
-              : toolName;
-            newRule.toolName = simpleToolName;
-            newRule.decision = 'allow';
-            newRule.priority = 200;
-          } else {
-            // Standard tool policy
-            newRule.toolName = toolName;
-            newRule.decision = 'allow';
-            newRule.priority = 100;
-          }
-
-          if (message.commandPrefix) {
-            newRule.commandPrefix = message.commandPrefix;
-          } else if (message.argsPattern) {
-            newRule.argsPattern = message.argsPattern;
-          }
-
-          // Append to existing rules
-          existingData.rule.push(newRule);
-
-          // Serialize to TOML
-          const newContent = toml.stringify(existingData as toml.JsonMap);
-
-          // Atomic write: tmp file + rename
-          const tmpFile = `${policyFile}.tmp`;
-          await fs.writeFile(tmpFile, newContent, 'utf-8');
-          await fs.rename(tmpFile, policyFile);
-        } catch (error) {
-          coreEvents.emitFeedback(
-            'error',
-            `Failed to persist policy for ${toolName}`,
-            error,
-          );
         }
-      }
+      })();
     },
   );
 }

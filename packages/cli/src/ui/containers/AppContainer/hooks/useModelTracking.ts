@@ -71,9 +71,11 @@ export function useModelTracking({
     // Also listen for any changes if SettingsService is available
     const settingsService = getSettingsService();
     if (settingsService) {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Event emitter expects void, but we want to await the async updateModel
       settingsService.on('settings-changed', updateModel);
       return () => {
         disposed = true;
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Event emitter expects void, but we want to await the async updateModel
         settingsService.off('settings-changed', updateModel);
       };
     }

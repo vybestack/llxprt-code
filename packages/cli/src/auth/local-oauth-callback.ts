@@ -754,9 +754,9 @@ const createCallbackServer = async (
     void shutdown();
   });
 
-  server.on('error', async (error) => {
+  server.on('error', (error) => {
     settle(error instanceof Error ? error : new Error(String(error)));
-    await shutdown();
+    void shutdown();
   });
 
   timeout = setTimeout(() => {

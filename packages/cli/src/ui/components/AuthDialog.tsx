@@ -87,7 +87,7 @@ export function AuthDialog({
   // Ensure we have a valid initial index (default to 0 if not found)
   const safeInitialIndex = initialAuthIndex >= 0 ? initialAuthIndex : 0;
   const handleAuthSelect = useCallback(
-    async (authMethod: string) => {
+    (authMethod: string) => {
       setErrorMessage(null);
 
       // Handle Close option
@@ -104,20 +104,23 @@ export function AuthDialog({
       const oauthManager = runtime.getCliOAuthManager();
 
       if (oauthManager) {
-        try {
-          const newState = await oauthManager.toggleOAuthEnabled(providerName);
+        void (async () => {
+          try {
+            const newState =
+              await oauthManager.toggleOAuthEnabled(providerName);
 
-          // Update local state to reflect the change
-          const newEnabledProviders = new Set(enabledProviders);
-          if (newState) {
-            newEnabledProviders.add(authMethod);
-          } else {
-            newEnabledProviders.delete(authMethod);
+            // Update local state to reflect the change
+            const newEnabledProviders = new Set(enabledProviders);
+            if (newState) {
+              newEnabledProviders.add(authMethod);
+            } else {
+              newEnabledProviders.delete(authMethod);
+            }
+            setEnabledProviders(newEnabledProviders);
+          } catch (error) {
+            setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
           }
-          setEnabledProviders(newEnabledProviders);
-        } catch (error) {
-          setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
-        }
+        })();
       }
 
       // Don't close the dialog - let user continue toggling

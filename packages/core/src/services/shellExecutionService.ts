@@ -389,25 +389,27 @@ export class ShellExecutionService {
         if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
-            async () => {
-              if (child.pid && !exited) {
-                const pid = child.pid;
-                if (isWindows) {
-                  cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
-                } else {
-                  try {
-                    process.kill(-pid, 'SIGTERM');
-                    await new Promise((res) =>
-                      setTimeout(res, SIGKILL_TIMEOUT_MS),
-                    );
-                    if (!exited) {
-                      process.kill(-pid, 'SIGKILL');
+            () => {
+              void (async () => {
+                if (child.pid && !exited) {
+                  const pid = child.pid;
+                  if (isWindows) {
+                    cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                  } else {
+                    try {
+                      process.kill(-pid, 'SIGTERM');
+                      await new Promise((res) =>
+                        setTimeout(res, SIGKILL_TIMEOUT_MS),
+                      );
+                      if (!exited) {
+                        process.kill(-pid, 'SIGKILL');
+                      }
+                    } catch (_e) {
+                      if (!exited) child.kill('SIGKILL');
                     }
-                  } catch (_e) {
-                    if (!exited) child.kill('SIGKILL');
                   }
                 }
-              }
+              })();
             },
             { once: true },
           );
@@ -528,22 +530,26 @@ export class ShellExecutionService {
           handleExit(1, null);
         });
 
-        const abortHandler = async () => {
-          if (child.pid && !exited) {
-            if (isWindows) {
-              cpSpawn('taskkill', ['/pid', child.pid.toString(), '/f', '/t']);
-            } else {
-              try {
-                process.kill(-child.pid, 'SIGTERM');
-                await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-                if (!exited) {
-                  process.kill(-child.pid, 'SIGKILL');
+        const abortHandler = () => {
+          void (async () => {
+            if (child.pid && !exited) {
+              if (isWindows) {
+                cpSpawn('taskkill', ['/pid', child.pid.toString(), '/f', '/t']);
+              } else {
+                try {
+                  process.kill(-child.pid, 'SIGTERM');
+                  await new Promise((res) =>
+                    setTimeout(res, SIGKILL_TIMEOUT_MS),
+                  );
+                  if (!exited) {
+                    process.kill(-child.pid, 'SIGKILL');
+                  }
+                } catch (_e) {
+                  if (!exited) child.kill('SIGKILL');
                 }
-              } catch (_e) {
-                if (!exited) child.kill('SIGKILL');
               }
             }
-          }
+          })();
         };
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });
@@ -879,25 +885,27 @@ export class ShellExecutionService {
         if (inactivityTimeoutMs && inactivityTimeoutMs > 0) {
           inactivityAbortController.signal.addEventListener(
             'abort',
-            async () => {
-              if (ptyProcess.pid && !exited) {
-                const pid = ptyProcess.pid;
-                if (isWindows) {
-                  cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
-                } else {
-                  try {
-                    process.kill(-pid, 'SIGTERM');
-                    await new Promise((res) =>
-                      setTimeout(res, SIGKILL_TIMEOUT_MS),
-                    );
-                    if (!exited) {
-                      process.kill(-pid, 'SIGKILL');
+            () => {
+              void (async () => {
+                if (ptyProcess.pid && !exited) {
+                  const pid = ptyProcess.pid;
+                  if (isWindows) {
+                    cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                  } else {
+                    try {
+                      process.kill(-pid, 'SIGTERM');
+                      await new Promise((res) =>
+                        setTimeout(res, SIGKILL_TIMEOUT_MS),
+                      );
+                      if (!exited) {
+                        process.kill(-pid, 'SIGKILL');
+                      }
+                    } catch (_e) {
+                      if (!exited) ptyProcess.kill('SIGKILL');
                     }
-                  } catch (_e) {
-                    if (!exited) ptyProcess.kill('SIGKILL');
                   }
                 }
-              }
+              })();
             },
             { once: true },
           );
@@ -1010,67 +1018,69 @@ export class ShellExecutionService {
           },
         );
 
-        const abortHandler = async () => {
-          if (ptyProcess.pid && !exited) {
-            const pid = ptyProcess.pid;
-            if (isWindows) {
-              cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
-              cleanupActivePty();
-              resolveResult({
-                rawOutput: Buffer.concat(outputChunks),
-                output: getFullBufferText(headlessTerminal),
-                exitCode: 1,
-                signal: null,
-                error,
-                aborted: true,
-                inactivityTimedOut: inactivityAbortController.signal.aborted,
-                pid,
-                executionMethod: ptyInfo.name ?? 'node-pty',
-              });
-              return;
-            }
+        const abortHandler = () => {
+          void (async () => {
+            if (ptyProcess.pid && !exited) {
+              const pid = ptyProcess.pid;
+              if (isWindows) {
+                cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+                cleanupActivePty();
+                resolveResult({
+                  rawOutput: Buffer.concat(outputChunks),
+                  output: getFullBufferText(headlessTerminal),
+                  exitCode: 1,
+                  signal: null,
+                  error,
+                  aborted: true,
+                  inactivityTimedOut: inactivityAbortController.signal.aborted,
+                  pid,
+                  executionMethod: ptyInfo.name ?? 'node-pty',
+                });
+                return;
+              }
 
-            try {
-              process.kill(-pid, 'SIGTERM');
-            } catch (_e) {
-              // ignore
-            }
-            try {
-              ptyProcess.kill('SIGTERM');
-            } catch (_e) {
-              // ignore
-            }
+              try {
+                process.kill(-pid, 'SIGTERM');
+              } catch (_e) {
+                // ignore
+              }
+              try {
+                ptyProcess.kill('SIGTERM');
+              } catch (_e) {
+                // ignore
+              }
 
-            await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
-            if (exited) {
-              return;
-            }
+              await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+              if (exited) {
+                return;
+              }
 
-            try {
-              process.kill(-pid, 'SIGKILL');
-            } catch (_e) {
-              // ignore
-            }
-            try {
-              ptyProcess.kill('SIGKILL');
-            } catch (_e) {
-              // ignore
-            }
+              try {
+                process.kill(-pid, 'SIGKILL');
+              } catch (_e) {
+                // ignore
+              }
+              try {
+                ptyProcess.kill('SIGKILL');
+              } catch (_e) {
+                // ignore
+              }
 
-            abortFinalizeTimeout = setTimeout(() => {
-              resolveResult({
-                rawOutput: Buffer.concat(outputChunks),
-                output: getFullBufferText(headlessTerminal),
-                exitCode: 1,
-                signal: null,
-                error,
-                aborted: true,
-                inactivityTimedOut: inactivityAbortController.signal.aborted,
-                pid,
-                executionMethod: ptyInfo.name ?? 'node-pty',
-              });
-            }, SIGKILL_TIMEOUT_MS);
-          }
+              abortFinalizeTimeout = setTimeout(() => {
+                resolveResult({
+                  rawOutput: Buffer.concat(outputChunks),
+                  output: getFullBufferText(headlessTerminal),
+                  exitCode: 1,
+                  signal: null,
+                  error,
+                  aborted: true,
+                  inactivityTimedOut: inactivityAbortController.signal.aborted,
+                  pid,
+                  executionMethod: ptyInfo.name ?? 'node-pty',
+                });
+              }, SIGKILL_TIMEOUT_MS);
+            }
+          })();
         };
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });

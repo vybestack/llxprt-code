@@ -96,83 +96,85 @@ export const DialogManager = ({
 
   // Handler for ModelsDialog selection
   const handleModelsDialogSelect = useCallback(
-    async (model: HydratedModel) => {
-      try {
-        const selectedProvider = model.provider;
+    (model: HydratedModel) => {
+      void (async () => {
+        try {
+          const selectedProvider = model.provider;
 
-        // Check if we need to switch providers
-        // Switch if: provider differs OR no current provider set
-        if (selectedProvider !== currentProvider) {
-          // 1. Switch provider first
-          const switchResult = await runtime.switchActiveProvider(
-            selectedProvider,
-            { addItem },
-          );
+          // Check if we need to switch providers
+          // Switch if: provider differs OR no current provider set
+          if (selectedProvider !== currentProvider) {
+            // 1. Switch provider first
+            const switchResult = await runtime.switchActiveProvider(
+              selectedProvider,
+              { addItem },
+            );
 
-          // 2. Build messages in correct order
-          const messages: string[] = [];
+            // 2. Build messages in correct order
+            const messages: string[] = [];
 
-          // Provider switch message
-          messages.push(
-            currentProvider
-              ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
-              : `Switched to ${switchResult.nextProvider}`,
-          );
+            // Provider switch message
+            messages.push(
+              currentProvider
+                ? `Switched from ${currentProvider} to ${switchResult.nextProvider}`
+                : `Switched to ${switchResult.nextProvider}`,
+            );
 
-          // Base URL message (extract from switchResult)
-          const baseUrlMsg = (switchResult.infoMessages ?? []).find(
-            (m) => m?.includes('Base URL') || m?.includes('base URL'),
-          );
-          if (baseUrlMsg) messages.push(baseUrlMsg);
+            // Base URL message (extract from switchResult)
+            const baseUrlMsg = (switchResult.infoMessages ?? []).find(
+              (m) => m?.includes('Base URL') || m?.includes('base URL'),
+            );
+            if (baseUrlMsg) messages.push(baseUrlMsg);
 
-          // Set the selected model (override provider's default)
-          await runtime.setActiveModel(model.id);
+            // Set the selected model (override provider's default)
+            await runtime.setActiveModel(model.id);
 
-          // Model message with user's selected model
-          messages.push(
-            `Active model is '${model.id}' for provider '${selectedProvider}'.`,
-          );
+            // Model message with user's selected model
+            messages.push(
+              `Active model is '${model.id}' for provider '${selectedProvider}'.`,
+            );
 
-          // /key reminder (if not gemini)
-          if (selectedProvider !== 'gemini') {
-            messages.push('Use /key to set API key if needed.');
+            // /key reminder (if not gemini)
+            if (selectedProvider !== 'gemini') {
+              messages.push('Use /key to set API key if needed.');
+            }
+
+            // Show all messages
+            for (const msg of messages) {
+              addItem({ type: 'info', text: msg });
+            }
+
+            commandContext.recordingIntegration?.recordProviderSwitch(
+              selectedProvider,
+              model.id,
+            );
+          } else {
+            // Same provider — just set model
+            const result = await runtime.setActiveModel(model.id);
+            addItem(
+              {
+                type: 'info',
+                text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+              },
+              Date.now(),
+            );
+            commandContext.recordingIntegration?.recordProviderSwitch(
+              result.providerName,
+              result.nextModel,
+            );
           }
-
-          // Show all messages
-          for (const msg of messages) {
-            addItem({ type: 'info', text: msg });
-          }
-
-          commandContext.recordingIntegration?.recordProviderSwitch(
-            selectedProvider,
-            model.id,
-          );
-        } else {
-          // Same provider — just set model
-          const result = await runtime.setActiveModel(model.id);
+        } catch (e) {
+          const status = runtime.getActiveProviderStatus();
           addItem(
             {
-              type: 'info',
-              text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+              type: 'error',
+              text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
             },
             Date.now(),
           );
-          commandContext.recordingIntegration?.recordProviderSwitch(
-            result.providerName,
-            result.nextModel,
-          );
         }
-      } catch (e) {
-        const status = runtime.getActiveProviderStatus();
-        addItem(
-          {
-            type: 'error',
-            text: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
-          },
-          Date.now(),
-        );
-      }
-      uiActions.closeModelsDialog();
+        uiActions.closeModelsDialog();
+      })();
     },
     [runtime, addItem, uiActions, currentProvider, commandContext],
   );
@@ -354,7 +356,9 @@ export const DialogManager = ({
     return (
       <Box flexDirection="column">
         <AuthDialog
-          onSelect={uiActions.handleAuthSelect}
+          onSelect={(method, scope) => {
+            void uiActions.handleAuthSelect(method, scope);
+          }}
           settings={settings}
           initialErrorMessage={uiState.authError}
         />
@@ -369,7 +373,9 @@ export const DialogManager = ({
       <OAuthCodeDialog
         provider={provider}
         onClose={uiActions.handleOAuthCodeDialogClose}
-        onSubmit={uiActions.handleOAuthCodeSubmit}
+        onSubmit={(code) => {
+          void uiActions.handleOAuthCodeSubmit(code);
+        }}
       />
     );
   }
@@ -395,7 +401,9 @@ export const DialogManager = ({
         <ProviderDialog
           providers={uiState.providerOptions}
           currentProvider={uiState.selectedProvider}
-          onSelect={uiActions.handleProviderSelect}
+          onSelect={(provider) => {
+            void uiActions.handleProviderSelect(provider);
+          }}
           onClose={uiActions.exitProviderDialog}
         />
       </Box>

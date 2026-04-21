@@ -338,6 +338,7 @@ vi.mock('../../../config/settings.js', () => {
   };
 });
 
+// eslint-disable-next-line @typescript-eslint/no-misused-promises -- Vitest async mock factory is standard pattern
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();

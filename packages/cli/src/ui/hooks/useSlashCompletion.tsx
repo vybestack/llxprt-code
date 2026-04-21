@@ -844,7 +844,9 @@ export function useSlashCompletion(
     let debounceTimeout: NodeJS.Timeout | undefined;
     if (codePoints[commandIndex] === '@') {
       // File operations are expensive and benefit from debouncing
-      debounceTimeout = setTimeout(fetchSuggestions, 100);
+      debounceTimeout = setTimeout(() => {
+        void fetchSuggestions();
+      }, 100);
     }
 
     return () => {

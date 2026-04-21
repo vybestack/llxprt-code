@@ -128,12 +128,14 @@ export class FileOutput {
       return;
     }
 
-    this.flushTimeout = setTimeout(async () => {
-      await this.flushQueue();
-      this.flushTimeout = null;
-      if (this.writeQueue.length > 0) {
-        this.startFlushTimer();
-      }
+    this.flushTimeout = setTimeout(() => {
+      void (async () => {
+        await this.flushQueue();
+        this.flushTimeout = null;
+        if (this.writeQueue.length > 0) {
+          this.startFlushTimer();
+        }
+      })();
     }, this.flushInterval);
   }
 

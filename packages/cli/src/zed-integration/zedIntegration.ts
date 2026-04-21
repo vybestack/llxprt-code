@@ -114,7 +114,9 @@ export async function runZedIntegration(
     }, stream);
     logger.debug(() => 'AgentSideConnection created successfully');
 
-    await connection.closed.finally(runExitCleanup);
+    await connection.closed.finally(() => {
+      void runExitCleanup();
+    });
   } catch (e) {
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
     throw e;

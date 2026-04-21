@@ -267,6 +267,7 @@ describe('GCSTaskStore', () => {
 
     it('should handle tar creation failure', async () => {
       mockFse.pathExists.mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-misused-promises -- Vitest mock handler, async is acceptable
         async (path) =>
           !path.toString().includes('task-task1-workspace-test-uuid.tar.gz'),
       );
