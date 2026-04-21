@@ -167,7 +167,7 @@ function resolveProfileId(settingsService: SettingsService): string | null {
   ).getCurrentProfileName;
   if (typeof maybeGetName === 'function') {
     const profileName = maybeGetName.call(settingsService);
-    if (profileName && profileName.trim()) {
+    if (profileName?.trim()) {
       return profileName.trim();
     }
   }

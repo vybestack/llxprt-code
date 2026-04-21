@@ -211,12 +211,10 @@ describe('GeminiProvider', () => {
     await generator.next();
 
     const request = generateContentStreamMock.mock.calls[0][0];
-    const toolMessage = request.contents.find(
-      (msg: { parts: Part[] }) =>
-        msg.parts &&
-        msg.parts.some(
-          (part: Part) => 'functionResponse' in part && part.functionResponse,
-        ),
+    const toolMessage = request.contents.find((msg: { parts: Part[] }) =>
+      msg.parts?.some(
+        (part: Part) => 'functionResponse' in part && part.functionResponse,
+      ),
     ) as { parts: Part[] };
     const functionResponsePart = toolMessage.parts.find(
       (part) => 'functionResponse' in part,

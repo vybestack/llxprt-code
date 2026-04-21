@@ -119,8 +119,7 @@ describe('EditTool', () => {
         const snippetMatch = promptText.match(
           /Problematic target snippet:\n```\n([\s\S]*?)\n```/,
         );
-        const problematicSnippet =
-          snippetMatch && snippetMatch[1] ? snippetMatch[1] : '';
+        const problematicSnippet = snippetMatch?.[1] ? snippetMatch[1] : '';
 
         if ((schema as any).properties?.corrected_target_snippet) {
           return Promise.resolve({
@@ -133,10 +132,9 @@ describe('EditTool', () => {
           const originalNewStringMatch = promptText.match(
             /original_new_string \(what was intended to replace original_old_string\):\n```\n([\s\S]*?)\n```/,
           );
-          const originalNewString =
-            originalNewStringMatch && originalNewStringMatch[1]
-              ? originalNewStringMatch[1]
-              : '';
+          const originalNewString = originalNewStringMatch?.[1]
+            ? originalNewStringMatch[1]
+            : '';
           return Promise.resolve({ corrected_new_string: originalNewString });
         }
         return Promise.resolve({}); // Default empty object if schema doesn't match

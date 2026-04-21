@@ -62,7 +62,7 @@ export class SecureInputHandler {
       // @pseudocode lines 424-445
       // Handle /toolkey BEFORE /key (because /toolkey starts with /key)
       const toolkeyMatch = text.match(/^\/toolkey\s+\S+\s+([\s\S]*)/);
-      if (toolkeyMatch && toolkeyMatch[1]) {
+      if (toolkeyMatch?.[1]) {
         const patContent = toolkeyMatch[1];
         const prefixEnd = text.indexOf(patContent);
         const prefix = text.substring(0, prefixEnd);
@@ -80,7 +80,7 @@ export class SecureInputHandler {
       // @requirement R20.1
       // /key save <name> <value> — mask only the value, leave subcommand and name visible
       const keySaveMatch = text.match(/^(\/key\s+save\s+\S+\s+)([\s\S]+)/);
-      if (keySaveMatch && keySaveMatch[2]) {
+      if (keySaveMatch?.[2]) {
         const prefix = keySaveMatch[1];
         const valueContent = keySaveMatch[2];
         const lineBreakMatch = valueContent.match(/[\r\n]/);
@@ -106,7 +106,7 @@ export class SecureInputHandler {
       const keyMatch = text.match(/^\/key\s+([\s\S]*)/);
       const keyfileMatch = text.match(/^\/keyfile\s+([\s\S]*)/);
 
-      if (keyMatch && keyMatch[1]) {
+      if (keyMatch?.[1]) {
         // We have content after "/key "
         const keyContent = keyMatch[1];
 
@@ -137,7 +137,7 @@ export class SecureInputHandler {
         // No line break, mask the entire key portion
         const maskedKey = this.maskValue(keyContent);
         return `/key ${maskedKey}`;
-      } else if (keyfileMatch && keyfileMatch[1]) {
+      } else if (keyfileMatch?.[1]) {
         // We have content after "/keyfile "
         // For /keyfile, we don't mask the file path (it's not sensitive)
         return text;

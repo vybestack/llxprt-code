@@ -97,7 +97,7 @@ export function getSystemEncoding(): string | null {
   }
 
   const match = locale.match(/\.(.+)/); // e.g., "en_US.UTF-8"
-  if (match && match[1]) {
+  if (match?.[1]) {
     return match[1].toLowerCase();
   }
 

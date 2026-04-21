@@ -503,7 +503,7 @@ const showCommand: SlashCommand = {
 
             if (entry.type === 'request' && entry.messages) {
               const lastMessage = entry.messages[entry.messages.length - 1];
-              if (lastMessage && lastMessage.content) {
+              if (lastMessage?.content) {
                 content = lastMessage.content.substring(0, 100);
                 if (lastMessage.content.length > 100) content += '...';
               }

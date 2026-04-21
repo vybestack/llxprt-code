@@ -206,7 +206,7 @@ export class Config extends ConfigBase {
     let existingHistory: Content[] = [];
     let existingHistoryService: HistoryService | null = null;
 
-    if (previousGeminiClient && previousGeminiClient.isInitialized()) {
+    if (previousGeminiClient?.isInitialized()) {
       existingHistory = await previousGeminiClient.getHistory();
       existingHistoryService = previousGeminiClient.getHistoryService();
       logger.debug('Retrieved existing state', {

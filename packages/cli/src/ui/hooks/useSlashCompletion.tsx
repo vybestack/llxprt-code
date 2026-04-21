@@ -594,8 +594,7 @@ export function useSlashCompletion(
 
           // Check if this entry should be ignored by filtering options
           if (
-            fileDiscovery &&
-            fileDiscovery.shouldIgnoreFile(entryPathFromRoot, filterOptions)
+            fileDiscovery?.shouldIgnoreFile(entryPathFromRoot, filterOptions)
           ) {
             continue;
           }
@@ -735,8 +734,7 @@ export function useSlashCompletion(
                 path.join(baseDirAbsolute, entry.name),
               );
               if (
-                fileDiscoveryService &&
-                fileDiscoveryService.shouldIgnoreFile(
+                fileDiscoveryService?.shouldIgnoreFile(
                   relativePath,
                   filterOptions,
                 )

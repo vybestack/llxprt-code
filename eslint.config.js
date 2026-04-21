@@ -221,7 +221,7 @@ export default tseslint.config(
       '@typescript-eslint/switch-exhaustiveness-check': 'warn',
       '@typescript-eslint/no-unnecessary-condition': 'warn',
       '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-      '@typescript-eslint/prefer-optional-chain': 'warn',
+      '@typescript-eslint/prefer-optional-chain': 'error',
 
       // General code quality
       'no-console': 'warn',
@@ -509,22 +509,6 @@ export default tseslint.config(
 
     },
   },
-  // ============================================================================
-  // Issue #1569: Batch R3B - prefer-optional-chain enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: [
-      'packages/a2a-server/src/config/config.ts',
-      'packages/a2a-server/src/commands/restore.ts',
-    ],
-    rules: {
-      '@typescript-eslint/prefer-optional-chain': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 R3B
-  // ============================================================================
   // ============================================================================
   // Issue #1569: Batch BN4A - switch-exhaustiveness-check enforcement
   // ============================================================================
