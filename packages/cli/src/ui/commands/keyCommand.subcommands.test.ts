@@ -207,12 +207,10 @@ describe('/key — Table-Driven Parsing (R27.2)', () => {
         // after P15, they return real results. Either way, dispatched.
         // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
         expect(result.content).toBeDefined();
-      } else {
+      } else if (tc.input.trim().length > 0) {
         // Legacy path: calls runtime.updateActiveProviderApiKey or shows status
-        if (tc.input.trim().length > 0) {
-          // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-          expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalled();
-        }
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+        expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalled();
       }
     });
   }

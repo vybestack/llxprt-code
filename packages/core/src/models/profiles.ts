@@ -23,11 +23,9 @@ export function generateDefaultProfile(
     if (model.temperature) {
       profile.temperature = 0.7;
     }
-  } else {
+  } else if (model.temperature) {
     // Non-reasoning models
-    if (model.temperature) {
-      profile.temperature = 1.0;
-    }
+    profile.temperature = 1.0;
   }
 
   // Top-p recommendations

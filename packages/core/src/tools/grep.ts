@@ -823,15 +823,13 @@ File: ${resolved.basename}
               if (code === 0) resolve(stdoutData);
               else if (code === 1)
                 resolve(''); // No matches
-              else {
-                if (stderrData)
-                  reject(
-                    new Error(
-                      `System grep exited with code ${code}: ${stderrData}`,
-                    ),
-                  );
-                else resolve(''); // Exit code > 1 but no stderr, likely just suppressed errors
-              }
+              else if (stderrData)
+                reject(
+                  new Error(
+                    `System grep exited with code ${code}: ${stderrData}`,
+                  ),
+                );
+              else resolve(''); // Exit code > 1 but no stderr, likely just suppressed errors
             };
 
             const cleanup = () => {

@@ -226,7 +226,7 @@ export default tseslint.config(
       // General code quality
       'no-console': 'warn',
       'no-else-return': 'error',
-      'no-lonely-if': 'warn',
+      'no-lonely-if': 'error',
       'no-unneeded-ternary': 'warn',
 
       // Complexity limits

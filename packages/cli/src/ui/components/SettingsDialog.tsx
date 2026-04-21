@@ -142,11 +142,9 @@ export function updateToolExclusion(
     if (state === 'enabled') {
       // Enable tool: remove from excludeTools
       newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
-    } else {
+    } else if (!newExcludeTools.includes(toolName)) {
       // Disable tool: add to excludeTools
-      if (!newExcludeTools.includes(toolName)) {
-        newExcludeTools.push(toolName);
-      }
+      newExcludeTools.push(toolName);
     }
 
     // Save changes directly using setValue since saveSingleSetting skips coreToolSettings
@@ -421,11 +419,9 @@ export function SettingsDialog({
                 newExcludeTools = newExcludeTools.filter(
                   (name) => name !== key,
                 );
-              } else {
+              } else if (!newExcludeTools.includes(key)) {
                 // Disable tool: add to excludeTools
-                if (!newExcludeTools.includes(key)) {
-                  newExcludeTools.push(key);
-                }
+                newExcludeTools.push(key);
               }
 
               // Update global pending changes for excludeTools
@@ -1239,22 +1235,20 @@ export function SettingsDialog({
                 next.delete(currentSetting.value);
                 return next;
               });
-            } else {
+            } else if (
+              (currentSetting.type === 'boolean' &&
+                typeof defaultValue === 'boolean') ||
+              (currentSetting.type === 'number' &&
+                typeof defaultValue === 'number') ||
+              (currentSetting.type === 'string' &&
+                typeof defaultValue === 'string')
+            ) {
               // Track default reset as a pending change if restart required
-              if (
-                (currentSetting.type === 'boolean' &&
-                  typeof defaultValue === 'boolean') ||
-                (currentSetting.type === 'number' &&
-                  typeof defaultValue === 'number') ||
-                (currentSetting.type === 'string' &&
-                  typeof defaultValue === 'string')
-              ) {
-                setGlobalPendingChanges((prev) => {
-                  const next = new Map(prev);
-                  next.set(currentSetting.value, defaultValue as PendingValue);
-                  return next;
-                });
-              }
+              setGlobalPendingChanges((prev) => {
+                const next = new Map(prev);
+                next.set(currentSetting.value, defaultValue as PendingValue);
+                return next;
+              });
             }
           }
         }
