@@ -532,6 +532,7 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         );
       });
 
+      // eslint-disable-next-line vitest/max-nested-describe -- intentional: semantic grouping requires this nesting depth
       describe('with .llxprtignore', () => {
         beforeEach(async () => {
           await fsp.writeFile(
