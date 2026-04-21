@@ -92,7 +92,7 @@ export default tseslint.config(
     rules: {
       ...importPlugin.configs.recommended.rules,
       ...importPlugin.configs.typescript.rules,
-      'import/no-default-export': 'warn',
+      'import/no-default-export': 'error',
       'import/no-unresolved': 'off', // Disable for now, can be noisy with monorepos/paths
     },
   },
@@ -1044,7 +1044,7 @@ export default tseslint.config(
     rules: {
       // Custom rules
       // 'custom/react-render-safety': 'error', // TODO: Fix for ESLint 9 API
-      'custom/no-inline-deps': 'warn', // Set to warn initially, can be changed to error later
+      'custom/no-inline-deps': 'error',
       'custom/ink-text-color-required': 'error',
     },
   },

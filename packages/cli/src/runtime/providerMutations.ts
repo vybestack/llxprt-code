@@ -14,10 +14,7 @@
 import type { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../providers/providerAliases.js';
-import { getCliRuntimeServices } from './runtimeAccessors.js';
-
-// Import internal helpers from runtimeAccessors
-import { _internal } from './runtimeAccessors.js';
+import { getCliRuntimeServices, _internal } from './runtimeAccessors.js';
 
 const logger = new DebugLogger('llxprt:runtime:providerMutations');
 
