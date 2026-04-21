@@ -218,7 +218,10 @@ export default tseslint.config(
         'error',
         { prefer: 'type-imports' },
       ],
-      '@typescript-eslint/switch-exhaustiveness-check': 'warn',
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { considerDefaultExhaustiveForUnions: true },
+      ],
       '@typescript-eslint/no-unnecessary-condition': 'warn',
       '@typescript-eslint/prefer-nullish-coalescing': 'warn',
       '@typescript-eslint/prefer-optional-chain': 'error',
@@ -509,19 +512,6 @@ export default tseslint.config(
 
     },
   },
-  // ============================================================================
-  // Issue #1569: Batch BN4A - switch-exhaustiveness-check enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: ['packages/a2a-server/src/agent/task.ts'],
-    rules: {
-      '@typescript-eslint/switch-exhaustiveness-check': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 BN4A
-  // ============================================================================
   // ============================================================================
   // Issue #1569: Batch BN4B - prefer-nullish-coalescing enforcement
   // ============================================================================
