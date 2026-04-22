@@ -74,7 +74,7 @@ describe('Runtime Isolation Integration', () => {
 
       expect(Object.isFrozen(snapshot)).toBe(true);
 
-      // Attempt to modify should fail silently or throw in strict mode
+      // Attempt to modify should throw in strict mode for frozen snapshots
       expect(() => {
         (snapshot as { provider: string }).provider = 'openai';
       }).toThrow(TypeError);

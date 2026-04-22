@@ -162,10 +162,13 @@ for (const file of argv) {
       .map((line) => (line.startsWith(dedentPrefix) ? line.slice(2) : line))
       .join('\n');
 
+    // Preserve block scope by wrapping hoisted body in braces
     const replacement =
       `if (${inverted}) throw new Error('unreachable: narrowing failed');\n` +
       indent +
-      dedented.trimStart();
+      `{\n` +
+      dedented +
+      `\n${indent}}`;
 
     ifStmt.replaceWithText(replacement);
     fileRewrites++;

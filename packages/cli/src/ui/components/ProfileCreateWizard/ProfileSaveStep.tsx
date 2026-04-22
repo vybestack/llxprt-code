@@ -119,39 +119,46 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   const handleProfileNameSubmit = useCallback(
     (forceSave: boolean = false) => {
       void (async () => {
-        if (!profileNameInput.trim()) {
-          setValidationError('Profile name cannot be empty');
-          return;
-        }
-        if (validationError && !forceSave) {
-          // If the only error is "already exists", show conflict dialog
-          if (validationError === 'Profile name already exists') {
-            setFocusedComponent('conflict');
+        try {
+          if (!profileNameInput.trim()) {
+            setValidationError('Profile name cannot be empty');
             return;
           }
-          return;
-        }
+          if (validationError && !forceSave) {
+            // If the only error is "already exists", show conflict dialog
+            if (validationError === 'Profile name already exists') {
+              setFocusedComponent('conflict');
+              return;
+            }
+            return;
+          }
 
-        // Save immediately
-        setFocusedComponent('saving');
-        setSaveError(null);
+          // Save immediately
+          setFocusedComponent('saving');
+          setSaveError(null);
 
-        const profileJSON = buildProfileJSON(state);
-        // Atomic save operation - filesystem is source of truth for conflicts
-        // Uses 'wx' flag by default to prevent overwrite unless forceSave=true
-        const result = await saveProfile(profileNameInput, profileJSON, {
-          overwrite: forceSave,
-        });
+          const profileJSON = buildProfileJSON(state);
+          // Atomic save operation - filesystem is source of truth for conflicts
+          // Uses 'wx' flag by default to prevent overwrite unless forceSave=true
+          const result = await saveProfile(profileNameInput, profileJSON, {
+            overwrite: forceSave,
+          });
 
-        if (result.success) {
-          onContinue();
-        } else if (result.alreadyExists) {
-          // Filesystem reports file exists - show conflict dialog
-          // This catches stale existingProfiles or race conditions
-          setValidationError('Profile name already exists');
-          setFocusedComponent('conflict');
-        } else {
-          setSaveError(result.error || 'Failed to save profile');
+          if (result.success) {
+            onContinue();
+          } else if (result.alreadyExists) {
+            // Filesystem reports file exists - show conflict dialog
+            // This catches stale existingProfiles or race conditions
+            setValidationError('Profile name already exists');
+            setFocusedComponent('conflict');
+          } else {
+            setSaveError(result.error || 'Failed to save profile');
+            setFocusedComponent('input');
+          }
+        } catch (error) {
+          setSaveError(
+            error instanceof Error ? error.message : 'Failed to save profile',
+          );
           setFocusedComponent('input');
         }
       })();

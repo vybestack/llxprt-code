@@ -651,8 +651,9 @@ describe('SecureStore — Encrypted File Fallback', () => {
     const stat = await fs.stat(nestedDir);
     // On macOS/Linux, check permissions (skip on Windows)
     // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (process.platform === 'win32')
-      throw new Error('unreachable: narrowing failed');
+    if (process.platform === 'win32') {
+      return;
+    }
     const perms = stat.mode & 0o777;
     expect(perms).toBe(0o700);
   });

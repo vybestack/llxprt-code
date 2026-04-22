@@ -107,9 +107,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
     providerManagerRef.current?.getProviderByName.mockReturnValue(provider);
 
     expect(flushMockRef.current).toBeDefined();
-    flushMockRef.current &&
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(flushMockRef.current).toHaveBeenCalledWith('test-runtime');
+    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+    expect(flushMockRef.current).toHaveBeenCalledWith('test-runtime');
   });
 
   it('removes the session bucket token even when provider.logout exists', async () => {

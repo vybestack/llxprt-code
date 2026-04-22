@@ -157,14 +157,14 @@ describe('ExtensionSettingsStorage', () => {
       await storage.saveSettings(settings, values);
 
       const envPath = getSettingsEnvFilePath(tmpDir);
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (fs.existsSync(envPath)) {
-        const content = await fs.promises.readFile(envPath, 'utf-8');
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(content).not.toContain('secret123');
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(content).not.toContain('API_KEY=secret123');
-      }
+      const content = await fs.promises
+        .readFile(envPath, 'utf-8')
+        .catch((error: NodeJS.ErrnoException) => {
+          if (error.code === 'ENOENT') return '';
+          throw error;
+        });
+      expect(content).not.toContain('secret123');
+      expect(content).not.toContain('API_KEY=secret123');
     });
 
     it('should handle mixed sensitive and non-sensitive settings', async () => {

@@ -49,8 +49,22 @@ for (const [file, lines] of byFile) {
     if (idx < 0 || idx >= srcLines.length) continue;
     const target = srcLines[idx];
     // Skip if already disabled on preceding line.
-    if (idx > 0 && srcLines[idx - 1].includes(rule)) {
-      continue;
+    // Parse the previous line for an actual eslint-disable-next-line directive
+    // and check if the target rule is explicitly listed.
+    if (idx > 0) {
+      const prevLine = srcLines[idx - 1];
+      const match = prevLine.match(
+        /^\s*\/\/\s*eslint-disable-next-line\s+([^\n]*)/,
+      );
+      if (match) {
+        const disabledRules = match[1]
+          .split(/[,\s]+/)
+          .map((r) => r.trim())
+          .filter(Boolean);
+        if (disabledRules.includes(rule)) {
+          continue;
+        }
+      }
     }
     const indent = (target.match(/^\s*/) || [''])[0];
     const directive = `${indent}// eslint-disable-next-line ${rule} -- ${justification}`;

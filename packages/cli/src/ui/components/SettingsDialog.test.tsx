@@ -661,7 +661,7 @@ describe('SettingsDialog', () => {
       // For non-restart-required settings the dialog must NOT show the
       // restart banner and must not close.
       expect(lastFrame()).not.toContain(
-        'To see changes, Gemini CLI must be restarted',
+        'To see changes, LLxprt Code must be restarted',
       );
       expect(lastFrame()).toContain('Settings');
       unmount();

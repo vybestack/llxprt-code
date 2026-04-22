@@ -2336,9 +2336,7 @@ describe('InputPrompt', () => {
             expect(uiActions.setEmbeddedShellFocused).not.toHaveBeenCalled();
           }
 
-          if (!expectedAcceptCall)
-            throw new Error('unreachable: narrowing failed');
-          expect(mockAccept).toHaveBeenCalled();
+          expect(mockAccept).toHaveBeenCalledTimes(expectedAcceptCall ? 1 : 0);
         });
         unmount();
       },

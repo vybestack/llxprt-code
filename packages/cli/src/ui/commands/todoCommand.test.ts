@@ -634,13 +634,12 @@ describe('todoCommand', () => {
             const calls = (
               ctx.todoContext.updateTodos as ReturnType<typeof vi.fn>
             ).mock.calls;
-            if (calls.length > 0) {
-              const updatedTodos = calls[0][0];
-              const expectedRemoved = end - start + 1;
-              const actualRemoved = todos.length - updatedTodos.length;
-              // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-              expect(actualRemoved).toBe(expectedRemoved);
-            }
+            expect(calls.length).toBeGreaterThan(0);
+            const updatedTodos = calls[0][0];
+            const expectedRemoved = end - start + 1;
+            const actualRemoved = todos.length - updatedTodos.length;
+            // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+            expect(actualRemoved).toBe(expectedRemoved);
           },
         ),
         { numRuns: 10 },

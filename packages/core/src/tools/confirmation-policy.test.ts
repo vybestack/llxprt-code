@@ -165,7 +165,7 @@ describe('Tool Confirmation Policy Updates', () => {
           // Should not publish UPDATE_POLICY message for ProceedAlways
           const publishCalls = (mockMessageBus.publish as any).mock.calls;
           const hasUpdatePolicy = publishCalls.some(
-            (call: any) => call[0].type === MessageBusType.UPDATE_POLICY,
+            (call: any[]) => call[0]?.type === MessageBusType.UPDATE_POLICY,
           );
           // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
           expect(hasUpdatePolicy).toBe(false);

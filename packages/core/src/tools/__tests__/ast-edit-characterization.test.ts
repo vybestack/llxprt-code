@@ -583,17 +583,11 @@ describe('ast-edit characterization tests', () => {
       const result = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (result) {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(result).toHaveProperty('metadata');
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(result.metadata).toHaveProperty('astValidation');
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(result.metadata).toHaveProperty('fileFreshness');
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(result).toHaveProperty('type');
-      }
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('metadata');
+      expect(result!.metadata).toHaveProperty('astValidation');
+      expect(result!.metadata).toHaveProperty('fileFreshness');
+      expect(result).toHaveProperty('type');
     });
 
     it('ProceedAlways should call setApprovalMode(AUTO_EDIT)', async () => {

@@ -68,11 +68,14 @@ describe('LSP entry path resolution', () => {
       const entryPath = existsSync(srcEntry) ? srcEntry : distEntry;
       // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
       expect(existsSync(entryPath)).toBe(true);
-      if (!entryPath.endsWith('.ts'))
-        throw new Error('unreachable: narrowing failed');
-      const content = readFileSync(entryPath, 'utf-8');
-      // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-      expect(content).toContain('parseBootstrapFromEnv');
+      if (entryPath.endsWith('.ts')) {
+        const content = readFileSync(entryPath, 'utf-8');
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+        expect(content).toContain('parseBootstrapFromEnv');
+      } else {
+        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
+        expect(entryPath).toBe(distEntry);
+      }
     }
   });
 });
