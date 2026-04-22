@@ -29,16 +29,23 @@ const eslint = new ESLint({
   overrideConfig: {},
 });
 
+const ITERATION_CAP = 300;
 let total = 0;
 for (const file of files) {
   let iterations = 0;
-  while (iterations++ < 300) {
+  while (iterations++ < ITERATION_CAP) {
     const results = await eslint.lintFiles([file]);
     const r = results[0];
     const msgs = (r.messages || []).filter(
       (m) => m.ruleId === ruleId && m.suggestions?.length,
     );
     if (msgs.length === 0) break;
+    if (iterations === ITERATION_CAP) {
+      console.warn(
+        `[${file}] WARNING: hit ${ITERATION_CAP}-iteration cap with ${msgs.length} ${ruleId} messages still pending; file may be only partially transformed. Re-run the codemod on this file alone to continue.`,
+      );
+      break;
+    }
     // Apply only the single suggestion with the highest start offset in
     // this pass. Two ESLint suggestions from this rule on chained
     // expressions (a || b || c) frequently overlap via shared tokens, and

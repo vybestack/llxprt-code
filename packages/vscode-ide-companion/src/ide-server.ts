@@ -125,7 +125,7 @@ export class IDEServer {
   }
 
   start(context: vscode.ExtensionContext): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.context = context;
       this.authToken = randomUUID();
       const sessionsWithInitialNotification = new Set<string>();
@@ -343,33 +343,38 @@ export class IDEServer {
 
       this.server = app.listen(0, '127.0.0.1', () => {
         void (async () => {
-          const address = (this.server as HTTPServer).address();
-          if (address && typeof address !== 'string') {
-            this.port = address.port;
-            this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
-            let portFile: string | undefined;
-            try {
-              const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
-              await fs.mkdir(portDir, { recursive: true });
-              portFile = path.join(
-                portDir,
-                `llxprt-ide-server-${process.ppid}-${this.port}.json`,
-              );
-              this.portFile = portFile;
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              this.log(`Failed to create IDE port file: ${message}`);
-            }
+          try {
+            const address = (this.server as HTTPServer).address();
+            if (address && typeof address !== 'string') {
+              this.port = address.port;
+              this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
+              let portFile: string | undefined;
+              try {
+                const portDir = path.join(os.tmpdir(), 'llxprt', 'ide');
+                await fs.mkdir(portDir, { recursive: true });
+                portFile = path.join(
+                  portDir,
+                  `llxprt-ide-server-${process.ppid}-${this.port}.json`,
+                );
+                this.portFile = portFile;
+              } catch (err) {
+                const message =
+                  err instanceof Error ? err.message : String(err);
+                this.log(`Failed to create IDE port file: ${message}`);
+              }
 
-            await writePortAndWorkspace({
-              context,
-              port: this.port,
-              portFile: this.portFile,
-              authToken: this.authToken ?? '',
-              log: this.log,
-            });
+              await writePortAndWorkspace({
+                context,
+                port: this.port,
+                portFile: this.portFile,
+                authToken: this.authToken ?? '',
+                log: this.log,
+              });
+            }
+            resolve();
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)));
           }
-          resolve();
         })();
       });
 
