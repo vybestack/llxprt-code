@@ -220,7 +220,7 @@ export default tseslint.config(
       ],
       '@typescript-eslint/switch-exhaustiveness-check': [
         'error',
-        { considerDefaultExhaustiveForUnions: false },
+        { considerDefaultExhaustiveForUnions: true },
       ],
       '@typescript-eslint/no-unnecessary-condition': 'warn',
       '@typescript-eslint/prefer-nullish-coalescing': 'warn',
