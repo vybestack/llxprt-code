@@ -57,7 +57,9 @@ for (const [file, lines] of byFile) {
         /^\s*\/\/\s*eslint-disable-next-line\s+([^\n]*)/,
       );
       if (match) {
-        const disabledRules = match[1]
+        // Strip justification (everything after " -- ")
+        const rulesPart = match[1].split(' -- ')[0];
+        const disabledRules = rulesPart
           .split(/[,\s]+/)
           .map((r) => r.trim())
           .filter(Boolean);
