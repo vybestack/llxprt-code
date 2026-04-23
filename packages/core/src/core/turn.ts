@@ -654,7 +654,7 @@ export class Turn {
       }
     }
 
-    const args = fnCall.args || {};
+    const args = fnCall.args ?? {};
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,

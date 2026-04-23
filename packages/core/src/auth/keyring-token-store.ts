@@ -43,6 +43,7 @@ const LOCK_WRITE_GRACE_MS = 750;
 /** Lazily resolved to avoid crashing when homedir() is undefined at import time. */
 let _lockDir: string | undefined;
 function getLockDir(): string {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string is invalid path, must fall back to default
   if (!_lockDir) {
     _lockDir = join(homedir(), '.llxprt', 'oauth', 'locks');
   }

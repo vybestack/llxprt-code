@@ -202,9 +202,7 @@ export class LspServiceClient {
 
     child.once('exit', (code, signal) => {
       this.alive = false;
-      if (this.unavailableReason === undefined) {
-        this.unavailableReason = `LSP service exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
-      }
+      this.unavailableReason ??= `LSP service exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
       this.cleanupProcessState();
     });
 

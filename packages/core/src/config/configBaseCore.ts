@@ -501,9 +501,7 @@ export abstract class ConfigBaseCore {
     return this.bugCommand;
   }
   getFileService(): FileDiscoveryService {
-    if (!this.fileDiscoveryService) {
-      this.fileDiscoveryService = new FileDiscoveryService(this.targetDir);
-    }
+    this.fileDiscoveryService ??= new FileDiscoveryService(this.targetDir);
     return this.fileDiscoveryService;
   }
   getUsageStatisticsEnabled(): boolean {

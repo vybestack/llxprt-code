@@ -246,9 +246,7 @@ function ensureRuntimeState(
     runtimeScopedStates.set(runtimeId, state);
   }
 
-  if (!context.metadata) {
-    context.metadata = {};
-  }
+  context.metadata ??= {};
   context.metadata.runtimeAuthScope = state.metadata;
 
   if (

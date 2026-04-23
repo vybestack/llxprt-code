@@ -316,10 +316,8 @@ export function handleExecutionError(
       `Error during subagent execution for ${ctx.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
   );
   ctx.output.terminate_reason = SubagentTerminateMode.ERROR;
-  if (!ctx.output.final_message) {
-    ctx.output.final_message =
-      error instanceof Error ? error.message : String(error);
-  }
+  ctx.output.final_message ??=
+    error instanceof Error ? error.message : String(error);
 }
 
 // ---------------------------------------------------------------------------

@@ -428,6 +428,7 @@ export class IdeClient {
 
   private createProxyAwareFetch() {
     // ignore proxy for '127.0.0.1' by default to allow connecting to the ide mcp server
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string, both cases need same handling
     const existingNoProxy = process.env['NO_PROXY'] || '';
     const agent = new EnvHttpProxyAgent({
       noProxy: [existingNoProxy, '127.0.0.1'].filter(Boolean).join(','),

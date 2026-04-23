@@ -151,7 +151,7 @@ export class OAuthUtils {
     return {
       authorizationUrl: metadata.authorization_endpoint,
       tokenUrl: metadata.token_endpoint,
-      scopes: metadata.scopes_supported || [],
+      scopes: metadata.scopes_supported ?? [],
       registrationUrl: metadata.registration_endpoint,
     };
   }

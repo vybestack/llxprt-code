@@ -356,6 +356,7 @@ export class CoreToolScheduler {
     const requestsToProcess = (
       Array.isArray(request) ? request : [request]
     ).map((req) => {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string agentId falls through to default
       if (!req.agentId) {
         req.agentId = DEFAULT_AGENT_ID;
       }

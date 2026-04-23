@@ -24,9 +24,7 @@ export class ConfigurationManager {
 
   // Line 21-26: Singleton getInstance()
   static getInstance(): ConfigurationManager {
-    if (!ConfigurationManager.instance) {
-      ConfigurationManager.instance = new ConfigurationManager();
-    }
+    ConfigurationManager.instance ??= new ConfigurationManager();
     return ConfigurationManager.instance;
   }
 

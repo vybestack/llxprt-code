@@ -669,7 +669,7 @@ export class SubAgentScope {
     execCtx: ExecutionLoopContext,
   ) {
     const messageParams = {
-      message: currentMessages[0]?.parts || [],
+      message: currentMessages[0]?.parts ?? [],
       config: {
         abortSignal: abortController.signal,
         tools: [{ functionDeclarations: toolsList }],

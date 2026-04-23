@@ -78,7 +78,7 @@ export class ConversationManager {
     return () => {
       const result = queue.shift();
       // If queue is empty, return a fallback value
-      return result || { historyId: '', toolName: undefined };
+      return result ?? { historyId: '', toolName: undefined };
     };
   }
 

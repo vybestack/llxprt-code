@@ -445,7 +445,7 @@ function logToolResult(
 ): void {
   if (toolResponse.error) {
     debugLogger.error(
-      `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
+      `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay ?? toolResponse.error.message}`,
     );
     ctx.logger.warn(
       () =>

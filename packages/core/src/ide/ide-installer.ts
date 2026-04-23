@@ -72,6 +72,7 @@ async function findVsCodeCommand(
     // Windows
     locations.push(
       path.join(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string, fallback to default path
         process.env.ProgramFiles || 'C:\\Program Files',
         'Microsoft VS Code',
         'bin',

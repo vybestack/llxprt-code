@@ -631,6 +631,7 @@ export class HookEventHandler {
    */
   private getHookNameFromResult(result: HookExecutionResult): string {
     const config = result.hookConfig as { command?: string; type: string };
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string command falls through to placeholder
     return config.command || 'unknown-hook';
   }
 
