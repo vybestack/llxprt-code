@@ -94,6 +94,7 @@ class GlobToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through
     return this.params.dir_path || this.params.path;
   }
 
@@ -350,9 +351,11 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: GlobToolParams,
   ): string | null {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through
     const dirPath = params.dir_path || params.path;
     const searchDirAbsolute = path.resolve(
       this.config.getTargetDir(),
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use current dir
       dirPath || '.',
     );
 

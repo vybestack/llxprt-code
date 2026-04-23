@@ -136,6 +136,7 @@ export abstract class BaseProvider implements IProvider {
 
     const precedenceConfig: AuthPrecedenceConfig = {
       apiKey: config.apiKey,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for optional config property
       envKeyNames: config.envKeyNames || [],
       isOAuthEnabled: config.isOAuthEnabled ?? false,
       // Use supportsOAuth from config if provided (for cases where method can't be used in constructor)
@@ -385,6 +386,7 @@ export abstract class BaseProvider implements IProvider {
         typeof manager.isOAuthEnabled === 'function'
       ) {
         const oauthProvider =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to this.name
           this.baseProviderConfig.oauthProvider || this.name;
         return manager.isOAuthEnabled(oauthProvider);
       }
@@ -557,15 +559,13 @@ export abstract class BaseProvider implements IProvider {
     let underlyingIterator: AsyncIterableIterator<IContent> | undefined;
 
     const prepareIterator = async (): Promise<void> => {
-      if (!preparedIteratorPromise) {
-        preparedIteratorPromise = (async () => {
-          normalizedOptions = await normalizedPromise;
-          underlyingIterator = this.invokeWithNormalizedOptions(
-            normalizedOptions,
-            previousRuntimeContext ?? null,
-          );
-        })();
-      }
+      preparedIteratorPromise ??= (async () => {
+        normalizedOptions = await normalizedPromise;
+        underlyingIterator = this.invokeWithNormalizedOptions(
+          normalizedOptions,
+          previousRuntimeContext ?? null,
+        );
+      })();
       await preparedIteratorPromise;
     };
 

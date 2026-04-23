@@ -164,8 +164,11 @@ class ExaWebSearchToolInvocation extends BaseToolInvocation<
         name: 'web_search_exa',
         arguments: {
           query: this.params.query,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional enum property
           type: this.params.type || 'auto',
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number fallback for optional property
           numResults: this.params.numResults || API_CONFIG.DEFAULT_NUM_RESULTS,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for optional enum property
           livecrawl: this.params.livecrawl || 'fallback',
           contextMaxCharacters: this.params.contextMaxCharacters ?? 10000,
         },

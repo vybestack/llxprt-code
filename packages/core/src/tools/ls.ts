@@ -89,6 +89,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
   }
 
   private getDirPath(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback chain for optional params
     return this.params.dir_path || this.params.path || '';
   }
 
@@ -356,6 +357,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: LSToolParams,
   ): string | null {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to validation
     const dirPath = params.dir_path || params.path;
     if (!dirPath || dirPath.trim() === '') {
       return "Either 'dir_path' or 'path' parameter must be provided and non-empty.";

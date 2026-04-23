@@ -411,6 +411,7 @@ export class Config extends ConfigBase {
       if (!extension.isActive) {
         continue;
       }
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: array default for optional extension property
       for (const tool of extension.excludeTools || []) {
         excludeToolsSet.add(tool);
       }
@@ -516,6 +517,7 @@ export class Config extends ConfigBase {
 
   private expandPath(filePath: string): string {
     if (filePath.startsWith('~/')) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: HOME env var may be empty string
       return filePath.replace('~', process.env.HOME || '');
     }
     return filePath;
@@ -793,9 +795,7 @@ export class Config extends ConfigBase {
     }
 
     // @requirement:HOOK-001 - Lazy creation on first access
-    if (!this.hookSystem) {
-      this.hookSystem = new HookSystem(this);
-    }
+    this.hookSystem ??= new HookSystem(this);
 
     return this.hookSystem;
   }

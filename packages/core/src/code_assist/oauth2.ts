@@ -245,9 +245,7 @@ export async function performLogin(config: Config): Promise<boolean> {
 }
 
 export async function getOauthClient(config: Config): Promise<OAuth2Client> {
-  if (!oauthClientPromise) {
-    oauthClientPromise = initOauthClient(config);
-  }
+  oauthClientPromise ??= initOauthClient(config);
   return oauthClientPromise;
 }
 
@@ -400,6 +398,7 @@ ${authUrl}`,
 async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   const port = await getAvailablePort();
   // The hostname used for the HTTP server binding (e.g., '0.0.0.0' in Docker).
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var may be empty string
   const host = process.env.OAUTH_CALLBACK_HOST || 'localhost';
   // The `redirectUri` sent to Google's authorization server MUST use a loopback IP literal
   // (i.e., 'localhost' or '127.0.0.1'). This is a strict security policy for credentials of
@@ -434,6 +433,7 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
 
           const errorCode = qs.get('error');
           const errorDescription =
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: URLSearchParams.get returns string | null, string fallback for error message
             qs.get('error_description') || 'No additional details provided';
           reject(
             new FatalAuthenticationError(

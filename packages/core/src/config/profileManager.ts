@@ -26,6 +26,7 @@ export class ProfileManager {
    */
   constructor(profilesDir?: string) {
     this.profilesDir =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use default path
       profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
   }
 
@@ -263,7 +264,7 @@ export class ProfileManager {
     const profile: Profile = {
       version: 1,
       provider: defaultProvider,
-      model: providerSettings?.model || 'default',
+      model: providerSettings?.model ?? 'default',
       modelParams: {
         temperature: providerSettings?.temperature,
         max_tokens: providerSettings?.maxTokens,

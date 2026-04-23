@@ -173,6 +173,7 @@ export class HookAggregator {
       // Handle clearContext (any true wins) - for AfterAgent hooks
       if (output.hookSpecificOutput?.['clearContext'] === true) {
         merged.hookSpecificOutput = {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default-shape pattern for object spread
           ...(merged.hookSpecificOutput || {}),
           clearContext: true,
         };
@@ -184,6 +185,7 @@ export class HookAggregator {
         const { clearContext: _clearContext, ...restSpecificOutput } =
           output.hookSpecificOutput;
         merged.hookSpecificOutput = {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default-shape pattern for object spread
           ...(merged.hookSpecificOutput || {}),
           ...restSpecificOutput,
         };
@@ -214,6 +216,7 @@ export class HookAggregator {
     // If we collected additional contexts, merge them into hookSpecificOutput
     if (additionalContexts.length > 0) {
       merged.hookSpecificOutput = {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default-shape pattern for object spread
         ...(merged.hookSpecificOutput || {}),
         additionalContext: additionalContexts.join('\n'),
       };

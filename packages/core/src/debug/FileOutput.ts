@@ -35,10 +35,12 @@ export class FileOutput {
     this.debugDir = home
       ? join(home, LLXPRT_DIR, 'debug')
       : join(process.cwd(), LLXPRT_DIR, 'debug');
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env vars may be empty strings, fall through to pid */
     this.debugRunId =
       process.env.LLXPRT_DEBUG_RUN_ID ||
       process.env.LLXPRT_DEBUG_SESSION_ID ||
       String(process.pid);
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     this.currentLogFile = this.generateLogFileName();
   }
 
@@ -47,9 +49,7 @@ export class FileOutput {
   }
 
   static getInstance(): FileOutput {
-    if (!FileOutput.instance) {
-      FileOutput.instance = new FileOutput();
-    }
+    FileOutput.instance ??= new FileOutput();
     return FileOutput.instance;
   }
 

@@ -41,6 +41,7 @@ export function getCachedEncodingForBuffer(buffer: Buffer): string {
   }
 
   // Otherwise, detect from this specific buffer (don't cache this result)
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for encoding detection
   return detectEncodingFromBuffer(buffer) || 'utf-8';
 }
 
@@ -82,6 +83,7 @@ export function getSystemEncoding(): string | null {
   // system encoding. However, these environment variables might not always
   // be set or accurate. Handle cases where none of these variables are set.
   const env = process.env;
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env vars may be empty strings, should fall through
   let locale = env.LC_ALL || env.LC_CTYPE || env.LANG || '';
 
   // Fallback to querying the system directly when environment variables are missing

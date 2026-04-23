@@ -76,11 +76,13 @@ export async function getRipgrepPath(): Promise<string> {
   if (isWindows) {
     const windowsPaths = [
       path.join(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
         process.env.PROGRAMFILES || 'C:\\Program Files',
         'ripgrep',
         'rg.exe',
       ),
       path.join(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var fallback for path
         process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
         'ripgrep',
         'rg.exe',
@@ -126,6 +128,7 @@ export async function getRipgrepPath(): Promise<string> {
   // Check if running from bundled environment
   const projectRoot = process.cwd();
   const isBundled =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string property may be empty, check node_modules as fallback
     (process as unknown as { pkg?: { entrypoint?: string } }).pkg?.entrypoint ||
     !fs.existsSync(path.join(projectRoot, 'node_modules'));
 

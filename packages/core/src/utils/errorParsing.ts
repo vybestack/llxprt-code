@@ -127,9 +127,11 @@ function getRateLimitMessage(
   if (isProQuotaExceededError(error)) {
     return isPaidTier
       ? getRateLimitErrorMessageGoogleProQuotaPaid(
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for model name
           currentModel || DEFAULT_GEMINI_MODEL,
         )
       : getRateLimitErrorMessageGoogleProQuotaFree(
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for model name
           currentModel || DEFAULT_GEMINI_MODEL,
         );
   }
@@ -137,6 +139,7 @@ function getRateLimitMessage(
   if (isGenericQuotaExceededError(error)) {
     return isPaidTier
       ? getRateLimitErrorMessageGoogleGenericQuotaPaid(
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string fallback for model name
           currentModel || DEFAULT_GEMINI_MODEL,
         )
       : getRateLimitErrorMessageGoogleGenericQuotaFree();

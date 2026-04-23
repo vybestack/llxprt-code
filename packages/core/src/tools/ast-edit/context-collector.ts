@@ -50,7 +50,7 @@ export function prioritizeSymbolsFromDeclarations(
     if (score === 0) continue;
     if (decl.visibility === 'public') score += 3;
 
-    scores.set(decl.name, (scores.get(decl.name) || 0) + score);
+    scores.set(decl.name, (scores.get(decl.name) ?? 0) + score);
   }
 
   return Array.from(scores.entries())
@@ -133,7 +133,7 @@ export class ASTContextCollector {
     // Phase 3: Repository context and Cross-file Relationships
     const repoContext =
       await this.repoProvider.collectRepositoryContext(workspaceRoot);
-    enhancedContext.repositoryContext = repoContext || undefined;
+    enhancedContext.repositoryContext = repoContext ?? undefined;
 
     // [CCR] Relation: Cross-file relationship analysis segment.
     // Reason: Optimized to use on-demand findInFiles instead of eager indexing.
@@ -172,6 +172,7 @@ export class ASTContextCollector {
     const memoryDelta =
       (process.memoryUsage().heapUsed - startMemory) / 1024 / 1024;
     logger.debug(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number where 0 means unset
       `collectEnhancedContext Metrics: ${duration}ms, Delta: ${memoryDelta.toFixed(2)}MB, Symbols: ${enhancedContext.relatedSymbols?.length || 0}`,
     );
 

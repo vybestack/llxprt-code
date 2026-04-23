@@ -487,7 +487,7 @@ export class LoadBalancingProvider implements IProvider {
    * Phase 5: Stats Integration
    */
   private incrementStats(subProfileName: string): void {
-    this.stats.set(subProfileName, (this.stats.get(subProfileName) || 0) + 1);
+    this.stats.set(subProfileName, (this.stats.get(subProfileName) ?? 0) + 1);
     this.lastSelected = subProfileName;
     this.totalRequests++;
   }
@@ -828,7 +828,7 @@ export class LoadBalancingProvider implements IProvider {
       this.tpmBuckets.set(minute, bucket);
     }
 
-    const current = bucket.get(profileName) || 0;
+    const current = bucket.get(profileName) ?? 0;
     bucket.set(profileName, current + tokensUsed);
 
     // Clean up old buckets (> 5 minutes old)
@@ -856,7 +856,7 @@ export class LoadBalancingProvider implements IProvider {
       const minute = currentMinute - i;
       const bucket = this.tpmBuckets.get(minute);
       if (bucket) {
-        const tokens = bucket.get(profileName) || 0;
+        const tokens = bucket.get(profileName) ?? 0;
         if (tokens > 0) {
           totalTokens += tokens;
           if (oldestBucket === undefined || minute < oldestBucket) {

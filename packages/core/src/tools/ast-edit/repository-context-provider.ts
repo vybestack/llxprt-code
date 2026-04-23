@@ -29,8 +29,11 @@ export class RepositoryContextProvider {
       }
 
       return {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: git command output fallback
         gitUrl: gitUrl || 'unknown',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: git command output fallback
         commitSha: commitSha || 'unknown',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: git command output fallback
         branch: branch || 'unknown',
         rootPath,
       };

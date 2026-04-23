@@ -68,7 +68,9 @@ export async function* handleNonStreamingResponse(
         hasToolCalls: !!(
           choice.message?.tool_calls && choice.message.tool_calls.length > 0
         ),
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number where 0 means unset
         contentLength: choice.message?.content?.length || 0,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number where 0 means unset
         toolCallCount: choice.message?.tool_calls?.length || 0,
         detectedFormat,
       },
@@ -219,9 +221,7 @@ export async function* handleNonStreamingResponse(
     // (via mapFinishReasonToStopReason above); finishReason preserves the
     // raw provider value for diagnostics.
     if (choice.finish_reason) {
-      if (!responseContent.metadata) {
-        responseContent.metadata = {};
-      }
+      responseContent.metadata ??= {};
       // stopReason was already set to the normalized value above; do NOT
       // overwrite it with the raw provider string.
       responseContent.metadata.finishReason = choice.finish_reason;
