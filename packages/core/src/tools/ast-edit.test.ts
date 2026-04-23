@@ -352,7 +352,7 @@ describe('AST Tools', () => {
           color.set(node, 1); // GRAY
           path.push(node);
 
-          const neighbors = graph.get(node) || [];
+          const neighbors = graph.get(node) ?? [];
           for (const neighbor of neighbors) {
             if (graph.has(neighbor)) {
               dfs(neighbor, [...path]);

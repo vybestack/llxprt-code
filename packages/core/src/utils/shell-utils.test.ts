@@ -552,7 +552,7 @@ describeWindowsOnly('PowerShell integration', () => {
   // eslint-disable-next-line vitest/require-top-level-describe -- intentional: top-level hooks / describe-alias used before nested describes
   beforeEach(() => {
     mockPlatform.mockReturnValue('win32');
-    const systemRoot = process.env['SystemRoot'] || 'C:\\\\Windows';
+    const systemRoot = process.env['SystemRoot'] ?? 'C:\\\\Windows';
     process.env['ComSpec'] =
       `${systemRoot}\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe`;
   });

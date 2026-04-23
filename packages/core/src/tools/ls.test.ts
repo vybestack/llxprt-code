@@ -42,13 +42,11 @@ describe('LSTool', () => {
       getDirectories: vi
         .fn()
         .mockReturnValue([mockPrimaryDir, mockSecondaryDir]),
-      isPathWithinWorkspace: vi
-        .fn()
-        .mockImplementation(
-          (path) =>
-            path.startsWith(mockPrimaryDir) ||
-            path.startsWith(mockSecondaryDir),
-        ),
+      isPathWithinWorkspace: vi.fn().mockImplementation(
+        (path) =>
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean short-circuit for workspace path matching
+          path.startsWith(mockPrimaryDir) || path.startsWith(mockSecondaryDir),
+      ),
       addDirectory: vi.fn(),
     } as unknown as WorkspaceContext;
 

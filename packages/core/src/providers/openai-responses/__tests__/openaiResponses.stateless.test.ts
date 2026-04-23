@@ -52,7 +52,7 @@ vi.mock('openai', () => ({
 vi.mock('../../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(
     async (options) =>
-      `mock system prompt with memory: ${options.userMemory || 'none'}`,
+      `mock system prompt with memory: ${options.userMemory ?? 'none'}`,
   ),
 }));
 

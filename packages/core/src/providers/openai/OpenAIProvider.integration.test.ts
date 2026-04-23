@@ -191,7 +191,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(toolCallMessage).toBeDefined();
 
     const toolCallBlocks =
-      toolCallMessage?.blocks.filter((b) => b.type === 'tool_call') || [];
+      toolCallMessage?.blocks.filter((b) => b.type === 'tool_call') ?? [];
     expect(toolCallBlocks.length).toBeGreaterThan(0);
 
     const toolCall = toolCallBlocks[0] as {

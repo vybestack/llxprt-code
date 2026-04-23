@@ -83,7 +83,7 @@ describe('ToolCallCollector', () => {
       );
 
       // Verify it's valid JSON
-      const parsedArgs = JSON.parse(completeCalls[0].args || '');
+      const parsedArgs = JSON.parse(completeCalls[0].args ?? '');
       expect(parsedArgs).toStrictEqual({
         param1: 'value1',
         param2: 'value2',

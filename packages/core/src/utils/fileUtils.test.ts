@@ -165,7 +165,7 @@ describe('fileUtils', () => {
     ])(
       'should return $expected for $name',
       ({ path: testPath, root, expected }) => {
-        expect(isWithinRoot(testPath, root || defaultRoot)).toBe(expected);
+        expect(isWithinRoot(testPath, root ?? defaultRoot)).toBe(expected);
       },
     );
   });

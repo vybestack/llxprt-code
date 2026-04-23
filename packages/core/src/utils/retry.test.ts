@@ -1153,7 +1153,7 @@ describe('RetryableQuotaError with exponential backoff', () => {
     const consoleWarnCalls = consoleWarnSpy.mock.calls;
     let foundConsoleWarnRetryMessage = false;
     for (const call of consoleWarnCalls) {
-      const message = String(call[0] || '');
+      const message = String(call[0] ?? '');
       if (message.includes('Retrying after 10000ms')) {
         foundConsoleWarnRetryMessage = true;
         break;

@@ -201,7 +201,7 @@ describe('ShellTool', () => {
       result: Partial<ShellExecutionResult> = {},
     ) => {
       const fullResult: ShellExecutionResult = {
-        rawOutput: Buffer.from(result.output || ''),
+        rawOutput: Buffer.from(result.output ?? ''),
         output: 'Success',
         exitCode: 0,
         signal: null,
