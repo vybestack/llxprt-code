@@ -111,6 +111,7 @@ export class QwenDeviceFlow {
 
           // Calculate expiry timestamp
           const now = Math.floor(Date.now() / 1000);
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expires_in is invalid, default to 3600
           const expiresIn = validatedResponse.expires_in || 3600; // Default to 1 hour if not provided
           const expiry = now + expiresIn;
 
@@ -119,7 +120,7 @@ export class QwenDeviceFlow {
             token_type: 'Bearer',
             expiry,
             refresh_token: validatedResponse.refresh_token,
-            scope: validatedResponse.scope || undefined, // Convert null to undefined
+            scope: validatedResponse.scope ?? undefined, // Convert null to undefined
             resource_url: validatedResponse.resource_url, // Include the API endpoint from Qwen
           };
         }
@@ -192,6 +193,7 @@ export class QwenDeviceFlow {
 
     // Calculate expiry timestamp with 30-second buffer
     const now = Math.floor(Date.now() / 1000);
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expires_in is invalid, default to 3600
     const expiresIn = validatedResponse.expires_in || 3600; // Default to 1 hour if not provided
     const expiry = now + expiresIn - 30; // 30-second buffer
 
@@ -199,8 +201,8 @@ export class QwenDeviceFlow {
       access_token: validatedResponse.access_token,
       token_type: 'Bearer',
       expiry,
-      refresh_token: validatedResponse.refresh_token || refreshToken, // Use new refresh token if provided, otherwise keep the old one
-      scope: validatedResponse.scope || undefined, // Convert null to undefined
+      refresh_token: validatedResponse.refresh_token ?? refreshToken, // Use new refresh token if provided, otherwise keep the old one
+      scope: validatedResponse.scope ?? undefined, // Convert null to undefined
       resource_url: validatedResponse.resource_url, // Include the API endpoint from Qwen
     };
   }

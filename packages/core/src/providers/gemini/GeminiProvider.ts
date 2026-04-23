@@ -410,7 +410,7 @@ export class GeminiProvider extends BaseProvider {
     const customHeaders = this.getCustomHeaders();
     return {
       headers: {
-        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION ?? process.version} (${process.platform}; ${process.arch})`,
         ...(customHeaders ?? {}),
       },
     };
@@ -526,7 +526,7 @@ export class GeminiProvider extends BaseProvider {
             if (data.models && data.models.length > 0) {
               return data.models.map((model) => ({
                 id: model.name.replace('models/', ''), // Remove 'models/' prefix
-                name: model.displayName || model.name,
+                name: model.displayName ?? model.name,
                 provider: this.name,
                 supportedToolFormats: [],
               }));
@@ -1387,7 +1387,7 @@ export class GeminiProvider extends BaseProvider {
       includeThoughts = true,
     ): IContent[] => {
       const chunks: IContent[] = [];
-      const parts = response.candidates?.[0]?.content?.parts || [];
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
 
       // Debug: Log all parts with their thought property for debugging
       thinkingLogger.log(
@@ -1481,12 +1481,12 @@ export class GeminiProvider extends BaseProvider {
         if (usageMetadata) {
           textContent.metadata = {
             usage: {
-              promptTokens: usageMetadata.promptTokenCount || 0,
-              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              promptTokens: usageMetadata.promptTokenCount ?? 0,
+              completionTokens: usageMetadata.candidatesTokenCount ?? 0,
               totalTokens:
-                usageMetadata.totalTokenCount ||
-                (usageMetadata.promptTokenCount || 0) +
-                  (usageMetadata.candidatesTokenCount || 0),
+                usageMetadata.totalTokenCount ??
+                (usageMetadata.promptTokenCount ?? 0) +
+                  (usageMetadata.candidatesTokenCount ?? 0),
             },
           };
         }
@@ -1499,10 +1499,10 @@ export class GeminiProvider extends BaseProvider {
           (call: FunctionCall) => ({
             type: 'tool_call',
             id:
-              call.id ||
+              call.id ??
               `call_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-            name: call.name || 'unknown_function',
-            parameters: call.args || {},
+            name: call.name ?? 'unknown_function',
+            parameters: call.args ?? {},
           }),
         );
 
@@ -1514,12 +1514,12 @@ export class GeminiProvider extends BaseProvider {
         if (usageMetadata) {
           toolCallContent.metadata = {
             usage: {
-              promptTokens: usageMetadata.promptTokenCount || 0,
-              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              promptTokens: usageMetadata.promptTokenCount ?? 0,
+              completionTokens: usageMetadata.candidatesTokenCount ?? 0,
               totalTokens:
-                usageMetadata.totalTokenCount ||
-                (usageMetadata.promptTokenCount || 0) +
-                  (usageMetadata.candidatesTokenCount || 0),
+                usageMetadata.totalTokenCount ??
+                (usageMetadata.promptTokenCount ?? 0) +
+                  (usageMetadata.candidatesTokenCount ?? 0),
             },
           };
         }
@@ -1533,12 +1533,12 @@ export class GeminiProvider extends BaseProvider {
           blocks: [],
           metadata: {
             usage: {
-              promptTokens: usageMetadata.promptTokenCount || 0,
-              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              promptTokens: usageMetadata.promptTokenCount ?? 0,
+              completionTokens: usageMetadata.candidatesTokenCount ?? 0,
               totalTokens:
-                usageMetadata.totalTokenCount ||
-                (usageMetadata.promptTokenCount || 0) +
-                  (usageMetadata.candidatesTokenCount || 0),
+                usageMetadata.totalTokenCount ??
+                (usageMetadata.promptTokenCount ?? 0) +
+                  (usageMetadata.candidatesTokenCount ?? 0),
             },
           },
         } as IContent);
@@ -1560,7 +1560,7 @@ export class GeminiProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
     // No caching - create client per call based on resolved authMode
     if (authMode === 'oauth') {
-      const configForOAuth = this.globalConfig || {
+      const configForOAuth = this.globalConfig ?? {
         getProxy: () => undefined,
         isBrowserLaunchSuppressed: () => false,
         getNoBrowser: () => false,
@@ -1621,7 +1621,7 @@ export class GeminiProvider extends BaseProvider {
       };
 
       // Use runtime metadata from options for session ID
-      const runtimeId = options.runtime?.runtimeId || 'default';
+      const runtimeId = options.runtime?.runtimeId ?? 'default';
       const sessionId = `oauth-session:${runtimeId}:${Math.random()
         .toString(36)
         .slice(2)}`;
@@ -1654,7 +1654,7 @@ export class GeminiProvider extends BaseProvider {
               oauthRequest,
               response,
               false,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
 
@@ -1681,7 +1681,7 @@ export class GeminiProvider extends BaseProvider {
               oauthRequest,
               { error: errorMessage },
               true,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
           throw error;
@@ -1703,7 +1703,7 @@ export class GeminiProvider extends BaseProvider {
             oauthRequest,
             { streaming: true },
             false,
-            baseURL || 'https://generativelanguage.googleapis.com',
+            baseURL ?? 'https://generativelanguage.googleapis.com',
           );
         }
 
@@ -1731,7 +1731,7 @@ export class GeminiProvider extends BaseProvider {
             oauthRequest,
             { error: errorMessage },
             true,
-            baseURL || 'https://generativelanguage.googleapis.com',
+            baseURL ?? 'https://generativelanguage.googleapis.com',
           );
         }
         throw error;
@@ -1795,7 +1795,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               { streaming: true },
               false,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
         } catch (error) {
@@ -1809,7 +1809,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               { error: errorMessage },
               true,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
           throw error;
@@ -1827,7 +1827,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               response,
               false,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
 
@@ -1854,7 +1854,7 @@ export class GeminiProvider extends BaseProvider {
               apiRequest,
               { error: errorMessage },
               true,
-              baseURL || 'https://generativelanguage.googleapis.com',
+              baseURL ?? 'https://generativelanguage.googleapis.com',
             );
           }
           throw error;

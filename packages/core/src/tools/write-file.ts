@@ -179,6 +179,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
     return this.params.absolute_path || this.params.file_path || '';
   }
 
@@ -306,12 +307,12 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     if (filterResult.blocked) {
       return {
         llmContent:
-          filterResult.error || 'File write blocked due to emoji content',
+          filterResult.error ?? 'File write blocked due to emoji content',
         returnDisplay:
-          filterResult.error || 'File write blocked due to emoji content',
+          filterResult.error ?? 'File write blocked due to emoji content',
         error: {
           message:
-            filterResult.error || 'File write blocked due to emoji content',
+            filterResult.error ?? 'File write blocked due to emoji content',
           type: ToolErrorType.INVALID_TOOL_PARAMS,
         },
       };
@@ -405,7 +406,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       );
 
       const originallyProposedContent =
-        filteredParams.ai_proposed_content || filteredParams.content;
+        filteredParams.ai_proposed_content ?? filteredParams.content;
       const diffStat = getDiffStat(
         fileName,
         currentContentForDiff,
@@ -414,6 +415,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       );
 
       const displayPath =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         filteredParams.absolute_path || filteredParams.file_path || '';
       const llmSuccessMessageParts = [
         isNewFile
@@ -680,6 +682,7 @@ export class WriteFileTool
     params: WriteFileToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
     const filePath = params.absolute_path || params.file_path || '';
 
     if (filePath.trim() === '') {
@@ -739,8 +742,10 @@ export class WriteFileTool
   ): ModifyContext<WriteFileToolParams> {
     return {
       getFilePath: (params: WriteFileToolParams) =>
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         params.absolute_path || params.file_path || '',
       getCurrentContent: async (params: WriteFileToolParams) => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         const correctedContentResult = await getCorrectedFileContent(
           filePath,
@@ -751,6 +756,7 @@ export class WriteFileTool
         return correctedContentResult.originalContent;
       },
       getProposedContent: async (params: WriteFileToolParams) => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         const correctedContentResult = await getCorrectedFileContent(
           filePath,

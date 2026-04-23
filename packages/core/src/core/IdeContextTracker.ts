@@ -58,7 +58,7 @@ export class IdeContextTracker {
       return { contextParts: [], newIdeContext: undefined };
     }
 
-    const openFiles = currentIdeContext.workspaceState?.openFiles || [];
+    const openFiles = currentIdeContext.workspaceState?.openFiles ?? [];
     const activeFile = openFiles.find((f) => f.isActive);
     const otherOpenFiles = openFiles
       .filter((f) => !f.isActive)
@@ -75,7 +75,7 @@ export class IdeContextTracker {
               character: activeFile.cursor.character,
             }
           : undefined,
-        selectedText: activeFile.selectedText || undefined,
+        selectedText: activeFile.selectedText ?? undefined,
       };
     }
 
@@ -120,12 +120,12 @@ export class IdeContextTracker {
     const changes: Record<string, unknown> = {};
 
     const lastFiles = new Map(
-      (this.lastSentIdeContext.workspaceState?.openFiles || []).map(
+      (this.lastSentIdeContext.workspaceState?.openFiles ?? []).map(
         (f: File) => [f.path, f],
       ),
     );
     const currentFiles = new Map(
-      (currentIdeContext.workspaceState?.openFiles || []).map((f: File) => [
+      (currentIdeContext.workspaceState?.openFiles ?? []).map((f: File) => [
         f.path,
         f,
       ]),
@@ -188,10 +188,10 @@ export class IdeContextTracker {
     changes: Record<string, unknown>,
   ): void {
     const lastActiveFile = (
-      lastIdeContext.workspaceState?.openFiles || []
+      lastIdeContext.workspaceState?.openFiles ?? []
     ).find((f: File) => f.isActive);
     const currentActiveFile = (
-      currentIdeContext.workspaceState?.openFiles || []
+      currentIdeContext.workspaceState?.openFiles ?? []
     ).find((f: File) => f.isActive);
 
     if (currentActiveFile) {
@@ -204,7 +204,7 @@ export class IdeContextTracker {
                 character: currentActiveFile.cursor.character,
               }
             : undefined,
-          selectedText: currentActiveFile.selectedText || undefined,
+          selectedText: currentActiveFile.selectedText ?? undefined,
         };
       } else {
         this.detectCursorAndSelectionChanges(
@@ -251,8 +251,8 @@ export class IdeContextTracker {
       };
     }
 
-    const lastSelectedText = lastActiveFile.selectedText || '';
-    const currentSelectedText = currentActiveFile.selectedText || '';
+    const lastSelectedText = lastActiveFile.selectedText ?? '';
+    const currentSelectedText = currentActiveFile.selectedText ?? '';
     if (lastSelectedText !== currentSelectedText) {
       changes.selectionChanged = {
         path: currentActiveFile.path,

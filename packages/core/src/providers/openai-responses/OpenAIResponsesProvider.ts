@@ -90,7 +90,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const baseConfig: BaseProviderConfig = {
       name: 'openai-responses',
       apiKey,
-      baseURL: baseURL || 'https://api.openai.com/v1',
+      baseURL: baseURL ?? 'https://api.openai.com/v1',
       envKeyNames: ['OPENAI_API_KEY'],
       isOAuthEnabled: isCodex && !!oauthManager,
       oauthProvider: isCodex ? 'codex' : undefined,
@@ -106,7 +106,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
-        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, hasApiKey: ${!!apiKey}, codexMode: ${isCodex}`,
+        `Constructor - baseURL: ${baseURL ?? 'https://api.openai.com/v1'}, hasApiKey: ${!!apiKey}, codexMode: ${isCodex}`,
     );
   }
 
@@ -188,7 +188,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
+    const baseURL = this.getBaseURL() ?? 'https://api.openai.com/v1';
     const isCodex = this.isCodexMode(baseURL);
 
     // @plan PLAN-20251214-ISSUE160.P05
@@ -707,7 +707,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
             toolResponseBlock.toolName ?? 'tool_response',
           );
 
-          const candidate = limited.content || limited.message || '';
+          const candidate = limited.content ?? limited.message ?? '';
 
           const outputCallId = normalizeToOpenAIToolId(
             toolResponseBlock.callId,
@@ -925,6 +925,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       request.tools = responsesTools;
       // Per codex-rs: set tool_choice when tools are present, respecting user-specified values
       // Only default to 'auto' if not already set (e.g., 'required' or a specific function name)
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional conditional assignment
       if (!request.tool_choice) {
         request.tool_choice = 'auto';
       }
@@ -975,6 +976,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // Add reasoning.effort to request if set
       // Per Responses API, reasoning goes inside the 'reasoning' field
       if (reasoningEffort && typeof reasoningEffort === 'string') {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional conditional initialization
         if (!request.reasoning) {
           request.reasoning = {};
         }
@@ -992,6 +994,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       typeof reasoningSummary === 'string' &&
       reasoningSummary !== 'none'
     ) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional conditional initialization
       if (!request.reasoning) {
         request.reasoning = {};
       }

@@ -104,7 +104,7 @@ export class ToolFormatter implements IToolFormatter {
           type: 'function' as const,
           function: {
             name: decl.name,
-            description: decl.description || '',
+            description: decl.description ?? '',
             parameters: convertedParams,
           },
         };
@@ -164,7 +164,7 @@ export class ToolFormatter implements IToolFormatter {
 
         return {
           name: decl.name,
-          description: decl.description || '',
+          description: decl.description ?? '',
           input_schema: {
             type: 'object' as const,
             ...convertedParams,
@@ -249,7 +249,7 @@ export class ToolFormatter implements IToolFormatter {
           type: 'function' as const,
           function: {
             name: decl.name,
-            description: decl.description || '',
+            description: decl.description ?? '',
             parameters: decl.parametersJsonSchema,
           },
         };
@@ -363,7 +363,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'anthropic':
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           input_schema: {
             type: 'object' as const,
             ...tool.function.parameters,
@@ -374,7 +374,7 @@ export class ToolFormatter implements IToolFormatter {
         // Return a text description of tools for the system prompt
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           parameters: tool.function.parameters,
         }));
       case 'xml':
@@ -382,7 +382,7 @@ export class ToolFormatter implements IToolFormatter {
         // Tools are typically described in the system prompt
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           parameters: tool.function.parameters,
         }));
       case 'gemma':
@@ -471,7 +471,7 @@ export class ToolFormatter implements IToolFormatter {
             type: 'tool_call' as const,
             id: anthropicToolCall.id,
             name: anthropicToolCall.name,
-            parameters: anthropicToolCall.input || {},
+            parameters: anthropicToolCall.input ?? {},
           },
         ];
       }
@@ -548,7 +548,7 @@ export class ToolFormatter implements IToolFormatter {
           if (!accumulatedToolCalls[deltaToolCall.index]) {
             accumulatedToolCalls[deltaToolCall.index] = {
               type: 'tool_call',
-              id: deltaToolCall.id || '',
+              id: deltaToolCall.id ?? '',
               name: '',
               parameters: {},
             };
@@ -633,12 +633,13 @@ export class ToolFormatter implements IToolFormatter {
     return tools.map((tool) => ({
       type: 'function' as const,
       name: tool.function.name,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty description should become null
       description: tool.function.description || null,
       parameters:
         (this.convertGeminiSchemaToStandard(tool.function.parameters) as Record<
           string,
           unknown
-        >) || null,
+        >) ?? null,
       strict: null,
     }));
   }

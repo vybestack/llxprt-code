@@ -153,6 +153,7 @@ export class ProviderManager implements IProviderManager {
   } {
     let fallback: ProviderRuntimeContext | null = null;
     const ensureFallback = (): ProviderRuntimeContext => {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional lazy initialization
       if (!fallback) {
         fallback = getActiveProviderRuntimeContext();
       }
@@ -404,8 +405,8 @@ export class ProviderManager implements IProviderManager {
     rawOptions: GenerateChatOptions,
     providerName?: string,
   ): GenerateChatOptions {
-    const runtimeId = rawOptions.runtime?.runtimeId || 'unknown';
-    const targetProvider = providerName || this.getActiveProviderName();
+    const runtimeId = rawOptions.runtime?.runtimeId ?? 'unknown';
+    const targetProvider = providerName ?? this.getActiveProviderName();
 
     // REQ-SP4-002: Check for required settings service and config in runtime context
     const settingsService =
@@ -816,13 +817,13 @@ export class ProviderManager implements IProviderManager {
         !this.serverToolsProvider ||
         this.serverToolsProvider.name !== 'gemini'
       ) {
-        this.serverToolsProvider = this.providers.get(name) || null;
+        this.serverToolsProvider = this.providers.get(name) ?? null;
       }
     }
     // If switching away from Gemini but serverToolsProvider is not set,
     // configure a Gemini provider for serverTools if available
     else if (!this.serverToolsProvider && this.providers.has('gemini')) {
-      this.serverToolsProvider = this.providers.get('gemini') || null;
+      this.serverToolsProvider = this.providers.get('gemini') ?? null;
     }
   }
 
@@ -1133,7 +1134,7 @@ export class ProviderManager implements IProviderManager {
       providerName: provider.name,
       currentModel: this.getStoredModelName(provider) || 'unknown',
       toolFormat: toolFormatSetting,
-      isPaidMode: provider.isPaidMode?.() || false,
+      isPaidMode: provider.isPaidMode?.() ?? false,
       capabilities,
       sessionStartTime: Date.now(),
     };
@@ -1189,6 +1190,7 @@ export class ProviderManager implements IProviderManager {
     );
 
     // Only accumulate non-negative values
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- 0 tokens is valid, || 0 is equivalent to ?? 0 for numbers */
     this.sessionTokenUsage.input += Math.max(0, usage.input || 0);
     this.sessionTokenUsage.output += Math.max(0, usage.output || 0);
 
@@ -1207,6 +1209,7 @@ export class ProviderManager implements IProviderManager {
       cacheTokens +
       Math.max(0, usage.tool || 0) +
       Math.max(0, usage.thought || 0);
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     // Track cache reads/writes if provided
     // Note: cacheWrites can be null (provider doesn't report) vs undefined (not in usage object)
@@ -1216,6 +1219,7 @@ export class ProviderManager implements IProviderManager {
           `[ProviderManager.accumulateSessionTokens] Received cache usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
       );
       this.trackCacheUsage(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- 0 cacheReads is valid
         Math.max(0, usage.cacheReads || 0),
         usage.cacheWrites === null || usage.cacheWrites === undefined
           ? null
@@ -1286,6 +1290,7 @@ export class ProviderManager implements IProviderManager {
     // Only track cache writes if the provider reports them (not null)
     if (cacheWrites !== null) {
       // Initialize from null to 0 on first reported value
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional null check for initialization
       if (this.cacheStats.totalCacheWrites === null) {
         this.cacheStats.totalCacheWrites = 0;
       }
@@ -1326,7 +1331,7 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250909-TOKTRACK
    */
   getProviderMetrics(providerName?: string) {
-    const name = providerName || this.getActiveProvider()?.name;
+    const name = providerName ?? this.getActiveProvider()?.name;
     if (!name) return null;
 
     const provider = this.providers.get(name);
@@ -1357,8 +1362,8 @@ export class ProviderManager implements IProviderManager {
     providerName?: string,
   ): ProviderCapabilities | undefined {
     const name =
-      providerName ||
-      (this.settingsService.get('activeProvider') as string) ||
+      providerName ??
+      (this.settingsService.get('activeProvider') as string) ??
       '';
     return this.providerCapabilities.get(name);
   }

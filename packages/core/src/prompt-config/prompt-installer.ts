@@ -155,10 +155,7 @@ export class PromptInstaller {
     const notices: string[] = [];
 
     // Prepare installation
-    let expandedBaseDir = baseDir;
-    if (!expandedBaseDir) {
-      expandedBaseDir = this.expandPath(DEFAULT_BASE_DIR);
-    }
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
     // Validate baseDir
     if (expandedBaseDir.includes('..') || !path.isAbsolute(expandedBaseDir)) {
@@ -600,10 +597,7 @@ export class PromptInstaller {
     const errors: string[] = [];
 
     // Validate inputs
-    let expandedBaseDir = baseDir;
-    if (!expandedBaseDir) {
-      expandedBaseDir = this.expandPath(DEFAULT_BASE_DIR);
-    }
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
     // If base directory doesn't exist, return success with empty arrays
     if (!existsSync(expandedBaseDir)) {
@@ -731,10 +725,7 @@ export class PromptInstaller {
    */
   async validate(baseDir: string | null): Promise<ValidationResult> {
     // Setup validation
-    let expandedBaseDir = baseDir;
-    if (!expandedBaseDir) {
-      expandedBaseDir = this.expandPath(DEFAULT_BASE_DIR);
-    }
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
     let isValid = true;
     const errors: string[] = [];
@@ -996,10 +987,7 @@ export class PromptInstaller {
     backupPath: string,
   ): Promise<BackupResult> {
     // Validate inputs
-    let expandedBaseDir = baseDir;
-    if (!expandedBaseDir) {
-      expandedBaseDir = this.expandPath(DEFAULT_BASE_DIR);
-    }
+    const expandedBaseDir = baseDir ?? this.expandPath(DEFAULT_BASE_DIR);
 
     if (!existsSync(expandedBaseDir)) {
       return {
@@ -1195,13 +1183,13 @@ export class PromptInstaller {
     // Expand environment variables with curly braces ${VAR}
     expandedPath = expandedPath.replace(
       /\$\{([^}]+)\}/g,
-      (match, varName) => process.env[varName] || match,
+      (match, varName) => process.env[varName] ?? match,
     );
 
     // Expand environment variables without curly braces $VAR
     expandedPath = expandedPath.replace(
       /\$([A-Za-z_][A-Za-z0-9_]*)/g,
-      (match, varName) => process.env[varName] || match,
+      (match, varName) => process.env[varName] ?? match,
     );
 
     // Resolve to absolute path

@@ -177,6 +177,7 @@ export class ContentConverters {
   ): IContent {
     this.logger.debug('Converting Gemini Content to IContent:', {
       role: content.role,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- length=0 is valid, preserve with ||
       partCount: content.parts?.length || 0,
       partTypes:
         content.parts?.map((p) => {
@@ -185,13 +186,13 @@ export class ContentConverters {
           if ('functionResponse' in p) return 'functionResponse';
           if ('thought' in p) return 'thought';
           return 'other';
-        }) || [],
+        }) ?? [],
       functionCallIds:
         content.parts
           ?.filter((p) => 'functionCall' in p)
           .map(
             (p) => (p as { functionCall?: { id?: string } }).functionCall?.id,
-          ) || [],
+          ) ?? [],
       functionResponseIds:
         content.parts
           ?.filter((p) => 'functionResponse' in p)
@@ -199,7 +200,7 @@ export class ContentConverters {
             (p) =>
               (p as { functionResponse?: { id?: string } }).functionResponse
                 ?.id,
-          ) || [],
+          ) ?? [],
     });
     const speaker = content.role === 'user' ? 'human' : 'ai';
     const blocks: ContentBlock[] = [];
@@ -239,19 +240,20 @@ export class ContentConverters {
             });
           }
         } else if ('functionCall' in part && part.functionCall) {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
           const toolName = part.functionCall.name || '';
           const rawId = part.functionCall.id;
           const generatedId =
             !rawId && generateIdCb ? generateIdCb() : undefined;
-          const finalId = generatedId
-            ? generatedId
-            : canonicalizeToolCallId({
-                providerName,
-                rawId,
-                toolName,
-                turnKey,
-                callIndex,
-              });
+          const finalId =
+            generatedId ??
+            canonicalizeToolCallId({
+              providerName,
+              rawId,
+              toolName,
+              turnKey,
+              callIndex,
+            });
           this.logger.debug('Converting functionCall to tool_call block:', {
             originalId: part.functionCall.id,
             finalId,
@@ -267,21 +269,22 @@ export class ContentConverters {
           });
           callIndex += 1;
         } else if ('functionResponse' in part && part.functionResponse) {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name
           const toolName = part.functionResponse.name || '';
           const rawId = part.functionResponse.id;
           const matched = !rawId ? getNextUnmatchedToolCall?.() : undefined;
           const generatedId =
             !rawId && !matched && generateIdCb ? generateIdCb() : undefined;
-          const callId = matched?.historyId
-            ? matched.historyId
-            : (generatedId ??
-              canonicalizeToolResponseId({
-                providerName,
-                rawId,
-                toolName,
-                turnKey,
-                callIndex: responseIndex,
-              }));
+          const callId =
+            matched?.historyId ??
+            generatedId ??
+            canonicalizeToolResponseId({
+              providerName,
+              rawId,
+              toolName,
+              turnKey,
+              callIndex: responseIndex,
+            });
           this.logger.debug(
             'Converting functionResponse to tool_response block:',
             {
@@ -329,6 +332,7 @@ export class ContentConverters {
             );
             result = {
               error: 'Failed to process tool response',
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback
               output: String(part.functionResponse.response || ''),
             };
           }
@@ -336,7 +340,9 @@ export class ContentConverters {
           blocks.push({
             type: 'tool_response',
             callId,
+            /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- empty string is valid for tool name */
             toolName: matched?.toolName || part.functionResponse.name || '',
+            /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
             result,
           });
           responseIndex += 1;
@@ -344,7 +350,9 @@ export class ContentConverters {
           // Handle inline data (media)
           blocks.push({
             type: 'media',
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for mimeType
             mimeType: part.inlineData.mimeType || '',
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for data
             data: part.inlineData.data || '',
             encoding: 'base64',
           });
@@ -421,12 +429,12 @@ export class ContentConverters {
       roles: contents.map((c) => c.role),
       totalFunctionCalls: contents.reduce(
         (acc, c) =>
-          acc + (c.parts?.filter((p) => 'functionCall' in p).length || 0),
+          acc + (c.parts?.filter((p) => 'functionCall' in p).length ?? 0),
         0,
       ),
       totalFunctionResponses: contents.reduce(
         (acc, c) =>
-          acc + (c.parts?.filter((p) => 'functionResponse' in p).length || 0),
+          acc + (c.parts?.filter((p) => 'functionResponse' in p).length ?? 0),
         0,
       ),
     });

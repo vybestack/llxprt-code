@@ -516,7 +516,7 @@ export function updateMCPServerStatus(
  * Get the current status of an MCP server
  */
 export function getMCPServerStatus(serverName: string): MCPServerStatus {
-  return serverStatuses.get(serverName) || MCPServerStatus.DISCONNECTED;
+  return serverStatuses.get(serverName) ?? MCPServerStatus.DISCONNECTED;
 }
 
 /**
@@ -584,7 +584,7 @@ async function handleAutomaticOAuth(
     } else if (hasNetworkTransport(mcpServerConfig)) {
       // Fallback: try to discover OAuth config from the base URL
       const serverUrl = new URL(
-        mcpServerConfig.httpUrl || mcpServerConfig.url!,
+        mcpServerConfig.httpUrl ?? mcpServerConfig.url!,
       );
       const baseUrl = `${serverUrl.protocol}//${serverUrl.host}`;
       oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
@@ -592,7 +592,7 @@ async function handleAutomaticOAuth(
 
     if (!oauthConfig) {
       debugLogger.error(
-        `❌ Could not configure OAuth for '${mcpServerName}' - please authenticate manually with /mcp auth ${mcpServerName}`,
+        `[ERROR] Could not configure OAuth for '${mcpServerName}' - please authenticate manually with /mcp auth ${mcpServerName}`,
       );
       return false;
     }
@@ -604,12 +604,13 @@ async function handleAutomaticOAuth(
       enabled: true,
       authorizationUrl: oauthConfig.authorizationUrl,
       tokenUrl: oauthConfig.tokenUrl,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array scopes means "no scopes"
       scopes: oauthConfig.scopes || [],
     };
 
     // Perform OAuth authentication
     // Pass the server URL for proper discovery
-    const serverUrl = mcpServerConfig.httpUrl || mcpServerConfig.url;
+    const serverUrl = mcpServerConfig.httpUrl ?? mcpServerConfig.url;
     debugLogger.log(
       `Starting OAuth authentication for server '${mcpServerName}'...`,
     );
@@ -822,7 +823,7 @@ function createSSETransportWithAuth(
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
-  const url = config.httpUrl || config.url!;
+  const url = config.httpUrl ?? config.url!;
   return new SSEClientTransport(new URL(url), {
     requestInit: { headers },
   });
@@ -907,7 +908,7 @@ async function retryWithOAuth(
   // Try HTTP first (default or explicit type:http)
   try {
     const httpTransport = new StreamableHTTPClientTransport(
-      new URL(config.httpUrl || config.url!),
+      new URL(config.httpUrl ?? config.url!),
       {
         requestInit: { headers },
       },
@@ -1399,6 +1400,7 @@ export async function invokeMcpPrompt(
  * @returns True if a `url` or `httpUrl` is present, false otherwise.
  */
 export function hasNetworkTransport(config: MCPServerConfig): boolean {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string URL is invalid
   return !!(config.url || config.httpUrl);
 }
 
@@ -1575,7 +1577,7 @@ export async function connectToMcpServer(
           `No www-authenticate header in error, trying to fetch it from server...`,
         );
         try {
-          const urlToFetch = mcpServerConfig.httpUrl || mcpServerConfig.url!;
+          const urlToFetch = mcpServerConfig.httpUrl ?? mcpServerConfig.url!;
           const response = await fetch(urlToFetch, {
             method: 'HEAD',
             headers: {
@@ -1693,6 +1695,7 @@ export async function connectToMcpServer(
         // Only try OAuth discovery for HTTP servers or when OAuth is explicitly configured
         // For SSE servers, we should not trigger new OAuth flows automatically
         const shouldTryDiscovery =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string httpUrl should not trigger discovery
           mcpServerConfig.httpUrl || mcpServerConfig.oauth?.enabled;
 
         if (!shouldTryDiscovery) {
@@ -1700,13 +1703,11 @@ export async function connectToMcpServer(
         }
 
         // For SSE/HTTP servers, try to discover OAuth configuration from the base URL
-        debugLogger.log(
-          `🔍 Attempting OAuth discovery for '${mcpServerName}'...`,
-        );
+        debugLogger.log(`Attempting OAuth discovery for '${mcpServerName}'...`);
 
         if (hasNetworkTransport(mcpServerConfig)) {
           const serverUrl = new URL(
-            mcpServerConfig.httpUrl || mcpServerConfig.url!,
+            mcpServerConfig.httpUrl ?? mcpServerConfig.url!,
           );
           const baseUrl = `${serverUrl.protocol}//${serverUrl.host}`;
 
@@ -1723,13 +1724,14 @@ export async function connectToMcpServer(
                 enabled: true,
                 authorizationUrl: oauthConfig.authorizationUrl,
                 tokenUrl: oauthConfig.tokenUrl,
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array scopes means "no scopes"
                 scopes: oauthConfig.scopes || [],
               };
 
               // Perform OAuth authentication
               // Pass the server URL for proper discovery
               const authServerUrl =
-                mcpServerConfig.httpUrl || mcpServerConfig.url;
+                mcpServerConfig.httpUrl ?? mcpServerConfig.url;
               debugLogger.log(
                 `Starting OAuth authentication for server '${mcpServerName}'...`,
               );
@@ -1928,9 +1930,11 @@ export async function createTransport(
   if (mcpServerConfig.command) {
     const transport = new StdioClientTransport({
       command: mcpServerConfig.command,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array args means "no args"
       args: mcpServerConfig.args || [],
       env: {
         ...process.env,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty object env means "no env"
         ...(mcpServerConfig.env || {}),
       } as Record<string, string>,
       cwd: mcpServerConfig.cwd,

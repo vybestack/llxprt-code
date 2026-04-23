@@ -51,8 +51,10 @@ export class OAuthCredentialStorage {
         // Convert from OAuthCredentials format to Google Credentials format
         const googleCreds: Credentials = {
           access_token: accessToken,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
           refresh_token: refreshToken || undefined,
           token_type: tokenType || undefined,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
           scope: scope || undefined,
         };
 
@@ -90,9 +92,12 @@ export class OAuthCredentialStorage {
       serverName: MAIN_ACCOUNT_KEY,
       token: {
         accessToken: credentials.access_token,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
         refreshToken: credentials.refresh_token || undefined,
-        tokenType: credentials.token_type || 'Bearer',
+        tokenType: credentials.token_type ?? 'Bearer',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
         scope: credentials.scope || undefined,
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expiry_date means "no expiration"
         expiresAt: credentials.expiry_date || undefined,
       },
       updatedAt: Date.now(),

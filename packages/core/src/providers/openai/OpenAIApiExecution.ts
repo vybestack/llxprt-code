@@ -80,7 +80,7 @@ export async function executeApiRequest(
             requestBody,
             { streaming: true },
             false,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 
@@ -98,13 +98,13 @@ export async function executeApiRequest(
             {
               error,
               model,
-              toolsProvided: formattedTools?.length || 0,
+              toolsProvided: formattedTools?.length ?? 0,
               toolNames: formattedTools?.map((t) => t.function.name),
               streamingEnabled,
             },
           );
           const enhancedError = new Error(
-            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length ?? 0} tools. Known API issue.`,
           );
           (enhancedError as Error & { originalError?: unknown }).originalError =
             error;
@@ -121,7 +121,7 @@ export async function executeApiRequest(
             requestBody,
             { error: dumpErrorMessage },
             true,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 
@@ -166,7 +166,7 @@ export async function executeApiRequest(
             requestBody,
             response,
             false,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 
@@ -194,13 +194,13 @@ export async function executeApiRequest(
             {
               error,
               model,
-              toolsProvided: formattedTools?.length || 0,
+              toolsProvided: formattedTools?.length ?? 0,
               toolNames: formattedTools?.map((t) => t.function.name),
               streamingEnabled,
             },
           );
           const enhancedError = new Error(
-            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length ?? 0} tools. Known API issue.`,
           );
           (enhancedError as Error & { originalError?: unknown }).originalError =
             error;
@@ -217,7 +217,7 @@ export async function executeApiRequest(
             requestBody,
             { error: dumpErrorMessage },
             true,
-            baseURL || 'https://api.openai.com/v1',
+            baseURL ?? 'https://api.openai.com/v1',
           );
         }
 

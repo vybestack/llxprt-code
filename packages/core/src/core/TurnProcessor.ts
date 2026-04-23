@@ -498,9 +498,9 @@ export class TurnProcessor {
         const promptTokens = iContent.metadata?.usage?.promptTokens;
         if (promptTokens !== undefined) {
           const cacheReads =
-            iContent.metadata?.usage?.cache_read_input_tokens || 0;
+            iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
           const cacheWrites =
-            iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+            iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
           this.lastPromptTokenCount = promptTokens + cacheReads + cacheWrites;
           this.compressionHandler.lastPromptTokenCount =
             this.lastPromptTokenCount;
@@ -663,8 +663,8 @@ export class TurnProcessor {
     if (usageMetadata?.promptTokenCount !== undefined) {
       const combined =
         usageMetadata.promptTokenCount +
-        (usageMetadata.cache_read_input_tokens || 0) +
-        (usageMetadata.cache_creation_input_tokens || 0);
+        (usageMetadata.cache_read_input_tokens ?? 0) +
+        (usageMetadata.cache_creation_input_tokens ?? 0);
       if (combined > 0) {
         this.historyService.syncTotalTokens(combined);
         await this.historyService.waitForTokenUpdates();
@@ -703,7 +703,7 @@ export class TurnProcessor {
           Array.isArray(toolGroup.functionDeclarations)
         ) {
           for (const funcDecl of toolGroup.functionDeclarations) {
-            const name = funcDecl.name || 'unknown';
+            const name = funcDecl.name ?? 'unknown';
             toolNames.push(name);
             if (
               funcDecl.parametersJsonSchema &&

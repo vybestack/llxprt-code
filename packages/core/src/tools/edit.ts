@@ -243,6 +243,7 @@ class EditToolInvocation extends BaseToolInvocation<
 
   private getFilePath(): string {
     // Use absolute_path if provided, otherwise fall back to file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
     return this.params.absolute_path || this.params.file_path || '';
   }
 
@@ -298,6 +299,7 @@ class EditToolInvocation extends BaseToolInvocation<
       | { display: string; raw: string; type: ToolErrorType }
       | undefined = undefined;
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
     const filePath = params.absolute_path || params.file_path || '';
 
     try {
@@ -512,6 +514,7 @@ class EditToolInvocation extends BaseToolInvocation<
     }
 
     if (!error && fileExists && currentContent === newContent) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
       const filePath = params.absolute_path || params.file_path || '';
       error = {
         display:
@@ -714,6 +717,7 @@ class EditToolInvocation extends BaseToolInvocation<
           try {
             gitStats = await gitStatsService.trackFileEdit(
               filePath,
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined currentContent should default to empty
               editData.currentContent || '',
               editData.newContent,
             );
@@ -727,7 +731,7 @@ class EditToolInvocation extends BaseToolInvocation<
       // Always return diff stats as per upstream
       const fileName = path.basename(filePath);
       const originallyProposedContent =
-        this.params.ai_proposed_content || editData.newContent;
+        this.params.ai_proposed_content ?? editData.newContent;
       const diffStat = getDiffStat(
         fileName,
         editData.currentContent ?? '',
@@ -898,6 +902,7 @@ Expectation for required parameters:
     params: EditToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid
     const filePath = params.absolute_path || params.file_path || '';
 
     if (filePath.trim() === '') {
@@ -957,8 +962,10 @@ Expectation for required parameters:
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {
     return {
       getFilePath: (params: EditToolParams) =>
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         params.absolute_path || params.file_path || '',
       getCurrentContent: async (params: EditToolParams): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         try {
           return await this.config
@@ -970,6 +977,7 @@ Expectation for required parameters:
         }
       },
       getProposedContent: async (params: EditToolParams): Promise<string> => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths are invalid, fall back to file_path
         const filePath = params.absolute_path || params.file_path || '';
         try {
           const currentContent = await this.config

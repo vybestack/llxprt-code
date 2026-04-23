@@ -466,6 +466,7 @@ export class LoggingProviderWrapper implements IProvider {
         const prototypeChain: string[] = [];
         let proto = Object.getPrototypeOf(activeConfig);
         while (proto && proto !== Object.prototype) {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty constructor name should use 'unknown'
           prototypeChain.push(proto.constructor?.name || 'unknown');
           proto = Object.getPrototypeOf(proto);
         }
@@ -590,7 +591,7 @@ export class LoggingProviderWrapper implements IProvider {
         () => `After JSON.stringify: requestText length=${requestText.length}`,
       );
       const modelName =
-        normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
+        normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
       this.debug.log(
         () => `Logging API request: model=${modelName}, promptId=${promptId}`,
       );
@@ -620,7 +621,7 @@ export class LoggingProviderWrapper implements IProvider {
     // If logging not enabled, process for metrics only
     // Resolve the model name for telemetry - use resolved model, not provider default
     const resolvedModelName =
-      normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
+      normalizedOptions.resolved?.model ?? this.wrapped.getDefaultModel();
     if (!activeConfig?.getConversationLoggingEnabled()) {
       yield* this.processStreamForMetrics(
         activeConfig,
@@ -659,7 +660,7 @@ export class LoggingProviderWrapper implements IProvider {
         this.wrapped.name,
         this.conversationId,
         this.turnNumber,
-        promptId || this.generatePromptId(),
+        promptId ?? this.generatePromptId(),
         redactedContent,
         redactedTools,
         'default', // toolFormat is no longer passed in
@@ -674,7 +675,7 @@ export class LoggingProviderWrapper implements IProvider {
       fileWriter.writeRequest(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        promptId: promptId || this.generatePromptId(),
+        promptId: promptId ?? this.generatePromptId(),
         tools: redactedTools,
         toolFormat: 'default',
       });
@@ -1254,6 +1255,7 @@ export class LoggingProviderWrapper implements IProvider {
       cache: tokenCounts.cached_content_token_count || 0,
       thought: tokenCounts.thoughts_token_count || 0,
       tool: tokenCounts.tool_token_count || 0,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- 0 cacheReads is valid
       cacheReads: tokenCounts.cache_read_input_tokens || 0,
       cacheWrites:
         tokenCounts.cache_creation_input_tokens === undefined

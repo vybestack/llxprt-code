@@ -307,10 +307,10 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
     ) {
       blocks.push({
         type: 'tool_response',
-        callId: part.functionResponse.id || '',
-        toolName: part.functionResponse.name || '',
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
         result:
-          (part.functionResponse.response as Record<string, unknown>) || {},
+          (part.functionResponse.response as Record<string, unknown>) ?? {},
         error: undefined,
       } as ToolResponseBlock);
     }
@@ -348,18 +348,18 @@ function classifyMixedParts(parts: Part[]): {
       hasAIContent = true;
       blocks.push({
         type: 'tool_call',
-        id: part.functionCall.id || '',
-        name: part.functionCall.name || '',
-        parameters: (part.functionCall.args as Record<string, unknown>) || {},
+        id: part.functionCall.id ?? '',
+        name: part.functionCall.name ?? '',
+        parameters: (part.functionCall.args as Record<string, unknown>) ?? {},
       } as ToolCallBlock);
     } else if ('functionResponse' in part && part.functionResponse) {
       hasToolContent = true;
       blocks.push({
         type: 'tool_response',
-        callId: part.functionResponse.id || '',
-        toolName: part.functionResponse.name || '',
+        callId: part.functionResponse.id ?? '',
+        toolName: part.functionResponse.name ?? '',
         result:
-          (part.functionResponse.response as Record<string, unknown>) || {},
+          (part.functionResponse.response as Record<string, unknown>) ?? {},
         error: undefined,
       } as ToolResponseBlock);
     }
@@ -480,13 +480,13 @@ export function applyResponseMetadata(
   // Add usage metadata if present
   if (input.metadata?.usage) {
     const usageMetadata: UsageMetadataWithCache = {
-      promptTokenCount: input.metadata.usage.promptTokens || 0,
-      candidatesTokenCount: input.metadata.usage.completionTokens || 0,
-      totalTokenCount: input.metadata.usage.totalTokens || 0,
+      promptTokenCount: input.metadata.usage.promptTokens ?? 0,
+      candidatesTokenCount: input.metadata.usage.completionTokens ?? 0,
+      totalTokenCount: input.metadata.usage.totalTokens ?? 0,
       cache_read_input_tokens:
-        input.metadata.usage.cache_read_input_tokens || 0,
+        input.metadata.usage.cache_read_input_tokens ?? 0,
       cache_creation_input_tokens:
-        input.metadata.usage.cache_creation_input_tokens || 0,
+        input.metadata.usage.cache_creation_input_tokens ?? 0,
     };
     response.usageMetadata = usageMetadata;
   }

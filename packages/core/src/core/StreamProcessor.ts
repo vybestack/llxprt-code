@@ -133,12 +133,10 @@ export class StreamProcessor {
     let processedStream: AsyncGenerator<GenerateContentResponse> | undefined;
     const ensureProcessedStream =
       (): AsyncGenerator<GenerateContentResponse> => {
-        if (!processedStream) {
-          processedStream = this.processStreamResponse(
-            streamResponse,
-            userContent,
-          );
-        }
+        processedStream ??= this.processStreamResponse(
+          streamResponse,
+          userContent,
+        );
         return processedStream;
       };
 
@@ -502,9 +500,9 @@ export class StreamProcessor {
       const promptTokens = iContent.metadata?.usage?.promptTokens;
       if (promptTokens !== undefined) {
         const cacheReads =
-          iContent.metadata?.usage?.cache_read_input_tokens || 0;
+          iContent.metadata?.usage?.cache_read_input_tokens ?? 0;
         const cacheWrites =
-          iContent.metadata?.usage?.cache_creation_input_tokens || 0;
+          iContent.metadata?.usage?.cache_creation_input_tokens ?? 0;
         const combinedPromptTokens = promptTokens + cacheReads + cacheWrites;
         this.logger.debug(
           () =>
@@ -532,7 +530,7 @@ export class StreamProcessor {
 
           if (afterModelResult?.shouldStopExecution()) {
             throw new AgentExecutionStoppedError(
-              afterModelResult.getEffectiveReason() ||
+              afterModelResult.getEffectiveReason() ??
                 'Execution stopped by AfterModel hook',
               afterModelResult.systemMessage,
             );
@@ -540,9 +538,9 @@ export class StreamProcessor {
 
           if (afterModelResult?.isBlockingDecision()) {
             const modifiedResponse = afterModelResult.getModifiedResponse();
-            const syntheticResponse = modifiedResponse || convertedChunk;
+            const syntheticResponse = modifiedResponse ?? convertedChunk;
             throw new AgentExecutionBlockedError(
-              afterModelResult.getEffectiveReason() ||
+              afterModelResult.getEffectiveReason() ??
                 'Execution blocked by AfterModel hook',
               syntheticResponse,
               afterModelResult.systemMessage,
@@ -643,8 +641,8 @@ export class StreamProcessor {
         const chunkUsage = chunk.usageMetadata as UsageMetadataWithCache;
         this.compressionHandler.lastPromptTokenCount =
           chunk.usageMetadata.promptTokenCount +
-          (chunkUsage.cache_read_input_tokens || 0) +
-          (chunkUsage.cache_creation_input_tokens || 0);
+          (chunkUsage.cache_read_input_tokens ?? 0) +
+          (chunkUsage.cache_creation_input_tokens ?? 0);
       }
       allChunks.push(chunk);
 
@@ -841,15 +839,15 @@ export class StreamProcessor {
       .find((chunk) => chunk.usageMetadata);
     if (lastChunkWithMetadata?.usageMetadata) {
       streamingUsageMetadata = {
-        promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount || 0,
+        promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount ?? 0,
         completionTokens:
-          lastChunkWithMetadata.usageMetadata.candidatesTokenCount || 0,
-        totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount || 0,
+          lastChunkWithMetadata.usageMetadata.candidatesTokenCount ?? 0,
+        totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount ?? 0,
       };
       const usageMetadata =
         lastChunkWithMetadata.usageMetadata as UsageMetadataWithCache;
-      const cacheReads = usageMetadata.cache_read_input_tokens || 0;
-      const cacheWrites = usageMetadata.cache_creation_input_tokens || 0;
+      const cacheReads = usageMetadata.cache_read_input_tokens ?? 0;
+      const cacheWrites = usageMetadata.cache_creation_input_tokens ?? 0;
       actualPromptTokens =
         streamingUsageMetadata.promptTokens + cacheReads + cacheWrites;
     }

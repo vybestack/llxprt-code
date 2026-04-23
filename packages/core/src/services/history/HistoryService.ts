@@ -324,7 +324,7 @@ export class HistoryService
     this.tokenizerLock = this.tokenizerLock.then(async () => {
       // Always derive token counts from the stored content to avoid double counting
       // when providers attach aggregate usage metadata (which already includes prompt tokens).
-      const defaultModel = modelName || 'gpt-4.1';
+      const defaultModel = modelName ?? 'gpt-4.1';
       const contentTokens = await this.estimateContentTokens(
         content,
         defaultModel,
@@ -393,7 +393,7 @@ export class HistoryService
           } else {
             // Try to stringify the result
             try {
-              blockText = JSON.stringify(block.result || '');
+              blockText = JSON.stringify(block.result ?? '');
             } catch (error) {
               // Handle circular references or other JSON.stringify errors
               this.logger.debug(
@@ -418,6 +418,7 @@ export class HistoryService
           break;
         case 'media':
           // For media, just count the caption if any
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty caption same as no caption
           blockText = block.caption || '';
           break;
         default:
@@ -474,6 +475,7 @@ export class HistoryService
 
     let total = 0;
     for (const content of contents) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model name should fall back
       const effectiveModel = content.metadata?.model || modelName || 'gpt-4.1';
       try {
         total += await this.estimateContentTokens(content, effectiveModel);
@@ -876,6 +878,7 @@ export class HistoryService
 
       for (const content of this.history) {
         // Use the model from content metadata, or fall back to provided default
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model name should fall back
         const modelToUse = content.metadata?.model || defaultModel;
         newTotal += await this.estimateContentTokens(content, modelToUse);
       }

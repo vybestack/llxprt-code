@@ -380,10 +380,10 @@ export async function* processStreamingResponse(
           state.textBuffer += deltaContent;
 
           const kimiBeginCount = (
-            state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []
+            state.textBuffer.match(/<\|tool_calls_section_begin\|>/g) ?? []
           ).length;
           const kimiEndCount = (
-            state.textBuffer.match(/<\|tool_calls_section_end\|>/g) || []
+            state.textBuffer.match(/<\|tool_calls_section_end\|>/g) ?? []
           ).length;
           const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
 
@@ -615,6 +615,7 @@ export async function* processStreamingResponse(
         pipelineToolCallBlocks.push({
           type: 'tool_call',
           id: normalizeToHistoryToolId(
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string ID should use fallback
             normalizedCall.id || `call_${normalizedCall.index}`,
           ),
           name: normalizedCall.name,
@@ -667,12 +668,14 @@ export async function* processStreamingResponse(
         const cacheMetrics = extractCacheMetrics(state.streamingUsage);
         combinedContent.metadata = {
           usage: {
+            /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- 0 tokens is valid but || 0 is equivalent to ?? 0 for numbers */
             promptTokens: state.streamingUsage.prompt_tokens || 0,
             completionTokens: state.streamingUsage.completion_tokens || 0,
             totalTokens:
               state.streamingUsage.total_tokens ||
               (state.streamingUsage.prompt_tokens || 0) +
                 (state.streamingUsage.completion_tokens || 0),
+            /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
             cachedTokens: cacheMetrics.cachedTokens,
             cacheCreationTokens: cacheMetrics.cacheCreationTokens,
             cacheMissTokens: cacheMetrics.cacheMissTokens,
@@ -688,6 +691,7 @@ export async function* processStreamingResponse(
       // (via mapFinishReasonToStopReason above); finishReason preserves the
       // raw provider value for diagnostics.
       if (state.lastFinishReason) {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional metadata initialization
         if (!combinedContent.metadata) {
           combinedContent.metadata = {};
         }
@@ -737,12 +741,14 @@ export async function* processStreamingResponse(
       blocks: [],
       metadata: {
         usage: {
+          /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- 0 tokens is valid but || 0 is equivalent to ?? 0 for numbers */
           promptTokens: state.streamingUsage.prompt_tokens || 0,
           completionTokens: state.streamingUsage.completion_tokens || 0,
           totalTokens:
             state.streamingUsage.total_tokens ||
             (state.streamingUsage.prompt_tokens || 0) +
               (state.streamingUsage.completion_tokens || 0),
+          /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
           cachedTokens: cacheMetrics.cachedTokens,
           cacheCreationTokens: cacheMetrics.cacheCreationTokens,
           cacheMissTokens: cacheMetrics.cacheMissTokens,

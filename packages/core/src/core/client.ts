@@ -153,7 +153,7 @@ export class GeminiClient {
     }
 
     const embeddingModel = config.getEmbeddingModel();
-    this.embeddingModel = embeddingModel || runtimeState.model;
+    this.embeddingModel = embeddingModel ?? runtimeState.model;
     this.loopDetector = new LoopDetectionService(config);
     this.lastPromptId = runtimeState.sessionId;
 
@@ -235,6 +235,7 @@ export class GeminiClient {
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
     // Preserve chat history before resetting, but only if we don't already have stored history
     // (e.g., from storeHistoryForLaterUse called before initialize)
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array means "no stored history"
     const previousHistory = this._previousHistory || this.chat?.getHistory();
 
     // Reset the client to force reinitialization with new auth
@@ -254,7 +255,7 @@ export class GeminiClient {
     }
     // Use pending config if available (from initialize() call), otherwise fall back to current config
     const contentGenConfig =
-      this._pendingConfig || this.config.getContentGeneratorConfig();
+      this._pendingConfig ?? this.config.getContentGeneratorConfig();
     if (!contentGenConfig) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -290,9 +291,7 @@ export class GeminiClient {
    * This is lazily initialized to avoid creating it when not needed.
    */
   private getBaseLlmClient(): BaseLLMClient {
-    if (!this._baseLlmClient) {
-      this._baseLlmClient = new BaseLLMClient(this.getContentGenerator());
-    }
+    this._baseLlmClient ??= new BaseLLMClient(this.getContentGenerator());
     return this._baseLlmClient;
   }
 
@@ -631,9 +630,7 @@ export class GeminiClient {
     promptId: string,
   ): Promise<GenerateContentResponse> {
     await this.lazyInitialize();
-    if (!this.chat) {
-      this.chat = await this.startChat([]);
-    }
+    this.chat ??= await this.startChat([]);
     return this.getChat().generateDirectMessage(params, promptId);
   }
 
@@ -703,7 +700,7 @@ export class GeminiClient {
       abortSignal,
       model,
       { ...this.generateContentConfig, ...config },
-      this.lastPromptId || this.config.getSessionId(),
+      this.lastPromptId ?? this.config.getSessionId(),
     );
   }
 
@@ -721,7 +718,7 @@ export class GeminiClient {
       generationConfig,
       abortSignal,
       model,
-      this.lastPromptId || this.config.getSessionId(),
+      this.lastPromptId ?? this.config.getSessionId(),
       this.generateContentConfig,
     );
   }

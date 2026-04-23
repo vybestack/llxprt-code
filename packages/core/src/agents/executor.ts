@@ -238,14 +238,14 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       if (terminateReason === AgentTerminateMode.GOAL) {
         return {
-          result: finalResult || 'Task completed.',
+          result: finalResult ?? 'Task completed.',
           terminate_reason: terminateReason,
         };
       }
 
       return {
         result:
-          finalResult || 'Agent execution was terminated before completion.',
+          finalResult ?? 'Agent execution was terminated before completion.',
         terminate_reason: terminateReason,
       };
     } catch (error) {
@@ -272,7 +272,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     signal.addEventListener('abort', onAbort, { once: true });
 
     const messageParams = {
-      message: message.parts || [],
+      message: message.parts ?? [],
       config: {
         abortSignal: timeoutSignal,
         tools: tools.length > 0 ? [{ functionDeclarations: tools }] : undefined,
@@ -327,7 +327,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
           // Extract and emit any subject "thought" content from the model.
           const { subject } = parseThought(
-            parts?.find((p: Part) => p.thought)?.text || '',
+            parts?.find((p: Part) => p.thought)?.text ?? '',
           );
           if (subject) {
             this.emitActivity('THOUGHT_CHUNK', { text: subject });
@@ -343,7 +343,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
             parts
               ?.filter((p: Part) => !p.thought && p.text)
               .map((p: Part) => p.text)
-              .join('') || '';
+              .join('') ?? '';
 
           if (text) {
             textResponse += text;
