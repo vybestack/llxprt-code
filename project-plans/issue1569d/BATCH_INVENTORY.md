@@ -89,8 +89,15 @@ implementer starts.
 - Promote to global `'error'`.
 
 ### RS-BN2 — `@typescript-eslint/prefer-nullish-coalescing`
-- Repo sweep.
-- Promote to global `'error'`.
+- Repo sweep. Pre-flight count: 1096 warnings across 366 files (293 prod,
+  73 test). Split into per-package sub-batches per plan cap rules.
+- Split plan (frozen before implementer starts):
+  - **BN2-A** (committed `c3afa7b22`): packages/a2a-server + packages/vscode-ide-companion. 8 files, 20 warnings -> 0.
+  - **BN2-B**: packages/cli production files. ~127 files, ~434 warnings. Further sub-splits may be required (cap 25 prod files per implementer pass); coordinator will freeze the sub-split list before BN2-B starts.
+  - **BN2-C**: packages/cli test files. ~25 test files, ~25 warnings. Must use type-aware conversion — many test sites intentionally use `||` with falsy string/number defaults.
+  - **BN2-D**: packages/core production files. ~159 files, ~558 warnings. Same 25-prod-file sub-split cap.
+  - **BN2-E**: packages/core test files. ~47 test files, ~59 warnings. Same type-aware caution as BN2-C.
+- Promote rule to global `'error'` only after BN2-A through BN2-E all reach zero warnings repo-wide for this rule.
 
 ### RS-BN3 — `@typescript-eslint/no-misused-promises`
 - Repo sweep.
