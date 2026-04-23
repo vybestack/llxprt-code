@@ -40,6 +40,7 @@ describe('<ToolResultDisplay />', () => {
       <ToolResultDisplay resultDisplay={undefined} terminalWidth={80} />,
     );
     // Empty or whitespace-only when no display data
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for trimmed content
     expect(lastFrame()?.trim() || '').toBe('');
   });
 

@@ -106,6 +106,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     .mockImplementation((optionsPassedToConstructor) => {
       const opts = { ...optionsPassedToConstructor }; // Clone
       // Basic mock structure, will be extended by the instance in tests
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- test fixture defaults intentionally use falsy coalescing */
       return {
         apiKey: opts.apiKey || 'test-key',
         model: opts.model || 'test-model-in-mock-factory',
@@ -161,6 +162,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           getUserTier: vi.fn(),
         })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
+        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
         getAllGeminiMdFilenames: vi.fn(() => ['GEMINI.md']),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
@@ -349,7 +351,7 @@ describe('App UI', () => {
   ): LoadedSettings => {
     const systemSettingsFile: SettingsFile = {
       path: '/system/settings.json',
-      settings: settings.system || {},
+      settings: settings.system ?? {},
     };
     const systemDefaultsFile: SettingsFile = {
       path: '/system/system-defaults.json',
@@ -357,11 +359,11 @@ describe('App UI', () => {
     };
     const userSettingsFile: SettingsFile = {
       path: '/user/settings.json',
-      settings: settings.user || {},
+      settings: settings.user ?? {},
     };
     const workspaceSettingsFile: SettingsFile = {
       path: '/workspace/.gemini/settings.json',
-      settings: settings.workspace || {},
+      settings: settings.workspace ?? {},
     };
     return new LoadedSettings(
       systemSettingsFile,
@@ -411,16 +413,12 @@ describe('App UI', () => {
     mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
 
     // Ensure getWorkspaceContext is available if not added by the constructor
-    if (!mockConfig.getWorkspaceContext) {
-      mockConfig.getWorkspaceContext = vi.fn(() => ({
-        getDirectories: vi.fn(() => ['/test/dir']),
-      }));
-    }
+    mockConfig.getWorkspaceContext ??= vi.fn(() => ({
+      getDirectories: vi.fn(() => ['/test/dir']),
+    }));
 
     // Ensure getEphemeralSetting is available if not added by the constructor
-    if (!mockConfig.getEphemeralSetting) {
-      mockConfig.getEphemeralSetting = vi.fn(() => undefined);
-    }
+    mockConfig.getEphemeralSetting ??= vi.fn(() => undefined);
     vi.mocked(ideContext.getIdeContext).mockReturnValue(undefined);
   });
 

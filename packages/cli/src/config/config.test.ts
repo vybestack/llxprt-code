@@ -228,8 +228,9 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     loadServerHierarchicalMemory: vi.fn(
       (cwd, dirs, debug, fileService, extensionPaths, _maxDirs) =>
         Promise.resolve({
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for joined paths
           memoryContent: extensionPaths?.join(',') || '',
-          fileCount: extensionPaths?.length || 0,
+          fileCount: extensionPaths?.length ?? 0,
           filePaths: [],
         }),
     ),

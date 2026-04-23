@@ -38,7 +38,7 @@ function createMockTokenStore(providers: Record<string, OAuthToken | null>): {
       const token = providers[provider];
       return token ? ['default'] : [];
     }),
-    getToken: vi.fn(async (provider: string) => providers[provider] || null),
+    getToken: vi.fn(async (provider: string) => providers[provider] ?? null),
     saveToken: vi.fn(),
     removeToken: vi.fn(),
     listProviders: vi.fn(async () =>
@@ -59,6 +59,7 @@ function createMCPCredentials(
       accessToken: `mcp_token_${serverName}`,
       refreshToken: opts?.refreshToken,
       expiresAt,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- 'Bearer' is a valid default for empty string
       tokenType: opts?.tokenType || 'Bearer',
       scope: opts?.scope,
     },
@@ -94,7 +95,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         return new Map(mockTokenStore);
       },
       async getCredentials(serverName: string) {
-        return mockTokenStore.get(serverName) || null;
+        return mockTokenStore.get(serverName) ?? null;
       },
       async setCredentials(credentials: MCPOAuthCredentials) {
         mockTokenStore.set(credentials.serverName, credentials);

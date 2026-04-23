@@ -85,6 +85,7 @@ describe('FileCommandLoader', () => {
     vi.mocked(glob.glob).mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for args
         const userArgsRaw = context?.invocation?.args || '';
         const processedPrompt = prompt.replaceAll(
           SHORTHAND_ARGS_PLACEHOLDER,

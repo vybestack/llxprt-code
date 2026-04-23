@@ -79,6 +79,7 @@ const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = (await importOriginal()) as any;
   return {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty object is valid fallback for module
     ...(actualSchedulerModule || {}),
     useReactToolScheduler: vi.fn(),
   };
@@ -249,6 +250,7 @@ describe('useGeminiStream', () => {
     initialToolCalls: TrackedToolCall[] = [],
     geminiClient?: any,
   ) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: falsy `any` client (undefined/null/0) falls through to mock
     const client = geminiClient || mockConfig.getGeminiClient();
 
     const initialProps = {

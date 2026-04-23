@@ -13,6 +13,7 @@ import { DefaultDark } from '../themes/default.js';
 // Mock the tokenLimit function
 vi.mock('@vybestack/llxprt-code-core', () => ({
   tokenLimit: vi.fn(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- 0 contextLimit should use default 100k
     (model: string, contextLimit?: number) => contextLimit || 100000, // Default 100k tokens
   ),
 }));

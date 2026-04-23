@@ -276,6 +276,7 @@ describe('updateGitignore', () => {
     expect(content).toBe('.llxprt/\nsome-other-file\n\ngha-creds-*.json\n');
     expect(content).toContain('gha-creds-*.json');
     // Should not duplicate .llxprt/ entry
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for match result
     expect((content.match(/\.llxprt\//g) || []).length).toBe(1);
   });
 

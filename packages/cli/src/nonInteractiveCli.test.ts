@@ -1075,6 +1075,7 @@ describe('runNonInteractive', () => {
     expect(thinkingOutputs).toHaveLength(1);
     const thinkingText = thinkingOutputs[0][0];
     // "Analyzing" should appear exactly once — not repeated for each subsequent thought
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty array is valid fallback for match result
     const thoughtCount = (thinkingText.match(/Analyzing/g) || []).length;
     expect(thoughtCount).toBe(1);
   });

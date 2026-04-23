@@ -173,6 +173,7 @@ describe('useVim hook', () => {
 
   const renderVimHook = (buffer?: Partial<TextBuffer>) =>
     renderHook(() =>
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- mockBuffer is valid fallback for missing buffer
       useVim((buffer || mockBuffer) as TextBuffer, mockHandleFinalSubmit),
     );
 

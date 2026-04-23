@@ -73,6 +73,7 @@ const createMockMCPTool = (
     } as unknown as CallableTool,
     serverName,
     serverToolName,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string description uses generated default
     description || `Description for ${serverToolName}`,
     { type: Type.OBJECT, properties: {} },
     true,

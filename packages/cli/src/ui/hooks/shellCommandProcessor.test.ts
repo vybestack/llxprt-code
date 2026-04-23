@@ -152,6 +152,7 @@ describe('useShellCommandProcessor', () => {
   const createMockServiceResult = (
     overrides: Partial<ShellExecutionResult> = {},
   ): ShellExecutionResult => ({
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for output
     rawOutput: Buffer.from(overrides.output || ''),
     output: 'Success',
     exitCode: 0,

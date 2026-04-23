@@ -200,11 +200,11 @@ class TestDeviceCodeFlow implements OAuthFlowInterface {
       return result.token;
     }
 
-    const err = new Error(result.error || 'authorization_pending') as Error & {
+    const err = new Error(result.error ?? 'authorization_pending') as Error & {
       code: string;
       newInterval?: number;
     };
-    err.code = result.error || 'authorization_pending';
+    err.code = result.error ?? 'authorization_pending';
     if (result.newInterval) {
       err.newInterval = result.newInterval;
     }

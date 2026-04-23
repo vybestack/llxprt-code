@@ -228,6 +228,7 @@ describe('Footer', () => {
       const { container: narrowContainer } = render(
         <Footer {...defaultProps} />,
       );
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for text content
       let textContent = narrowContainer.textContent || '';
 
       // Narrow should show compact memory and context
@@ -244,6 +245,7 @@ describe('Footer', () => {
       });
 
       const { container: wideContainer } = render(<Footer {...defaultProps} />);
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for text content
       textContent = wideContainer.textContent || '';
 
       // Wide should show full memory info and timestamp
@@ -410,6 +412,7 @@ describe('Footer', () => {
       });
 
       const { container } = render(<Footer {...defaultProps} />);
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty string is valid fallback for text content
       const textContent = container.textContent || '';
 
       expect(textContent).toContain('8.0GB');

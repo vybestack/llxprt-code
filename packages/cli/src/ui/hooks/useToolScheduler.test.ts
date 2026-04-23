@@ -1382,6 +1382,7 @@ describe('mapToDisplay', () => {
         const toolCall: ToolCall = {
           request: baseRequest,
           status,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty object is valid fallback for extra props
           ...(extraProps || {}),
         } as ToolCall;
 

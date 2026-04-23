@@ -139,6 +139,7 @@ const mockUseReactToolScheduler = useReactToolScheduler as Mock;
 vi.mock('./useReactToolScheduler.js', async (importOriginal) => {
   const actualSchedulerModule = (await importOriginal()) as any;
   return {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty object is valid fallback for module
     ...(actualSchedulerModule || {}),
     useReactToolScheduler: vi.fn(),
   };
@@ -327,6 +328,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       mockMarkToolsAsSubmitted,
     ]);
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- mockConfig.getGeminiClient() is valid fallback
     const client = geminiClient || mockConfig.getGeminiClient();
 
     const { result, rerender } = renderHook(
