@@ -223,7 +223,10 @@ export class AnthropicDeviceFlow {
 
         // Handle other errors
         throw new Error(
-          `Token polling failed: ${error.error_description || error.error}`,
+          `Token polling failed: ${
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error_description should fall through to error code
+            error.error_description || error.error
+          }`,
         );
       } catch (error) {
         if (

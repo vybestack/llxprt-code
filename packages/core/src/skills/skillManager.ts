@@ -190,14 +190,18 @@ export class SkillManager {
       }
 
       // Skill name can come from config or use directory name
-      const skillName = config.name || name;
+      const skillName =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty name string should fall through to directory name
+        config.name || name;
 
       // Look for skill instruction file (SKILL.md or similar)
       const body = await this.loadSkillBody(skillPath);
 
       return {
         name: skillName,
-        description: config.description || '',
+        description:
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty description should default to empty string
+          config.description || '',
         location: skillPath,
         body,
         source: 'builtin',

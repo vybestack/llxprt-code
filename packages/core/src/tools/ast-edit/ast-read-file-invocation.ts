@@ -91,7 +91,7 @@ export class ASTReadFileToolInvocation
         'CONTEXT ANALYSIS:',
         ...enhancedContext.declarations.map(
           (decl) =>
-            `- ${decl.type}: ${decl.name}${decl.signature ? decl.signature : ''} (line ${decl.line})`,
+            `- ${decl.type}: ${decl.name}${decl.signature ?? ''} (line ${decl.line})`,
         ),
         '',
         'RELEVANT SNIPPETS:',
@@ -114,8 +114,7 @@ export class ASTReadFileToolInvocation
                   return [
                     `- ${relPath}:`,
                     ...file.declarations.map(
-                      (d) =>
-                        `  - ${d.type}: ${d.name}${d.signature ? d.signature : ''}`,
+                      (d) => `  - ${d.type}: ${d.name}${d.signature ?? ''}`,
                     ),
                   ];
                 })

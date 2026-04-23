@@ -73,6 +73,7 @@ export async function initializeParser(): Promise<boolean> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const TreeSitter = (await import('web-tree-sitter')) as any;
     // web-tree-sitter exports Parser directly as a named export, not default
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: Parser/default may be undefined, null, or falsy
     const Parser = TreeSitter.Parser || TreeSitter.default || TreeSitter;
 
     await Parser.init();

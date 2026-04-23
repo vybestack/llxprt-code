@@ -242,14 +242,14 @@ export class CrossFileRelationshipAnalyzer {
       if (references.length > 0) return references;
     } catch (error) {
       logger.warn(
-        `findRelatedSymbols failed or timed out for symbol '${symbolName}' in workspace '${workspacePath}' (lang: ${lang || 'mixed'})`,
+        `findRelatedSymbols failed or timed out for symbol '${symbolName}' in workspace '${workspacePath}' (lang: ${lang ?? 'mixed'})`,
         error,
       );
     }
 
     // Fallback to in-memory symbol index only if explicitly enabled
     if (ASTConfig.ENABLE_SYMBOL_INDEXING) {
-      return this.symbolIndex.get(symbolName) || [];
+      return this.symbolIndex.get(symbolName) ?? [];
     }
     return [];
   }

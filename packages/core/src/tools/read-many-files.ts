@@ -125,7 +125,7 @@ class ReadManyFilesToolInvocation extends BaseToolInvocation<
   }
 
   getDescription(): string {
-    const allPatterns = [...this.params.paths, ...(this.params.include || [])];
+    const allPatterns = [...this.params.paths, ...(this.params.include ?? [])];
     const pathDesc = `using patterns: 
 ${allPatterns.join('`, `')}
  (within target directory: 
@@ -133,7 +133,7 @@ ${this.config.getTargetDir()}
 ) `;
 
     // Determine the final list of exclusion patterns exactly as in execute method
-    const paramExcludes = this.params.exclude || [];
+    const paramExcludes = this.params.exclude ?? [];
     const paramUseDefaultExcludes = this.params.useDefaultExcludes !== false;
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes

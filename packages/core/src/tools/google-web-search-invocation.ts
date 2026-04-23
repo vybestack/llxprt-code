@@ -164,7 +164,9 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
 
       if (sources && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty title should show 'Untitled'
           const title = source.web?.title || 'Untitled';
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty URI should show 'No URI'
           const uri = source.web?.uri || 'No URI';
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });

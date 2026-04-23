@@ -307,8 +307,9 @@ export class SchemaValidator {
       };
 
       const formattedErrors = validate.errors.map((err: ErrorObject) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty path strings should fall through to next option */
         const path = (err as any).instancePath || (err as any).dataPath || '';
+        /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/prefer-nullish-coalescing */
         const basePath = formatPath(path as string);
         const message = err.message ?? 'is invalid';
         return `${basePath} ${message}`;

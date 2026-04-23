@@ -260,10 +260,12 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
   exportForProfile() {
     // Get activeProvider from global settings first, then fallback to direct field or default
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty activeProvider string should fall through to default */
     const activeProvider =
       (this.settings.global.activeProvider as string) ||
       this.settings.activeProvider ||
       'openai';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     const allowedValue = this.get('tools.allowed');
     const disabledValue = this.get('tools.disabled');
@@ -353,10 +355,12 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
   getDiagnosticsData(): Promise<DiagnosticsInfo> {
     // Get activeProvider from global settings (set via set() method) or fallback to direct field or default
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty activeProvider string should fall through to default */
     const activeProvider =
       (this.settings.global.activeProvider as string) ||
       this.settings.activeProvider ||
       'openai';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     const providerSettings = this.getProviderSettings(
       activeProvider,
     ) as ProviderSettings;

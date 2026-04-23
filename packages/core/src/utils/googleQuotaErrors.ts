@@ -92,6 +92,7 @@ export function classifyGoogleError(error: unknown): unknown {
 
   if (status === 404) {
     const message =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to generic message
       googleApiError?.message ||
       (error instanceof Error ? error.message : 'Model not found');
     return new ModelNotFoundError(message, status);
@@ -104,6 +105,7 @@ export function classifyGoogleError(error: unknown): unknown {
   ) {
     // Fallback: try to parse the error message for a retry delay
     const errorMessage =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall through to stringified error
       googleApiError?.message ||
       (error instanceof Error ? error.message : String(error));
     const match = errorMessage.match(/Please retry in ([0-9.]+(?:ms|s))/);

@@ -535,7 +535,7 @@ export function checkCommandPermissions(
   } as AnyToolInvocation & { params: { command: string } };
 
   // 1. Blocklist Check (Highest Priority)
-  const excludeTools = config.getExcludeTools() || [];
+  const excludeTools = config.getExcludeTools() ?? [];
   const isWildcardBlocked = SHELL_TOOL_NAMES.some((name) =>
     excludeTools.includes(name),
   );
@@ -563,7 +563,7 @@ export function checkCommandPermissions(
     }
   }
 
-  const coreTools = config.getCoreTools() || [];
+  const coreTools = config.getCoreTools() ?? [];
   const isWildcardAllowed = SHELL_TOOL_NAMES.some((name) =>
     coreTools.includes(name),
   );

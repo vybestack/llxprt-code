@@ -389,9 +389,10 @@ export async function processSingleFileContent(
         const lines = content.split('\n');
         const originalLineCount = countLines(lines);
 
-        const startLine = offset || 0;
-        const effectiveLimit =
-          limit === undefined ? DEFAULT_MAX_LINES_TEXT_FILE : limit;
+        const startLine =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: offset 0 is valid and should be preserved
+          offset || 0;
+        const effectiveLimit = limit ?? DEFAULT_MAX_LINES_TEXT_FILE;
         // Ensure endLine does not exceed originalLineCount
         const endLine = Math.min(startLine + effectiveLimit, originalLineCount);
         // Ensure selectedLines doesn't try to slice beyond array bounds if startLine is too high

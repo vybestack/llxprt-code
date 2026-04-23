@@ -120,7 +120,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
 
     // Resolve search path
     const targetDir = this.config.getTargetDir();
-    let searchPath = this.params.path || target || targetDir;
+    let searchPath = this.params.path ?? target ?? targetDir;
     if (!path.isAbsolute(searchPath)) {
       searchPath = path.resolve(targetDir, searchPath);
     }

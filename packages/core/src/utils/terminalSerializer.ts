@@ -116,6 +116,7 @@ class Cell {
   }
 
   getChars(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from getChars() should become space
     return this.cell?.getChars() || ' ';
   }
 
@@ -157,7 +158,7 @@ export function serializeTerminalToObject(terminal: Terminal): AnsiOutput {
 
     for (let x = 0; x < terminal.cols; x++) {
       const cellData = line.getCell(x);
-      const cell = new Cell(cellData || null, x, y, cursorX, cursorY);
+      const cell = new Cell(cellData ?? null, x, y, cursorX, cursorY);
 
       if (x > 0 && !cell.equals(lastCell)) {
         if (currentText) {

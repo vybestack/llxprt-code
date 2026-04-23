@@ -449,7 +449,7 @@ export async function retryWithBackoff<T>(
 
         logger.debug(
           () =>
-            `[issue1029] onPersistent429 callback returned: ${failoverResult === null ? 'null (no handler)' : failoverResult}`,
+            `[issue1029] onPersistent429 callback returned: ${failoverResult ?? 'null (no handler)'}`,
         );
 
         if (failoverResult === true || typeof failoverResult === 'string') {
@@ -591,7 +591,7 @@ export function isOverloadError(error: unknown): boolean {
       error?: { type?: string; message?: string };
       type?: string;
     };
-    const errorType = errorObj.error?.type || errorObj.type;
+    const errorType = errorObj.error?.type ?? errorObj.type;
     return errorType === 'overloaded_error' || errorType === 'rate_limit_error';
   }
   return false;

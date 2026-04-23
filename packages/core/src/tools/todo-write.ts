@@ -127,7 +127,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const todos = result.data;
 
     // Get session and agent IDs from context
-    const sessionId = this.context?.sessionId || 'default';
+    const sessionId = this.context?.sessionId ?? 'default';
     const agentId = this.context?.agentId;
 
     const store = new TodoStore(sessionId, agentId);
@@ -151,7 +151,9 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     }
 
     // Determine if we're in interactive mode
-    const isInteractive = this.context?.interactiveMode || false;
+    const isInteractive =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: false is a valid value for interactiveMode, must default to false
+      this.context?.interactiveMode || false;
 
     // Set active todo ID if there's an in_progress todo
     if (isInteractive) {
