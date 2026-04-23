@@ -36,11 +36,11 @@ export function useWorkspaceMigration(settings: LoadedSettings) {
 
   const onWorkspaceMigrationDialogOpen = useCallback(() => {
     const userSettings = settings.forScope(SettingScope.User);
-    const extensionSettings = userSettings.settings.extensions || {
+    const extensionSettings = userSettings.settings.extensions ?? {
       disabled: [],
     };
     const workspacesWithMigrationNudge =
-      extensionSettings.workspacesWithMigrationNudge || [];
+      extensionSettings.workspacesWithMigrationNudge ?? [];
 
     const cwd = process.cwd();
     if (!workspacesWithMigrationNudge.includes(cwd)) {

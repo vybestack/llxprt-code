@@ -124,6 +124,7 @@ async function fetchApiKeyProviderQuota(
           }
         ).providerConfig;
         if (providerConfig) {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
           const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
           if (configBaseUrl) {
             provider = detectApiKeyProvider(configBaseUrl);
@@ -145,6 +146,7 @@ async function fetchApiKeyProviderQuota(
           ).baseProviderConfig;
           if (baseProviderConfig) {
             const baseConfigUrl =
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
               baseProviderConfig['base-url']?.trim() || undefined;
             if (baseConfigUrl) {
               provider = detectApiKeyProvider(baseConfigUrl);

@@ -427,7 +427,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   // Calculate max model ID length from filtered models
   const maxModelIdLen = useMemo(() => {
     if (filteredModels.length === 0) return 20;
-    return Math.max(...filteredModels.map((m) => (m.modelId || m.id).length));
+    return Math.max(...filteredModels.map((m) => (m.modelId ?? m.id).length));
   }, [filteredModels]);
 
   // Model ID column: use actual max length, but cap at available space
@@ -472,6 +472,7 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
       : SemanticColors.text.primary;
 
     // Use modelId if hydrated, otherwise use id
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string modelId fallback to id
     const displayId = model.modelId || model.id;
 
     return (

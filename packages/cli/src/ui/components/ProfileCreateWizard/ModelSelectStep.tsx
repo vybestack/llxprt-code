@@ -137,7 +137,7 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       ]
     : [];
 
-  const selectedModel = state.config.model || undefined;
+  const selectedModel = state.config.model ?? undefined;
   const initialIndex =
     selectedModel && hasKnownModels
       ? models.findIndex((m) => m === selectedModel)
@@ -170,7 +170,7 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       <Text color={Colors.Gray}>
         {focusedComponent === 'input'
           ? "Enter the model name exactly as it appears in your provider's documentation"
-          : `Choose the AI model for ${providerOption?.label || state.config.provider}`}
+          : `Choose the AI model for ${providerOption?.label ?? state.config.provider}`}
       </Text>
       <Text color={Colors.Foreground}> </Text>
 

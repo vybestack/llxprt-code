@@ -152,6 +152,7 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
       .map((line) => line.content)
       .join('\n');
     // Attempt to infer language from filename, default to plain text if no filename
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string extension fallback to null
     const fileExtension = filename?.split('.').pop() || null;
     const language = fileExtension
       ? getLanguageFromExtension(fileExtension)
@@ -209,6 +210,7 @@ const renderDiffContent = (
   );
   const gutterWidth = Math.max(1, maxLineNumber.toString().length);
 
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string extension fallback to null
   const fileExtension = filename?.split('.').pop() || null;
   const language = fileExtension
     ? getLanguageFromExtension(fileExtension)

@@ -57,7 +57,7 @@ export class ShellProcessor implements IPromptProcessor {
   constructor(private readonly commandName: string) {}
 
   async process(prompt: string, context: CommandContext): Promise<string> {
-    const userArgsRaw = context.invocation?.args || '';
+    const userArgsRaw = context.invocation?.args ?? '';
 
     if (!prompt.includes(SHELL_INJECTION_TRIGGER)) {
       return prompt.replaceAll(SHORTHAND_ARGS_PLACEHOLDER, userArgsRaw);
@@ -105,7 +105,7 @@ export class ShellProcessor implements IPromptProcessor {
       if (!allAllowed) {
         if (isHardDenial) {
           throw new Error(
-            `Blocked command: "${command}". Reason: ${blockReason || 'Blocked by configuration.'}`,
+            `Blocked command: "${command}". Reason: ${blockReason ?? 'Blocked by configuration.'}`,
           );
         }
 

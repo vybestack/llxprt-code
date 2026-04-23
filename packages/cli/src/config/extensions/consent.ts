@@ -299,7 +299,7 @@ async function extensionConsentString(
 ): Promise<string> {
   const sanitizedConfig = escapeAnsiCtrlCodes(extensionConfig);
   const output: string[] = [];
-  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers || {});
+  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers ?? {});
   output.push(`Installing extension "${sanitizedConfig.name}".`);
   output.push(INSTALL_WARNING_MESSAGE);
 
@@ -309,7 +309,7 @@ async function extensionConsentString(
       const isLocal = !!mcpServer.command;
       const source =
         mcpServer.httpUrl ??
-        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
+        `${mcpServer.command ?? ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }

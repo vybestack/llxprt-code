@@ -127,7 +127,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       const currentProviderName = status.providerName ?? undefined;
 
       const previousProvider =
-        forcePreviousProvider || sessionState.lastProvider;
+        forcePreviousProvider ?? sessionState.lastProvider;
       const providerChanged =
         currentProviderName && currentProviderName !== previousProvider;
       const paymentModeChanged =
@@ -199,6 +199,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         settings.merged,
         config.getExtensions(),
         config.getFolderTrust(),
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string memory import format
         settings.merged.ui.memoryImportFormat || 'tree',
         config.getFileFilteringOptions(),
       );

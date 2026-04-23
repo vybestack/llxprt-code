@@ -66,12 +66,8 @@ export class GitStatsTracker {
     }
 
     // Handle null/undefined content gracefully
-    if (oldContent === null || oldContent === undefined) {
-      oldContent = '';
-    }
-    if (newContent === null || newContent === undefined) {
-      newContent = '';
-    }
+    oldContent ??= '';
+    newContent ??= '';
 
     // Handle invalid file paths gracefully
     if (!filePath || typeof filePath !== 'string') {

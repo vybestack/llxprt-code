@@ -166,7 +166,7 @@ export const useSlashCommandProcessor = (
 
   const logger = useMemo(() => {
     const l = new Logger(
-      config?.getSessionId() || '',
+      config?.getSessionId() ?? '',
       config?.storage ?? new Storage(process.cwd()),
     );
     // The logger's initialize is async, but we can create the instance
@@ -680,7 +680,7 @@ export const useSlashCommandProcessor = (
                           part !== null &&
                           'text' in part
                         ) {
-                          return (part as { text?: string }).text || '';
+                          return (part as { text?: string }).text ?? '';
                         }
                         return '';
                       })

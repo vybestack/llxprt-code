@@ -40,8 +40,8 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   const effectiveCoreCount = coreMemoryFileCount ?? 0;
   const { columns: terminalWidth } = useTerminalSize();
   const isNarrow = isNarrowWidth(terminalWidth);
-  const mcpServerCount = Object.keys(mcpServers || {}).length;
-  const blockedMcpServerCount = blockedMcpServers?.length || 0;
+  const mcpServerCount = Object.keys(mcpServers ?? {}).length;
+  const blockedMcpServerCount = blockedMcpServers?.length ?? 0;
   const openFileCount = ideContext?.workspaceState?.openFiles?.length ?? 0;
 
   if (

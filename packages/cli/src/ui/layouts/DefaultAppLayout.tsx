@@ -532,6 +532,7 @@ export const DefaultAppLayout = ({
                 showErrorDetails={showErrorDetails}
                 showMemoryUsage={
                   config.getDebugMode() ||
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flags (false is a valid default)
                   settings.merged.ui.showMemoryUsage ||
                   false
                 }
@@ -700,6 +701,7 @@ export const DefaultAppLayout = ({
               showErrorDetails={showErrorDetails}
               showMemoryUsage={
                 config.getDebugMode() ||
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flags (false is a valid default)
                 settings.merged.ui.showMemoryUsage ||
                 false
               }

@@ -115,8 +115,8 @@ export const useThemeCommand = (
       try {
         // Merge user and workspace custom themes (workspace takes precedence)
         const mergedCustomThemes = {
-          ...(loadedSettings.user.settings.ui?.customThemes || {}),
-          ...(loadedSettings.workspace.settings.ui?.customThemes || {}),
+          ...(loadedSettings.user.settings.ui?.customThemes ?? {}),
+          ...(loadedSettings.workspace.settings.ui?.customThemes ?? {}),
         };
         // Only allow selecting themes available in the merged custom themes or built-in themes
         const isBuiltIn = themeManager.findThemeByName(themeName);

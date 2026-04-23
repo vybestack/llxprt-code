@@ -64,7 +64,7 @@ export class FileCommandLoader implements ICommandLoader {
   constructor(private readonly config: Config | null) {
     this.folderTrustEnabled = !!config?.getFolderTrust();
     this.isTrustedFolder = !!config?.isTrustedFolder();
-    this.projectRoot = config?.getProjectRoot() || process.cwd();
+    this.projectRoot = config?.getProjectRoot() ?? process.cwd();
   }
 
   /**
@@ -225,6 +225,7 @@ export class FileCommandLoader implements ICommandLoader {
 
     // Add extension name tag for extension commands
     const defaultDescription = `Custom command from ${path.basename(filePath)}`;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string description sentinel
     let description = validDef.description || defaultDescription;
     if (extensionName) {
       description = `[${extensionName}] ${description}`;

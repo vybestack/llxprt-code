@@ -180,6 +180,7 @@ function handleDisplayKeys(
     const newValue = !display.showToolDescriptions;
     display.setShowToolDescriptions(newValue);
     const mcpServers = mcp.getMcpServers();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing to handle undefined/null server objects
     if (Object.keys(mcpServers || {}).length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       display.handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
@@ -234,6 +235,7 @@ function handleIdeAndShellKeys(
       'Ctrl+F: activeShellPtyId=%s, lastActivePtyId=%s, will toggle=%s',
       shell.activeShellPtyId,
       lastPtyId,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for PTY ID (0 means no active PTY)
       !!(shell.activeShellPtyId || lastPtyId),
     );
     if (shell.activeShellPtyId || lastPtyId) {

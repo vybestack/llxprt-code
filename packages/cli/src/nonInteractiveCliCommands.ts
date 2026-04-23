@@ -53,7 +53,7 @@ export const handleSlashCommand = async (
     if (commandToExecute.action) {
       // Not used by custom commands but may be in the future.
       const sessionStats: SessionStatsState = {
-        sessionId: config?.getSessionId() || 'unknown',
+        sessionId: config?.getSessionId() ?? 'unknown',
         sessionStartTime: new Date(),
         metrics: uiTelemetryService.getMetrics(),
         lastPromptTokenCount: 0,
@@ -62,7 +62,7 @@ export const handleSlashCommand = async (
       };
 
       const loggerStorage = config?.storage ?? new Storage(process.cwd());
-      const logger = new Logger(config?.getSessionId() || '', loggerStorage);
+      const logger = new Logger(config?.getSessionId() ?? '', loggerStorage);
 
       const context: CommandContext = {
         services: {

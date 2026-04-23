@@ -409,7 +409,7 @@ function handleDeleteWordLeftAction(state: TextBufferState): TextBufferState {
   if (newCursorCol > 0) {
     const lineContent = lines[cursorRow] ?? '';
     const prevWordStart = findPrevWordStartInLine(lineContent, newCursorCol);
-    const start = prevWordStart === null ? 0 : prevWordStart;
+    const start = prevWordStart ?? 0;
     newLines[newCursorRow] =
       cpSlice(lineContent, 0, start) + cpSlice(lineContent, newCursorCol);
     newCursorCol = start;
@@ -448,7 +448,7 @@ function handleDeleteWordRightAction(state: TextBufferState): TextBufferState {
     newLines.splice(cursorRow + 1, 1);
   } else {
     const nextWordStart = findNextWordStartInLine(lineContent, cursorCol);
-    const end = nextWordStart === null ? lineLen : nextWordStart;
+    const end = nextWordStart ?? lineLen;
     newLines[cursorRow] =
       cpSlice(lineContent, 0, cursorCol) + cpSlice(lineContent, end);
   }

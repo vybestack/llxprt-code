@@ -156,12 +156,12 @@ export async function applyProfileToRuntime(
     );
   } else if (
     loadedProfile &&
-    (profileToLoad || bootstrapArgs.profileJson !== null) &&
+    (profileToLoad ?? bootstrapArgs.profileJson !== null) &&
     argv.provider === undefined
   ) {
     // @plan:PLAN-20251118-ISSUE533.P13 - Apply inline or file-based profile
     const snapshotResult = await applyProfileSnapshot(loadedProfile, {
-      profileName: profileToLoad || 'inline-profile',
+      profileName: profileToLoad ?? 'inline-profile',
     });
 
     ({
@@ -179,7 +179,7 @@ export async function applyProfileToRuntime(
     }
     logger.debug(
       () =>
-        `[bootstrap] Applied profile '${profileToLoad || 'inline'}' -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,
+        `[bootstrap] Applied profile '${profileToLoad ?? 'inline'}' -> provider=${resolvedProviderAfterProfile}, model=${resolvedModelAfterProfile}, baseUrl=${resolvedBaseUrlAfterProfile ?? 'default'}`,
     );
   } else if (profileToLoad && argv.provider !== undefined) {
     logger.debug(

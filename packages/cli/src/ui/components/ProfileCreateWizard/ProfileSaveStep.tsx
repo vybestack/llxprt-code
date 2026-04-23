@@ -42,6 +42,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
   >('input');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [profileNameInput, setProfileNameInput] = useState(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string profile name
     state.profileName || '',
   );
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -152,6 +153,7 @@ export const ProfileSaveStep: React.FC<ProfileSaveStepProps> = ({
             setValidationError('Profile name already exists');
             setFocusedComponent('conflict');
           } else {
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string error fallback
             setSaveError(result.error || 'Failed to save profile');
             setFocusedComponent('input');
           }
