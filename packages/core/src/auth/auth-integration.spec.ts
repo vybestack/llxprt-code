@@ -540,7 +540,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         async () => mockOAuthManager.getToken('qwen', qwenMetadata), // OAuth only
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
-        async () => process.env.OPENAI_API_KEY || null, // Env var only
+        async () => process.env.OPENAI_API_KEY ?? null, // Env var only
       );
 
       // When: Both providers resolve authentication

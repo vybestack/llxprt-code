@@ -47,7 +47,7 @@ vi.mock('../utils/generateContentResponseUtilities', () => ({
     resp.candidates?.[0]?.content?.parts
       ?.filter((part) => !(part as { thought?: boolean }).thought)
       .map((part) => part.text)
-      .join('') || undefined,
+      .join('') ?? undefined,
   getFunctionCalls: (resp: GenerateContentResponse) => resp.functionCalls ?? [],
 }));
 

@@ -35,7 +35,7 @@ class TestTokenStore extends BaseTokenStore {
 
   async getToken(serverName: string): Promise<MCPOAuthCredentials | null> {
     this.validateServerName(serverName);
-    return this.tokens.get(serverName) || null;
+    return this.tokens.get(serverName) ?? null;
   }
 
   async removeToken(serverName: string): Promise<void> {

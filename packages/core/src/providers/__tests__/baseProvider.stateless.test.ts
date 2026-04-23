@@ -358,11 +358,7 @@ describe('BaseProvider stateless contract', () => {
     expect(baselineSnapshots).not.toHaveLength(0);
 
     const baselineTokens = Array.from(
-      new Set(
-        baselineSnapshots.map((snapshot) =>
-          snapshot.authToken === undefined ? '' : snapshot.authToken,
-        ),
-      ),
+      new Set(baselineSnapshots.map((snapshot) => snapshot.authToken ?? '')),
     ).sort();
 
     expect(baselineTokens).toStrictEqual(['']);

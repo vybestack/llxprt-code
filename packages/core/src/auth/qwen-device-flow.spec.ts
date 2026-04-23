@@ -299,7 +299,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
           });
           req.on('end', () => {
             const params = new URLSearchParams(body);
-            storedChallenge = params.get('code_challenge') || undefined;
+            storedChallenge = params.get('code_challenge') ?? undefined;
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(

@@ -51,7 +51,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       if (format === 'anthropic') {
         return tools.map((tool) => ({
           name: tool.function.name,
-          description: tool.function.description || '',
+          description: tool.function.description ?? '',
           input_schema: {
             type: 'object',
             ...tool.function.parameters,
@@ -89,11 +89,11 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
           for (const func of group.functionDeclarations) {
             tools.push({
               name: func.name,
-              description: func.description || '',
+              description: func.description ?? '',
               input_schema: {
                 type: 'object',
-                properties: func.parametersJsonSchema?.properties || {},
-                required: func.parametersJsonSchema?.required || [],
+                properties: func.parametersJsonSchema?.properties ?? {},
+                required: func.parametersJsonSchema?.required ?? [],
               },
             });
           }
@@ -111,11 +111,11 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
             for (const func of group.functionDeclarations) {
               tools.push({
                 name: func.name,
-                description: func.description || '',
+                description: func.description ?? '',
                 input_schema: {
                   type: 'object',
-                  properties: func.parametersJsonSchema?.properties || {},
-                  required: func.parametersJsonSchema?.required || [],
+                  properties: func.parametersJsonSchema?.properties ?? {},
+                  required: func.parametersJsonSchema?.required ?? [],
                 },
               });
             }
@@ -133,7 +133,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
               type: 'function',
               function: {
                 name: func.name,
-                description: func.description || '',
+                description: func.description ?? '',
                 parameters: func.parametersJsonSchema,
               },
             });
@@ -246,9 +246,7 @@ describe('AnthropicProvider', () => {
     provider = result.provider;
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings(provider.name),

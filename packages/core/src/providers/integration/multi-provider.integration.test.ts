@@ -37,8 +37,8 @@ describe('Multi-Provider Integration Tests', () => {
     }
 
     // Only load OpenAI API key from environment variable
-    apiKey = process.env.OPENAI_API_KEY || null;
-    baseURL = process.env.OPENAI_BASE_URL || undefined;
+    apiKey = process.env.OPENAI_API_KEY ?? null;
+    baseURL = process.env.OPENAI_BASE_URL ?? undefined;
 
     if (!apiKey) {
       console.log(

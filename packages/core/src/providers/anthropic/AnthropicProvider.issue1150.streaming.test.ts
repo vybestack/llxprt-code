@@ -106,9 +106,7 @@ describe('AnthropicProvider Issue #1150: Streaming Thinking Block Consolidation'
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    if (!runtimeContext.config) {
-      runtimeContext.config = createRuntimeConfigStub(settingsService);
-    }
+    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
 
     runtimeContext.config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),

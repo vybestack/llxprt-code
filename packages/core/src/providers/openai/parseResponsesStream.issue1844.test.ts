@@ -53,6 +53,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
 
     // Find the usage/terminal message
     const terminalMessage = messages.find(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean OR for truthy check (usage OR stopReason present)
       (m) => m.metadata?.usage || m.metadata?.stopReason,
     );
     expect(terminalMessage).toBeDefined();
@@ -85,6 +86,7 @@ describe('issue #1844 – parseResponsesStream terminal metadata', () => {
     }
 
     const terminalMessage = messages.find(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean OR for truthy check (usage OR stopReason present)
       (m) => m.metadata?.usage || m.metadata?.stopReason,
     );
     expect(terminalMessage).toBeDefined();

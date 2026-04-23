@@ -316,6 +316,7 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
       chunks.forEach((chunk) => {
         const result = filter.filterStreamChunk(chunk);
         expect(result.filtered).toBeDefined();
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: accumulate empty string result from filter
         fullResult += result.filtered || '';
         detectedEmojis = detectedEmojis || result.emojiDetected;
       });

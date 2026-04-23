@@ -56,7 +56,7 @@ const createMockResponse = (options: {
     headers: {
       get: (name: string) => {
         if (name.toLowerCase() === 'content-type') {
-          return options.contentType || null;
+          return options.contentType ?? null;
         }
         return null;
       },

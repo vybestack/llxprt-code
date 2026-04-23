@@ -142,7 +142,7 @@ vi.mock('../utils/getFolderStructure', () => ({
 vi.mock('../utils/errorReporting', () => ({ reportError: vi.fn() }));
 vi.mock('../utils/generateContentResponseUtilities', () => ({
   getResponseText: (result: GenerateContentResponse) =>
-    result.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ||
+    result.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ??
     undefined,
 }));
 vi.mock('../telemetry/index.js', () => ({
