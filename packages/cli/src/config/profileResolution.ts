@@ -190,6 +190,7 @@ async function applyFileProfile(
     );
 
     const tempDebugMode =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean flag should fall through when false
       argv.debug ||
       [process.env.DEBUG, process.env.DEBUG_MODE].some(
         (v) => v === 'true' || v === '1',

@@ -328,7 +328,7 @@ export function detectTerminalBackgroundColor(): Promise<string | undefined> {
         /\x1b\]11;rgb:([0-9a-f]{4})\/([0-9a-f]{4})\/([0-9a-f]{4})\x07/i,
       );
 
-      const match = matchST || matchBEL;
+      const match = matchST ?? matchBEL;
       if (match) {
         // Convert 16-bit RGB components to 8-bit hex
         // Take first 2 hex digits of each 4-digit component (high byte)

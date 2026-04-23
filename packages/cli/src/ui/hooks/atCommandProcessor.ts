@@ -638,7 +638,7 @@ export async function handleAtCommand({
               }
             }
 
-            displayPath = displayPath || filePathSpecInContent;
+            displayPath = displayPath || filePathSpecInContent; // eslint-disable-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty displayPath should fall back to filePathSpecInContent
 
             processedQueryParts.push({
               text: `\nContent from @${displayPath}:\n`,

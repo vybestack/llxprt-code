@@ -255,12 +255,10 @@ async function runExternalEditor(params: {
     }
   }
 
-  if (!command) {
-    command =
-      process.env['VISUAL'] ??
-      process.env['EDITOR'] ??
-      (process.platform === 'win32' ? 'notepad' : 'vi');
-  }
+  command ??=
+    process.env['VISUAL'] ??
+    process.env['EDITOR'] ??
+    (process.platform === 'win32' ? 'notepad' : 'vi');
 
   dispatch({ type: 'create_undo_snapshot' });
 

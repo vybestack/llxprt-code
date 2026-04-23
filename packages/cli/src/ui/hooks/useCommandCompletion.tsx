@@ -168,7 +168,7 @@ export function useCommandCompletion(
 
   useAtCompletion({
     enabled: completionMode === CompletionMode.AT,
-    pattern: query || '',
+    pattern: query ?? '',
     config,
     cwd,
     setSuggestions,

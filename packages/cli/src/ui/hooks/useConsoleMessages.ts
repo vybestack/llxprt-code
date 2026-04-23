@@ -84,11 +84,9 @@ export function useConsoleMessages(): UseConsoleMessagesReturn {
   const handleNewMessage = useCallback(
     (message: ConsoleMessageItem) => {
       messageQueueRef.current.push(message);
-      if (!timeoutRef.current) {
-        // Batch updates using a timeout. 16ms is a reasonable delay to batch
-        // rapid-fire messages without noticeable lag.
-        timeoutRef.current = setTimeout(processQueue, 16);
-      }
+      // Batch updates using a timeout. 16ms is a reasonable delay to batch
+      // rapid-fire messages without noticeable lag.
+      timeoutRef.current ??= setTimeout(processQueue, 16);
     },
     [processQueue],
   );

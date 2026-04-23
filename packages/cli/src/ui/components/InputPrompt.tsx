@@ -869,7 +869,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     const remainingWidth = Math.max(0, inputWidth - usedWidth);
 
     const ghostTextLinesRaw = ghostSuffix.split('\n');
-    const firstLineRaw = ghostTextLinesRaw.shift() || '';
+    const firstLineRaw = ghostTextLinesRaw.shift() ?? '';
 
     let inlineGhost = '';
     let remainingFirstLine = '';

@@ -274,7 +274,7 @@ const saveCommand: SlashCommand = {
           ' already exists. Do you want to overwrite it?',
         ),
         originalInvocation: {
-          raw: invocation?.raw || '',
+          raw: invocation?.raw ?? '',
         },
       };
     }

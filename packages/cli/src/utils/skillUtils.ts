@@ -34,6 +34,7 @@ export function renderSkillActionFeedback(
 
   if (status === 'error') {
     return (
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty error message should fall back to generic message
       error ||
       `An error occurred while attempting to ${action} skill "${skillName}".`
     );

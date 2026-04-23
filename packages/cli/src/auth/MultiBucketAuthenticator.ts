@@ -173,9 +173,7 @@ export class MultiBucketAuthenticator {
           error: errorMessage,
         });
         failedBuckets.push(bucket);
-        if (!firstError) {
-          firstError = errorMessage;
-        }
+        firstError ??= errorMessage;
       }
     }
 

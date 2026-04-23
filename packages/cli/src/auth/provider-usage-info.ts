@@ -250,7 +250,7 @@ export async function getHigherPriorityAuth(
   }
 
   if (providerName === 'qwen') {
-    const baseUrls = merged.providerBaseUrls || {};
+    const baseUrls = merged.providerBaseUrls ?? {};
     const openaiBaseUrl = baseUrls['openai'];
     if (openaiBaseUrl && !isQwenCompatibleUrl(openaiBaseUrl)) {
       return 'OpenAI BaseURL Mismatch';

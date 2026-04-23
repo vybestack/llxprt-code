@@ -221,10 +221,9 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
           // Token exists and is not expired — failure isn't credential-related
           reason = 'skipped';
         }
-      } else if (reason === null) {
-        // No token in store (REQ-1598-CL03)
-        reason = 'no-token';
       }
+      // No token in store (REQ-1598-CL03)
+      reason ??= 'no-token';
     }
 
     // Record reason and mark bucket as tried (REQ-1598-FL12)

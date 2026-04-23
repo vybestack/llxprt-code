@@ -22,9 +22,7 @@ export class PersistentState {
   private filePath: string | null = null;
 
   private getPath(): string {
-    if (!this.filePath) {
-      this.filePath = path.join(Storage.getGlobalLlxprtDir(), STATE_FILENAME);
-    }
+    this.filePath ??= path.join(Storage.getGlobalLlxprtDir(), STATE_FILENAME);
     return this.filePath;
   }
 

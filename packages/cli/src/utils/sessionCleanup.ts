@@ -346,6 +346,7 @@ function validateRetentionConfig(
     }
 
     // Enforce minimum retention period
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string minRetention should fall back to default
     const minRetention = retentionConfig.minRetention || DEFAULT_MIN_RETENTION;
     let minRetentionMs: number;
     try {

@@ -82,9 +82,7 @@ export async function createToolCheckpoint(
     );
   }
 
-  if (!commitHash) {
-    commitHash = (await gitService.getCurrentCommitHash()) ?? undefined;
-  }
+  commitHash ??= (await gitService.getCurrentCommitHash()) ?? undefined;
 
   if (!commitHash) {
     onDebugMessage(

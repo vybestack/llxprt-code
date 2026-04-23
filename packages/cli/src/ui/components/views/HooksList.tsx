@@ -53,6 +53,7 @@ export const HooksList: React.FC<HooksListProps> = ({ hooks }) => {
           <Box flexDirection="column" paddingLeft={2}>
             {entries.map((entry, index) => {
               const commandName =
+                // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty name/command should fall back to next option
                 entry.config.name ||
                 entry.config.command ||
                 `${entry.config.type} hook`;

@@ -367,6 +367,7 @@ export const DialogManager = ({
   }
   if (uiState.isOAuthCodeDialogOpen) {
     const provider =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should fall back to 'unknown'
       (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
       'unknown';
     return (

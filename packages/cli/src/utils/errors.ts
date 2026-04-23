@@ -103,7 +103,7 @@ export function handleToolError(
   errorType?: string,
   resultDisplay?: string,
 ): void {
-  const errorMessage = `Error executing tool ${toolName}: ${resultDisplay || toolError.message}`;
+  const errorMessage = `Error executing tool ${toolName}: ${resultDisplay ?? toolError.message}`;
 
   const isFatal = isFatalToolError(errorType);
 

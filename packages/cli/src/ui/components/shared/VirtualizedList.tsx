@@ -167,9 +167,7 @@ function VirtualizedList<T>(
       if (itemRef) {
         const height = Math.round(measureElement(itemRef).height);
         if (height !== heights[i]) {
-          if (!newHeights) {
-            newHeights = [...heights];
-          }
+          newHeights ??= [...heights];
           newHeights[i] = height;
         }
       }

@@ -486,9 +486,7 @@ export const useGeminiStream = (
       const abortSignal = abortControllerRef.current.signal;
       turnCancelledRef.current = false;
 
-      if (!prompt_id) {
-        prompt_id = config.getSessionId() + '########' + getPromptCount();
-      }
+      prompt_id ??= config.getSessionId() + '########' + getPromptCount();
 
       const trimmedStr = typeof query === 'string' ? query.trim() : '';
 

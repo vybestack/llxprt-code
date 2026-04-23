@@ -39,6 +39,7 @@ export function computeTerminalTitle({
   const MAX_LEN = 80;
 
   // Use CLI_TITLE env var if available, otherwise use the provided folder name
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty CLI_TITLE should fall back to folderName
   let displayContext = process.env['CLI_TITLE'] || folderName;
 
   if (!useDynamicTitle) {

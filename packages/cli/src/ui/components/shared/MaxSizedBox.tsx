@@ -107,7 +107,7 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
   additionalHiddenLinesCount = 0,
 }) => {
   const id = useId();
-  const { addOverflowingId, removeOverflowingId } = useOverflowActions() || {};
+  const { addOverflowingId, removeOverflowingId } = useOverflowActions() ?? {};
 
   const laidOutStyledText: StyledText[][] = [];
   const targetMaxHeight = Math.max(

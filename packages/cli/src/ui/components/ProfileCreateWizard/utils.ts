@@ -91,6 +91,7 @@ export function buildProfileJSON(state: WizardState): Record<string, unknown> {
   } else if (state.config.auth.type === 'oauth') {
     profile.auth = {
       type: 'oauth',
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty buckets array should fall back to ['default']
       buckets: state.config.auth.buckets || ['default'],
     };
   }

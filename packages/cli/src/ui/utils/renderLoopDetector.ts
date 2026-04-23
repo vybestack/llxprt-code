@@ -51,7 +51,7 @@ export function useRenderLoopDetector(
     renderTimesRef.current.push(now);
 
     // Update global tracking
-    const info = renderCounts.get(componentName) || {
+    const info = renderCounts.get(componentName) ?? {
       count: 0,
       lastRenderTime: now,
       renderTimes: [],

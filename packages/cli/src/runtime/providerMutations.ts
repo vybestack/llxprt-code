@@ -405,7 +405,7 @@ export async function setActiveModel(
     activeProvider.name,
   );
   const previousModel =
-    (providerSettings.model as string | undefined) || config.getModel();
+    (providerSettings.model as string | undefined) ?? config.getModel();
 
   const authRefreshed = false;
   try {

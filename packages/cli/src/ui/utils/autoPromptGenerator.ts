@@ -100,7 +100,7 @@ export async function generateAutoPrompt(
     cleanupDetached?.dispose?.();
   }
 
-  const text = response.text || '';
+  const text = response.text ?? '';
   if (text.trim() === '') {
     throw new Error(
       'Model returned empty response. Try manual mode or rephrase your description.',

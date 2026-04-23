@@ -40,7 +40,8 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     isShellFocusHint;
   const primaryText = isActionRequired
     ? currentLoadingPhrase
-    : thought?.subject || currentLoadingPhrase;
+    : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty subject should fall back to loading phrase
+      thought?.subject || currentLoadingPhrase;
 
   const timerText =
     streamingState === StreamingState.WaitingForConfirmation

@@ -21,7 +21,7 @@ import { PromptService, debugLogger } from '@vybestack/llxprt-code-core';
 async function getInitCommandPrompt(): Promise<string> {
   try {
     const baseDir =
-      process.env.LLXPRT_PROMPTS_DIR ||
+      process.env.LLXPRT_PROMPTS_DIR ??
       path.join(os.homedir(), '.llxprt', 'prompts');
     const promptService = new PromptService({
       baseDir,

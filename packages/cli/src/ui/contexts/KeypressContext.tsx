@@ -607,7 +607,7 @@ function* emitKeys(
       charLengthAt(sequence, 0) === sequence.length
     ) {
       keypressHandler({
-        name: name || '',
+        name: name ?? '',
         shift,
         meta,
         ctrl,

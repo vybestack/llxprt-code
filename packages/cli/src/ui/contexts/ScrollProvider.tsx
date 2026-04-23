@@ -148,7 +148,7 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
       for (const candidate of candidates) {
         const { scrollTop, scrollHeight, innerHeight } =
           candidate.getScrollState();
-        const pendingDelta = pendingScrollsRef.current.get(candidate.id) || 0;
+        const pendingDelta = pendingScrollsRef.current.get(candidate.id) ?? 0;
         const effectiveScrollTop = scrollTop + pendingDelta;
 
         const canScrollUp = effectiveScrollTop > 0.001;

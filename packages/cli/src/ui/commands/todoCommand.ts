@@ -72,7 +72,7 @@ export function parsePosition(pos: string, todos: Todo[]): ParsedPosition {
       // Line 57: INSERT at parent.subtasks.length
       return {
         parentIndex,
-        subtaskIndex: parent.subtasks?.length || 0,
+        subtaskIndex: parent.subtasks?.length ?? 0,
         isLast: true,
       };
     }

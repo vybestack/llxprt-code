@@ -224,7 +224,7 @@ export function parseX11MouseEvent(
 export function parseMouseEvent(
   buffer: string,
 ): { event: MouseEvent; length: number } | null {
-  return parseSGRMouseEvent(buffer) || parseX11MouseEvent(buffer);
+  return parseSGRMouseEvent(buffer) ?? parseX11MouseEvent(buffer);
 }
 
 export function isIncompleteMouseSequence(buffer: string): boolean {

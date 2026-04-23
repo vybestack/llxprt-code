@@ -60,9 +60,7 @@ export class TerminalCapabilityManager {
   private constructor() {}
 
   static getInstance(): TerminalCapabilityManager {
-    if (!this.instance) {
-      this.instance = new TerminalCapabilityManager();
-    }
+    this.instance ??= new TerminalCapabilityManager();
     return this.instance;
   }
 

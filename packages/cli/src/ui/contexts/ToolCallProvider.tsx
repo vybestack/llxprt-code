@@ -35,7 +35,7 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
 
   // Get executing tool calls for a specific todo
   const getExecutingToolCalls = useCallback(
-    (todoId: string): TodoToolCall[] => executingToolCalls.get(todoId) || [],
+    (todoId: string): TodoToolCall[] => executingToolCalls.get(todoId) ?? [],
     [executingToolCalls],
   );
 

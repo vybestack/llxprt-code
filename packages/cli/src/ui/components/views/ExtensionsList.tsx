@@ -36,7 +36,7 @@ export const ExtensionsList: React.FC<ExtensionsListProps> = ({
           const activeColor = isActive ? Colors.AccentGreen : Colors.DimComment;
 
           let stateColor: string = Colors.DimComment;
-          const stateText = state || 'unknown state';
+          const stateText = state ?? 'unknown state';
 
           switch (state) {
             case ExtensionUpdateState.CHECKING_FOR_UPDATES:

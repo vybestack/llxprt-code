@@ -20,6 +20,7 @@
 export function resolveEnvVarsInString(value: string): string {
   const envVarRegex = /\$(?:(\w+)|{([^}]+)})/g; // Find $VAR_NAME or ${VAR_NAME}
   return value.replace(envVarRegex, (match, varName1, varName2) => {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: regex capture groups, one may be empty string
     const varName = varName1 || varName2;
     if (process?.env && typeof process.env[varName] === 'string') {
       return process.env[varName];

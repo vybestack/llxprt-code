@@ -71,7 +71,7 @@ export function saveSingleSetting(
     loadedSettings.forScope(scope).settings[parentKey];
 
   // Create a deep copy of the parent object to modify
-  const newParentObject = JSON.parse(JSON.stringify(currentParentObject || {}));
+  const newParentObject = JSON.parse(JSON.stringify(currentParentObject ?? {}));
 
   // Use the copied setNestedValue helper to update the specific nested key
   setNestedValue(newParentObject, pathParts.slice(1), value);

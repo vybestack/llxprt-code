@@ -200,6 +200,7 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
       mainContent = formatContent(entry.response, contentWidth);
     } else if (entry.type === 'tool_call') {
       // Format tool call content
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty tool name should fall back to 'Unknown tool'
       let toolContent = `${entry.tool || 'Unknown tool'}`;
       if (entry.duration) {
         toolContent += ` (${entry.duration}ms)`;

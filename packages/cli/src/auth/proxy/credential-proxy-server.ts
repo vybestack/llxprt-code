@@ -894,6 +894,7 @@ export class CredentialProxyServer {
     } catch (error: unknown) {
       // Handle provider-specific polling responses
       const err = error as Error & { code?: string; newInterval?: number };
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string code should fall back to message
       const errorCode = err.code || err.message;
 
       switch (errorCode) {

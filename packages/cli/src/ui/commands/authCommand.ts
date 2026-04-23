@@ -189,6 +189,7 @@ export class AuthCommandExecutor {
     args?: string,
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string fallback for undefined/whitespace args
     const trimmedArgs = args?.trim() || '';
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
     const provider = parts[0];

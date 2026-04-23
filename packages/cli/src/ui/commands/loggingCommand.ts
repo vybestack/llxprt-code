@@ -483,7 +483,7 @@ const showCommand: SlashCommand = {
     } else if (result.type === 'dialog') {
       // Format the log entries as text for now until dialog system is implemented
       const entries =
-        (result.dialogData as { entries?: unknown[] })?.entries || [];
+        (result.dialogData as { entries?: unknown[] })?.entries ?? [];
       if (entries.length === 0) {
         context.ui.addItem(
           {
