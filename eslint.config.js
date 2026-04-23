@@ -223,7 +223,7 @@ export default tseslint.config(
         { considerDefaultExhaustiveForUnions: true },
       ],
       '@typescript-eslint/no-unnecessary-condition': 'warn',
-      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
       '@typescript-eslint/prefer-optional-chain': 'error',
 
       // General code quality
@@ -512,18 +512,6 @@ export default tseslint.config(
 
     },
   },
-  // ============================================================================
-  // Issue #1569: Batch BN4B - prefer-nullish-coalescing enforcement
-  // ============================================================================
-  // Promote this rule from warn to error for the specific batch scope.
-  {
-    files: ['packages/a2a-server/src/config/config.ts'],
-    rules: {
-      '@typescript-eslint/prefer-nullish-coalescing': 'error',
-    },
-  },
-  // ============================================================================
-  // End Issue #1569 BN4B
   // ============================================================================
   // Issue #1569: Batch BN4C - no-unnecessary-condition enforcement
   // ============================================================================
