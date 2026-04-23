@@ -1466,7 +1466,7 @@ export function getCompletionOptions(): ReadonlyArray<{
   options?: ReadonlyArray<{ value: string; description?: string }>;
 }> {
   return SETTINGS_REGISTRY.filter(
-    (s) => s.completionOptions || s.enumValues,
+    (s) => s.completionOptions ?? s.enumValues,
   ).map((s) => ({
     key: s.key,
     options: s.completionOptions ?? s.enumValues?.map((v) => ({ value: v })),

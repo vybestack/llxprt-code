@@ -369,6 +369,7 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
 
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: status_code is number | string | undefined, 0 is not a valid HTTP status
     body: `API response from ${event.model}. Status: ${event.status_code || 'N/A'}. Duration: ${event.duration_ms}ms.`,
     attributes,
   };

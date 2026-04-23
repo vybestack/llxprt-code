@@ -198,6 +198,7 @@ class DirectWebFetchToolInvocation extends BaseToolInvocation<
       }
 
       const content = new TextDecoder().decode(arrayBuffer);
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: content-type header may be empty string
       const contentType = response.headers.get('content-type') || '';
 
       let output = content;

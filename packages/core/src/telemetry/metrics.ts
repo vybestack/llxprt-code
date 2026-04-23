@@ -49,9 +49,7 @@ function getCommonAttributes(config: SessionConfig): Attributes {
 }
 
 export function getMeter(): Meter | undefined {
-  if (!cliMeter) {
-    cliMeter = metrics.getMeter(SERVICE_NAME);
-  }
+  cliMeter ??= metrics.getMeter(SERVICE_NAME);
   return cliMeter;
 }
 

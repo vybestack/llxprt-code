@@ -246,8 +246,7 @@ export class ASTEditToolInvocation
                   return [
                     `- ${relPath}:`,
                     ...file.declarations.map(
-                      (d) =>
-                        `  - ${d.type}: ${d.name}${d.signature ? d.signature : ''}`,
+                      (d) => `  - ${d.type}: ${d.name}${d.signature ?? ''}`,
                     ),
                   ];
                 })

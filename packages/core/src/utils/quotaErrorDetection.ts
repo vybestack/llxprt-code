@@ -76,6 +76,7 @@ export function isProQuotaExceededError(error: unknown): boolean {
         const errorData = gaxiosError.response.data as {
           error?: { message?: string };
         };
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: error message may be empty string, should still check
         return checkMessage(errorData.error?.message || '');
       }
     }

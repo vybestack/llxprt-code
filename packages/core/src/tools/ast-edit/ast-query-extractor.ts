@@ -22,6 +22,7 @@ export class ASTQueryExtractor {
     filePath: string,
     content: string,
   ): Promise<EnhancedDeclaration[]> {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: file extension may be empty string, should fall through to empty
     const extension = (filePath.split('.').pop() || '').toLowerCase();
     const lang = LANGUAGE_MAP[extension];
     if (!lang) {

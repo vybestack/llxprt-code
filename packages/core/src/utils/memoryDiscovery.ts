@@ -612,6 +612,7 @@ export async function loadServerHierarchicalMemory(
     debugMode,
     fileService,
     folderTrust,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: FileFilteringOptions default object when undefined
     fileFilteringOptions || DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
     maxDirs,
     maxDepth,

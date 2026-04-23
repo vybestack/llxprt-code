@@ -264,6 +264,7 @@ export class SessionPersistenceService {
    */
   private createdAt: string | null = null;
   private getCreatedAt(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: string | null type, falsy pattern guards both null and empty string
     if (!this.createdAt) {
       this.createdAt = new Date().toISOString();
     }

@@ -87,6 +87,7 @@ class GrepToolInvocation extends BaseToolInvocation<
     try {
       const workspaceContext = this.config.getWorkspaceContext();
       const resolved = this.resolveTarget(this.params.path);
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: path param may be empty string, display '.' instead
       const searchDirDisplay = this.params.path || '.';
 
       if (resolved.kind === 'file') {

@@ -270,6 +270,7 @@ export class McpClientManager {
     }
 
     const servers = populateMcpServerCommand(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default empty object for undefined McpServers
       this.cliConfig.getMcpServers() || {},
       this.cliConfig.getMcpServerCommand(),
     );
