@@ -840,7 +840,7 @@ export function validateName(name: string): void {
 function extensionConsentString(extensionConfig: ExtensionConfig): string {
   const sanitizedConfig = escapeAnsiCtrlCodes(extensionConfig);
   const output: string[] = [];
-  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers || {});
+  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers ?? {});
   output.push(`Installing extension "${sanitizedConfig.name}".`);
   output.push(
     '**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**',
@@ -852,6 +852,7 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
       const isLocal = !!mcpServer.command;
       const source =
         mcpServer.httpUrl ??
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string fallback for command display
         `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }

@@ -76,8 +76,8 @@ export function ThemeDialog({
   // Generate theme items filtered by selected scope
   const customThemes =
     selectedScope === SettingScope.User
-      ? settings.user.settings.ui?.customThemes || {}
-      : settings.merged.ui.customThemes || {};
+      ? (settings.user.settings.ui?.customThemes ?? {})
+      : (settings.merged.ui.customThemes ?? {});
   const builtInThemes = themeManager
     .getAvailableThemes()
     .filter((theme) => theme.type !== 'custom');
@@ -263,7 +263,7 @@ export function ThemeDialog({
 
   const previewTheme = useMemo(
     () =>
-      themeManager.getTheme(highlightedThemeName || DEFAULT_THEME.name) ||
+      themeManager.getTheme(highlightedThemeName ?? DEFAULT_THEME.name) ??
       DEFAULT_THEME,
     [highlightedThemeName],
   );

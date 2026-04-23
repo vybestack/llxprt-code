@@ -53,7 +53,7 @@ function renderHastNode(
 
     // Determine the color to pass down: Use this element's specific color
     // if found; otherwise, continue passing down the already inherited color.
-    const colorToPassDown = elementColor || inheritedColor;
+    const colorToPassDown = elementColor ?? inheritedColor;
 
     // Recursively render children, passing the determined color down
     // Ensure child type matches expected HAST structure (ElementContent is common)
@@ -119,7 +119,7 @@ export function colorizeLine(
   theme?: Theme,
   overrideColor?: string,
 ): React.ReactNode {
-  const activeTheme = theme || themeManager.getActiveTheme();
+  const activeTheme = theme ?? themeManager.getActiveTheme();
   if (overrideColor) {
     // If there's an override color, we create a simple Text component
     // instead of going through syntax highlighting
@@ -147,7 +147,7 @@ export function colorizeCode(
   hideLineNumbers?: boolean,
 ): React.ReactNode {
   const codeToHighlight = code.replace(/\n$/, '');
-  const activeTheme = theme || themeManager.getActiveTheme();
+  const activeTheme = theme ?? themeManager.getActiveTheme();
   const showLineNumbers = hideLineNumbers
     ? false
     : (settings?.merged.ui?.showLineNumbers ?? true);

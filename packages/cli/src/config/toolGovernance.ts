@@ -117,11 +117,11 @@ export function mergeExcludeTools(
   extraExcludes?: string[] | undefined,
 ): string[] {
   const allExcludeTools = new Set([
-    ...(settings.excludeTools || []),
-    ...(extraExcludes || []),
+    ...(settings.excludeTools ?? []),
+    ...(extraExcludes ?? []),
   ]);
   for (const extension of extensions) {
-    for (const tool of extension.excludeTools || []) {
+    for (const tool of extension.excludeTools ?? []) {
       allExcludeTools.add(tool);
     }
   }

@@ -17,6 +17,7 @@ import type { LoadedSettings } from './config/settings.js';
  * Check if any authentication environment variables are set.
  */
 function hasAuthEnvVars(): boolean {
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: checking for presence of any auth env var (empty string means not set) */
   return !!(
     process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
@@ -25,6 +26,7 @@ function hasAuthEnvVars(): boolean {
     process.env.GEMINI_API_KEY ||
     process.env.LLXPRT_API_KEY
   );
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 }
 
 function reportNonInteractiveAuthError(config: Config, message: string): void {

@@ -155,7 +155,9 @@ function mapParsedArgsToCliArgs(result: Record<string, unknown>): CliArgs {
     sandboxProfileLoad: result['sandboxProfileLoad'] as string | undefined,
     debug: result['debug'] as boolean | undefined,
     prompt:
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to queryFromPromptWords
       (result['prompt'] as string | undefined) ||
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to undefined
       queryFromPromptWords ||
       undefined,
     promptInteractive: result['promptInteractive'] as string | undefined,

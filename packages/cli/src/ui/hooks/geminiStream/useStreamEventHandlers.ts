@@ -147,8 +147,8 @@ function applyThoughtToState(
       )?.profileName;
       const pn = liveProfileName ?? ep;
       return {
-        type: (item?.type as 'gemini' | 'gemini_content') || 'gemini',
-        text: item?.text || '',
+        type: (item?.type as 'gemini' | 'gemini_content') ?? 'gemini',
+        text: item?.text ?? '',
         ...(pn != null ? { profileName: pn } : {}),
         thinkingBlocks: [...thinkingBlocksRef.current],
       };
@@ -634,6 +634,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
               addItem(
                 {
                   type: MessageType.INFO,
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
                   text: `Execution stopped by hook: ${event.systemMessage?.trim() || event.reason}`,
                 },
                 userMessageTimestamp,
@@ -652,6 +653,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
               addItem(
                 {
                   type: MessageType.INFO,
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty system message should fall back to reason
                   text: `Execution blocked by hook: ${event.systemMessage?.trim() || event.reason}`,
                 },
                 userMessageTimestamp,

@@ -40,14 +40,15 @@ export class McpPromptLoader implements ICommandLoader {
     if (!this.config) {
       return Promise.resolve([]);
     }
-    const mcpServers = this.config.getMcpServers() || {};
+    const mcpServers = this.config.getMcpServers() ?? {};
     for (const serverName in mcpServers) {
-      const prompts = getMCPServerPrompts(this.config, serverName) || [];
+      const prompts = getMCPServerPrompts(this.config, serverName) ?? [];
       for (const prompt of prompts) {
         // Sanitize prompt names to ensure they are valid slash commands (e.g. "Prompt Name" -> "Prompt-Name")
         const commandName = `${prompt.name}`.trim().replace(/\s+/g, '-');
         const newPromptCommand: SlashCommand = {
           name: commandName,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string description should use generated default
           description: prompt.description || `Invoke prompt ${prompt.name}`,
           kind: CommandKind.MCP_PROMPT,
           autoExecute: !prompt.arguments || prompt.arguments.length === 0,
@@ -109,7 +110,7 @@ export class McpPromptLoader implements ICommandLoader {
             }
 
             try {
-              const mcpServers = this.config.getMcpServers() || {};
+              const mcpServers = this.config.getMcpServers() ?? {};
               const mcpServerConfig = mcpServers[serverName];
               if (!mcpServerConfig) {
                 return {

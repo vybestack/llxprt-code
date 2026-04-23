@@ -117,10 +117,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
         // Try to load from new location first
         let savedToken = await this.tokenStore!.getToken('gemini');
 
-        if (!savedToken) {
-          // Try to migrate from legacy locations
-          savedToken = await this.migrateFromLegacyTokens();
-        }
+        // Try to migrate from legacy locations
+        savedToken ??= await this.migrateFromLegacyTokens();
 
         if (savedToken) {
           this.currentToken = savedToken;
@@ -381,12 +379,14 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
     const token: OAuthToken = {
       access_token: creds.access_token,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       refresh_token: creds.refresh_token || undefined,
       // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
       expiry: creds.expiry_date
         ? Math.floor(creds.expiry_date / 1000)
         : Math.floor(Date.now() / 1000) + 3600,
       token_type: 'Bearer' as const,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalize null/undefined/empty-string to undefined
       scope: creds.scope || undefined,
     };
 

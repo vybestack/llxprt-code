@@ -276,6 +276,7 @@ export class GeminiAgent {
           );
           this.logger.debug(
             () =>
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty/null provider name should show 'none'
               `Active provider name: ${providerManager?.getActiveProviderName?.() || 'none'}`,
           );
         } else {
@@ -359,8 +360,8 @@ export class GeminiAgent {
               }
 
               const mergedModelParams = {
-                ...(configWithProfile._profileModelParams || {}),
-                ...(configWithProfile._cliModelParams || {}),
+                ...(configWithProfile._profileModelParams ?? {}),
+                ...(configWithProfile._cliModelParams ?? {}),
               };
               const existingParams = getActiveModelParams();
 
@@ -656,9 +657,7 @@ export class Session {
         };
 
         const scheduleBatchFlush = () => {
-          if (batchTimer === null) {
-            batchTimer = setTimeout(flushBatch, BATCH_INTERVAL_MS);
-          }
+          batchTimer ??= setTimeout(flushBatch, BATCH_INTERVAL_MS);
         };
 
         for await (const resp of responseStream) {
@@ -1398,7 +1397,7 @@ export class Session {
         });
 
         const result = await invocation.execute(abortSignal);
-        const content = toToolCallContent(result) || {
+        const content = toToolCallContent(result) ?? {
           type: 'content',
           content: {
             type: 'text',

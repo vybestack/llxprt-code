@@ -196,7 +196,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
 
     const deviceCodeUrl =
-      deviceCodeResponse.verification_uri_complete ||
+      deviceCodeResponse.verification_uri_complete ??
       `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
     const callbackUrl = localCallback
       ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
@@ -228,7 +228,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     if (interactive) {
       debugLogger.log('Opening browser for authentication...');
-      const browserUrl = callbackUrl || deviceCodeUrl;
+      const browserUrl = callbackUrl ?? deviceCodeUrl;
       try {
         await openBrowserSecurely(browserUrl);
       } catch (error) {

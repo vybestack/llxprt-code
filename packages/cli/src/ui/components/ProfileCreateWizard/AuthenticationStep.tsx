@@ -118,6 +118,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
         if (authMethod === 'keyfile') {
           const validation = await validateKeyFile(authInput);
           if (!validation.valid) {
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
             setValidationError(validation.error || 'Invalid file path');
             return;
           }
@@ -205,11 +206,13 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
       <Text color={Colors.Gray}>
         {focusedComponent === 'input'
           ? authMethod === 'apikey'
-            ? `Enter your ${providerOption?.label || state.config.provider} API key:`
+            ? // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string label should fall back to provider name
+              `Enter your ${providerOption?.label || state.config.provider} API key:`
             : authMethod === 'keyfile'
               ? 'Enter the path to your API key file:'
               : 'OAuth authentication will be set up when you load this profile'
-          : `Choose how to authenticate with ${providerOption?.label || state.config.provider}`}
+          : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string label should fall back to provider name
+            `Choose how to authenticate with ${providerOption?.label || state.config.provider}`}
       </Text>
       <Text color={Colors.Foreground}> </Text>
 

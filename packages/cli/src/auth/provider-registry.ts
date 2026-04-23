@@ -110,7 +110,7 @@ export class ProviderRegistry {
     if (this.settings) {
       // Check settings if available
       const oauthEnabledProviders =
-        this.settings.merged.oauthEnabledProviders || {};
+        this.settings.merged.oauthEnabledProviders ?? {};
       return oauthEnabledProviders[providerName] ?? false;
     }
 
@@ -130,7 +130,7 @@ export class ProviderRegistry {
 
     if (this.settings) {
       const oauthEnabledProviders = {
-        ...(this.settings.merged.oauthEnabledProviders || {}),
+        ...(this.settings.merged.oauthEnabledProviders ?? {}),
       };
       oauthEnabledProviders[providerName] = enabled;
       this.settings.setValue(

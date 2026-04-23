@@ -67,7 +67,7 @@ export async function cloneFromGit(
       );
     }
 
-    const refToFetch = installMetadata.ref || 'HEAD';
+    const refToFetch = installMetadata.ref ?? 'HEAD';
 
     await git.fetch(remotes[0].name, refToFetch);
 
@@ -262,7 +262,7 @@ export async function checkForExtensionUpdate(
       }
 
       // Determine the ref to check on the remote.
-      const refToCheck = installMetadata.ref || 'HEAD';
+      const refToCheck = installMetadata.ref ?? 'HEAD';
 
       const lsRemoteOutput = await git.listRemote([remoteUrl, refToCheck]);
 
@@ -356,9 +356,7 @@ export async function downloadFromGitHubRelease(
         `No assets found for release with tag ${releaseData.tag_name}`,
       );
     }
-    if (!fileName) {
-      fileName = path.basename(new URL(archiveUrl).pathname);
-    }
+    fileName ??= path.basename(new URL(archiveUrl).pathname);
     let downloadedAssetPath = path.join(destination, fileName);
     if (isTar && !downloadedAssetPath.endsWith('.tar.gz')) {
       downloadedAssetPath += '.tar.gz';

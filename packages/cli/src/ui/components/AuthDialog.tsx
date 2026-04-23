@@ -26,12 +26,13 @@ export function AuthDialog({
 }: AuthDialogProps): React.JSX.Element {
   const runtime = useRuntimeApi();
   const [errorMessage, setErrorMessage] = useState<string | null>(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error message should be treated as null
     initialErrorMessage || null,
   );
 
   // Track enabled providers from settings (oauthEnabledProviders is an object)
   const [enabledProviders, setEnabledProviders] = useState<Set<string>>(() => {
-    const oauthProviders = settings.merged.oauthEnabledProviders || {};
+    const oauthProviders = settings.merged.oauthEnabledProviders ?? {};
     const enabled = new Set<string>();
     for (const [provider, isEnabled] of Object.entries(oauthProviders)) {
       if (isEnabled) {
@@ -43,7 +44,7 @@ export function AuthDialog({
 
   // Update enabledProviders state when settings change
   React.useEffect(() => {
-    const oauthProviders = settings.merged.oauthEnabledProviders || {};
+    const oauthProviders = settings.merged.oauthEnabledProviders ?? {};
     const enabled = new Set<string>();
     for (const [provider, isEnabled] of Object.entries(oauthProviders)) {
       if (isEnabled) {

@@ -127,6 +127,7 @@ async function handleSaveAlias(
       : undefined;
 
   const resolvedBaseUrl =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: filter out 'none' and empty string
     (configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined) ||
     getProviderBaseUrl(unwrappedProvider);
 
@@ -140,6 +141,7 @@ async function handleSaveAlias(
   }
 
   const defaultModel =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: chain model getters where empty string should continue to next fallback
     unwrappedProvider.getCurrentModel?.() ||
     unwrappedProvider.getDefaultModel?.() ||
     '';
@@ -221,6 +223,7 @@ export const providerCommand: SlashCommand = {
         };
       }
 
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: null and empty string should both fall back to 'none'
       const fromProvider = currentProvider || 'none';
 
       let switchResult;

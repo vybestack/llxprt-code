@@ -68,6 +68,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
       if (value === 'defaults') {
         // Use provider defaults
         const defaults =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider name should use default key
           PARAMETER_DEFAULTS[state.config.provider || ''] ||
           PARAMETER_DEFAULTS.anthropic;
         onUpdateParams(defaults);
@@ -122,6 +123,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
     // Validate the field
     const validation = PARAM_VALIDATORS[currentField](numValue);
     if (!validation.valid) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message
       setValidationError(validation.error || 'Invalid value');
       return;
     }
@@ -145,6 +147,7 @@ export const AdvancedParamsStep: React.FC<AdvancedParamsStepProps> = ({
   }, [fieldInput, currentField, customParams, onUpdateParams, onContinue]);
 
   const providerDefaults =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider name should use default key
     PARAMETER_DEFAULTS[state.config.provider || ''] ||
     PARAMETER_DEFAULTS.anthropic;
 

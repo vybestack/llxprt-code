@@ -72,7 +72,7 @@ function resolveTrustAndIdeContext(
   const debugMode = isDebugMode(argv);
 
   const memoryImportFormat =
-    profileMergedSettings.ui?.memoryImportFormat || 'tree';
+    profileMergedSettings.ui?.memoryImportFormat ?? 'tree';
 
   let ideMode: boolean;
   if (argv.ideMode === 'enable') {
@@ -142,8 +142,8 @@ function resolveIncludeDirectories(
   'includeDirectories' | 'resolvedLoadMemoryFromIncludeDirectories'
 > {
   const includeDirectoriesFromSettings =
-    profileMergedSettings.includeDirectories || [];
-  const includeDirectoriesFromCli = argv.includeDirectories || [];
+    profileMergedSettings.includeDirectories ?? [];
+  const includeDirectoriesFromCli = argv.includeDirectories ?? [];
   const includeDirectories = includeDirectoriesFromSettings
     .map(resolvePath)
     .concat(includeDirectoriesFromCli.map(resolvePath));
