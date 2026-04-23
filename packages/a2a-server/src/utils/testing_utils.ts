@@ -228,7 +228,7 @@ export function createMockConfig(
             toolCalls: [],
             getPreferredEditor: callbacks.getPreferredEditor ?? vi.fn(),
             config: mockConfig,
-            toolRegistry: mockConfig?.getToolRegistry?.() || {
+            toolRegistry: mockConfig?.getToolRegistry?.() ?? {
               getTool: vi.fn(),
             },
           } as unknown as CoreToolScheduler;

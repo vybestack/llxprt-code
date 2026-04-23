@@ -149,7 +149,7 @@ export class IDEServer {
       );
 
       app.use((req, res, next) => {
-        const host = req.headers.host || '';
+        const host = req.headers.host ?? '';
         const allowedHosts = [
           `localhost:${this.port}`,
           `127.0.0.1:${this.port}`,

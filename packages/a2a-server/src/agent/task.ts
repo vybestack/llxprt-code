@@ -122,8 +122,9 @@ export class Task {
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
       provider: this.config.getProvider() ?? 'gemini',
-      // getModel() returns string (non-null), so no nullish coalescing needed
-      model: this.config.getModel() || contentConfig?.model || 'gemini-pro',
+      // getModel() returns string (non-null), but ?? is safer and consistent
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive nullish coalescing for future-proofing
+      model: this.config.getModel() ?? contentConfig?.model ?? 'gemini-pro',
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });
@@ -153,7 +154,7 @@ export class Task {
   // state managed within the @gemini-cli/core module.
   async getMetadata(): Promise<TaskMetadata> {
     const toolRegistry = this.config.getToolRegistry();
-    const mcpServers = this.config.getMcpServers() || {};
+    const mcpServers = this.config.getMcpServers() ?? {};
     const serverStatuses = getAllMCPServerStatuses();
     const servers = Object.keys(mcpServers).map((serverName) => ({
       name: serverName,
@@ -176,8 +177,8 @@ export class Task {
       contextId: this.contextId,
       taskState: this.taskState,
       model:
-        this.modelInfo?.model ||
-        this.config.getContentGeneratorConfig()?.model ||
+        this.modelInfo?.model ??
+        this.config.getContentGeneratorConfig()?.model ??
         'unknown',
       mcpServers: servers,
       availableTools,
@@ -259,7 +260,7 @@ export class Task {
       traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
-      model: this.modelInfo?.model || this.config.getModel(),
+      model: this.modelInfo?.model ?? this.config.getModel(),
       userTier: this.geminiClient.getUserTier(),
     };
 
@@ -278,7 +279,7 @@ export class Task {
       status: {
         state: stateToReport,
         message, // Shorthand property
-        timestamp: timestamp || new Date().toISOString(),
+        timestamp: timestamp ?? new Date().toISOString(),
       },
       final,
       metadata,

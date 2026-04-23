@@ -134,7 +134,7 @@ export async function createApp() {
         const agentSettings = req.body.agentSettings as
           | AgentSettings
           | undefined;
-        const contextId = req.body.contextId || uuidv4();
+        const contextId = req.body.contextId ?? uuidv4();
         const wrapper = await agentExecutor.createTask(
           taskId,
           contextId,
@@ -327,6 +327,7 @@ export async function createApp() {
 export async function main() {
   try {
     const expressApp = await createApp();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var default
     const port = process.env['CODER_AGENT_PORT'] || 0;
 
     const server = expressApp.listen(port, () => {

@@ -281,7 +281,7 @@ export class GCSTaskStore implements TaskStore {
 
       return {
         id: taskId,
-        contextId: loadedMetadata._contextId || uuidv4(),
+        contextId: loadedMetadata._contextId ?? uuidv4(),
         kind: 'task',
         status: {
           state: persistedState._taskState,

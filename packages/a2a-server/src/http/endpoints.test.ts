@@ -35,7 +35,7 @@ vi.mock('../config/config.js', () => ({
   loadEnvironment: vi.fn(),
   setTargetDir: vi
     .fn()
-    .mockImplementation((settings) => settings?.workspacePath || process.cwd()),
+    .mockImplementation((settings) => settings?.workspacePath ?? process.cwd()),
 }));
 
 // Mock Task.create to avoid its complex setup
