@@ -97,12 +97,15 @@ function buildToolGovernance(
 
   return {
     allowed: new Set(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original tool name
       (allowedRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
     ),
     disabled: new Set(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original tool name
       (disabledRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
     ),
     excluded: new Set(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original tool name
       excludedRaw.map((tool) => normalizeToolName(tool) || tool),
     ),
   };
@@ -112,6 +115,7 @@ function isToolPermitted(
   toolName: string,
   governance: ToolGovernance,
 ): boolean {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: normalizeToolName returns string, empty string should fall through to original toolName
   const canonical = normalizeToolName(toolName) || toolName;
   if (governance.excluded.has(canonical)) {
     return false;

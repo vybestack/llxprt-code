@@ -215,9 +215,11 @@ class MemoryToolInvocation extends BaseToolInvocation<
   }
 
   getMemoryFilePath(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: scope is optional string, empty string should fall through to default
     const scope = this.params.scope || 'project';
     switch (scope) {
       case 'core.project':
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workingDir is optional string, empty string should fall through to cwd
         return getProjectCoreMemoryFilePath(this.workingDir || process.cwd());
       case 'core.global':
         return getGlobalCoreMemoryFilePath();
@@ -445,10 +447,12 @@ export class MemoryTool
 
   getModifyContext(_abortSignal: AbortSignal): ModifyContext<SaveMemoryParams> {
     const resolvePath = (scope?: MemoryScope): string => {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: scope is optional string, empty string should fall through to default
       const resolvedScope = scope || 'project';
       switch (resolvedScope) {
         case 'core.project':
           return getProjectCoreMemoryFilePath(
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getWorkingDir returns string | undefined, empty string should fall through to cwd
             this.config?.getWorkingDir() || process.cwd(),
           );
         case 'core.global':

@@ -179,6 +179,7 @@ export class AnthropicProvider extends BaseProvider {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy check: empty string authToken should also trigger fallback
     if (!authToken) {
       authToken = await this.getAuthTokenForPrompt();
     }
@@ -537,6 +538,7 @@ export class AnthropicProvider extends BaseProvider {
 
     // Build custom headers
     const customHeaders = buildAnthropicCustomHeaders({
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getCustomHeaders returns Record<string, string> | undefined, empty object should fall through
       baseHeaders: this.getCustomHeaders() || {},
       isOAuth,
       wantCaching: requestContext.wantCaching,
@@ -578,9 +580,11 @@ export class AnthropicProvider extends BaseProvider {
       | DumpMode
       | undefined;
     const baseURL =
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, baseURL is optional string */
       options.resolved.baseURL ||
       this.getBaseURL() ||
       'https://api.anthropic.com';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     const { response, rateLimitInfo } = await executeAnthropicApiCall({
       apiCallFn: apiCallWithResponse,

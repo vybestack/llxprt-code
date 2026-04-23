@@ -221,14 +221,16 @@ function tryMultipleParsingStrategies(
 
   // Strategy 2: Detect and repair double escaping (existing logic, no format dependency)
   const detection = detectDoubleEscaping(parametersString);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: format is optional string, empty string should fall through to 'auto'
+  const formatLabel = format || 'auto';
   if (detection.correctedValue !== undefined) {
     if (detection.isDoubleEscaped) {
       logger.error(
         () =>
-          `[${format || 'auto'}] Fixed double-escaped parameters for ${toolName}`,
+          `[${formatLabel}] Fixed double-escaped parameters for ${toolName}`,
         {
           tool: toolName,
-          format: format || 'auto',
+          format: formatLabel,
           originalLength: parametersString.length,
           fixed: true,
         },
@@ -245,10 +247,10 @@ function tryMultipleParsingStrategies(
   // Strategy 3: Return original string (last resort)
   if (detection.detectionDetails.error) {
     logger.error(
-      () => `[${format || 'auto'}] Failed to parse parameters for ${toolName}`,
+      () => `[${formatLabel}] Failed to parse parameters for ${toolName}`,
       {
         tool: toolName,
-        format: format || 'auto',
+        format: formatLabel,
         error: detection.detectionDetails.error,
       },
     );

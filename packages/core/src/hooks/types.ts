@@ -23,7 +23,7 @@ import type { ConfigSource } from './hookRegistry.js';
  * Used for deduplication and trust tracking
  */
 export function getHookKey(hook: HookConfig): string {
-  const name = hook.name || '';
+  const name = hook.name ?? '';
   const command = hook.command || '';
   return `${name}:${command}`;
 }
@@ -173,6 +173,7 @@ export class DefaultHookOutput implements HookOutput {
    * Prioritizes stopReason over reason per upstream 05049b5a
    */
   getEffectiveReason(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, strings have fallthrough intent
     return this.stopReason || this.reason || 'No reason provided';
   }
 
@@ -367,7 +368,7 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
           defaultHookTranslator.fromHookToolConfig(hookToolConfig);
         return {
           ...target,
-          tools: target.tools || [],
+          tools: target.tools ?? [],
           toolConfig: {
             ...sdkToolConfig,
             // Also expose allowedFunctionNames directly for easier access

@@ -112,7 +112,9 @@ export class ToolCallPipeline {
           const mockValidatedCall = {
             index: candidate.index,
             id: candidate.id,
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: name is optional string, empty string should fall through
             name: candidate.name || '',
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: args is optional string, empty string should fall through
             args: candidate.args || '',
             isValid: true,
             validationErrors: [],
@@ -173,13 +175,16 @@ export class ToolCallPipeline {
   normalizeToolName(name: string, args?: string): string {
     const mockValidatedCall = {
       index: 0,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: name is string, empty string should fall through
       name: name || '',
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: args is optional string, empty string should fall through
       args: args || '',
       isValid: true,
       validationErrors: [],
     };
 
     const normalized = this.normalizer.normalize(mockValidatedCall);
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, strings have fallthrough intent
     return normalized?.name || name || '';
   }
 

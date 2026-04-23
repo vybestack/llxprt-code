@@ -192,6 +192,7 @@ export class HookCallEvent {
     this['event.name'] = 'hook_call';
     this['event.timestamp'] = new Date().toISOString();
     this.hook_event_name = eventName;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: multi-line || chain with terminator, command/name are strings with fallthrough intent
     this.hook_name = result.hookConfig.command || result.hookConfig.name || '';
     this.hook_input = input;
     this.hook_output =
@@ -497,10 +498,13 @@ export class EnhancedConversationResponseEvent extends ConversationResponseEvent
       tool_calls,
     );
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default array shape pattern
     this.tool_calls_detailed = tool_calls || [];
     this.performance_metrics =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default object shape pattern
       performance_metrics || this.createDefaultMetrics(provider_name);
     this.provider_context =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: default object shape pattern
       provider_context || this.createDefaultContext(provider_name);
   }
 

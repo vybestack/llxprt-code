@@ -131,6 +131,7 @@ class GrepToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: dir_path and path are optional strings, empty string should fall through
     return this.params.dir_path || this.params.path;
   }
 
@@ -178,6 +179,7 @@ class GrepToolInvocation extends BaseToolInvocation<
       const workspaceContext = this.config.getWorkspaceContext();
       const dirPath = this.getDirPath();
       const resolved = this.resolveTarget(dirPath);
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: dirPath is optional string, empty string should fall through
       const searchDirDisplay = dirPath || '.';
 
       // Get limits from parameters or ephemeral settings
@@ -864,6 +866,7 @@ File: ${resolved.basename}
         'GrepLogic: Falling back to JavaScript grep implementation.',
       );
       strategyUsed = 'javascript fallback';
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: include is optional string, empty string should fall through to default glob
       const globPattern = include ? include : '**/*';
       const ignorePatterns = this.fileExclusions.getGlobExcludes();
 
@@ -1023,6 +1026,7 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
       return `Invalid regular expression pattern provided: ${params.pattern}. Error: ${getErrorMessage(error)}`;
     }
 
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: dir_path and path are optional strings, empty string should fall through
     const dirPath = params.dir_path || params.path;
     if (dirPath) {
       try {

@@ -358,8 +358,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       : customFetch;
 
     return createOpenAI({
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: authToken may be null/empty string, should fall through to undefined
       apiKey: authToken || undefined,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: baseURL may be empty string, should fall through to undefined
       baseURL: baseURL || undefined,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: headers may be empty object, should fall through to undefined
       headers: headers || undefined,
       fetch: fetchWithCompatibility,
     });
@@ -1588,8 +1591,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
   override getDefaultModel(): string {
     if (isQwenBaseURL(this.getBaseURL())) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var is string | undefined, empty string should fall through
       return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
     }
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: env var is string | undefined, empty string should fall through
     return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-4o';
   }
 

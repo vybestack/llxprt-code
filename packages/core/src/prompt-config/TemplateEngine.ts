@@ -169,6 +169,7 @@ export class TemplateEngine {
       }
 
       const workspaceName =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceName is optional string, empty string should fall through to basename
         context.environment.workspaceName ||
         (context.environment.workingDirectory
           ? path.basename(context.environment.workingDirectory)
@@ -180,8 +181,10 @@ export class TemplateEngine {
       }
 
       const workspaceRoot =
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceRoot is optional string, empty string should fall through */
         context.environment.workspaceRoot ||
         context.environment.workingDirectory;
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       if (workspaceRoot) {
         variables['WORKSPACE_ROOT'] = workspaceRoot;
       } else {
@@ -189,10 +192,12 @@ export class TemplateEngine {
       }
 
       const workspaceDirectories =
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: workspaceDirectories is optional string[], empty array should fall through */
         context.environment.workspaceDirectories ||
         (context.environment.workingDirectory
           ? [context.environment.workingDirectory]
           : []);
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       if (workspaceDirectories.length > 0) {
         variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
       } else {
@@ -273,7 +278,9 @@ export class TemplateEngine {
 
     // Add interaction mode variables
     const interactionMode =
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: interactionMode is optional string, empty string should fall through to default */
       context.environment?.interactionMode || 'interactive';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     variables['INTERACTION_MODE'] = interactionMode;
 
     // Add interaction mode label

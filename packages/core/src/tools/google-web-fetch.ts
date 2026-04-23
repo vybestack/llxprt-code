@@ -172,6 +172,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         );
       }
       const rawContent = await response.text();
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: get() returns string | null, empty string should fall through
       const contentType = response.headers.get('content-type') || '';
       let textContent: string;
 
@@ -350,6 +351,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       );
 
       let responseText =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getResponseText returns string | null | undefined, empty string should fall through
         getResponseText(response as GenerateContentResponse) || '';
       const typedResponse = response as GenerateContentResponse;
       const urlContextMeta = typedResponse.candidates?.[0]?.urlContextMetadata;
@@ -403,7 +405,9 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
       const sourceListFormatted: string[] = [];
       if (sources && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: title is optional string, empty string should fall through
           const title = source.web?.title || 'Untitled';
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: uri is optional string, empty string should fall through
           const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });

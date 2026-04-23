@@ -297,7 +297,7 @@ function blocksToText(blocks: ContentBlock[]): string {
     if (block.type === 'text') {
       combined += block.text;
     } else if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       combined += `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`;
     }
   }
@@ -508,7 +508,7 @@ function concatenateTextAndCodeBlocks(blocks: ContentBlock[]): string {
     if (block.type === 'text' && block.text) {
       segments.push(block.text);
     } else if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       segments.push(`\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`);
     }
   }
@@ -530,7 +530,7 @@ function convertHumanMessageWithMedia(
     if (block.type === 'text' && block.text) {
       parts.push({ type: 'text', text: block.text });
     } else if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       parts.push({
         type: 'text',
         text: `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`,
@@ -684,7 +684,7 @@ function buildAIMessageContent(
     }
 
     if (block.type === 'code') {
-      const language = block.language ? block.language : '';
+      const language = block.language ?? '';
       const codeText = `\n\n\`\`\`${language}\n${block.code}\n\`\`\`\n`;
       contentArray.push({ type: 'text', text: codeText });
       continue;
