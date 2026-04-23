@@ -38,12 +38,15 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
 
   logger.debug(
     () =>
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to 'undefined' display
       `setupUser: starting setup, GOOGLE_CLOUD_PROJECT=${process.env.GOOGLE_CLOUD_PROJECT || 'undefined'}`,
   );
   const projectId =
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env vars should fall through to undefined */
     process.env['GOOGLE_CLOUD_PROJECT'] ||
     process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
     undefined;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
   const caServer = new CodeAssistServer(client, projectId, {}, undefined);
   const coreClientMetadata: ClientMetadata = {
@@ -145,6 +148,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
 }
 
 function getOnboardTier(res: LoadCodeAssistResponse): GeminiUserTier {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined allowedTiers should default to empty array
   for (const tier of res.allowedTiers || []) {
     if (tier.isDefault) {
       return tier;

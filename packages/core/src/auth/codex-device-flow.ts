@@ -187,6 +187,7 @@ export class CodexDeviceFlow {
 
     // Build validated Codex token - use Unix timestamp in SECONDS (not milliseconds)
     const now = Math.floor(Date.now() / 1000);
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
     const expiresIn = tokenResponse.expires_in || 3600; // Default 1 hour
     const expiry = now + expiresIn;
 
@@ -256,6 +257,7 @@ export class CodexDeviceFlow {
 
     // Use Unix timestamp in SECONDS
     const now = Math.floor(Date.now() / 1000);
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
     const expiresIn = tokenResponse.expires_in || 3600;
     const expiry = now + expiresIn;
 
@@ -291,10 +293,12 @@ export class CodexDeviceFlow {
     const validated = JwtPayloadSchema.parse(parsedPayload);
 
     // Extract account_id from OpenAI-specific claim or root
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string account_id from JWT claims should fall through to next option */
     const accountId =
       validated['https://api.openai.com/auth']?.chatgpt_account_id ||
       validated['https://api.openai.com/auth']?.account_id ||
       validated.account_id;
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     if (!accountId) {
       throw new Error('No account_id found in id_token JWT claims');

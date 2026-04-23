@@ -269,12 +269,12 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
   toHookLLMResponse(sdkResponse: GenerateContentResponse): LLMResponse {
     return {
       text: getResponseText(sdkResponse) ?? undefined,
-      candidates: (sdkResponse.candidates || []).map((candidate) => {
+      candidates: (sdkResponse.candidates ?? []).map((candidate) => {
         // Extract text parts from the candidate
         const textParts =
           candidate.content?.parts
             ?.filter(hasTextProperty)
-            .map((part) => part.text) || [];
+            .map((part) => part.text) ?? [];
 
         return {
           content: {
@@ -285,7 +285,9 @@ export class HookTranslatorGenAIv1 extends HookTranslator {
             candidate.finishReason as LLMResponse['candidates'][0]['finishReason'],
           index: candidate.index,
           safetyRatings: candidate.safetyRatings?.map((rating) => ({
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string category should fall through to empty string
             category: String(rating.category || ''),
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string probability should fall through to empty string
             probability: String(rating.probability || ''),
           })),
         };

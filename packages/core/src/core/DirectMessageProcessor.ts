@@ -349,6 +349,7 @@ export class DirectMessageProcessor {
       );
       if (hookResult.syntheticResponse) {
         return {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined tools array should default to empty array
           effectiveToolsFromConfig: effectiveToolsFromConfig || [],
           contentsForApi,
           syntheticResponse: hookResult.syntheticResponse,
@@ -360,6 +361,7 @@ export class DirectMessageProcessor {
     }
 
     return {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined tools array should default to empty array
       effectiveToolsFromConfig: effectiveToolsFromConfig || [],
       contentsForApi,
       syntheticResponse: undefined,
@@ -520,11 +522,13 @@ export class DirectMessageProcessor {
           (part) => 'text' in part && part.text?.trim(),
         );
         if (!hasText) {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined content should default to empty object
           candidate.content = candidate.content || {
             role: 'model',
             parts: [],
           };
           candidate.content.parts = [
+            /* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty parts array should fall through to empty array spread */
             ...(candidate.content.parts || []),
             { text: aggregatedText },
           ];

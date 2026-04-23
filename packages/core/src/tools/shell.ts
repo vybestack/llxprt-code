@@ -133,6 +133,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 
   private getDirPath(): string | undefined {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string dir_path should fall through to directory
     return this.params.dir_path || this.params.directory;
   }
 
@@ -320,6 +321,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       const cwd = path.resolve(
         this.config.getTargetDir(),
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string dir_path should fall through to empty string for resolve
         this.getDirPath() || '',
       );
 
@@ -481,6 +483,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
         llmContent = [
           `Command: ${this.params.command}`,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string directory should fall through to '(root)'
           `Directory: ${this.getDirPath() || '(root)'}`,
           `Stdout: ${filteredOutput || '(empty)'}`,
           `Stderr: (empty)`,
@@ -652,6 +655,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
   }
 
   private isInvocationAllowlisted(command: string): boolean {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: getAllowedTools returns undefined or array, empty array should be used
     const allowedTools = this.config.getAllowedTools() || [];
     if (allowedTools.length === 0) {
       return false;
@@ -838,6 +842,7 @@ export class ShellTool extends BaseDeclarativeTool<
     if (getCommandRoots(params.command).length === 0) {
       return 'Could not identify command root to obtain permission from user.';
     }
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string dir_path should fall through to directory
     const dirPath = params.dir_path || params.directory;
     if (dirPath) {
       const workspaceContext = this.config.getWorkspaceContext();

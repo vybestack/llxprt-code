@@ -74,7 +74,9 @@ export class HookRunner {
       );
     } catch (error) {
       const duration = Date.now() - startTime;
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/command should fall through to next option or 'unknown' */
       const hookId = hookConfig.name || hookConfig.command || 'unknown';
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       const errorMessage = `Hook execution failed for event '${eventName}' (hook: ${hookId}): ${error}`;
       debugLogger.warn(`Hook execution error (non-fatal): ${errorMessage}`);
 
@@ -273,6 +275,7 @@ export class HookRunner {
       const env = {
         ...sanitizeEnvironment(
           process.env,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined sanitizationConfig should default to config object
           sanitizationConfig || {
             enableEnvironmentVariableRedaction: false,
             allowedEnvironmentVariables: [],
@@ -369,6 +372,7 @@ export class HookRunner {
           // Convert error output to structured format
           output = this.convertPlainTextToHookOutput(
             stderr.trim(),
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: exitCode 0 means success but explicit value needed for non-blocking error
             exitCode || EXIT_CODE_NON_BLOCKING_ERROR,
           );
         }
@@ -380,6 +384,7 @@ export class HookRunner {
           output,
           stdout,
           stderr,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: exitCode 0 means success but explicit value needed for EXIT_CODE_SUCCESS
           exitCode: exitCode || EXIT_CODE_SUCCESS,
           duration,
         });

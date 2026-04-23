@@ -33,6 +33,7 @@ const safeOsUsername = (): string => {
   try {
     return os.userInfo().username;
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: environment variables may be empty string which should fall through
     const fallback = process.env.USER || process.env.USERNAME || 'unknown-user';
     debugLogger.warn('Failed to resolve username, using fallback value', error);
     return fallback;
@@ -56,6 +57,7 @@ export class FileTokenStore extends BaseTokenStore {
     } = {},
   ) {
     super();
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string path should fall through to default
     this.tokenFilePath = tokenFilePath || Storage.getMcpOAuthTokensPath();
     this.serviceName = options.serviceName ?? 'llxprt-cli-mcp-oauth';
     this.encryptionKey =
@@ -188,6 +190,7 @@ export class FileTokenStore extends BaseTokenStore {
           tokenMap.set(credential.serverName, credential);
         } else {
           debugLogger.warn(
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string serverName should fall through to 'unknown'
             `Skipping invalid credential entry for server: ${(credential as { serverName?: string })?.serverName || 'unknown'}`,
           );
         }
@@ -250,7 +253,7 @@ export class FileTokenStore extends BaseTokenStore {
     this.validateServerName(serverName);
 
     const tokens = await this.loadTokens();
-    const credential = tokens.get(serverName) || null;
+    const credential = tokens.get(serverName) ?? null;
 
     // Return credential if found
 

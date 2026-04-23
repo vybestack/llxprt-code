@@ -243,12 +243,15 @@ export class ToolRegistry {
 
     return {
       allowed: new Set(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
         allowedRaw.map((name) => normalizeToolName(name) || name),
       ),
       disabled: new Set(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
         disabledRaw.map((name) => normalizeToolName(name) || name),
       ),
       excluded: new Set(
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
         excludedRaw.map((name) => normalizeToolName(name) || name),
       ),
     };
@@ -258,6 +261,7 @@ export class ToolRegistry {
     toolName: string,
     governance: ReturnType<ToolRegistry['getToolGovernance']>,
   ): boolean {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string normalized name should fall through to original name
     const canonical = normalizeToolName(toolName) || toolName;
     if (governance.excluded.has(canonical)) {
       return false;
@@ -687,6 +691,7 @@ export class ToolRegistry {
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
     // Normalize the tool name for consistent storage and lookup
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through to original name
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 
     if (targetMap.has(normalizedName)) {

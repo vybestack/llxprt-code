@@ -39,19 +39,19 @@ let promptServiceInitPromise: Promise<void> | null = null;
  * Initialize the PromptService singleton
  */
 async function initializePromptService(): Promise<void> {
-  if (!promptServiceInitPromise) {
-    promptServiceInitPromise = (async () => {
-      const baseDir =
-        process.env.LLXPRT_PROMPTS_DIR ||
-        path.join(os.homedir(), '.llxprt', 'prompts');
-      promptService = new PromptService({
-        baseDir,
-        debugMode: process.env.DEBUG === 'true',
-      });
-      await promptService.initialize();
-      promptServiceInitialized = true;
-    })();
-  }
+  promptServiceInitPromise ??= (async () => {
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default path */
+    const baseDir =
+      process.env.LLXPRT_PROMPTS_DIR ||
+      path.join(os.homedir(), '.llxprt', 'prompts');
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
+    promptService = new PromptService({
+      baseDir,
+      debugMode: process.env.DEBUG === 'true',
+    });
+    await promptService.initialize();
+    promptServiceInitialized = true;
+  })();
   return promptServiceInitPromise;
 }
 
@@ -349,6 +349,7 @@ async function buildPromptContext(
   }
 
   // Use provider if explicitly passed, otherwise get from settings or default to gemini
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should fall through to 'gemini'
   let resolvedProvider = provider || 'gemini';
 
   // If provider wasn't explicitly passed, try to get it from settings
@@ -396,6 +397,7 @@ async function buildPromptContext(
 
   return {
     provider: resolvedProvider,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string model should fall through to default
     model: model || 'gemini-1.5-pro',
     enabledTools,
     environment,

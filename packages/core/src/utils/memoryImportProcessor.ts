@@ -209,9 +209,7 @@ export async function processImports(
   projectRoot?: string,
   importFormat: 'flat' | 'tree' = 'tree',
 ): Promise<ProcessImportsResult> {
-  if (!projectRoot) {
-    projectRoot = await findProjectRoot(basePath);
-  }
+  projectRoot ??= await findProjectRoot(basePath);
 
   if (importState.currentDepth >= importState.maxDepth) {
     if (debugMode) {
@@ -221,6 +219,7 @@ export async function processImports(
     }
     return {
       content,
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string currentFile should fall through to 'unknown'
       importTree: { path: importState.currentFile || 'unknown' },
     };
   }
@@ -271,7 +270,7 @@ export async function processImports(
 
         // Validate import path
         if (
-          !validateImportPath(importPath, fileBasePath, [projectRoot || ''])
+          !validateImportPath(importPath, fileBasePath, [projectRoot ?? ''])
         ) {
           continue;
         }
@@ -315,6 +314,7 @@ export async function processImports(
 
     // Start with the root file (current file)
     const rootPath = path.normalize(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string currentFile should fall through to resolved basePath
       importState.currentFile || path.resolve(basePath),
     );
     await processFlat(content, basePath, rootPath, 0);
@@ -408,6 +408,7 @@ export async function processImports(
   return {
     content: result,
     importTree: {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string currentFile should fall through to 'unknown'
       path: importState.currentFile || 'unknown',
       imports: imports.length > 0 ? imports : undefined,
     },

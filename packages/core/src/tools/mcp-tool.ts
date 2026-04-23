@@ -333,6 +333,7 @@ function transformResourceBlock(
     return { text: resource.text };
   }
   if (resource?.blob) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string mimeType is invalid, should fall through to default
     const mimeType = resource.mimeType || 'application/octet-stream';
     return [
       {
@@ -351,6 +352,7 @@ function transformResourceBlock(
 
 function transformResourceLinkBlock(block: McpResourceLinkBlock): Part {
   return {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string title should fall through to name
     text: `Resource Link: ${block.title || block.name} at ${block.uri}`,
   };
 }
@@ -364,6 +366,7 @@ function transformResourceLinkBlock(block: McpResourceLinkBlock): Part {
 function transformMcpContentToParts(sdkResponse: Part[]): Part[] {
   const funcResponse = sdkResponse?.[0]?.functionResponse;
   const mcpContent = funcResponse?.response?.content as McpContentBlock[];
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through to 'unknown tool'
   const toolName = funcResponse?.name || 'unknown tool';
 
   if (!Array.isArray(mcpContent)) {
@@ -416,14 +419,17 @@ function getStringifiedResultForDisplay(rawResponse: Part[]): string {
       case 'audio':
         return `[Audio: ${block.mimeType}]`;
       case 'resource_link':
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string title should fall through to name
         return `[Link to ${block.title || block.name}: ${block.uri}]`;
       case 'resource':
         if (block.resource?.text) {
           return block.resource.text;
         }
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string mimeType should fall through to 'unknown type' */
         return `[Embedded Resource: ${
           block.resource?.mimeType || 'unknown type'
         }]`;
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       default:
         return `[Unknown content type: ${(block as { type: string }).type}]`;
     }

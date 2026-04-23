@@ -116,6 +116,7 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   }
 
   private getFilePath(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths should fall through to next option
     return this.params.absolute_path || this.params.file_path || '';
   }
 
@@ -329,8 +330,10 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
       }
 
       const fileName = path.basename(filePath);
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string ai_proposed_content should be preserved, not replaced */
       const originallyProposedContent =
         this.params.ai_proposed_content || newContent;
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       const diffStat = getDiffStat(
         fileName,
         currentContent,
@@ -478,6 +481,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
     params: ApplyPatchToolParams,
   ): string | null {
     // Accept either absolute_path or file_path
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string paths should fall through to next option
     const filePath = params.absolute_path || params.file_path || '';
 
     if (filePath.trim() === '') {
