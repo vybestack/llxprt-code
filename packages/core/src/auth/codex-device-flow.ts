@@ -564,7 +564,8 @@ export class CodexDeviceFlow {
 
     // Build and return the CodexOAuthToken
     const now = Date.now();
-    const expiresIn = tokenResponse.expires_in ?? 3600; // Default to 1 hour if not provided
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
+    const expiresIn = tokenResponse.expires_in || 3600; // Default to 1 hour if not provided
     const tokenType = (tokenResponse.token_type ?? 'Bearer') as
       | 'Bearer'
       | 'bearer';

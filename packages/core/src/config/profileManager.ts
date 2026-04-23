@@ -264,7 +264,8 @@ export class ProfileManager {
     const profile: Profile = {
       version: 1,
       provider: defaultProvider,
-      model: providerSettings?.model ?? 'default',
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string model should fall back to 'default'
+      model: providerSettings?.model || 'default',
       modelParams: {
         temperature: providerSettings?.temperature,
         max_tokens: providerSettings?.maxTokens,

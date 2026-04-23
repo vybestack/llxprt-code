@@ -528,7 +528,7 @@ export class DirectMessageProcessor {
             parts: [],
           };
           candidate.content.parts = [
-            /* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty parts array should fall through to empty array spread */
+            /* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined or missing parts should default to empty array for the spread */
             ...(candidate.content.parts || []),
             { text: aggregatedText },
           ];

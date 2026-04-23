@@ -279,7 +279,8 @@ export class Task {
       status: {
         state: stateToReport,
         message, // Shorthand property
-        timestamp: timestamp ?? new Date().toISOString(),
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string timestamp is invalid, use current time
+        timestamp: timestamp || new Date().toISOString(),
       },
       final,
       metadata,

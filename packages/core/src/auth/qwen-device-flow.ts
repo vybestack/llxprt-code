@@ -201,7 +201,8 @@ export class QwenDeviceFlow {
       access_token: validatedResponse.access_token,
       token_type: 'Bearer',
       expiry,
-      refresh_token: validatedResponse.refresh_token ?? refreshToken, // Use new refresh token if provided, otherwise keep the old one
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
+      refresh_token: validatedResponse.refresh_token || refreshToken,
       scope: validatedResponse.scope ?? undefined, // Convert null to undefined
       resource_url: validatedResponse.resource_url, // Include the API endpoint from Qwen
     };

@@ -242,7 +242,8 @@ export async function runNonInteractive({
         signal: abortController.signal,
       });
 
-      if (error ?? !processedQuery) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error indicates failure
+      if (error || !processedQuery) {
         // An error occurred during @include processing (e.g., file not found).
         // The error message is already logged by handleAtCommand.
         /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message */

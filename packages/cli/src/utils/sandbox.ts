@@ -1094,14 +1094,16 @@ function entrypoint(
 
   const quotedCliArgs = cliArgs.slice(2).map((arg) => quote([arg]));
   const isDebugMode = isSandboxDebugModeEnabled(process.env.DEBUG);
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string DEBUG_PORT should fall back to default */
   const cliCmd =
     process.env.NODE_ENV === 'development'
       ? isDebugMode
         ? 'npm run debug --'
         : 'npm rebuild && npm run start --'
       : isDebugMode
-        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT ?? '9229'} $(which llxprt)`
+        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT || '9229'} $(which llxprt)`
         : 'llxprt';
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   const args = [...shellCmds, cliCmd, ...quotedCliArgs];
   return ['bash', '-c', args.join(' ')];
@@ -1239,12 +1241,14 @@ export async function start_sandbox(
       Object.assign(sandboxEnv, getPassthroughEnvVars(process.env));
 
       if (proxyCommand) {
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string proxy env vars should fall back to default */
         const proxy =
-          process.env.HTTPS_PROXY ??
-          process.env.https_proxy ??
-          process.env.HTTP_PROXY ??
-          process.env.http_proxy ??
+          process.env.HTTPS_PROXY ||
+          process.env.https_proxy ||
+          process.env.HTTP_PROXY ||
+          process.env.http_proxy ||
           'http://localhost:8877';
+        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
         sandboxEnv['HTTPS_PROXY'] = proxy;
         sandboxEnv['https_proxy'] = proxy; // lower-case can be required, e.g. for curl
         sandboxEnv['HTTP_PROXY'] = proxy;
@@ -1579,7 +1583,8 @@ export async function start_sandbox(
       const portsToForwardSet = new Set<string>(ports());
 
       if (isSandboxDebugModeEnabled(process.env.DEBUG)) {
-        portsToForwardSet.add(process.env.DEBUG_PORT ?? '9229');
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string DEBUG_PORT should fall back to default
+        portsToForwardSet.add(process.env.DEBUG_PORT || '9229');
       }
       const portsToForward: string[] = [...portsToForwardSet];
 
@@ -1613,7 +1618,8 @@ export async function start_sandbox(
 
     // if DEBUG is enabled, expose debugging port (skip if using SSH tunnels on Podman macOS)
     if (isSandboxDebugModeEnabled(process.env.DEBUG) && !isPodmanMacOS) {
-      const debugPort = process.env.DEBUG_PORT ?? '9229';
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string DEBUG_PORT should fall back to default
+      const debugPort = process.env.DEBUG_PORT || '9229';
       args.push(`--publish`, `${debugPort}:${debugPort}`);
     }
 
@@ -1622,12 +1628,14 @@ export async function start_sandbox(
     // LLXPRT_SANDBOX_PROXY_COMMAND implies HTTPS_PROXY unless HTTP_PROXY is set
     const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
     if (proxyCommand) {
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string proxy env vars should fall back to default */
       let proxy =
-        process.env.HTTPS_PROXY ??
-        process.env.https_proxy ??
-        process.env.HTTP_PROXY ??
-        process.env.http_proxy ??
+        process.env.HTTPS_PROXY ||
+        process.env.https_proxy ||
+        process.env.HTTP_PROXY ||
+        process.env.http_proxy ||
         'http://localhost:8877';
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       proxy = proxy.replace('localhost', SANDBOX_PROXY_NAME);
       if (proxy) {
         args.push('--env', `HTTPS_PROXY=${proxy}`);

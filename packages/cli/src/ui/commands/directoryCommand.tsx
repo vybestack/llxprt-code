@@ -112,6 +112,12 @@ export const directoryCommand: SlashCommand = {
 
         try {
           if (config.shouldLoadMemoryFromIncludeDirectories()) {
+            const memoryImportFormat =
+              context.services.settings.merged.ui.memoryImportFormat;
+            const effectiveMemoryImportFormat =
+              memoryImportFormat === 'tree' || memoryImportFormat === 'flat'
+                ? memoryImportFormat
+                : 'tree';
             const { memoryContent, fileCount } =
               await loadServerHierarchicalMemory(
                 config.getWorkingDir(),
@@ -120,8 +126,7 @@ export const directoryCommand: SlashCommand = {
                 config.getFileService(),
                 config.getExtensions(),
                 config.getFolderTrust(),
-                context.services.settings.merged.ui.memoryImportFormat ??
-                  'tree', // Use setting or default to 'tree'
+                effectiveMemoryImportFormat,
                 config.getFileFilteringOptions(),
                 context.services.settings.merged.ui.memoryDiscoveryMaxDirs,
               );

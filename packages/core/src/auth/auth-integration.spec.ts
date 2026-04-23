@@ -540,7 +540,8 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         async () => mockOAuthManager.getToken('qwen', qwenMetadata), // OAuth only
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
-        async () => process.env.OPENAI_API_KEY ?? null, // Env var only
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string API key should be treated as missing
+        async () => process.env.OPENAI_API_KEY || null, // Env var only
       );
 
       // When: Both providers resolve authentication

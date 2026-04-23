@@ -94,7 +94,8 @@ export class OAuthCredentialStorage {
         accessToken: credentials.access_token,
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string refresh_token means "not provided"
         refreshToken: credentials.refresh_token || undefined,
-        tokenType: credentials.token_type ?? 'Bearer',
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string token_type is invalid, default to Bearer
+        tokenType: credentials.token_type || 'Bearer',
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string scope means "not provided"
         scope: credentials.scope || undefined,
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expiry_date means "no expiration"
