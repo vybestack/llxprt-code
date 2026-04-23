@@ -280,6 +280,7 @@ export function convertToVercelMessages(
             return {
               type: 'tool-result' as const,
               toolCallId: resolveToolResponseId(block),
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/toolName should fall through to empty string
               toolName: extBlock.name || extBlock.toolName || '',
               output: {
                 type: 'text',
@@ -529,7 +530,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
             ? (systemContent as Array<{ type: string; text?: string } | string>)
                 .map((part) => {
                   if (typeof part === 'string') return part;
-                  if (part.type === 'text') return part.text || '';
+                  if (part.type === 'text') return part.text ?? '';
                   return '';
                 })
                 .join('\n')

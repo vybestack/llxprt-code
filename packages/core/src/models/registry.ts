@@ -374,7 +374,7 @@ export class ModelRegistry {
    * Emit an event
    */
   private emit(event: ModelRegistryEvent): void {
-    const callbacks = this.listeners.get(event) || [];
+    const callbacks = this.listeners.get(event) ?? [];
     callbacks.forEach((cb) => cb());
   }
 }
@@ -386,6 +386,7 @@ let registryInstance: ModelRegistry | null = null;
  * Get the global ModelRegistry instance
  */
 export function getModelRegistry(): ModelRegistry {
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional singleton initialization pattern
   if (!registryInstance) {
     registryInstance = new ModelRegistry();
   }

@@ -231,6 +231,7 @@ export function createAgentRuntimeState(
 
   // Generate sessionId if not provided (line 101)
   const sessionId =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string sessionId should generate new ID
     params.sessionId ||
     `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
@@ -441,6 +442,7 @@ export function subscribeToAgentRuntimeState(
   // Store subscription (lines 298-302)
   subscribers.set(subscriptionId, {
     callback,
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: boolean async option defaults to false
     async: options?.async || false,
   });
 

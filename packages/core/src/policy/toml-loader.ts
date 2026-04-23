@@ -327,8 +327,10 @@ export async function loadPoliciesFromToml(
               );
             } catch (e) {
               const error = e as Error;
+              /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string regex patterns should fall through to 'unknown' */
               const patternStr =
                 rule.commandRegex || rule.commandPrefix || 'unknown';
+              /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
               errors.push({
                 filePath,
                 fileName: file,

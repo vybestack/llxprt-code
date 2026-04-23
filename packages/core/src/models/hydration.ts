@@ -98,11 +98,13 @@ export async function hydrateModelsWithRegistry(
   // Hydrate each model
   return models.map((model) => {
     // Try multiple matching strategies
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string model IDs should fall through to next strategy */
     const registryModel =
       registryMap.get(model.id) ||
       registryMap.get(model.name) ||
       // Try partial match for models with prefixes/suffixes
       findPartialMatch(model.id, registryMap);
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     if (!registryModel) {
       // Model not found in registry - return unhydrated

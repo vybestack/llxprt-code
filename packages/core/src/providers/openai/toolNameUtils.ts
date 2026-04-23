@@ -229,12 +229,14 @@ export function safeExtractToolName(
     const validation = validateToolName(extractedName, availableToolNames);
 
     if (!validation.isValid) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default
       warnings.push(validation.reason || 'Unknown validation error');
       extractedName = processFinalToolName(extractedName, availableToolNames);
     } else if (
       validation.correctedName &&
       validation.correctedName !== extractedName
     ) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default
       warnings.push(validation.reason || 'Name was corrected');
       extractedName = validation.correctedName;
     }

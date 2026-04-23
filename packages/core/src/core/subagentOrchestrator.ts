@@ -285,20 +285,14 @@ export class SubagentOrchestrator {
 
     const runConfig: RunConfig = {
       max_time_minutes:
-        custom?.max_time_minutes ??
-        (profileMaxTime !== undefined
-          ? profileMaxTime
-          : Number.POSITIVE_INFINITY),
+        custom?.max_time_minutes ?? profileMaxTime ?? Number.POSITIVE_INFINITY,
     };
 
     const profileMaxTurns = this.getNumberSetting(profile.ephemeralSettings, [
       'maxTurnsPerPrompt',
     ]);
 
-    const maxTurns =
-      custom?.max_turns !== undefined
-        ? custom.max_turns
-        : (profileMaxTurns ?? 200);
+    const maxTurns = custom?.max_turns ?? profileMaxTurns ?? 200;
 
     if (maxTurns !== undefined && maxTurns > 0) {
       runConfig.max_turns = Math.floor(maxTurns);

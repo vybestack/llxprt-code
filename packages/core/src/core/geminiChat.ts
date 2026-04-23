@@ -71,6 +71,7 @@ export class AgentExecutionStoppedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty systemMessage should fall through to reason
     super(`Agent execution stopped: ${systemMessage || reason}`);
     this.name = 'AgentExecutionStoppedError';
     this.reason = reason;
@@ -94,6 +95,7 @@ export class AgentExecutionBlockedError extends Error {
     systemMessage?: string,
     contextCleared?: boolean,
   ) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty systemMessage should fall through to reason
     super(`Agent execution blocked: ${systemMessage || reason}`);
     this.name = 'AgentExecutionBlockedError';
     this.reason = reason;

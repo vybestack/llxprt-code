@@ -191,6 +191,7 @@ export class PromptLoader {
         compressedLine.match(/^\s*[-*+]\s/) ||
         compressedLine.match(/^\s*\d+\.\s/)
       ) {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string leading spaces should default to empty string
         const leadingSpaces = compressedLine.match(/^\s*/)?.[0] || '';
         compressedLine =
           leadingSpaces + compressedLine.trim().replace(/\s+/g, ' ');
@@ -408,6 +409,7 @@ export class PromptLoader {
                 timeouts.set(
                   filenameStr,
                   setTimeout(() => {
+                    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string event type should default to 'change'
                     callback(eventType || 'change', filenameStr);
                     timeouts.delete(filenameStr);
                   }, 100),

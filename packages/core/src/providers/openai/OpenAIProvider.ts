@@ -279,8 +279,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       baseURL &&
       (baseURL.includes('qwen') || baseURL.includes('dashscope'))
     ) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default
       return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
     }
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string env var should fall through to default
     return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
   }
 

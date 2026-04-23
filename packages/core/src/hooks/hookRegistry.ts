@@ -116,6 +116,7 @@ export class HookRegistry {
    * Get hook name for identification and display purposes (public for external use)
    */
   getHookName(entry: HookRegistryEntry | { config: HookConfig }): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string name/command should fall through to unknown-command
     return entry.config.name || entry.config.command || 'unknown-command';
   }
 
@@ -159,6 +160,7 @@ export class HookRegistry {
     const untrusted = trustManager.getUntrustedHooks(allProjectHooks);
 
     if (untrusted.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string hook name/command should fall through
       const hookNames = untrusted.map((h) => h.name || h.command).join(', ');
       const warning = `WARNING: Project defines ${untrusted.length} untrusted hook(s): ${hookNames}. Review these hooks before trusting them.
 `;

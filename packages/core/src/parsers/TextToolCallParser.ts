@@ -275,7 +275,9 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       const parsed = JSON.parse(innerContent);
       if (typeof parsed === 'object' && parsed !== null && 'name' in parsed) {
         // Hermes format validation
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string tool name should fall through
         const toolName = String(parsed.name || '');
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined arguments should default to empty object
         const args = parsed.arguments || {};
         return {
           start,

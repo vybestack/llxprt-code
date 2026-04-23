@@ -352,11 +352,13 @@ export async function runVerificationPass(
 export function mediaBlockToCompressionPlaceholder(media: MediaBlock): string {
   const category = classifyMediaBlock(media);
   // Prefer caption first (for accessibility/context), then filename, then mimeType, then 'unknown'
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall through to next identifier */
   const identifier =
     media.caption?.trim() ||
     media.filename?.trim() ||
     media.mimeType ||
     'unknown';
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   // Capitalize PDF label for display, keep other categories as-is
   const label = category === 'pdf' ? 'PDF' : category;
   return `[Attached ${label}: ${identifier}]`;

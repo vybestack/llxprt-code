@@ -68,6 +68,7 @@ function checkHookDecision(
 ): void {
   if (hookResult?.shouldStopExecution()) {
     const stopError = new Error(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default message
       hookResult.getEffectiveReason() || `Stopped by ${hookPhase} hook`,
     );
     (stopError as Error & { isStopExecution?: boolean }).isStopExecution = true;
@@ -75,6 +76,7 @@ function checkHookDecision(
   }
   if (hookResult?.isBlockingDecision()) {
     throw new Error(
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string reason should fall through to default message
       hookResult.getEffectiveReason() || `Blocked by ${hookPhase} hook`,
     );
   }

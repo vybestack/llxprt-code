@@ -43,10 +43,12 @@ export class MockConfigurationManager {
   }
 
   getOutputTarget(): string {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string target should fall back to default
     return this.config.output?.target || 'file stderr';
   }
 
   getRedactPatterns(): string[] {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array vs undefined - treating undefined as no patterns
     return this.config.redactPatterns || [];
   }
 

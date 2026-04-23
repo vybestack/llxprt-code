@@ -113,9 +113,10 @@ export async function createToolRegistry(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
     const className = ToolClass.name;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string class name should fall through
     const toolName = ToolClass.Name || className;
     const coreTools = effectiveCoreTools;
-    const excludeTools = host.getExcludeTools() || [];
+    const excludeTools = host.getExcludeTools() ?? [];
 
     let isEnabled = true;
     let reason: string | undefined;

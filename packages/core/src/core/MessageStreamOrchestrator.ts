@@ -270,7 +270,7 @@ export class MessageStreamOrchestrator {
     const hasPendingToolCall =
       !!lastMessage &&
       lastMessage.role === 'model' &&
-      (lastMessage.parts?.some((p) => 'functionCall' in p) || false);
+      (lastMessage.parts?.some((p) => 'functionCall' in p) ?? false);
 
     if (config.getIdeMode() && !hasPendingToolCall) {
       const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
@@ -885,6 +885,7 @@ export class MessageStreamOrchestrator {
   private _getProviderName(): string {
     const contentGenConfig = this.deps.config.getContentGeneratorConfig();
     const providerManager = contentGenConfig?.providerManager;
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty provider name should fall back to 'backend'
     return providerManager?.getActiveProviderName() || 'backend';
   }
 

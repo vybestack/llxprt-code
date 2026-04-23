@@ -73,7 +73,9 @@ export class PromptResolver {
     }
 
     // 2. Sanitize provider and model names
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should be sanitized to empty string
     const provider = this.sanitizePathComponent(context.provider || '');
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string model should be sanitized to empty string
     const model = this.sanitizePathComponent(context.model || '');
 
     // 3. Build search paths in order (most specific first)
