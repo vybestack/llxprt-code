@@ -18,9 +18,9 @@ export function mergeMcpServers(
   settings: Settings,
   extensions: GeminiCLIExtension[],
 ): Record<string, MCPServerConfig> {
-  const mcpServers = { ...(settings.mcpServers || {}) };
+  const mcpServers = { ...(settings.mcpServers ?? {}) };
   for (const extension of extensions) {
-    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
+    Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
       if (mcpServers[key]) {
         logger.debug(
           () =>
@@ -50,7 +50,7 @@ export function allowedMcpServers(
         if (!isAllowed) {
           blockedMcpServers.push({
             name: key,
-            extensionName: server.extensionName || '',
+            extensionName: server.extensionName ?? '',
           });
         }
         return isAllowed;
@@ -60,7 +60,7 @@ export function allowedMcpServers(
   blockedMcpServers.push(
     ...Object.entries(mcpServers).map(([key, server]) => ({
       name: key,
-      extensionName: server.extensionName || '',
+      extensionName: server.extensionName ?? '',
     })),
   );
   return {};
@@ -98,7 +98,7 @@ export function resolveMcpServers(
             .filter(([key]) => excludedNames.has(key))
             .map(([key, server]) => ({
               name: key,
-              extensionName: server.extensionName || '',
+              extensionName: server.extensionName ?? '',
             })),
         );
         mcpServers = Object.fromEntries(

@@ -449,7 +449,7 @@ export function useSlashCompletion(
       }
 
       // Command/Sub-command Completion
-      const commandsToSearch = currentLevel || [];
+      const commandsToSearch = currentLevel ?? [];
       debugLogger.debug(
         () =>
           `Commands to search: ${commandsToSearch.length}, Partial: "${commandPartial}"`,
@@ -777,7 +777,9 @@ export function useSlashCompletion(
 
         // Sort by depth, then directories first, then alphabetically
         fetchedSuggestions.sort((a, b) => {
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (null match should use empty array)
           const depthA = (a.label.match(/\//g) || []).length;
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (null match should use empty array)
           const depthB = (b.label.match(/\//g) || []).length;
 
           if (depthA !== depthB) {
@@ -884,7 +886,7 @@ export function useSlashCompletion(
         return null;
       }
       const suggestion = suggestions[suggestionIndex];
-      return suggestionCommandMapRef.current.get(suggestion.value) || null;
+      return suggestionCommandMapRef.current.get(suggestion.value) ?? null;
     },
     [suggestions],
   );

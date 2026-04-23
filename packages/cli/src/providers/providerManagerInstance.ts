@@ -104,9 +104,7 @@ export function setFileSystem(fs: IFileSystem): void {
  * Get the file system implementation to use.
  */
 function getFileSystem(): IFileSystem {
-  if (!fileSystemInstance) {
-    fileSystemInstance = new NodeFileSystem();
-  }
+  fileSystemInstance ??= new NodeFileSystem();
   return fileSystemInstance;
 }
 
@@ -328,7 +326,7 @@ export function createProviderManager(
     | Record<string, unknown>
     | undefined;
   const openaiProviderApiKey =
-    (openaiSettings?.apiKey as string | undefined) ||
+    (openaiSettings?.apiKey as string | undefined) ??
     (openaiSettings?.['auth-key'] as string | undefined);
 
   let openaiApiKey: string | undefined;
@@ -633,7 +631,7 @@ function createOpenAIAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
     debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -666,7 +664,7 @@ function createOpenAIAliasProvider(
   }
 
   const provider = new OpenAIProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
@@ -679,7 +677,7 @@ function createOpenAIAliasProvider(
     const configuredDefaultModel = entry.config.defaultModel;
     const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
     provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
+      configuredDefaultModel ?? originalGetDefaultModel();
   }
 
   // Override getModels() to return static models if configured
@@ -706,7 +704,7 @@ function createOpenAIResponsesAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIResponsesProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
     debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -739,7 +737,7 @@ function createOpenAIResponsesAliasProvider(
   }
 
   const provider = new OpenAIResponsesProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
@@ -760,7 +758,7 @@ function createOpenAIResponsesAliasProvider(
     const configuredDefaultModel = entry.config.defaultModel;
     const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
     provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
+      configuredDefaultModel ?? originalGetDefaultModel();
   }
 
   // Override getModels() to return static models if configured
@@ -784,7 +782,7 @@ function createOpenAIVercelAliasProvider(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
 ): OpenAIVercelProvider | null {
-  const resolvedBaseUrl = entry.config['base-url'] || openaiBaseUrl;
+  const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
   if (!resolvedBaseUrl) {
     debugLogger.warn(
       `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
@@ -817,7 +815,7 @@ function createOpenAIVercelAliasProvider(
   }
 
   const provider = new OpenAIVercelProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
     oauthManager,
@@ -830,7 +828,7 @@ function createOpenAIVercelAliasProvider(
     const configuredDefaultModel = entry.config.defaultModel;
     const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
     provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
+      configuredDefaultModel ?? originalGetDefaultModel();
   }
 
   // Override getModels() to return static models if configured
@@ -865,7 +863,7 @@ function createGeminiAliasProvider(
   const resolvedBaseUrl = entry.config['base-url'];
 
   const provider = new GeminiProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     config,
     oauthManager,
@@ -882,7 +880,7 @@ function createGeminiAliasProvider(
     const configuredDefaultModel = entry.config.defaultModel;
     const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
     provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
+      configuredDefaultModel ?? originalGetDefaultModel();
   }
 
   bindProviderAliasIdentity(provider, entry.alias);
@@ -912,7 +910,7 @@ function createAnthropicAliasProvider(
   }
 
   const provider = new AnthropicProvider(
-    aliasApiKey || undefined,
+    aliasApiKey ?? undefined,
     resolvedBaseUrl,
     providerConfig,
     oauthManager,
@@ -925,7 +923,7 @@ function createAnthropicAliasProvider(
     const configuredDefaultModel = entry.config.defaultModel;
     const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
     provider.getDefaultModel = () =>
-      configuredDefaultModel || originalGetDefaultModel();
+      configuredDefaultModel ?? originalGetDefaultModel();
   }
 
   bindProviderAliasIdentity(provider, entry.alias);

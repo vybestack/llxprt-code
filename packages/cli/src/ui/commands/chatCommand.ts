@@ -140,7 +140,7 @@ const saveCommand: SlashCommand = {
             ' already exists. Do you want to overwrite it?',
           ),
           originalInvocation: {
-            raw: context.invocation?.raw || `/chat save ${tag}`,
+            raw: context.invocation?.raw ?? `/chat save ${tag}`,
           },
         };
       }
@@ -236,10 +236,12 @@ const resumeCommand: SlashCommand = {
     // Convert checkpoint history to UI history items for display
     // Use LoadHistoryActionReturn to properly sync both UI and client history
     const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from join should be preserved, parts may be undefined */
       const text =
         content.parts
           ?.map((part: Part) => (part.text ? part.text : ''))
           .join('') || '';
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       return {
         type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
         text,
@@ -288,7 +290,7 @@ const deleteCommand: SlashCommand = {
           '?',
         ),
         originalInvocation: {
-          raw: context.invocation?.raw || `/chat delete ${tag}`,
+          raw: context.invocation?.raw ?? `/chat delete ${tag}`,
         },
       };
     }
@@ -351,7 +353,7 @@ const renameCommand: SlashCommand = {
             ' already exists. Do you want to overwrite it?',
           ),
           originalInvocation: {
-            raw: context.invocation?.raw || `/chat rename ${oldTag} ${newTag}`,
+            raw: context.invocation?.raw ?? `/chat rename ${oldTag} ${newTag}`,
           },
         };
       }
@@ -455,10 +457,12 @@ const restoreHistory = async (
 
   // Convert to UI history items for display
   const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string from join should be preserved, parts may be undefined */
     const text =
       content.parts
         ?.map((part: Part) => (part.text ? part.text : ''))
         .join('') || '';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     return {
       type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
       text,

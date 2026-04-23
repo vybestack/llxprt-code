@@ -23,7 +23,7 @@ export const aboutCommand: SlashCommand = {
       sandboxEnv = process.env.SANDBOX;
     } else if (process.env.SANDBOX === 'sandbox-exec') {
       sandboxEnv = `sandbox-exec (${
-        process.env.SEATBELT_PROFILE || 'unknown'
+        process.env.SEATBELT_PROFILE ?? 'unknown'
       })`;
     }
     // Determine the currently selected model/provider using runtime diagnostics
@@ -88,14 +88,14 @@ export const aboutCommand: SlashCommand = {
           }
         }
       } catch {
-        modelVersion = context.services.config?.getModel() || modelVersion;
+        modelVersion = context.services.config?.getModel() ?? modelVersion;
       }
 
       if (modelVersion === 'Unknown') {
-        modelVersion = context.services.config?.getModel() || modelVersion;
+        modelVersion = context.services.config?.getModel() ?? modelVersion;
       }
     } else {
-      modelVersion = context.services.config?.getModel() || modelVersion;
+      modelVersion = context.services.config?.getModel() ?? modelVersion;
     }
 
     if (!baseURL) {
@@ -116,11 +116,13 @@ export const aboutCommand: SlashCommand = {
     }
 
     const cliVersion = await getCliVersion();
-    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || '';
+    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT ?? '';
+    /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (false from getIdeMode() should trigger fallback) */
     const ideClient =
       (context.services.config?.getIdeMode() &&
         context.services.config?.getIdeClient()?.getDetectedIdeDisplayName()) ||
       '';
+    /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
     // Determine keyfile path and key status for the active provider (if any)
     let keyfilePath = '';
@@ -133,7 +135,7 @@ export const aboutCommand: SlashCommand = {
       const providerName = providerManager.getActiveProviderName();
       if (providerName) {
         keyfilePath =
-          context.services.settings.getProviderKeyfile?.(providerName) || '';
+          context.services.settings.getProviderKeyfile?.(providerName) ?? '';
         // We don't check for API keys anymore - they're only in profiles
       }
     } catch {

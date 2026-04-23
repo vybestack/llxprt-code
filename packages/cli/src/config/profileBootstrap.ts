@@ -286,9 +286,7 @@ ${baseProfile.error}`);
         }
 
         if (setValues.length > 0) {
-          if (!bootstrapArgs.setOverrides) {
-            bootstrapArgs.setOverrides = [];
-          }
+          bootstrapArgs.setOverrides ??= [];
           bootstrapArgs.setOverrides.push(...setValues);
         }
 
@@ -674,8 +672,8 @@ ${baseProfile.error}`);
         );
         if (profile) {
           const baseProfile: ProfileApplicationResult = {
-            providerName: profile.provider || '',
-            modelName: profile.model || '',
+            providerName: profile.provider ?? '',
+            modelName: profile.model ?? '',
             warnings: [],
           };
           return applyOverridesToProfile(baseProfile, bootstrapArgs);
@@ -695,9 +693,9 @@ ${baseProfile.error}`);
       bootstrapArgs.modelOverride !== null
     ) {
       const baseProfile: ProfileApplicationResult = {
-        providerName: bootstrapArgs.providerOverride || '',
-        modelName: bootstrapArgs.modelOverride || '',
-        baseUrl: bootstrapArgs.baseurlOverride || undefined,
+        providerName: bootstrapArgs.providerOverride ?? '',
+        modelName: bootstrapArgs.modelOverride ?? '',
+        baseUrl: bootstrapArgs.baseurlOverride ?? undefined,
         warnings: [],
       };
       // Don't call applyOverridesToProfile since we're using them directly

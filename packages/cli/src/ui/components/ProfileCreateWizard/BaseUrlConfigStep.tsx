@@ -41,10 +41,11 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
   const providerOption = PROVIDER_OPTIONS.find(
     (p) => p.value === state.config.provider,
   );
-  const defaultBaseUrl = providerOption?.defaultBaseUrl || '';
+  const defaultBaseUrl = providerOption?.defaultBaseUrl ?? '';
 
   // Initialize with default URL if available and not already set
   const [inputValue, setInputValue] = useState(
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string baseUrl means "not set")
     state.config.baseUrl || defaultBaseUrl,
   );
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
     (value: string) => {
       setInputValue(value);
       const validation = validateBaseUrl(value);
-      setValidationError(validation.valid ? null : validation.error || null);
+      setValidationError(validation.valid ? null : (validation.error ?? null));
       if (validation.valid) {
         onUpdateBaseUrl(value);
       }
@@ -66,14 +67,14 @@ export const BaseUrlConfigStep: React.FC<BaseUrlConfigStepProps> = ({
     if (validation.valid) {
       onContinue();
     } else {
-      setValidationError(validation.error || 'Invalid URL');
+      setValidationError(validation.error ?? 'Invalid URL');
     }
   }, [inputValue, onContinue]);
 
   const isCustomProvider = state.config.provider === 'custom';
   const helpText = isCustomProvider
     ? 'Enter the API endpoint for your custom provider:'
-    : `${providerOption?.label || 'This provider'} typically runs on the default port. Edit if using a different configuration.`;
+    : `${providerOption?.label ?? 'This provider'} typically runs on the default port. Edit if using a different configuration.`;
 
   const { current, total } = getStepPosition(state);
 

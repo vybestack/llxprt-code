@@ -77,10 +77,12 @@ export async function runNonInteractive({
     process.stderr.write(`[${prefix}] ${payload.message}
 `);
     if (payload.error && config.getDebugMode()) {
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty stack should fall back to message */
       const errorToLog =
         payload.error instanceof Error
           ? payload.error.stack || payload.error.message
           : String(payload.error);
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       process.stderr.write(`${errorToLog}
 `);
     }
@@ -240,12 +242,14 @@ export async function runNonInteractive({
         signal: abortController.signal,
       });
 
-      if (error || !processedQuery) {
+      if (error ?? !processedQuery) {
         // An error occurred during @include processing (e.g., file not found).
         // The error message is already logged by handleAtCommand.
+        /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string error should use default message */
         throw new FatalInputError(
           error || 'Exiting due to an error processing the @ command.',
         );
+        /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       }
       query = processedQuery as Part[];
     }
@@ -481,12 +485,12 @@ export async function runNonInteractive({
         } else if (event.type === GeminiEventType.Error) {
           throw event.value.error;
         } else if (event.type === GeminiEventType.AgentExecutionStopped) {
-          const stopMessage = `Agent execution stopped: ${event.systemMessage?.trim() || event.reason}`;
+          const stopMessage = `Agent execution stopped: ${event.systemMessage?.trim() ?? event.reason}`;
           process.stderr.write(`${stopMessage}
 `);
           return;
         } else if (event.type === GeminiEventType.AgentExecutionBlocked) {
-          const blockMessage = `Agent execution blocked: ${event.systemMessage?.trim() || event.reason}`;
+          const blockMessage = `Agent execution blocked: ${event.systemMessage?.trim() ?? event.reason}`;
           process.stderr.write(`[WARNING] ${blockMessage}
 `);
         }
@@ -571,7 +575,7 @@ export async function runNonInteractive({
                   : undefined,
               error: toolResponse.error
                 ? {
-                    type: toolResponse.errorType || 'TOOL_EXECUTION_ERROR',
+                    type: toolResponse.errorType ?? 'TOOL_EXECUTION_ERROR',
                     message: toolResponse.error.message,
                   }
                 : undefined,
@@ -580,9 +584,11 @@ export async function runNonInteractive({
 
           if (toolResponse.error) {
             if (!jsonOutput && !streamJsonOutput) {
+              /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty resultDisplay should fall back to error message */
               debugLogger.error(
                 `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
               );
+              /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
             }
           } else if (
             !jsonOutput &&

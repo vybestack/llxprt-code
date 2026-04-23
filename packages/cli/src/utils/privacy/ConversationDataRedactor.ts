@@ -134,8 +134,8 @@ export class ConversationDataRedactor {
     let redacted = content;
 
     // Apply provider-specific and global API key patterns
-    const providerPatterns = this.redactionPatterns.get(providerName) || [];
-    const globalPatterns = this.redactionPatterns.get('global') || [];
+    const providerPatterns = this.redactionPatterns.get(providerName) ?? [];
+    const globalPatterns = this.redactionPatterns.get('global') ?? [];
 
     [...providerPatterns, ...globalPatterns].forEach((pattern) => {
       if (pattern.enabled && pattern.name.includes('api_key')) {
@@ -220,7 +220,7 @@ export class ConversationDataRedactor {
     let redacted = content;
 
     // Apply provider-specific patterns
-    const providerPatterns = this.redactionPatterns.get(providerName) || [];
+    const providerPatterns = this.redactionPatterns.get(providerName) ?? [];
     for (const pattern of providerPatterns) {
       if (pattern.enabled) {
         redacted = redacted.replace(pattern.pattern, pattern.replacement);
@@ -228,7 +228,7 @@ export class ConversationDataRedactor {
     }
 
     // Apply global patterns
-    const globalPatterns = this.redactionPatterns.get('global') || [];
+    const globalPatterns = this.redactionPatterns.get('global') ?? [];
     for (const pattern of globalPatterns) {
       if (pattern.enabled) {
         redacted = redacted.replace(pattern.pattern, pattern.replacement);
@@ -492,8 +492,8 @@ export class ConversationDataRedactor {
     };
 
     const patterns = [
-      ...(this.redactionPatterns.get('global') || []),
-      ...(this.redactionPatterns.get(providerName) || []),
+      ...(this.redactionPatterns.get('global') ?? []),
+      ...(this.redactionPatterns.get(providerName) ?? []),
     ];
 
     for (const pattern of patterns) {

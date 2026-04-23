@@ -62,6 +62,7 @@ function parseArgs(args: string): ModelCommandArgs {
 /**
  * Check if any filter flags are set
  */
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for boolean flag checks (false should not trigger fallback) */
 function hasAnyFlags(args: ModelCommandArgs): boolean {
   return !!(
     args.provider ||
@@ -72,6 +73,7 @@ function hasAnyFlags(args: ModelCommandArgs): boolean {
     args.all
   );
 }
+/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
 /**
  * Convert parsed args to dialog props

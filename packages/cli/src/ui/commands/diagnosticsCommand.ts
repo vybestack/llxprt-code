@@ -241,6 +241,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       // Add dumpcontext status
       const dumpcontextMode =
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string means not set)
         ephemeralSettings['dumpcontext'] ||
         (ephemeralSettings['dumponerror'] === 'enabled' ? 'error' : 'off');
       if (dumpcontextMode && dumpcontextMode !== 'off') {
@@ -268,10 +269,10 @@ export const diagnosticsCommand: SlashCommand = {
       );
 
       diagnostics.push('\n## Settings');
-      const merged = settings?.merged || {};
-      diagnostics.push(`- Theme: ${merged.ui?.theme || 'default'}`);
-      diagnostics.push(`- Default Profile: ${merged.defaultProfile || 'none'}`);
-      diagnostics.push(`- Sandbox: ${merged.sandbox || 'disabled'}`);
+      const merged = settings?.merged ?? {};
+      diagnostics.push(`- Theme: ${merged.ui?.theme ?? 'default'}`);
+      diagnostics.push(`- Default Profile: ${merged.defaultProfile ?? 'none'}`);
+      diagnostics.push(`- Sandbox: ${merged.sandbox ?? 'disabled'}`);
 
       diagnostics.push('\n## IDE Integration');
       diagnostics.push(

@@ -45,10 +45,11 @@ export async function resolveIntermediateConfig(
   approvalMode: ApprovalMode,
 ): Promise<IntermediateConfig> {
   const screenReader =
-    argv.screenReader !== undefined
-      ? argv.screenReader
-      : (profileMergedSettings.accessibility?.screenReader ?? false);
+    argv.screenReader ??
+    profileMergedSettings.accessibility?.screenReader ??
+    false;
 
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty array should fall back to next source */
   const allowedTools =
     argv.allowedTools ||
     profileMergedSettings.tools?.allowed ||
@@ -56,6 +57,7 @@ export async function resolveIntermediateConfig(
     settings.tools?.allowed ||
     settings.allowedTools ||
     [];
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
   const allowedToolsSet = buildNormalizedToolSet(allowedTools);
 
   let profileSettingsWithTools = profileMergedSettings;
@@ -102,8 +104,10 @@ export async function resolveIntermediateConfig(
     allowedToolsSet,
   );
 
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should fall back to next source, empty array should join to empty string */
   const question =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   return {
     screenReader,

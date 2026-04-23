@@ -344,7 +344,7 @@ export function SettingsDialog({
 
   const generateSubSettingsItems = (parentKey: string) => {
     const parentDefinition = getSettingDefinition(parentKey);
-    let subSettings = parentDefinition?.subSettings || {};
+    let subSettings = parentDefinition?.subSettings ?? {};
 
     // If this is the coreToolSettings, use the memoized dynamic settings
     if (parentKey === 'coreToolSettings') {
@@ -485,7 +485,7 @@ export function SettingsDialog({
       return {
         description: definition?.description,
 
-        label: definition?.label || key,
+        label: definition?.label ?? key,
         value: key,
         type: definition?.type,
         toggle: () => {
@@ -1018,7 +1018,8 @@ export function SettingsDialog({
             // Switch to sub-settings mode
             setSubSettingsMode({
               isActive: true,
-              parentKey: currentItem?.value || '',
+              parentKey: currentItem?.value ?? '',
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string parentKey should fall back to empty string label)
               parentLabel: currentDefinition?.label || currentItem?.value || '',
             });
 
@@ -1412,10 +1413,7 @@ export function SettingsDialog({
 
                 // Add * if value differs from default OR if currently being modified
                 const isModified = modifiedSettings.has(item.value);
-                const effectiveCurrentValue =
-                  currentValue !== undefined && currentValue !== null
-                    ? currentValue
-                    : defaultValue;
+                const effectiveCurrentValue = currentValue ?? defaultValue;
                 const isDifferentFromDefault =
                   effectiveCurrentValue !== defaultValue;
 

@@ -81,6 +81,7 @@ export function resolveProviderAndModel(
 
   const aliasDefaultModel = getAliasDefaultModel(provider);
 
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty model string should fall back to next source */
   const model: string =
     cliModel ||
     profileModel ||
@@ -88,6 +89,7 @@ export function resolveProviderAndModel(
     envDefaultModel ||
     envGeminiModel ||
     (provider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '');
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   return { provider, model };
 }

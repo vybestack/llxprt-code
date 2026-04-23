@@ -128,29 +128,37 @@ const pickTty = (): Promise<TtyTarget> =>
     resolve(getStdioTty());
   });
 
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const inTmux = (): boolean =>
   Boolean(
     process.env['TMUX'] || (process.env['TERM'] ?? '').startsWith('tmux'),
   );
+/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const inScreen = (): boolean =>
   Boolean(
     process.env['STY'] || (process.env['TERM'] ?? '').startsWith('screen'),
   );
+/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const isSSH = (): boolean =>
   Boolean(
     process.env['SSH_TTY'] ||
       process.env['SSH_CONNECTION'] ||
       process.env['SSH_CLIENT'],
   );
+/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
+/* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for env var checks (empty string means not set) */
 const isWSL = (): boolean =>
   Boolean(
     process.env['WSL_DISTRO_NAME'] ||
       process.env['WSLENV'] ||
       process.env['WSL_INTEROP'],
   );
+/* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
 const isWindowsTerminal = (): boolean =>
   process.platform === 'win32' && Boolean(process.env['WT_SESSION']);

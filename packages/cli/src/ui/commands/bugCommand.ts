@@ -23,7 +23,7 @@ export const bugCommand: SlashCommand = {
   description: 'submit a bug report',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args?: string): Promise<void> => {
-    const bugDescription = (args || '').trim();
+    const bugDescription = (args ?? '').trim();
     const { config } = context.services;
 
     const osVersion = `${process.platform} ${process.version}`;
@@ -32,20 +32,20 @@ export const bugCommand: SlashCommand = {
       sandboxEnv = process.env.SANDBOX.replace(/^gemini-(?:code-)?/, '');
     } else if (process.env.SANDBOX === 'sandbox-exec') {
       sandboxEnv = `sandbox-exec (${
-        process.env.SEATBELT_PROFILE || 'unknown'
+        process.env.SEATBELT_PROFILE ?? 'unknown'
       })`;
     }
-    const modelVersion = config?.getModel() || 'Unknown';
+    const modelVersion = config?.getModel() ?? 'Unknown';
     const cliVersion = await getCliVersion();
     const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
     const ideClient =
       (context.services.config?.getIdeMode() &&
-        context.services.config?.getIdeClient()?.getDetectedIdeDisplayName()) ||
+        context.services.config?.getIdeClient()?.getDetectedIdeDisplayName()) ??
       '';
     const terminalName =
-      terminalCapabilityManager.getTerminalName() || 'Unknown';
+      terminalCapabilityManager.getTerminalName() ?? 'Unknown';
     const terminalBgColor =
-      terminalCapabilityManager.getTerminalBackgroundColor() || 'Unknown';
+      terminalCapabilityManager.getTerminalBackgroundColor() ?? 'Unknown';
     const kittyProtocol = terminalCapabilityManager.isKittyProtocolEnabled()
       ? 'Supported'
       : 'Unsupported';

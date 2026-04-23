@@ -1100,7 +1100,7 @@ function entrypoint(
         ? 'npm run debug --'
         : 'npm rebuild && npm run start --'
       : isDebugMode
-        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT || '9229'} $(which llxprt)`
+        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT ?? '9229'} $(which llxprt)`
         : 'llxprt';
 
   const args = [...shellCmds, cliCmd, ...quotedCliArgs];
@@ -1136,7 +1136,7 @@ export async function start_sandbox(
   };
 
   const patcher = new ConsolePatcher({
-    debugMode: cliConfig?.getDebugMode() || !!process.env.DEBUG,
+    debugMode: cliConfig?.getDebugMode() ?? !!process.env.DEBUG,
     stderr: true,
   });
   patcher.patch();
@@ -1190,7 +1190,7 @@ export async function start_sandbox(
       // Add included directories from the workspace context
       // Always add 5 INCLUDE_DIR parameters to ensure .sb files can reference them
       const MAX_INCLUDE_DIRS = 5;
-      const targetDir = fs.realpathSync(cliConfig?.getTargetDir() || '');
+      const targetDir = fs.realpathSync(cliConfig?.getTargetDir() ?? '');
       const includedDirs: string[] = [];
 
       if (cliConfig) {
@@ -1240,16 +1240,16 @@ export async function start_sandbox(
 
       if (proxyCommand) {
         const proxy =
-          process.env.HTTPS_PROXY ||
-          process.env.https_proxy ||
-          process.env.HTTP_PROXY ||
-          process.env.http_proxy ||
+          process.env.HTTPS_PROXY ??
+          process.env.https_proxy ??
+          process.env.HTTP_PROXY ??
+          process.env.http_proxy ??
           'http://localhost:8877';
         sandboxEnv['HTTPS_PROXY'] = proxy;
         sandboxEnv['https_proxy'] = proxy; // lower-case can be required, e.g. for curl
         sandboxEnv['HTTP_PROXY'] = proxy;
         sandboxEnv['http_proxy'] = proxy;
-        const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+        const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
         if (noProxy) {
           sandboxEnv['NO_PROXY'] = noProxy;
           sandboxEnv['no_proxy'] = noProxy;
@@ -1579,7 +1579,7 @@ export async function start_sandbox(
       const portsToForwardSet = new Set<string>(ports());
 
       if (isSandboxDebugModeEnabled(process.env.DEBUG)) {
-        portsToForwardSet.add(process.env.DEBUG_PORT || '9229');
+        portsToForwardSet.add(process.env.DEBUG_PORT ?? '9229');
       }
       const portsToForward: string[] = [...portsToForwardSet];
 
@@ -1613,7 +1613,7 @@ export async function start_sandbox(
 
     // if DEBUG is enabled, expose debugging port (skip if using SSH tunnels on Podman macOS)
     if (isSandboxDebugModeEnabled(process.env.DEBUG) && !isPodmanMacOS) {
-      const debugPort = process.env.DEBUG_PORT || '9229';
+      const debugPort = process.env.DEBUG_PORT ?? '9229';
       args.push(`--publish`, `${debugPort}:${debugPort}`);
     }
 
@@ -1623,10 +1623,10 @@ export async function start_sandbox(
     const proxyCommand = process.env.LLXPRT_SANDBOX_PROXY_COMMAND;
     if (proxyCommand) {
       let proxy =
-        process.env.HTTPS_PROXY ||
-        process.env.https_proxy ||
-        process.env.HTTP_PROXY ||
-        process.env.http_proxy ||
+        process.env.HTTPS_PROXY ??
+        process.env.https_proxy ??
+        process.env.HTTP_PROXY ??
+        process.env.http_proxy ??
         'http://localhost:8877';
       proxy = proxy.replace('localhost', SANDBOX_PROXY_NAME);
       if (proxy) {
@@ -1635,7 +1635,7 @@ export async function start_sandbox(
         args.push('--env', `HTTP_PROXY=${proxy}`);
         args.push('--env', `http_proxy=${proxy}`);
       }
-      const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+      const noProxy = process.env.NO_PROXY ?? process.env.no_proxy;
       if (noProxy) {
         args.push('--env', `NO_PROXY=${noProxy}`);
         args.push('--env', `no_proxy=${noProxy}`);
@@ -1772,7 +1772,7 @@ export async function start_sandbox(
     }
 
     // copy NODE_OPTIONS
-    const existingNodeOptions = process.env.NODE_OPTIONS || '';
+    const existingNodeOptions = process.env.NODE_OPTIONS ?? '';
     const allNodeOptions = [
       ...(existingNodeOptions ? [existingNodeOptions] : []),
       ...nodeArgs,

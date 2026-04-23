@@ -31,9 +31,9 @@ async function getMcpServersFromConfig(): Promise<
     new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
   );
 
-  const mcpServers = { ...(settings.merged.mcpServers || {}) };
+  const mcpServers = { ...(settings.merged.mcpServers ?? {}) };
   for (const extension of extensions) {
-    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
+    Object.entries(extension.mcpServers ?? {}).forEach(([key, server]) => {
       if (mcpServers[key]) {
         return;
       }
@@ -132,10 +132,10 @@ export async function listMcpServers(): Promise<void> {
         );
       }
     } else if (server.url) {
-      const type = server.type || 'http';
+      const type = server.type ?? 'http';
       serverInfo += `${server.url} (${type})`;
     } else if (server.command) {
-      serverInfo += `${server.command} ${server.args?.join(' ') || ''} (stdio)`;
+      serverInfo += `${server.command} ${server.args?.join(' ') ?? ''} (stdio)`;
     }
 
     debugLogger.log(`${statusIndicator} ${serverInfo} - ${statusText}`);

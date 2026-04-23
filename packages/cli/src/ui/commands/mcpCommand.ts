@@ -56,7 +56,7 @@ const mcpAuthSchema: CommandArgumentSchema = [
         return [];
       }
 
-      const mcpServers = config.getMcpServers() || {};
+      const mcpServers = config.getMcpServers() ?? {};
       return Object.keys(mcpServers).map((name) => ({
         value: name,
         description: 'Configured MCP server',
@@ -89,9 +89,9 @@ const getMcpStatus = async (
     };
   }
 
-  const mcpServers = config.getMcpServers() || {};
+  const mcpServers = config.getMcpServers() ?? {};
   const serverNames = Object.keys(mcpServers);
-  const blockedMcpServers = config.getBlockedMcpServers() || [];
+  const blockedMcpServers = config.getBlockedMcpServers() ?? [];
 
   if (serverNames.length === 0 && blockedMcpServers.length === 0) {
     const docsUrl =
@@ -190,7 +190,7 @@ const getMcpStatus = async (
     // Format server header with bold formatting and status
     message += `${statusIndicator} \u001b[1m${serverDisplayName}\u001b[0m - ${statusText}`;
 
-    let needsAuthHint = mcpServerRequiresOAuth.get(serverName) || false;
+    let needsAuthHint = mcpServerRequiresOAuth.get(serverName) ?? false;
     // Add OAuth status if applicable
     if (server?.oauth?.enabled || mcpServerRequiresOAuth.has(serverName)) {
       needsAuthHint = true;
@@ -442,7 +442,7 @@ const authCommand: SlashCommand = {
       };
     }
 
-    const mcpServers = config.getMcpServers() || {};
+    const mcpServers = config.getMcpServers() ?? {};
 
     if (!serverName) {
       // List servers that support OAuth (from config or discovered)
@@ -508,11 +508,9 @@ const authCommand: SlashCommand = {
       const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
 
       let oauthConfig = server.oauth;
-      if (!oauthConfig) {
-        oauthConfig = { enabled: false };
-      }
+      oauthConfig ??= { enabled: false };
 
-      const mcpServerUrl = server.httpUrl || server.url;
+      const mcpServerUrl = server.httpUrl ?? server.url;
       await MCPOAuthProvider.authenticate(
         serverName,
         oauthConfig,

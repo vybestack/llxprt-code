@@ -194,9 +194,7 @@ function getSchemaDefaults(): Partial<Settings> {
         schemaEntry.properties
       ) {
         // Initialize nested object if it doesn't exist
-        if (!target[key]) {
-          target[key] = {};
-        }
+        target[key] ??= {};
         extractDefaults(
           schemaEntry.properties as Record<string, SettingDefinition>,
           target[key] as Record<string, unknown>,
@@ -255,109 +253,109 @@ function mergeSettings(
     ...safeWorkspace,
     ...system,
     ui: {
-      ...(schemaDefaults.ui || {}),
+      ...(schemaDefaults.ui ?? {}),
       // Migrate legacy top-level UI settings to ui.* namespace for backwards compatibility
       // This ensures users with old settings.json files don't lose their preferences
       ...extractLegacyUiKeys(systemDefaults),
-      ...(systemDefaults.ui || {}),
+      ...(systemDefaults.ui ?? {}),
       ...extractLegacyUiKeys(user),
-      ...(user.ui || {}),
+      ...(user.ui ?? {}),
       ...extractLegacyUiKeys(safeWorkspace),
-      ...(safeWorkspace.ui || {}),
+      ...(safeWorkspace.ui ?? {}),
       ...extractLegacyUiKeys(system),
-      ...(system.ui || {}),
+      ...(system.ui ?? {}),
       customThemes: {
-        ...(systemDefaults.ui?.customThemes || {}),
-        ...(user.ui?.customThemes || {}),
-        ...(safeWorkspace.ui?.customThemes || {}),
-        ...(system.ui?.customThemes || {}),
+        ...(systemDefaults.ui?.customThemes ?? {}),
+        ...(user.ui?.customThemes ?? {}),
+        ...(safeWorkspace.ui?.customThemes ?? {}),
+        ...(system.ui?.customThemes ?? {}),
       },
     },
     mcpServers: {
-      ...(systemDefaults.mcpServers || {}),
-      ...(user.mcpServers || {}),
-      ...(safeWorkspace.mcpServers || {}),
-      ...(system.mcpServers || {}),
+      ...(systemDefaults.mcpServers ?? {}),
+      ...(user.mcpServers ?? {}),
+      ...(safeWorkspace.mcpServers ?? {}),
+      ...(system.mcpServers ?? {}),
     },
     includeDirectories: [
-      ...(systemDefaults.includeDirectories || []),
-      ...(user.includeDirectories || []),
-      ...(safeWorkspace.includeDirectories || []),
-      ...(system.includeDirectories || []),
+      ...(systemDefaults.includeDirectories ?? []),
+      ...(user.includeDirectories ?? []),
+      ...(safeWorkspace.includeDirectories ?? []),
+      ...(system.includeDirectories ?? []),
     ],
     chatCompression: {
-      ...(systemDefaults.chatCompression || {}),
-      ...(user.chatCompression || {}),
-      ...(safeWorkspace.chatCompression || {}),
-      ...(system.chatCompression || {}),
+      ...(systemDefaults.chatCompression ?? {}),
+      ...(user.chatCompression ?? {}),
+      ...(safeWorkspace.chatCompression ?? {}),
+      ...(system.chatCompression ?? {}),
     },
     security: {
-      ...(schemaDefaults.security || {}),
-      ...(systemDefaults.security || {}),
-      ...(user.security || {}),
-      ...(safeWorkspace.security || {}),
-      ...(system.security || {}),
+      ...(schemaDefaults.security ?? {}),
+      ...(systemDefaults.security ?? {}),
+      ...(user.security ?? {}),
+      ...(safeWorkspace.security ?? {}),
+      ...(system.security ?? {}),
     },
     telemetry: {
-      ...(schemaDefaults.telemetry || {}),
-      ...(systemDefaults.telemetry || {}),
-      ...(user.telemetry || {}),
-      ...(safeWorkspace.telemetry || {}),
-      ...(system.telemetry || {}),
+      ...(schemaDefaults.telemetry ?? {}),
+      ...(systemDefaults.telemetry ?? {}),
+      ...(user.telemetry ?? {}),
+      ...(safeWorkspace.telemetry ?? {}),
+      ...(system.telemetry ?? {}),
     },
     mcp: {
-      ...(schemaDefaults.mcp || {}),
-      ...(systemDefaults.mcp || {}),
-      ...(user.mcp || {}),
-      ...(safeWorkspace.mcp || {}),
-      ...(system.mcp || {}),
+      ...(schemaDefaults.mcp ?? {}),
+      ...(systemDefaults.mcp ?? {}),
+      ...(user.mcp ?? {}),
+      ...(safeWorkspace.mcp ?? {}),
+      ...(system.mcp ?? {}),
     },
     tools: {
-      ...(schemaDefaults.tools || {}),
-      ...(systemDefaults.tools || {}),
-      ...(user.tools || {}),
-      ...(safeWorkspace.tools || {}),
-      ...(system.tools || {}),
+      ...(schemaDefaults.tools ?? {}),
+      ...(systemDefaults.tools ?? {}),
+      ...(user.tools ?? {}),
+      ...(safeWorkspace.tools ?? {}),
+      ...(system.tools ?? {}),
     },
     extensions: {
-      ...(systemDefaults.extensions || {}),
-      ...(user.extensions || {}),
-      ...(safeWorkspace.extensions || {}),
-      ...(system.extensions || {}),
+      ...(systemDefaults.extensions ?? {}),
+      ...(user.extensions ?? {}),
+      ...(safeWorkspace.extensions ?? {}),
+      ...(system.extensions ?? {}),
       disabled: [
         ...new Set([
-          ...(systemDefaults.extensions?.disabled || []),
-          ...(user.extensions?.disabled || []),
-          ...(safeWorkspace.extensions?.disabled || []),
-          ...(system.extensions?.disabled || []),
+          ...(systemDefaults.extensions?.disabled ?? []),
+          ...(user.extensions?.disabled ?? []),
+          ...(safeWorkspace.extensions?.disabled ?? []),
+          ...(system.extensions?.disabled ?? []),
         ]),
       ],
       workspacesWithMigrationNudge: [
         ...new Set([
-          ...(systemDefaults.extensions?.workspacesWithMigrationNudge || []),
-          ...(user.extensions?.workspacesWithMigrationNudge || []),
-          ...(safeWorkspace.extensions?.workspacesWithMigrationNudge || []),
-          ...(system.extensions?.workspacesWithMigrationNudge || []),
+          ...(systemDefaults.extensions?.workspacesWithMigrationNudge ?? []),
+          ...(user.extensions?.workspacesWithMigrationNudge ?? []),
+          ...(safeWorkspace.extensions?.workspacesWithMigrationNudge ?? []),
+          ...(system.extensions?.workspacesWithMigrationNudge ?? []),
         ]),
       ],
     },
     // coreToolSettings is UI-only and should not be merged from settings files
     // It only exists in memory for the UI and manipulates excludeTools/allowedTools
     // But it should have schema defaults for proper UI display
-    coreToolSettings: schemaDefaults.coreToolSettings || {},
+    coreToolSettings: schemaDefaults.coreToolSettings ?? {},
     hooksConfig: {
-      ...(schemaDefaults.hooksConfig || {}),
-      ...(systemDefaults.hooksConfig || {}),
-      ...(user.hooksConfig || {}),
-      ...(safeWorkspace.hooksConfig || {}),
-      ...(system.hooksConfig || {}),
+      ...(schemaDefaults.hooksConfig ?? {}),
+      ...(systemDefaults.hooksConfig ?? {}),
+      ...(user.hooksConfig ?? {}),
+      ...(safeWorkspace.hooksConfig ?? {}),
+      ...(system.hooksConfig ?? {}),
     },
     hooks: {
-      ...(schemaDefaults.hooks || {}),
-      ...(systemDefaults.hooks || {}),
-      ...(user.hooks || {}),
-      ...(safeWorkspace.hooks || {}),
-      ...(system.hooks || {}),
+      ...(schemaDefaults.hooks ?? {}),
+      ...(systemDefaults.hooks ?? {}),
+      ...(user.hooks ?? {}),
+      ...(safeWorkspace.hooks ?? {}),
+      ...(system.hooks ?? {}),
     },
   };
 
@@ -527,9 +525,7 @@ export class LoadedSettings {
       let current = settingsFile.settings[topLevel] as Record<string, unknown>;
       const nestedParts = nested.split('.');
       for (let i = 0; i < nestedParts.length - 1; i++) {
-        if (!current[nestedParts[i]]) {
-          current[nestedParts[i]] = {};
-        }
+        current[nestedParts[i]] ??= {};
         current = current[nestedParts[i]] as Record<string, unknown>;
       }
       current[nestedParts[nestedParts.length - 1]] = value;
@@ -544,25 +540,25 @@ export class LoadedSettings {
 
   // Provider keyfile methods for llxprt multi-provider support
   getProviderKeyfile(providerName: string): string | undefined {
-    const keyfiles = this.merged.providerKeyfiles || {};
+    const keyfiles = this.merged.providerKeyfiles ?? {};
     return keyfiles[providerName];
   }
 
   setProviderKeyfile(providerName: string, keyfilePath: string): void {
-    const keyfiles = this.merged.providerKeyfiles || {};
+    const keyfiles = this.merged.providerKeyfiles ?? {};
     keyfiles[providerName] = keyfilePath;
     this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
   }
 
   removeProviderKeyfile(providerName: string): void {
-    const keyfiles = this.merged.providerKeyfiles || {};
+    const keyfiles = this.merged.providerKeyfiles ?? {};
     delete keyfiles[providerName];
     this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
   }
 
   // OAuth enablement methods
   getOAuthEnabledProviders(): Record<string, boolean> {
-    return this.merged.oauthEnabledProviders || {};
+    return this.merged.oauthEnabledProviders ?? {};
   }
 
   // Note: setRemoteAdminSettings from upstream omitted - not applicable to LLxprt (no Google admin integration)
@@ -659,7 +655,7 @@ export function loadEnvironment(settings: Settings): void {
       const parsedEnv = dotenv.parse(envFileContent);
 
       const excludedVars =
-        settings?.excludedProjectEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
+        settings?.excludedProjectEnvVars ?? DEFAULT_EXCLUDED_ENV_VARS;
       const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {

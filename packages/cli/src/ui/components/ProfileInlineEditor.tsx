@@ -267,9 +267,11 @@ export const ProfileInlineEditor: React.FC<ProfileInlineEditorProps> = ({
       </Box>
 
       {/* Error display */}
+      {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for error display (empty string means no error) */}
       {(validationError || externalError || validateJson) && (
         <Box marginBottom={1}>
           <Text color={SemanticColors.status.error}>
+            {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for error display (empty string means no error) */}
             Error: {validationError || externalError || validateJson}
           </Text>
         </Box>

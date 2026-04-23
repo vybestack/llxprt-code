@@ -403,8 +403,10 @@ export async function main() {
     return cachedStdinData ?? '';
   };
 
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string and empty array should fall back to next source */
   const questionFromArgs =
     argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   await cleanupCheckpoints();
 
@@ -558,7 +560,7 @@ export async function main() {
   }
 
   const bootstrapProfileName =
-    argv.profileLoad?.trim() ||
+    argv.profileLoad?.trim() ??
     (typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
       ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
       : '');

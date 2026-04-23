@@ -28,8 +28,8 @@ export const memoryCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       autoExecute: true,
       action: async (context) => {
-        const memoryContent = context.services.config?.getUserMemory() || '';
-        const fileCount = context.services.config?.getLlxprtMdFileCount() || 0;
+        const memoryContent = context.services.config?.getUserMemory() ?? '';
+        const fileCount = context.services.config?.getLlxprtMdFileCount() ?? 0;
 
         const messageContent =
           memoryContent.length > 0
@@ -115,7 +115,7 @@ export const memoryCommand: SlashCommand = {
 
           const fact = remainingArgs;
           const workingDir =
-            context.services.config?.getWorkingDir() || process.cwd();
+            context.services.config?.getWorkingDir() ?? process.cwd();
           const filePath =
             firstArg === 'core.project'
               ? getProjectCoreMemoryFilePath(workingDir)
@@ -239,7 +239,7 @@ export const memoryCommand: SlashCommand = {
                 settings.merged,
                 config.getExtensions(),
                 config.isTrustedFolder(),
-                context.services.settings.merged.ui.memoryImportFormat ||
+                context.services.settings.merged.ui.memoryImportFormat ??
                   'tree', // Use setting or default to 'tree'
                 config.getFileFilteringOptions(),
               );
@@ -299,7 +299,7 @@ export const memoryCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       autoExecute: true,
       action: async (context) => {
-        const filePaths = context.services.config?.getLlxprtMdFilePaths() || [];
+        const filePaths = context.services.config?.getLlxprtMdFilePaths() ?? [];
         const fileCount = filePaths.length;
 
         const messageContent =
