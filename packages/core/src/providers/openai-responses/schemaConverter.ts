@@ -270,7 +270,7 @@ export function convertToolsToOpenAIResponses(
       responsesTools.push({
         type: 'function',
         name: decl.name,
-        description: decl.description || null,
+        description: decl.description ?? null,
         parameters,
         strict: null,
       });

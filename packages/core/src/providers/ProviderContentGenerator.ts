@@ -69,8 +69,9 @@ export class ProviderContentGenerator implements ContentGenerator {
       text = request.contents;
     } else if (Array.isArray(request.contents)) {
       text = request.contents
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty parts array should use []
         .flatMap((c: Content) => c.parts || [])
-        .map((p: Part) => (p as { text: string }).text || '')
+        .map((p: Part) => (p as { text: string }).text ?? '')
         .join(' ');
     }
     // Very rough approximation: ~4 characters per token

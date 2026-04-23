@@ -155,7 +155,9 @@ export function buildResponsesInputFromContent(
                 toolResponseBlock.toolName ?? 'tool_response',
               );
 
-        const textResult = limited.content || limited.message || '';
+        const textResult =
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message
+          limited.content || limited.message || '';
 
         input.push({
           type: 'function_call_output',

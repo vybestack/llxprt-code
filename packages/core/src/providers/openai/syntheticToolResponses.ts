@@ -47,6 +47,7 @@ export class SyntheticToolResponseHandler {
         {
           type: 'tool_response',
           callId: tool.toolCallId,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: toolName is optional string, empty string should use 'unknown'
           toolName: tool.toolName || 'unknown',
           result: 'Tool execution cancelled by user',
           error: 'Cancelled by user',

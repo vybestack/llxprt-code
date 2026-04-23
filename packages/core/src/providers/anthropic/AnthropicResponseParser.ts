@@ -174,9 +174,7 @@ export function parseAnthropicResponse(
   // Propagate stop_reason so downstream turn handling and telemetry
   // receive a terminal signal (issue #1844).
   if (message.stop_reason) {
-    if (!result.metadata) {
-      result.metadata = {};
-    }
+    result.metadata ??= {};
     result.metadata.stopReason = message.stop_reason;
   }
 

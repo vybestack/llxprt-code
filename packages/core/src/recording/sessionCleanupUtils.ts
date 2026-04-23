@@ -68,6 +68,7 @@ async function readSessionHeader(
       if (parsed.type === 'session_start' && parsed.payload?.sessionId) {
         return {
           sessionId: parsed.payload.sessionId,
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: startTime may be empty string, fallback to ts
           startTime: parsed.payload.startTime || parsed.ts,
         };
       }

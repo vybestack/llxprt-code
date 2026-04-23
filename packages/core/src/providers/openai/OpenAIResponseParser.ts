@@ -151,7 +151,7 @@ export function extractKimiToolCallsFromText(
             // Infer tool name from ID.
             let toolName = '';
             const match =
-              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
+              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ??
               /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
             if (match) {
               toolName = match[1];

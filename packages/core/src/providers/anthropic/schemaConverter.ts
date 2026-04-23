@@ -269,7 +269,7 @@ export function convertToolsToAnthropic(
 
       anthropicTools.push({
         name: toolName,
-        description: decl.description || '',
+        description: decl.description ?? '',
         input_schema: inputSchema,
       });
     }

@@ -555,9 +555,7 @@ export function createPolicyUpdater(
             }
 
             // Initialize rule array if needed
-            if (!existingData.rule) {
-              existingData.rule = [];
-            }
+            existingData.rule ??= [];
 
             // Build new rule
             const newRule: TomlRule = {};

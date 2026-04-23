@@ -193,7 +193,7 @@ export async function prepareRequest(
   // Add stream options if streaming is enabled
   const streamOptions = (ephemeralSettings['stream-options'] as
     | { include_usage?: boolean }
-    | undefined) || { include_usage: true };
+    | undefined) ?? { include_usage: true };
 
   if (streamingEnabled && streamOptions) {
     Object.assign(requestBody, { stream_options: streamOptions });

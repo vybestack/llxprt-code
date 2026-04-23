@@ -92,6 +92,7 @@ export class PromptCache {
 
     // Include interaction mode in cache key
     const interactionMode =
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string should use default
       context.environment?.interactionMode || 'interactive';
     envFlags.push(interactionMode);
 

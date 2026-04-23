@@ -265,7 +265,7 @@ export class ConfirmationCoordinator {
       return;
     }
 
-    const allowedTools = this.config.getAllowedTools() || [];
+    const allowedTools = this.config.getAllowedTools() ?? [];
     if (
       this.config.getApprovalMode() === ApprovalMode.YOLO ||
       doesToolInvocationMatch(toolCall.tool, invocation, allowedTools)

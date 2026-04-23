@@ -26,6 +26,7 @@ export function extractCacheMetrics(
   usage: unknown,
   headers?: Headers,
 ): CacheMetrics {
+  /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: chain of fallbacks where 0 means "not found" */
   const cachedTokens =
     (hasProperty(usage, 'prompt_tokens_details') &&
       hasProperty(usage.prompt_tokens_details, 'cached_tokens') &&
@@ -46,6 +47,7 @@ export function extractCacheMetrics(
     (hasProperty(usage, 'prompt_cache_miss_tokens') &&
       toNumber(usage.prompt_cache_miss_tokens)) ||
     0;
+  /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
 
   return {
     cachedTokens,

@@ -220,6 +220,7 @@ function limitToolPayload(
     block.toolName ?? 'tool_response',
   );
   const candidate =
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message, then placeholder
     limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;
   const sanitized = sanitizeUnicode(candidate);
   return {

@@ -272,7 +272,7 @@ export function convertToolsToOpenAI(
         type: 'function',
         function: {
           name: decl.name,
-          description: decl.description || '',
+          description: decl.description ?? '',
           parameters,
         },
       });
