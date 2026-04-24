@@ -122,9 +122,8 @@ export class Task {
     const runtimeState = createAgentRuntimeState({
       runtimeId: `${this.contextId}-task-runtime`,
       provider: this.config.getProvider() ?? 'gemini',
-      // getModel() returns string (non-null), but ?? is safer and consistent
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive nullish coalescing for future-proofing
-      model: this.config.getModel() ?? contentConfig?.model ?? 'gemini-pro',
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty-string model should fall through to contentConfig/default (matches PR #1901 convention; Config.getModel() returns string)
+      model: this.config.getModel() || contentConfig?.model || 'gemini-pro',
       proxyUrl: this.config.getProxy(),
       sessionId: this.config.getSessionId(),
     });

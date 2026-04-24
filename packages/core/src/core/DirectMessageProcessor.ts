@@ -522,14 +522,12 @@ export class DirectMessageProcessor {
           (part) => 'text' in part && part.text?.trim(),
         );
         if (!hasText) {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined content should default to empty object
-          candidate.content = candidate.content || {
+          candidate.content = candidate.content ?? {
             role: 'model',
             parts: [],
           };
           candidate.content.parts = [
-            /* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: undefined or missing parts should default to empty array for the spread */
-            ...(candidate.content.parts || []),
+            ...(candidate.content.parts ?? []),
             { text: aggregatedText },
           ];
         }
