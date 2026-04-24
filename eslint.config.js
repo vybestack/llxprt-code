@@ -201,7 +201,7 @@ export default tseslint.config(
       // --- Strict rules modeled after lsp/ui packages (enabled as warnings for core/cli) ---
 
       // Strict TypeScript rules
-      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/strict-boolean-expressions': [
         'warn',
         {
