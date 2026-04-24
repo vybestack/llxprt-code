@@ -118,7 +118,7 @@ export const METADATA_KEY = '__persistedState';
 export function getPersistedState(
   metadata: PersistedTaskMetadata,
 ): PersistedStateMetadata | undefined {
-  return metadata?.[METADATA_KEY] as PersistedStateMetadata | undefined;
+  return metadata[METADATA_KEY] as PersistedStateMetadata | undefined;
 }
 
 export function setPersistedState(

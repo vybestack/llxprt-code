@@ -257,7 +257,7 @@ export class DiffManager {
           modified?: vscode.Uri;
           original?: vscode.Uri;
         };
-        if (input && input.modified?.toString() === rightDocUri.toString()) {
+        if (input.modified?.toString() === rightDocUri.toString()) {
           await vscode.window.tabGroups.close(tab);
           return;
         }

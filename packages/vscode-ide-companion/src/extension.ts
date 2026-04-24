@@ -30,8 +30,8 @@ const MANAGED_EXTENSION_SURFACES: ReadonlySet<IdeInfo['name']> = new Set([
   IDE_DEFINITIONS.cloudshell.name,
 ]);
 
-let ideServer: IDEServer;
-let logger: vscode.OutputChannel;
+let ideServer: IDEServer | undefined;
+let logger: vscode.OutputChannel | undefined;
 
 let log: (message: string) => void = () => {};
 
@@ -192,10 +192,14 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       updateWorkspacePath(context);
-      void ideServer.syncEnvVars();
+      if (ideServer) {
+        void ideServer.syncEnvVars();
+      }
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
-      void ideServer.syncEnvVars();
+      if (ideServer) {
+        void ideServer.syncEnvVars();
+      }
     }),
     vscode.commands.registerCommand('llxprt-code.runLLxprtCode', async () => {
       const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -238,6 +242,7 @@ export async function activate(context: vscode.ExtensionContext) {
 export async function deactivate(): Promise<void> {
   log('Extension deactivated');
   try {
+    // VS Code lifecycle boundary: ideServer may be undefined if activation failed
     if (ideServer) {
       await ideServer.stop();
     }
@@ -245,6 +250,7 @@ export async function deactivate(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     log(`Failed to stop IDE server during deactivation: ${message}`);
   } finally {
+    // VS Code lifecycle boundary: logger may be undefined if activation failed
     if (logger) {
       logger.dispose();
     }

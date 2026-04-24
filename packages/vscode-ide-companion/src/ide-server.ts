@@ -114,8 +114,7 @@ export class IDEServer {
   private portFile: string | undefined;
   private port: number | undefined;
   private authToken: string | undefined;
-  private transports: { [sessionId: string]: StreamableHTTPServerTransport } =
-    {};
+  private transports: Map<string, StreamableHTTPServerTransport> = new Map();
   private openFilesManager: OpenFilesManager | undefined;
   diffManager: DiffManager;
 
@@ -191,7 +190,7 @@ export class IDEServer {
       context.subscriptions.push(onDidChangeSubscription);
       const onDidChangeDiffSubscription = this.diffManager.onDidChange(
         (notification) => {
-          for (const transport of Object.values(this.transports)) {
+          for (const transport of this.transports.values()) {
             void transport.send(notification);
           }
         },
@@ -204,14 +203,20 @@ export class IDEServer {
           | undefined;
         let transport: StreamableHTTPServerTransport;
 
-        if (sessionId && this.transports[sessionId]) {
-          transport = this.transports[sessionId];
-        } else if (!sessionId && isInitializeRequest(req.body)) {
+        // Preserve original behavior:
+        // - Known session ID → reuse existing transport
+        // - No existing transport for session (including stale/unknown session ID) + initialize request → create new transport
+        // - Anything else → 400
+        const transportForSession =
+          sessionId === undefined ? undefined : this.transports.get(sessionId);
+        if (transportForSession) {
+          transport = transportForSession;
+        } else if (isInitializeRequest(req.body)) {
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (newSessionId) => {
               this.log(`New session initialized: ${newSessionId}`);
-              this.transports[newSessionId] = transport;
+              this.transports.set(newSessionId, transport);
             },
           });
           let missedPings = 0;
@@ -241,7 +246,7 @@ export class IDEServer {
             if (transport.sessionId) {
               this.log(`Session closed: ${transport.sessionId}`);
               sessionsWithInitialNotification.delete(transport.sessionId);
-              delete this.transports[transport.sessionId];
+              this.transports.delete(transport.sessionId);
             }
           };
           void mcpServer.connect(transport);
@@ -297,13 +302,15 @@ export class IDEServer {
         const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
           | string
           | undefined;
-        if (!sessionId || !this.transports[sessionId]) {
+        const transport = sessionId
+          ? this.transports.get(sessionId)
+          : undefined;
+        if (!sessionId || !transport) {
           this.log('Invalid or missing session ID');
           res.status(400).send('Invalid or missing session ID');
           return;
         }
 
-        const transport = this.transports[sessionId];
         try {
           await transport.handleRequest(req, res);
         } catch (error) {
@@ -392,7 +399,7 @@ export class IDEServer {
     if (!this.openFilesManager) {
       return;
     }
-    for (const transport of Object.values(this.transports)) {
+    for (const transport of this.transports.values()) {
       sendIdeContextUpdateNotification(
         transport,
         this.log.bind(this),

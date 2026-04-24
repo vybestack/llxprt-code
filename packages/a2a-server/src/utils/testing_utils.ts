@@ -143,6 +143,8 @@ export function createMockConfig(
                 const requests = Array.isArray(request) ? request : [request];
                 const scheduledCalls = requests.map((requestItem, index) =>
                   makeCall(
+                    // Test utility mock contract: callId fallback for defensive testing
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Permissive mock contract for test utilities
                     requestItem.callId ?? `call-${index}`,
                     requestItem.name,
                     'scheduled',
@@ -157,7 +159,7 @@ export function createMockConfig(
                 const confirmationResults = await Promise.all(
                   scheduledCalls.map(async (call) => {
                     const tool = mockConfig
-                      .getToolRegistry?.()
+                      .getToolRegistry()
                       ?.getTool?.(call.request.name);
                     if (!tool || typeof tool.build !== 'function') {
                       return false;
@@ -226,11 +228,9 @@ export function createMockConfig(
             cancelAll: vi.fn(),
             dispose: vi.fn(),
             toolCalls: [],
-            getPreferredEditor: callbacks.getPreferredEditor ?? vi.fn(),
+            getPreferredEditor: callbacks.getPreferredEditor,
             config: mockConfig,
-            toolRegistry: mockConfig?.getToolRegistry?.() ?? {
-              getTool: vi.fn(),
-            },
+            toolRegistry: mockConfig.getToolRegistry(),
           } as unknown as CoreToolScheduler;
 
           return scheduler;
@@ -297,10 +297,11 @@ export function assertUniqueFinalEventIsLast(
 ) {
   // Final event is input-required & final
   const finalEvent = events[events.length - 1].result as TaskStatusUpdateEvent;
+  // metadata is optional per SDK type, test contract ensures it's present for final events
   expect(finalEvent.metadata?.['coderAgent']).toMatchObject({
     kind: 'state-change',
   });
-  expect(finalEvent.status?.state).toBe('input-required');
+  expect(finalEvent.status.state).toBe('input-required');
   expect(finalEvent.final).toBe(true);
 
   // There is only one event with final and its the last

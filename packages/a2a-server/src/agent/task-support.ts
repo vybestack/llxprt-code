@@ -574,7 +574,9 @@ export function handleStreamError(
   stateChange: StateChange,
   traceId?: string,
 ): void {
+  // Provider stream events are runtime boundaries; malformed payloads must not publish undefined.
   const errorMessage =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Runtime boundary: error.message may be undefined in malformed payloads despite type definitions
     event.value.error.message ?? 'Unknown error from LLM stream';
   logger.error('[Task] Received error event from LLM stream:', errorMessage);
   const errMessage = parseAndFormatApiError(event.value.error);

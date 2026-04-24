@@ -284,7 +284,7 @@ export async function createApp() {
       }
       try {
         const wrappers = agentExecutor.getAllTasks();
-        if (wrappers && wrappers.length > 0) {
+        if (wrappers.length > 0) {
           const tasksMetadata = await Promise.all(
             wrappers.map((wrapper) => wrapper.task.getMetadata()),
           );
