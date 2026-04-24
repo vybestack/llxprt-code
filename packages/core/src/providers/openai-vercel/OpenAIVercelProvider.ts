@@ -358,12 +358,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       : customFetch;
 
     return createOpenAI({
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: authToken may be null/empty string, should fall through to undefined
       apiKey: authToken || undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: baseURL may be empty string, should fall through to undefined
+      /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: baseURL and headers may be empty strings/objects, should fall through to undefined */
       baseURL: baseURL || undefined,
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: headers may be empty object, should fall through to undefined
       headers: headers || undefined,
+      /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
       fetch: fetchWithCompatibility,
     });
   }

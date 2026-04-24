@@ -22,7 +22,7 @@ interface ModelSelectStepProps {
   provider: string;
   models: ModelInfo[];
   modelsLoadStatus: ModelsLoadStatus;
-  onSelect: (modelId: string) => void;
+  onSelect: (modelId: string) => void | Promise<void>;
   onBack: () => void;
   isFocused?: boolean;
 }
@@ -59,7 +59,7 @@ export const ModelSelectStep: React.FC<ModelSelectStepProps> = ({
       if (value === '__back__') {
         onBack();
       } else {
-        onSelect(value);
+        void onSelect(value);
       }
     },
     [onBack, onSelect],

@@ -107,7 +107,6 @@ describe('OAuthManager.logout runtime cache handling', () => {
     providerManagerRef.current?.getProviderByName.mockReturnValue(provider);
 
     expect(flushMockRef.current).toBeDefined();
-    // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
     expect(flushMockRef.current).toHaveBeenCalledWith('test-runtime');
   });
 

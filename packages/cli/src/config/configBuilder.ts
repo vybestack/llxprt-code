@@ -241,7 +241,6 @@ function buildFeatureArgs(
     enableExtensionReloading:
       profileSettingsWithTools.experimental?.extensionReloading,
     blockedMcpServers: [...blockedMcpServers],
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: false should fall back to skills.enabled
     skillsSupport:
       profileSettingsWithTools.experimental?.skills === true ||
       (profileSettingsWithTools.skills?.enabled ?? true),

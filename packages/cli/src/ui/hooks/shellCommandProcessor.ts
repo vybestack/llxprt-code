@@ -73,7 +73,7 @@ export const useShellCommandProcessor = (
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  onExec: (command: Promise<void>) => void,
+  onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
   config: Config,
   geminiClient: GeminiClient | undefined,
@@ -394,7 +394,7 @@ export const useShellCommandProcessor = (
         executeCommand(resolve);
       });
 
-      onExec(execPromise);
+      void onExec(execPromise);
       return true;
     },
     [

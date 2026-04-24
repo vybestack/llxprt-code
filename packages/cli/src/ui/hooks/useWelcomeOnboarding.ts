@@ -41,7 +41,7 @@ export interface WelcomeActions {
   selectProvider: (providerId: string) => void;
   selectModel: (modelId: string) => void | Promise<void>;
   selectAuthMethod: (method: 'oauth' | 'api_key') => void;
-  onAuthComplete: () => void;
+  onAuthComplete: () => void | Promise<void>;
   onAuthError: (error: string) => void;
   skipSetup: () => void;
   goBack: () => void;

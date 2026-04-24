@@ -13,7 +13,7 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 interface AuthenticationStepProps {
   provider: string;
   method: 'oauth' | 'api_key';
-  onComplete: () => void;
+  onComplete: () => void | Promise<void>;
   onError: (error: string) => void;
   onBack: () => void;
   triggerAuth: (
@@ -46,7 +46,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
     setIsAuthenticating(true);
     try {
       await triggerAuth(provider, 'api_key', apiKey.trim());
-      onComplete();
+      await onComplete();
     } catch (error: unknown) {
       setIsAuthenticating(false);
       onError(error instanceof Error ? error.message : String(error));
@@ -98,8 +98,8 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
       authStartedRef.current = true;
       setIsAuthenticating(true);
       triggerAuth(provider, 'oauth')
-        .then(() => {
-          onComplete();
+        .then(async () => {
+          await onComplete();
         })
         .catch((error: unknown) => {
           setIsAuthenticating(false);

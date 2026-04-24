@@ -414,90 +414,99 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   });
 
   const loginCompletePromise = new Promise<void>((resolve, reject) => {
-    const server = http.createServer(async (req, res) => {
-      try {
-        if (req.url!.indexOf('/oauth2callback') === -1) {
-          res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
-          res.end();
-          reject(
-            new FatalAuthenticationError(
-              'OAuth callback not received. Unexpected request: ' + req.url,
-            ),
-          );
-        }
-        // acquire the code from the querystring, and close the web server.
-        const qs = new url.URL(req.url!, 'http://localhost:3000').searchParams;
-        if (qs.get('error')) {
-          res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
-          res.end();
-
-          const errorCode = qs.get('error');
-          const errorDescription =
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: URLSearchParams.get returns string | null, string fallback for error message
-            qs.get('error_description') || 'No additional details provided';
-          reject(
-            new FatalAuthenticationError(
-              `Google OAuth error: ${errorCode}. ${errorDescription}`,
-            ),
-          );
-        } else if (qs.get('state') !== state) {
-          res.end('State mismatch. Possible CSRF attack');
-
-          reject(
-            new FatalAuthenticationError(
-              'OAuth state mismatch. Possible CSRF attack or browser session issue.',
-            ),
-          );
-        } else if (qs.get('code')) {
-          try {
-            const success = await authWithCode(
-              client,
-              qs.get('code')!,
-              undefined,
-              redirectUri,
-            );
-
-            if (!success) {
-              throw new FatalAuthenticationError(
-                'Failed to exchange authorization code for tokens.',
-              );
-            }
-
-            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
-            res.end();
-            resolve();
-          } catch (error) {
+    const server = http.createServer((req, res) => {
+      const handleRequest = async (): Promise<void> => {
+        try {
+          if (req.url!.indexOf('/oauth2callback') === -1) {
             res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
             res.end();
             reject(
-              error instanceof FatalAuthenticationError
-                ? error
-                : new FatalAuthenticationError(
-                    `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
-                  ),
+              new FatalAuthenticationError(
+                'OAuth callback not received. Unexpected request: ' + req.url,
+              ),
+            );
+            return;
+          }
+          // acquire the code from the querystring, and close the web server.
+          const qs = new url.URL(req.url!, 'http://localhost:3000')
+            .searchParams;
+          if (qs.get('error')) {
+            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+            res.end();
+
+            const errorCode = qs.get('error');
+            const errorDescription =
+              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: URLSearchParams.get returns string | null, string fallback for error message
+              qs.get('error_description') || 'No additional details provided';
+            reject(
+              new FatalAuthenticationError(
+                `Google OAuth error: ${errorCode}. ${errorDescription}`,
+              ),
+            );
+            return;
+          }
+          if (qs.get('state') !== state) {
+            res.end('State mismatch. Possible CSRF attack');
+
+            reject(
+              new FatalAuthenticationError(
+                'OAuth state mismatch. Possible CSRF attack or browser session issue.',
+              ),
+            );
+            return;
+          }
+          if (qs.get('code')) {
+            try {
+              const success = await authWithCode(
+                client,
+                qs.get('code')!,
+                undefined,
+                redirectUri,
+              );
+
+              if (!success) {
+                throw new FatalAuthenticationError(
+                  'Failed to exchange authorization code for tokens.',
+                );
+              }
+
+              res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
+              res.end();
+              resolve();
+            } catch (error) {
+              res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+              res.end();
+              reject(
+                error instanceof FatalAuthenticationError
+                  ? error
+                  : new FatalAuthenticationError(
+                      `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
+                    ),
+              );
+            }
+          } else {
+            reject(
+              new FatalAuthenticationError(
+                'No authorization code received from Google OAuth. Please try authenticating again.',
+              ),
             );
           }
-        } else {
-          reject(
-            new FatalAuthenticationError(
-              'No authorization code received from Google OAuth. Please try authenticating again.',
-            ),
-          );
+        } catch (e) {
+          // Provide more specific error message for unexpected errors during OAuth flow
+          if (e instanceof FatalAuthenticationError) {
+            reject(e);
+          } else {
+            reject(
+              new FatalAuthenticationError(
+                `Unexpected error during OAuth authentication: ${getErrorMessage(e)}`,
+              ),
+            );
+          }
+        } finally {
+          server.close();
         }
-      } catch (e) {
-        // Provide more specific error message for unexpected errors during OAuth flow
-        if (e instanceof FatalAuthenticationError) {
-          reject(e);
-        } else {
-          reject(
-            new FatalAuthenticationError(
-              `Unexpected error during OAuth authentication: ${getErrorMessage(e)}`,
-            ),
-          );
-        }
-      } finally {
-        server.close();
-      }
+      };
+      void handleRequest();
     });
 
     server.listen(port, host, () => {
