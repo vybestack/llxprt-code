@@ -171,6 +171,7 @@ export class Config extends ConfigBase {
     // Register settings-defined subagents (after extension subagents, before GeminiClient creation)
     if (subagentMgr) {
       const allSettings = this.settingsService.getAllGlobalSettings();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const subagentsSettings = allSettings?.['subagents'] as
         | Record<string, unknown>
         | undefined;
@@ -206,6 +207,7 @@ export class Config extends ConfigBase {
     let existingHistory: Content[] = [];
     let existingHistoryService: HistoryService | null = null;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (previousGeminiClient?.isInitialized()) {
       existingHistory = await previousGeminiClient.getHistory();
       existingHistoryService = previousGeminiClient.getHistoryService();
@@ -248,6 +250,7 @@ export class Config extends ConfigBase {
       // Vertex and Genai have incompatible encryption and sending history with
       // throughtSignature from Genai to Vertex will fail, we need to strip them
       const fromGenaiToVertex =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         this.contentGeneratorConfig?.vertexai === false &&
         newContentGeneratorConfig.vertexai === true;
 
@@ -264,6 +267,7 @@ export class Config extends ConfigBase {
             if (newContent.parts) {
               newContent.parts = newContent.parts.map((part) => {
                 if (
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                   part &&
                   typeof part === 'object' &&
                   'thoughtSignature' in part
@@ -293,6 +297,7 @@ export class Config extends ConfigBase {
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       previousGeminiClient &&
       typeof previousGeminiClient.dispose === 'function'
     ) {
@@ -326,6 +331,7 @@ export class Config extends ConfigBase {
   getModel(): string {
     // Delegate to SettingsService as source of truth
     const settingsService = this.getSettingsService();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (settingsService) {
       const activeProvider = settingsService.get('activeProvider') as string;
       if (activeProvider) {
@@ -337,12 +343,14 @@ export class Config extends ConfigBase {
       }
     }
     // Fallback to legacy
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     return this.contentGeneratorConfig?.model || this.model;
   }
 
   setModel(newModel: string): void {
     // Update SettingsService as source of truth
     const settingsService = this.getSettingsService();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (settingsService) {
       const activeProvider = settingsService.get('activeProvider') as string;
       if (activeProvider) {
@@ -350,6 +358,7 @@ export class Config extends ConfigBase {
       }
     }
     // Keep legacy updates for backward compatibility
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.contentGeneratorConfig) {
       this.contentGeneratorConfig.model = newModel;
     }
@@ -378,6 +387,7 @@ export class Config extends ConfigBase {
    */
   async refreshMcpContext(): Promise<void> {
     await this.refreshMemory();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.geminiClient?.isInitialized()) {
       await this.geminiClient.setTools();
       await this.geminiClient.updateSystemInstruction();
@@ -637,6 +647,7 @@ export class Config extends ConfigBase {
       // Initialize lazily using the 'task-max-async' setting (default 5)
       const settingsService = this.getSettingsService();
       const maxAsyncTasks =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         (settingsService.get('task-max-async') as number) ?? 5;
       this.asyncTaskManager = new AsyncTaskManager(maxAsyncTasks);
     }
@@ -759,6 +770,7 @@ export class Config extends ConfigBase {
     }
     return _getOrCreateScheduler(this, sessionId, callbacks, options, {
       messageBus: schedulerMessageBus,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       toolRegistry: dependencies?.toolRegistry ?? this.getToolRegistry(),
     });
   }
@@ -801,6 +813,7 @@ export class Config extends ConfigBase {
   }
 
   async dispose(): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     this.geminiClient?.dispose();
     if (this.mcpClientManager) {
       await this.mcpClientManager.stop();

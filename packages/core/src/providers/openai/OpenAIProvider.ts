@@ -140,6 +140,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Resolve settings for HTTP agents from invocation or provider config
     const agentSettings =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       options.invocation?.ephemerals ??
       this.providerConfig?.getEphemeralSettings?.() ??
       {};
@@ -161,6 +162,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const providerConfig = this.providerConfig as IProviderConfig & {
       forceQwenOAuth?: boolean;
     };
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (providerConfig?.forceQwenOAuth) {
       return true;
     }
@@ -333,6 +335,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.name === 'qwen' && config?.forceQwenOAuth) {
       try {
         const token = await this.authResolver.resolveAuthentication({
@@ -458,6 +461,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ]);
 
       const params: Record<string, unknown> = {};
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (providerSettings) {
         for (const [key, value] of Object.entries(providerSettings)) {
           if (reservedKeys.has(key) || value === undefined || value === null) {
@@ -490,7 +494,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
   ): AsyncGenerator<IContent, void, unknown> {
     const { metadata } = options;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
     // Import the extracted modules
@@ -533,6 +539,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         authTokenPresent: Boolean(resolved.authToken),
         messageCount: options.contents.length,
         toolCount: options.tools?.length ?? 0,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         metadataKeys: Object.keys(metadata ?? {}),
       });
 
@@ -549,6 +556,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
           toolCount: requestBody.tools?.length,
           toolNames: requestBody.tools?.map((t) =>
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             'function' in t ? t.function?.name : undefined,
           ),
           firstTool: requestBody.tools?.[0],
@@ -708,10 +716,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           break;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         const choice = chunk.choices?.[0];
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         if (!choice) continue;
 
         const deltaContent = coerceMessageContentToString(
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           choice.delta?.content as unknown,
         );
         if (deltaContent) {

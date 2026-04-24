@@ -74,6 +74,7 @@ function resolveModelBehavior<T>(
   key: string,
 ): T | undefined {
   const fromBehavior =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     typeof options.invocation?.getModelBehavior === 'function'
       ? options.invocation.getModelBehavior(key)
       : undefined;
@@ -88,6 +89,7 @@ function resolveCliSetting<T>(
   key: string,
 ): T | undefined {
   const fromCli =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     typeof options.invocation?.getCliSetting === 'function'
       ? options.invocation.getCliSetting(key)
       : undefined;
@@ -190,9 +192,11 @@ function resolveRequestSettings(
   providerName: string,
 ): RequestSettings {
   // Get streaming setting from ephemeral settings (default: enabled)
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const invocationEphemerals = options.invocation?.ephemerals ?? {};
   const streamingSetting =
     (invocationEphemerals['streaming'] as string | undefined) ??
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     providerConfig?.getEphemeralSettings?.()?.['streaming'];
   const streamingEnabled = streamingSetting !== 'disabled';
 
@@ -201,6 +205,7 @@ function resolveRequestSettings(
 
   // Get pre-separated model parameters from invocation context
   const requestOverrides: Record<string, unknown> = {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     ...(options.invocation?.modelParams ?? {}),
   };
 
@@ -223,6 +228,7 @@ function resolveRequestSettings(
 
   // Get caching setting from options.settings or provider settings
   const providerSettings =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     options.settings.getProviderSettings(providerName) ?? {};
   const cachingSetting =
     (options.settings.get('prompt-caching') as
@@ -410,6 +416,7 @@ function mapEffortLevel(
     return 'medium';
   } else if (rawEffort === 'high') {
     return 'high';
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   } else if (rawEffort === 'xhigh' || rawEffort === 'max') {
     return opus46Plus ? 'max' : 'high';
   }
@@ -578,12 +585,15 @@ async function resolveMcpAndSubagentConfig(params: {
 }> {
   const { config, toolNamesForPrompt } = params;
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
   const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
     toolNamesForPrompt ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     () => config?.getSubagentManager?.(),
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const interactionMode = config?.isInteractive?.()
     ? 'interactive'
     : 'non-interactive';
@@ -747,6 +757,7 @@ export async function prepareAnthropicRequest(
 
   const userMemory = await resolveUserMemory(
     params.options.userMemory,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     () => params.options.invocation?.userMemory,
   );
 

@@ -391,6 +391,7 @@ export class McpClient {
           'info',
           `Tools updated for server: ${this.serverName}`,
         );
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       } while (this.pendingToolRefresh);
     } catch (error) {
       debugLogger.error(
@@ -441,6 +442,7 @@ export class McpClient {
           'info',
           `Resources updated for server: ${this.serverName}`,
         );
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       } while (this.pendingResourceRefresh);
     } catch (error) {
       debugLogger.error(
@@ -706,6 +708,7 @@ function createUrlTransport(
         new URL(mcpServerConfig.url),
         transportOptions,
       );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     } else if (mcpServerConfig.type === 'sse') {
       return new SSEClientTransport(
         new URL(mcpServerConfig.url),
@@ -765,6 +768,7 @@ async function createTransportWithOAuth(
           new URL(mcpServerConfig.url),
           transportOptions,
         );
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       } else if (mcpServerConfig.type === 'sse') {
         return new SSEClientTransport(
           new URL(mcpServerConfig.url),
@@ -999,6 +1003,7 @@ class LenientJsonSchemaValidator implements jsonSchemaValidator {
     } catch (error) {
       this.debugLogger.warn(
         `Failed to compile MCP tool output schema (${
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           (schema as Record<string, unknown>)?.['$id'] ?? '<no $id>'
         }): ${error instanceof Error ? error.message : String(error)}. ` +
           'Skipping output validation for this tool.',
@@ -1167,6 +1172,7 @@ export async function discoverTools(
             mcpServerName,
             toolDef.name,
             toolDef.description ?? '',
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             toolDef.inputSchema ?? { type: 'object', properties: {} },
             mcpServerConfig.trust,
             undefined,
@@ -1188,6 +1194,7 @@ export async function discoverTools(
   } catch (error) {
     if (
       error instanceof Error &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       !error.message?.includes('Method not found')
     ) {
       debugLogger.error(
@@ -1227,10 +1234,12 @@ async function listResources(
         },
         ListResourcesResultSchema,
       );
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       resources.push(...(response.resources ?? []));
       cursor = response.nextCursor ?? undefined;
     } while (cursor);
   } catch (error) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (error instanceof Error && error.message?.includes('Method not found')) {
       return [];
     }
@@ -1337,6 +1346,7 @@ export async function discoverPrompts(
     // Don't log an error if the method is not found, which is a common case.
     if (
       error instanceof Error &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       !error.message?.includes('Method not found')
     ) {
       debugLogger.error(
@@ -1381,6 +1391,7 @@ export async function invokeMcpPrompt(
   } catch (error) {
     if (
       error instanceof Error &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       !error.message?.includes('Method not found')
     ) {
       debugLogger.error(
@@ -1524,6 +1535,7 @@ export async function connectToMcpServer(
 
     // If not 401 and URL config has no explicit type, try SSE fallback
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       !httpReturned404 &&
       hasNetworkTransport(mcpServerConfig) &&
       !mcpServerConfig.type &&

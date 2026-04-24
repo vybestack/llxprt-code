@@ -171,6 +171,7 @@ export class ProviderManager implements IProviderManager {
 
     if (
       typeof init === 'object' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       init !== null &&
       'settingsService' in init &&
       ('runtimeId' in init || 'metadata' in init)
@@ -342,6 +343,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     const settingsService = baseRuntime.settingsService;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!settingsService) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
@@ -471,7 +473,9 @@ export class ProviderManager implements IProviderManager {
       model:
         rawOptions.resolved?.model ??
         (providerSettings.model as string | undefined) ??
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         (shouldApplyGlobalEphemerals ? config.getModel?.() : undefined) ??
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         providerInstance?.getDefaultModel?.() ??
         undefined,
       baseURL:
@@ -488,6 +492,7 @@ export class ProviderManager implements IProviderManager {
       },
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const effectiveConfig = rawOptions.config ?? config ?? null;
     // Debug: Log resolved authToken before global auth-key check
     logger.debug(() => {
@@ -498,6 +503,7 @@ export class ProviderManager implements IProviderManager {
 
     if (
       shouldApplyGlobalEphemerals &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       effectiveConfig &&
       typeof (
         effectiveConfig as Config & {
@@ -511,7 +517,9 @@ export class ProviderManager implements IProviderManager {
         effectiveConfig as Config & {
           getEphemeralSetting?: (key: string) => unknown;
         }
-      ).getEphemeralSetting?.('auth-key') as string | undefined;
+      )
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        .getEphemeralSetting?.('auth-key') as string | undefined;
 
       // Debug: Log global auth-key check
       logger.debug(() => {
@@ -628,6 +636,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // REQ-SP4-005: Ensure normalized.userMemory and metadata derive from runtime context
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const userMemory = rawOptions.userMemory ?? config.getUserMemory?.();
     const metadata = {
       ...rawOptions.metadata,
@@ -647,6 +656,7 @@ export class ProviderManager implements IProviderManager {
     };
 
     const userMemorySnapshot =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       typeof userMemory === 'string' ? userMemory : config.getUserMemory?.();
 
     const invocation =
@@ -661,6 +671,7 @@ export class ProviderManager implements IProviderManager {
         ),
         telemetry: resolved.telemetry,
         metadata,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         userMemory: userMemorySnapshot ?? undefined,
         fallbackRuntimeId: runtimeId,
       });
@@ -838,6 +849,7 @@ export class ProviderManager implements IProviderManager {
     let resolvedName = activeProviderName;
 
     if (!resolvedName) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const preferredFromConfig = this.config?.getProvider?.();
       if (preferredFromConfig && this.providers.has(preferredFromConfig)) {
         resolvedName = preferredFromConfig;
@@ -914,6 +926,7 @@ export class ProviderManager implements IProviderManager {
           const providerModels = registry.getByProvider(providerId);
           for (const rm of providerModels) {
             // Only exclude models that explicitly disable tool support
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             if (rm.capabilities?.toolCalling === false) continue;
 
             registryModels.push({
@@ -1049,6 +1062,7 @@ export class ProviderManager implements IProviderManager {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     return provider.getDefaultModel?.() ?? '';
   }
 
@@ -1331,6 +1345,7 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250909-TOKTRACK
    */
   getProviderMetrics(providerName?: string) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const name = providerName ?? this.getActiveProvider()?.name;
     if (!name) return null;
 
@@ -1362,6 +1377,7 @@ export class ProviderManager implements IProviderManager {
     providerName?: string,
   ): ProviderCapabilities | undefined {
     const name =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       providerName ??
       (this.settingsService.get('activeProvider') as string) ??
       '';
@@ -1386,6 +1402,7 @@ export class ProviderManager implements IProviderManager {
       });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!runtimeContext.settingsService) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
@@ -1515,6 +1532,7 @@ export class ProviderManager implements IProviderManager {
     const visited = new Set<IProvider>();
     let current: IProvider | undefined = provider;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     while (current) {
       if (visited.has(current)) {
         break;

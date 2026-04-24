@@ -181,6 +181,7 @@ export abstract class BaseProvider implements IProvider {
       return activeOptions.settings;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (this.defaultSettingsService) {
       return this.defaultSettingsService;
     }
@@ -275,6 +276,7 @@ export abstract class BaseProvider implements IProvider {
     }
 
     const providerSettings = settingsService.getProviderSettings(this.name);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const providerBaseUrl = normalizeBaseUrl(providerSettings?.['base-url']);
     if (providerBaseUrl) {
       return providerBaseUrl;
@@ -300,6 +302,7 @@ export abstract class BaseProvider implements IProvider {
     }
 
     const providerSettings = settingsService.getProviderSettings(this.name);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const providerModel = providerSettings?.model as string | undefined;
     if (providerModel) {
       return providerModel;
@@ -484,6 +487,7 @@ export abstract class BaseProvider implements IProvider {
   clearAuthCache(): void {
     // Invalidate cached tokens in the auth resolver
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       this.authResolver &&
       typeof this.authResolver.invalidateCache === 'function'
     ) {
@@ -707,8 +711,10 @@ export abstract class BaseProvider implements IProvider {
       : contentsOrOptions;
 
     const settings =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       providedOptions.settings ?? this.defaultSettingsService ?? null;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!settings) {
       throw new MissingProviderRuntimeError({
         providerKey: `BaseProvider.${this.name}`,
@@ -742,16 +748,20 @@ export abstract class BaseProvider implements IProvider {
       })) ?? '';
 
     const providerSettings =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       settings.getProviderSettings(this.name) ??
       ({} as Record<string, unknown>);
     const resolvedTemperature =
       providedOptions.resolved?.temperature ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       (providerSettings?.temperature as number | undefined);
     const resolvedMaxTokens =
       providedOptions.resolved?.maxTokens ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       (providerSettings?.maxTokens as number | undefined);
     const resolvedStreaming =
       providedOptions.resolved?.streaming ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       (providerSettings?.streaming as boolean | undefined);
 
     // Use provided authToken if specified (e.g., from LoadBalancingProvider),
@@ -863,13 +873,16 @@ export abstract class BaseProvider implements IProvider {
       }
       if (
         input.resolved.baseURL !== undefined &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         input.resolved.baseURL !== null &&
         typeof input.resolved.baseURL !== 'string'
       ) {
         resolvedMissing.push('resolved.baseURL');
       }
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         input.resolved.authToken === undefined ||
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         input.resolved.authToken === null
       ) {
         resolvedMissing.push('resolved.authToken');
@@ -1190,6 +1203,7 @@ export abstract class BaseProvider implements IProvider {
       combined['User-Agent'] = userAgent.trim();
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (options?.invocation?.customHeaders) {
       Object.assign(combined, options.invocation.customHeaders);
     }

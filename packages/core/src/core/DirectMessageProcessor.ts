@@ -76,6 +76,7 @@ export class DirectMessageProcessor {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     const provider = this.providerResolver('DirectMessageProcessor');
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!provider) {
       throw new Error('No active provider configured');
     }
@@ -203,6 +204,7 @@ export class DirectMessageProcessor {
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         toolCount: effectiveToolsFromConfig?.length ?? 0,
         baseUrl: baseUrlForCall,
       },
@@ -211,6 +213,7 @@ export class DirectMessageProcessor {
     const runtimeContext = this.providerRuntimeBuilder(
       'DirectMessageProcessor.generateDirectMessage',
       {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         toolCount: effectiveToolsFromConfig?.length ?? 0,
         ...(directOverrides ? { geminiDirectOverrides: directOverrides } : {}),
       },
@@ -236,6 +239,7 @@ export class DirectMessageProcessor {
     const streamResponse = provider.generateChatCompletion({
       contents: contentsForApi,
       tools:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
           ? (effectiveToolsFromConfig as ProviderToolset)
           : undefined,
@@ -246,6 +250,7 @@ export class DirectMessageProcessor {
       } as unknown as GenerateChatOptions['invocation'],
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       userMemory: runtimeContext.config?.getUserMemory?.(),
     });
 
@@ -260,6 +265,7 @@ export class DirectMessageProcessor {
 
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       while (true) {
         // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let nextResponse: IteratorResult<IContent, unknown>;
@@ -287,6 +293,7 @@ export class DirectMessageProcessor {
         const iContent = nextResponse.value;
         lastResponse = iContent;
         const result = aggregateTextWithSpacing(
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           iContent.blocks ?? [],
           aggregatedText,
           lastBlockWasNonText,
@@ -310,6 +317,7 @@ export class DirectMessageProcessor {
       {
         contents: contentsForApi,
         tools:
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           effectiveToolsFromConfig && effectiveToolsFromConfig.length > 0
             ? effectiveToolsFromConfig
             : undefined,
@@ -372,7 +380,9 @@ export class DirectMessageProcessor {
     configForHooks: Config,
     toolsFromConfig: ToolGroupArray,
   ): Promise<ToolGroupArray> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!configForHooks.getEnableHooks?.()) return toolsFromConfig;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const hookSystem = configForHooks.getHookSystem?.();
     if (!hookSystem) return toolsFromConfig;
     await hookSystem.initialize();
@@ -387,14 +397,18 @@ export class DirectMessageProcessor {
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
       if (allowedFunctions?.length) {
-        return toolsFromConfig
-          .map((toolGroup) => ({
-            ...toolGroup,
-            functionDeclarations: toolGroup.functionDeclarations?.filter((fn) =>
-              allowedFunctions.includes(fn.name),
-            ),
-          }))
-          .filter((g) => g.functionDeclarations?.length) as ToolGroupArray;
+        return (
+          toolsFromConfig
+            .map((toolGroup) => ({
+              ...toolGroup,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+              functionDeclarations: toolGroup.functionDeclarations?.filter(
+                (fn) => allowedFunctions.includes(fn.name),
+              ),
+            }))
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            .filter((g) => g.functionDeclarations?.length) as ToolGroupArray
+        );
       }
     }
     return toolsFromConfig;
@@ -428,7 +442,9 @@ export class DirectMessageProcessor {
     };
 
     let beforeModelResult = undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (configForHooks.getEnableHooks?.()) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const hookSystem = configForHooks.getHookSystem?.();
       if (hookSystem) {
         await hookSystem.initialize();
@@ -471,6 +487,7 @@ export class DirectMessageProcessor {
         model: this.runtimeContext.state.model || '',
         contents: ContentConverters.toGeminiContents(userIContents),
       });
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (modifiedRequest?.contents) {
         return {
           modifiedContents: ContentConverters.toIContents(
@@ -496,7 +513,9 @@ export class DirectMessageProcessor {
     let directResponse = convertIContentToResponse(lastResponse);
 
     // Trigger AfterModel hook
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (config?.getEnableHooks?.()) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const hookSystem = config.getHookSystem?.();
       if (hookSystem) {
         await hookSystem.initialize();

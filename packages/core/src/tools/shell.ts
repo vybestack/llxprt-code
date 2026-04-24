@@ -398,6 +398,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       const backgroundPIDs: number[] = [];
       let pgid: number | null = null;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (os.platform() !== 'win32' && result) {
         if (fs.existsSync(tempFilePath)) {
           const pgrepLines = fs
@@ -414,6 +415,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
               backgroundPIDs.push(pid);
             }
           }
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         } else if (!signal.aborted) {
           this.logger.debug(() => 'missing pgrep output');
         }
@@ -435,6 +437,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const rawOutput = result?.output ?? '';
       const filterInfo = applyOutputFilters(rawOutput, this.params);
       const filteredOutput = filterInfo.content;
@@ -442,6 +445,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       let llmContent = '';
       let returnDisplayMessage = '';
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!result) {
         llmContent = 'Command failed to execute.';
         if (this.config.getDebugMode()) {
@@ -452,6 +456,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
           timeoutController.signal.aborted && !signal.aborted;
         if (timeoutTriggered) {
           llmContent = `Command timed out after ${timeoutSeconds ?? defaultTimeoutSeconds}s (timeout_seconds).`;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           if (rawOutput?.trim()) {
             llmContent += ` Partial output:\n${rawOutput}`;
           } else {
@@ -462,6 +467,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
         } else {
           llmContent =
             'Command was cancelled by user before it could complete.';
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           if (rawOutput?.trim()) {
             llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
           } else {
@@ -470,6 +476,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
           if (this.config.getDebugMode()) {
             returnDisplayMessage = llmContent;
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           } else if (filteredOutput?.trim()) {
             returnDisplayMessage = filteredOutput;
           } else {
@@ -498,6 +505,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
         if (this.config.getDebugMode()) {
           returnDisplayMessage = llmContent;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         } else if (filteredOutput?.trim()) {
           returnDisplayMessage = filteredOutput;
         } else if (result.signal) {
@@ -517,6 +525,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
 
       // Check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const executionError = result?.error
         ? {
             error: {
@@ -524,14 +533,16 @@ export class ShellToolInvocation extends BaseToolInvocation<
               type: ToolErrorType.SHELL_EXECUTE_ERROR,
             },
           }
-        : result?.aborted && timeoutController.signal.aborted && !signal.aborted
+        : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          result?.aborted && timeoutController.signal.aborted && !signal.aborted
           ? {
               error: {
                 message: llmContent,
                 type: ToolErrorType.TIMEOUT,
               },
             }
-          : result?.aborted
+          : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            result?.aborted
             ? {
                 error: {
                   message: llmContent,
@@ -541,6 +552,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
             : {};
 
       let llmPayload = llmContent;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (summarizeConfig?.[ShellTool.Name] && result && !result.aborted) {
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
@@ -614,6 +626,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
       }
 
       this.logger.debug(
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Final returnDisplayMessage length=${returnDisplayMessage?.length ?? 0}, preview=${returnDisplayMessage?.slice(0, 100) ?? 'EMPTY'}`,
       );
 

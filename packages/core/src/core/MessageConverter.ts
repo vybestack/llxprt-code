@@ -96,6 +96,7 @@ export function createUserContentWithFunctionResponseFix(
           for (const subItem of item) {
             parts.push(subItem);
           }
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         } else if (item && typeof item === 'object') {
           // Individual part (function response, text, etc.)
           parts.push(item);
@@ -135,6 +136,7 @@ export function normalizeToolInteractionInput(
 
   // Detect if this is a tool response sequence (functionResponse parts only)
   const hasFunctionResponses = parts.some(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (part) => part && typeof part === 'object' && 'functionResponse' in part,
   );
 
@@ -185,6 +187,7 @@ export function isValidContent(content: Content): boolean {
     return false;
   }
   for (const part of content.parts) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (part === undefined || Object.keys(part).length === 0) {
       return false;
     }
@@ -213,6 +216,7 @@ export function validateHistory(history: Content[]): void {
 export function extractCuratedHistory(
   comprehensiveHistory: Content[],
 ): Content[] {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   if (comprehensiveHistory === undefined || comprehensiveHistory.length === 0) {
     return [];
   }
@@ -282,6 +286,7 @@ export function convertPartListUnionToIContent(input: PartListUnion): IContent {
 export function convertMixedPartsToIContent(parts: Part[]): IContent {
   // Fast path: all function responses → tool message
   const allFunctionResponses = parts.every(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (part) => part && typeof part === 'object' && 'functionResponse' in part,
   );
   if (allFunctionResponses) {
@@ -310,6 +315,7 @@ function convertAllFunctionResponses(parts: Part[]): IContent {
         callId: part.functionResponse.id ?? '',
         toolName: part.functionResponse.name ?? '',
         result:
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           (part.functionResponse.response as Record<string, unknown>) ?? {},
         error: undefined,
       } as ToolResponseBlock);
@@ -350,6 +356,7 @@ function classifyMixedParts(parts: Part[]): {
         type: 'tool_call',
         id: part.functionCall.id ?? '',
         name: part.functionCall.name ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         parameters: (part.functionCall.args as Record<string, unknown>) ?? {},
       } as ToolCallBlock);
     } else if ('functionResponse' in part && part.functionResponse) {
@@ -359,6 +366,7 @@ function classifyMixedParts(parts: Part[]): {
         callId: part.functionResponse.id ?? '',
         toolName: part.functionResponse.name ?? '',
         result:
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           (part.functionResponse.response as Record<string, unknown>) ?? {},
         error: undefined,
       } as ToolResponseBlock);
@@ -480,8 +488,11 @@ export function applyResponseMetadata(
   // Add usage metadata if present
   if (input.metadata?.usage) {
     const usageMetadata: UsageMetadataWithCache = {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       promptTokenCount: input.metadata.usage.promptTokens ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       candidatesTokenCount: input.metadata.usage.completionTokens ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       totalTokenCount: input.metadata.usage.totalTokens ?? 0,
       cache_read_input_tokens:
         input.metadata.usage.cache_read_input_tokens ?? 0,
@@ -519,6 +530,7 @@ export function applyResponseMetadata(
       failed: FinishReason.STOP,
     };
     const mappedReason = finishReasonByTerminationReason[terminationReason];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (mappedReason) {
       response.candidates[0].finishReason = mappedReason;
       logger.debug(
@@ -552,7 +564,9 @@ export function applyResponseMetadata(
       {
         speaker: input.speaker,
         blockCount: input.blocks.length,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         stopReason: input.metadata?.stopReason,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         finishReason: input.metadata?.finishReason,
         hasCandidate: Boolean(response.candidates?.[0]),
       },

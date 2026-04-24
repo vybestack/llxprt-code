@@ -103,6 +103,7 @@ export class StreamProcessor {
       () => '[StreamProcessor] Active provider snapshot before stream request',
       {
         providerName: provider.name,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeContext.state.model,
         baseUrl: providerBaseUrl,
@@ -150,11 +151,13 @@ export class StreamProcessor {
         value?: unknown,
       ): Promise<IteratorResult<GenerateContentResponse>> {
         if (processedStream) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           return processedStream.return
             ? processedStream.return(value)
             : { done: true, value: undefined };
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         if (streamResponse.return) {
           await streamResponse.return(value);
         }
@@ -165,16 +168,19 @@ export class StreamProcessor {
         error?: unknown,
       ): Promise<IteratorResult<GenerateContentResponse>> {
         if (processedStream) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           if (processedStream.throw) {
             return processedStream.throw(error);
           }
           throw error;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         if (streamResponse.throw) {
           return streamResponse.throw(error);
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         if (streamResponse.return) {
           await streamResponse.return(undefined);
         }
@@ -249,7 +255,9 @@ export class StreamProcessor {
     );
 
     // Trigger BeforeModel hook for streaming path
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (configForHooks?.getEnableHooks?.()) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const hookSystem = configForHooks.getHookSystem?.();
       if (hookSystem) {
         await hookSystem.initialize();
@@ -295,6 +303,7 @@ export class StreamProcessor {
               model: this.runtimeContext.state.model || '',
               contents: ContentConverters.toGeminiContents(requestContents),
             });
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           if (modifiedRequest?.contents) {
             requestContents = ContentConverters.toIContents(
               modifiedRequest.contents as Content[],
@@ -339,6 +348,7 @@ export class StreamProcessor {
           ...runtimeContext.metadata,
           abortSignal: params.config?.abortSignal,
         },
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 
@@ -398,10 +408,12 @@ export class StreamProcessor {
     tools: GenerateContentConfig['tools'],
   ): Promise<GenerateContentConfig['tools']> {
     const toolsFromConfig = tools as ToolGroupArray | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!toolsFromConfig || !configForHooks?.getEnableHooks?.()) {
       return tools;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const hookSystem = configForHooks.getHookSystem?.();
     if (!hookSystem) {
       return tools;
@@ -420,14 +432,18 @@ export class StreamProcessor {
     ) {
       const allowedFunctions = modifiedConfig.toolConfig.allowedFunctionNames;
       if (allowedFunctions?.length) {
-        return toolsFromConfig
-          .map((toolGroup) => ({
-            ...toolGroup,
-            functionDeclarations: toolGroup.functionDeclarations?.filter((fn) =>
-              allowedFunctions.includes(fn.name),
-            ),
-          }))
-          .filter((g) => g.functionDeclarations?.length) as ToolGroupArray;
+        return (
+          toolsFromConfig
+            .map((toolGroup) => ({
+              ...toolGroup,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+              functionDeclarations: toolGroup.functionDeclarations?.filter(
+                (fn) => allowedFunctions.includes(fn.name),
+              ),
+            }))
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+            .filter((g) => g.functionDeclarations?.length) as ToolGroupArray
+        );
       }
     }
 
@@ -517,7 +533,9 @@ export class StreamProcessor {
 
       // Trigger AfterModel hook per streamed chunk
       const hookConfig = this.runtimeContext.providerRuntime.config;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (hookConfig?.getEnableHooks?.()) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         const hookSystem = hookConfig.getHookSystem?.();
         if (hookSystem) {
           if (!hookSystem.isInitialized()) {
@@ -530,6 +548,7 @@ export class StreamProcessor {
 
           if (afterModelResult?.shouldStopExecution()) {
             throw new AgentExecutionStoppedError(
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               afterModelResult.getEffectiveReason() ??
                 'Execution stopped by AfterModel hook',
               afterModelResult.systemMessage,
@@ -540,6 +559,7 @@ export class StreamProcessor {
             const modifiedResponse = afterModelResult.getModifiedResponse();
             const syntheticResponse = modifiedResponse ?? convertedChunk;
             throw new AgentExecutionBlockedError(
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               afterModelResult.getEffectiveReason() ??
                 'Execution blocked by AfterModel hook',
               syntheticResponse,
@@ -599,6 +619,7 @@ export class StreamProcessor {
 
     for await (const chunk of streamResponse) {
       // Track finish reason
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const candidateWithReason = chunk?.candidates?.find(
         (c) => c.finishReason,
       );
@@ -693,6 +714,7 @@ export class StreamProcessor {
     for (const part of modelResponseParts) {
       const lastPart = consolidatedParts[consolidatedParts.length - 1];
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         lastPart?.text &&
         isValidNonThoughtTextPart(lastPart) &&
         isValidNonThoughtTextPart(part)
@@ -865,6 +887,7 @@ export class StreamProcessor {
 
     // Sync token counts AFTER recording history to replace estimated tokens with actual API prompt tokens
     // Use explicit check for undefined to allow 0 values
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (actualPromptTokens !== null && actualPromptTokens !== undefined) {
       if (actualPromptTokens > 0) {
         this.logger.debug(

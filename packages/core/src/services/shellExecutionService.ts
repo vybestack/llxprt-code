@@ -365,6 +365,7 @@ export class ShellExecutionService {
         let sniffBuffer = Buffer.alloc(0);
         let totalBytesReceived = 0;
         let inactivityTimeout: NodeJS.Timeout | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         const inactivityTimeoutMs = shellExecutionConfig?.inactivityTimeoutMs;
         const inactivityAbortController = new AbortController();
 
@@ -401,10 +402,12 @@ export class ShellExecutionService {
                       await new Promise((res) =>
                         setTimeout(res, SIGKILL_TIMEOUT_MS),
                       );
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                       if (!exited) {
                         process.kill(-pid, 'SIGKILL');
                       }
                     } catch (_e) {
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                       if (!exited) child.kill('SIGKILL');
                     }
                   }
@@ -514,6 +517,7 @@ export class ShellExecutionService {
             rawOutput: finalBuffer,
             output: combinedOutput.trim(),
             exitCode: code,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             signal: signal ? (os.constants.signals[signal] ?? null) : null,
             error,
             aborted: abortSignal.aborted,
@@ -541,10 +545,12 @@ export class ShellExecutionService {
                   await new Promise((res) =>
                     setTimeout(res, SIGKILL_TIMEOUT_MS),
                   );
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                   if (!exited) {
                     process.kill(-child.pid, 'SIGKILL');
                   }
                 } catch (_e) {
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                   if (!exited) child.kill('SIGKILL');
                 }
               }
@@ -554,6 +560,7 @@ export class ShellExecutionService {
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         if (child.once) {
           child.once('exit', (code, signal) => {
             handleExit(code, signal);
@@ -581,7 +588,9 @@ export class ShellExecutionService {
 
           if (!cleanedUp) {
             cleanedUp = true;
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             child.stdout?.removeAllListeners('data');
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             child.stderr?.removeAllListeners('data');
             child.removeAllListeners('error');
             child.removeAllListeners('exit');
@@ -751,6 +760,7 @@ export class ShellExecutionService {
           if (shellExecutionConfig.showColor) {
             newOutput = serializeTerminalToObject(headlessTerminal);
           } else {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             newOutput = (serializeTerminalToObject(headlessTerminal) || [])
               .filter((line): line is AnsiLine => Array.isArray(line))
               .map((line) =>
@@ -794,7 +804,9 @@ export class ShellExecutionService {
             // Extract text from cursor line for debug
             const cursorLine = finalOutput[buffer.cursorY];
             const cursorLineText =
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               cursorLine
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                 ?.map((t) => t.text)
                 .join('')
                 .trimEnd() ?? '(no line)';
@@ -832,6 +844,7 @@ export class ShellExecutionService {
             aborted: abortSignal.aborted,
             inactivityTimedOut: inactivityAbortController.signal.aborted,
             pid: ptyProcess.pid,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             executionMethod: ptyInfo.name ?? 'node-pty',
           });
         };
@@ -897,10 +910,12 @@ export class ShellExecutionService {
                       await new Promise((res) =>
                         setTimeout(res, SIGKILL_TIMEOUT_MS),
                       );
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                       if (!exited) {
                         process.kill(-pid, 'SIGKILL');
                       }
                     } catch (_e) {
+                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                       if (!exited) ptyProcess.kill('SIGKILL');
                     }
                   }
@@ -1034,6 +1049,7 @@ export class ShellExecutionService {
                   aborted: true,
                   inactivityTimedOut: inactivityAbortController.signal.aborted,
                   pid,
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                   executionMethod: ptyInfo.name ?? 'node-pty',
                 });
                 return;
@@ -1051,6 +1067,7 @@ export class ShellExecutionService {
               }
 
               await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               if (exited) {
                 return;
               }
@@ -1076,6 +1093,7 @@ export class ShellExecutionService {
                   aborted: true,
                   inactivityTimedOut: inactivityAbortController.signal.aborted,
                   pid,
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
                   executionMethod: ptyInfo.name ?? 'node-pty',
                 });
               }, SIGKILL_TIMEOUT_MS);

@@ -51,27 +51,32 @@ export async function* handleNonStreamingResponse(
   deps: NonStreamHandlerDeps,
 ): AsyncGenerator<IContent, void, unknown> {
   const completion = response;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const choice = completion.choices?.[0];
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   if (!choice) {
     throw new Error('No choices in completion response');
   }
 
   // Log finish reason
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   if (choice.finish_reason) {
     deps.logger.debug(
       () => `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
       {
         model,
         finishReason: choice.finish_reason,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         hasContent: !!choice.message?.content,
         hasToolCalls: !!(
-          choice.message?.tool_calls && choice.message.tool_calls.length > 0
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          (choice.message?.tool_calls && choice.message.tool_calls.length > 0)
         ),
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number where 0 means unset
-        contentLength: choice.message?.content?.length || 0,
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: number where 0 means unset
-        toolCallCount: choice.message?.tool_calls?.length || 0,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        contentLength: choice.message?.content?.length ?? 0,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        toolCallCount: choice.message?.tool_calls?.length ?? 0,
         detectedFormat,
       },
     );
@@ -88,6 +93,7 @@ export async function* handleNonStreamingResponse(
 
   // Handle text content and Kimi tool sections
   const pipelineRawMessageContent = coerceMessageContentToString(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     choice.message?.content as unknown,
   );
   let pipelineKimiCleanContent: string | undefined;
@@ -110,6 +116,7 @@ export async function* handleNonStreamingResponse(
   }
 
   // Handle tool calls
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
     for (const toolCall of choice.message.tool_calls) {
       if (toolCall.type === 'function') {
@@ -220,6 +227,7 @@ export async function* handleNonStreamingResponse(
     // receive a finish signal (issue #1844).  stopReason stays normalized
     // (via mapFinishReasonToStopReason above); finishReason preserves the
     // raw provider value for diagnostics.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (choice.finish_reason) {
       responseContent.metadata ??= {};
       // stopReason was already set to the normalized value above; do NOT
@@ -251,11 +259,13 @@ export async function* handleNonStreamingResponse(
     };
 
     // Propagate terminal metadata on usage-only responses too (issue #1844).
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (choice.finish_reason && metadataOnly.metadata) {
       metadataOnly.metadata.finishReason = choice.finish_reason;
     }
 
     yield metadataOnly;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   } else if (choice.finish_reason) {
     // Emit a metadata-only chunk even without usage so downstream receives
     // the terminal finish signal (issue #1844).  stopReason is normalized.

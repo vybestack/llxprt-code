@@ -100,6 +100,7 @@ function formatSuccessDisplay(
   agentId: string,
   output: OutputObject,
 ): string {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const emittedVars = Object.entries(output.emitted_vars ?? {});
   const finalMessageSection = output.final_message
     ? `Final message:\n${output.final_message}`
@@ -125,6 +126,7 @@ function formatSuccessContent(agentId: string, output: OutputObject): string {
   const payload: Record<string, unknown> = {
     agent_id: agentId,
     terminate_reason: output.terminate_reason,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     emitted_vars: output.emitted_vars ?? {},
   };
 
@@ -373,6 +375,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       signal.removeEventListener('abort', abortHandler);
     };
     signal.addEventListener('abort', abortHandler, { once: true });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (signal.aborted) {
       abortHandler();
       removeAbortHandler();
@@ -399,9 +402,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       if (this.isTimeoutError(signal, timeoutController, error)) {
         return this.createTimeoutResult(
           timeoutSeconds,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           launchResult?.scope?.output,
         );
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (this.isAbortError(error) || aborted || signal.aborted) {
         return this.createCancelledResult('Task aborted during launch.');
       }
@@ -434,6 +439,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       }
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (signal.aborted || aborted) {
       await teardown();
       return this.createCancelledResult(
@@ -494,6 +500,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       } else {
         await scope.runNonInteractive(contextState);
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (aborted) {
         await teardown();
         taskLogger.warn(
@@ -509,12 +516,14 @@ class TaskToolInvocation extends BaseToolInvocation<
         await teardown();
         return this.createTimeoutResult(timeoutSeconds, scope.output);
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const output = scope.output ?? {
         terminate_reason: SubagentTerminateMode.ERROR,
         emitted_vars: {},
       };
       taskLogger.debug(
         () =>
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           `Subagent '${launchRequest.name}' finished with reason=${output.terminate_reason} emittedKeys=${Object.keys(output.emitted_vars ?? {}).join(', ')}`,
       );
       const llmContent = formatSuccessContent(agentId, output);
@@ -530,6 +539,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         metadata: {
           agentId,
           terminateReason: output.terminate_reason,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           emittedVars: output.emitted_vars ?? {},
           ...(output.final_message
             ? { finalMessage: output.final_message }
@@ -541,6 +551,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         await teardown();
         return this.createTimeoutResult(timeoutSeconds, scope.output, agentId);
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (this.isAbortError(error) || aborted || signal.aborted) {
         await teardown();
         return this.createCancelledResult(
@@ -655,6 +666,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutId: ReturnType<typeof setTimeout> | null;
     onUserAbort: () => void;
   } {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const settings = this.config.getEphemeralSettings?.() ?? {};
     const defaultTimeoutSeconds =
       (settings['task-default-timeout-seconds'] as number | undefined) ??
@@ -768,7 +780,9 @@ class TaskToolInvocation extends BaseToolInvocation<
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     // Check global async setting (from /settings)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const settingsService = this.config.getSettingsService?.();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const globalSettings = settingsService?.getAllGlobalSettings?.() ?? {};
     const subagentsSettings = globalSettings['subagents'] as
       | { asyncEnabled?: boolean; maxAsync?: number }
@@ -787,6 +801,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     // Check profile async setting (from ephemeralSettings)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const ephemeralSettings = this.config.getEphemeralSettings?.() ?? {};
     const profileAsyncEnabled =
       ephemeralSettings['subagents.async.enabled'] !== false;
@@ -870,6 +885,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       contextState = this.buildContextState();
 
       // Set up timeout for async task (but don't wire to parent signal)
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const settings = this.config.getEphemeralSettings?.() ?? {};
       const defaultTimeoutSeconds =
         (settings['task-default-timeout-seconds'] as number | undefined) ??
@@ -1040,6 +1056,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         }
 
         // Get output
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         const output = scope.output ?? {
           terminate_reason: SubagentTerminateMode.ERROR,
           emitted_vars: {},
@@ -1204,11 +1221,13 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
         params.behaviorPrompts ??
         []),
     ]
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       .map((prompt) => prompt?.trim())
       .filter((prompt): prompt is string => Boolean(prompt))
       .filter((prompt, index, array) => array.indexOf(prompt) === index);
 
     const toolWhitelist = (params.tool_whitelist ?? params.toolWhitelist ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       .map((tool) => tool?.trim())
       .filter((tool): tool is string => Boolean(tool));
 
@@ -1240,9 +1259,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
     const profileManager =
       this.dependencies.profileManager ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       configWithManagers.getProfileManager?.();
     const subagentManager =
       this.dependencies.subagentManager ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       configWithManagers.getSubagentManager?.();
 
     if (!profileManager || !subagentManager) {

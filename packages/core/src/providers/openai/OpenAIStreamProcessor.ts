@@ -268,6 +268,7 @@ export async function* processStreamingResponse(
 
       const chunkRecord = chunk as unknown as Record<string, unknown>;
       let parsedData: Record<string, unknown> | undefined;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const rawData = chunkRecord?.data;
       if (typeof rawData === 'string') {
         try {
@@ -280,9 +281,11 @@ export async function* processStreamingResponse(
       }
 
       const streamingError =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         chunkRecord?.error ??
         parsedData?.error ??
         (parsedData?.data as { error?: unknown } | undefined)?.error;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
         | string
         | undefined;
@@ -307,7 +310,9 @@ export async function* processStreamingResponse(
         state.streamingUsage = chunk.usage;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const choice = chunk.choices?.[0];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!choice) continue;
 
       // Parse reasoning_content
@@ -355,6 +360,7 @@ export async function* processStreamingResponse(
 
       // Handle text content
       const rawDeltaContent = coerceMessageContentToString(
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         choice.delta?.content as unknown,
       );
       if (rawDeltaContent) {
@@ -449,9 +455,11 @@ export async function* processStreamingResponse(
       }
 
       // Handle tool calls using pipeline
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const deltaToolCalls = choice.delta?.tool_calls;
       if (deltaToolCalls && deltaToolCalls.length > 0) {
         for (const deltaToolCall of deltaToolCalls) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           if (deltaToolCall.index === undefined) continue;
 
           deps.toolCallPipeline.addFragment(deltaToolCall.index, {
@@ -476,13 +484,16 @@ export async function* processStreamingResponse(
             toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
             index: number,
           ) => {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             if (!toolCall || toolCall.type !== 'function') {
               return;
             }
 
             deps.toolCallPipeline.addFragment(index, {
               id: toolCall.id,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               name: toolCall.function?.name,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               args: toolCall.function?.arguments,
             });
           },
@@ -829,7 +840,9 @@ export async function* processStreamingResponse(
 
   // Handle empty streaming responses after tool calls
   const toolCallCount =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (state.cachedPipelineResult?.normalized.length ?? 0) +
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (state.cachedPipelineResult?.failed.length ?? 0);
   const hasToolsButNoText =
     state.lastFinishReason === 'stop' &&
@@ -850,6 +863,7 @@ export async function* processStreamingResponse(
       },
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!state.cachedPipelineResult) {
       throw new Error(
         'Pipeline result not cached - this should not happen in pipeline mode',

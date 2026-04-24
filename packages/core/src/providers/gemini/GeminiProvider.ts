@@ -260,8 +260,9 @@ export class GeminiProvider extends BaseProvider {
   private getStreamingPreference(
     _options: NormalizedGenerateChatOptions,
   ): boolean {
-    const streamingSetting =
-      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    // providerConfig is optional; getEphemeralSettings may not exist on all configs
+    const ephemeralSettings = this.providerConfig?.getEphemeralSettings?.();
+    const streamingSetting = ephemeralSettings?.['streaming'];
     return streamingSetting !== 'disabled';
   }
 
@@ -341,9 +342,12 @@ export class GeminiProvider extends BaseProvider {
 
     // 3. CHECK IF OAUTH IS ENABLED (for compatibility with downstream code)
     //    Use the EXACT pattern from current GeminiProvider.ts lines 305-320:
-    const manager = this.geminiOAuthManager as OAuthManager & {
-      isOAuthEnabled?(provider: string): boolean;
-    };
+    // geminiOAuthManager is optional; guard with null check
+    const manager = this.geminiOAuthManager as
+      | (OAuthManager & {
+          isOAuthEnabled?(provider: string): boolean;
+        })
+      | undefined;
     const isOAuthEnabled =
       manager?.isOAuthEnabled &&
       typeof manager.isOAuthEnabled === 'function' &&
@@ -366,9 +370,12 @@ export class GeminiProvider extends BaseProvider {
    */
   protected supportsOAuth(): boolean {
     // Check if OAuth is actually enabled for Gemini in the OAuth manager
-    const manager = this.geminiOAuthManager as OAuthManager & {
-      isOAuthEnabled?(provider: string): boolean;
-    };
+    // geminiOAuthManager is optional; guard with null check
+    const manager = this.geminiOAuthManager as
+      | (OAuthManager & {
+          isOAuthEnabled?(provider: string): boolean;
+        })
+      | undefined;
 
     if (
       manager?.isOAuthEnabled &&
@@ -616,13 +623,12 @@ export class GeminiProvider extends BaseProvider {
       ]);
 
       const params: Record<string, unknown> = {};
-      if (providerSettings) {
-        for (const [key, value] of Object.entries(providerSettings)) {
-          if (reservedKeys.has(key) || value === undefined || value === null) {
-            continue;
-          }
-          params[key] = value;
+      // providerSettings is Record<string, unknown> returned from settings, may be empty but never null
+      for (const [key, value] of Object.entries(providerSettings)) {
+        if (reservedKeys.has(key) || value === undefined || value === null) {
+          continue;
         }
+        params[key] = value;
       }
 
       return Object.keys(params).length > 0 ? params : undefined;
@@ -1106,6 +1112,8 @@ export class GeminiProvider extends BaseProvider {
         if (parts.length > 0) {
           contents.push({ role: 'model', parts });
         }
+        // TypeScript narrows speaker to 'tool' after 'human' and 'ai' checks
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Defensive check for speaker type exhaustiveness
       } else if (c.speaker === 'tool') {
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
@@ -1162,7 +1170,8 @@ export class GeminiProvider extends BaseProvider {
 
     // Extract reasoning ephemerals for Gemini 3.x thinking support
     // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
-    const earlyEphemerals = options.invocation?.ephemerals ?? {};
+    // invocation is required on NormalizedGenerateChatOptions, ephemerals is Record (may be empty)
+    const earlyEphemerals = options.invocation.ephemerals;
 
     // Get dump mode from ephemeral settings
     const dumpMode = earlyEphemerals.dumpcontext as DumpMode | undefined;
@@ -1175,12 +1184,12 @@ export class GeminiProvider extends BaseProvider {
       'reasoning'
     ] as Record<string, unknown> | undefined;
     const reasoningEnabled =
-      options.invocation?.getModelBehavior<boolean>('reasoning.enabled') ??
+      options.invocation.getModelBehavior<boolean>('reasoning.enabled') ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
         true ||
         reasoningObj?.enabled === true);
     const reasoningIncludeInResponse =
-      options.invocation?.getCliSetting<boolean>(
+      options.invocation.getCliSetting<boolean>(
         'reasoning.includeInResponse',
       ) ??
       ((earlyEphemerals as Record<string, unknown>)[
@@ -1188,7 +1197,8 @@ export class GeminiProvider extends BaseProvider {
       ] !== false &&
         reasoningObj?.includeInResponse !== false);
     const reasoningStripFromContext =
-      options.invocation?.getCliSetting<'all' | 'allButLast' | 'none'>(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- getCliSetting returns T | undefined, fallbacks provide defaults
+      options.invocation.getCliSetting<'all' | 'allButLast' | 'none'>(
         'reasoning.stripFromContext',
       ) ??
       ((earlyEphemerals as Record<string, unknown>)[
@@ -1197,7 +1207,7 @@ export class GeminiProvider extends BaseProvider {
       (reasoningObj?.stripFromContext as 'all' | 'allButLast' | 'none') ??
       'all';
     const reasoningEffort =
-      options.invocation?.getModelBehavior<
+      options.invocation.getModelBehavior<
         'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
       >('reasoning.effort') ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.effort'] as
@@ -1215,7 +1225,7 @@ export class GeminiProvider extends BaseProvider {
         | 'xhigh'
         | undefined);
     const reasoningMaxTokens =
-      options.invocation?.getModelBehavior<number>('reasoning.maxTokens') ??
+      options.invocation.getModelBehavior<number>('reasoning.maxTokens') ??
       ((earlyEphemerals as Record<string, unknown>)['reasoning.maxTokens'] as
         | number
         | undefined) ??
@@ -1245,22 +1255,15 @@ export class GeminiProvider extends BaseProvider {
                   `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
               );
             }
-            let parameters = decl.parametersJsonSchema;
-            // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
-            // This ensures compatibility and prevents API errors when using tools.
-            // Ref: https://ai.google.dev/api/caching#Schema
-            parameters = this.cleanGeminiSchema(parameters);
-            if (
-              parameters &&
-              typeof parameters === 'object' &&
-              !('type' in (parameters as Record<string, unknown>))
-            ) {
+            // parameters is the result of cleanGeminiSchema which always returns an object
+            let parameters = this.cleanGeminiSchema(decl.parametersJsonSchema);
+            if (!('type' in (parameters as Record<string, unknown>))) {
               parameters = { type: Type.OBJECT, ...parameters };
             }
             return {
               name: decl.name,
               description: decl.description,
-              parameters: parameters as Schema,
+              parameters,
             };
           }),
         }))
@@ -1281,7 +1284,7 @@ export class GeminiProvider extends BaseProvider {
 
     const directOverridesRaw = (
       options.metadata as { geminiDirectOverrides?: unknown }
-    )?.geminiDirectOverrides;
+    ).geminiDirectOverrides;
     const directOverrides =
       directOverridesRaw && typeof directOverridesRaw === 'object'
         ? (directOverridesRaw as Record<string, unknown>)
@@ -1306,13 +1309,13 @@ export class GeminiProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
     // Get pre-separated model params from invocation context
-    const modelParams = options.invocation?.modelParams ?? {};
+    const modelParams = options.invocation.modelParams;
     const requestConfig: Record<string, unknown> = {
       ...modelParams,
     };
 
     // Translate generic maxOutputTokens ephemeral to Gemini's maxOutputTokens
-    const rawMaxOutput = options.settings?.get('maxOutputTokens');
+    const rawMaxOutput = options.settings.get('maxOutputTokens');
     const genericMaxOutput =
       typeof rawMaxOutput === 'number' &&
       Number.isFinite(rawMaxOutput) &&
@@ -1444,13 +1447,12 @@ export class GeminiProvider extends BaseProvider {
         willYieldThinkingBlock: !!(thoughtText && includeThoughts),
       });
 
-      const functionCalls =
-        parts
-          ?.filter((part: Part) => 'functionCall' in part)
-          ?.map(
-            (part: Part) =>
-              (part as { functionCall: FunctionCall }).functionCall,
-          ) || [];
+      // parts is always an array (defaulted from ?? []), so no optional chaining needed
+      const functionCalls = parts
+        .filter((part: Part) => 'functionCall' in part)
+        .map(
+          (part: Part) => (part as { functionCall: FunctionCall }).functionCall,
+        );
 
       const usageMetadata = (response as GeminiResponseWithUsage).usageMetadata;
 
@@ -1578,15 +1580,18 @@ export class GeminiProvider extends BaseProvider {
       // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
       const userMemory = await resolveUserMemory(
         options.userMemory,
-        () => options.invocation?.userMemory,
+        () => options.invocation.userMemory,
       );
       const subagentConfig =
         options.config ?? options.runtime?.config ?? this.globalConfig;
+      // subagentConfig methods are optional on some config types - defensive check for runtime boundary
       const mcpInstructions = subagentConfig
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config methods may not exist on all IProviderConfig implementations
         ?.getMcpClientManager?.()
         ?.getMcpInstructions();
       const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
         toolNamesForPrompt ?? [],
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config methods may not exist on all IProviderConfig implementations
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
@@ -1595,6 +1600,7 @@ export class GeminiProvider extends BaseProvider {
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isInteractive may not exist on all IProviderConfig implementations
         interactionMode: subagentConfig?.isInteractive?.()
           ? 'interactive'
           : 'non-interactive',
@@ -1753,15 +1759,18 @@ export class GeminiProvider extends BaseProvider {
       // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
       const userMemory = await resolveUserMemory(
         options.userMemory,
-        () => options.invocation?.userMemory,
+        () => options.invocation.userMemory,
       );
       const subagentConfig =
         options.config ?? options.runtime?.config ?? this.globalConfig;
+      // subagentConfig methods are optional on some config types - defensive check for runtime boundary
       const mcpInstructions = subagentConfig
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config methods may not exist on all IProviderConfig implementations
         ?.getMcpClientManager?.()
         ?.getMcpInstructions();
       const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
         toolNamesForPrompt ?? [],
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Config methods may not exist on all IProviderConfig implementations
         () => subagentConfig?.getSubagentManager?.(),
       );
       const systemInstruction = await getCoreSystemPromptAsync({
@@ -1770,6 +1779,7 @@ export class GeminiProvider extends BaseProvider {
         model: currentModel,
         tools: toolNamesForPrompt,
         includeSubagentDelegation,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isInteractive may not exist on all IProviderConfig implementations
         interactionMode: subagentConfig?.isInteractive?.()
           ? 'interactive'
           : 'non-interactive',
@@ -1862,11 +1872,14 @@ export class GeminiProvider extends BaseProvider {
       }
     }
 
-    if (stream) {
+    // stream is either AsyncIterable (truthy object) or null - explicit null check
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- stream is typed as AsyncIterable | null but TS infers control flow differently
+    if (stream !== null) {
       const iterator: AsyncIterator<GenerateContentResponse> =
         typeof stream[Symbol.asyncIterator] === 'function'
           ? stream[Symbol.asyncIterator]()
           : (stream as unknown as AsyncIterator<GenerateContentResponse>);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Intentional infinite loop with break conditions
       while (true) {
         const { value, done } = await iterator.next();
         if (done) {

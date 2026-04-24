@@ -78,10 +78,8 @@ export class ToolFormatter implements IToolFormatter {
 
     const openAITools = geminiTools.flatMap((toolGroup) => {
       // Add safety check for malformed tool groups
-      if (
-        !toolGroup?.functionDeclarations ||
-        !Array.isArray(toolGroup.functionDeclarations)
-      ) {
+      // Runtime boundary: toolGroup comes from provider payload, functionDeclarations may not be an array
+      if (!Array.isArray(toolGroup.functionDeclarations)) {
         this.logger.warn(
           () => `convertGeminiToOpenAI: Skipping malformed tool group`,
           { toolGroup },
@@ -231,10 +229,8 @@ export class ToolFormatter implements IToolFormatter {
 
     // For other formats, convert to ITool first then use toProviderFormat
     const itools = geminiTools.flatMap((toolGroup) => {
-      if (
-        !toolGroup?.functionDeclarations ||
-        !Array.isArray(toolGroup.functionDeclarations)
-      ) {
+      // Runtime boundary: toolGroup comes from provider payload, functionDeclarations may not be an array
+      if (!Array.isArray(toolGroup.functionDeclarations)) {
         return [];
       }
 
@@ -412,14 +408,16 @@ export class ToolFormatter implements IToolFormatter {
       case 'qwen':
       case 'kimi':
       case 'gemma': {
+        // Runtime boundary: rawToolCall comes from network response, may not match expected type
+        // Cast reflects that fields may be missing from malformed provider data
         const openAiToolCall = rawToolCall as {
           id: string;
           type?: string;
-          function: { name: string; arguments: string };
+          function?: { name: string; arguments: string };
         };
 
         if (
-          !openAiToolCall?.function?.name ||
+          !openAiToolCall.function?.name ||
           !openAiToolCall.function.arguments
         ) {
           throw new Error(`Invalid ${format} tool call format`);
@@ -462,7 +460,9 @@ export class ToolFormatter implements IToolFormatter {
           input?: unknown;
         };
 
-        if (!anthropicToolCall?.id || !anthropicToolCall.name) {
+        // Runtime boundary: rawToolCall comes from provider API, may not match asserted type
+
+        if (!anthropicToolCall.id || !anthropicToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
@@ -482,16 +482,20 @@ export class ToolFormatter implements IToolFormatter {
           arguments: Record<string, unknown>;
         };
 
-        if (!hermesToolCall?.name) {
+        // Runtime boundary: rawToolCall from parser may not match asserted type
+        if (!hermesToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
+        const hermesArguments = hermesToolCall.arguments as
+          | Record<string, unknown>
+          | undefined;
         return [
           {
             type: 'tool_call' as const,
             id: `hermes_${Date.now()}_${Math.random().toString(36).substring(7)}`,
             name: hermesToolCall.name,
-            parameters: hermesToolCall.arguments || {},
+            parameters: hermesArguments ?? {},
           },
         ];
       }
@@ -502,16 +506,20 @@ export class ToolFormatter implements IToolFormatter {
           arguments: Record<string, unknown>;
         };
 
-        if (!xmlToolCall?.name) {
+        // Runtime boundary: rawToolCall from parser may not match asserted type
+        if (!xmlToolCall.name) {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
+        const xmlArguments = xmlToolCall.arguments as
+          | Record<string, unknown>
+          | undefined;
         return [
           {
             type: 'tool_call' as const,
             id: `xml_${Date.now()}_${Math.random().toString(36).substring(7)}`,
             name: xmlToolCall.name,
-            parameters: xmlToolCall.arguments || {},
+            parameters: xmlArguments ?? {},
           },
         ];
       }
@@ -636,10 +644,11 @@ export class ToolFormatter implements IToolFormatter {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty description should become null
       description: tool.function.description || null,
       parameters:
-        (this.convertGeminiSchemaToStandard(tool.function.parameters) as Record<
-          string,
-          unknown
-        >) ?? null,
+        (this.convertGeminiSchemaToStandard(tool.function.parameters) as
+          | Record<string, unknown>
+          | null
+          | undefined) ?? null,
+
       strict: null,
     }));
   }

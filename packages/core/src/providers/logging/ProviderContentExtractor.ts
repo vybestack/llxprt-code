@@ -82,12 +82,16 @@ export class ProviderContentExtractor {
 
   private extractGeminiContent(chunk: Record<string, unknown>): string {
     const candidates = chunk.candidates as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const candidate = candidates?.[0];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!candidate) return '';
 
     // Handle text content
     const content = candidate.content as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const parts = content?.parts as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (parts) {
       const textParts = parts
         .filter((part: Record<string, unknown>) => part.text)
@@ -100,17 +104,21 @@ export class ProviderContentExtractor {
 
   private extractOpenAIContent(chunk: Record<string, unknown>): string {
     const choices = chunk.choices as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const choice = choices?.[0];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!choice) return '';
 
     // Handle streaming content
     const delta = choice.delta as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (delta?.content) {
       return delta.content as string;
     }
 
     // Handle complete content
     const message = choice.message as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (message?.content) {
       return message.content as string;
     }
@@ -123,14 +131,17 @@ export class ProviderContentExtractor {
     switch (chunk.type) {
       case 'content_block_delta': {
         const delta = chunk.delta as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         return (delta?.text as string) || '';
       }
       case 'content_block_start': {
         const contentBlock = chunk.content_block as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         return (contentBlock?.text as string) || '';
       }
       case 'message_delta': {
         const delta = chunk.delta as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         return (delta?.text as string) || '';
       }
       default:
@@ -144,6 +155,7 @@ export class ProviderContentExtractor {
     if (chunk.content) return chunk.content as string;
     if (chunk.message) return chunk.message as string;
     const delta = chunk.delta as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (delta?.text) return delta.text as string;
 
     return '';
@@ -151,10 +163,14 @@ export class ProviderContentExtractor {
 
   private extractGeminiToolCalls(chunk: Record<string, unknown>): ToolCall[] {
     const candidates = chunk.candidates as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const candidate = candidates?.[0];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!candidate) return [];
     const content = candidate.content as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const parts = content?.parts as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!parts) return [];
 
     return parts
@@ -171,16 +187,22 @@ export class ProviderContentExtractor {
 
   private extractOpenAIToolCalls(chunk: Record<string, unknown>): ToolCall[] {
     const choices = chunk.choices as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const choice = choices?.[0];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (!choice) return [];
 
     // Handle streaming tool calls
     const delta = choice.delta as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const toolCalls = delta?.tool_calls as Array<Record<string, unknown>>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (toolCalls) {
       return toolCalls.map((call: Record<string, unknown>) => ({
         provider: 'openai',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         name: (call.function as Record<string, unknown>)?.name as string,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         arguments: (call.function as Record<string, unknown>)?.arguments,
         id: call.id as string,
       }));
@@ -188,9 +210,11 @@ export class ProviderContentExtractor {
 
     // Handle complete tool calls
     const message = choice.message as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const messageToolCalls = message?.tool_calls as Array<
       Record<string, unknown>
     >;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (messageToolCalls) {
       return messageToolCalls.map((call: Record<string, unknown>) => ({
         provider: 'openai',

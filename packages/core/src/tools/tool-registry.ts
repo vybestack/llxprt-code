@@ -107,10 +107,12 @@ Signal: Signal number or \`(none)\` if no signal was received.
     try {
       await new Promise<void>((resolve) => {
         const onStdout = (data: Buffer) => {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           stdout += data?.toString();
         };
 
         const onStderr = (data: Buffer) => {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
           stderr += data?.toString();
         };
 
@@ -148,12 +150,16 @@ Signal: Signal number or \`(none)\` if no signal was received.
     }
 
     // if there is any error, non-zero exit code, signal, or stderr, return error details instead of stdout
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (error || code !== 0 || exitSignal || stderr) {
       const llmContent = [
         `Stdout: ${stdout || '(empty)'}`,
         `Stderr: ${stderr || '(empty)'}`,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Error: ${error ?? '(none)'}`,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Exit Code: ${code ?? '(none)'}`,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         `Signal: ${exitSignal ?? '(none)'}`,
       ].join('\n');
       return {
@@ -228,7 +234,8 @@ export class ToolRegistry {
   } {
     const ephemerals =
       typeof this.config.getEphemeralSettings === 'function'
-        ? this.config.getEphemeralSettings() || {}
+        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+          this.config.getEphemeralSettings() || {}
         : {};
 
     const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
@@ -239,6 +246,7 @@ export class ToolRegistry {
       : Array.isArray(ephemerals['disabled-tools'])
         ? (ephemerals['disabled-tools'] as string[])
         : [];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const excludedRaw = this.config.getExcludeTools?.() ?? [];
 
     return {
@@ -508,12 +516,16 @@ export class ToolRegistry {
    * Used to conditionally hide tool parameters that are disabled by settings.
    */
   private getSchemaTransforms(): { hideTaskAsync: boolean } {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const settingsService = this.config.getSettingsService?.();
 
     // Global setting from /settings (subagents.asyncEnabled)
     let globalAsyncEnabled = true;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (settingsService) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const globalSettings = settingsService.getAllGlobalSettings?.();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       const subagentsSettings = globalSettings?.['subagents'] as
         | { asyncEnabled?: boolean }
         | undefined;
@@ -522,6 +534,7 @@ export class ToolRegistry {
 
     // Profile setting from /set (subagents.async.enabled)
     const profileAsyncEnabled =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       settingsService?.get('subagents.async.enabled') !== false;
 
     return {
@@ -625,6 +638,7 @@ export class ToolRegistry {
   getToolsByServer(serverName: string): AnyDeclarativeTool[] {
     const serverTools: AnyDeclarativeTool[] = [];
     for (const tool of this.tools.values()) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if ((tool as DiscoveredMCPTool)?.serverName === serverName) {
         serverTools.push(tool);
       }

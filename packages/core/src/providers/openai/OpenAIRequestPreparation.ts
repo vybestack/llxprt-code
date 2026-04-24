@@ -47,6 +47,7 @@ export async function prepareRequest(
 ): Promise<RequestContext> {
   const { contents, tools, metadata } = options;
   const model = options.resolved.model || defaultModel;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
   // Detect the tool format to use BEFORE building messages
@@ -98,7 +99,9 @@ export async function prepareRequest(
       inputFirstGroup: tools?.[0],
       inputFunctionDeclarationsLength: tools?.[0]?.functionDeclarations?.length,
       outputHasTools: !!formattedTools,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       outputToolsLength: formattedTools?.length,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       outputToolNames: formattedTools?.map((t) => t.function.name),
     });
   }
@@ -119,11 +122,14 @@ export async function prepareRequest(
 
   const userMemory = await resolveUserMemory(
     options.userMemory,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     () => options.invocation?.userMemory,
   );
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   const mcpInstructions = config?.getMcpClientManager?.()?.getMcpInstructions();
   const includeSubagentDelegation = await shouldIncludeSubagentDelegation(
     toolNamesArg ?? [],
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     () => config?.getSubagentManager?.(),
   );
   const systemPrompt = await getCoreSystemPromptAsync({
@@ -132,6 +138,7 @@ export async function prepareRequest(
     model,
     tools: toolNamesArg,
     includeSubagentDelegation,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     interactionMode: config?.isInteractive?.()
       ? 'interactive'
       : 'non-interactive',
@@ -144,6 +151,7 @@ export async function prepareRequest(
   ];
 
   const maxTokens =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (metadata?.maxTokens as number | undefined) ??
     (ephemeralSettings['max-tokens'] as number | undefined);
 
@@ -172,6 +180,7 @@ export async function prepareRequest(
 
   // Inject thinking parameter for reasoning models
   if (!('thinking' in requestBody) && !('reasoning_effort' in requestBody)) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     const reasoningEnabled = options.invocation?.modelBehavior?.[
       'reasoning.enabled'
     ] as boolean | undefined;
@@ -195,6 +204,7 @@ export async function prepareRequest(
     | { include_usage?: boolean }
     | undefined) ?? { include_usage: true };
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
   if (streamingEnabled && streamOptions) {
     Object.assign(requestBody, { stream_options: streamOptions });
   }

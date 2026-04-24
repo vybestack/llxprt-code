@@ -82,7 +82,9 @@ export function convertMetadataToFunctionDeclaration(
   };
 
   return {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     name: metadata.name ?? fallbackName,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     description: metadata.description ?? '',
     parametersJsonSchema,
   };
@@ -247,6 +249,7 @@ export function createEmojiFilter(
   settingsSnapshot?: ReadonlySettingsSnapshot,
 ): EmojiFilter | undefined {
   const filterMode =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     (settingsSnapshot?.emojifilter as EmojiFilterMode) ?? 'auto';
 
   if (filterMode === 'allowed') {
@@ -405,7 +408,8 @@ export function createSchedulerConfig(
   const getExcludeTools =
     typeof toolExecutorContext.getExcludeTools === 'function'
       ? () => toolExecutorContext.getExcludeTools()
-      : () => foregroundConfig.getExcludeTools?.() ?? [];
+      : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
+        () => foregroundConfig.getExcludeTools?.() ?? [];
 
   const getTelemetryLogPromptsEnabled =
     typeof toolExecutorContext.getTelemetryLogPromptsEnabled === 'function'
@@ -459,10 +463,15 @@ export function createSchedulerConfig(
     disposeScheduler: (sessionId: string) => {
       toolExecutorContext.disposeScheduler(sessionId);
     },
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     getEnableHooks: () => foregroundConfig.getEnableHooks?.() ?? false,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     getHooks: () => foregroundConfig.getHooks?.(),
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     getHookSystem: () => foregroundConfig.getHookSystem?.(),
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     getWorkingDir: () => foregroundConfig.getWorkingDir?.() ?? process.cwd(),
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     getTargetDir: () => foregroundConfig.getTargetDir?.() ?? process.cwd(),
   } as unknown as Config;
 }
@@ -553,6 +562,7 @@ async function buildSystemInstruction(
   const toolNames = Array.from(
     new Set(
       combinedDeclarations
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         .map((d) => d?.name?.trim())
         .filter((name): name is string => Boolean(name && name.length > 0)),
     ),
@@ -569,7 +579,9 @@ async function buildSystemInstruction(
 
   const instructionSections = [
     envContextText,
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     coreSystemPrompt?.trim() ?? '',
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     personaPrompt?.trim() ?? '',
   ].filter((section) => section.length > 0);
 

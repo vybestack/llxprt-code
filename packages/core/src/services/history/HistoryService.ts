@@ -264,6 +264,7 @@ export class HistoryService
     if (this.isCompressing) {
       this.logger.debug('Queueing add operation during compression', {
         speaker: content.speaker,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         blockTypes: content.blocks?.map((b) => b.type),
       });
 
@@ -281,11 +282,14 @@ export class HistoryService
     // Log content being added with any tool call/response IDs
     this.logger.debug('Adding content to history:', {
       speaker: content.speaker,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       blockTypes: content.blocks?.map((b) => b.type),
       toolCallIds: content.blocks
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         ?.filter((b) => b.type === 'tool_call')
         .map((b) => b.id),
       toolResponseIds: content.blocks
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
         ?.filter((b) => b.type === 'tool_response')
         .map((b) => ({
           callId: b.callId,
@@ -296,6 +300,7 @@ export class HistoryService
     });
 
     // Only do basic validation - must have valid speaker
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
     if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
 
@@ -498,6 +503,7 @@ export class HistoryService
           total += estimateTextTokens(serialized);
         } else {
           const blockStrings = content.blocks
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             ?.map((block) => {
               switch (block.type) {
                 case 'text':
@@ -763,6 +769,7 @@ export class HistoryService
       if (content.speaker === 'human' || content.speaker === 'tool') {
         // Always include user and tool messages
         curated.push(content);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       } else if (content.speaker === 'ai') {
         aiMessagesAnalyzed++;
         // Only include AI messages if they have valid content
@@ -773,11 +780,16 @@ export class HistoryService
           this.logger.debug('Analyzing AI message:', {
             messageIndex: aiMessagesAnalyzed,
             hasValidContent,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             blockCount: content.blocks?.length || 0,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
             blocks: content.blocks?.map((b) => ({
               type: b.type,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               textLength: b.type === 'text' ? b.text?.length : null,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               textPreview: b.type === 'text' ? b.text?.substring(0, 50) : null,
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
               isEmpty: b.type === 'text' ? !b.text?.trim() : false,
             })),
             metadata: {
@@ -964,6 +976,7 @@ export class HistoryService
     const respondedCallIds = new Set<string>();
 
     for (const content of this.history) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!content.blocks) continue;
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
@@ -979,6 +992,7 @@ export class HistoryService
     const seenToolCallIds = new Set<string>();
 
     for (const content of this.history) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!content.blocks) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
@@ -1008,6 +1022,7 @@ export class HistoryService
   validateAndFix(): void {
     const respondedCallIds = new Set<string>();
     for (const content of this.history) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!content.blocks) continue;
       for (const block of content.blocks) {
         if (block.type === 'tool_response') {
@@ -1023,6 +1038,7 @@ export class HistoryService
 
     for (let i = 0; i < this.history.length; i++) {
       const content = this.history[i];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (content.speaker !== 'ai' || !content.blocks) continue;
 
       const toolCalls = content.blocks.filter(
@@ -1124,6 +1140,7 @@ export class HistoryService
     const result: IContent[] = [];
 
     for (const content of contents) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (content.speaker !== 'tool' || !content.blocks?.length) {
         result.push(content);
         continue;
@@ -1172,6 +1189,7 @@ export class HistoryService
     const normalized: IContent[] = [];
 
     for (const content of contents) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (content.blocks && content.blocks.length > 0) {
         for (const block of content.blocks) {
           if (block.type === 'tool_call') {
@@ -1180,6 +1198,7 @@ export class HistoryService
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (content.speaker === 'tool' && content.blocks?.length) {
         const missingResponses = content.blocks.filter(
           (block) =>
@@ -1243,6 +1262,7 @@ export class HistoryService
     const respondedCallIds = new Set<string>();
 
     for (const content of contents) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!content.blocks?.length) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_response') continue;
@@ -1259,6 +1279,7 @@ export class HistoryService
       const content = contents[i];
       result.push(content);
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (content.speaker !== 'ai' || !content.blocks?.length) continue;
 
       const toolCalls = content.blocks.filter(
@@ -1312,6 +1333,7 @@ export class HistoryService
 
     for (let i = 0; i < contents.length; i++) {
       const content = contents[i];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!content.blocks?.length) continue;
       for (const block of content.blocks) {
         if (block.type !== 'tool_call') continue;
@@ -1342,6 +1364,7 @@ export class HistoryService
     };
 
     const strippedContents: Array<IContent | null> = contents.map((content) => {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- BN4-C-P01: preserve defensive runtime boundary guard despite current static types.
       if (!content.blocks?.length) return content;
 
       const toolResponseBlocks = content.blocks.filter(
