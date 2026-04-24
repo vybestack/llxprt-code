@@ -88,12 +88,10 @@ describe('IDEServer', () => {
   });
 
   afterEach(async () => {
-    if (ideServer) {
-      try {
-        await ideServer.stop();
-      } catch {
-        // Ignore cleanup errors
-      }
+    try {
+      await ideServer.stop();
+    } catch {
+      // Ignore cleanup errors
     }
   });
 

@@ -112,14 +112,12 @@ describe('Agent Server Endpoints', () => {
   });
 
   afterAll(async () => {
-    if (server) {
-      await new Promise<void>((resolve, reject) => {
-        server.close((err) => {
-          if (err) return reject(err);
-          resolve();
-        });
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => {
+        if (err) return reject(err);
+        resolve();
       });
-    }
+    });
 
     // On Windows, give the server a moment to fully close before cleanup
     const closeDelay = process.platform === 'win32' ? 100 : 0;

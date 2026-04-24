@@ -103,7 +103,7 @@ const mockGunzipSync = gunzipSync as Mock;
 const mockUuidv4 = uuidv4 as Mock;
 const mockSetTargetDir = configModule.setTargetDir as Mock;
 const mockGetPersistedState = getPersistedState as Mock;
-const TEST_METADATA_KEY = METADATA_KEY || '__persistedState';
+const TEST_METADATA_KEY = METADATA_KEY;
 
 type MockWriteStream = {
   emit: Mock<(event: string, ...args: unknown[]) => boolean>;
