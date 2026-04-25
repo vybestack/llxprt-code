@@ -282,6 +282,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     const { validUrls: urls } = parsePrompt(userPrompt);
     const url = urls[0];
     const isPrivate = isPrivateIp(url);
+    const shouldFallbackForProcessingError = () => isPrivateIp(url);
 
     if (isPrivate) {
       const errorMessage =
@@ -382,24 +383,20 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         processingError = true;
       }
 
-      if (
-        !processingError &&
-        !responseText.trim() &&
-        (!sources || sources.length === 0)
-      ) {
+      if (!processingError && !responseText.trim() && sources === undefined) {
         // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
         processingError = true;
       }
 
       if (processingError) {
-        // If it's not a private IP, don't fallback - just return no content found
-        if (!isPrivate) {
-          return {
-            llmContent: 'No content found or URL retrieval failed.',
-            returnDisplay: 'No content found.',
-          };
+        if (shouldFallbackForProcessingError()) {
+          return await this.executeFallback(signal);
         }
-        return await this.executeFallback(signal);
+
+        return {
+          llmContent: 'No content found or URL retrieval failed.',
+          returnDisplay: 'No content found.',
+        };
       }
 
       const sourceListFormatted: string[] = [];

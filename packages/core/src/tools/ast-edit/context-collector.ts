@@ -108,12 +108,6 @@ export class ASTContextCollector {
       connectedFiles: [],
     };
 
-    // Phase 1: AST enhanced parsing (reuse declarations from base context)
-    if (ASTConfig.ENABLE_AST_PARSING) {
-      enhancedContext.declarations =
-        baseContext.declarations as EnhancedDeclaration[];
-    }
-
     // Context optimization
     enhancedContext.relevantSnippets = optimizeContextCollection(
       enhancedContext.declarations,

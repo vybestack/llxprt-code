@@ -388,7 +388,7 @@ export const MultiOccurrenceReplacer: Replacer = function* (content, find) {
   // to handle multiple occurrences based on replaceAll parameter
   let startIndex = 0;
 
-  while (true) {
+  while (startIndex < content.length) {
     const index = content.indexOf(find, startIndex);
     if (index === -1) break;
 

@@ -113,7 +113,7 @@ function parseResponseData(error: GaxiosError): ResponseData | undefined {
   // Inexplicably, Gaxios sometimes doesn't JSONify the response data.
   if (typeof error.response?.data === 'string') {
     try {
-      return JSON.parse(error.response?.data) as ResponseData;
+      return JSON.parse(error.response.data) as ResponseData;
     } catch {
       return undefined;
     }

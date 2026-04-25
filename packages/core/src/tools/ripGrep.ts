@@ -189,11 +189,11 @@ File: ${resolved.basename}
       const matchesByFile = allMatches.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
-          if (!acc[fileKey]) {
-            acc[fileKey] = [];
-          }
-          acc[fileKey].push(match);
-          acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
+          acc[fileKey] ??= [];
+          const fileMatches = acc[fileKey];
+          fileMatches.push(match);
+          fileMatches.sort((a, b) => a.lineNumber - b.lineNumber);
+
           return acc;
         },
         {} as Record<string, GrepMatch[]>,

@@ -64,16 +64,13 @@ export function isProQuotaExceededError(error: unknown): boolean {
         data?: unknown;
       };
     };
-    if (gaxiosError.response?.data) {
-      if (typeof gaxiosError.response.data === 'string') {
-        return checkMessage(gaxiosError.response.data);
+    const responseData = gaxiosError.response?.data;
+    if (responseData) {
+      if (typeof responseData === 'string') {
+        return checkMessage(responseData);
       }
-      if (
-        typeof gaxiosError.response.data === 'object' &&
-        gaxiosError.response.data !== null &&
-        'error' in gaxiosError.response.data
-      ) {
-        const errorData = gaxiosError.response.data as {
+      if (typeof responseData === 'object' && 'error' in responseData) {
+        const errorData = responseData as {
           error?: { message?: string };
         };
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: error message may be empty string, should still check

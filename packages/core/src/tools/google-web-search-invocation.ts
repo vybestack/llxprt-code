@@ -125,7 +125,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
 
       // Invoke the server tool with validated query
       // Double-check query is not undefined before sending
-      const searchQuery = this.params.query?.trim() || '';
+      const searchQuery = this.params.query.trim();
       if (!searchQuery) {
         return {
           llmContent: `Error: Cannot perform web search without a query.`,

@@ -25,7 +25,7 @@ import {
 } from '../utils/fileUtils.js';
 import { type PartListUnion } from '@google/genai';
 import type { Config } from '../config/config.js';
-import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
+
 import {
   recordFileOperationMetric,
   FileOperation,
@@ -165,8 +165,7 @@ ${finalExclusionPatternsForDescription
       useDefaultExcludes = true,
     } = this.params;
 
-    const defaultFileIgnores =
-      this.config.getFileFilteringOptions() ?? DEFAULT_FILE_FILTERING_OPTIONS;
+    const defaultFileIgnores = this.config.getFileFilteringOptions();
 
     const fileFilteringOptions = {
       respectGitIgnore:

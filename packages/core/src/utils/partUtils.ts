@@ -31,7 +31,7 @@ export function partToString(
   // Cast to Part, assuming it might contain project-specific fields
   const part = value as Part & {
     videoMetadata?: unknown;
-    thought?: string;
+    thought?: unknown;
     codeExecutionResult?: unknown;
     executableCode?: unknown;
   };

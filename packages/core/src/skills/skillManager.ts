@@ -182,7 +182,7 @@ export class SkillManager {
   ): Promise<SkillDefinition | null> {
     try {
       const content = await fs.readFile(configPath, 'utf-8');
-      const config: BuiltinSkillConfig = JSON.parse(content);
+      const config = JSON.parse(content) as BuiltinSkillConfig | null;
 
       // Validate required fields
       if (!config || typeof config !== 'object') {

@@ -222,13 +222,14 @@ function toMistralToolId(id: string, used: Set<string>): string {
   }
 
   let salt = 0;
-  while (true) {
+  while (salt <= Number.MAX_SAFE_INTEGER) {
     const candidate = generateDeterministicMistralId(id, salt);
     if (!used.has(candidate)) {
       return candidate;
     }
     salt += 1;
   }
+  throw new Error('Unable to generate a unique Mistral tool ID.');
 }
 
 /**

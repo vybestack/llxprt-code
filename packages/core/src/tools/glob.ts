@@ -216,7 +216,7 @@ class GlobToolInvocation extends BaseToolInvocation<
         ignoredCount = entries.length - filteredEntries.length;
       }
 
-      if (!filteredEntries || filteredEntries.length === 0) {
+      if (filteredEntries.length === 0) {
         let message = `No files found matching pattern "${this.params.pattern}"`;
         if (searchDirectories.length === 1) {
           message += ` within ${searchDirectories[0]}`;

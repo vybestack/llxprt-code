@@ -29,7 +29,7 @@ export async function parseAST(
   content: string,
   language: string,
 ): Promise<ASTNode[]> {
-  if (!ASTConfig.ENABLE_AST_PARSING || language === 'unknown') {
+  if (language === 'unknown') {
     return [];
   }
 

@@ -65,7 +65,7 @@ export interface PersistedUIHistoryItem {
  */
 export interface PersistedSession {
   /** Schema version for future migrations */
-  version: 1;
+  version: number;
   /** Unique session identifier */
   sessionId: string;
   /** Hash of project root for validation */

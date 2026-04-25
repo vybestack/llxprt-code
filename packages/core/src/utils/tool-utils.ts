@@ -112,16 +112,13 @@ export function isShellInvocationAllowlisted(
     return true;
   }
 
-  if (
-    !('params' in invocation) ||
-    typeof invocation.params !== 'object' ||
-    invocation.params === null ||
-    !('command' in invocation.params)
-  ) {
+  const params = invocation.params as unknown;
+  if (typeof params !== 'object' || params === null || !('command' in params)) {
     return false;
   }
 
-  const commandValue = (invocation.params as { command?: unknown }).command;
+  const commandValue = (params as { command?: unknown }).command;
+
   if (typeof commandValue !== 'string' || !commandValue.trim()) {
     return false;
   }

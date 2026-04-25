@@ -152,7 +152,7 @@ const mergeToolCalls = (
   }
 
   const seen = new Set(baseCalls.map((call) => call.id));
-  const liveCalls = (getLiveToolCalls(todo.id) ?? []).filter((call) => {
+  const liveCalls = getLiveToolCalls(todo.id).filter((call) => {
     if (seen.has(call.id)) {
       return false;
     }

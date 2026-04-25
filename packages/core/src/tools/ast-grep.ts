@@ -302,7 +302,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
         for (const raw of multiVarNames) {
           const name = raw.slice(3); // remove $$$
           const matches = node.getMultipleMatches(name);
-          if (matches && matches.length > 0) {
+          if (matches.length > 0) {
             metaVariables[name] = matches
               .map((m: SgNode) => m.text())
               .join(', ');

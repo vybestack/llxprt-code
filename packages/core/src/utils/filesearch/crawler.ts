@@ -92,6 +92,7 @@ export async function crawl(options: CrawlOptions): Promise<string[]> {
     path.posix.join(relativeToCrawlDir, p),
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- fdir callbacks mutate this as a runtime traversal boundary; never cache partial results when maxFiles truncates traversal.
   if (options.cache && !truncated) {
     const cacheKey = cache.getCacheKey(
       options.crawlDirectory,
