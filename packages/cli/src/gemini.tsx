@@ -22,7 +22,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
     const warningCode =
       typeof warning === 'string'
         ? undefined
-        : typeof warning?.code === 'string'
+        : typeof warning.code === 'string'
           ? warning.code
           : undefined;
     if (warningCode && suppressedWarningCodes.has(warningCode)) {
@@ -31,7 +31,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
     const message =
       typeof warning === 'string'
         ? warning
-        : (warning?.stack ?? warning?.message ?? String(warning));
+        : (warning.stack ?? warning.message ?? String(warning));
     debugLogger.warn(message);
   });
 }
@@ -538,12 +538,10 @@ export async function main() {
 
   const consolePatcher = new ConsolePatcher({
     stderr: !(
-      config.getOutputFormat?.() === OutputFormat.JSON &&
-      !config.isInteractive()
+      config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive()
     ),
     debugMode:
-      config.getOutputFormat?.() === OutputFormat.JSON &&
-      !config.isInteractive()
+      config.getOutputFormat() === OutputFormat.JSON && !config.isInteractive()
         ? false
         : config.getDebugMode(),
   });
@@ -709,10 +707,7 @@ export async function main() {
           ? cliModelFromBootstrap
           : config.getModel();
 
-      if (
-        (!configModel || configModel === 'placeholder-model') &&
-        activeProvider.getDefaultModel
-      ) {
+      if (!configModel || configModel === 'placeholder-model') {
         // No model specified or placeholder, get the provider's default
         configModel = activeProvider.getDefaultModel();
       }
@@ -736,17 +731,15 @@ export async function main() {
         Object.assign(mergedModelParams, configWithParams._cliModelParams);
       }
 
-      if (activeProvider) {
-        const existingParams = getActiveModelParams();
+      const existingParams = getActiveModelParams();
 
-        for (const [key, value] of Object.entries(mergedModelParams)) {
-          setActiveModelParam(key, value);
-        }
+      for (const [key, value] of Object.entries(mergedModelParams)) {
+        setActiveModelParam(key, value);
+      }
 
-        for (const key of Object.keys(existingParams)) {
-          if (!(key in mergedModelParams)) {
-            clearActiveModelParam(key);
-          }
+      for (const key of Object.keys(existingParams)) {
+        if (!(key in mergedModelParams)) {
+          clearActiveModelParam(key);
         }
       }
 
@@ -1020,9 +1013,7 @@ export async function main() {
   if (resumedHistory && resumedHistory.length > 0) {
     try {
       const geminiClient = config.getGeminiClient();
-      if (geminiClient) {
-        await geminiClient.restoreHistory(resumedHistory);
-      }
+      await geminiClient.restoreHistory(resumedHistory);
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
       debugLogger.warn(
