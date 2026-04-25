@@ -24,6 +24,32 @@ import {
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { createTokenStore } from '../../auth/proxy/credential-store-factory.js';
 
+type ProfileConfigService = Partial<
+  Pick<
+    NonNullable<CommandContext['services']['config']>,
+    'getProviderManager' | 'setProvider'
+  >
+> & {
+  getGeminiClient?: () =>
+    | (ReturnType<
+        NonNullable<CommandContext['services']['config']>['getGeminiClient']
+      > & { setTools?: () => void | Promise<void> })
+    | undefined;
+};
+
+type ProfileLoadResultView = {
+  infoMessages?: string[];
+  warnings?: string[];
+  modelName?: string;
+};
+
+function formatProfileMessages(
+  messages: readonly string[] | undefined,
+  prefix: string,
+): string {
+  return messages?.map((message) => `\n${prefix}${message}`).join('') ?? '';
+}
+
 const profileSuggestionDescription = 'Saved profile';
 
 const RESERVED_BUCKET_NAMES = ['login', 'logout', 'status', 'switch', '--all'];
@@ -253,7 +279,7 @@ const saveCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
@@ -510,7 +536,7 @@ const loadCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     // Parse profile name from args
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       // Open interactive profile selection dialog
@@ -545,6 +571,7 @@ const loadCommand: SlashCommand = {
       const runtime = getRuntimeApi();
       const statusBefore = runtime.getActiveProviderStatus();
       const result = await runtime.loadProfileByName(profileName);
+      const profileLoadResult = result as ProfileLoadResultView;
       if (result.providerName) {
         try {
           await runtime.switchActiveProvider(result.providerName);
@@ -559,46 +586,54 @@ const loadCommand: SlashCommand = {
           );
         }
       }
-      const infoMessages = (result.infoMessages ?? [])
-        .map((message) => `\n- ${message}`)
-        .join('');
-      const warningMessages = (result.warnings ?? [])
-        .map((warning) => `\n⚠ ${warning}`)
-        .join('');
+      const infoMessages = formatProfileMessages(
+        profileLoadResult.infoMessages,
+        '- ',
+      );
+      const warningMessages = formatProfileMessages(
+        profileLoadResult.warnings,
+        '⚠ ',
+      );
 
-      const configService = context.services.config;
-      if (configService) {
+      const configService = context.services
+        .config as unknown as ProfileConfigService | null;
+      if (configService !== null) {
         const providerManager = configService.getProviderManager?.();
-        if (providerManager && result.providerName) {
-          logger.debug(
-            () =>
-              `[profile] forcing config provider manager switch to '${result.providerName}'`,
-          );
-          try {
-            providerManager.setActiveProvider(result.providerName);
-            logger.debug(() => {
-              let activeName = 'unknown';
-              try {
-                activeName = providerManager.getActiveProvider().name;
-              } catch (readError) {
-                logger.debug(
-                  () =>
-                    `[profile] unable to read active provider: ${readError instanceof Error ? readError.message : String(readError)}`,
-                );
-              }
-              return `[profile] config manager active provider after switch: ${activeName}`;
-            });
-          } catch (error) {
-            logger.error(
+        if (result.providerName) {
+          if (providerManager !== undefined) {
+            logger.debug(
               () =>
-                `[profile] failed to set provider on config manager: ${error instanceof Error ? error.message : String(error)}`,
+                `[profile] forcing config provider manager switch to '${result.providerName}'`,
             );
+            try {
+              providerManager.setActiveProvider(result.providerName);
+              logger.debug(() => {
+                let activeName = 'unknown';
+                try {
+                  activeName = providerManager.getActiveProvider().name;
+                } catch (readError) {
+                  logger.debug(
+                    () =>
+                      `[profile] unable to read active provider: ${readError instanceof Error ? readError.message : String(readError)}`,
+                  );
+                }
+                return `[profile] config manager active provider after switch: ${activeName}`;
+              });
+            } catch (error) {
+              logger.error(
+                () =>
+                  `[profile] failed to set provider on config manager: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
           }
           configService.setProvider?.(result.providerName);
         }
 
         const geminiClient = configService.getGeminiClient?.();
-        if (geminiClient && typeof geminiClient.setTools === 'function') {
+        if (
+          geminiClient !== undefined &&
+          typeof geminiClient.setTools === 'function'
+        ) {
           try {
             await geminiClient.setTools();
           } catch (error) {
@@ -627,8 +662,8 @@ const loadCommand: SlashCommand = {
       try {
         const statusAfter = runtime.getActiveProviderStatus();
         context.recordingIntegration?.recordProviderSwitch(
-          statusAfter.providerName ?? result.providerName ?? 'unknown',
-          statusAfter.modelName ?? 'unknown',
+          statusAfter.providerName ?? result.providerName,
+          statusAfter.modelName ?? profileLoadResult.modelName ?? 'unknown',
         );
       } catch {
         // Best-effort recording — don't let it block profile loading
@@ -716,7 +751,7 @@ const deleteCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     // Parse profile name from args
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       // For now, show usage until dialog system is implemented
@@ -795,7 +830,7 @@ const setDefaultCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     // Parse profile name from args
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
@@ -820,15 +855,6 @@ const setDefaultCommand: SlashCommand = {
     }
 
     try {
-      // Check if settings service is available
-      if (!context.services.settings) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'Settings service not available',
-        };
-      }
-
       if (profileName.toLowerCase() === 'none') {
         // Clear the default profile
         getRuntimeApi().setDefaultProfileName(null);
@@ -937,7 +963,7 @@ const showCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
@@ -1003,7 +1029,7 @@ const editCommand: SlashCommand = {
     _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       return {
