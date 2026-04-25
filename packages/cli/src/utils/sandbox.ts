@@ -1355,7 +1355,7 @@ export async function start_sandbox(
       });
 
       return await new Promise<number>((resolve) => {
-        sandboxProcess?.on('close', (code, signal) => {
+        sandboxProcess.on('close', (code, signal) => {
           resolve(normalizeExitCode(code, signal));
         });
       });
@@ -1867,31 +1867,34 @@ export async function start_sandbox(
       credentialProxyHandle = await createAndStartProxy({
         socketPath: resolvedTmpdir,
       });
+      void credentialProxyHandle;
       const socketPath = getProxySocketPath();
       if (socketPath) {
         // @plan:PLAN-20250214-CREDPROXY.P34 R3.6: Pass socket path to container via env var
-        const shouldBridgeCredentialProxy =
-          (config.command === 'podman' || config.command === 'docker') &&
-          os.platform() === 'darwin';
-
-        if (shouldBridgeCredentialProxy) {
-          if (config.command === 'podman') {
-            credentialProxyBridgeResult = await setupCredentialProxyPodmanMacOS(
-              args,
-              socketPath,
-              SSH_TUNNEL_POLL_TIMEOUT_MS,
-              {
-                reserveTunnelPort: (port) => {
-                  reservedTunnelPorts.add(port);
-                },
-                excludedTunnelPorts: reservedTunnelPorts,
-              },
-            );
-          } else if (config.command === 'docker') {
-            credentialProxyBridgeResult = await setupCredentialProxyDockerMacOS(
-              args,
-              socketPath,
-            );
+        const sandboxCommand: string = config.command;
+        if (os.platform() === 'darwin') {
+          switch (sandboxCommand) {
+            case 'podman':
+              credentialProxyBridgeResult =
+                await setupCredentialProxyPodmanMacOS(
+                  args,
+                  socketPath,
+                  SSH_TUNNEL_POLL_TIMEOUT_MS,
+                  {
+                    reserveTunnelPort: (port) => {
+                      reservedTunnelPorts.add(port);
+                    },
+                    excludedTunnelPorts: reservedTunnelPorts,
+                  },
+                );
+              break;
+            case 'docker':
+              credentialProxyBridgeResult =
+                await setupCredentialProxyDockerMacOS(args, socketPath);
+              break;
+            default:
+              args.push('--env', `LLXPRT_CREDENTIAL_SOCKET=${socketPath}`);
+              break;
           }
 
           if (credentialProxyBridgeResult) {
@@ -2067,18 +2070,16 @@ export async function start_sandbox(
     }
 
     // @plan:PLAN-20250214-CREDPROXY.P34 R25.2, R25.3: Clean up credential proxy on sandbox exit
-    if (credentialProxyHandle) {
-      const stopCredentialProxy = () => {
-        void stopProxy();
-      };
-      process.on('exit', stopCredentialProxy);
-      process.on('SIGINT', stopCredentialProxy);
-      process.on('SIGTERM', stopCredentialProxy);
-      sandboxProcess.on('close', stopCredentialProxy);
-    }
+    const stopCredentialProxy = () => {
+      void stopProxy();
+    };
+    process.on('exit', stopCredentialProxy);
+    process.on('SIGINT', stopCredentialProxy);
+    process.on('SIGTERM', stopCredentialProxy);
+    sandboxProcess.on('close', stopCredentialProxy);
 
     return await new Promise<number>((resolve) => {
-      sandboxProcess?.on('close', (code, signal) => {
+      sandboxProcess.on('close', (code, signal) => {
         const exitCode = normalizeExitCode(code, signal);
         if (exitCode !== 0) {
           debugLogger.log(
@@ -2107,11 +2108,9 @@ async function imageExists(sandbox: string, image: string): Promise<boolean> {
     const checkProcess = spawn(sandbox, args);
 
     let stdoutData = '';
-    if (checkProcess.stdout) {
-      checkProcess.stdout.on('data', (data) => {
-        stdoutData += data.toString();
-      });
-    }
+    checkProcess.stdout.on('data', (data) => {
+      stdoutData += data.toString();
+    });
 
     checkProcess.on('error', (err) => {
       debugLogger.warn(
@@ -2174,12 +2173,8 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
     };
 
     const cleanup = () => {
-      if (pullProcess.stdout) {
-        pullProcess.stdout.removeListener('data', onStdoutData);
-      }
-      if (pullProcess.stderr) {
-        pullProcess.stderr.removeListener('data', onStderrData);
-      }
+      pullProcess.stdout.removeListener('data', onStdoutData);
+      pullProcess.stderr.removeListener('data', onStderrData);
       pullProcess.removeListener('error', onError);
       pullProcess.removeListener('close', onClose);
       if (pullProcess.connected) {
@@ -2187,12 +2182,8 @@ async function pullImage(sandbox: string, image: string): Promise<boolean> {
       }
     };
 
-    if (pullProcess.stdout) {
-      pullProcess.stdout.on('data', onStdoutData);
-    }
-    if (pullProcess.stderr) {
-      pullProcess.stderr.on('data', onStderrData);
-    }
+    pullProcess.stdout.on('data', onStdoutData);
+    pullProcess.stderr.on('data', onStderrData);
     pullProcess.on('error', onError);
     pullProcess.on('close', onClose);
   });
