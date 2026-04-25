@@ -62,24 +62,31 @@ export async function prepareTurnForQuery(
   setThought: (t: null) => void,
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
 ): Promise<void> {
+  const getBucketFailoverHandler = config.getBucketFailoverHandler as
+    | Config['getBucketFailoverHandler']
+    | undefined;
+
   if (!isContinuation) {
     startNewPrompt();
     setThought(null);
     thinkingBlocksRef.current = [];
-    config.getBucketFailoverHandler?.()?.reset?.();
+    getBucketFailoverHandler?.()?.reset?.();
 
     // Invalidate auth cache at turn boundaries for new turns
     // This ensures tokens updated by other processes are picked up
-    const handler = config.getBucketFailoverHandler?.();
+    const handler = getBucketFailoverHandler?.();
     if (handler?.invalidateAuthCache) {
-      const runtimeId = config.getSessionId?.() ?? 'default';
+      const getRuntimeSessionId = config.getSessionId as
+        | (() => string | undefined)
+        | undefined;
+      const runtimeId = getRuntimeSessionId?.() ?? 'default';
       handler.invalidateAuthCache(runtimeId);
     }
   } else {
-    config.getBucketFailoverHandler?.()?.resetSession?.();
+    getBucketFailoverHandler?.()?.resetSession?.();
   }
   try {
-    await config.getBucketFailoverHandler?.()?.ensureBucketsAuthenticated?.();
+    await getBucketFailoverHandler?.()?.ensureBucketsAuthenticated?.();
   } catch {
     // Swallow — partial auth is acceptable.
   }
@@ -145,15 +152,16 @@ export const useGeminiStream = (
   const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
 
   const emojiFilter = useMemo(() => {
-    const emojiFilterMode =
-      typeof config.getEphemeralSetting === 'function'
-        ? (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) ||
-          'auto'
+    const getEphemeralSetting = config.getEphemeralSetting as
+      | Config['getEphemeralSetting']
+      | undefined;
+    const emojiFilterMode = getEphemeralSetting?.('emojifilter');
+    const mode: EmojiFilterMode =
+      typeof emojiFilterMode === 'string' && emojiFilterMode.length > 0
+        ? (emojiFilterMode as EmojiFilterMode)
         : 'auto';
 
-    return emojiFilterMode !== 'allowed'
-      ? new EmojiFilter({ mode: emojiFilterMode })
-      : undefined;
+    return mode !== 'allowed' ? new EmojiFilter({ mode }) : undefined;
   }, [config]);
 
   const sanitizeContent = useCallback(
@@ -241,12 +249,10 @@ export const useGeminiStream = (
     [addItem, pendingHistoryItemRef, sanitizeContent, setPendingHistoryItem],
   );
   const logger = useLogger(storage);
-  const gitService = useMemo(() => {
-    if (!config.getProjectRoot()) {
-      return;
-    }
-    return new GitService(config.getProjectRoot(), storage);
-  }, [config, storage]);
+  const gitService = useMemo(
+    () => new GitService(config.getProjectRoot(), storage),
+    [config, storage],
+  );
 
   const [
     toolCalls,
@@ -315,7 +321,9 @@ export const useGeminiStream = (
 
   const pendingToolCallGroupDisplay = useMemo(
     () =>
-      toolCalls.length ? mapTrackedToolCallsToDisplay(toolCalls) : undefined,
+      toolCalls.length > 0
+        ? mapTrackedToolCallsToDisplay(toolCalls)
+        : undefined,
     [toolCalls],
   );
 
@@ -354,8 +362,8 @@ export const useGeminiStream = (
           ((tc.status === 'success' ||
             tc.status === 'error' ||
             tc.status === 'cancelled') &&
-            !(tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
-              .responseSubmittedToGemini),
+            (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
+              .responseSubmittedToGemini !== true),
       )
     ) {
       return StreamingState.Responding;
@@ -471,7 +479,7 @@ export const useGeminiStream = (
       if (
         (streamingState === StreamingState.Responding ||
           streamingState === StreamingState.WaitingForConfirmation) &&
-        !options?.isContinuation
+        options?.isContinuation !== true
       ) {
         queuedSubmissionsRef.current.push({
           query,
@@ -498,7 +506,7 @@ export const useGeminiStream = (
         ? Object.keys(config.getMcpServers() ?? {}).length
         : 0;
       if (
-        !options?.isContinuation &&
+        options?.isContinuation !== true &&
         trimmedStr &&
         !isSlashCommand(trimmedStr) &&
         configuredMcpServers > 0 &&
@@ -516,7 +524,7 @@ export const useGeminiStream = (
 
       if (
         trimmedStr &&
-        !options?.isContinuation &&
+        options?.isContinuation !== true &&
         !isSlashCommand(trimmedStr)
       ) {
         displayUserMessage(trimmedStr, userMessageTimestamp);
@@ -534,7 +542,7 @@ export const useGeminiStream = (
       }
 
       await prepareTurnForQuery(
-        !!options?.isContinuation,
+        options?.isContinuation === true,
         config,
         startNewPrompt,
         setThought,
@@ -658,8 +666,8 @@ export const useGeminiStream = (
   );
 
   const lastOutputTime = Math.max(
-    lastToolOutputTime ?? 0,
-    lastShellOutputTime ?? 0,
+    lastToolOutputTime,
+    lastShellOutputTime,
     lastGeminiActivityTime,
   );
 
