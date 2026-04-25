@@ -24,6 +24,44 @@ interface LoadBalancerStatsResult {
   profileCounts: Record<string, number>;
 }
 
+interface BucketFailoverDiagnosticsHandler {
+  getBuckets: () => string[];
+  getCurrentBucket: () => string | undefined;
+  isEnabled: () => boolean;
+}
+
+function getBucketFailoverDiagnosticsHandler(
+  config: unknown,
+): BucketFailoverDiagnosticsHandler | undefined {
+  if (
+    config === null ||
+    typeof config !== 'object' ||
+    !('getBucketFailoverHandler' in config) ||
+    typeof (config as { getBucketFailoverHandler?: unknown })
+      .getBucketFailoverHandler !== 'function'
+  ) {
+    return undefined;
+  }
+
+  const handler = (
+    config as {
+      getBucketFailoverHandler: () => unknown;
+    }
+  ).getBucketFailoverHandler();
+  if (
+    handler === null ||
+    typeof handler !== 'object' ||
+    typeof (handler as { getBuckets?: unknown }).getBuckets !== 'function' ||
+    typeof (handler as { getCurrentBucket?: unknown }).getCurrentBucket !==
+      'function' ||
+    typeof (handler as { isEnabled?: unknown }).isEnabled !== 'function'
+  ) {
+    return undefined;
+  }
+
+  return handler as BucketFailoverDiagnosticsHandler;
+}
+
 function isLoadBalancingProvider(
   provider: unknown,
 ): provider is { getStats: () => LoadBalancerStatsResult } {
@@ -85,21 +123,21 @@ export const diagnosticsCommand: SlashCommand = {
       }
 
       // Show bucket failover status
-      const failoverHandler = config.getBucketFailoverHandler?.();
-      if (failoverHandler) {
-        const buckets = failoverHandler.getBuckets?.() ?? [];
-        const currentBucket = failoverHandler.getCurrentBucket?.();
-        const isEnabled = failoverHandler.isEnabled?.() ?? false;
+      const failoverHandler = getBucketFailoverDiagnosticsHandler(config);
+      if (failoverHandler !== undefined) {
+        const buckets = failoverHandler.getBuckets();
+        const currentBucket = failoverHandler.getCurrentBucket();
+        const isEnabled = failoverHandler.isEnabled();
         diagnostics.push(
           `- Bucket Failover: ${isEnabled ? 'Enabled' : 'Disabled'}`,
         );
         if (buckets.length > 0) {
           diagnostics.push(`- Failover Buckets: ${buckets.join(' → ')}`);
           diagnostics.push(
-            `- Current Failover Bucket: ${currentBucket ?? buckets[0] ?? 'default'}`,
+            `- Current Failover Bucket: ${currentBucket ?? buckets[0]}`,
           );
           // Calculate next bucket
-          if (currentBucket && buckets.length > 1) {
+          if (currentBucket !== undefined && buckets.length > 1) {
             const currentIndex = buckets.indexOf(currentBucket);
             const nextBucket =
               currentIndex >= 0 && currentIndex < buckets.length - 1
@@ -240,11 +278,14 @@ export const diagnosticsCommand: SlashCommand = {
       }
 
       // Add dumpcontext status
+      const dumpcontextSetting = ephemeralSettings['dumpcontext'];
+      const dumpcontextFallback =
+        ephemeralSettings['dumponerror'] === 'enabled' ? 'error' : 'off';
       const dumpcontextMode =
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing (empty string means not set)
-        ephemeralSettings['dumpcontext'] ||
-        (ephemeralSettings['dumponerror'] === 'enabled' ? 'error' : 'off');
-      if (dumpcontextMode && dumpcontextMode !== 'off') {
+        typeof dumpcontextSetting === 'string' && dumpcontextSetting.length > 0
+          ? dumpcontextSetting
+          : dumpcontextFallback;
+      if (dumpcontextMode !== 'off') {
         diagnostics.push(`\n## Context Dumping`);
         diagnostics.push(`- Mode: ${dumpcontextMode}`);
         diagnostics.push(`- Dump Directory: ${os.homedir()}/.llxprt/dumps/`);
@@ -257,7 +298,7 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(
         `- Debug Mode: ${config.getDebugMode() ? 'Enabled' : 'Disabled'}`,
       );
-      diagnostics.push(`- Approval Mode: ${config.getApprovalMode() || 'off'}`);
+      diagnostics.push(`- Approval Mode: ${config.getApprovalMode()}`);
 
       diagnostics.push('\n## Compression');
       const compressionThreshold =
@@ -269,8 +310,8 @@ export const diagnosticsCommand: SlashCommand = {
       );
 
       diagnostics.push('\n## Settings');
-      const merged = settings?.merged ?? {};
-      diagnostics.push(`- Theme: ${merged.ui?.theme ?? 'default'}`);
+      const { merged } = settings;
+      diagnostics.push(`- Theme: ${merged.ui.theme ?? 'default'}`);
       diagnostics.push(`- Default Profile: ${merged.defaultProfile ?? 'none'}`);
       diagnostics.push(`- Sandbox: ${merged.sandbox ?? 'disabled'}`);
 
@@ -297,27 +338,25 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Memory/Context');
       const userMemory = config.getUserMemory();
+      const userMemoryText =
+        typeof userMemory === 'string' && userMemory.length > 0
+          ? `${userMemory.length} characters`
+          : 'Not loaded';
+      diagnostics.push(`- User Memory: ${userMemoryText}`);
       diagnostics.push(
-        `- User Memory: ${userMemory ? `${userMemory.length} characters` : 'Not loaded'}`,
-      );
-      diagnostics.push(
-        `- Context Files: ${config.getLlxprtMdFileCount() || 0} files`,
+        `- Context Files: ${config.getLlxprtMdFileCount()} files`,
       );
 
       diagnostics.push('\n## Tools');
       try {
         const toolRegistry = config.getToolRegistry();
-        if (toolRegistry) {
-          const tools = toolRegistry.getAllTools();
-          diagnostics.push(`- Available Tools: ${tools.length}`);
-          const toolNames = tools
-            .map((t: { name: string }) => t.name)
-            .slice(0, 10);
-          if (toolNames.length > 0) {
-            diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
-          }
-        } else {
-          diagnostics.push('- Tool Registry: Not initialized');
+        const tools = toolRegistry.getAllTools();
+        diagnostics.push(`- Available Tools: ${tools.length}`);
+        const toolNames = tools
+          .map((t: { name: string }) => t.name)
+          .slice(0, 10);
+        if (toolNames.length > 0) {
+          diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
         }
       } catch {
         diagnostics.push('- Tool Registry: Not initialized');
@@ -325,7 +364,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Telemetry');
       diagnostics.push(
-        `- Usage Statistics: ${merged.ui?.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
+        `- Usage Statistics: ${merged.ui.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
       );
 
       diagnostics.push('\n## OAuth Tokens');
