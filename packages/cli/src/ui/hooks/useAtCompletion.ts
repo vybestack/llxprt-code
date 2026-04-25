@@ -7,7 +7,12 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { setTimeout as setTimeoutPromise } from 'node:timers/promises';
 import { AsyncFzf } from 'fzf';
-import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  FileFilteringOptions,
+  FileSearch,
+  MCPResource,
+} from '@vybestack/llxprt-code-core';
 import { FileSearchFactory, escapePath } from '@vybestack/llxprt-code-core';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import { MAX_SUGGESTIONS_TO_SHOW } from '../components/SuggestionsDisplay.js';
@@ -26,7 +31,7 @@ interface AtCompletionState {
   status: AtCompletionStatus;
   suggestions: Suggestion[];
   isLoading: boolean;
-  pattern: string | null;
+  pattern: PatternInput;
 }
 
 type AtCompletionAction =
@@ -102,32 +107,56 @@ interface SubagentSuggestionCandidate {
   suggestion: Suggestion;
 }
 
-function buildResourceCandidates(
-  config?: Config,
-): ResourceSuggestionCandidate[] {
-  const registry = (
-    config as Config & {
-      getResourceRegistry?: () => {
-        getAllResources: () => Array<{
-          serverName: string;
-          uri: string;
-          name?: string;
-        }>;
-      };
-    }
-  )?.getResourceRegistry?.();
+type PatternInput = string | null;
 
-  if (!registry) {
+function fileFilteringOptions(
+  config: Config | undefined,
+): FileFilteringOptions | undefined {
+  return config?.getFileFilteringOptions();
+}
+
+function getResourceRegistry(config: Config | undefined) {
+  if (config === undefined) {
+    return undefined;
+  }
+
+  const configWithOptionalRegistry = config as {
+    getResourceRegistry?: Config['getResourceRegistry'];
+  };
+  return configWithOptionalRegistry.getResourceRegistry?.();
+}
+
+function getSubagentManager(config: Config | undefined) {
+  if (config === undefined) {
+    return undefined;
+  }
+
+  const configWithOptionalSubagents = config as {
+    getSubagentManager?: Config['getSubagentManager'];
+  };
+  return configWithOptionalSubagents.getSubagentManager?.();
+}
+
+function hasResourceIdentity(resource: MCPResource): boolean {
+  return resource.serverName.length > 0 && resource.uri.length > 0;
+}
+
+function buildResourceCandidates(
+  config: Config | undefined,
+): ResourceSuggestionCandidate[] {
+  const registry = getResourceRegistry(config);
+
+  if (registry === undefined) {
     return [];
   }
 
   return registry
     .getAllResources()
-    .filter((resource) => Boolean(resource.serverName && resource.uri))
+    .filter(hasResourceIdentity)
     .map((resource) => {
       const prefixedUri = `${resource.serverName}:${resource.uri}`;
       return {
-        searchKey: `${prefixedUri} ${resource.name ?? ''}`.toLowerCase(),
+        searchKey: `${prefixedUri} ${resource.name}`.toLowerCase(),
         suggestion: {
           label: prefixedUri,
           value: prefixedUri,
@@ -137,9 +166,9 @@ function buildResourceCandidates(
 }
 
 async function buildSubagentCandidates(
-  config?: Config,
+  config: Config | undefined,
 ): Promise<SubagentSuggestionCandidate[]> {
-  const subagentManager = config?.getSubagentManager?.();
+  const subagentManager = getSubagentManager(config);
   if (!subagentManager) {
     return [];
   }
@@ -215,7 +244,7 @@ async function searchSubagentCandidates(
 
 export interface UseAtCompletionProps {
   enabled: boolean;
-  pattern: string;
+  pattern: PatternInput;
   config: Config | undefined;
   cwd: string;
   setSuggestions: (suggestions: Suggestion[]) => void;
@@ -280,13 +309,12 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
   useEffect(() => {
     const initialize = async () => {
       try {
+        const filteringOptions = fileFilteringOptions(config);
         const searcher = FileSearchFactory.create({
           projectRoot: cwd,
           ignoreDirs: [],
-          useGitignore:
-            config?.getFileFilteringOptions()?.respectGitIgnore ?? true,
-          useGeminiignore:
-            config?.getFileFilteringOptions()?.respectGitIgnore ?? true,
+          useGitignore: filteringOptions?.respectGitIgnore ?? true,
+          useGeminiignore: filteringOptions?.respectGitIgnore ?? true,
           cache: true,
           cacheTtl: 30, // 30 seconds
           enableRecursiveFileSearch:
@@ -294,7 +322,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           enableFuzzySearch: !(
             config?.getFileFilteringDisableFuzzySearch() ?? false
           ),
-          maxFiles: config?.getFileFilteringOptions()?.maxFileCount,
+          maxFiles: filteringOptions?.maxFileCount,
         });
         await searcher.initialize();
         fileSearch.current = searcher;
@@ -324,7 +352,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
       }, 200);
 
       const timeoutMs =
-        config?.getFileFilteringOptions()?.searchTimeout ??
+        fileFilteringOptions(config)?.searchTimeout ??
         DEFAULT_SEARCH_TIMEOUT_MS;
 
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
@@ -345,9 +373,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           maxResults: MAX_SUGGESTIONS_TO_SHOW * 3,
         });
 
-        if (slowSearchTimer.current) {
-          clearTimeout(slowSearchTimer.current);
-        }
+        clearTimeout(slowSearchTimer.current);
 
         if (controller.signal.aborted) {
           return;
@@ -360,13 +386,13 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
 
         const resourceCandidates = buildResourceCandidates(config);
         const resourceSuggestions = await searchResourceCandidates(
-          state.pattern ?? '',
+          state.pattern,
           resourceCandidates,
         );
 
         const subagentCandidates = await buildSubagentCandidates(config);
         const subagentSuggestions = await searchSubagentCandidates(
-          state.pattern ?? '',
+          state.pattern,
           subagentCandidates,
         );
 
