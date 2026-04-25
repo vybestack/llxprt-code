@@ -253,7 +253,7 @@ export class ConversationManager {
         ...content,
         parts: (content.parts ?? []).filter((part) => !isThoughtPart(part)),
       }))
-      .filter((content) => (content.parts?.length ?? 0) > 0);
+      .filter((content) => content.parts.length > 0);
 
     // Extract thinking blocks if needed
     const thoughtBlocks: ThinkingBlock[] = includeThoughtsInHistory

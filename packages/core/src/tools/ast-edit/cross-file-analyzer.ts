@@ -144,7 +144,7 @@ export class CrossFileRelationshipAnalyzer {
                 matcher: { rule: { pattern: symbolName } },
               },
               (err, matches) => {
-                if (err || !matches) {
+                if (err !== null || matches.length === 0) {
                   resolve();
                   return;
                 }
@@ -208,7 +208,7 @@ export class CrossFileRelationshipAnalyzer {
                   matcher: { rule: { pattern: symbolName } },
                 },
                 (err, matches) => {
-                  if (err || !matches) {
+                  if (err !== null || matches.length === 0) {
                     resolve();
                     return;
                   }
@@ -238,6 +238,7 @@ export class CrossFileRelationshipAnalyzer {
 
       await withTimeout(queryPromise, ASTConfig.FIND_RELATED_TIMEOUT_MS);
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Workspace-size guard is set inside async search callbacks before this await resumes.
       if (workspaceTooLarge) return [];
       if (references.length > 0) return references;
     } catch (error) {

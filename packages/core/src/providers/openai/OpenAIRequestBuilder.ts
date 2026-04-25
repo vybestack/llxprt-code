@@ -312,9 +312,11 @@ export function buildMessagesWithReasoning(
   config: Config | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const stripPolicy =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings can omit reasoning policy during provider test/runtime bootstrap.
     (options.settings.get('reasoning.stripFromContext') as StripPolicy) ??
     'none';
   const includeInContext =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings can omit reasoning inclusion during provider test/runtime bootstrap.
     (options.settings.get('reasoning.includeInContext') as boolean) ?? false;
 
   const filteredContents = filterThinkingForContext(contents, stripPolicy);
@@ -382,6 +384,7 @@ export function buildMessagesWithReasoning(
       if (assistantMessage) {
         messages.push(assistantMessage);
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI history can include legacy/partial content records; only tool content belongs here.
     } else if (content.speaker === 'tool') {
       const toolMessages = processToolResponses(
         content,

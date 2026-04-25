@@ -175,7 +175,7 @@ export class PromptInstaller {
       const fullPath = path.join(expandedBaseDir, dir);
 
       if (options?.dryRun) {
-        if (options?.verbose) {
+        if (options.verbose) {
           logger.debug('Would create:', fullPath);
         }
       } else {
@@ -226,9 +226,6 @@ export class PromptInstaller {
         }
       }
 
-      // Track if we should write file (for overwrite action)
-      let shouldWriteFile = false;
-
       // Check existing file
       if (existsSync(fullPath) && !options?.force) {
         const decision = await this.handleExistingFile(
@@ -273,25 +270,15 @@ export class PromptInstaller {
           continue;
         }
 
-        if (decision.action === 'overwrite') {
-          // User never modified - safe to silently overwrite
-          shouldWriteFile = true;
-          if (options?.verbose) {
-            logger.debug('Updating unmodified file:', relativePath);
-          }
+        if (options?.verbose) {
+          logger.debug('Updating unmodified file:', relativePath);
         }
       } else {
         // File doesn't exist or force mode - write it
-        shouldWriteFile = true;
-      }
-
-      // Write file only if shouldWriteFile is true
-      if (!shouldWriteFile) {
-        continue;
       }
 
       if (options?.dryRun) {
-        if (options?.verbose) {
+        if (options.verbose) {
           logger.debug('Would write:', fullPath);
         }
         installed.push(relativePath);

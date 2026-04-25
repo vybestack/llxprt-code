@@ -48,12 +48,11 @@ import { validatePathWithinWorkspace } from '../safety/index.js';
  */
 function getEmojiFilter(config: Config): EmojiFilter {
   // Get emojifilter from ephemeral settings or default to 'auto'
-  const mode =
-    (config.getEphemeralSetting('emojifilter') as
-      | 'allowed'
-      | 'auto'
-      | 'warn'
-      | 'error') || 'auto';
+  const mode = config.getEphemeralSetting('emojifilter') as
+    | 'allowed'
+    | 'auto'
+    | 'warn'
+    | 'error';
 
   // Map auto to warn for file operations (we want warnings when filtering files)
   let filterMode: 'allowed' | 'warn' | 'error';
@@ -84,17 +83,17 @@ export function applyReplacement(
   }
 
   const preserveTrailingNewline = currentContent.endsWith('\n');
-  // If oldString is empty and it's not a new file, do not modify the content.
-  if (oldString === '' && !isNewFile) {
-    return currentContent;
-  }
-
   // Prevent infinite loop: empty oldString with multiple replacements is invalid
   if (oldString === '' && expectedReplacements > 1) {
     // This would cause an infinite loop as indexOf("", n) always returns n
     throw new Error(
       'Cannot perform multiple replacements with empty old_string',
     );
+  }
+
+  // If oldString is empty and it's not a new file, do not modify the content.
+  if (oldString === '') {
+    return currentContent;
   }
 
   // Try fuzzy matching first
@@ -405,7 +404,7 @@ class EditToolInvocation extends BaseToolInvocation<
       } else if (occurrences === 0) {
         const replaceLine = filteredParams.replaceBeginLineNumber;
 
-        if (replaceLine && replaceLine > 0 && currentContent !== null) {
+        if (replaceLine !== undefined && replaceLine > 0) {
           const lines = currentContent.split('\n');
 
           if (replaceLine > lines.length) {

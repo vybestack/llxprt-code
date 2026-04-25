@@ -97,10 +97,11 @@ export async function executeProviderWithBucketFailover(
   const { buckets, provider, tokenRefreshCallback, notificationCallback } =
     config;
 
-  if (!buckets || buckets.length === 0) {
+  if (buckets.length === 0) {
     throw new Error('Bucket failover requires at least one bucket');
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public failover boundary validates provider implementations supplied at runtime.
   if (!provider.generateChatCompletion) {
     throw new Error('Provider does not support generateChatCompletion');
   }

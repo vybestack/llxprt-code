@@ -163,7 +163,7 @@ export function getRecommendedModel(
     }
 
     // Filter out deprecated
-    candidates = candidates.filter((m) => m.metadata?.status !== 'deprecated');
+    candidates = candidates.filter((m) => m.metadata.status !== 'deprecated');
 
     // Apply capability filters
     if (options?.requireToolCalling) {
@@ -188,8 +188,8 @@ export function getRecommendedModel(
     } else {
       // Default: prefer larger context window (usually better models)
       candidates.sort((a, b) => {
-        const ctxA = a.limits.contextWindow ?? 0;
-        const ctxB = b.limits.contextWindow ?? 0;
+        const ctxA = a.limits.contextWindow;
+        const ctxB = b.limits.contextWindow;
         return ctxB - ctxA;
       });
     }

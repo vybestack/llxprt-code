@@ -71,7 +71,7 @@ export function createContentGeneratorConfig(
 
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: effectiveModel,
-    proxy: config?.getProxy(),
+    proxy: config.getProxy(),
   };
 
   if (geminiApiKey) {
@@ -125,7 +125,7 @@ export async function createContentGenerator(
   }
 
   const requestOptions = { headers: {} as Record<string, string> };
-  if (gcConfig?.getUsageStatisticsEnabled()) {
+  if (gcConfig.getUsageStatisticsEnabled()) {
     const installationManager = new InstallationManager();
     const installationId = installationManager.getInstallationId();
     requestOptions.headers['x-gemini-api-privileged-user-id'] =

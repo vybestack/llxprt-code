@@ -411,6 +411,7 @@ export class CodexDeviceFlow {
     const startTime = Date.now();
     const intervalMs = intervalSeconds * 1000;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Device-flow polling intentionally loops until timeout, authorization, or terminal error.
     while (true) {
       if (Date.now() - startTime >= maxWaitMs) {
         throw new Error('Device authorization timed out after 15 minutes');
@@ -566,17 +567,14 @@ export class CodexDeviceFlow {
     const now = Date.now();
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: expires_in 0 is invalid but should fall through to default 1 hour
     const expiresIn = tokenResponse.expires_in || 3600; // Default to 1 hour if not provided
-    const tokenType = (tokenResponse.token_type ?? 'Bearer') as
-      | 'Bearer'
-      | 'bearer';
-    const token: CodexOAuthToken = {
+    const token: CodexOAuthToken = CodexOAuthTokenSchema.parse({
       access_token: tokenResponse.access_token,
       refresh_token: tokenResponse.refresh_token,
       id_token: tokenResponse.id_token,
-      token_type: tokenType,
+      token_type: tokenResponse.token_type,
       expiry: Math.floor(now / 1000) + expiresIn,
       account_id: accountId,
-    };
+    });
 
     this.logger.debug(
       () => '[DEVICE] Device authorization completed successfully',

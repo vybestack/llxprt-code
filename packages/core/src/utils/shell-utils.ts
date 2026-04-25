@@ -458,14 +458,17 @@ export function checkCommandPermissions(
   isHardDenial?: boolean;
 } {
   // Check shell replacement mode via ephemeral setting or config
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit ephemeral settings support.
   const ephemeralValue = config.getEphemeralSetting?.('shell-replacement') as
     | 'allowlist'
     | 'all'
     | 'none'
     | boolean
     | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission test doubles may omit static shell replacement support.
   const configValue = config.getShellReplacement?.();
   const shellReplacementMode = normalizeShellReplacement(
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Shell permission config may omit both ephemeral and static replacement settings.
     ephemeralValue ?? configValue ?? 'allowlist',
   );
 

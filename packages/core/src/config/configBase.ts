@@ -57,10 +57,8 @@ export abstract class ConfigBase extends ConfigBaseCore {
   }
 
   resetModelToDefault(): void {
-    if (this.contentGeneratorConfig) {
-      this.contentGeneratorConfig.model = this.originalModel;
-      this.inFallbackMode = false;
-    }
+    this.contentGeneratorConfig.model = this.originalModel;
+    this.inFallbackMode = false;
     this.model = this.originalModel;
   }
 
@@ -240,28 +238,33 @@ export abstract class ConfigBase extends ConfigBaseCore {
       key === 'socket-nodelay' ||
       key === 'streaming'
     ) {
-      if (this.providerManager) {
-        const activeProvider = this.providerManager.getActiveProvider();
-        if (activeProvider) {
-          if (
-            'clearClientCache' in activeProvider &&
-            typeof activeProvider.clearClientCache === 'function'
-          ) {
-            const providerWithClearCache = activeProvider as {
-              clearClientCache: () => void;
-            };
-            providerWithClearCache.clearClientCache();
-          }
-          if (
-            'clearAuthCache' in activeProvider &&
-            typeof activeProvider.clearAuthCache === 'function'
-          ) {
-            const providerWithClearAuth = activeProvider as {
-              clearAuthCache: () => void;
-            };
-            providerWithClearAuth.clearAuthCache();
-          }
-        }
+      if (!this.providerManager) {
+        return;
+      }
+
+      const activeProvider = this.providerManager.getActiveProvider();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider manager may have no active provider during settings updates.
+      if (!activeProvider) {
+        return;
+      }
+
+      if (
+        'clearClientCache' in activeProvider &&
+        typeof activeProvider.clearClientCache === 'function'
+      ) {
+        const providerWithClearCache = activeProvider as {
+          clearClientCache: () => void;
+        };
+        providerWithClearCache.clearClientCache();
+      }
+      if (
+        'clearAuthCache' in activeProvider &&
+        typeof activeProvider.clearAuthCache === 'function'
+      ) {
+        const providerWithClearAuth = activeProvider as {
+          clearAuthCache: () => void;
+        };
+        providerWithClearAuth.clearAuthCache();
       }
     }
   }

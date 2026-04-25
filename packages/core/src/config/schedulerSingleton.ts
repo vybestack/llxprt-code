@@ -185,7 +185,7 @@ export async function getOrCreateScheduler(
       );
     }
     if (shouldRefreshCallbacks(entry.callbacks, callbacks)) {
-      entry.scheduler.setCallbacks?.({
+      entry.scheduler.setCallbacks({
         config,
         messageBus: dependencies.messageBus,
         toolRegistry: dependencies.toolRegistry,
@@ -218,7 +218,7 @@ export async function getOrCreateScheduler(
     ]);
     inFlight.callbacks = combinedCallbacks;
     const scheduler = await inFlight.promise;
-    scheduler.setCallbacks?.({
+    scheduler.setCallbacks({
       config,
       messageBus: dependencies.messageBus,
       toolRegistry: dependencies.toolRegistry,

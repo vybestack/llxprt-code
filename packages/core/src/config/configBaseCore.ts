@@ -571,9 +571,11 @@ export abstract class ConfigBaseCore {
     this.ideMode = value;
   }
   setIdeClientDisconnected(): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public IDE setter can be invoked before initialization or via partial runtime/test boundaries.
     void this.ideClient?.disconnect();
   }
   setIdeClientConnected(): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Public IDE setter can be invoked before initialization or via partial runtime/test boundaries.
     void this.ideClient?.connect();
   }
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {

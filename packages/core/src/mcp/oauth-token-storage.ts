@@ -125,6 +125,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     MCPOAuthTokenStorage.validateToken(credentials.token);
     await this.storage.setCredentials({
       ...credentials,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Malformed/partial OAuth credential boundary normalization preserves missing updatedAt fallback.
       updatedAt: credentials.updatedAt ?? Date.now(),
     });
   }
@@ -193,7 +194,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
   }
 
   private static validateToken(token: OAuthToken): void {
-    if (!token || typeof token !== 'object') {
+    if (typeof token !== 'object') {
       throw new Error('Token must be a valid object');
     }
     if (!token.accessToken || typeof token.accessToken !== 'string') {

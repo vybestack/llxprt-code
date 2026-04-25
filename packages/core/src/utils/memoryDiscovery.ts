@@ -43,6 +43,7 @@ interface GeminiFileContent {
 
 async function findProjectRoot(startDir: string): Promise<string | null> {
   let currentDir = path.resolve(startDir);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Project-root discovery intentionally walks until filesystem root.
   while (true) {
     const gitPath = path.join(currentDir, '.git');
     try {
@@ -408,6 +409,7 @@ async function findUpwardGeminiFiles(
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Upward memory search terminates on explicit directory/root checks.
   while (true) {
     if (currentDir === globalGeminiDir) {
       break;
@@ -493,7 +495,7 @@ export async function loadEnvironmentMemory(
   const extensionPaths = extensionLoader
     .getExtensions()
     .filter((ext: GeminiCLIExtension) => ext.isActive)
-    .flatMap((ext: GeminiCLIExtension) => ext.contextFiles ?? []);
+    .flatMap((ext: GeminiCLIExtension) => ext.contextFiles);
   extensionPaths.forEach((p: string) => allPaths.add(p));
 
   const sortedPaths = Array.from(allPaths).sort();

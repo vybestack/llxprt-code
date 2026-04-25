@@ -52,6 +52,7 @@ export interface ProcessImportsResult {
 // Helper to find the project root (looks for .git directory)
 async function findProjectRoot(startDir: string): Promise<string> {
   let currentDir = path.resolve(startDir);
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Project-root discovery intentionally walks until filesystem root.
   while (true) {
     const gitPath = path.join(currentDir, '.git');
     try {
@@ -300,7 +301,7 @@ export async function processImports(
           // Only log errors in debug mode, unless they're not ENOENT (file not found) errors
           // This prevents spurious error messages from cluttering the console when files
           // are intentionally missing, addressing issue #391
-          if (debugMode && (!errorMessage.includes('ENOENT') || debugMode)) {
+          if (debugMode) {
             logger.warn(`Failed to import ${fullPath}: ${errorMessage}`);
           } else if (!errorMessage.includes('ENOENT')) {
             // Log non-ENOENT errors even in non-debug mode as they might be unexpected
@@ -392,7 +393,7 @@ export async function processImports(
       // Only log errors in debug mode, unless they're not ENOENT (file not found) errors
       // This prevents spurious error messages from cluttering the console when files
       // are intentionally missing, addressing issue #391
-      if (debugMode && (!message.includes('ENOENT') || debugMode)) {
+      if (debugMode) {
         logger.error(`Failed to import ${importPath}: ${message}`);
       } else if (!message.includes('ENOENT')) {
         // Log non-ENOENT errors even in non-debug mode as they might be unexpected

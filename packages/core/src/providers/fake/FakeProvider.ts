@@ -149,7 +149,7 @@ function convertLegacyResponseChunk(chunk: unknown): IContent[] {
 
   const convertedCandidates = candidates
     .map((candidate) => {
-      if (!candidate?.content) {
+      if (!candidate.content) {
         return undefined;
       }
 
@@ -160,7 +160,7 @@ function convertLegacyResponseChunk(chunk: unknown): IContent[] {
     .filter((content): content is IContent => !!content);
 
   const fallbackStopReason = candidates
-    .map((candidate) => normalizeStopReason(candidate?.finishReason))
+    .map((candidate) => normalizeStopReason(candidate.finishReason))
     .find((reason): reason is string => !!reason);
 
   if (convertedCandidates.length === 0 && (usage || fallbackStopReason)) {
@@ -263,8 +263,9 @@ export class FakeProvider implements IProvider {
     _optionsOrContent: GenerateChatOptions | IContent[],
   ): AsyncIterableIterator<IContent> {
     const turnIndex = this.callCounter++;
-    const turn = this.turns[turnIndex];
-    if (!turn) {
+    const [turn] = this.turns.slice(turnIndex, turnIndex + 1);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Fixture replay must guard exhausted response files at runtime.
+    if (turn === undefined) {
       throw new Error(
         `FakeProvider: no more canned responses (call #${turnIndex + 1}, only ${this.turns.length} turn(s) available)`,
       );
