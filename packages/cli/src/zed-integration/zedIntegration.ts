@@ -8,6 +8,7 @@ import {
   type Config,
   type ContentGeneratorConfig,
   type GeminiChat,
+  type GeminiClient,
   logToolCall,
   type ToolResult,
   convertToFunctionResponse,
@@ -121,6 +122,11 @@ export async function runZedIntegration(
     logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
     throw e;
   }
+}
+function getRuntimeGeminiClient(config: Config): GeminiClient | undefined {
+  return (
+    config as { getGeminiClient: () => GeminiClient | undefined }
+  ).getGeminiClient();
 }
 
 export class GeminiAgent {
@@ -251,7 +257,7 @@ export class GeminiAgent {
       }
 
       // Try to get the client and check if it's properly initialized
-      let geminiClient = sessionConfig.getGeminiClient();
+      let geminiClient = getRuntimeGeminiClient(sessionConfig);
       const hasContentGeneratorConfig =
         sessionConfig.getContentGeneratorConfig() !== undefined;
 
@@ -270,14 +276,14 @@ export class GeminiAgent {
 
         // Debug provider state
         if (providerManager) {
+          const activeProviderManager = providerManager;
+          const providerName = activeProviderManager.getActiveProviderName();
           this.logger.debug(
             () =>
-              `ProviderManager exists: ${providerManager?.hasActiveProvider?.() ? 'has active provider' : 'no active provider'}`,
+              `ProviderManager exists: ${activeProviderManager.hasActiveProvider() ? 'has active provider' : 'no active provider'}`,
           );
           this.logger.debug(
-            () =>
-              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty/null provider name should show 'none'
-              `Active provider name: ${providerManager?.getActiveProviderName?.() || 'none'}`,
+            () => `Active provider name: ${providerName || 'none'}`,
           );
         } else {
           this.logger.debug(() => 'No ProviderManager available');
@@ -285,7 +291,7 @@ export class GeminiAgent {
 
         // Check for provider from config (loaded from profile or CLI)
         const configProvider = sessionConfig.getProvider();
-        let hasActiveProvider = providerManager?.hasActiveProvider?.() ?? false;
+        let hasActiveProvider = providerManager?.hasActiveProvider() ?? false;
 
         if (configProvider) {
           this.logger.debug(() => `Config has provider: ${configProvider}`);
@@ -300,7 +306,7 @@ export class GeminiAgent {
             const result = await switchActiveProvider(configProvider);
             providerManager = sessionConfig.getProviderManager();
             hasActiveProvider =
-              providerManager?.hasActiveProvider?.() ?? result.changed;
+              providerManager?.hasActiveProvider() ?? result.changed;
             if (result.infoMessages.length > 0) {
               for (const info of result.infoMessages) {
                 this.logger.debug(() => `[zed-integration] ${info}`);
@@ -314,7 +320,10 @@ export class GeminiAgent {
           }
         }
 
-        if (!hasActiveProvider && providerManager?.hasActiveProvider?.()) {
+        if (
+          !hasActiveProvider &&
+          (providerManager?.hasActiveProvider() ?? false)
+        ) {
           hasActiveProvider = true;
         }
 
@@ -378,11 +387,15 @@ export class GeminiAgent {
           }
         }
 
-        if (providerManager?.hasActiveProvider()) {
+        const providerManagerForAuth =
+          providerManager?.hasActiveProvider() === true
+            ? providerManager
+            : undefined;
+        if (providerManagerForAuth) {
           // Use provider-based auth if a provider is configured
           this.logger.debug(
             () =>
-              `Auto-authenticating with provider: ${providerManager.getActiveProviderName()}`,
+              `Auto-authenticating with provider: ${providerManagerForAuth.getActiveProviderName()}`,
           );
 
           // Ensure provider manager is set on config before refreshAuth
@@ -391,12 +404,12 @@ export class GeminiAgent {
             this.logger.debug(() => 'Setting provider manager on config');
             (
               sessionConfig as unknown as Record<string, unknown>
-            ).providerManager = providerManager;
+            ).providerManager = providerManagerForAuth;
 
             // Ensure serverToolsProvider (Gemini) has config set BEFORE refreshAuth
             // This is critical for web search to work properly
             const serverToolsProvider =
-              providerManager.getServerToolsProvider();
+              providerManagerForAuth.getServerToolsProvider();
             if (
               serverToolsProvider &&
               serverToolsProvider.name === 'gemini' &&
@@ -419,7 +432,7 @@ export class GeminiAgent {
             this.logger.debug(
               () => 'Adding provider manager to ContentGeneratorConfig',
             );
-            contentGenConfig.providerManager = providerManager;
+            contentGenConfig.providerManager = providerManagerForAuth;
           }
         } else {
           // Try OAuth as last resort (this might open a browser)
@@ -427,7 +440,7 @@ export class GeminiAgent {
           await sessionConfig.refreshAuth('oauth');
         }
 
-        geminiClient = sessionConfig.getGeminiClient();
+        geminiClient = getRuntimeGeminiClient(sessionConfig);
         if (!geminiClient) {
           throw new Error(
             'Failed to authenticate. Please ensure valid credentials are available.',
@@ -554,12 +567,10 @@ export class Session {
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
     // Initialize emoji filter from settings
-    const emojiFilterMode =
-      (this.config.getEphemeralSetting('emojifilter') as
-        | 'allowed'
-        | 'auto'
-        | 'warn'
-        | 'error') || 'auto';
+    const configuredEmojiFilterMode = this.config.getEphemeralSetting(
+      'emojifilter',
+    ) as 'allowed' | 'auto' | 'warn' | 'error' | undefined;
+    const emojiFilterMode = configuredEmojiFilterMode ?? 'auto';
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
 
@@ -614,7 +625,7 @@ export class Session {
       try {
         const responseStream = await chat.sendMessageStream(
           {
-            message: nextMessage?.parts ?? [],
+            message: nextMessage.parts ?? [],
             config: {
               abortSignal: pendingSend.signal,
             },
@@ -749,13 +760,6 @@ export class Session {
         const toolResponseParts: Part[] = [];
 
         for (const fc of functionCalls) {
-          // Check for cancellation before each tool execution
-          if (pendingSend.signal.aborted) {
-            // Return cancellation without polluting conversation history
-            // Tool execution cancellation should be handled by the tool execution system
-            return { stopReason: 'cancelled' };
-          }
-
           const response = await this.runTool(pendingSend.signal, promptId, fc);
           toolResponseParts.push(...response.parts);
           if (response.message) {
@@ -1408,7 +1412,7 @@ export class Session {
           sessionUpdate: 'tool_call_update',
           toolCallId: callId,
           status: 'completed',
-          content: content ? [content] : [],
+          content: [content],
         });
         if (Array.isArray(result.llmContent)) {
           const fileContentRegex = /^--- (.*?) ---\n\n([\s\S]*?)\n\n$/;
