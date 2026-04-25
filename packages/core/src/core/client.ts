@@ -399,6 +399,7 @@ export class GeminiClient {
           if (newContent.parts) {
             newContent.parts = newContent.parts.map((part) => {
               if (
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Client runtime state crosses provider/session boundaries despite declared types.
                 part &&
                 typeof part === 'object' &&
                 'thoughtSignature' in part
@@ -453,6 +454,7 @@ export class GeminiClient {
 
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Client runtime state crosses provider/session boundaries despite declared types.
     if (!toolRegistry) {
       return;
     }
@@ -514,6 +516,7 @@ export class GeminiClient {
     // If chat exists, clear its history service
     if (this.chat) {
       const historyService = this.chat.getHistoryService();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Client runtime state crosses provider/session boundaries despite declared types.
       if (historyService) {
         // Clear the history service directly
         historyService.clear();

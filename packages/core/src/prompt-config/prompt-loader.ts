@@ -51,6 +51,7 @@ export class PromptLoader {
     shouldCompress: boolean,
   ): Promise<LoadFileResult> {
     // Step 1: Validate input
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt loading crosses filesystem/plugin boundaries despite declared types.
     if (filePath === null || filePath === undefined) {
       return { success: false, content: '', error: 'Invalid file path' };
     }
@@ -226,6 +227,7 @@ export class PromptLoader {
     shouldCompress: boolean,
   ): Promise<Map<string, string>> {
     // Step 1: Validate inputs
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt loading crosses filesystem/plugin boundaries despite declared types.
     if (!baseDir || !fileList) {
       return new Map();
     }
@@ -383,6 +385,7 @@ export class PromptLoader {
           timeouts.clear();
 
           // Close the watcher
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt loading crosses filesystem/plugin boundaries despite declared types.
           if (watcher && typeof watcher.close === 'function') {
             watcher.close();
           }

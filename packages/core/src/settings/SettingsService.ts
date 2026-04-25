@@ -95,10 +95,12 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
   // Lines 40-54: Provider-specific methods - direct manipulation of settings.providers
   getProviderSettings(provider: string): Record<string, unknown> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
     return this.settings.providers[provider] || {};
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
     if (!this.settings.providers[provider]) {
       this.settings.providers[provider] = {};
     }
@@ -151,6 +153,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     let current = obj as Record<string, unknown>;
 
     for (const k of keys) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
       if (current && typeof current === 'object' && k in current) {
         current = current[k] as Record<string, unknown>;
       } else {
@@ -315,6 +318,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       // Import provider settings
       if (data.providers) {
         for (const [provider, settings] of Object.entries(data.providers)) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
           if (settings && typeof settings === 'object') {
             for (const [key, value] of Object.entries(settings)) {
               this.setProviderSetting(provider, key, value);
@@ -324,10 +328,12 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       }
 
       const toolsAllowed = Array.isArray(data.tools?.allowed)
-        ? (data.tools?.allowed as unknown[]).map((name) => String(name))
+        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
+          (data.tools?.allowed as unknown[]).map((name) => String(name))
         : [];
       const toolsDisabled = Array.isArray(data.tools?.disabled)
-        ? (data.tools?.disabled as unknown[]).map((name) => String(name))
+        ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Settings values cross persisted/plugin boundaries despite declared types.
+          (data.tools?.disabled as unknown[]).map((name) => String(name))
         : [];
 
       this.settings.tools = this.settings.tools ?? {};

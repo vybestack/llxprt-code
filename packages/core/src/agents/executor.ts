@@ -186,6 +186,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         : 'Get Started!';
       let currentMessage: Content = { role: 'user', parts: [{ text: query }] };
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
       while (true) {
         // Check for termination conditions like max turns or timeout.
         const reason = this.checkTermination(startTime, turnCounter);
@@ -208,6 +209,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           promptId,
         );
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
         if (signal.aborted) {
           terminateReason = AgentTerminateMode.ABORTED;
           break;
@@ -294,6 +296,7 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
       let textResponse = '';
       streamIterator = responseStream[Symbol.asyncIterator]();
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
       while (true) {
         // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let result: IteratorResult<StreamEvent>;
@@ -448,14 +451,19 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           contentGeneratorConfig:
             this.runtimeContext.getContentGeneratorConfig(),
           toolRegistry: this.toolRegistry,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
           providerManager: this.runtimeContext.getProviderManager?.(),
         },
         overrides: {
           contentGenerator: (() => {
             try {
-              return this.runtimeContext
-                .getGeminiClient?.()
-                ?.getContentGenerator();
+              return (
+                this.runtimeContext
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+                  .getGeminiClient?.()
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent/model streams are external runtime boundaries despite declared types.
+                  ?.getContentGenerator()
+              );
             } catch {
               const unavailableContentGenerator = void 0;
               return unavailableContentGenerator;

@@ -108,6 +108,7 @@ export function parseLspConfig(
   if (lsp === true) {
     return { servers: [] };
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
   return lsp.servers === undefined ? { ...lsp, servers: [] } : lsp;
 }
 
@@ -169,6 +170,7 @@ async function registerMcpNavigationTools(
             typeof chunk === 'string' ? chunk : chunk.toString('utf8');
           readBuffer += text;
 
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
           while (true) {
             const newlineIndex = readBuffer.indexOf('\n');
             if (newlineIndex === -1) {
@@ -243,6 +245,7 @@ async function registerMcpNavigationTools(
     const requestTimeoutMs = 250;
     await client.connect(transport, { timeout: requestTimeoutMs });
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
     const capabilities = client.getServerCapabilities?.();
     if (!capabilities?.tools) {
       await cleanup();
@@ -252,6 +255,7 @@ async function registerMcpNavigationTools(
     const toolsResponse = await client.listTools(undefined, {
       timeout: requestTimeoutMs,
     });
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
     const toolDefs = toolsResponse.tools ?? [];
     if (toolDefs.length === 0) {
       await cleanup();
@@ -315,6 +319,7 @@ async function registerMcpNavigationTools(
         'lsp-navigation',
         toolDef.name,
         toolDef.description ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- LSP responses cross external server boundaries despite declared types.
         toolDef.inputSchema ?? { type: 'object', properties: {} },
         true,
         undefined,

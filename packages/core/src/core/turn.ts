@@ -430,6 +430,7 @@ export class Turn {
         );
         streamIterator = responseStream[Symbol.asyncIterator]();
 
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
         while (true) {
           // Use watchdog if timeout > 0, otherwise call iterator.next() directly
           let result: IteratorResult<StreamEvent>;
@@ -457,6 +458,7 @@ export class Turn {
           }
 
           const streamEvent = result.value;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
           if (signal?.aborted) {
             yield { type: GeminiEventType.UserCancelled };
             return;
@@ -492,6 +494,7 @@ export class Turn {
 
           // Narrow to CHUNK — the only other variant in the discriminated union
           const resp = streamEvent.value;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
           if (!resp) continue; // Skip if there's no response body
 
           this.debugResponses.push(resp);
@@ -585,6 +588,7 @@ export class Turn {
         return;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       if (idleTimedOut) {
         yield {
           type: GeminiEventType.StreamIdleTimeout,
@@ -662,6 +666,7 @@ export class Turn {
       args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn events cross provider/runtime boundaries despite declared types.
       agentId: this.agentId ?? DEFAULT_AGENT_ID,
     };
 

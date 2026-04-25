@@ -94,6 +94,7 @@ function classifyError(error: unknown): SecureStoreErrorCode {
   if (msg.includes('timeout') || msg.includes('timed out')) return 'TIMEOUT';
   if (msg.includes('not found')) return 'NOT_FOUND';
   const errObj = error as NodeJS.ErrnoException;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
   if (errObj?.code === 'ENOENT') return 'NOT_FOUND';
   return 'UNAVAILABLE';
 }
@@ -204,12 +205,17 @@ export async function createDefaultKeyringAdapter(): Promise<KeyringAdapter | nu
   } catch (error) {
     const err = error as NodeJS.ErrnoException;
     const isModuleMissing =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
       err?.code === 'ERR_MODULE_NOT_FOUND' ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
       err?.code === 'MODULE_NOT_FOUND' ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
       err?.code === 'ERR_DLOPEN_FAILED' ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
       err?.message?.includes('@napi-rs/keyring');
     if (!isModuleMissing && process.env.DEBUG) {
       debugLogger.warn(
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Secure storage adapters can return malformed runtime data despite declared types.
         `[SecureStore] Unexpected error loading @napi-rs/keyring: ${err?.message}`,
       );
     }

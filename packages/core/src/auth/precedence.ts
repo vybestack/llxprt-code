@@ -590,6 +590,7 @@ export class AuthPrecedenceResolver {
       return this.settingsService;
     }
     const context = getActiveProviderRuntimeContext();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Auth precedence consumes persisted/runtime credentials despite declared types.
     if (!context?.settingsService) {
       throw new Error('Active provider runtime context not available');
     }
@@ -1065,6 +1066,7 @@ export class AuthPrecedenceResolver {
 
     try {
       const context = getActiveProviderRuntimeContext();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Auth precedence consumes persisted/runtime credentials despite declared types.
       if (context?.runtimeId && !knownRuntimeIds.includes(context.runtimeId)) {
         knownRuntimeIds.push(context.runtimeId);
       }

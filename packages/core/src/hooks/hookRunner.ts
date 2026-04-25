@@ -312,6 +312,7 @@ export class HookRunner {
       }, timeout);
 
       // Send input to stdin
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook output crosses plugin process boundaries despite declared types.
       if (child.stdin) {
         child.stdin.on('error', (err: NodeJS.ErrnoException) => {
           // Ignore EPIPE errors which happen when the child process closes stdin early
@@ -324,11 +325,13 @@ export class HookRunner {
       }
 
       // Collect stdout
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook output crosses plugin process boundaries despite declared types.
       child.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
       // Collect stderr
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook output crosses plugin process boundaries despite declared types.
       child.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString();
       });

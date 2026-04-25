@@ -199,6 +199,7 @@ export function classifyGoogleError(error: unknown): unknown {
     }
 
     // Existing Cloud Code API quota handling
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
     const quotaLimit = errorInfo.metadata?.['quota_limit'] ?? '';
     if (quotaLimit.includes('PerDay') || quotaLimit.includes('Daily')) {
       return new TerminalQuotaError(
@@ -242,6 +243,7 @@ export function classifyGoogleError(error: unknown): unknown {
   }
 
   if (errorInfo) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
     const quotaLimit = errorInfo.metadata?.['quota_limit'] ?? '';
     if (quotaLimit.includes('PerMinute')) {
       return new RetryableQuotaError(
@@ -255,10 +257,12 @@ export function classifyGoogleError(error: unknown): unknown {
   // If we reached this point and the status is still 429, we return retryable.
   if (status === 429) {
     const errorMessage =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
       googleApiError?.message ||
       (error instanceof Error ? error.message : String(error));
     return new RetryableQuotaError(
       errorMessage,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Google quota errors are external provider payloads despite declared types.
       googleApiError ?? {
         code: 429,
         message: errorMessage,

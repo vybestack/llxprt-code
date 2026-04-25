@@ -202,6 +202,7 @@ export async function createToolRegistry(
   }
 
   let subagentManager = host.getSubagentManager();
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
   if (!subagentManager && profileManager) {
     const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
     subagentManager = new SubagentManager(subagentsDir, profileManager);
@@ -216,18 +217,22 @@ export async function createToolRegistry(
     getAsyncTaskManager: () => host.getAsyncTaskManager(),
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
   if (profileManager && subagentManager) {
     registerCoreTool(TaskTool, config, taskToolArgs);
   } else {
     const taskToolRecord: ToolRecord = {
       toolClass: TaskTool,
       toolName: 'TaskTool',
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
       displayName: TaskTool.Name || 'TaskTool',
       isRegistered: false,
       reason:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
         !profileManager && !subagentManager
           ? 'requires profile manager and subagent manager'
-          : !profileManager
+          : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
+            !profileManager
             ? 'requires profile manager'
             : 'requires subagent manager',
       args: [config, taskToolArgs],
@@ -245,6 +250,7 @@ export async function createToolRegistry(
     const listSubagentsRecord: ToolRecord = {
       toolClass: ListSubagentsTool,
       toolName: 'ListSubagentsTool',
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool registry inputs cross plugin/runtime boundaries despite declared types.
       displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
       isRegistered: false,
       reason: 'requires subagent manager',

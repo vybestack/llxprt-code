@@ -56,6 +56,7 @@ export function ensureActiveLoopHasThoughtSignatures(
     const content = requestContents[i];
     if (
       content.role === 'user' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
       content.parts?.some((part) => 'text' in part && part.text)
     ) {
       activeLoopStartIndex = i;
@@ -74,6 +75,7 @@ export function ensureActiveLoopHasThoughtSignatures(
   // Check if we need to modify anything
   for (let i = activeLoopStartIndex; i < requestContents.length; i++) {
     const content = requestContents[i];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
     if (content.role === 'model' && content.parts) {
       for (const part of content.parts) {
         if ('functionCall' in part && part.functionCall) {
@@ -100,6 +102,7 @@ export function ensureActiveLoopHasThoughtSignatures(
 
   for (let i = activeLoopStartIndex; i < newContents.length; i++) {
     const content = newContents[i];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
     if (content.role === 'model' && content.parts) {
       const newParts = content.parts.slice();
       let modified = false;
@@ -176,6 +179,7 @@ export function stripThoughtsFromHistory(
   // Check if we need to modify anything
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
     if (content.role !== 'model' || !content.parts) continue;
 
     // Skip last model turn if policy is 'allButLast'
@@ -202,6 +206,7 @@ export function stripThoughtsFromHistory(
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini history payloads cross provider boundaries despite declared types.
     if (content.role !== 'model' || !content.parts) {
       newContents.push(content);
       continue;

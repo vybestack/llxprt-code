@@ -39,21 +39,25 @@ const EPHEMERAL_DEFAULTS = {
 export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (!options.provider) {
     throw new Error(
       'AgentRuntimeContext requires a provider adapter. Supply options.provider.',
     );
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (!options.telemetry) {
     throw new Error(
       'AgentRuntimeContext requires a telemetry adapter. Supply options.telemetry.',
     );
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (!options.tools) {
     throw new Error(
       'AgentRuntimeContext requires a tools view. Supply options.tools.',
     );
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
   if (!options.providerRuntime) {
     throw new Error(
       'AgentRuntimeContext requires a provider runtime context. Supply options.providerRuntime.',
@@ -67,7 +71,9 @@ export function createAgentRuntimeContext(
     snapshotValue: T | undefined,
   ): T | undefined => {
     // First check the live settings service for runtime changes
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
     const settingsService = options.providerRuntime?.settingsService;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime context accepts externally assembled values despite declared types.
     if (settingsService) {
       const liveValue = settingsService.get(key) as T | undefined;
       if (liveValue !== undefined) {

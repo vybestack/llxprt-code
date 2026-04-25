@@ -36,6 +36,7 @@ export function enhanceToolNameExtraction(
   isComplete: boolean,
 ): { name: string; isFallback: boolean } {
   // If we already have a valid name, keep it
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
   if (currentName?.trim()) {
     return { name: currentName.trim(), isFallback: false };
   }
@@ -77,6 +78,7 @@ export function validateToolName(
   toolName: string,
   availableToolNames: string[] = [],
 ): { isValid: boolean; correctedName?: string; reason?: string } {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
   if (!toolName?.trim()) {
     return {
       isValid: false,
@@ -169,6 +171,7 @@ export function processFinalToolName(
   });
 
   // Use a more descriptive fallback that includes debugging information
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
   const fallbackName = toolName?.trim()
     ? `tool_name_not_found_${toolName.replace(/[^a-zA-Z0-9]/g, '_')}`
     : 'missing_tool_name';
@@ -202,6 +205,7 @@ export function safeExtractToolName(
 
   // Standard OpenAI format
   if (
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
     delta?.function &&
     typeof delta.function === 'object' &&
     'name' in delta.function
@@ -218,7 +222,9 @@ export function safeExtractToolName(
 
   // Check if this is a completion signal
   if (
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
     delta?.finish_reason === 'tool_calls' ||
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI tool payloads are external boundaries despite declared types.
     (currentIndex >= 0 && delta?.index !== undefined)
   ) {
     isComplete = true;

@@ -57,6 +57,7 @@ export class LoopDetectionService {
   addAndCheck(event: ServerGeminiStreamEvent): boolean {
     // Check if loop detection is disabled
     const loopDetectionEnabled =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
       (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
       true;
     if (!loopDetectionEnabled) {
@@ -95,6 +96,7 @@ export class LoopDetectionService {
   async turnStarted(_signal: AbortSignal) {
     // Check if loop detection is disabled (master switch)
     const loopDetectionEnabled =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
       (this.config.getEphemeralSetting('loopDetectionEnabled') as boolean) ??
       true;
     if (!loopDetectionEnabled) {
@@ -105,6 +107,7 @@ export class LoopDetectionService {
 
     // Check if max turns per prompt is configured and exceeded
     const maxTurnsPerPrompt =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
       (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? -1;
     if (
       maxTurnsPerPrompt > 0 &&
@@ -122,6 +125,7 @@ export class LoopDetectionService {
 
   private checkToolCallLoop(toolCall: { name: string; args: object }): boolean {
     const threshold =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
       (this.config.getEphemeralSetting('toolCallLoopThreshold') as number) ??
       DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
     if (threshold === -1) {
@@ -284,6 +288,7 @@ export class LoopDetectionService {
    */
   private isLoopDetectedForChunk(chunk: string, hash: string): boolean {
     const threshold =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop detection consumes runtime settings despite declared types.
       (this.config.getEphemeralSetting('contentLoopThreshold') as number) ??
       DEFAULT_CONTENT_LOOP_THRESHOLD;
     if (threshold === -1) {

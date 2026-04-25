@@ -579,6 +579,7 @@ export class HookEventHandler {
     let suppressOutput = false;
 
     // Pass 1 - stop intent (first wins): triggered by continue === false (upstream parity)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
     for (const hookOutput of aggregated.allOutputs ?? []) {
       if (hookOutput.continue === false) {
         shouldStop = true;
@@ -592,6 +593,7 @@ export class HookEventHandler {
     }
 
     // Pass 2 - systemMessage and suppressOutput (first non-empty systemMessage wins)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
     for (const hookOutput of aggregated.allOutputs ?? []) {
       if (hookOutput.systemMessage != null && hookOutput.systemMessage !== '') {
         systemMessage = hookOutput.systemMessage;
@@ -663,10 +665,12 @@ export class HookEventHandler {
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
       if (this.debugLogger === undefined) continue;
 
       const record = {
         eventName: String(eventName),
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
         hookIdentity: result.hookConfig?.type ?? 'unknown',
         duration: result.duration,
         success: result.success,
@@ -700,6 +704,7 @@ export class HookEventHandler {
     hookResults: readonly HookExecutionResult[],
     totalDurationMs: number,
   ): void {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook events cross plugin/runtime boundaries despite declared types.
     if (this.debugLogger === undefined) return;
 
     const hookCount = hookResults.length;

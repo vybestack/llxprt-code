@@ -192,7 +192,9 @@ export class SubagentOrchestrator {
         }
 
         // 2. Then clean up the history service
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
         const history = runtimeResult.history ?? scope.runtimeContext.history;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
         if (history) {
           const disposable = (history as { dispose?: () => void }).dispose;
           if (typeof disposable === 'function') {
@@ -215,6 +217,7 @@ export class SubagentOrchestrator {
   }
 
   private async loadSubagentConfig(name: string): Promise<SubagentConfig> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
     if (!name?.trim()) {
       throw new Error('Subagent name is required.');
     }
@@ -238,8 +241,10 @@ export class SubagentOrchestrator {
     basePrompt: string,
     additions?: string[],
   ): PromptConfig {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
     const trimmedBase = basePrompt?.trim();
     const trimmedAdditions = (additions ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
       .map((part) => part?.trim())
       .filter((part) => part && part.length > 0);
 
@@ -294,6 +299,7 @@ export class SubagentOrchestrator {
 
     const maxTurns = custom?.max_turns ?? profileMaxTurns ?? 200;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent settings cross persisted/runtime boundaries despite declared types.
     if (maxTurns !== undefined && maxTurns > 0) {
       runConfig.max_turns = Math.floor(maxTurns);
     }

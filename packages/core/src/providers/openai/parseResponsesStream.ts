@@ -69,6 +69,7 @@ function appendReasoningDelta(current: string, delta: string): string {
     return delta;
   }
   const lastChar = current[current.length - 1] ?? '';
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
   const nextChar = delta[0] ?? '';
   const needsSpace =
     /[\w)]/.test(lastChar) && /[\w(]/.test(nextChar) && !/\s/.test(nextChar);
@@ -115,6 +116,7 @@ export async function* parseResponsesStream(
   let lastLoggedType: string | undefined;
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
     while (true) {
       const { done, value } = await reader.read();
 
@@ -317,6 +319,7 @@ export async function* parseResponsesStream(
 
                   const finalThought = thoughtText.trim();
                   const hasEncryptedContent = Boolean(
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
                     event.item?.encrypted_content,
                   );
                   const prior = emittedThoughts.get(finalThought);
@@ -347,6 +350,7 @@ export async function* parseResponsesStream(
                     const reasoningBlock: ContentBlock = hasEncryptedContent
                       ? {
                           ...baseReasoningBlock,
+                          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
                           encryptedContent: event.item?.encrypted_content,
                         }
                       : baseReasoningBlock;
@@ -468,6 +472,7 @@ export async function* parseResponsesStream(
 
                 // Usage data - handle both response.completed (OpenAI) and response.done (Codex)
                 if (event.response?.usage) {
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response streams are external provider boundaries despite declared types.
                   const terminalReason = event.response.status ?? 'completed';
                   yield {
                     speaker: 'ai',

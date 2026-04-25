@@ -547,6 +547,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const merged: Array<{ start: number; end: number }> = [];
     for (const range of sorted) {
       const last = merged[merged.length - 1];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
       if (last && range.start <= last.end) {
         last.end = Math.max(last.end, range.end);
       } else {
@@ -636,9 +637,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     args: Record<string, unknown>,
     toolName: string,
   ): Record<string, unknown> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
     if (!args) {
       return args;
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
     const normalizedTool = toolName?.trim().toLowerCase();
     if (normalizedTool === 'todo_write') {
       const todos = args['todos'];
@@ -820,6 +823,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     attributeText: string,
   ): Record<string, unknown> {
     const args: Record<string, unknown> = {};
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool-call parser consumes model text boundaries despite declared types.
     const text = attributeText ?? '';
     const length = text.length;
     let index = 0;

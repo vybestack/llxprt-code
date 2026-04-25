@@ -211,6 +211,7 @@ export function buildResponsesRequest(
   if (processedMessages) {
     // First, extract function calls from assistant messages and function call outputs from tool messages
     processedMessages
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
       .filter((msg): msg is IContent => msg !== undefined && msg !== null)
       .forEach((msg) => {
         // Extract function calls from AI messages
@@ -271,6 +272,7 @@ export function buildResponsesRequest(
 
     // Then, create the regular messages array (excluding tool messages)
     transformedMessages = processedMessages
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
       .filter((msg): msg is IContent => msg !== undefined && msg !== null)
       .filter((msg) => msg.speaker !== 'tool') // Exclude tool messages
       .map((msg) => {
@@ -323,6 +325,7 @@ export function buildResponsesRequest(
         return result as ResponsesMessage;
       })
       .filter(
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- OpenAI response input parts cross provider/runtime boundaries despite declared types.
         (msg): msg is NonNullable<typeof msg> => msg !== null,
       ) as ResponsesMessage[];
   }

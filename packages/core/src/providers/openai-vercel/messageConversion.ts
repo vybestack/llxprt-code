@@ -260,6 +260,7 @@ export function convertToVercelMessages(
           messages.push(baseMessage);
         }
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
     } else if (content.speaker === 'tool') {
       // Convert tool messages to tool result messages
       const toolResponseBlocks = content.blocks.filter(
@@ -321,6 +322,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
           const partType = (part as { type?: string }).type;
 
           if (typeof part === 'string') {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
             if (part) {
               blocks.push({ type: 'text', text: part });
             }
@@ -385,6 +387,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
           const partType = (part as { type?: string }).type;
 
           if (typeof part === 'string') {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
             if (part) {
               blocks.push({
                 type: 'text',
@@ -468,6 +471,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
       const blocks: ToolResponseBlock[] = [];
 
       for (const part of message.content) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
         if (part.type === 'tool-result') {
           const output = (part as { output?: unknown }).output;
           const isErrorOutput =
@@ -520,6 +524,7 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
           blocks,
         });
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Vercel message payloads are external provider boundaries despite declared types.
     } else if (message.role === 'system') {
       // Convert system messages
       const systemContent = message.content;

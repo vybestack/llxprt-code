@@ -42,11 +42,13 @@ export async function triggerBeforeToolHook(
   mcpContext?: McpContext,
 ): Promise<BeforeToolHookOutput | undefined> {
   // Check if hooks are enabled
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
   if (!config.getEnableHooks?.()) {
     return undefined;
   }
 
   // Get the HookSystem singleton
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
   const hookSystem = config.getHookSystem?.();
   if (!hookSystem) {
     return undefined;
@@ -100,11 +102,13 @@ export async function triggerAfterToolHook(
   mcpContext?: McpContext,
 ): Promise<AfterToolHookOutput | undefined> {
   // Check if hooks are enabled
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
   if (!config.getEnableHooks?.()) {
     return undefined;
   }
 
   // Get the HookSystem singleton
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
   const hookSystem = config.getHookSystem?.();
   if (!hookSystem) {
     return undefined;
@@ -261,10 +265,12 @@ export async function triggerToolNotificationHook(
   config: Config,
   confirmationDetails: ToolCallConfirmationDetails,
 ): Promise<NotificationHookResult | undefined> {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
   if (!config.getEnableHooks?.()) {
     return undefined;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook payloads cross plugin/runtime boundaries despite declared types.
   const hookSystem = config.getHookSystem?.();
   if (!hookSystem) {
     return undefined;

@@ -47,6 +47,7 @@ import { validatePathWithinWorkspace } from '../safety/index.js';
 function getEmojiFilter(config: Config): EmojiFilter {
   // Get emojifilter from ephemeral settings or default to 'auto'
   const mode =
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
     (config.getEphemeralSetting('emojifilter') as
       | 'allowed'
       | 'auto'
@@ -356,6 +357,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     // fileExists is false if the file did not exist (ENOENT).
     const isNewFile =
       !fileExists ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
       (correctedContentResult.error !== undefined &&
         !correctedContentResult.fileExists);
 
@@ -392,6 +394,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       // If there was a readError, originalContent in correctedContentResult is '',
       // but for the diff, we want to show the original content as it was before the write if possible.
       // However, if it was unreadable, currentContentForDiff will be empty.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
       const currentContentForDiff = correctedContentResult.error
         ? '' // Or some indicator of unreadable content
         : originalContent;
@@ -480,6 +483,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
               break;
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Write-file inputs cross tool invocation boundaries despite declared types.
             const fileDiagnostics = allDiagnostics[file] || [];
             // Filter by severity
             const filtered = fileDiagnostics.filter((d) =>
