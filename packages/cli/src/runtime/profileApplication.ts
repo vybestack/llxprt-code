@@ -90,11 +90,51 @@ export function getAllLoadBalancerStats() {
   return new Map();
 }
 
+type PersistedProfileView = Omit<
+  Partial<Profile>,
+  'ephemeralSettings' | 'modelParams'
+> & {
+  ephemeralSettings?: Record<string, unknown> | null;
+  modelParams?: Record<string, unknown> | null;
+  provider?: string | null;
+  model?: string | null;
+};
+
+function asPersistedProfileView(profile: Profile): PersistedProfileView {
+  return profile as unknown as PersistedProfileView;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getProfileEphemeralSettings(
+  profile: Profile,
+): Record<string, unknown> {
+  const settings = asPersistedProfileView(profile).ephemeralSettings;
+  return isRecord(settings) ? settings : {};
+}
+
+function getProfileModelParams(profile: Profile): Record<string, unknown> {
+  const params = asPersistedProfileView(profile).modelParams;
+  return isRecord(params) ? params : {};
+}
+
+function getProfileProvider(profile: Profile): string | undefined {
+  const provider = asPersistedProfileView(profile).provider;
+  return typeof provider === 'string' ? provider : undefined;
+}
+
+function getProfileModel(profile: Profile): string | undefined {
+  const model = asPersistedProfileView(profile).model;
+  return typeof model === 'string' ? model : undefined;
+}
+
 function getStringValue(
-  ephemerals: Profile['ephemeralSettings'],
+  ephemerals: Record<string, unknown>,
   key: string,
 ): string | undefined {
-  const value = (ephemerals as Record<string, unknown>)[key];
+  const value = ephemerals[key];
   if (typeof value === 'string' && value.trim() !== '') {
     return value;
   }
@@ -111,9 +151,8 @@ export function selectAvailableProvider(
   availableProviders: readonly string[],
 ): ProviderSelectionResult {
   const trimmedRequested =
-    typeof requestedProvider === 'string'
-      ? requestedProvider.trim()
-      : (requestedProvider ?? '');
+    typeof requestedProvider === 'string' ? requestedProvider.trim() : '';
+
   const warnings: string[] = [];
 
   if (trimmedRequested && availableProviders.includes(trimmedRequested)) {
@@ -181,15 +220,13 @@ async function wireAuthBeforeSwitch(
     setProviderBaseUrl,
   } = deps;
 
+  const ephemeralSettings = getProfileEphemeralSettings(sanitizedProfile);
   let authKeyApplied = false;
   let authKeyNameApplied = false;
   let resolvedAuthKeyfilePath: string | null = null;
-  const authKeyName = sanitizedProfile.ephemeralSettings?.['auth-key-name'];
-  if (
-    authKeyName &&
-    typeof authKeyName === 'string' &&
-    authKeyName.trim() !== ''
-  ) {
+  const authKeyName = ephemeralSettings['auth-key-name'];
+
+  if (typeof authKeyName === 'string' && authKeyName.trim() !== '') {
     const trimmedKeyName = authKeyName.trim();
     setEphemeralSetting('auth-key-name', trimmedKeyName);
     try {
@@ -219,12 +256,8 @@ async function wireAuthBeforeSwitch(
     }
   }
 
-  const authKeyfile = sanitizedProfile.ephemeralSettings?.['auth-keyfile'];
-  if (
-    authKeyfile &&
-    typeof authKeyfile === 'string' &&
-    authKeyfile.trim() !== ''
-  ) {
+  const authKeyfile = ephemeralSettings['auth-keyfile'];
+  if (typeof authKeyfile === 'string' && authKeyfile.trim() !== '') {
     const resolvedPath = authKeyfile.replace(/^~(?=$|\/)/, homedir());
     const filePath = path.resolve(resolvedPath);
     try {
@@ -265,18 +298,18 @@ async function wireAuthBeforeSwitch(
     }
   }
 
-  if (!authKeyApplied && sanitizedProfile.ephemeralSettings?.['auth-key']) {
-    const authKey = sanitizedProfile.ephemeralSettings['auth-key'];
-    setEphemeralSetting('auth-key', authKey);
-    setProviderApiKey(authKey);
+  const directAuthKey = getStringValue(ephemeralSettings, 'auth-key');
+  if (!authKeyApplied && directAuthKey !== undefined) {
+    setEphemeralSetting('auth-key', directAuthKey);
+    setProviderApiKey(directAuthKey);
     logger.debug(
       () =>
         `[profile] applied auth to SettingsService before switch (direct key)`,
     );
   }
 
-  if (sanitizedProfile.ephemeralSettings?.['base-url']) {
-    const baseUrl = sanitizedProfile.ephemeralSettings['base-url'];
+  const baseUrl = getStringValue(ephemeralSettings, 'base-url');
+  if (baseUrl !== undefined) {
     setEphemeralSetting('base-url', baseUrl);
     setProviderBaseUrl(baseUrl);
     logger.debug(
@@ -284,17 +317,14 @@ async function wireAuthBeforeSwitch(
     );
   }
 
-  const gcpProject = getStringValue(
-    sanitizedProfile.ephemeralSettings,
-    'GOOGLE_CLOUD_PROJECT',
-  );
+  const gcpProject = getStringValue(ephemeralSettings, 'GOOGLE_CLOUD_PROJECT');
   if (gcpProject) {
     setEphemeralSetting('GOOGLE_CLOUD_PROJECT', gcpProject);
     process.env.GOOGLE_CLOUD_PROJECT = gcpProject;
   }
 
   const gcpLocation = getStringValue(
-    sanitizedProfile.ephemeralSettings,
+    ephemeralSettings,
     'GOOGLE_CLOUD_LOCATION',
   );
   if (gcpLocation) {
@@ -316,7 +346,7 @@ const PRE_APPLIED_EPHEMERAL_KEYS = new Set([
 
 function applyNonAuthEphemerals(sanitizedProfile: Profile): void {
   const otherEphemerals = Object.entries(
-    sanitizedProfile.ephemeralSettings ?? {},
+    getProfileEphemeralSettings(sanitizedProfile),
   ).filter(([key]) => !PRE_APPLIED_EPHEMERAL_KEYS.has(key));
 
   for (const [key, value] of otherEphemerals) {
@@ -363,10 +393,8 @@ async function applyModelAndParams(
   } = deps;
 
   const isLB = isLoadBalancerProfile(actualProfile);
-  const requestedModel =
-    typeof sanitizedProfile.model === 'string'
-      ? sanitizedProfile.model.trim()
-      : '';
+  const requestedModel = getProfileModel(sanitizedProfile)?.trim() ?? '';
+
   const fallbackModel =
     providerRecord?.getDefaultModel?.() ??
     config.getModel() ??
@@ -375,14 +403,14 @@ async function applyModelAndParams(
 
   if (!isLB && !requestedModel && !fallbackModel) {
     throw new Error(
-      `Provider '${sanitizedProfile.provider}' profile does not specify a model and no default is available.`,
+      `Provider '${getProfileProvider(sanitizedProfile) ?? 'unknown'}' profile does not specify a model and no default is available.`,
     );
   }
 
   const modelToSet = isLB ? 'load-balancer' : requestedModel || fallbackModel;
   const modelResult = await setActiveModel(modelToSet);
 
-  const profileParams = sanitizedProfile.modelParams ?? {};
+  const profileParams = getProfileModelParams(sanitizedProfile);
   const existingParams = getActiveModelParams();
 
   for (const [key, value] of Object.entries(profileParams)) {
@@ -458,11 +486,16 @@ export async function applyProfileWithGuards(
 
       // Extract full config from loaded sub-profile
       // Resolve authToken from either auth-key or auth-keyfile
-      let authToken = subProfile.ephemeralSettings?.['auth-key'];
-      const authKeyfile = subProfile.ephemeralSettings?.['auth-keyfile'];
+      const subProfileEphemeralSettings =
+        getProfileEphemeralSettings(subProfile);
+      let authToken = getStringValue(subProfileEphemeralSettings, 'auth-key');
+      const authKeyfile = getStringValue(
+        subProfileEphemeralSettings,
+        'auth-keyfile',
+      );
 
       // If auth-key not provided but auth-keyfile is, read the key from file
-      if (!authToken && authKeyfile) {
+      if (authToken === undefined && authKeyfile !== undefined) {
         try {
           const keyfilePath = authKeyfile.startsWith('~')
             ? path.join(homedir(), authKeyfile.slice(1))
@@ -482,16 +515,13 @@ export async function applyProfileWithGuards(
 
       const resolved: ResolvedSubProfile = {
         name: profileName,
-        providerName: subProfile.provider,
-        model: subProfile.model,
-        baseURL: subProfile.ephemeralSettings?.['base-url'],
+        providerName: getProfileProvider(subProfile) ?? '',
+        model: getProfileModel(subProfile) ?? '',
+        baseURL: getStringValue(subProfileEphemeralSettings, 'base-url'),
         authToken,
         authKeyfile,
-        ephemeralSettings: (subProfile.ephemeralSettings ?? {}) as Record<
-          string,
-          unknown
-        >,
-        modelParams: (subProfile.modelParams ?? {}) as Record<string, unknown>,
+        ephemeralSettings: subProfileEphemeralSettings,
+        modelParams: getProfileModelParams(subProfile),
       };
 
       resolvedSubProfiles.push(resolved);
@@ -514,10 +544,7 @@ export async function applyProfileWithGuards(
           authToken: sp.authToken,
         }),
       ),
-      lbProfileEphemeralSettings: profileInput.ephemeralSettings as Record<
-        string,
-        unknown
-      >,
+      lbProfileEphemeralSettings: getProfileEphemeralSettings(profileInput),
     };
 
     lbLogger.debug(
@@ -545,18 +572,12 @@ export async function applyProfileWithGuards(
   const requestedProvider = isLBProfileFormat
     ? 'load-balancer'
     : actualProfile.provider;
-
-  logger.debug(() => {
-    const requested =
-      typeof requestedProvider === 'string'
-        ? requestedProvider
-        : requestedProvider === null
-          ? 'null'
-          : 'unset';
-    return `[profile] applying profile provider='${requested}' available=[${availableProviders.join(
-      ', ',
-    )}]`;
-  });
+  logger.debug(
+    () =>
+      `[profile] applying profile provider='${requestedProvider}' available=[${availableProviders.join(
+        ', ',
+      )}]`,
+  );
 
   const selection = selectAvailableProvider(
     requestedProvider,
@@ -572,8 +593,8 @@ export async function applyProfileWithGuards(
 
   const sanitizedProfile: Profile = {
     ...actualProfile,
-    modelParams: { ...(actualProfile.modelParams ?? {}) },
-    ephemeralSettings: { ...(actualProfile.ephemeralSettings ?? {}) },
+    modelParams: { ...getProfileModelParams(actualProfile) },
+    ephemeralSettings: { ...getProfileEphemeralSettings(actualProfile) },
   };
 
   const setProviderApiKey = (apiKey: string | undefined): void => {
@@ -601,29 +622,25 @@ export async function applyProfileWithGuards(
     settingsService.setProviderSetting(targetProviderName, 'base-url', baseUrl);
   };
 
+  const sanitizedEphemeralSettings =
+    getProfileEphemeralSettings(sanitizedProfile);
+  const sanitizedModelParams = getProfileModelParams(sanitizedProfile);
   const propagateModelParamToEphemeral = (
     aliases: string[],
     targetKey: 'auth-key' | 'auth-keyfile' | 'base-url',
   ): void => {
-    if (
-      sanitizedProfile.ephemeralSettings[targetKey] === undefined ||
-      sanitizedProfile.ephemeralSettings[targetKey] === null
-    ) {
+    if (sanitizedEphemeralSettings[targetKey] === undefined) {
       for (const alias of aliases) {
-        const candidate =
-          sanitizedProfile.modelParams?.[alias as keyof ModelParams];
+        const candidate = sanitizedModelParams[alias as keyof ModelParams];
         if (typeof candidate === 'string' && candidate.trim() !== '') {
-          sanitizedProfile.ephemeralSettings[targetKey] = candidate;
+          sanitizedEphemeralSettings[targetKey] = candidate;
           break;
         }
       }
     }
     for (const alias of aliases) {
-      if (
-        sanitizedProfile.modelParams &&
-        alias in sanitizedProfile.modelParams
-      ) {
-        delete sanitizedProfile.modelParams[alias as keyof ModelParams];
+      if (alias in sanitizedModelParams) {
+        delete sanitizedModelParams[alias as keyof ModelParams];
       }
     }
   };
@@ -634,17 +651,10 @@ export async function applyProfileWithGuards(
     'auth-keyfile',
   );
   propagateModelParamToEphemeral(['base-url'], 'base-url');
-  if (sanitizedProfile.modelParams) {
-    const extraSensitiveKeys = [
-      'apiKey',
-      'api-key',
-      'apiKeyfile',
-      'api-keyfile',
-    ];
-    for (const key of extraSensitiveKeys) {
-      if (key in sanitizedProfile.modelParams) {
-        delete sanitizedProfile.modelParams[key as keyof ModelParams];
-      }
+  const extraSensitiveKeys = ['apiKey', 'api-key', 'apiKeyfile', 'api-keyfile'];
+  for (const key of extraSensitiveKeys) {
+    if (key in sanitizedModelParams) {
+      delete sanitizedModelParams[key as keyof ModelParams];
     }
   }
 
@@ -656,7 +666,7 @@ export async function applyProfileWithGuards(
   }
   logger.debug(
     () =>
-      `[profile] target provider '${targetProviderName}' (requested='${requestedProvider ?? 'none'}')`,
+      `[profile] target provider '${targetProviderName}' (requested='${requestedProvider}')`,
   );
   const providerRecord = providerManager.getProviderByName(targetProviderName);
   if (!providerRecord) {
@@ -666,15 +676,13 @@ export async function applyProfileWithGuards(
   }
 
   const previousEphemerals = config.getEphemeralSettings();
-  const previousEphemeralEntries = new Map(
-    Object.entries(previousEphemerals ?? {}),
-  );
+  const previousEphemeralEntries = new Map(Object.entries(previousEphemerals));
   const previousEphemeralKeys = Array.from(previousEphemeralEntries.keys());
 
   // STEP 1: Clear ALL ephemerals first (except activeProvider)
   const mutatedEphemeralKeys = new Set<string>([
     ...previousEphemeralKeys.filter((key) => key !== 'activeProvider'),
-    ...Object.keys(sanitizedProfile.ephemeralSettings ?? {}),
+    ...Object.keys(sanitizedEphemeralSettings),
     'auth-key',
     'auth-keyfile',
     'base-url',
@@ -732,7 +740,7 @@ export async function applyProfileWithGuards(
   // This updates the provider-specific state but the auth is already in SettingsService
   let appliedBaseUrl: string | undefined;
 
-  const profileEphemeralSettings = sanitizedProfile.ephemeralSettings ?? {};
+  const profileEphemeralSettings = sanitizedEphemeralSettings;
   const hasOwnEphemeral = (key: string): boolean =>
     Object.prototype.hasOwnProperty.call(profileEphemeralSettings, key);
   const isExplicitClearValue = (value: unknown): boolean =>
