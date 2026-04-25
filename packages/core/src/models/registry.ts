@@ -218,7 +218,7 @@ export class ModelRegistry {
     }, REFRESH_INTERVAL_MS);
 
     // Don't prevent process exit
-    this.refreshTimer.unref?.();
+    this.refreshTimer.unref();
   }
 
   /**

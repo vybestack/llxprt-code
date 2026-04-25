@@ -28,7 +28,7 @@ export async function resolveRuntimeAuthToken(
     return token;
   }
   if (isRuntimeAuthTokenProvider(token)) {
-    const result = await token.provide?.();
+    const result = await token.provide();
     return typeof result === 'string' ? result : undefined;
   }
   return undefined;

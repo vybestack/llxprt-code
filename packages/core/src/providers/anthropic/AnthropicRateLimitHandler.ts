@@ -210,10 +210,6 @@ export function calculateWaitTime(
     now?: number;
   },
 ): WaitDecision {
-  if (!info) {
-    return { shouldWait: false, waitMs: 0, reason: 'No rate limit data' };
-  }
-
   if (options.throttleEnabled === 'off') {
     return { shouldWait: false, waitMs: 0, reason: 'Throttling disabled' };
   }

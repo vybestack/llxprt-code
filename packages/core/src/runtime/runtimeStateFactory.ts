@@ -82,9 +82,7 @@ export function createAgentRuntimeStateFromConfig(
   const model =
     overrides.model ??
     contentConfig?.model ??
-    (typeof config.getModel === 'function'
-      ? (config.getModel() ?? undefined)
-      : undefined) ??
+    (typeof config.getModel === 'function' ? config.getModel() : undefined) ??
     DEFAULT_GEMINI_MODEL;
 
   const baseUrlCandidate =

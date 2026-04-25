@@ -221,28 +221,18 @@ export class SessionLockManager {
       };
       const lockPid = lockData.pid;
 
-      let pidAlive = false;
       try {
         process.kill(lockPid, 0);
-        pidAlive = true;
       } catch (error: unknown) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'EPERM') {
-          pidAlive = true;
-        } else {
+        if (code !== 'EPERM') {
           return true;
         }
       }
 
-      if (pidAlive && lockData.timestamp) {
-        const lockAge = Date.now() - new Date(lockData.timestamp).getTime();
-        const maxAge = 48 * 60 * 60 * 1000;
-        if (lockAge > maxAge) {
-          return true;
-        }
-      }
-
-      return false;
+      const lockAge = Date.now() - new Date(lockData.timestamp).getTime();
+      const maxAge = 48 * 60 * 60 * 1000;
+      return lockAge > maxAge;
     } catch {
       return true;
     }

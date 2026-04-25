@@ -142,12 +142,12 @@ export class ToolCallNormalizer {
   /**
    * Validate normalization result
    */
-  validateNormalized(call: NormalizedToolCall): boolean {
+  validateNormalized(call: { name?: unknown; args?: unknown }): boolean {
     if (!call.name || typeof call.name !== 'string') {
       return false;
     }
 
-    if (!call.args || typeof call.args !== 'object') {
+    if (call.args === null || typeof call.args !== 'object') {
       return false;
     }
 

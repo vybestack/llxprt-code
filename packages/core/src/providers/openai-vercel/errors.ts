@@ -43,9 +43,7 @@ export class ProviderError extends Error {
     this.originalError = originalError;
 
     // Maintain proper stack trace for where error was thrown (V8 only)
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
-    }
+    Error.captureStackTrace(this, this.constructor);
   }
 }
 

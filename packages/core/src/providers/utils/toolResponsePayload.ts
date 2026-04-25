@@ -214,11 +214,7 @@ function limitToolPayload(
     };
   }
 
-  const limited = limitOutputTokens(
-    serializedResult,
-    config,
-    block.toolName ?? 'tool_response',
-  );
+  const limited = limitOutputTokens(serializedResult, config, block.toolName);
   const candidate =
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message, then placeholder
     limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;

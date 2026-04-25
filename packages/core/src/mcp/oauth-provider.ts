@@ -976,7 +976,7 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
 
       // Verify token was saved
       const savedToken = await tokenStorage.getCredentials(serverName);
-      if (savedToken?.token?.accessToken) {
+      if (savedToken?.token.accessToken) {
         debugLogger.debug('[OK] Token verification successful');
       } else {
         debugLogger.error(

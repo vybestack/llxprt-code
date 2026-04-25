@@ -283,8 +283,9 @@ export function convertToolsToOpenAIResponses(
         `Converted ${responsesTools.length} tools to OpenAI Responses format`,
       {
         toolNames: responsesTools.map((t) => t.name),
-        firstToolHasRequired:
-          responsesTools[0]?.parameters.required !== undefined,
+        firstToolHasRequired: Array.isArray(
+          responsesTools[0].parameters.required,
+        ),
       },
     );
   }

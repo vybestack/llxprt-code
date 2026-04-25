@@ -131,7 +131,7 @@ class VsCodeInstaller implements IdeInstaller {
 
       if (result.status !== 0) {
         throw new Error(
-          `Failed to install extension: ${result.stderr?.toString()}`,
+          `Failed to install extension: ${result.stderr.toString()}`,
         );
       }
 

@@ -191,7 +191,7 @@ export class FileTokenStore extends BaseTokenStore {
         } else {
           debugLogger.warn(
             // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string serverName should fall through to 'unknown'
-            `Skipping invalid credential entry for server: ${(credential as { serverName?: string })?.serverName || 'unknown'}`,
+            `Skipping invalid credential entry for server: ${(credential as { serverName?: string }).serverName || 'unknown'}`,
           );
         }
       }

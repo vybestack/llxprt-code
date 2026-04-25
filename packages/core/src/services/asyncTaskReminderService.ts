@@ -103,7 +103,7 @@ export class AsyncTaskReminderService {
       const payload: Record<string, unknown> = {
         agent_id: task.id,
         terminate_reason: task.output.terminate_reason,
-        emitted_vars: task.output.emitted_vars ?? {},
+        emitted_vars: task.output.emitted_vars,
       };
 
       if (task.output.final_message !== undefined) {

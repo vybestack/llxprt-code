@@ -280,8 +280,9 @@ export function convertToolsToAnthropic(
       () => `Converted ${anthropicTools.length} tools to Anthropic format`,
       {
         toolNames: anthropicTools.map((t) => t.name),
-        firstToolHasRequired:
-          anthropicTools[0]?.input_schema.required !== undefined,
+        firstToolHasRequired: Array.isArray(
+          anthropicTools[0].input_schema.required,
+        ),
       },
     );
   }

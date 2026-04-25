@@ -197,26 +197,7 @@ export class ResultAggregator {
     this.pendingPublishRequest = false;
 
     try {
-      do {
-        this.pendingPublishRequest = false;
-        this.recoverBatchSizeIfNeeded();
-
-        while (this.nextPublishIndex < this.currentBatchSize) {
-          const nextBuffered = this.findByExecutionIndex(this.nextPublishIndex);
-          if (!nextBuffered) {
-            break; // Gap — wait for the missing result to arrive
-          }
-
-          if (!nextBuffered.isCancelled) {
-            await this.publishResult(nextBuffered, signal);
-          }
-
-          this.pendingResults.delete(nextBuffered.callId);
-          this.nextPublishIndex++;
-        }
-
-        this.resetBatchIfComplete();
-      } while (this.pendingPublishRequest);
+      await this.publishBufferedResultsPass(signal);
     } finally {
       this.isPublishingBufferedResults = false;
       this.scheduleFollowUpIfNeeded(signal);
@@ -292,6 +273,31 @@ export class ResultAggregator {
     }
   }
 
+  private async publishBufferedResultsPass(signal: AbortSignal): Promise<void> {
+    this.pendingPublishRequest = false;
+    this.recoverBatchSizeIfNeeded();
+
+    while (this.nextPublishIndex < this.currentBatchSize) {
+      const nextBuffered = this.findByExecutionIndex(this.nextPublishIndex);
+      if (!nextBuffered) {
+        break; // Gap — wait for the missing result to arrive
+      }
+
+      if (!nextBuffered.isCancelled) {
+        await this.publishResult(nextBuffered, signal);
+      }
+
+      this.pendingResults.delete(nextBuffered.callId);
+      this.nextPublishIndex++;
+    }
+
+    this.resetBatchIfComplete();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Async publish reentrancy can flip this flag while awaiting result publication.
+    if (this.pendingPublishRequest) {
+      await this.publishBufferedResultsPass(signal);
+    }
+  }
+
   /**
    * After releasing the reentrancy lock, schedule a follow-up publish via
    * `setImmediate` when the next expected result is already buffered.  This
@@ -301,6 +307,7 @@ export class ResultAggregator {
    *  3. That call sees the lock held, sets `pendingPublishRequest`, and returns.
    *  4. We exit the `do-while` without seeing the flag (it was set after the check).
    */
+
   private scheduleFollowUpIfNeeded(signal: AbortSignal): void {
     if (this.pendingResults.size === 0) {
       return;

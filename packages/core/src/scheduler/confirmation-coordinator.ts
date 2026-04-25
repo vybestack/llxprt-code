@@ -278,7 +278,7 @@ export class ConfirmationCoordinator {
       toolCall,
       signal,
       confirmationDetails,
-      evaluation.context ?? getPolicyContextFromInvocation(invocation, reqInfo),
+      evaluation.context,
     );
   }
 

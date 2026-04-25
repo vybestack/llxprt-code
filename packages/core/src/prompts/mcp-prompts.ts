@@ -11,9 +11,5 @@ export function getMCPServerPrompts(
   config: Config,
   serverName: string,
 ): DiscoveredMCPPrompt[] {
-  const promptRegistry = config.getPromptRegistry();
-  if (!promptRegistry) {
-    return [];
-  }
-  return promptRegistry.getPromptsByServer(serverName);
+  return config.getPromptRegistry().getPromptsByServer(serverName);
 }

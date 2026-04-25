@@ -380,8 +380,7 @@ export async function loadPoliciesFromToml(
                 return policyRule;
               });
             });
-          })
-          .filter((rule): rule is PolicyRule => rule !== null);
+          });
 
         rules.push(...parsedRules);
       } catch (e) {

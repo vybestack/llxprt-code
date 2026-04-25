@@ -79,6 +79,7 @@ export class GoogleCredentialProvider implements McpAuthProvider {
       token_type: 'Bearer',
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- GoogleAuth mocks and external clients may omit credentials at runtime.
     const expiryTime = client.credentials?.expiry_date;
     if (expiryTime) {
       this.tokenExpiryTime = expiryTime;

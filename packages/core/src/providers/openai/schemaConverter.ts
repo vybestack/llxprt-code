@@ -284,8 +284,9 @@ export function convertToolsToOpenAI(
       () => `Converted ${openAITools.length} tools to OpenAI format`,
       {
         toolNames: openAITools.map((t) => t.function.name),
-        firstToolHasRequired:
-          openAITools[0]?.function.parameters.required !== undefined,
+        firstToolHasRequired: Array.isArray(
+          openAITools[0].function.parameters.required,
+        ),
       },
     );
   }

@@ -26,6 +26,7 @@ export abstract class BaseTokenStorage {
     if (!credentials.serverName) {
       throw new Error('Server name is required');
     }
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Token storage validates malformed persisted credential records.
     if (!credentials.token) {
       throw new Error('Token is required');
     }
