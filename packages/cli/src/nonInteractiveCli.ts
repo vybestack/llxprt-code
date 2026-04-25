@@ -49,6 +49,19 @@ interface RunNonInteractiveParams {
   deferTelemetryShutdown?: boolean;
 }
 
+type RuntimeToolCallRequest = Omit<ToolCallRequestInfo, 'args' | 'callId'> & {
+  args: unknown;
+  callId?: string;
+};
+
+function normalizeToolCallArgs(args: unknown): Record<string, unknown> {
+  if (typeof args === 'object' && args !== null && !Array.isArray(args)) {
+    return args as Record<string, unknown>;
+  }
+
+  return {};
+}
+
 export async function runNonInteractive({
   config,
   settings,
@@ -57,10 +70,8 @@ export async function runNonInteractive({
   runtimeMessageBus,
   deferTelemetryShutdown = false,
 }: RunNonInteractiveParams): Promise<void> {
-  const outputFormat =
-    typeof config.getOutputFormat === 'function'
-      ? config.getOutputFormat()
-      : OutputFormat.TEXT;
+  const outputFormat = config.getOutputFormat();
+
   const jsonOutput = outputFormat === OutputFormat.JSON;
   const streamJsonOutput = outputFormat === OutputFormat.STREAM_JSON;
 
@@ -124,7 +135,7 @@ export async function runNonInteractive({
       key: { name?: string; ctrl?: boolean },
     ) => {
       // Detect Ctrl+C: either ctrl+c key combo or raw character code 3
-      if ((key && key.ctrl && key.name === 'c') || str === '\u0003') {
+      if ((key.ctrl && key.name === 'c') || str === '\u0003') {
         // Only handle once
         if (isAborting) {
           return;
@@ -187,7 +198,7 @@ export async function runNonInteractive({
     setActiveProviderRuntimeContext({
       settingsService: config.getSettingsService(),
       config,
-      runtimeId: config.getSessionId?.(),
+      runtimeId: config.getSessionId(),
       metadata: { source: 'nonInteractiveCli' },
     });
 
@@ -202,11 +213,18 @@ export async function runNonInteractive({
     }
 
     // Initialize emoji filter for non-interactive mode
-    const emojiFilterMode =
-      typeof config.getEphemeralSetting === 'function'
-        ? (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) ||
-          'auto'
-        : 'auto';
+    const configuredEmojiFilterMode = config.getEphemeralSetting(
+      'emojifilter',
+    ) as EmojiFilterMode | undefined;
+    let emojiFilterMode: EmojiFilterMode = 'auto';
+    if (configuredEmojiFilterMode === 'allowed') {
+      emojiFilterMode = 'allowed';
+    } else if (configuredEmojiFilterMode === 'warn') {
+      emojiFilterMode = 'warn';
+    } else if (configuredEmojiFilterMode === 'error') {
+      emojiFilterMode = 'error';
+    }
+
     const emojiFilter =
       emojiFilterMode !== 'allowed'
         ? new EmojiFilter({ mode: emojiFilterMode })
@@ -269,7 +287,7 @@ export async function runNonInteractive({
     let jsonResponseText = '';
 
     let turnCount = 0;
-    while (true) {
+    for (;;) {
       turnCount++;
       if (
         config.getMaxSessionTurns() >= 0 &&
@@ -286,9 +304,7 @@ export async function runNonInteractive({
       const includeThinking =
         !jsonOutput &&
         !streamJsonOutput &&
-        (typeof config.getEphemeralSetting === 'function'
-          ? config.getEphemeralSetting('reasoning.includeInResponse') !== false
-          : true);
+        config.getEphemeralSetting('reasoning.includeInResponse') !== false;
 
       const flushThoughtBuffer = () => {
         if (!includeThinking) {
@@ -313,9 +329,14 @@ export async function runNonInteractive({
       let firstEventInTurn = true;
       const maybeEmitProfileName = () => {
         if (firstEventInTurn && !jsonOutput && !streamFormatter) {
-          const activeProfileName = config
-            .getSettingsService()
-            .getCurrentProfileName?.();
+          const settingsService = config.getSettingsService() as Omit<
+            ReturnType<Config['getSettingsService']>,
+            'getCurrentProfileName'
+          > & {
+            getCurrentProfileName?: () => string | null;
+          };
+          const activeProfileName = settingsService.getCurrentProfileName?.();
+
           if (activeProfileName) {
             process.stdout.write(`[${activeProfileName}]
 `);
@@ -327,7 +348,7 @@ export async function runNonInteractive({
       // Resolve the effective idle timeout for this turn
       const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
 
-      while (true) {
+      for (;;) {
         let nextEvent: IteratorResult<ServerGeminiStreamEvent>;
         try {
           // Use watchdog if timeout > 0, otherwise call iterator.next() directly
@@ -447,7 +468,7 @@ export async function runNonInteractive({
           }
         } else if (event.type === GeminiEventType.ToolCallRequest) {
           flushThoughtBuffer();
-          const toolCallRequest = event.value;
+          const toolCallRequest = event.value as RuntimeToolCallRequest;
           if (streamFormatter) {
             streamFormatter.emitEvent({
               type: JsonStreamEventType.TOOL_USE,
@@ -456,13 +477,18 @@ export async function runNonInteractive({
               tool_id:
                 toolCallRequest.callId ??
                 `${toolCallRequest.name}-${Date.now()}`,
-              parameters: toolCallRequest.args ?? {},
+              parameters: normalizeToolCallArgs(toolCallRequest.args),
             });
           }
           const normalizedRequest: ToolCallRequestInfo = {
             ...toolCallRequest,
+            callId:
+              toolCallRequest.callId ?? `${toolCallRequest.name}-${Date.now()}`,
+            args: normalizeToolCallArgs(toolCallRequest.args),
+
             agentId: toolCallRequest.agentId ?? 'primary',
           };
+
           functionCalls.push(normalizedRequest);
         } else if (event.type === GeminiEventType.LoopDetected) {
           if (streamFormatter) {
@@ -498,7 +524,7 @@ export async function runNonInteractive({
 
       flushThoughtBuffer();
 
-      const remainingBuffered = emojiFilter?.flushBuffer?.();
+      const remainingBuffered = emojiFilter?.flushBuffer();
       if (remainingBuffered) {
         if (jsonOutput) {
           jsonResponseText += remainingBuffered;
@@ -511,15 +537,15 @@ export async function runNonInteractive({
         const toolResponseParts: Part[] = [];
 
         for (const requestFromModel of functionCalls) {
-          const callId =
-            requestFromModel.callId ?? `${requestFromModel.name}-${Date.now()}`;
-          const rawArgs = requestFromModel.args ?? {};
+          const callId = requestFromModel.callId;
+
+          const rawArgs = requestFromModel.args;
           let normalizedArgs: Record<string, unknown>;
           if (typeof rawArgs === 'string') {
             try {
-              const parsed = JSON.parse(rawArgs);
+              const parsed = JSON.parse(rawArgs) as unknown;
               normalizedArgs =
-                parsed && typeof parsed === 'object'
+                typeof parsed === 'object' && parsed !== null
                   ? (parsed as Record<string, unknown>)
                   : {};
             } catch (error) {
@@ -533,7 +559,7 @@ export async function runNonInteractive({
               `Unexpected array arguments for tool ${requestFromModel.name}; coercing to empty object.`,
             );
             normalizedArgs = {};
-          } else if (rawArgs && typeof rawArgs === 'object') {
+          } else if (typeof rawArgs === 'object') {
             normalizedArgs = rawArgs;
           } else {
             normalizedArgs = {};
@@ -544,7 +570,7 @@ export async function runNonInteractive({
             name: requestFromModel.name,
             args: normalizedArgs,
             isClientInitiated: false,
-            prompt_id: requestFromModel.prompt_id ?? prompt_id,
+            prompt_id: requestFromModel.prompt_id,
             agentId: requestFromModel.agentId ?? 'primary',
           };
 
@@ -601,7 +627,7 @@ export async function runNonInteractive({
 `);
           }
 
-          if (toolResponse.responseParts) {
+          if (toolResponse.responseParts.length > 0) {
             toolResponseParts.push(...toolResponse.responseParts);
           }
         }
