@@ -180,6 +180,61 @@ function coerceAuthOnly(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function resolveOpenaiResponsesEnabled(
+  ephemeralValue: unknown,
+  authOnlyEnabled: boolean,
+  settingsValue: unknown,
+): boolean | undefined {
+  if (ephemeralValue !== undefined) {
+    return Boolean(ephemeralValue);
+  }
+
+  if (authOnlyEnabled) {
+    return true;
+  }
+
+  return typeof settingsValue === 'boolean' ? settingsValue : undefined;
+}
+
+function resolveOpenaiApiKey(
+  ephemeralAuthKey: unknown,
+  openaiProviderApiKey: string | undefined,
+  authOnlyEnabled: boolean,
+): string | undefined {
+  if (typeof ephemeralAuthKey === 'string' && ephemeralAuthKey.trim() !== '') {
+    return sanitizeApiKey(ephemeralAuthKey);
+  }
+
+  if (
+    typeof openaiProviderApiKey === 'string' &&
+    openaiProviderApiKey.trim() !== ''
+  ) {
+    return sanitizeApiKey(openaiProviderApiKey);
+  }
+
+  const envApiKey = process.env.OPENAI_API_KEY;
+  if (typeof envApiKey === 'string' && envApiKey !== '' && !authOnlyEnabled) {
+    return sanitizeApiKey(envApiKey);
+  }
+
+  return undefined;
+}
+
+function resolveOpenaiBaseUrl(
+  ephemeralBaseUrl: unknown,
+  providerBaseUrl: string | undefined,
+): string | undefined {
+  if (typeof ephemeralBaseUrl === 'string') {
+    return ephemeralBaseUrl;
+  }
+
+  if (typeof providerBaseUrl === 'string') {
+    return providerBaseUrl;
+  }
+
+  return process.env.OPENAI_BASE_URL;
+}
+
 function resolveAuthOnlyFlag(
   config?: Config,
   loadedSettings?: LoadedSettings,
@@ -208,13 +263,11 @@ function resolveAuthOnlyFlag(
   if (typeof getSettingsService === 'function') {
     try {
       const settingsService = getSettingsService();
-      if (settingsService && typeof settingsService.get === 'function') {
-        const serviceValue = settingsService.get('authOnly');
-        if (serviceValue !== undefined) {
-          const coerced = coerceAuthOnly(serviceValue);
-          if (typeof coerced === 'boolean') {
-            return coerced;
-          }
+      const serviceValue = settingsService.get('authOnly');
+      if (serviceValue !== undefined) {
+        const coerced = coerceAuthOnly(serviceValue);
+        if (typeof coerced === 'boolean') {
+          return coerced;
         }
       }
     } catch (_error) {
@@ -283,8 +336,8 @@ export function createProviderManager(
   }
 
   logger.debug('createProviderManager config check', {
-    hasConfig: !!config,
-    configType: config?.constructor?.name,
+    hasConfig: config !== undefined,
+    configType: config?.constructor.name,
   });
 
   if (config) {
@@ -301,15 +354,12 @@ export function createProviderManager(
 
   const settingsData =
     loadedSettings?.merged ?? ({} as Partial<MergedSettings>);
-  const ephemeralSettings = config?.getEphemeralSettings?.() ?? {};
-  const effectiveOpenaiResponsesEnabled: boolean | undefined =
-    ephemeralSettings.openaiResponsesEnabled !== undefined
-      ? Boolean(ephemeralSettings.openaiResponsesEnabled)
-      : authOnlyEnabled
-        ? true
-        : typeof settingsData.openaiResponsesEnabled === 'boolean'
-          ? settingsData.openaiResponsesEnabled
-          : undefined;
+  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
+  const effectiveOpenaiResponsesEnabled = resolveOpenaiResponsesEnabled(
+    ephemeralSettings.openaiResponsesEnabled,
+    authOnlyEnabled,
+    settingsData.openaiResponsesEnabled,
+  );
 
   // Check for CLI-provided API key first (highest priority)
   // NOTE: Bootstrap args (--key, --keyfile) should be applied to ephemeral settings
@@ -329,35 +379,18 @@ export function createProviderManager(
     (openaiSettings?.apiKey as string | undefined) ??
     (openaiSettings?.['auth-key'] as string | undefined);
 
-  let openaiApiKey: string | undefined;
-
-  if (
-    ephemeralAuthKey &&
-    typeof ephemeralAuthKey === 'string' &&
-    ephemeralAuthKey.trim() !== ''
-  ) {
-    openaiApiKey = sanitizeApiKey(ephemeralAuthKey);
-  } else if (
-    openaiProviderApiKey &&
-    typeof openaiProviderApiKey === 'string' &&
-    openaiProviderApiKey.trim() !== ''
-  ) {
-    openaiApiKey = sanitizeApiKey(openaiProviderApiKey);
-  } else if (process.env.OPENAI_API_KEY && !authOnlyEnabled) {
-    openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
-  }
+  const openaiApiKey = resolveOpenaiApiKey(
+    ephemeralAuthKey,
+    openaiProviderApiKey,
+    authOnlyEnabled,
+  );
 
   // Check for CLI-provided baseUrl in ephemerals or provider settings
   // NOTE: Bootstrap args (--baseurl) should be applied to ephemeral settings
   // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
   const ephemeralBaseUrl = ephemeralSettings['base-url'];
   const providerBaseUrl = openaiSettings?.['base-url'] as string | undefined;
-  const openaiBaseUrl =
-    ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
-      ? ephemeralBaseUrl
-      : providerBaseUrl && typeof providerBaseUrl === 'string'
-        ? providerBaseUrl
-        : process.env.OPENAI_BASE_URL;
+  const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
 
   // Debug logging removed - was using debugLogger.log which violates project guidelines
   // Use DebugLogger if detailed logging is needed here
@@ -509,7 +542,7 @@ function registerAliasProviders(
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
   config?: Config,
-  authOnlyEnabled?: boolean,
+  authOnlyEnabled = false,
 ): void {
   for (const entry of aliasEntries) {
     switch (entry.config.baseProvider.toLowerCase()) {
@@ -589,6 +622,39 @@ type AliasAwareBaseProvider = {
   };
 };
 
+type AliasDefaultModelProvider = {
+  getDefaultModel: () => string;
+};
+
+type RuntimeMutableAliasConfig = {
+  defaultModel?: string | null;
+};
+
+function isAliasDefaultModelProvider(
+  provider: unknown,
+): provider is AliasDefaultModelProvider {
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'getDefaultModel' in provider &&
+    typeof provider.getDefaultModel === 'function'
+  );
+}
+
+function overrideAliasDefaultModel(
+  provider: unknown,
+  entry: ProviderAliasEntry,
+): void {
+  if (!entry.config.defaultModel || !isAliasDefaultModelProvider(provider)) {
+    return;
+  }
+
+  const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
+  const runtimeAliasConfig = entry.config as RuntimeMutableAliasConfig;
+  provider.getDefaultModel = () =>
+    runtimeAliasConfig.defaultModel ?? originalGetDefaultModel();
+}
+
 /**
  * Ensure alias providers use their own identifier when resolving authentication.
  * Without this, API keys saved via `/key` are stored under the alias name,
@@ -602,8 +668,8 @@ export function bindOpenAIAliasIdentity(
 }
 
 function bindProviderAliasIdentity(provider: unknown, alias: string): void {
-  const aliasName = alias?.trim();
-  if (!aliasName) {
+  const aliasName = alias.trim();
+  if (aliasName === '') {
     return;
   }
 
@@ -670,15 +736,7 @@ function createOpenAIAliasProvider(
     oauthManager,
   );
 
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel ?? originalGetDefaultModel();
-  }
+  overrideAliasDefaultModel(provider, entry);
 
   // Override getModels() to return static models if configured
   // This avoids API calls for providers that don't have a /models endpoint
@@ -751,15 +809,7 @@ function createOpenAIResponsesAliasProvider(
     configurable: true,
   });
 
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel ?? originalGetDefaultModel();
-  }
+  overrideAliasDefaultModel(provider, entry);
 
   // Override getModels() to return static models if configured
   if (entry.config.staticModels && entry.config.staticModels.length > 0) {
@@ -821,15 +871,7 @@ function createOpenAIVercelAliasProvider(
     oauthManager,
   );
 
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel ?? originalGetDefaultModel();
-  }
+  overrideAliasDefaultModel(provider, entry);
 
   // Override getModels() to return static models if configured
   if (entry.config.staticModels && entry.config.staticModels.length > 0) {
@@ -873,15 +915,7 @@ function createGeminiAliasProvider(
     provider.setConfig(config);
   }
 
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel ?? originalGetDefaultModel();
-  }
+  overrideAliasDefaultModel(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
 
@@ -891,7 +925,7 @@ function createGeminiAliasProvider(
 function createAnthropicAliasProvider(
   entry: ProviderAliasEntry,
   oauthManager: OAuthManager,
-  authOnlyEnabled?: boolean,
+  authOnlyEnabled = false,
 ): AnthropicProvider | null {
   let aliasApiKey: string | undefined;
   // Only use environment variable API key if authOnly is not enabled
@@ -916,15 +950,7 @@ function createAnthropicAliasProvider(
     oauthManager,
   );
 
-  if (
-    entry.config.defaultModel &&
-    typeof provider.getDefaultModel === 'function'
-  ) {
-    const configuredDefaultModel = entry.config.defaultModel;
-    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
-    provider.getDefaultModel = () =>
-      configuredDefaultModel ?? originalGetDefaultModel();
-  }
+  overrideAliasDefaultModel(provider, entry);
 
   bindProviderAliasIdentity(provider, entry.alias);
 
