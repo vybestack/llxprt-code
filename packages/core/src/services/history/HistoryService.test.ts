@@ -883,7 +883,7 @@ describe('HistoryService - Behavioral Tests', () => {
         curated.some(
           (content) =>
             content.metadata?.synthetic &&
-            content.metadata?.reason === 'reconstructed_tool_call',
+            content.metadata.reason === 'reconstructed_tool_call',
         ),
       ).toBe(false);
     });
@@ -941,9 +941,9 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
       const toolResultMessage = curated[toolCallIndex + 1];
-      expect(toolResultMessage?.speaker).toBe('tool');
+      expect(toolResultMessage.speaker).toBe('tool');
       expect(
-        toolResultMessage?.blocks.some(
+        toolResultMessage.blocks.some(
           (block) => block.type === 'tool_response' && block.callId === callId,
         ),
       ).toBe(true);
@@ -988,9 +988,9 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(toolCallIndex).toBeGreaterThanOrEqual(0);
 
       const toolResultMessage = curated[toolCallIndex + 1];
-      expect(toolResultMessage?.speaker).toBe('tool');
+      expect(toolResultMessage.speaker).toBe('tool');
       expect(
-        toolResultMessage?.blocks.some(
+        toolResultMessage.blocks.some(
           (block) => block.type === 'tool_response' && block.callId === callId,
         ),
       ).toBe(true);

@@ -483,7 +483,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     // Check the second call's contents - it should have the AI message with thinking + tool_call
     expect(calls.length).toBe(2);
-    const secondCallContents = calls[1].contents ?? [];
+    const secondCallContents = calls[1].contents;
 
     // Find the AI message with tool calls in the history sent to provider
     const aiWithToolCall = secondCallContents.find(
@@ -678,7 +678,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     expect(thinkingPart).toBeDefined();
     expect(
-      (thinkingPart as { thoughtSignature?: string })?.thoughtSignature,
+      (thinkingPart as { thoughtSignature?: string }).thoughtSignature,
     ).toBe('sig-test-123');
 
     // Also verify order: thinking must come BEFORE tool calls
@@ -708,7 +708,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
       options: GenerateChatOptions,
     ) {
       callCount++;
-      capturedContents.push([...(options.contents ?? [])]);
+      capturedContents.push([...options.contents]);
 
       if (callCount === 1) {
         // First turn: yield thinking then tool call (separately, like Anthropic does)
@@ -1236,7 +1236,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     expect(thoughtPart).toBeDefined();
     expect(
-      (thoughtPart as { thoughtSignature?: string })?.thoughtSignature,
+      (thoughtPart as { thoughtSignature?: string }).thoughtSignature,
     ).toBe('sig-abc-123');
 
     // Now convert back to IContent (what happens when we call toIContents)

@@ -112,10 +112,10 @@ describe('GeminiChat hook execution control', () => {
         },
       },
       provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager?.(),
+        mockConfig.getProviderManager(),
       ),
       telemetry: createTelemetryAdapterFromConfig(mockConfig),
-      tools: createToolRegistryViewFromRegistry(mockConfig.getToolRegistry?.()),
+      tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
 

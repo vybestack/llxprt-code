@@ -391,12 +391,10 @@ function makeGeminiChat(
       },
     },
     provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager?.(),
+      runtimeSetup.config.getProviderManager(),
     ),
     telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
-    tools: createToolRegistryViewFromRegistry(
-      runtimeSetup.config.getToolRegistry?.(),
-    ),
+    tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
 
@@ -816,12 +814,10 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
         },
       },
       provider: createProviderAdapterFromManager(
-        runtimeSetup.config.getProviderManager?.(),
+        runtimeSetup.config.getProviderManager(),
       ),
       telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
-      tools: createToolRegistryViewFromRegistry(
-        runtimeSetup.config.getToolRegistry?.(),
-      ),
+      tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
 

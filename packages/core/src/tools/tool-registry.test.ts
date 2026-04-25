@@ -690,7 +690,7 @@ describe('ToolRegistry', () => {
               string,
               unknown
             >
-          )?.async,
+          ).async,
         ).toBeUndefined();
         expect(
           (
@@ -698,7 +698,7 @@ describe('ToolRegistry', () => {
               string,
               unknown
             >
-          )?.subagent_name,
+          ).subagent_name,
         ).toBeDefined();
       });
 
@@ -734,7 +734,7 @@ describe('ToolRegistry', () => {
               string,
               unknown
             >
-          )?.async,
+          ).async,
         ).toBeUndefined();
       });
 
@@ -770,7 +770,7 @@ describe('ToolRegistry', () => {
               string,
               unknown
             >
-          )?.async,
+          ).async,
         ).toBeDefined();
       });
 
@@ -806,7 +806,7 @@ describe('ToolRegistry', () => {
               string,
               unknown
             >
-          )?.async,
+          ).async,
         ).toBeUndefined();
       });
 
@@ -840,7 +840,7 @@ describe('ToolRegistry', () => {
               string,
               unknown
             >
-          )?.async,
+          ).async,
         ).toBeDefined();
       });
     });

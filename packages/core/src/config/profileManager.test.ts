@@ -306,7 +306,7 @@ describe('ProfileManager', () => {
         providers?: Record<string, { model?: string }>;
       };
       expect(imported.defaultProvider).toBe('openai');
-      expect(imported.providers?.openai?.model).toBe('test-model');
+      expect(imported.providers?.openai.model).toBe('test-model');
     });
 
     it('should pass base-url from profile ephemeralSettings', async () => {
@@ -327,7 +327,7 @@ describe('ProfileManager', () => {
       const imported = capturedData.value as {
         providers?: Record<string, Record<string, unknown>>;
       };
-      expect(imported.providers?.openai?.['base-url']).toBe(
+      expect(imported.providers?.openai['base-url']).toBe(
         'https://api.openai.com/v1',
       );
     });
@@ -361,7 +361,7 @@ describe('ProfileManager', () => {
       const imported = capturedData.value as {
         providers?: Record<string, { toolFormat?: string }>;
       };
-      expect(imported.providers?.openai?.toolFormat).toBe('kimi');
+      expect(imported.providers?.openai.toolFormat).toBe('kimi');
     });
 
     it('should pass tool enablement lists from profile', async () => {

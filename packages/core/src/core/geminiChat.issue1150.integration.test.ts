@@ -123,30 +123,18 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
 
       // Simulate processStreamResponse accumulation
       const modelResponseParts: Part[] = [];
-      const includeThoughtsInHistory = true;
-
       // Process thinking chunk
       const content1 = thinkingChunk.candidates?.[0]?.content;
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (content1?.parts) {
-        if (includeThoughtsInHistory) {
-          modelResponseParts.push(...content1.parts);
-        } else {
-          modelResponseParts.push(
-            ...content1.parts.filter(
-              (part) => !(part as { thought?: boolean }).thought,
-            ),
-          );
-        }
+        modelResponseParts.push(...content1.parts);
       }
 
       // Process tool call chunk
       const content2 = toolCallChunk.candidates?.[0]?.content;
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
       if (content2?.parts) {
-        if (includeThoughtsInHistory) {
-          modelResponseParts.push(...content2.parts);
-        }
+        modelResponseParts.push(...content2.parts);
       }
 
       // CRITICAL ASSERTION: Thinking part MUST be in modelResponseParts
@@ -196,21 +184,15 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       } as GenerateContentResponse;
 
       const modelResponseParts: Part[] = [];
-      const includeThoughtsInHistory = false;
-
       // Process with thoughts filtered
       [thinkingChunk, textChunk].forEach((chunk) => {
         const content = chunk.candidates?.[0]?.content;
         if (content?.parts) {
-          if (includeThoughtsInHistory) {
-            modelResponseParts.push(...content.parts);
-          } else {
-            modelResponseParts.push(
-              ...content.parts.filter(
-                (part) => !(part as { thought?: boolean }).thought,
-              ),
-            );
-          }
+          modelResponseParts.push(
+            ...content.parts.filter(
+              (part) => !(part as { thought?: boolean }).thought,
+            ),
+          );
         }
       });
 
@@ -259,12 +241,7 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
       };
 
       // Simulate recordHistory's attachment logic
-      let didAttachThoughtBlocks = false;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
-        outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
-        didAttachThoughtBlocks = true;
-      }
+      outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
 
       // CRITICAL ASSERTIONS
 
@@ -316,14 +293,9 @@ describe('Issue #1150: GeminiChat thinking block integration', () => {
         ],
       };
 
-      let didAttachThoughtBlocks = false;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
-        outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
-        didAttachThoughtBlocks = true;
-      }
+      outputIContent.blocks = [...thoughtBlocks, ...outputIContent.blocks];
 
-      expect(didAttachThoughtBlocks).toBe(true);
+      expect(thoughtBlocks.length).toBeGreaterThan(0);
       expect(outputIContent.blocks[0].type).toBe('thinking');
       expect((outputIContent.blocks[0] as ThinkingBlock).signature).toBe(
         'sig_fix',

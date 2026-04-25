@@ -481,7 +481,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toMatchObject({
         ...customHeaders,
@@ -1924,7 +1924,7 @@ describe('AnthropicProvider', () => {
         const call = mockMessagesCreate.mock.calls[0];
         expect(call).toBeDefined();
 
-        const options = call?.[1];
+        const options = call[1];
         expect(options).toBeDefined();
         expect(options?.headers).toBeDefined();
         expect(options?.headers?.['anthropic-beta']).toContain(
@@ -1956,7 +1956,7 @@ describe('AnthropicProvider', () => {
         await generator.next();
 
         const call = mockMessagesCreate.mock.calls[0];
-        const options = call?.[1];
+        const options = call[1];
 
         // Check beta header - should not contain extended TTL
         const betaHeader = options?.headers?.['anthropic-beta'];
@@ -3833,7 +3833,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const requestBody = call?.[0];
+      const requestBody = call[0];
       expect(requestBody).toBeDefined();
       expect(requestBody.tools).toBeDefined();
       expect(requestBody.tools[0].name).toBe('llxprt_read_file');
@@ -3897,7 +3897,7 @@ describe('AnthropicProvider', () => {
         mockMessagesCreate.mock.calls[mockMessagesCreate.mock.calls.length - 1];
       expect(call).toBeDefined();
 
-      const requestBody = call?.[0];
+      const requestBody = call[0];
       expect(requestBody).toBeDefined();
       expect(requestBody.tools).toBeDefined();
       expect(requestBody.tools[0].name).toBe('read_file'); // NO prefix
@@ -4098,7 +4098,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toBeDefined();
       expect(options?.headers?.['User-Agent']).toBe(
@@ -4155,7 +4155,7 @@ describe('AnthropicProvider', () => {
       const call = mockMessagesCreate.mock.calls[0];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toBeDefined();
       const betaHeader = options?.headers?.['anthropic-beta'];
@@ -4208,7 +4208,7 @@ describe('AnthropicProvider', () => {
         mockMessagesCreate.mock.calls[mockMessagesCreate.mock.calls.length - 1];
       expect(call).toBeDefined();
 
-      const options = call?.[1];
+      const options = call[1];
       expect(options).toBeDefined();
 
       // Should NOT have User-Agent header for non-OAuth requests

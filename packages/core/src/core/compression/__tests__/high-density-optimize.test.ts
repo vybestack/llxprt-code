@@ -691,10 +691,7 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     const textBlocks = replaced.blocks.filter((b) => b.type === 'text');
     // The file content should be removed from the earlier inclusion
     for (const tb of textBlocks) {
-      if (tb.type === 'text') {
-        // eslint-disable-next-line vitest/no-conditional-expect -- intentional: narrowing/filter/property-test context
-        expect(tb.text).not.toContain('version1');
-      }
+      expect(tb.text).not.toContain('version1');
     }
     // Index 5 (latest inclusion) should NOT be in replacements
     expect(result.replacements.has(5)).toBe(false);
@@ -728,7 +725,7 @@ describe('deduplicateFileInclusions @plan PLAN-20260211-HIGHDENSITY.P10', () => 
     const replaced = result.replacements.get(0)!;
     const textContent = replaced.blocks
       .filter((b) => b.type === 'text')
-      .map((b) => (b.type === 'text' ? b.text : ''))
+      .map((b) => b.text)
       .join('');
     expect(textContent).toContain('Fix this:');
   });

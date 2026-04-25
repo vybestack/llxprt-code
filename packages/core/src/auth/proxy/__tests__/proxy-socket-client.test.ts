@@ -62,19 +62,15 @@ function createAutoReplyServer(_socketPath: string): net.Server {
 
 describe('ProxySocketClient', () => {
   let socketPath: string;
-  let server: net.Server;
-  let client: ProxySocketClient;
+  let server: net.Server | undefined;
+  let client: ProxySocketClient | undefined;
 
   beforeEach(() => {
     socketPath = createTempSocketPath();
   });
 
   afterEach(async () => {
-    try {
-      client?.close();
-    } catch {
-      // client may not be initialized
-    }
+    client?.close();
     await new Promise<void>((resolve) => {
       if (server?.listening) {
         server.close(() => resolve());

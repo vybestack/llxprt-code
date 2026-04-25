@@ -451,7 +451,7 @@ describe('subagent.ts', () => {
       callIndex = 0,
     ): GenerateContentConfig & { systemInstruction?: string | Content } => {
       const callArgs = vi.mocked(GeminiChat).mock.calls[callIndex];
-      const generationConfig = callArgs?.[2];
+      const generationConfig = callArgs[2];
       // Ensure it's defined before proceeding
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
@@ -862,9 +862,7 @@ describe('subagent.ts', () => {
         await scope.runNonInteractive(new ContextState());
 
         const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
-        const ephemerals =
-          toolExecutorConfig.getEphemeralSettings?.() ??
-          ({} as Record<string, unknown>);
+        const ephemerals = toolExecutorConfig.getEphemeralSettings();
         expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
       });
 
@@ -2948,10 +2946,10 @@ describe('subagent.ts', () => {
 
       const runtimeContext: AgentRuntimeContext = {
         state: {
-          runtimeId: config.getSessionId() ?? 'runtime-123',
-          provider: config.getProvider() ?? 'gemini',
+          runtimeId: config.getSessionId(),
+          provider: config.getProvider(),
           model: config.getModel(),
-          sessionId: config.getSessionId() ?? 'runtime-session',
+          sessionId: config.getSessionId(),
           proxyUrl: undefined,
           modelParams: {},
         },
@@ -2971,7 +2969,7 @@ describe('subagent.ts', () => {
           getActiveProvider: vi.fn(
             () =>
               ({
-                name: config.getProvider() ?? 'gemini',
+                name: config.getProvider(),
                 generateChatCompletion: vi.fn(async function* () {}),
                 getDefaultModel: () => config.getModel(),
                 getServerTools: () => [],
@@ -2985,7 +2983,7 @@ describe('subagent.ts', () => {
           getToolMetadata: () => undefined,
         },
         providerRuntime: {
-          runtimeId: config.getSessionId() ?? 'runtime-123',
+          runtimeId: config.getSessionId(),
           metadata: {},
           settingsService: config.getSettingsService(),
           config,

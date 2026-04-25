@@ -35,7 +35,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     });
     settingsService = runtime.settingsService;
     provider = new OpenAIProvider('test-key', 'https://openrouter.ai/api/v1/');
-    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setRuntimeSettingsService(settingsService);
     provider.setConfig?.(runtime.config);
     settingsService.set('model', 'openai/gpt-oss-120b');
     settingsService.setProviderSetting(
@@ -242,7 +242,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
     expect(secondFetchCall).toBeDefined();
     const secondRequestBody = JSON.parse(
-      secondFetchCall?.[1]?.body as string,
+      secondFetchCall[1]?.body as string,
     ) as {
       messages: Array<{
         role: string;
@@ -468,7 +468,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     expect(secondFetchCall).toBeDefined();
 
     const secondRequestBody = JSON.parse(
-      secondFetchCall?.[1]?.body as string,
+      secondFetchCall[1]?.body as string,
     ) as {
       messages: Array<{
         role: string;
@@ -624,7 +624,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
     const secondRequestBody = JSON.parse(
-      secondFetchCall?.[1]?.body as string,
+      secondFetchCall[1]?.body as string,
     ) as {
       messages: Array<{
         role: string;

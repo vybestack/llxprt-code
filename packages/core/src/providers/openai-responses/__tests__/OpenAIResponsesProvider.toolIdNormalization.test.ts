@@ -78,19 +78,11 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const input = buildResponsesInputFromContent(content);
 
       const functionCallItem = input.find(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          item.type === 'function_call',
+        (item) => item.type === 'function_call',
       ) as { type: string; call_id: string } | undefined;
 
       const functionCallOutputItem = input.find(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          item.type === 'function_call_output',
+        (item) => item.type === 'function_call_output',
       ) as { type: string; call_id: string } | undefined;
 
       expect(functionCallItem?.call_id).toBe('call_abc123def456');
@@ -129,19 +121,11 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const input = buildResponsesInputFromContent(content);
 
       const functionCallItem = input.find(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          item.type === 'function_call',
+        (item) => item.type === 'function_call',
       ) as { type: string; call_id: string } | undefined;
 
       const functionCallOutputItem = input.find(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          item.type === 'function_call_output',
+        (item) => item.type === 'function_call_output',
       ) as { type: string; call_id: string } | undefined;
 
       expect(functionCallItem?.call_id).toBe('call_unknown_xyz789');
@@ -176,19 +160,11 @@ describe('Tool ID Normalization for OpenAI Responses API', () => {
       const input = buildResponsesInputFromContent(content);
 
       const functionCallItem = input.find(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          item.type === 'function_call',
+        (item) => item.type === 'function_call',
       ) as { type: string; call_id: string } | undefined;
 
       const functionCallOutputItem = input.find(
-        (item) =>
-          typeof item === 'object' &&
-          item !== null &&
-          'type' in item &&
-          item.type === 'function_call_output',
+        (item) => item.type === 'function_call_output',
       ) as { type: string; call_id: string } | undefined;
 
       expect(functionCallItem?.call_id).toBe('call_existing123');

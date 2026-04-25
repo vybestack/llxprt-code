@@ -133,7 +133,7 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -246,7 +246,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -361,7 +361,7 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -480,7 +480,7 @@ describe('Bus-absent fallback (DELTA-HBUS-002)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
   });
 
   /**
@@ -536,7 +536,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
     bus.clear();
   });
 
@@ -649,7 +649,7 @@ describe('Model translation (DELTA-HPAY-003)', () => {
   });
 
   afterEach(() => {
-    handler?.dispose();
+    handler.dispose();
   });
 
   /**

@@ -113,22 +113,20 @@ class MockSettingsService {
   }
 
   on(event: string, listener: (event: unknown) => void): () => void {
-    if (!this.eventListeners[event]) {
-      this.eventListeners[event] = [];
-    }
-    this.eventListeners[event].push(listener);
+    const listeners = this.eventListeners[event] ?? [];
+    this.eventListeners[event] = listeners;
+    listeners.push(listener);
     return () => {
-      const index = this.eventListeners[event].indexOf(listener);
+      const index = listeners.indexOf(listener);
       if (index > -1) {
-        this.eventListeners[event].splice(index, 1);
+        listeners.splice(index, 1);
       }
     };
   }
 
   emit(event: string, data: unknown): void {
-    if (this.eventListeners[event]) {
-      this.eventListeners[event].forEach((listener) => listener(data));
-    }
+    const listeners = this.eventListeners[event] ?? [];
+    listeners.forEach((listener) => listener(data));
   }
 }
 

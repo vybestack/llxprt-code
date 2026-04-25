@@ -112,8 +112,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * the accumulated modelResponseParts must include the thinking part.
      */
     it('modelResponseParts should include thinking parts from stream', () => {
-      const includeThoughtsInHistory = true;
-
       // Simulate stream chunks converted to Content
       const streamChunks: Content[] = [
         {
@@ -147,15 +145,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       // Simulate processStreamResponse logic
       const modelResponseParts: Part[] = [];
       for (const chunk of streamChunks) {
-        if (chunk.parts) {
-          if (includeThoughtsInHistory) {
-            modelResponseParts.push(...chunk.parts);
-          } else {
-            modelResponseParts.push(
-              ...chunk.parts.filter((part) => !isThoughtPart(part)),
-            );
-          }
-        }
+        modelResponseParts.push(...chunk.parts);
       }
 
       // CRITICAL ASSERTION: Thinking part must be in modelResponseParts
@@ -169,8 +159,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * Even when chunks come from separate yields, thinking must be preserved
      */
     it('thinking from separate IContent yield must be preserved', () => {
-      const includeThoughtsInHistory = true;
-
       // This simulates AnthropicProvider yielding thinking as separate IContent
       // which gets converted via convertIContentToResponse
       const thinkingChunk: Content = {
@@ -202,20 +190,10 @@ describe('Issue #1150: Thinking blocks in history', () => {
       const modelResponseParts: Part[] = [];
 
       // Process thinking chunk
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (thinkingChunk.parts) {
-        if (includeThoughtsInHistory) {
-          modelResponseParts.push(...thinkingChunk.parts);
-        }
-      }
+      modelResponseParts.push(...thinkingChunk.parts);
 
       // Process tool call chunk
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (toolCallChunk.parts) {
-        if (includeThoughtsInHistory) {
-          modelResponseParts.push(...toolCallChunk.parts);
-        }
-      }
+      modelResponseParts.push(...toolCallChunk.parts);
 
       // Verify thinking is preserved
       const thoughtParts = modelResponseParts.filter(isThoughtPart);
@@ -232,8 +210,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * to the first output content as ThinkingBlocks.
      */
     it('thoughtBlocks should be extracted from modelResponseParts', () => {
-      const includeThoughtsInHistory = true;
-
       const modelOutput: Content[] = [
         {
           role: 'model',
@@ -257,20 +233,18 @@ describe('Issue #1150: Thinking blocks in history', () => {
       ];
 
       // Simulate recordHistory's thought extraction logic
-      const thoughtBlocks: ThinkingBlock[] = includeThoughtsInHistory
-        ? modelOutput
-            .flatMap((content) => content.parts ?? [])
-            .filter(isThoughtPart)
-            .map(
-              (part): ThinkingBlock => ({
-                type: 'thinking',
-                thought: (part.text ?? '').trim(),
-                sourceField: part.llxprtSourceField ?? 'thought',
-                signature: part.thoughtSignature,
-              }),
-            )
-            .filter((block) => block.thought.length > 0)
-        : [];
+      const thoughtBlocks: ThinkingBlock[] = modelOutput
+        .flatMap((content) => content.parts)
+        .filter(isThoughtPart)
+        .map(
+          (part): ThinkingBlock => ({
+            type: 'thinking',
+            thought: part.text.trim(),
+            sourceField: part.llxprtSourceField ?? 'thought',
+            signature: part.thoughtSignature,
+          }),
+        )
+        .filter((block) => block.thought.length > 0);
 
       // CRITICAL: thoughtBlocks must contain the thinking
       expect(thoughtBlocks.length).toBe(1);
@@ -306,12 +280,7 @@ describe('Issue #1150: Thinking blocks in history', () => {
       };
 
       // Simulate recordHistory's attachment logic
-      let didAttachThoughtBlocks = false;
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (thoughtBlocks.length > 0 && !didAttachThoughtBlocks) {
-        outputContent.blocks = [...thoughtBlocks, ...outputContent.blocks];
-        didAttachThoughtBlocks = true;
-      }
+      outputContent.blocks = [...thoughtBlocks, ...outputContent.blocks];
 
       // CRITICAL: First block must be thinking
       expect(outputContent.blocks[0].type).toBe('thinking');
@@ -334,8 +303,6 @@ describe('Issue #1150: Thinking blocks in history', () => {
      * in history has thinking as the first block.
      */
     it('final IContent in history must have thinking block first when tool_call present', () => {
-      const includeThoughtsInHistory = true;
-
       // Step 1: AnthropicProvider yields IContent with thinking
       const thinkingIContent: IContent = {
         speaker: 'ai',
@@ -380,11 +347,8 @@ describe('Issue #1150: Thinking blocks in history', () => {
 
       // Step 4: Accumulate in processStreamResponse
       const modelResponseParts: Part[] = [];
-      // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (includeThoughtsInHistory) {
-        modelResponseParts.push(...(thinkingContent.parts ?? []));
-        modelResponseParts.push(...(toolCallContent.parts ?? []));
-      }
+      modelResponseParts.push(...thinkingContent.parts);
+      modelResponseParts.push(...toolCallContent.parts);
 
       // Step 5: Consolidate parts (simulating consolidatedParts logic)
       const consolidatedParts = [...modelResponseParts];
@@ -395,20 +359,18 @@ describe('Issue #1150: Thinking blocks in history', () => {
       ];
 
       // Step 7: Extract thoughtBlocks (simulating recordHistory)
-      const thoughtBlocks: ThinkingBlock[] = includeThoughtsInHistory
-        ? modelOutput
-            .flatMap((content) => content.parts ?? [])
-            .filter(isThoughtPart)
-            .map(
-              (part): ThinkingBlock => ({
-                type: 'thinking',
-                thought: (part.text ?? '').trim(),
-                sourceField: part.llxprtSourceField ?? 'thought',
-                signature: part.thoughtSignature,
-              }),
-            )
-            .filter((block) => block.thought.length > 0)
-        : [];
+      const thoughtBlocks: ThinkingBlock[] = modelOutput
+        .flatMap((content) => content.parts)
+        .filter(isThoughtPart)
+        .map(
+          (part): ThinkingBlock => ({
+            type: 'thinking',
+            thought: part.text.trim(),
+            sourceField: part.llxprtSourceField ?? 'thought',
+            signature: part.thoughtSignature,
+          }),
+        )
+        .filter((block) => block.thought.length > 0);
 
       // Step 8: Create output IContent (simulating toIContent + attachment)
       const nonThoughtParts = consolidatedParts.filter(

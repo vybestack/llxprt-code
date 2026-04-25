@@ -288,7 +288,7 @@ describe('Hook Caller Application', () => {
         .calls[0]?.[0] as ToolCall[];
       // When properly blocked, status should be 'error' with hook blocking reason
       // Currently it will be 'success' because the hook result is ignored
-      expect(completedCalls?.[0]?.status).toBe('error');
+      expect(completedCalls[0]?.status).toBe('error');
     });
   });
 
@@ -388,11 +388,11 @@ describe('Hook Caller Application', () => {
       // Assert: Result should include the systemMessage
       const completedCalls = onAllToolCallsComplete.mock
         .calls[0]?.[0] as ToolCall[];
-      const successCall = completedCalls?.[0] as SuccessfulToolCall;
+      const successCall = completedCalls[0] as SuccessfulToolCall;
       // The response should contain the systemMessage in some form
       // This could be via responseParts or metadata depending on implementation
-      const responseText = successCall?.response?.responseParts
-        ?.map((p) => {
+      const responseText = successCall.response.responseParts
+        .map((p) => {
           if ('functionResponse' in p) {
             return JSON.stringify(p.functionResponse?.response);
           }
@@ -450,12 +450,11 @@ describe('Hook Caller Application', () => {
       // Assert: Result should have suppressDisplay set
       const completedCalls = onAllToolCallsComplete.mock
         .calls[0]?.[0] as ToolCall[];
-      const successCall = completedCalls?.[0] as SuccessfulToolCall;
+      const successCall = completedCalls[0] as SuccessfulToolCall;
       // Check for suppressDisplay in response metadata or similar
       // The exact field depends on how ToolCallResponseInfo is extended
       expect(
-        (successCall?.response as { suppressDisplay?: boolean })
-          ?.suppressDisplay,
+        (successCall.response as { suppressDisplay?: boolean }).suppressDisplay,
       ).toBe(true);
     });
   });

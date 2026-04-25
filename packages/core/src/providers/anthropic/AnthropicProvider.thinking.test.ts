@@ -407,7 +407,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(request.output_config).toBeDefined();
       expect(request.output_config?.effort).toBe('medium');
       // Effort should NOT be under thinking
-      expect((request.thinking as { effort?: string })?.effort).toBeUndefined();
+      expect((request.thinking as { effort?: string }).effort).toBeUndefined();
     });
 
     it('should map xhigh effort to max for Opus 4.6+ @issue:1307', async () => {
@@ -1093,7 +1093,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
 
       // Last assistant message should have thinking (kept)
       const lastAssistantMsg = assistantMsgs[assistantMsgs.length - 1];
-      expect(Array.isArray(lastAssistantMsg?.content)).toBe(true);
+      expect(Array.isArray(lastAssistantMsg.content)).toBe(true);
       const thinkingBlock = (
         lastAssistantMsg.content as AnthropicContentBlock[]
       ).find((block) => block.type === 'thinking');
@@ -1681,7 +1681,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(assistantMsg).toBeDefined();
 
       const content = assistantMsg?.content as AnthropicContentBlock[];
-      expect(content?.[0]).toMatchObject({
+      expect(content[0]).toMatchObject({
         type: 'thinking',
         signature: 'sig1',
       });
