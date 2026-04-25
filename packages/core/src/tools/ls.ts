@@ -15,7 +15,6 @@ import {
 } from './tools.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import type { Config } from '../config/config.js';
-import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 import { ToolErrorType } from './tool-error.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
@@ -152,15 +151,6 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
     try {
       const dirPath = this.getDirPath();
       const stats = fs.statSync(dirPath);
-      if (!stats) {
-        // fs.statSync throws on non-existence, so this check might be redundant
-        // but keeping for clarity. Error message adjusted.
-        return this.errorResult(
-          `Error: Directory not found or inaccessible: ${dirPath}`,
-          `Directory not found or inaccessible.`,
-          ToolErrorType.FILE_NOT_FOUND,
-        );
-      }
       if (!stats.isDirectory()) {
         return this.errorResult(
           `Error: Path is not a directory: ${dirPath}`,
@@ -171,8 +161,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
 
       const files = fs.readdirSync(dirPath);
 
-      const defaultFileIgnores =
-        this.config.getFileFilteringOptions() ?? DEFAULT_FILE_FILTERING_OPTIONS;
+      const defaultFileIgnores = this.config.getFileFilteringOptions();
 
       const fileFilteringOptions = {
         respectGitIgnore:

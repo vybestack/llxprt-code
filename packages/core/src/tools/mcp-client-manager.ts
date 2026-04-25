@@ -144,7 +144,7 @@ export class McpClientManager {
   ): Promise<void> | void {
     if (!this.isAllowedMcpServer(name)) {
       if (!this.blockedMcpServers.find((s) => s.name === name)) {
-        this.blockedMcpServers?.push({
+        this.blockedMcpServers.push({
           name,
           extensionName: config.extension?.name ?? '',
         });
@@ -383,6 +383,7 @@ export class McpClientManager {
           // Debounce to coalesce multiple rapid updates
           await new Promise((resolve) => setTimeout(resolve, 300));
           await this.cliConfig.refreshMcpContext();
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- refresh flag can be set by concurrent MCP discovery callbacks while awaiting
         } while (this.refreshRequestedWhilePending);
       } catch (error) {
         debugLogger.error(

@@ -21,10 +21,10 @@ export function sanitizeEnvironment(
   const results: NodeJS.ProcessEnv = {};
 
   const allowedSet = new Set(
-    (config.allowedEnvironmentVariables || []).map((k) => k.toUpperCase()),
+    config.allowedEnvironmentVariables.map((k) => k.toUpperCase()),
   );
   const blockedSet = new Set(
-    (config.blockedEnvironmentVariables || []).map((k) => k.toUpperCase()),
+    config.blockedEnvironmentVariables.map((k) => k.toUpperCase()),
   );
 
   // Enable strict sanitization in GitHub actions.

@@ -587,6 +587,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       const callers: CallerEntry[] = [];
 
       for (const file of files) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- AbortSignal can be triggered asynchronously while traversing files
         if (signal.aborted || nodesVisited >= maxNodes) break;
         const parsed = await this.parseFile(file, lang);
         if (!parsed) continue;
@@ -752,6 +753,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       const callees: CalleeEntry[] = [];
 
       for (const file of files) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- AbortSignal can be triggered asynchronously while traversing files
         if (signal.aborted) break;
         const parsed = await this.parseFile(file, lang);
         if (!parsed) continue;

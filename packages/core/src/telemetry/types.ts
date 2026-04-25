@@ -67,8 +67,12 @@ export class StartSessionEvent {
     const generatorConfig = config.getContentGeneratorConfig();
     const mcpServers = config.getMcpServers();
 
-    const useGemini = !!generatorConfig?.apiKey && !generatorConfig?.vertexai;
-    const useVertex = !!generatorConfig?.vertexai;
+    const useGemini =
+      generatorConfig !== undefined &&
+      !!generatorConfig.apiKey &&
+      !generatorConfig.vertexai;
+    const useVertex =
+      generatorConfig !== undefined && !!generatorConfig.vertexai;
 
     this['event.name'] = 'cli_config';
     this.model = config.getModel();
@@ -151,13 +155,13 @@ export class ToolCallEvent {
         : 'native';
     this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
 
+    const resultDisplay = call.response.resultDisplay;
     if (
       call.status === 'success' &&
-      typeof call.response.resultDisplay === 'object' &&
-      call.response.resultDisplay !== null &&
-      'diffStat' in call.response.resultDisplay
+      typeof resultDisplay === 'object' &&
+      'diffStat' in resultDisplay
     ) {
-      const diffStat = call.response.resultDisplay.diffStat;
+      const diffStat = resultDisplay.diffStat;
       if (diffStat) {
         this.metadata = {
           ai_added_lines: diffStat.ai_added_lines,

@@ -182,7 +182,7 @@ export async function loadSkillFromFile(
       name: frontmatter.name,
       description: frontmatter.description,
       location: filePath,
-      body: match[2]?.trim() ?? '',
+      body: match[2].trim(),
       source,
     };
   } catch (error) {

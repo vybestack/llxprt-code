@@ -449,6 +449,7 @@ function convertContentToMessages(
 
   for (let contentIndex = 0; contentIndex < contents.length; contentIndex++) {
     const c = contents[contentIndex];
+    const speaker: string = c.speaker;
     const toolResponseBlocks = c.blocks.filter(
       (b): b is ToolResponseBlock => b.type === 'tool_response',
     );
@@ -471,7 +472,7 @@ function convertContentToMessages(
       pendingToolResults.push(...results);
     }
 
-    if (c.speaker === 'human') {
+    if (speaker === 'human') {
       const skipHumanMessage = onlyToolResponseContent;
       flushToolResults();
 
@@ -483,18 +484,19 @@ function convertContentToMessages(
       if (message) {
         messages.push(message);
       }
-    } else if (c.speaker === 'ai') {
+    } else if (speaker === 'ai') {
       flushToolResults();
       convertAIMessage(c, contentIndex, redactedIndices, messages, options);
-    } else if (c.speaker === 'tool') {
+    } else {
+      if (speaker !== 'tool') {
+        throw new Error(`Unknown speaker type: ${speaker}`);
+      }
       if (toolResponseBlocks.length === 0) {
         throw new Error('Tool content must have a tool_response block');
       }
       if (onlyToolResponseContent) {
         continue;
       }
-    } else {
-      throw new Error(`Unknown speaker type: ${c.speaker}`);
     }
   }
 
@@ -623,10 +625,8 @@ function convertThinkingBlockToAnthropic(
     };
   }
 
-  const shouldRedact =
-    shouldRedactThinkingBase &&
-    block.sourceField === 'thinking' &&
-    block.signature;
+  const shouldRedact = shouldRedactThinkingBase;
+
   if (shouldRedact) {
     return {
       type: 'redacted_thinking',

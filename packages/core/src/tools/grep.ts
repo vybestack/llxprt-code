@@ -326,7 +326,7 @@ File: ${resolved.basename}
       const matchesByFile = limitedMatches.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
-          if (!acc[fileKey]) {
+          if (!(fileKey in acc)) {
             acc[fileKey] = [];
           }
           if (acc[fileKey].length < maxPerFile) {
@@ -400,6 +400,7 @@ File: ${resolved.basename}
 
       if (isAbortError) {
         // Check if it was a timeout (our controller aborted but user's didn't)
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- caller AbortSignal can change asynchronously outside this stack
         if (timeoutController.signal.aborted && !signal.aborted) {
           const timeoutMessage =
             `Search operation timed out after ${timeoutMs}ms. To resolve this, you can either:

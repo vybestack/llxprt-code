@@ -220,7 +220,7 @@ export const ContentValidation = {
    * Check if IContent has valid content (non-empty blocks, at least one block with actual content)
    */
   hasContent(content: IContent): boolean {
-    if (!content.blocks || content.blocks.length === 0) {
+    if (content.blocks.length === 0) {
       return false;
     }
 
@@ -254,10 +254,7 @@ export const ContentValidation = {
         // For OpenAI/Codex, either thought OR encrypted content is valid
         return hasThought || hasEncrypted;
       }
-      if (block.type === 'code') {
-        return !!block.code && block.code.trim().length > 0;
-      }
-      return false;
+      return block.code.trim().length > 0;
     });
   },
 };

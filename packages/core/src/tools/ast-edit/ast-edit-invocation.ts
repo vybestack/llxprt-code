@@ -213,7 +213,7 @@ export class ASTEditToolInvocation
       const fileName = path.basename(this.params.file_path);
       const fileDiff = Diff.createPatch(
         fileName,
-        currentContent ?? '',
+        currentContent,
         newContent,
         'Current',
         'Proposed',
@@ -253,7 +253,7 @@ export class ASTEditToolInvocation
                 .flat(),
             ]
           : [],
-        astValidation && !astValidation.valid
+        !astValidation.valid
           ? `- AST errors: ${astValidation.errors.join(', ')}`
           : '',
         currentMtime ? `- Timestamp: ${currentMtime}` : '',

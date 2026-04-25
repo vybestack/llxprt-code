@@ -132,7 +132,7 @@ export function buildResponsesInputFromContent(
           arguments: JSON.stringify(toolCall.parameters),
         });
       }
-    } else if (c.speaker === 'tool') {
+    } else {
       const toolResponseBlocks = c.blocks.filter(
         (b) => b.type === 'tool_response',
       );
@@ -149,11 +149,7 @@ export function buildResponsesInputFromContent(
         const limited =
           config === undefined
             ? { content: rawResult, wasTruncated: false }
-            : limitOutputTokens(
-                rawResult,
-                config,
-                toolResponseBlock.toolName ?? 'tool_response',
-              );
+            : limitOutputTokens(rawResult, config, toolResponseBlock.toolName);
 
         const textResult =
           // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty content should fall through to message

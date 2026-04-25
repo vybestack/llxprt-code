@@ -68,10 +68,6 @@ export class PromptResolver {
       return { found: false, path: null, source: null };
     }
 
-    if (!context) {
-      context = {};
-    }
-
     // 2. Sanitize provider and model names
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: empty string provider should be sanitized to empty string
     const provider = this.sanitizePathComponent(context.provider || '');
@@ -119,7 +115,7 @@ export class PromptResolver {
    */
   resolveAllFiles(baseDir: string, context: PromptContext): ResolvedFile[] {
     // 1. Validate inputs
-    if (!baseDir || !context) {
+    if (!baseDir) {
       return [];
     }
 

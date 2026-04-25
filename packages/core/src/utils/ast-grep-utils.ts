@@ -101,13 +101,15 @@ export const JAVASCRIPT_FAMILY_EXTENSIONS: readonly string[] = [
  */
 export function getAstLanguage(extOrName: string): string | Lang | undefined {
   // Try extension first
-  const byExt = LANGUAGE_MAP[extOrName];
-  if (byExt !== undefined) return byExt;
+  if (extOrName in LANGUAGE_MAP) {
+    return LANGUAGE_MAP[extOrName];
+  }
 
   // Try full name (case-insensitive)
   const lower = extOrName.toLowerCase();
-  const byName = LANGUAGE_NAME_MAP[lower];
-  if (byName !== undefined) return byName;
+  if (lower in LANGUAGE_NAME_MAP) {
+    return LANGUAGE_NAME_MAP[lower];
+  }
 
   return undefined;
 }

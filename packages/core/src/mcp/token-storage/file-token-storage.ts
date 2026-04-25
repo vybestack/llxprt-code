@@ -83,10 +83,8 @@ export class FileTokenStorage extends BaseTokenStorage {
         return new Map();
       }
       if (
-        err.message?.includes('Invalid encrypted data format') ||
-        err.message?.includes(
-          'Unsupported state or unable to authenticate data',
-        )
+        err.message.includes('Invalid encrypted data format') ||
+        err.message.includes('Unsupported state or unable to authenticate data')
       ) {
         throw new Error('Token file corrupted');
       }

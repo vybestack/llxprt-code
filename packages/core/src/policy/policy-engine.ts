@@ -62,7 +62,7 @@ export class PolicyEngine {
         SHELL_TOOL_NAMES.includes(toolName) &&
         decision === PolicyDecision.ALLOW
       ) {
-        const command = (args as { command?: string })?.command;
+        const command = (args as { command?: string }).command;
         if (command) {
           const subCommands = splitCommands(command);
 
@@ -135,7 +135,7 @@ export class PolicyEngine {
       SHELL_TOOL_NAMES.includes(toolName) &&
       defaultResult !== PolicyDecision.DENY
     ) {
-      const command = (args as { command?: string })?.command;
+      const command = (args as { command?: string }).command;
       if (command) {
         const subCommands = splitCommands(command);
 
