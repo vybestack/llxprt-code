@@ -32,7 +32,7 @@ vi.mock('path', () => ({
 }));
 
 describe('FileOutput', () => {
-  let fileOutput: FileOutput;
+  let fileOutput: FileOutput | undefined;
   const mockHomedir = '/test/home';
   const mockDebugDir = '/test/home/.llxprt/debug';
 

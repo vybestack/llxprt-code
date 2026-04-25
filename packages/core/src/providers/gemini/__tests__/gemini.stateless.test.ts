@@ -447,7 +447,7 @@ describe('Gemini provider stateless contract tests', () => {
     expect(googleGenAIState.streamCalls).toHaveLength(1);
     const request = googleGenAIState.streamCalls[0]?.request ?? {};
     const toolConfig = request.config as Record<string, unknown>;
-    expect(toolConfig?.tools).toStrictEqual(
+    expect(toolConfig.tools).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           functionDeclarations: expect.arrayContaining([
@@ -458,7 +458,7 @@ describe('Gemini provider stateless contract tests', () => {
         }),
       ]),
     );
-    expect(toolConfig?.tools).toStrictEqual(
+    expect(toolConfig.tools).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           functionDeclarations: expect.arrayContaining([

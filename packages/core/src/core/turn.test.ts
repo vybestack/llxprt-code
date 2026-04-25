@@ -304,10 +304,7 @@ describe('Turn', () => {
           [Symbol.asyncIterator]: () => ({
             next: () => generator.next(),
             return: returnSpy,
-            throw: (e: unknown) => {
-              if (generator.throw) return generator.throw(e);
-              throw e;
-            },
+            throw: (e: unknown) => generator.throw(e),
           }),
         };
 

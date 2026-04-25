@@ -137,11 +137,9 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
   });
 
   afterEach(async () => {
-    if (testServer) {
-      await new Promise<void>((resolve) => {
-        testServer.close(() => resolve());
-      });
-    }
+    await new Promise<void>((resolve) => {
+      testServer.close(() => resolve());
+    });
   });
 
   /**

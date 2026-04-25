@@ -781,7 +781,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
 function getFullResponseText(response: ToolCallResponseInfo): string {
   const chunks: string[] = [];
-  for (const part of response.responseParts ?? []) {
+  for (const part of response.responseParts) {
     const payload = part.functionResponse?.response as
       | { output?: unknown; error?: unknown }
       | undefined;

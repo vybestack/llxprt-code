@@ -74,9 +74,6 @@ describe('Command Action Return Types', () => {
       content: 'An error occurred',
     };
 
-    // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-    if (action.type !== 'message')
-      throw new Error('unreachable: narrowing failed');
     // Type should be narrowed to MessageActionReturn
     expect(action.messageType).toBe('error');
     expect(action.content).toBe('An error occurred');

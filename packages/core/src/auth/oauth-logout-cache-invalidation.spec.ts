@@ -83,7 +83,7 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     expect(firstAuth).toBe(tokenAccountA);
 
     // Simulate logout - invalidate the cache
-    resolver.invalidateCache?.();
+    resolver.invalidateCache();
 
     // Login with different account - token B
     vi.mocked(mockOAuthManager.getToken).mockResolvedValue(tokenAccountB);

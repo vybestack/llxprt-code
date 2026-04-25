@@ -212,7 +212,7 @@ describe('GeminiProvider', () => {
 
     const request = generateContentStreamMock.mock.calls[0][0];
     const toolMessage = request.contents.find((msg: { parts: Part[] }) =>
-      msg.parts?.some(
+      msg.parts.some(
         (part: Part) => 'functionResponse' in part && part.functionResponse,
       ),
     ) as { parts: Part[] };
@@ -565,7 +565,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       expect(toolMessage).toBeDefined();
 
@@ -616,7 +616,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       expect(toolMessage).toBeDefined();
 
@@ -660,7 +660,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,
@@ -697,7 +697,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,
@@ -752,7 +752,7 @@ describe('GeminiProvider', () => {
       const toolMessage = request.contents.find(
         (msg: { role: string }) =>
           msg.role === 'user' &&
-          msg.parts?.some((p: Part) => 'functionResponse' in p),
+          msg.parts.some((p: Part) => 'functionResponse' in p),
       );
       const frPart = toolMessage.parts.find(
         (p: Part) => 'functionResponse' in p,

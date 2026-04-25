@@ -316,7 +316,7 @@ describe('MiddleOutStrategy', () => {
       // (i.e., an AI with tool_call whose response isn't also in top)
       const lastTop = topMessages[topMessages.length - 1];
       // eslint-disable-next-line vitest/no-conditional-in-test -- intentional: narrowing/filter/parameterized-test context
-      if (lastTop?.speaker === 'ai') {
+      if (lastTop.speaker === 'ai') {
         const toolCalls = lastTop.blocks.filter((b) => b.type === 'tool_call');
         if (toolCalls.length > 0) {
           // If the last top message has tool calls, their responses

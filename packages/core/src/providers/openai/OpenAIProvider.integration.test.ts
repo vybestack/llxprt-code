@@ -59,8 +59,8 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     settingsService = runtimeSettings;
 
     provider = new OpenAIProvider(OPENAI_API_KEY, OPENAI_BASE_URL);
-    provider.setRuntimeSettingsService?.(settingsService);
-    provider.setConfig?.(config);
+    provider.setRuntimeSettingsService(settingsService);
+    provider.setConfig(config);
 
     settingsService.set('activeProvider', provider.name);
     const defaultModel = resolveDefaultModel();

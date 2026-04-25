@@ -541,7 +541,7 @@ describe('integration: full session recording lifecycle', () => {
     // We test the logic directly — the Config class constructor has too many
     // dependencies to instantiate in an integration test. Instead we test the
     // same logic pattern that Config.getContinueSessionRef implements.
-    const continueSession: boolean | string = 'abc123';
+    const continueSession = 'abc123' as boolean | string;
     const ref =
       typeof continueSession === 'string'
         ? continueSession
@@ -557,7 +557,7 @@ describe('integration: full session recording lifecycle', () => {
   // @requirement REQ-INT-FULL-005
   // =========================================================================
   it('15: bare --continue (true) → getContinueSessionRef returns CONTINUE_LATEST', async () => {
-    const continueSession: boolean | string = true;
+    const continueSession = true as boolean | string;
     const ref =
       typeof continueSession === 'string'
         ? continueSession

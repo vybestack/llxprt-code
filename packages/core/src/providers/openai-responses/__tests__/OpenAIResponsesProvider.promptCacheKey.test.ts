@@ -37,7 +37,7 @@ function buildCodexCallOptions(
       ? {
           ...invocation,
           metadata: {
-            ...(invocation.metadata ?? {}),
+            ...invocation.metadata,
             codexToken,
           },
         }

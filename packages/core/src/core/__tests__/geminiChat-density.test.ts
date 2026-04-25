@@ -960,6 +960,7 @@ describe('Density Optimization Orchestration (P19)', () => {
 
               await internals.ensureDensityOptimized();
 
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- property-based test asserts runtime postcondition across generated strategy fixtures.
               return internals.densityDirty === false;
             },
           ),

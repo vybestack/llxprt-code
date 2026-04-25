@@ -43,11 +43,9 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
   });
 
   afterEach(async () => {
-    if (testServer) {
-      await new Promise<void>((resolve) => {
-        testServer.close(() => resolve());
-      });
-    }
+    await new Promise<void>((resolve) => {
+      testServer.close(() => resolve());
+    });
   });
 
   describe('Device Flow Initiation', () => {

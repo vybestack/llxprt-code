@@ -819,7 +819,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
       // The redacted_thinking should have data (the signature)
       // redacted_thinking must have data field with signature
       expect(redactedBlock?.data).toBeDefined();
-      expect(redactedBlock?.data?.length ?? 0).toBeGreaterThan(0);
+      expect(redactedBlock?.data.length).toBeGreaterThan(0);
     });
 
     /**

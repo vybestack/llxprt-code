@@ -611,7 +611,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       expect(assistantMsg).toBeDefined();
       expect(assistantMsg).toHaveProperty('reasoning_content');
       const reasoning = (assistantMsg as { reasoning_content?: string })
-        ?.reasoning_content;
+        .reasoning_content;
       expect(reasoning).toContain('Deep thinking');
     });
 
@@ -727,7 +727,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
 
       expect(assistantMsg).toBeDefined();
       const reasoning = (assistantMsg as { reasoning_content?: string })
-        ?.reasoning_content;
+        .reasoning_content;
       expect(reasoning).toContain('First thought');
       expect(reasoning).toContain('Second thought');
     });

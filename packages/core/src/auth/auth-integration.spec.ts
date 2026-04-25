@@ -121,12 +121,7 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
       // When: Provider resolves authentication with CLI key
       vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => {
-          // Simulate provider precedence logic
-          if (cliArg) return cliArg;
-          if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-          return mockOAuthManager.getToken('qwen', integrationMetadata('qwen'));
-        },
+        async () => cliArg,
       );
 
       const resolvedAuth = await mockQwenProvider.resolveAuthentication();

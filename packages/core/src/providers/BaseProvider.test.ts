@@ -589,7 +589,7 @@ describe('BaseProvider', () => {
 
       // When: Update API key through SettingsService
       settingsService.set('auth-key', 'new-key');
-      provider.clearAuthCache?.();
+      provider.clearAuthCache();
 
       // Then: Should use new key
       const response = await provider
@@ -622,7 +622,7 @@ describe('BaseProvider', () => {
       // Update to use API key via SettingsService
       const settingsService = getSettingsService();
       settingsService.set('auth-key', 'new-api-key');
-      provider.clearAuthCache?.();
+      provider.clearAuthCache();
 
       // Second call should use new API key, not cached OAuth
       const response = await provider

@@ -90,9 +90,7 @@ describe('Logger', () => {
   });
 
   afterEach(async () => {
-    if (logger) {
-      logger.close();
-    }
+    logger.close();
     // Clean up after the test
     await cleanupLogAndCheckpointFiles();
     vi.useRealTimers();

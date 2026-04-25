@@ -83,7 +83,7 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
           ? await options.userMemory.getProfile()
           : undefined;
 
-    const runtimeConfigEphemeralSettings = options.invocation?.ephemerals;
+    const runtimeConfigEphemeralSettings = options.invocation.ephemerals;
 
     // Simulate the system prompt generation (don't actually call OpenAI)
     const promptSpy = vi.mocked(getCoreSystemPromptAsync);
@@ -104,10 +104,8 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
       stream: true,
     };
 
-    // Include ephemeral settings if any
-    if (runtimeConfigEphemeralSettings) {
-      Object.assign(request, runtimeConfigEphemeralSettings);
-    }
+    // Include ephemeral settings
+    Object.assign(request, runtimeConfigEphemeralSettings);
 
     // Store the request for test verification
     const Fake = OpenAI as unknown as typeof import('openai').default & {
