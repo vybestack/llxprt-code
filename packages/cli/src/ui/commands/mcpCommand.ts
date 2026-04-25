@@ -40,6 +40,37 @@ const RESET_COLOR = '\u001b[0m';
 
 const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
+type RuntimeConfigWithOptionalServices = Omit<
+  Config,
+  | 'getGeminiClient'
+  | 'getMcpClientManager'
+  | 'getResourceRegistry'
+  | 'getToolRegistry'
+> & {
+  getGeminiClient?: () => ReturnType<Config['getGeminiClient']> | undefined;
+  getMcpClientManager?: () =>
+    | ReturnType<Config['getMcpClientManager']>
+    | undefined;
+  getResourceRegistry?: () =>
+    | ReturnType<Config['getResourceRegistry']>
+    | undefined;
+  getToolRegistry?: () => ReturnType<Config['getToolRegistry']> | undefined;
+};
+
+type RuntimeMcpServers = Record<string, MCPServerConfig | undefined>;
+
+type RuntimeMcpResource = Omit<DiscoveredMCPResource, 'name'> & {
+  name?: string;
+};
+
+const asRuntimeConfig = (config: Config): RuntimeConfigWithOptionalServices =>
+  config;
+
+const getResourceName = (resource: DiscoveredMCPResource): string => {
+  const runtimeResource = resource as RuntimeMcpResource;
+  return runtimeResource.name ?? runtimeResource.uri;
+};
+
 const mcpAuthSchema: CommandArgumentSchema = [
   {
     kind: 'value',
@@ -56,7 +87,7 @@ const mcpAuthSchema: CommandArgumentSchema = [
         return [];
       }
 
-      const mcpServers = config.getMcpServers() ?? {};
+      const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
       return Object.keys(mcpServers).map((name) => ({
         value: name,
         description: 'Configured MCP server',
@@ -80,7 +111,8 @@ const getMcpStatus = async (
     };
   }
 
-  const toolRegistry = config.getToolRegistry();
+  const runtimeConfig = asRuntimeConfig(config);
+  const toolRegistry = runtimeConfig.getToolRegistry?.();
   if (!toolRegistry) {
     return {
       type: 'message',
@@ -89,7 +121,7 @@ const getMcpStatus = async (
     };
   }
 
-  const mcpServers = config.getMcpServers() ?? {};
+  const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
   const serverNames = Object.keys(mcpServers);
   const blockedMcpServers = config.getBlockedMcpServers() ?? [];
 
@@ -128,22 +160,14 @@ const getMcpStatus = async (
   const allTools = toolRegistry.getAllTools();
   const promptRegistry = config.getPromptRegistry();
   const allResources =
-    (
-      config as Config & {
-        getResourceRegistry?: () => {
-          getAllResources: () => DiscoveredMCPResource[];
-        };
-      }
-    )
-      .getResourceRegistry?.()
-      ?.getAllResources?.() ?? [];
+    runtimeConfig.getResourceRegistry?.()?.getAllResources() ?? [];
 
   for (const serverName of serverNames) {
     const serverTools = allTools.filter((tool: AnyDeclarativeTool) => {
       const isMcpTool = tool instanceof DiscoveredMCPTool;
       return isMcpTool && tool.serverName === serverName;
     }) as DiscoveredMCPTool[];
-    const serverPrompts = promptRegistry.getPromptsByServer(serverName) || [];
+    const serverPrompts = promptRegistry.getPromptsByServer(serverName);
     const serverResources = allResources.filter(
       (resource) => resource.serverName === serverName,
     );
@@ -182,6 +206,10 @@ const getMcpStatus = async (
 
     // Get server description if available
     const server = mcpServers[serverName];
+    if (!server) {
+      continue;
+    }
+
     let serverDisplayName = serverName;
     if (server.extensionName) {
       serverDisplayName += ` (from ${server.extensionName})`;
@@ -192,7 +220,10 @@ const getMcpStatus = async (
 
     let needsAuthHint = mcpServerRequiresOAuth.get(serverName) ?? false;
     // Add OAuth status if applicable
-    if (server?.oauth?.enabled || mcpServerRequiresOAuth.has(serverName)) {
+    if (
+      server.oauth?.enabled === true ||
+      mcpServerRequiresOAuth.has(serverName)
+    ) {
       needsAuthHint = true;
       try {
         const { MCPOAuthTokenStorage } = await import(
@@ -250,15 +281,11 @@ const getMcpStatus = async (
     }
 
     // Add server description with proper handling of multi-line descriptions
-    if (showDescriptions && server?.description) {
+    if (showDescriptions && server.description) {
       const descLines = server.description.trim().split('\n');
-      if (descLines) {
-        message += ':\n';
-        for (const descLine of descLines) {
-          message += `    ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
-        }
-      } else {
-        message += '\n';
+      message += ':\n';
+      for (const descLine of descLines) {
+        message += `    ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
       }
     } else {
       message += '\n';
@@ -279,13 +306,9 @@ const getMcpStatus = async (
 
           // Handle multi-line descriptions by properly indenting and preserving formatting
           const descLines = tool.description.trim().split('\n');
-          if (descLines) {
-            message += ':\n';
-            for (const descLine of descLines) {
-              message += `      ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
-            }
-          } else {
-            message += '\n';
+          message += ':\n';
+          for (const descLine of descLines) {
+            message += `      ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
           }
           // Reset is handled inline with each line now
         } else {
@@ -301,10 +324,8 @@ const getMcpStatus = async (
           const paramsLines = JSON.stringify(parameters, null, 2)
             .trim()
             .split('\n');
-          if (paramsLines) {
-            for (const paramsLine of paramsLines) {
-              message += `      ${COLOR_GREEN}${paramsLine}${RESET_COLOR}\n`;
-            }
+          for (const paramsLine of paramsLines) {
+            message += `      ${COLOR_GREEN}${paramsLine}${RESET_COLOR}\n`;
           }
         }
       });
@@ -323,13 +344,9 @@ const getMcpStatus = async (
         if (showDescriptions && prompt.description) {
           message += `  - ${COLOR_CYAN}${prompt.name}${RESET_COLOR}`;
           const descLines = prompt.description.trim().split('\n');
-          if (descLines) {
-            message += ':\n';
-            for (const descLine of descLines) {
-              message += `      ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
-            }
-          } else {
-            message += '\n';
+          message += ':\n';
+          for (const descLine of descLines) {
+            message += `      ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
           }
         } else {
           message += `  - ${COLOR_CYAN}${prompt.name}${RESET_COLOR}\n`;
@@ -350,7 +367,7 @@ const getMcpStatus = async (
         MAX_MCP_RESOURCES_TO_SHOW,
       );
       resourcesToShow.forEach((resource) => {
-        const resourceName = resource.name ?? resource.uri;
+        const resourceName = getResourceName(resource);
         const resourceUri = resource.uri;
 
         if (showDescriptions && resource.description) {
@@ -442,20 +459,23 @@ const authCommand: SlashCommand = {
       };
     }
 
-    const mcpServers = config.getMcpServers() ?? {};
+    const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
+
+    const runtimeConfig = asRuntimeConfig(config);
 
     if (!serverName) {
       // List servers that support OAuth (from config or discovered)
       const oauthServersFromConfig = Object.entries(mcpServers)
         .filter(
-          ([_, server]: [string, MCPServerConfig]) => server.oauth?.enabled,
+          ([_, server]: [string, MCPServerConfig | undefined]) =>
+            server?.oauth?.enabled === true,
         )
         .map(([name, _]) => name);
 
       // Include servers discovered to require OAuth
       const discoveredOAuthServers = Array.from(
         mcpServerRequiresOAuth.keys(),
-      ).filter((name) => mcpServers[name]); // Only include configured servers
+      ).filter((name) => mcpServers[name] !== undefined); // Only include configured servers
 
       // Combine and deduplicate
       const allOAuthServers = [
@@ -527,7 +547,7 @@ const authCommand: SlashCommand = {
       );
 
       // Trigger tool re-discovery to pick up authenticated server
-      const mcpClientManager = config.getMcpClientManager();
+      const mcpClientManager = runtimeConfig.getMcpClientManager?.();
       if (mcpClientManager) {
         context.ui.addItem(
           {
@@ -539,7 +559,7 @@ const authCommand: SlashCommand = {
         await mcpClientManager.restartServer(serverName);
       }
       // Update the client with the new tools
-      const geminiClient = config.getGeminiClient();
+      const geminiClient = runtimeConfig.getGeminiClient?.();
       if (geminiClient) {
         await geminiClient.setTools();
       }
@@ -607,7 +627,8 @@ const refreshCommand: SlashCommand = {
       };
     }
 
-    const toolRegistry = config.getToolRegistry();
+    const runtimeConfig = asRuntimeConfig(config);
+    const toolRegistry = runtimeConfig.getToolRegistry?.();
     if (!toolRegistry) {
       return {
         type: 'message',
@@ -627,7 +648,7 @@ const refreshCommand: SlashCommand = {
     await toolRegistry.discoverAllTools();
 
     // Update the client with the new tools
-    const geminiClient = config.getGeminiClient();
+    const geminiClient = runtimeConfig.getGeminiClient?.();
     if (geminiClient) {
       await geminiClient.setTools();
     }
