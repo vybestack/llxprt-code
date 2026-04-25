@@ -81,6 +81,7 @@ export class TodoContinuationService {
   ): void {
     const normalizedNames = new Set(
       declarations
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
         .map((decl) => decl?.name)
         .filter((name): name is string => typeof name === 'string')
         .map((name) => name.toLowerCase()),
@@ -158,6 +159,7 @@ export class TodoContinuationService {
     const suffixAlreadyPresent = parts.some(
       (part) =>
         typeof part === 'object' &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
         part !== null &&
         'text' in part &&
         typeof part.text === 'string' &&
@@ -215,8 +217,11 @@ export class TodoContinuationService {
     const normalize = (todos: readonly Todo[]) =>
       todos
         .map((todo) => ({
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
           id: `${todo.id ?? ''}`,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
           status: (todo.status ?? 'pending').toLowerCase(),
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
           content: todo.content ?? '',
         }))
         .sort((left, right) => left.id.localeCompare(right.id));
@@ -262,6 +267,7 @@ export class TodoContinuationService {
     const alreadyPresent = parts.some(
       (part) =>
         typeof part === 'object' &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
         part !== null &&
         'text' in part &&
         typeof part.text === 'string' &&
@@ -287,6 +293,7 @@ export class TodoContinuationService {
     }
     return response.responseParts.some((part) => {
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
         part &&
         typeof part === 'object' &&
         'functionResponse' in part &&
@@ -316,6 +323,7 @@ export class TodoContinuationService {
       return PostTurnAction.Finish;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo continuation runtime payloads.
     if (hadThinking && !hadContent && !hadToolCalls) {
       if (retryCount >= maxRetries) {
         return PostTurnAction.Finish;

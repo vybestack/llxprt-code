@@ -178,6 +178,7 @@ export class LoadBalancingProvider implements IProvider {
     private readonly providerManager: ProviderManager,
   ) {
     // Validate required dependencies
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
     if (!providerManager) {
       throw new Error(
         'LoadBalancingProvider requires a ProviderManager dependency',
@@ -194,6 +195,7 @@ export class LoadBalancingProvider implements IProvider {
    */
   private validateConfig(config: LoadBalancingProviderConfig): void {
     // Check for empty subProfiles array
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
     if (!config.subProfiles || config.subProfiles.length === 0) {
       throw new Error(
         'LoadBalancingProvider requires at least one sub-profile in configuration',
@@ -201,6 +203,7 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     // Check for valid strategy
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
     if (config.strategy !== 'round-robin' && config.strategy !== 'failover') {
       throw new Error(
         `Invalid strategy "${config.strategy}". Supported: "round-robin", "failover".`,
@@ -240,6 +243,7 @@ export class LoadBalancingProvider implements IProvider {
         }
 
         if (
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
           !subProfile.ephemeralSettings ||
           typeof subProfile.ephemeralSettings !== 'object'
         ) {
@@ -249,6 +253,7 @@ export class LoadBalancingProvider implements IProvider {
         }
 
         if (
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
           !subProfile.modelParams ||
           typeof subProfile.modelParams !== 'object'
         ) {
@@ -907,6 +912,7 @@ export class LoadBalancingProvider implements IProvider {
    * @plan PLAN-20251212issue489 - Phase 4/5
    */
   private extractTokenCount(chunks: IContent[]): number {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
     if (!chunks || chunks.length === 0) return 0;
 
     // Look for usage information in the last chunk (common pattern)
@@ -1234,6 +1240,7 @@ export class LoadBalancingProvider implements IProvider {
     // Return the first sub-profile's auth token if available
     // This satisfies ProviderManager validation; actual auth is passed per-request
     const firstSubProfile = this.config.subProfiles[0];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Load-balancing runtime state.
     return firstSubProfile?.authToken ?? '';
   }
 }

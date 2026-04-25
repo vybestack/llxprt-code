@@ -81,14 +81,20 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       // Try to import keytar without any timeout - let the OS handle it
       const module = await keyringLoader();
       this.keytarModule =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
         'default' in module ? module.default || null : module || null;
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       const isModuleMissing =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
         err?.code === 'ERR_MODULE_NOT_FOUND' ||
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
         err?.code === 'MODULE_NOT_FOUND' ||
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
         err?.code === 'ERR_DLOPEN_FAILED' ||
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
         err?.message?.includes(`'keytar'`) ||
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Keychain token storage data.
         err?.message?.includes(`'@napi-rs/keyring'`);
 
       if (isModuleMissing) {

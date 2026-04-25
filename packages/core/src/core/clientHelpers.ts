@@ -58,7 +58,9 @@ export function findCompressSplitPoint(
   const lastContent = contents[contents.length - 1];
   if (lastSplitPoint > 0) {
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
       lastContent?.role === 'model' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
       !lastContent?.parts?.some((part) => part.functionCall)
     ) {
       return contents.length;
@@ -76,7 +78,9 @@ export function findCompressSplitPoint(
   }
 
   if (
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
     lastContent?.role === 'model' &&
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
     !lastContent?.parts?.some((part) => part.functionCall)
   ) {
     return contents.length;
@@ -91,6 +95,7 @@ export function extractPromptText(request: PartListUnion): string {
     return request
       .map((part) => {
         if (typeof part === 'string') return part;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
         if (part && typeof part === 'object' && 'text' in part) {
           return (part as { text: string }).text;
         }
@@ -99,6 +104,7 @@ export function extractPromptText(request: PartListUnion): string {
       .filter(Boolean)
       .join(' ');
   }
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
   if (request && typeof request === 'object' && 'text' in request) {
     return (request as { text: string }).text;
   }
@@ -113,6 +119,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
   if (!Array.isArray(request)) {
     if (
       typeof request === 'object' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
       request !== null &&
       'text' in request &&
       request.text
@@ -128,6 +135,7 @@ export function estimateTextOnlyLength(request: PartListUnion): number {
       textLength += part.length;
     } else if (
       typeof part === 'object' &&
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider client runtime payloads.
       part !== null &&
       'text' in part &&
       part.text

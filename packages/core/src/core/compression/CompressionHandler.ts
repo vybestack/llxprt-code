@@ -151,6 +151,7 @@ export class CompressionHandler {
       const strategy = getCompressionStrategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
       if (!strategy.optimize || strategy.trigger?.mode !== 'continuous') {
         return;
       }
@@ -231,6 +232,7 @@ export class CompressionHandler {
         this.generationConfig,
         this.runtimeContext.state.model,
         undefined,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
         this.runtimeContext.providerRuntime?.settingsService,
       ),
     );
@@ -356,6 +358,7 @@ export class CompressionHandler {
         this.generationConfig,
         this.runtimeContext.state.model,
         provider,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
         this.runtimeContext.providerRuntime?.settingsService,
       ),
     );
@@ -608,6 +611,7 @@ export class CompressionHandler {
     }
 
     await this.historyService.waitForTokenUpdates();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
     if (didCompress && compressionSucceeded) {
       this.lastSuccessfulCompressionTime = Date.now();
       return PerformCompressionResult.COMPRESSED;
@@ -767,6 +771,7 @@ export class CompressionHandler {
     }
 
     // Get config from runtimeContext for bucket failover handling
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
     const config = this.runtimeContext.providerRuntime?.config;
 
     return {
@@ -788,6 +793,7 @@ export class CompressionHandler {
       promptId,
       ...(activeTodos ? { activeTodos } : {}),
       compressionVerification:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Compression history runtime data.
         this.runtimeContext.ephemerals.compressionVerification?.() ?? false,
       ...(config ? { config } : {}),
     };

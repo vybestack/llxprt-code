@@ -411,6 +411,7 @@ export class TurnProcessor {
       () => '[TurnProcessor] Active provider snapshot before send',
       {
         providerName: provider.name,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
         providerDefaultModel: provider.getDefaultModel?.(),
         configModel: this.runtimeContext.state.model,
         baseUrl: this.resolveProviderBaseUrl(provider),
@@ -458,6 +459,7 @@ export class TurnProcessor {
       } as unknown as GenerateChatOptions['invocation'],
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
       userMemory: runtimeContext.config?.getUserMemory?.(),
     });
 
@@ -470,6 +472,7 @@ export class TurnProcessor {
 
     try {
       const iterator = streamResponse[Symbol.asyncIterator]();
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
       while (true) {
         // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let nextResponse: IteratorResult<IContent, unknown>;
@@ -543,6 +546,7 @@ export class TurnProcessor {
       {
         providerName: provider.name,
         model: this.runtimeContext.state.model,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
         toolCount: (tools as unknown[])?.length ?? 0,
         baseUrl,
       },
@@ -578,6 +582,7 @@ export class TurnProcessor {
   ): void {
     const curatedHistory = this.historyService.getCurated();
     const index = ContentConverters.toGeminiContents(curatedHistory).length;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
     const newEntries = afcHistory.slice(index) ?? [];
     const matcher = this.makePositionMatcher();
     for (const content of newEntries) {
@@ -698,6 +703,7 @@ export class TurnProcessor {
 
       for (const toolGroup of tools) {
         if (
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Turn processor runtime payloads.
           toolGroup &&
           'functionDeclarations' in toolGroup &&
           Array.isArray(toolGroup.functionDeclarations)

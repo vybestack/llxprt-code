@@ -136,11 +136,13 @@ export class HookRegistry {
         if (Array.isArray(eventDefinitions)) {
           for (const definition of eventDefinitions) {
             if (
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
               definition &&
               typeof definition === 'object' &&
               'hooks' in definition
             ) {
               const hookDef = definition;
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
               if (hookDef.hooks) {
                 allProjectHooks.push(...hookDef.hooks);
               }
@@ -192,6 +194,7 @@ export class HookRegistry {
     }
 
     // Get hooks from extensions (always allowed)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
     const extensions = this.config.getExtensions() || [];
     for (const extension of extensions) {
       if (extension.isActive && extension.hooks) {
@@ -254,6 +257,7 @@ export class HookRegistry {
     source: ConfigSource,
   ): void {
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
       !definition ||
       typeof definition !== 'object' ||
       !Array.isArray(definition.hooks)
@@ -265,10 +269,12 @@ export class HookRegistry {
       return;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
     const disabledHooks = this.config.getDisabledHooks() || [];
 
     for (const hookConfig of definition.hooks) {
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
         hookConfig &&
         typeof hookConfig === 'object' &&
         this.validateHookConfig(hookConfig, eventName, source)
@@ -307,6 +313,7 @@ export class HookRegistry {
     eventName: HookEventName,
     source: ConfigSource,
   ): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
     if (!config.type || !['command', 'plugin'].includes(config.type)) {
       debugLogger.warn(
         `Invalid hook ${eventName} from ${source} type: ${config.type}`,
@@ -314,6 +321,7 @@ export class HookRegistry {
       return false;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Hook registry external payloads.
     if (config.type === 'command' && !config.command) {
       debugLogger.warn(
         `Command hook ${eventName} from ${source} missing command field`,

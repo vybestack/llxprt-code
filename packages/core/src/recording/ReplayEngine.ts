@@ -154,6 +154,7 @@ export async function replaySession(
             projectHash: startPayload.projectHash,
             provider: startPayload.provider,
             model: startPayload.model,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
             workspaceDirs: startPayload.workspaceDirs || [],
             startTime: startPayload.startTime,
           };
@@ -163,6 +164,7 @@ export async function replaySession(
         // @pseudocode line 79-86: content
         case 'content': {
           const contentPayload = payload as unknown as ContentPayload;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
           if (contentPayload.content?.speaker) {
             history.push(contentPayload.content);
           } else {
@@ -178,7 +180,9 @@ export async function replaySession(
         case 'compressed': {
           const compPayload = payload as unknown as CompressedPayload;
           if (
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
             compPayload.summary?.speaker &&
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
             compPayload.itemsCompressed !== undefined
           ) {
             history = [compPayload.summary];
@@ -228,6 +232,7 @@ export async function replaySession(
         // @pseudocode line 122-126: session_event
         case 'session_event': {
           const sePayload = payload as unknown as SessionEventPayload;
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
           if (sePayload.severity && typeof sePayload.message === 'string') {
             sessionEvents.push({
               severity: sePayload.severity,
@@ -247,6 +252,7 @@ export async function replaySession(
           const dirPayload = payload as unknown as DirectoriesChangedPayload;
           if (metadata && Array.isArray(dirPayload.directories)) {
             metadata.workspaceDirs = dirPayload.directories;
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Replay fixture session data.
           } else if (!Array.isArray(dirPayload?.directories)) {
             malformedCount++;
             warnings.push(

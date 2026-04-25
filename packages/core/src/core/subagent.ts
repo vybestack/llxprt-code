@@ -175,7 +175,9 @@ export class SubAgentScope {
     }
 
     const toolsView =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       runtimeBundle.runtimeContext.tools ?? runtimeBundle.toolsView;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
     if (!toolsView) {
       throw new Error(
         'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
@@ -349,6 +351,7 @@ export class SubAgentScope {
     let currentMessages = this.buildInitialMessages(context);
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       while (true) {
         const check = checkTerminationConditions(
           turnCounter,
@@ -438,6 +441,7 @@ export class SubAgentScope {
   ) {
     const currentTurn = turnIndex;
     const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
     const providerName = this.runtimeContext.state.provider ?? 'backend';
     const turn = new Turn(chat, promptId, this.subagentId, providerName);
     const parts = currentMessages[0]?.parts ?? [];
@@ -459,6 +463,7 @@ export class SubAgentScope {
           if (execCtx.onMessage && filtered.text) {
             execCtx.onMessage(filtered.text);
           }
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
         } else if (event.type === GeminiEventType.Error && event.value?.error) {
           execCtx.output.terminate_reason = SubagentTerminateMode.ERROR;
           throw new Error(event.value.error.message);
@@ -602,6 +607,7 @@ export class SubAgentScope {
     let turnCounter = 0;
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       while (true) {
         const check = checkTerminationConditions(
           turnCounter,
@@ -699,6 +705,7 @@ export class SubAgentScope {
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(this.config);
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       while (true) {
         // Use watchdog if timeout > 0, otherwise call iterator.next() directly
         let result: IteratorResult<StreamEvent, unknown>;
@@ -725,9 +732,11 @@ export class SubAgentScope {
           break;
         }
         const resp = result.value;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
         if (abortController.signal.aborted)
           return { functionCalls: [], textResponse: '' };
         if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
           const chunkCalls = resp.value.functionCalls ?? [];
           if (chunkCalls.length > 0) {
             functionCalls.push(...chunkCalls);
@@ -743,6 +752,7 @@ export class SubAgentScope {
       }
     } finally {
       // Close the stream iterator to release sendPromise in TurnProcessor.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config and runtime tool payloads.
       iterator.return?.(undefined).catch(() => {});
       timeoutController.abort();
       abortController.signal.removeEventListener('abort', onAbort);

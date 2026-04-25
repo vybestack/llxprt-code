@@ -227,6 +227,7 @@ export class RetryOrchestrator implements IProvider {
     }
 
     // Extract signal - it may be on invocation or in options directly
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
     const signal = (options.invocation as { signal?: AbortSignal })?.signal;
 
     // Check for abort before starting
@@ -236,9 +237,11 @@ export class RetryOrchestrator implements IProvider {
 
     // Read ephemeral settings for retry configuration
     const maxAttempts =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       (options.invocation?.ephemerals?.['retries'] as number | undefined) ??
       this.config.maxAttempts;
     const initialDelayMs =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       (options.invocation?.ephemerals?.['retrywait'] as number | undefined) ??
       this.config.initialDelayMs;
 
@@ -371,6 +374,7 @@ export class RetryOrchestrator implements IProvider {
               await authErrorHandler.handleAuthError({
                 failedAccessToken,
                 providerId,
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
                 errorStatus: errorStatus ?? 401,
               });
             } catch (handlerError) {
@@ -488,6 +492,7 @@ export class RetryOrchestrator implements IProvider {
     const iterator = stream[Symbol.asyncIterator]();
     let firstChunk = true;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
     while (true) {
       if (signal?.aborted) {
         throw createAbortError();
@@ -636,7 +641,9 @@ export class RetryOrchestrator implements IProvider {
     options: GenerateChatOptions,
   ): BucketFailoverHandler | undefined {
     return (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       options.runtime?.config?.getBucketFailoverHandler?.() ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       options.config?.getBucketFailoverHandler?.()
     );
   }
@@ -649,7 +656,9 @@ export class RetryOrchestrator implements IProvider {
     options: GenerateChatOptions,
   ): OnAuthErrorHandler | undefined {
     return (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       options.runtime?.config?.getOnAuthErrorHandler?.() ??
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider retry runtime state.
       options.config?.getOnAuthErrorHandler?.()
     );
   }

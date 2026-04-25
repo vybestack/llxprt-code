@@ -24,6 +24,7 @@ function loadMarkdownFile(filename: string): string {
   let debugLog = false;
   try {
     debugLog =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
       process?.env &&
       (process.env.DEBUG === '1' || process.env.DEBUG === 'true');
   } catch {
@@ -39,18 +40,22 @@ function loadMarkdownFile(filename: string): string {
       `[PROMPT_LOADER] process.cwd(): ${typeof process !== 'undefined' ? process.cwd() : 'N/A'}`,
     );
     debugLogger.log(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
       `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv?.[0] : 'N/A'}`,
     );
     debugLogger.log(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
       `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv?.[1] : 'N/A'}`,
     );
     debugLogger.log(
       `[PROMPT_LOADER] process.platform: ${typeof process !== 'undefined' ? process.platform : 'N/A'}`,
     );
     debugLogger.log(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
       `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'}`,
     );
     debugLogger.log(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
       `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
     );
   }
@@ -133,6 +138,7 @@ function loadMarkdownFile(filename: string): string {
     }
 
     // As a last resort, check if we're running from a bundle directory
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
     if (process?.cwd().includes('bundle')) {
       const cwdPath = join(process.cwd(), filename);
       if (existsSync(cwdPath)) {
@@ -142,6 +148,7 @@ function loadMarkdownFile(filename: string): string {
 
     // Additional check for Windows CI where files might be in a different location
     // Check if the file exists relative to the executing script location
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Tool prompt default data.
     if (process?.argv[1]) {
       const scriptDir = dirname(process.argv[1]);
       const scriptPath = join(scriptDir, filename);

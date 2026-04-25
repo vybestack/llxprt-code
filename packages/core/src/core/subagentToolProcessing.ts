@@ -140,11 +140,14 @@ export function finalizeOutput(output: OutputObject): void {
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
   const emittedVars = output.emitted_vars ?? {};
   const emittedEntries = Object.entries(emittedVars)
     .filter(
       ([, value]) =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
         value !== undefined &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
         value !== null &&
         String(value).trim().length > 0,
     )
@@ -190,6 +193,7 @@ export function handleEmitValueCall(
   request: ToolCallRequestInfo,
   ctx: EmitValueContext,
 ): Part[] {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
   const args = request.args ?? {};
   const variableName =
     typeof args.emit_variable_name === 'string'
@@ -257,6 +261,7 @@ export function buildPartsFromCompletedCalls(
 ): Part[] {
   const aggregate: Part[] = [];
   for (const call of completedCalls) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
     if (call.response?.responseParts?.length) {
       for (const part of call.response.responseParts) {
         if ('functionCall' in part) {
@@ -278,7 +283,9 @@ export function buildPartsFromCompletedCalls(
 
     if (call.status === 'error') {
       const errorMessage =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
         call.response?.error?.message ??
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
         call.response?.resultDisplay ??
         'Tool execution failed.';
       ctx.logger.warn(
@@ -293,8 +300,10 @@ export function buildPartsFromCompletedCalls(
     }
 
     const toolCanUpdateOutput =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
       call.status === 'success' && call.tool?.canUpdateOutput === true;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
     const display = call.response?.resultDisplay;
     if (
       typeof display === 'string' &&
@@ -370,6 +379,7 @@ export async function processFunctionCalls(
       continue;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent tool-call runtime payloads.
     if (toolResponse.responseParts) {
       for (const part of toolResponse.responseParts) {
         if ('functionCall' in part) {

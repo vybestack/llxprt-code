@@ -199,16 +199,21 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
   private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
     const normalized = rawTodos.map((todo, index) => {
       const normalizedId =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
         todo?.id !== undefined &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
         todo?.id !== null &&
         `${todo.id}`.trim() !== ''
           ? String(todo.id)
           : String(index + 1);
 
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
       const normalizedSubtasks = Array.isArray(todo?.subtasks)
         ? todo.subtasks.map((subtask, subIndex) => {
             const subtaskId =
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== undefined &&
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
               subtask?.id !== null &&
               `${subtask.id}`.trim() !== ''
                 ? String(subtask.id)
@@ -218,7 +223,8 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
               id: subtaskId,
             };
           })
-        : todo?.subtasks;
+        : // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Todo input payload data.
+          todo?.subtasks;
 
       return {
         ...todo,

@@ -25,6 +25,7 @@ function loadMarkdownFile(filename: string): string {
   let debugLog = false;
   try {
     debugLog =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
       process?.env &&
       (process.env.DEBUG === '1' || process.env.DEBUG === 'true');
   } catch {
@@ -44,10 +45,12 @@ function loadMarkdownFile(filename: string): string {
     );
     logger.debug(
       () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
         `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv?.[0] : 'N/A'}`,
     );
     logger.debug(
       () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
         `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv?.[1] : 'N/A'}`,
     );
     logger.debug(
@@ -56,10 +59,12 @@ function loadMarkdownFile(filename: string): string {
     );
     logger.debug(
       () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
         `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'}`,
     );
     logger.debug(
       () =>
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
         `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
     );
   }
@@ -111,6 +116,7 @@ function loadMarkdownFile(filename: string): string {
             const fullPath = join(currentDir, f);
             try {
               const exists = existsSync(fullPath);
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
               if (debugLog && exists) {
                 logger.debug(() => `[PROMPT_LOADER] Found ${f} at ${fullPath}`);
               }
@@ -178,6 +184,7 @@ function loadMarkdownFile(filename: string): string {
     }
 
     // As a last resort, check if we're running from a bundle directory using process.cwd()
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
     if (process?.cwd().includes('bundle')) {
       const cwdPath = join(process.cwd(), filename);
       if (existsSync(cwdPath)) {
@@ -187,6 +194,7 @@ function loadMarkdownFile(filename: string): string {
 
     // Additional check for Windows CI where files might be in a different location
     // Check if the file exists relative to the executing script location
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Core prompt default data.
     if (process?.argv[1]) {
       const scriptDir = dirname(process.argv[1]);
       const scriptPath = join(scriptDir, filename);

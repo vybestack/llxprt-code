@@ -34,14 +34,20 @@ export class ContentConverters {
   static toGeminiContent(iContent: IContent): Content {
     this.logger.debug('Converting IContent to Gemini Content:', {
       speaker: iContent.speaker,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
       blockCount: iContent.blocks?.length || 0,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
       blockTypes: iContent.blocks?.map((b) => b.type) || [],
       toolCallIds:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
         iContent.blocks
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
           ?.filter((b) => b.type === 'tool_call')
           .map((b) => b.id) || [],
       toolResponseCallIds:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
         iContent.blocks
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
           ?.filter((b) => b.type === 'tool_response')
           .map((b) => b.callId) || [],
     });
@@ -214,6 +220,7 @@ export class ContentConverters {
     if (!content.parts || content.parts.length === 0) {
       // Empty content - keep it empty
       // This represents an empty model response
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
     } else if (content.parts) {
       for (const part of content.parts) {
         if ('text' in part && part.text !== undefined) {
@@ -265,6 +272,7 @@ export class ContentConverters {
             id: finalId,
             name: toolName,
             parameters:
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
               (part.functionCall.args as Record<string, unknown>) || {},
           });
           callIndex += 1;
@@ -300,6 +308,7 @@ export class ContentConverters {
             if (part.functionResponse.response) {
               if (
                 typeof part.functionResponse.response === 'object' &&
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted history content data.
                 part.functionResponse.response !== null
               ) {
                 // If it's already an object, use it directly

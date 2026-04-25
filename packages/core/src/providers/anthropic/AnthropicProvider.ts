@@ -271,6 +271,7 @@ export class AnthropicProvider extends BaseProvider {
         const latest = models
           .filter((m) => m.id.startsWith(`claude-${tier}-4-`))
           .sort((a, b) => b.id.localeCompare(a.id))[0];
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
         if (latest) {
           models.push({
             ...latest,
@@ -407,7 +408,9 @@ export class AnthropicProvider extends BaseProvider {
       // First check SettingsService for toolFormat override in provider settings
       // Note: This is synchronous access to cached settings, not async
       const currentSettings = settingsService['settings'];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
       const providerSettings = currentSettings?.providers?.[this.name];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
       const toolFormatOverride = providerSettings?.toolFormat as
         | ToolFormat
         | 'auto'
@@ -553,13 +556,16 @@ export class AnthropicProvider extends BaseProvider {
     const rateLimitLogger = this.getRateLimitLogger();
     const waitDecision = calculateWaitTime(this.lastRateLimitInfo ?? {}, {
       throttleEnabled:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
         (requestContext.configEphemerals['rate-limit-throttle'] as string) ??
         'on',
       thresholdPercentage:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
         (requestContext.configEphemerals[
           'rate-limit-throttle-threshold'
         ] as number) ?? 5,
       maxWaitMs:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
         (requestContext.configEphemerals['rate-limit-max-wait'] as number) ??
         60000,
     });
@@ -576,6 +582,7 @@ export class AnthropicProvider extends BaseProvider {
     );
 
     // Execute API call with dump context handling
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Anthropic provider response payloads.
     const dumpMode = options.invocation?.ephemerals?.dumpcontext as
       | DumpMode
       | undefined;

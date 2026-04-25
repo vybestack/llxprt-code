@@ -199,10 +199,12 @@ export class SubagentManager {
     profile: string,
     systemPrompt: string,
   ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (profile === undefined || profile.trim() === '') {
       throw new Error('Profile name is required.');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (systemPrompt === undefined || systemPrompt.trim() === '') {
       throw new Error(ERROR_MESSAGES.PROMPT_REQUIRED);
     }
@@ -615,7 +617,9 @@ export class SubagentManager {
   async validateProfileReference(profileName: string): Promise<boolean> {
     // Validate input
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       profileName === undefined ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       profileName === null ||
       profileName.trim() === ''
     ) {
@@ -645,6 +649,7 @@ export class SubagentManager {
   private getSubagentPath(name: string): string {
     // Centralize all name validation in this helper
     // 1. Validate name is not undefined or null
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (name === undefined || name === null) {
       throw new Error(ERROR_MESSAGES.NAME_REQUIRED);
     }
@@ -664,7 +669,9 @@ export class SubagentManager {
 
     // 5. Validate baseDir is provided to the instance
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       this.baseDir === undefined ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
       this.baseDir === null ||
       this.baseDir.trim() === ''
     ) {
@@ -672,6 +679,7 @@ export class SubagentManager {
     }
 
     // 6. Validate profileManager is provided to the instance
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Persisted subagent config data.
     if (this.profileManager === undefined || this.profileManager === null) {
       throw new Error('ProfileManager instance is required');
     }

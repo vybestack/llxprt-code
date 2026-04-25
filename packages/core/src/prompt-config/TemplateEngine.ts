@@ -30,6 +30,7 @@ export class TemplateEngine {
     options?: TemplateProcessingOptions,
   ): string {
     // Step 1: Validate inputs
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     if (content === null || content === undefined) {
       return '';
     }
@@ -38,6 +39,7 @@ export class TemplateEngine {
       return content;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     const vars = variables || {};
 
     // Step 2: Initialize processing state
@@ -123,6 +125,7 @@ export class TemplateEngine {
     currentTool: string | null = null,
   ): TemplateVariables {
     // Validate context - return minimal valid object if no context
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     if (!context) {
       return {
         MODEL: '',
@@ -142,6 +145,7 @@ export class TemplateEngine {
     }
 
     // Add environment variables
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     if (context.environment) {
       variables['IS_GIT_REPO'] = context.environment.isGitRepository
         ? 'true'
@@ -224,6 +228,7 @@ export class TemplateEngine {
     variables['CURRENT_TIME'] = now.toLocaleTimeString();
     variables['CURRENT_DATETIME'] = now.toLocaleString();
     const sessionStartedAt =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
       context.environment?.sessionStartedAt &&
       context.environment.sessionStartedAt.trim() !== ''
         ? context.environment.sessionStartedAt
@@ -233,6 +238,7 @@ export class TemplateEngine {
     variables['PLATFORM'] = process.platform;
 
     // Add SUBAGENT_DELEGATION variable - empty unless includeSubagentDelegation is true and the required tools are available
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     const enabledTools = context.enabledTools ?? [];
     const hasTaskTool =
       enabledTools.includes('Task') || enabledTools.includes('task');
@@ -279,6 +285,7 @@ export class TemplateEngine {
     // Add interaction mode variables
     const interactionMode =
       /* eslint-disable @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: interactionMode is optional string, empty string should fall through to default */
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
       context.environment?.interactionMode || 'interactive';
     /* eslint-enable @typescript-eslint/prefer-nullish-coalescing */
     variables['INTERACTION_MODE'] = interactionMode;
@@ -288,6 +295,7 @@ export class TemplateEngine {
       variables['INTERACTION_MODE_LABEL'] = 'an interactive';
     } else if (interactionMode === 'non-interactive') {
       variables['INTERACTION_MODE_LABEL'] = 'a non-interactive';
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Prompt template user data.
     } else if (interactionMode === 'subagent') {
       variables['INTERACTION_MODE_LABEL'] = 'a subagent';
     }

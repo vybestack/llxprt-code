@@ -88,11 +88,14 @@ function buildToolGovernance(
   profile: AgentRuntimeProfileSnapshot,
 ): ToolGovernance {
   const allowedRaw = Array.isArray(profile.settings.tools?.allowed)
-    ? profile.settings.tools?.allowed
+    ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
+      profile.settings.tools?.allowed
     : undefined;
   const disabledRaw = Array.isArray(profile.settings.tools?.disabled)
-    ? profile.settings.tools?.disabled
+    ? // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
+      profile.settings.tools?.disabled
     : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
   const excludedRaw = profile.config.getExcludeTools?.() ?? [];
 
   return {
@@ -164,9 +167,10 @@ function createFilteredToolRegistryView(
           : typeof (tool as { description?: string }).description === 'string'
             ? (tool as { description: string }).description
             : '';
-      const parameterSchema = (
-        schema as { parametersJsonSchema?: Record<string, unknown> }
-      )?.parametersJsonSchema;
+      const runtimeSchema = schema as
+        | { parametersJsonSchema?: Record<string, unknown> }
+        | undefined;
+      const parameterSchema = runtimeSchema?.parametersJsonSchema;
 
       return {
         name: (tool as { name?: string }).name ?? name,
@@ -181,6 +185,7 @@ export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
   const { profile, overrides = {}, signal } = options;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
   if (!profile) {
     throw new Error('AgentRuntimeLoader requires a profile option.');
   }
@@ -196,6 +201,7 @@ export async function loadAgentRuntime(
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
     createProviderAdapterFromManager(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
       profile.providerManager ?? profile.config.getProviderManager?.(),
     );
 
@@ -207,6 +213,7 @@ export async function loadAgentRuntime(
   const toolsView: ToolRegistryView =
     overrides.toolsView ??
     createFilteredToolRegistryView(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Agent runtime loader config data.
       profile.toolRegistry ?? profile.config.getToolRegistry?.(),
       governance,
     );

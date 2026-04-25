@@ -134,6 +134,7 @@ export class GeminiChat {
     generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
   ) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
     if (!view) {
       throw new Error('AgentRuntimeContext is required for GeminiChat');
     }
@@ -171,6 +172,7 @@ export class GeminiChat {
       this.generationConfig,
       providerResolver,
       async (context: CompressionContext) => {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
         const config = view.providerRuntime?.config;
         if (config) {
           await triggerPreCompressHook(
@@ -233,6 +235,7 @@ export class GeminiChat {
     const originalAdd = this.historyService.add.bind(this.historyService);
     this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
       const result = originalAdd(...args);
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
       this.compressionHandler?.markDensityDirty();
       return result;
     };
@@ -250,6 +253,7 @@ export class GeminiChat {
   }
 
   resolveProviderForRuntime(contextLabel: string): IProvider {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
     const desiredProviderName = this.runtimeState.provider?.trim();
     const adapter = this.runtimeContext.provider;
 
@@ -287,6 +291,7 @@ export class GeminiChat {
       try {
         adapter.setActiveProvider(desiredProviderName);
         const updatedProvider = adapter.getActiveProvider();
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
         if (updatedProvider) {
           provider = updatedProvider;
         }
@@ -323,6 +328,7 @@ export class GeminiChat {
   ): ProviderRuntimeContext {
     const baseRuntime = this.runtimeContext.providerRuntime;
     const runtimeId =
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
       baseRuntime.runtimeId ?? this.runtimeState.runtimeId ?? 'geminiChat';
 
     return {
@@ -501,6 +507,7 @@ export class GeminiChat {
    * Used by Turn and other consumers to access ephemeral settings.
    */
   getConfig(): Config | undefined {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Gemini chat runtime payloads.
     return this.runtimeContext.providerRuntime?.config;
   }
 }

@@ -458,6 +458,7 @@ export class MessageStreamOrchestrator {
 
     if (event.type === GeminiEventType.Error) {
       const errorStatus =
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         event.value?.error && typeof event.value.error === 'object'
           ? (event.value.error as { status?: number }).status
           : undefined;
@@ -591,11 +592,13 @@ export class MessageStreamOrchestrator {
     for (const part of request) {
       if (
         typeof part === 'object' &&
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         part !== null &&
         'functionResponse' in part
       ) {
         const funcResp = (part as { functionResponse: { name?: string } })
           .functionResponse;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         if (funcResp?.name) {
           names.add(funcResp.name);
         }
@@ -631,6 +634,7 @@ export class MessageStreamOrchestrator {
       return yield* this._finishWithToolCalls(iter.deferredEvents, ctx);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
     if (iter.hadThinking && !iter.hadContent && !iter.hadToolCallsThisTurn) {
       const newRetry = retryCount + 1;
       this.deps.logger.debug(
@@ -863,6 +867,7 @@ export class MessageStreamOrchestrator {
   ): void {
     if (
       event.type !== GeminiEventType.ToolCallRequest ||
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
       !todoContinuationService.isTodoToolCall(event.value?.name)
     )
       return;
@@ -870,13 +875,17 @@ export class MessageStreamOrchestrator {
     todoContinuationService.setLastTodoToolTurn(getSessionTurnCount());
     todoContinuationService.consecutiveComplexTurns = 0;
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
     const requestedTodos = Array.isArray(event.value?.args?.todos)
       ? (event.value.args.todos as Todo[])
       : [];
     if (requestedTodos.length > 0) {
       todoContinuationService.lastTodoSnapshot = requestedTodos.map((todo) => ({
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         id: `${todo.id ?? ''}`,
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         content: todo.content ?? '',
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Provider stream and tool-call runtime payloads.
         status: todo.status ?? 'pending',
       }));
     }
