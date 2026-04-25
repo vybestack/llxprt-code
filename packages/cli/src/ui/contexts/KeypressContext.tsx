@@ -39,10 +39,13 @@ const MAC_ALT_KEY_CHARACTER_MAP: Record<string, string> = {
 };
 
 // Parse the key itself - table-driven dispatch from upstream
-const KEY_INFO_MAP: Record<
-  string,
-  { name: string; shift?: boolean; ctrl?: boolean }
-> = {
+interface KeyInfo {
+  name: string;
+  shift?: boolean;
+  ctrl?: boolean;
+}
+
+const KEY_INFO_MAP: Partial<Record<string, KeyInfo>> = {
   '[200~': { name: 'paste-start' },
   '[201~': { name: 'paste-end' },
   '[[A': { name: 'f1' },
@@ -189,7 +192,7 @@ function bufferBackslashEnter(
   keypressHandler: KeypressHandler,
 ): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
-    while (true) {
+    for (;;) {
       const key = yield;
 
       if (key == null) {
@@ -235,7 +238,7 @@ function bufferBackslashEnter(
  */
 function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
   const bufferer = (function* (): Generator<void, void, Key | null> {
-    while (true) {
+    for (;;) {
       let key = yield;
 
       if (key === null) {
@@ -246,7 +249,7 @@ function bufferPaste(keypressHandler: KeypressHandler): KeypressHandler {
       }
 
       let buffer = '';
-      while (true) {
+      for (;;) {
         const timeoutId = setTimeout(() => bufferer.next(null), PASTE_TIMEOUT);
         key = yield;
         clearTimeout(timeoutId);
@@ -309,7 +312,7 @@ function createDataListener(keypressHandler: KeypressHandler) {
 function* emitKeys(
   keypressHandler: KeypressHandler,
 ): Generator<void, void, string> {
-  while (true) {
+  for (;;) {
     let ch = yield;
     let sequence = ch;
     let escaped = false;
@@ -344,7 +347,7 @@ function* emitKeys(
         let buffer = '';
 
         // Read until BEL, `ESC \`, or timeout (empty string)
-        while (true) {
+        for (;;) {
           const next = yield;
           if (next === '' || next === '\u0007') {
             break;
@@ -380,7 +383,9 @@ function* emitKeys(
         }
 
         continue; // resume main loop
-      } else if (ch === 'O') {
+      }
+
+      if (code === 'O') {
         // ESC O letter
         // ESC O modifier letter
         ch = yield;
@@ -393,7 +398,7 @@ function* emitKeys(
         }
 
         code += ch;
-      } else if (ch === '[') {
+      } else if (code === '[') {
         // ESC [ letter
         // ESC [ modifier letter
         // ESC [ [ modifier letter
@@ -483,39 +488,59 @@ function* emitKeys(
          * and modifier from it
          */
         const cmd = sequence.slice(cmdStart);
-        let match;
+        const numberedCodeMatch =
+          /^(?<first>\d+)(?:;(?<second>\d+))?(?:;(?<third>\d+))?(?<suffix>[~^$u])$/.exec(
+            cmd,
+          );
+        const letterCodeMatch =
+          numberedCodeMatch !== null
+            ? null
+            : /^(?<first>\d+)?(?:;(?<second>\d+))?(?<letter>[A-Za-z])$/.exec(
+                cmd,
+              );
 
-        if ((match = /^(\d+)(?:;(\d+))?(?:;(\d+))?([~^$u])$/.exec(cmd))) {
-          if (match[1] === '27' && match[3] && match[4] === '~') {
+        if (numberedCodeMatch !== null) {
+          const { first, second, third, suffix } = numberedCodeMatch.groups as {
+            first: string;
+            second?: string;
+            third?: string;
+            suffix: string;
+          };
+          if (first === '27' && third !== undefined && suffix === '~') {
             // modifyOtherKeys format: CSI 27 ; modifier ; key ~
             // Treat as CSI u: key + 'u'
-            code += match[3] + 'u';
-            modifier = parseInt(match[2] ?? '1', 10) - 1;
+            code += third + 'u';
+            modifier = parseInt(second ?? '1', 10) - 1;
           } else {
-            code += match[1] + match[4];
+            code += first + suffix;
             // Defaults to '1' if no modifier exists, resulting in a 0 modifier value
-            modifier = parseInt(match[2] ?? '1', 10) - 1;
+            modifier = parseInt(second ?? '1', 10) - 1;
           }
-        } else if ((match = /^(\d+)?(?:;(\d+))?([A-Za-z])$/.exec(cmd))) {
-          code += match[3];
-          modifier = parseInt(match[2] ?? match[1] ?? '1', 10) - 1;
+        } else if (letterCodeMatch !== null) {
+          const { first, second, letter } = letterCodeMatch.groups as {
+            first?: string;
+            second?: string;
+            letter: string;
+          };
+          code += letter;
+          modifier = parseInt(second ?? first ?? '1', 10) - 1;
         } else {
           code += cmd;
         }
       }
 
       // Parse the key modifier
-      shift = !!(modifier & 1);
-      meta = !!(modifier & 2);
-      ctrl = !!(modifier & 4);
+      shift = (modifier & 1) !== 0;
+      meta = (modifier & 2) !== 0;
+      ctrl = (modifier & 4) !== 0;
 
       const keyInfo = KEY_INFO_MAP[code];
-      if (keyInfo) {
+      if (keyInfo !== undefined) {
         name = keyInfo.name;
-        if (keyInfo.shift) {
+        if (keyInfo.shift === true) {
           shift = true;
         }
-        if (keyInfo.ctrl) {
+        if (keyInfo.ctrl === true) {
           ctrl = true;
         }
         if (name === 'space' && !ctrl && !meta) {
