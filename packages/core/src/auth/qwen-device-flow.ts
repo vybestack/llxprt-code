@@ -50,7 +50,7 @@ export class QwenDeviceFlow {
     });
 
     // Only add scope if it's not empty
-    if (this.config.scopes && this.config.scopes.length > 0) {
+    if (this.config.scopes.length > 0) {
       params.append('scope', this.config.scopes.join(' '));
     }
 
@@ -111,8 +111,11 @@ export class QwenDeviceFlow {
 
           // Calculate expiry timestamp
           const now = Math.floor(Date.now() / 1000);
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expires_in is invalid, default to 3600
-          const expiresIn = validatedResponse.expires_in || 3600; // Default to 1 hour if not provided
+          const expiresIn =
+            validatedResponse.expires_in === undefined ||
+            validatedResponse.expires_in === 0
+              ? 3600
+              : validatedResponse.expires_in; // Default to 1 hour if not provided
           const expiry = now + expiresIn;
 
           return {
@@ -128,22 +131,19 @@ export class QwenDeviceFlow {
         // Handle error responses
         const errorData = await response.json();
 
-        if (errorData.error === 'authorization_pending') {
-          // Continue polling - wait for the interval before next attempt
-          await new Promise((resolve) => setTimeout(resolve, interval));
-          continue;
-        } else if (errorData.error === 'slow_down') {
-          // Increase polling interval by 5 seconds and continue
-          interval += 5000;
-          await new Promise((resolve) => setTimeout(resolve, interval));
-          continue;
-        } else if (errorData.error === 'access_denied') {
+        if (errorData.error === 'access_denied') {
           throw new Error('access_denied');
         } else if (errorData.error === 'expired_token') {
           throw new Error('expired_token');
+        } else if (errorData.error === 'slow_down') {
+          // Increase polling interval by 5 seconds and continue
+          interval += 5000;
+        } else if (errorData.error !== 'authorization_pending') {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Continue polling - wait for the interval before next attempt
+        await new Promise((resolve) => setTimeout(resolve, interval));
       } catch (error) {
         // For network errors, apply exponential backoff
         if (error instanceof Error && error.message.includes('fetch failed')) {
@@ -193,8 +193,11 @@ export class QwenDeviceFlow {
 
     // Calculate expiry timestamp with 30-second buffer
     const now = Math.floor(Date.now() / 1000);
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: 0 expires_in is invalid, default to 3600
-    const expiresIn = validatedResponse.expires_in || 3600; // Default to 1 hour if not provided
+    const expiresIn =
+      validatedResponse.expires_in === undefined ||
+      validatedResponse.expires_in === 0
+        ? 3600
+        : validatedResponse.expires_in; // Default to 1 hour if not provided
     const expiry = now + expiresIn - 30; // 30-second buffer
 
     return {

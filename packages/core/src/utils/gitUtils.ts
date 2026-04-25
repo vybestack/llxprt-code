@@ -16,7 +16,8 @@ export function isGitRepository(directory: string): boolean {
   try {
     let currentDir = path.resolve(directory);
 
-    while (true) {
+    let searching = true;
+    while (searching) {
       const gitDir = path.join(currentDir, '.git');
 
       // Check if .git exists (either as directory or file for worktrees)
@@ -28,10 +29,12 @@ export function isGitRepository(directory: string): boolean {
 
       // If we've reached the root directory, stop searching
       if (parentDir === currentDir) {
-        break;
+        searching = false;
       }
 
-      currentDir = parentDir;
+      if (searching) {
+        currentDir = parentDir;
+      }
     }
 
     return false;
@@ -50,7 +53,8 @@ export function findGitRoot(directory: string): string | null {
   try {
     let currentDir = path.resolve(directory);
 
-    while (true) {
+    let searching = true;
+    while (searching) {
       const gitDir = path.join(currentDir, '.git');
 
       if (fs.existsSync(gitDir)) {
@@ -60,10 +64,12 @@ export function findGitRoot(directory: string): string | null {
       const parentDir = path.dirname(currentDir);
 
       if (parentDir === currentDir) {
-        break;
+        searching = false;
       }
 
-      currentDir = parentDir;
+      if (searching) {
+        currentDir = parentDir;
+      }
     }
 
     return null;

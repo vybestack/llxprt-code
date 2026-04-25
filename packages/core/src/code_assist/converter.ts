@@ -199,9 +199,7 @@ function toContent(content: ContentUnion): Content {
     // it's a Content - process parts to handle thought filtering
     return {
       ...content,
-      parts: content.parts
-        ? toParts(content.parts.filter((p) => p != null))
-        : [],
+      parts: toParts(content.parts ?? []),
     };
   }
   // it's a Part

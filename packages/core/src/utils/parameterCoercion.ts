@@ -154,7 +154,6 @@ function coerceValue(value: unknown, propertySchema: PropertySchema): unknown {
   if (
     expectedType === 'object' &&
     typeof value === 'object' &&
-    value !== null &&
     !Array.isArray(value) &&
     propertySchema.properties
   ) {
@@ -183,7 +182,7 @@ function coerceObjectProperties(
 
   for (const [key, value] of Object.entries(obj)) {
     const propertySchema = properties[key];
-    if (propertySchema) {
+    if (Object.prototype.hasOwnProperty.call(properties, key)) {
       result[key] = coerceValue(value, propertySchema);
     } else {
       // Property not in schema, pass through unchanged

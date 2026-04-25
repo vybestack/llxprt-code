@@ -39,7 +39,7 @@ export class TrustedHooksManager {
         const data = JSON.parse(
           fs.readFileSync(this.filePath, 'utf-8'),
         ) as TrustedHooksData;
-        this.trustedHooks = new Set(data.trustedHooks || []);
+        this.trustedHooks = new Set(data.trustedHooks);
         debugLogger.debug(
           () => `Loaded ${this.trustedHooks.size} trusted hooks`,
         );

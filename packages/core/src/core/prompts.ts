@@ -436,7 +436,7 @@ export async function getCoreSystemPromptAsync(
 
   let mcpInstructions: string | undefined = undefined;
 
-  if (typeof userMemoryOrOptions === 'object' && userMemoryOrOptions !== null) {
+  if (typeof userMemoryOrOptions === 'object') {
     // Options object mode
     const opts = userMemoryOrOptions;
     userMemory = opts.userMemory;

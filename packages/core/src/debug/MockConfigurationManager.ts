@@ -16,7 +16,7 @@ export interface DebugSettings {
 }
 
 export class MockConfigurationManager {
-  private static instance: MockConfigurationManager;
+  private static instance: MockConfigurationManager | undefined;
   private config: DebugSettings = {
     enabled: true,
     namespaces: ['*'],
@@ -27,9 +27,7 @@ export class MockConfigurationManager {
   private listeners = new Set<() => void>();
 
   static getInstance(): MockConfigurationManager {
-    if (!MockConfigurationManager.instance) {
-      MockConfigurationManager.instance = new MockConfigurationManager();
-    }
+    MockConfigurationManager.instance ??= new MockConfigurationManager();
     return MockConfigurationManager.instance;
   }
 

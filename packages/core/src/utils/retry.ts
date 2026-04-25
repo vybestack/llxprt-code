@@ -311,9 +311,11 @@ export async function retryWithBackoff<T>(
     throw new Error('maxAttempts must be a positive number.');
   }
 
-  const cleanOptions = options
-    ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
-    : {};
+  const cleanOptions = Object.fromEntries(
+    Object.entries((options ?? {}) as Record<string, unknown>).filter(
+      ([, value]) => value !== undefined,
+    ),
+  ) as Partial<RetryOptions>;
 
   const {
     maxAttempts,
@@ -366,6 +368,7 @@ export async function retryWithBackoff<T>(
       const is429 = errorStatus === 429 || isOverload;
       const is402 = errorStatus === 402;
       const isAuthError = errorStatus === 401 || errorStatus === 403;
+      const authErrorStatus: number | undefined = errorStatus;
 
       // Track consecutive 429 errors for bucket failover
       if (is429) {
@@ -411,7 +414,7 @@ export async function retryWithBackoff<T>(
             () =>
               `Calling onAuthError callback for status ${errorStatus} before retry`,
           );
-          await options.onAuthError({ errorStatus: errorStatus ?? 401 });
+          await options.onAuthError({ errorStatus: authErrorStatus ?? 401 });
         } catch (handlerError) {
           // Log but don't fail - the retry should still proceed
           logger.debug(

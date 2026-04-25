@@ -632,19 +632,17 @@ export class CoreToolScheduler {
       // Execute all tools in parallel and wait for all to complete
       // @requirement:HOOK-134 - Hook results are now awaited, so we wait for all executions
       await Promise.all(
-        callsToExecute
-          .filter((toolCall) => toolCall.status === 'scheduled')
-          .map((toolCall) => {
-            const scheduledCall = toolCall;
-            const executionIndex = executionIndices.get(
-              scheduledCall.request.callId,
-            )!;
-            return this.launchToolExecution(
-              scheduledCall,
-              executionIndex,
-              signal,
-            );
-          }),
+        callsToExecute.map((toolCall) => {
+          const scheduledCall = toolCall;
+          const executionIndex = executionIndices.get(
+            scheduledCall.request.callId,
+          )!;
+          return this.launchToolExecution(
+            scheduledCall,
+            executionIndex,
+            signal,
+          );
+        }),
       );
     }
   }

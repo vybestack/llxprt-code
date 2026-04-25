@@ -304,7 +304,7 @@ function applyRuntimeFlags(
   config.checkpointing = params.checkpointing ?? false;
   config.dumpOnError = params.dumpOnError ?? false;
   config.proxy = params.proxy;
-  config.cwd = params.cwd ?? process.cwd();
+  config.cwd = params.cwd;
   config.fileDiscoveryService = params.fileDiscoveryService ?? null;
   config.bugCommand = params.bugCommand;
   config.model = params.model;

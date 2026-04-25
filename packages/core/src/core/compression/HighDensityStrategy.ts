@@ -293,7 +293,7 @@ export class HighDensityStrategy implements CompressionStrategy {
       if (entry.speaker === 'human' || entry.speaker === 'ai') {
         // Preserve human and AI entries intact (REQ-HD-008.4)
         newHistory.push(entry);
-      } else if (entry.speaker === 'tool') {
+      } else {
         // Summarize tool response blocks (REQ-HD-008.3)
         const summarized = this.summarizeToolResponseBlocks(entry, history);
         newHistory.push(summarized);

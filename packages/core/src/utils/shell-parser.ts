@@ -119,19 +119,19 @@ export function parseShellCommand(
   }
 
   const deadline = performance.now() + timeoutMicros / 1000;
-  let timedOut = false;
+  const parseState = { timedOut: false };
 
   try {
     const tree = parser.parse(command, null, {
       progressCallback: () => {
         if (performance.now() > deadline) {
-          timedOut = true;
+          parseState.timedOut = true;
           return true as unknown as void; // Returning true cancels parsing
         }
       },
     });
 
-    if (timedOut) {
+    if (parseState.timedOut) {
       debugLogger.error('Bash command parsing timed out for command:', command);
       return null;
     }
@@ -295,7 +295,7 @@ function hasPromptCommandTransform(root: Node): boolean {
 
         if (
           operatorNode?.text === '@' &&
-          transformNode?.text?.toLowerCase() === 'p'
+          transformNode?.text.toLowerCase() === 'p'
         ) {
           return true;
         }

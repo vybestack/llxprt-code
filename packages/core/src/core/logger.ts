@@ -234,7 +234,10 @@ export class Logger {
 
   async getPreviousUserMessages(): Promise<string[]> {
     if (!this.initialized) return [];
-    return this.logs
+    const logsWithPersistedTypes: Array<
+      Omit<LogEntry, 'type'> & { type: string }
+    > = this.logs;
+    return logsWithPersistedTypes
       .filter((entry) => entry.type === MessageSenderType.USER)
       .sort((a, b) => {
         const dateA = new Date(a.timestamp).getTime();

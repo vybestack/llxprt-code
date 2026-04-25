@@ -70,7 +70,7 @@ function getRealPath(path: string): string {
  * Manages the connection to and interaction with the IDE server.
  */
 export class IdeClient {
-  private static instance: IdeClient;
+  private static instance: IdeClient | undefined;
   private client: Client | undefined = undefined;
   private state: IDEConnectionState = {
     status: IDEConnectionStatus.Disconnected,

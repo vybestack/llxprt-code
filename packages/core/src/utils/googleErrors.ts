@@ -251,9 +251,9 @@ function fromGaxiosError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && data !== null) {
+    if (typeof data === 'object') {
       if ('error' in data) {
-        outerError = (data as { error: ErrorShape }).error;
+        outerError = (data as { error?: ErrorShape }).error;
       }
     }
   }
@@ -288,16 +288,16 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
         data = JSON.parse(data);
       } catch (_) {
         // Not a JSON string, can't parse.
+        const stringData = String(data);
+
         // Try one more fallback: look for the first '{' and last '}'
-        if (typeof data === 'string') {
-          const firstBrace = data.indexOf('{');
-          const lastBrace = data.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-            try {
-              data = JSON.parse(data.substring(firstBrace, lastBrace + 1));
-            } catch (__) {
-              // Still failed
-            }
+        const firstBrace = stringData.indexOf('{');
+        const lastBrace = stringData.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          try {
+            data = JSON.parse(stringData.substring(firstBrace, lastBrace + 1));
+          } catch (__) {
+            // Still failed
           }
         }
       }
@@ -307,9 +307,9 @@ function fromApiError(errorObj: object): ErrorShape | undefined {
       data = data[0];
     }
 
-    if (typeof data === 'object' && data !== null) {
+    if (typeof data === 'object') {
       if ('error' in data) {
-        outerError = (data as { error: ErrorShape }).error;
+        outerError = (data as { error?: ErrorShape }).error;
       }
     }
   }

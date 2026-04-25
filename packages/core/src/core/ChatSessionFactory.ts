@@ -303,7 +303,7 @@ export async function createChatSession(
       providerRuntime,
       contentGeneratorConfig: config.getContentGeneratorConfig(),
       toolRegistry,
-      providerManager: config.getProviderManager?.(),
+      providerManager: config.getProviderManager(),
     },
     overrides: { historyService, contentGenerator },
   });

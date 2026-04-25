@@ -125,7 +125,7 @@ export async function estimatePendingTokens(
         );
         try {
           const blockStrings = content.blocks
-            ?.map((block) => {
+            .map((block) => {
               switch (block.type) {
                 case 'text':
                   return block.text;

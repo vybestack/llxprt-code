@@ -261,9 +261,7 @@ export class ProxySocketClient {
   private resetIdleTimer(): void {
     this.cancelIdleTimer();
     this.idleTimer = setTimeout(() => this.gracefulClose(), IDLE_TIMEOUT_MS);
-    if (this.idleTimer.unref) {
-      this.idleTimer.unref();
-    }
+    this.idleTimer.unref();
   }
 
   private cancelIdleTimer(): void {

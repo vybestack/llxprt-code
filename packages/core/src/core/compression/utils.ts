@@ -311,15 +311,13 @@ export async function runVerificationPass(
     let verifiedText = '';
     let lastBlockWasNonText = false;
     for await (const chunk of stream) {
-      if (chunk.blocks) {
-        const result = aggregateTextFromBlocks(
-          chunk.blocks,
-          verifiedText,
-          lastBlockWasNonText,
-        );
-        verifiedText = result.text;
-        lastBlockWasNonText = result.lastBlockWasNonText;
-      }
+      const result = aggregateTextFromBlocks(
+        chunk.blocks,
+        verifiedText,
+        lastBlockWasNonText,
+      );
+      verifiedText = result.text;
+      lastBlockWasNonText = result.lastBlockWasNonText;
     }
 
     const trimmed = verifiedText.trim();
