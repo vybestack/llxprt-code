@@ -365,18 +365,12 @@ function mergeSettings(
     system.ui?.theme ??
     systemDefaults.ui?.theme ??
     schemaDefaults.ui?.theme;
-  if (merged.ui) {
-    merged.ui.theme = prioritizedTheme;
-  }
+  merged.ui.theme = prioritizedTheme;
 
   return merged as MergedSettings;
 }
 
 function migrateLegacyInteractiveShellSetting(settings: Settings): void {
-  if (!settings || typeof settings !== 'object') {
-    return;
-  }
-
   const tools = settings.tools;
   if (!tools || typeof tools !== 'object') {
     return;
@@ -392,7 +386,7 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
   }
 
   const legacyShell = toolSettings['shell'];
-  if (legacyShell && typeof legacyShell === 'object') {
+  if (typeof legacyShell === 'object' && legacyShell !== null) {
     const shellSettings = legacyShell as Record<string, unknown>;
     const shellFlag = shellSettings['enableInteractiveShell'];
     if (typeof shellFlag === 'boolean') {
@@ -418,10 +412,6 @@ function migrateLegacyInteractiveShellSetting(settings: Settings): void {
  * Called per-scope before merging, so each scope's settings file is independently migrated.
  */
 function migrateHooksConfig(settings: Settings): void {
-  if (!settings || typeof settings !== 'object') {
-    return;
-  }
-
   const hooks = settings.hooks as Record<string, unknown> | undefined;
   if (!hooks) return;
 
@@ -430,7 +420,11 @@ function migrateHooksConfig(settings: Settings): void {
 
   if (!needsMigration) return;
 
-  const hooksConfig = (settings.hooksConfig as Record<string, unknown>) ?? {};
+  const rawHooksConfig = (settings as Record<string, unknown>)['hooksConfig'];
+  const hooksConfig =
+    typeof rawHooksConfig === 'object' && rawHooksConfig !== null
+      ? (rawHooksConfig as Record<string, unknown>)
+      : {};
   const newHooks: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(hooks)) {
@@ -517,12 +511,14 @@ export class LoadedSettings {
       const nested = parts.slice(1).join('.');
 
       // Ensure the top-level object exists
-      if (!settingsFile.settings[topLevel]) {
-        (settingsFile.settings as Record<string, unknown>)[topLevel] = {};
+      const settingsRecord = settingsFile.settings as Record<string, unknown>;
+      const existingTopLevel = settingsRecord[topLevel];
+      if (typeof existingTopLevel !== 'object' || existingTopLevel === null) {
+        settingsRecord[topLevel] = {};
       }
 
       // Navigate to the nested property
-      let current = settingsFile.settings[topLevel] as Record<string, unknown>;
+      let current = settingsRecord[topLevel] as Record<string, unknown>;
       const nestedParts = nested.split('.');
       for (let i = 0; i < nestedParts.length - 1; i++) {
         current[nestedParts[i]] ??= {};
@@ -581,7 +577,7 @@ export class LoadedSettings {
 
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
-  while (true) {
+  for (;;) {
     // prefer gemini-specific .env under LLXPRT_DIR
     const geminiEnvPath = path.join(currentDir, LLXPRT_DIR, '.env');
     if (fs.existsSync(geminiEnvPath)) {
@@ -592,7 +588,7 @@ function findEnvFile(startDir: string): string | null {
       return envPath;
     }
     const parentDir = path.dirname(currentDir);
-    if (parentDir === currentDir || !parentDir) {
+    if (parentDir === currentDir) {
       // check .env under home as fallback, again preferring gemini-specific .env
       const homeGeminiEnvPath = path.join(homedir(), LLXPRT_DIR, '.env');
       if (fs.existsSync(homeGeminiEnvPath)) {
@@ -655,7 +651,7 @@ export function loadEnvironment(settings: Settings): void {
       const parsedEnv = dotenv.parse(envFileContent);
 
       const excludedVars =
-        settings?.excludedProjectEnvVars ?? DEFAULT_EXCLUDED_ENV_VARS;
+        settings.excludedProjectEnvVars ?? DEFAULT_EXCLUDED_ENV_VARS;
       const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {
