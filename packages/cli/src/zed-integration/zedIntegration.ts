@@ -760,7 +760,18 @@ export class Session {
         const toolResponseParts: Part[] = [];
 
         for (const fc of functionCalls) {
-          const response = await this.runTool(pendingSend.signal, promptId, fc);
+          const signal = pendingSend.signal;
+          if (signal.aborted) {
+            return { stopReason: 'cancelled' };
+          }
+
+          const response = await this.runTool(signal, promptId, fc);
+
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- AbortSignal can flip while runTool awaits; avoid appending responses after cancellation.
+          if (signal.aborted) {
+            return { stopReason: 'cancelled' };
+          }
+
           toolResponseParts.push(...response.parts);
           if (response.message) {
             fallbackMessages.push(response.message);

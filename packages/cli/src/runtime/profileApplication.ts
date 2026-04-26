@@ -629,7 +629,7 @@ export async function applyProfileWithGuards(
     aliases: string[],
     targetKey: 'auth-key' | 'auth-keyfile' | 'base-url',
   ): void => {
-    if (sanitizedEphemeralSettings[targetKey] === undefined) {
+    if (sanitizedEphemeralSettings[targetKey] == null) {
       for (const alias of aliases) {
         const candidate = sanitizedModelParams[alias as keyof ModelParams];
         if (typeof candidate === 'string' && candidate.trim() !== '') {
