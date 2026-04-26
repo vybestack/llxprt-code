@@ -235,37 +235,21 @@ export function createIsolatedRuntimeContext(
       settingsService,
     });
 
-  const configWithManagers = config as Config & {
-    getProfileManager?: () => ProfileManager | undefined;
-    setProfileManager?: (manager: ProfileManager) => void;
-    getSubagentManager?: () => SubagentManager | undefined;
-    setSubagentManager?: (manager: SubagentManager) => void;
-  };
-  const optionsConfigWithManagers = options.config as
-    | (Config & {
-        getProfileManager?: () => ProfileManager | undefined;
-        getSubagentManager?: () => SubagentManager | undefined;
-      })
-    | undefined;
-
   const llxprtDir = path.join(os.homedir(), '.llxprt');
   const resolvedProfileManager =
-    optionsConfigWithManagers?.getProfileManager?.() ??
-    configWithManagers.getProfileManager?.() ??
+    config.getProfileManager() ??
     new ProfileManager(path.join(llxprtDir, 'profiles'));
   const resolvedSubagentManager =
-    optionsConfigWithManagers?.getSubagentManager?.() ??
-    configWithManagers.getSubagentManager?.() ??
+    config.getSubagentManager() ??
     new SubagentManager(
       path.join(llxprtDir, 'subagents'),
       resolvedProfileManager,
     );
 
-  configWithManagers.setProfileManager?.(resolvedProfileManager);
-  configWithManagers.setSubagentManager?.(resolvedSubagentManager);
+  config.setProfileManager(resolvedProfileManager);
+  config.setSubagentManager(resolvedSubagentManager);
 
-  const resolvedSettingsService =
-    config.getSettingsService() ?? settingsService;
+  const resolvedSettingsService = config.getSettingsService();
   const sessionMessageBus = new MessageBus(
     config.getPolicyEngine(),
     config.getDebugMode(),
