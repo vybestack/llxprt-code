@@ -52,7 +52,7 @@ interface EffectiveExtensionAutoUpdateSettings {
   checkIntervalHours: number;
   installMode: ExtensionAutoUpdateInstallMode;
   notificationLevel: ExtensionAutoUpdateNotificationLevel;
-  perExtension: Record<string, ExtensionAutoUpdatePerExtensionSetting>;
+  perExtension: Partial<Record<string, ExtensionAutoUpdatePerExtensionSetting>>;
 }
 
 export interface ExtensionUpdateHistoryEntry {
@@ -327,7 +327,7 @@ export class ExtensionAutoUpdater {
         isActive: true,
         path: extension.path,
         installMetadata: extension.installMetadata,
-        contextFiles: extension.contextFiles || [],
+        contextFiles: extension.contextFiles,
       };
 
       // Call the update checker which will update entry.state via callback
@@ -403,7 +403,7 @@ export class ExtensionAutoUpdater {
         isActive: true,
         path: extension.path,
         installMetadata: extension.installMetadata,
-        contextFiles: extension.contextFiles || [],
+        contextFiles: extension.contextFiles,
       };
 
       const info = await this.updateExecutor(
