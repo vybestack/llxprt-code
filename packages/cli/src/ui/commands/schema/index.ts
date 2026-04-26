@@ -24,14 +24,14 @@ interface FlattenedPath {
   readonly description?: string;
 }
 
-export type CompletionInput =
-  | string
-  | {
-      args?: string;
-      completedArgs?: readonly string[];
-      partialArg?: string;
-      commandPathLength?: number;
-    };
+interface CompletionInputObject {
+  args?: string;
+  completedArgs?: readonly string[];
+  partialArg?: string;
+  commandPathLength?: number;
+}
+
+export type CompletionInput = string | CompletionInputObject;
 
 interface NormalizedInput {
   commandPathLength: number;
@@ -99,11 +99,11 @@ function normalizeCompletionContext(
 
   let commandPathLength = tokens.length > 0 ? 1 : 0;
   let completedArgs: string[] = [];
-  let partialArg = hasTrailingSpace ? '' : (tokenInfo.partialToken ?? '');
+  let partialArg = hasTrailingSpace ? '' : tokenInfo.partialToken;
   let explicitCompleted = false;
   let explicitPartial = false;
 
-  if (typeof input === 'object' && input !== null) {
+  if (typeof input === 'object') {
     if (
       typeof input.commandPathLength === 'number' &&
       Number.isFinite(input.commandPathLength)
@@ -141,7 +141,7 @@ function normalizeCompletionContext(
   }
 
   if (!explicitPartial) {
-    partialArg = hasTrailingSpace ? '' : (tokenInfo.partialToken ?? '');
+    partialArg = hasTrailingSpace ? '' : tokenInfo.partialToken;
     if (tokens.length <= sanitizedPath) {
       partialArg = '';
     }
@@ -180,7 +180,7 @@ function resolveActiveStep(
   schema: CommandArgumentSchema,
   completedArgs: readonly string[],
 ): ActiveContext {
-  let currentSchema = schema ?? [];
+  let currentSchema = schema;
   const remainingArgs = [...completedArgs];
   let consumedCount = 0;
   let consumedLiterals = 0;
@@ -269,7 +269,7 @@ async function suggestForValue(
     if (node.options?.length) {
       // Get the fuzzy filtering setting from context
       // Default to true if setting is not defined
-      const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+      const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
       const enableFuzzy = settingValue ?? true;
 
       // Use filterCompletions for both fuzzy and exact prefix matching
@@ -341,7 +341,7 @@ function suggestForLiterals(
 
   // Get the fuzzy filtering setting from context
   // Default to true if setting is not defined
-  const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+  const settingValue = ctx.services.settings.merged.enableFuzzyFiltering;
   const enableFuzzy = settingValue ?? true;
 
   // Filter single-level options
@@ -496,7 +496,7 @@ export function tokenize(fullLine: string): TokenInfo {
     tokens.push(current);
   }
 
-  const firstToken = tokens[0];
+  const firstToken = tokens.length === 0 ? undefined : tokens[0];
   const prefixChars = new Set<string>(['/', '@']);
   const prefixChar = firstToken?.[0];
   // Stryker disable next-line BooleanLiteral
