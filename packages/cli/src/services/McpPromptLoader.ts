@@ -42,7 +42,7 @@ export class McpPromptLoader implements ICommandLoader {
     }
     const mcpServers = this.config.getMcpServers() ?? {};
     for (const serverName in mcpServers) {
-      const prompts = getMCPServerPrompts(this.config, serverName) ?? [];
+      const prompts = getMCPServerPrompts(this.config, serverName);
       for (const prompt of prompts) {
         // Sanitize prompt names to ensure they are valid slash commands (e.g. "Prompt Name" -> "Prompt-Name")
         const commandName = `${prompt.name}`.trim().replace(/\s+/g, '-');
@@ -66,20 +66,20 @@ export class McpPromptLoader implements ICommandLoader {
                   };
                 }
 
+                const promptArgs = prompt.arguments;
                 let helpMessage = `Arguments for "${prompt.name}":\n\n`;
-                if (prompt.arguments && prompt.arguments.length > 0) {
-                  helpMessage += `You can provide arguments by name (e.g., --argName="value") or by position.\n\n`;
-                  helpMessage += `e.g., ${prompt.name} ${prompt.arguments?.map((_) => `"foo"`)} is equivalent to ${prompt.name} ${prompt.arguments?.map((arg) => `--${arg.name}="foo"`)}\n\n`;
-                }
-                for (const arg of prompt.arguments) {
+                helpMessage += `You can provide arguments by name (e.g., --argName="value") or by position.\n\n`;
+                helpMessage += `e.g., ${prompt.name} ${promptArgs.map(() => `"foo"`)} is equivalent to ${prompt.name} ${promptArgs.map((arg) => `--${arg.name}="foo"`)}\n\n`;
+                for (const arg of promptArgs) {
                   helpMessage += `  --${arg.name}\n`;
                   if (arg.description) {
                     helpMessage += `    ${arg.description}\n`;
                   }
                   helpMessage += `    (required: ${
-                    arg.required ? 'yes' : 'no'
+                    arg.required === true ? 'yes' : 'no'
                   })\n\n`;
                 }
+
                 return {
                   type: 'message',
                   messageType: 'info',
@@ -111,8 +111,7 @@ export class McpPromptLoader implements ICommandLoader {
 
             try {
               const mcpServers = this.config.getMcpServers() ?? {};
-              const mcpServerConfig = mcpServers[serverName];
-              if (!mcpServerConfig) {
+              if (!Object.hasOwn(mcpServers, serverName)) {
                 return {
                   type: 'message',
                   messageType: 'error',
@@ -234,7 +233,8 @@ export class McpPromptLoader implements ICommandLoader {
     while ((match = namedArgRegex.exec(userArgs)) !== null) {
       const key = match[1];
       // Extract the quoted or unquoted argument and remove escape chars.
-      const value = (match[2] ?? match[3]).replace(/\\(.)/g, '$1');
+      const value = (match.at(2) ?? match.at(3) ?? '').replace(/\\(.)/g, '$1');
+
       argValues[key] = value;
       // Capture text between matches as potential positional args
       if (match.index > lastIndex) {
@@ -253,8 +253,9 @@ export class McpPromptLoader implements ICommandLoader {
     const positionalArgRegex = /(?:"((?:\\.|[^"\\])*)"|([^ ]+))/g;
     const positionalArgs: string[] = [];
     while ((match = positionalArgRegex.exec(positionalArgsString)) !== null) {
-      // Extract the quoted or unquoted argument and remove escape chars.
-      positionalArgs.push((match[1] ?? match[2]).replace(/\\(.)/g, '$1'));
+      positionalArgs.push(
+        (match.at(1) ?? match.at(2) ?? '').replace(/\\(.)/g, '$1'),
+      );
     }
 
     if (!promptArgs) {
@@ -265,9 +266,8 @@ export class McpPromptLoader implements ICommandLoader {
         promptInputs[arg.name] = argValues[arg.name];
       }
     }
-
     const unfilledArgs = promptArgs.filter(
-      (arg) => arg.required && !promptInputs[arg.name],
+      (arg) => arg.required === true && !promptInputs[arg.name],
     );
 
     if (unfilledArgs.length === 1) {
