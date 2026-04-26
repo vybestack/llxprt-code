@@ -23,21 +23,25 @@ import {
 import type { IProvider } from '@vybestack/llxprt-code-core/providers/IProvider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
-function unwrapProvider(provider: IProvider): IProvider {
-  if (
-    provider &&
-    typeof provider === 'object' &&
+type WrappedProvider = IProvider & { wrappedProvider: IProvider };
+
+function hasWrappedProvider(provider: IProvider): provider is WrappedProvider {
+  return (
     'wrappedProvider' in provider &&
-    provider.wrappedProvider
-  ) {
-    return (provider as unknown as { wrappedProvider: IProvider })
-      .wrappedProvider;
+    (provider as { wrappedProvider?: unknown }).wrappedProvider !== undefined &&
+    (provider as { wrappedProvider?: unknown }).wrappedProvider !== null
+  );
+}
+
+function unwrapProvider(provider: IProvider): IProvider {
+  if (hasWrappedProvider(provider)) {
+    return provider.wrappedProvider;
   }
   return provider;
 }
 
 function resolveBaseProviderId(provider: IProvider): string {
-  const constructorName = provider?.constructor?.name ?? '';
+  const constructorName = provider.constructor.name;
   if (constructorName === 'OpenAIProvider') {
     return 'openai';
   }
@@ -141,10 +145,9 @@ async function handleSaveAlias(
   }
 
   const defaultModel =
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing: chain model getters where empty string should continue to next fallback
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- provider boundary: empty model from runtime should fall back to the provider default
     unwrappedProvider.getCurrentModel?.() ||
-    unwrappedProvider.getDefaultModel?.() ||
-    '';
+    unwrappedProvider.getDefaultModel();
 
   const aliasConfig: ProviderAliasConfig = {
     baseProvider: baseProviderId,
@@ -186,7 +189,7 @@ export const providerCommand: SlashCommand = {
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
     const providerManager = getProviderManager();
-    const trimmedArgs = args?.trim();
+    const trimmedArgs = args.trim();
 
     if (!trimmedArgs) {
       // Open interactive provider selection dialog
@@ -240,7 +243,7 @@ export const providerCommand: SlashCommand = {
         };
       }
 
-      for (const info of switchResult.infoMessages ?? []) {
+      for (const info of switchResult.infoMessages) {
         if (!info) {
           continue;
         }
