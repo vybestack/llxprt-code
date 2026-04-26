@@ -98,7 +98,7 @@ async function fetchApiKeyProviderQuota(
 ): Promise<{ provider: string; lines: string[] } | null> {
   let provider: 'zai' | 'synthetic' | 'chutes' | 'kimi' | null = null;
   let baseUrlForFetch: string | undefined;
-  const activeProviderName = runtimeApi.getActiveProviderName?.();
+  const activeProviderName = runtimeApi.getActiveProviderName();
 
   // Strategy 1: Check ephemeral base-url setting (highest priority)
   const ephemeralBaseUrl = runtimeApi.getEphemeralSetting('base-url');
@@ -112,51 +112,48 @@ async function fetchApiKeyProviderQuota(
 
   // Strategy 2 & 3: If not found, try provider config base URLs
   if (!provider && activeProviderName) {
-    const providerManager = runtimeApi.getCliProviderManager?.();
-    if (providerManager) {
-      const providerInstance =
-        providerManager.getProviderByName?.(activeProviderName);
-      if (providerInstance) {
-        // Try providerConfig['base-url'] first (kebab-case per PR #1491)
-        const providerConfig = (
-          providerInstance as {
-            providerConfig?: { 'base-url'?: string };
-          }
-        ).providerConfig;
-        if (providerConfig) {
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
-          const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
-          if (configBaseUrl) {
-            provider = detectApiKeyProvider(configBaseUrl);
-            baseUrlForFetch = configBaseUrl;
-            if (provider) {
-              logger.debug(
-                () => `Detected ${provider} from provider config base-url`,
-              );
-            }
+    const providerManager = runtimeApi.getCliProviderManager();
+    const providerInstance =
+      providerManager.getProviderByName(activeProviderName);
+    if (providerInstance) {
+      // Try providerConfig['base-url'] first (kebab-case per PR #1491)
+      const providerConfig = (
+        providerInstance as {
+          providerConfig?: { 'base-url'?: string };
+        }
+      ).providerConfig;
+      if (providerConfig) {
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
+        const configBaseUrl = providerConfig['base-url']?.trim() || undefined;
+        if (configBaseUrl) {
+          provider = detectApiKeyProvider(configBaseUrl);
+          baseUrlForFetch = configBaseUrl;
+          if (provider) {
+            logger.debug(
+              () => `Detected ${provider} from provider config base-url`,
+            );
           }
         }
+      }
 
-        // Try baseProviderConfig['base-url'] if still not found (kebab-case per PR #1491)
-        if (!provider) {
-          const baseProviderConfig = (
-            providerInstance as {
-              baseProviderConfig?: { 'base-url'?: string };
-            }
-          ).baseProviderConfig;
-          if (baseProviderConfig) {
-            const baseConfigUrl =
-              // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
-              baseProviderConfig['base-url']?.trim() || undefined;
-            if (baseConfigUrl) {
-              provider = detectApiKeyProvider(baseConfigUrl);
-              baseUrlForFetch = baseConfigUrl;
-              if (provider) {
-                logger.debug(
-                  () =>
-                    `Detected ${provider} from base provider config base-url`,
-                );
-              }
+      // Try baseProviderConfig['base-url'] if still not found (kebab-case per PR #1491)
+      if (!provider) {
+        const baseProviderConfig = (
+          providerInstance as {
+            baseProviderConfig?: { 'base-url'?: string };
+          }
+        ).baseProviderConfig;
+        if (baseProviderConfig) {
+          const baseConfigUrl =
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- intentional falsy coalescing for empty-string base-url
+            baseProviderConfig['base-url']?.trim() || undefined;
+          if (baseConfigUrl) {
+            provider = detectApiKeyProvider(baseConfigUrl);
+            baseUrlForFetch = baseConfigUrl;
+            if (provider) {
+              logger.debug(
+                () => `Detected ${provider} from base provider config base-url`,
+              );
             }
           }
         }
@@ -220,9 +217,10 @@ function formatGeminiQuotaLines(quotaData: Record<string, unknown>): string[] {
   const lines: string[] = [];
   for (const bucket of buckets) {
     const b = bucket as Record<string, unknown>;
-    const model = (b.modelId as string) ?? 'unknown';
-    const tokenType = (b.tokenType as string) ?? 'tokens';
-    const remaining = (b.remainingAmount as string) ?? '?';
+    const model = typeof b.modelId === 'string' ? b.modelId : 'unknown';
+    const tokenType = typeof b.tokenType === 'string' ? b.tokenType : 'tokens';
+    const remaining =
+      typeof b.remainingAmount === 'string' ? b.remainingAmount : '?';
     const fraction =
       typeof b.remainingFraction === 'number'
         ? ` (${Math.round(b.remainingFraction * 100)}%)`
@@ -411,6 +409,7 @@ async function fetchAllQuotaInfo(
 async function defaultSessionView(context: CommandContext): Promise<void> {
   const now = new Date();
   const { sessionStartTime } = context.session.stats;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Runtime stats may be incomplete before session initialization.
   if (!sessionStartTime) {
     context.ui.addItem(
       {
