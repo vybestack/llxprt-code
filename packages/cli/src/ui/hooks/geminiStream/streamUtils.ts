@@ -150,9 +150,9 @@ export function splitPartsByRole(parts: Part[]): {
   const otherParts: Part[] = [];
 
   for (const part of parts) {
-    if (part && typeof part === 'object' && 'functionCall' in part) {
+    if ('functionCall' in part) {
       functionCalls.push(part);
-    } else if (part && typeof part === 'object' && 'functionResponse' in part) {
+    } else if ('functionResponse' in part) {
       functionResponses.push(part);
     } else {
       otherParts.push(part);
@@ -168,7 +168,7 @@ export function splitPartsByRole(parts: Part[]): {
 export function collectGeminiTools<
   T extends { request: { isClientInitiated?: boolean } },
 >(primaryTools: T[]): T[] {
-  return primaryTools.filter((t) => !t.request.isClientInitiated);
+  return primaryTools.filter((t) => t.request.isClientInitiated !== true);
 }
 
 /**
@@ -264,8 +264,10 @@ export function buildFullSplitItem(
     currentItem as HistoryItemGemini | HistoryItemGeminiContent | undefined
   )?.profileName;
   const profileName = liveProfileName ?? existingProfileName;
+  const type =
+    currentItem?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
   return {
-    type: (currentItem?.type as 'gemini' | 'gemini_content') ?? 'gemini',
+    type,
     text: sanitizedCombined,
     ...(profileName != null ? { profileName } : {}),
     ...(thinkingBlocks.length > 0
@@ -414,25 +416,21 @@ export function showCitations(
   config: Config,
 ): boolean {
   try {
-    const settingsService = config.getSettingsService();
-    if (settingsService) {
-      const enabled = settingsService.get('ui.showCitations');
-      if (enabled !== undefined) {
-        return enabled as boolean;
-      }
+    const enabled = config.getSettingsService().get('ui.showCitations');
+    if (enabled !== undefined) {
+      return enabled as boolean;
     }
   } catch {
     // Fall through to other methods
   }
 
-  const enabled = (settings?.merged as { ui?: { showCitations?: boolean } })?.ui
-    ?.showCitations;
+  const enabled = settings.merged.ui.showCitations;
   if (enabled !== undefined) {
     return enabled;
   }
 
   const server = getCodeAssistServer(config);
-  return (server && server.userTier !== UserTierId.FREE) ?? false;
+  return server != null && server.userTier !== UserTierId.FREE;
 }
 
 /**
@@ -442,13 +440,7 @@ export function showCitations(
  */
 export function getCurrentProfileName(config: Config): string | null {
   try {
-    const settingsService = config.getSettingsService();
-    if (
-      settingsService &&
-      typeof settingsService.getCurrentProfileName === 'function'
-    ) {
-      return settingsService.getCurrentProfileName() ?? null;
-    }
+    return config.getSettingsService().getCurrentProfileName() ?? null;
   } catch {
     // Fall through if settings service unavailable
   }
