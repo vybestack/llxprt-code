@@ -26,6 +26,17 @@ import { debugLogger } from '@vybestack/llxprt-code-core';
 // Configure theming and parsing utilities.
 const lowlight = createLowlight(common);
 
+function getClassNames(node: Element): string[] {
+  const className = node.properties.className;
+  if (Array.isArray(className)) {
+    return className.filter(
+      (value): value is string => typeof value === 'string',
+    );
+  }
+
+  return typeof className === 'string' ? [className] : [];
+}
+
 function renderHastNode(
   node: Root | Element | HastText | RootContent,
   theme: Theme,
@@ -38,8 +49,7 @@ function renderHastNode(
 
   // Handle Element Nodes: Determine color and pass it down, don't wrap
   if (node.type === 'element') {
-    const nodeClasses: string[] =
-      (node.properties?.className as string[]) || [];
+    const nodeClasses = getClassNames(node);
     let elementColor: string | undefined = undefined;
 
     // Find color defined specifically for this element's class
@@ -57,7 +67,7 @@ function renderHastNode(
 
     // Recursively render children, passing the determined color down
     // Ensure child type matches expected HAST structure (ElementContent is common)
-    const children = node.children?.map(
+    const children = node.children.map(
       (child: ElementContent, index: number) => (
         <React.Fragment key={index}>
           {renderHastNode(child, theme, colorToPassDown)}
@@ -73,13 +83,13 @@ function renderHastNode(
   // Handle Root Node: Start recursion with initially inherited color
   if (node.type === 'root') {
     // Check if children array is empty - this happens when lowlight can't detect language – fall back to plain text
-    if (!node.children || node.children.length === 0) {
+    if (node.children.length === 0) {
       return null;
     }
 
     // Pass down the initial inheritedColor (likely undefined from the top call)
     // Ensure child type matches expected HAST structure (RootContent is common)
-    return node.children?.map((child: RootContent, index: number) => (
+    return node.children.map((child: RootContent, index: number) => (
       <React.Fragment key={index}>
         {renderHastNode(child, theme, inheritedColor)}
       </React.Fragment>
@@ -148,9 +158,10 @@ export function colorizeCode(
 ): React.ReactNode {
   const codeToHighlight = code.replace(/\n$/, '');
   const activeTheme = theme ?? themeManager.getActiveTheme();
-  const showLineNumbers = hideLineNumbers
-    ? false
-    : (settings?.merged.ui?.showLineNumbers ?? true);
+  const showLineNumbers =
+    hideLineNumbers === true
+      ? false
+      : (settings?.merged.ui.showLineNumbers ?? true);
 
   try {
     // Render the HAST tree using the adapted theme
