@@ -46,6 +46,31 @@ interface UseTokenMetricsTrackingOptions {
 export interface UseTokenMetricsTrackingResult {
   tokenMetrics: TokenMetrics;
 }
+type RuntimeHistoryService = Parameters<
+  RecordingIntegration['onHistoryServiceReplaced']
+>[0];
+
+interface RuntimeGeminiClientBoundary {
+  hasChatInitialized?: () => boolean;
+  getHistoryService?: () => RuntimeHistoryService | null | undefined;
+}
+
+interface RuntimeConfigBoundary {
+  getGeminiClient?: () => RuntimeGeminiClientBoundary | null | undefined;
+}
+
+function getInitializedHistoryService(
+  config: Config,
+): RuntimeHistoryService | null {
+  const runtimeConfig = config as RuntimeConfigBoundary;
+  const geminiClient = runtimeConfig.getGeminiClient?.();
+
+  if (geminiClient?.hasChatInitialized?.() !== true) {
+    return null;
+  }
+
+  return geminiClient.getHistoryService?.() ?? null;
+}
 
 function useHistoryTokenListener(
   config: Config,
@@ -62,51 +87,49 @@ function useHistoryTokenListener(
     const checkInterval = setInterval(() => {
       if (intervalCleared) return;
 
-      const geminiClient = config.getGeminiClient();
+      const historyService = getInitializedHistoryService(config);
 
-      if (geminiClient?.hasChatInitialized?.()) {
-        const historyService = geminiClient.getHistoryService?.() ?? null;
+      // Handle service identity change (including transition to null).
+      if (historyService === lastHistoryServiceRef.current) {
+        return;
+      }
 
-        // Handle service identity change (including transition to null).
-        if (historyService !== lastHistoryServiceRef.current) {
-          // Clean up listener from the old service regardless of whether the
-          // new service is truthy — a reset may have cleared the service.
-          if (historyTokenCleanupRef.current) {
-            historyTokenCleanupRef.current();
-            historyTokenCleanupRef.current = null;
+      // Clean up listener from the old service regardless of whether the
+      // new service is truthy — a reset may have cleared the service.
+      if (historyTokenCleanupRef.current) {
+        historyTokenCleanupRef.current();
+        historyTokenCleanupRef.current = null;
+      }
+      lastHistoryServiceRef.current = historyService;
+
+      if (historyService) {
+        tokenLogger.debug(
+          () => 'Found new history service, setting up listener',
+        );
+
+        const handleTokensUpdated = (event: { totalTokens: number }) => {
+          tokenLogger.debug(
+            () =>
+              `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
+          );
+          if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
+            lastPublishedHistoryTokensRef.current = event.totalTokens;
+            updateHistoryTokenCount(event.totalTokens);
           }
-          lastHistoryServiceRef.current = historyService ?? null;
+        };
 
-          if (historyService) {
-            tokenLogger.debug(
-              () => 'Found new history service, setting up listener',
-            );
+        historyService.on('tokensUpdated', handleTokensUpdated);
 
-            const handleTokensUpdated = (event: { totalTokens: number }) => {
-              tokenLogger.debug(
-                () =>
-                  `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
-              );
-              if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
-                lastPublishedHistoryTokensRef.current = event.totalTokens;
-                updateHistoryTokenCount(event.totalTokens);
-              }
-            };
+        const currentTokens = historyService.getTotalTokens();
+        tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
+        lastPublishedHistoryTokensRef.current = currentTokens;
+        updateHistoryTokenCount(currentTokens);
 
-            historyService.on('tokensUpdated', handleTokensUpdated);
-
-            const currentTokens = historyService.getTotalTokens();
-            tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
-            lastPublishedHistoryTokensRef.current = currentTokens;
-            updateHistoryTokenCount(currentTokens);
-
-            historyTokenCleanupRef.current = () => {
-              historyService.off('tokensUpdated', handleTokensUpdated);
-            };
-          } else {
-            tokenLogger.debug(() => 'History service reset to undefined');
-          }
-        }
+        historyTokenCleanupRef.current = () => {
+          historyService.off('tokensUpdated', handleTokensUpdated);
+        };
+      } else {
+        tokenLogger.debug(() => 'History service reset to undefined');
       }
     }, 100); // Check every 100ms
 
@@ -145,28 +168,25 @@ function useRecordingSubscription(
     // recording integrations. The polling interval below handles this: each tick checks
     // recordingIntegrationRef.current?.onHistoryServiceReplaced, so a recording
     // integration that arrives after mount is automatically picked up on the next tick.
-    if (!recordingIntegrationRef.current) return;
+    if (!recordingIntegrationRef.current) {
+      return undefined;
+    }
 
     let intervalCleared = false;
     const checkInterval = setInterval(() => {
       if (intervalCleared) return;
 
-      const geminiClient = config.getGeminiClient();
-      if (geminiClient?.hasChatInitialized?.()) {
-        const historyService = geminiClient.getHistoryService?.();
-        if (
-          historyService &&
-          historyService !== recordingSubscribedServiceRef.current
-        ) {
-          recordingSubscribedServiceRef.current = historyService;
-          recordingIntegrationRef.current?.onHistoryServiceReplaced(
-            historyService,
-          );
-          tokenLogger.debug(
-            'RecordingIntegration subscribed to HistoryService',
-          );
-        }
+      const historyService = getInitializedHistoryService(config);
+      if (
+        historyService === null ||
+        historyService === recordingSubscribedServiceRef.current
+      ) {
+        return;
       }
+
+      recordingSubscribedServiceRef.current = historyService;
+      recordingIntegrationRef.current?.onHistoryServiceReplaced(historyService);
+      tokenLogger.debug('RecordingIntegration subscribed to HistoryService');
     }, 100);
 
     return () => {
