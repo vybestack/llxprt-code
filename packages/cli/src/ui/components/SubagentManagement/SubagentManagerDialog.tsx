@@ -9,6 +9,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { useUIState } from '../../contexts/UIStateContext.js';
+import type { CommandContext } from '../../commands/types.js';
+
 import {
   SubagentView,
   type SubagentManagerDialogProps,
@@ -28,11 +30,10 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   initialView = SubagentView.MENU,
   initialSubagentName,
 }) => {
-  const uiState = useUIState();
-  const { commandContext } = uiState;
-  const subagentManager = commandContext?.services?.subagentManager;
-  const profileManager = commandContext?.services?.profileManager;
-  const activeProfileName = uiState.activeProfileName;
+  const { activeProfileName, commandContext } = useUIState();
+  const runtimeCommandContext = commandContext as CommandContext | undefined;
+  const subagentManager = runtimeCommandContext?.services.subagentManager;
+  const profileManager = runtimeCommandContext?.services.profileManager;
 
   const [state, setState] = useState<SubagentManagerState>({
     currentView: initialView,
@@ -237,7 +238,8 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       let finalPrompt = systemPrompt;
 
       if (mode === 'auto') {
-        const config = commandContext?.services?.config;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Subagent creation can be invoked before the runtime command context has a config service.
+        const config = runtimeCommandContext?.services?.config;
         if (!config) {
           throw new Error(
             'Configuration service unavailable. Set up the CLI before using auto mode.',
@@ -253,7 +255,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
       await subagentManager.saveSubagent(name, profile, finalPrompt);
       onClose();
     },
-    [subagentManager, onClose, commandContext],
+    [subagentManager, onClose, runtimeCommandContext],
   );
 
   // Handle profile attachment - check if we came from EDIT view
