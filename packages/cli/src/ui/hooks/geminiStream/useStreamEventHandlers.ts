@@ -146,8 +146,10 @@ function applyThoughtToState(
         item as HistoryItemGemini | HistoryItemGeminiContent | undefined
       )?.profileName;
       const pn = liveProfileName ?? ep;
+      const itemType =
+        item?.type === 'gemini_content' ? 'gemini_content' : 'gemini';
       return {
-        type: (item?.type as 'gemini' | 'gemini_content') ?? 'gemini',
+        type: itemType,
         text: item?.text ?? '',
         ...(pn != null ? { profileName: pn } : {}),
         thinkingBlocks: [...thinkingBlocksRef.current],
@@ -514,7 +516,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
 
       try {
         iterator = stream[Symbol.asyncIterator]();
-        while (true) {
+        for (;;) {
           // Use watchdog if timeout > 0, otherwise call iterator.next() directly
           let nextEvent: IteratorResult<GeminiEvent>;
           if (effectiveTimeoutMs > 0) {
@@ -733,11 +735,11 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
         userMessageTimestamp,
       );
       const showProfileChangeInChat =
-        settings?.merged?.showProfileChangeInChat ?? true;
+        settings.merged.showProfileChangeInChat ?? true;
       const liveProfileName = getCurrentProfileName(config);
       if (
         showProfileChangeInChat &&
-        liveProfileName &&
+        liveProfileName !== null &&
         lastProfileNameRef.current !== undefined &&
         liveProfileName !== lastProfileNameRef.current
       ) {
@@ -754,7 +756,7 @@ export function useStreamEventHandlers(deps: StreamEventHandlerDeps) {
     [
       addItem,
       config,
-      settings?.merged?.showProfileChangeInChat,
+      settings.merged.showProfileChangeInChat,
       lastProfileNameRef,
     ],
   );
