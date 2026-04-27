@@ -13,6 +13,12 @@ interface MockConfig {
   continuationEnabled?: boolean;
 }
 
+type ContinuationConfig = Config | MockConfig | null | undefined;
+
+interface ConfigWithEphemeralSettings {
+  getEphemeralSetting(key: string): unknown;
+}
+
 /**
  * Type guard to check if config has continuation enabled property (test mock)
  */
@@ -22,6 +28,33 @@ function isMockConfig(config: unknown): config is MockConfig {
     config !== null &&
     'continuationEnabled' in config
   );
+}
+
+function hasEphemeralSettings(
+  config: unknown,
+): config is ConfigWithEphemeralSettings {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'getEphemeralSetting' in config &&
+    typeof config.getEphemeralSetting === 'function'
+  );
+}
+
+function getContinuationEnabled(config: ContinuationConfig): unknown {
+  if (config === null || config === undefined) {
+    return true;
+  }
+
+  if (isMockConfig(config)) {
+    return config.continuationEnabled;
+  }
+
+  if (hasEphemeralSettings(config)) {
+    return config.getEphemeralSetting('todo-continuation');
+  }
+
+  return true;
 }
 
 /**
@@ -109,13 +142,15 @@ export class TodoContinuationService {
    * @param config Configuration for prompt generation
    * @returns Formatted continuation prompt string
    */
-  generateContinuationPrompt(config: ContinuationPromptConfig): string {
-    if (!config) {
+  generateContinuationPrompt(
+    config: ContinuationPromptConfig | null | undefined,
+  ): string {
+    if (config === null || config === undefined) {
       throw new Error('Configuration is required');
     }
 
     const taskDescription = this.truncateTaskDescription(
-      config.taskDescription || '',
+      config.taskDescription,
     );
 
     if (config.isYoloMode) {
@@ -138,9 +173,9 @@ export class TodoContinuationService {
    * @returns Evaluation result with decision and reasoning
    */
   checkContinuationConditions(
-    context: ContinuationContext,
+    context: ContinuationContext | null | undefined,
   ): ContinuationEvaluation {
-    if (!context) {
+    if (context === null || context === undefined) {
       throw new Error('Context is required');
     }
 
@@ -163,7 +198,7 @@ export class TodoContinuationService {
       };
     }
 
-    if (context.todoPaused) {
+    if (context.todoPaused === true) {
       return {
         shouldContinue: false,
         reason: 'Todo continuation paused by todo_pause tool',
@@ -227,8 +262,8 @@ export class TodoContinuationService {
    * @param todo Todo item to format
    * @returns Formatted task description string
    */
-  formatTaskDescription(todo: Todo): string {
-    if (!todo?.content) {
+  formatTaskDescription(todo: Todo | null | undefined): string {
+    if (todo === null || todo === undefined || todo.content.length === 0) {
       return 'Complete task';
     }
 
@@ -262,14 +297,12 @@ export class TodoContinuationService {
    * @param state Current continuation state
    * @returns Whether continuation is allowed
    */
-  shouldAllowContinuation(config: Config, state: ContinuationState): boolean {
+  shouldAllowContinuation(
+    config: ContinuationConfig,
+    state: ContinuationState,
+  ): boolean {
     // Check ephemeral setting safely
-    let continuationEnabled: unknown = true;
-    if (config && typeof config.getEphemeralSetting === 'function') {
-      continuationEnabled = config.getEphemeralSetting('todo-continuation');
-    } else if (isMockConfig(config)) {
-      continuationEnabled = config.continuationEnabled;
-    }
+    const continuationEnabled = getContinuationEnabled(config);
 
     if (continuationEnabled === false) {
       return false;
@@ -283,7 +316,7 @@ export class TodoContinuationService {
     }
 
     // Check time constraints
-    if (state.lastPromptTime) {
+    if (state.lastPromptTime !== undefined) {
       const timeSinceLastPrompt = Date.now() - state.lastPromptTime.getTime();
       if (
         timeSinceLastPrompt <
@@ -318,7 +351,7 @@ export class TodoContinuationService {
    * @returns Whether continuation should proceed
    */
   shouldContinue(
-    settings: Config,
+    settings: ContinuationConfig,
     hasActiveTodos: boolean,
     hasToolCalls: boolean,
   ): boolean {
@@ -333,12 +366,7 @@ export class TodoContinuationService {
     }
 
     // Check if continuation is enabled safely
-    let continuationEnabled: unknown = true;
-    if (settings && typeof settings.getEphemeralSetting === 'function') {
-      continuationEnabled = settings.getEphemeralSetting('todo-continuation');
-    } else if (isMockConfig(settings)) {
-      continuationEnabled = settings.continuationEnabled;
-    }
+    const continuationEnabled = getContinuationEnabled(settings);
 
     return continuationEnabled !== false;
   }
@@ -424,11 +452,11 @@ export class TodoContinuationService {
 
     let result = basePrompt;
 
-    if (previousFailure) {
+    if (previousFailure !== undefined && previousFailure.length > 0) {
       result += `\n\nPrevious failure information: ${previousFailure}`;
     }
 
-    if (attemptCount && attemptCount > 1) {
+    if (attemptCount !== undefined && attemptCount > 1) {
       const retryNote = `\n\nNote: This is continuation attempt #${attemptCount}. Please make sure to take concrete action.`;
       result += retryNote;
     }
@@ -462,11 +490,11 @@ export class TodoContinuationService {
 
     let result = basePrompt;
 
-    if (previousFailure) {
+    if (previousFailure !== undefined && previousFailure.length > 0) {
       result += `\n\nPrevious failure information: ${previousFailure}`;
     }
 
-    if (attemptCount && attemptCount > 1) {
+    if (attemptCount !== undefined && attemptCount > 1) {
       const urgentRetry = `\n\nATTEMPT #${attemptCount} - YOU MUST TAKE ACTION NOW. No more analysis, proceed with execution.`;
       result += urgentRetry;
     }
@@ -481,17 +509,7 @@ export class TodoContinuationService {
    */
   private evaluateAllConditions(context: ContinuationContext): ConditionSet {
     // Safely get ephemeral setting with fallback
-    let continuationSetting: unknown = true;
-    if (
-      context.config &&
-      typeof context.config.getEphemeralSetting === 'function'
-    ) {
-      continuationSetting =
-        context.config.getEphemeralSetting('todo-continuation');
-    } else if (isMockConfig(context.config)) {
-      // Support test mock structure
-      continuationSetting = context.config.continuationEnabled;
-    }
+    const continuationSetting = getContinuationEnabled(context.config);
 
     const hasActiveTodos = this.hasAnyActiveTodos(context.todos);
     const todoPaused = context.todoPaused === true;
@@ -555,7 +573,7 @@ export class TodoContinuationService {
    * @returns Whether time constraints are satisfied
    */
   private checkTimeConstraints(lastPromptTime?: Date): boolean {
-    if (!lastPromptTime) {
+    if (lastPromptTime === undefined) {
       return true; // No previous attempt, allowed
     }
 
