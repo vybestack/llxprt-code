@@ -121,8 +121,8 @@ export const DialogManager = ({
             );
 
             // Base URL message (extract from switchResult)
-            const baseUrlMsg = (switchResult.infoMessages ?? []).find(
-              (m) => m?.includes('Base URL') || m?.includes('base URL'),
+            const baseUrlMsg = switchResult.infoMessages.find(
+              (m) => m.includes('Base URL') || m.includes('base URL'),
             );
             if (baseUrlMsg) messages.push(baseUrlMsg);
 
@@ -236,7 +236,7 @@ export const DialogManager = ({
       }
 
       // Restore history to gemini client
-      await config.getGeminiClient()?.restoreHistory(resumeResult.history);
+      await config.getGeminiClient().restoreHistory(resumeResult.history);
 
       // Convert IContent[] to UI history items and load
       const uiHistory = iContentToHistoryItems(resumeResult.history);
@@ -514,7 +514,7 @@ export const DialogManager = ({
     return (
       <LoggingDialog
         entries={
-          (uiState.loggingDialogData?.entries || []) as Array<{
+          uiState.loggingDialogData.entries as Array<{
             timestamp: string;
             type: 'request' | 'response' | 'tool_call';
             provider: string;
