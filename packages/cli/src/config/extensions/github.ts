@@ -111,19 +111,16 @@ export function tryParseGithubUrl(source: string): GithubRepoInfo | null {
     throw new TypeError(`Invalid repo URL: ${source}`, { cause: e });
   }
 
-  if (!parsedUrl) {
-    throw new Error(`Invalid repo URL: ${source}`);
-  }
-  if (parsedUrl?.host !== 'github.com') {
+  if (parsedUrl.host !== 'github.com') {
     return null;
   }
   // The pathname should be "/owner/repo".
-  const parts = parsedUrl?.pathname
+  const parts = parsedUrl.pathname
     .split('/')
     // Remove the empty segments, fixes trailing and leading slashes
     .filter((part) => part !== '');
 
-  if (parts?.length !== 2) {
+  if (parts.length !== 2) {
     throw new Error(
       `Invalid GitHub repository source: ${source}. Expected "owner/repo" or a github repo uri.`,
     );
@@ -142,12 +139,10 @@ export function parseGitHubRepoForReleases(source: string): {
   repo: string;
 } {
   // Handle SCP-style SSH URLs.
-  if (source.startsWith('git@')) {
-    if (source.startsWith('git@github.com:')) {
-      throw new Error(
-        `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via HTTPS.`,
-      );
-    }
+  if (source.startsWith('git@github.com:')) {
+    throw new Error(
+      `GitHub release-based extensions are not supported for SSH. You must use an HTTPS URI with a personal access token to download releases from private repositories. You can set your personal access token in the GITHUB_TOKEN environment variable and install the extension via HTTPS.`,
+    );
   }
   // Default to a github repo path, so `source` can be just an org/repo
   let parsedUrl: URL | null = null;
@@ -329,11 +324,6 @@ export async function downloadFromGitHubRelease(
 
   try {
     const releaseData = await fetchReleaseFromGithub(owner, repo, ref);
-    if (!releaseData) {
-      throw new Error(
-        `No release data found for ${owner}/${repo}${ref ? ` at tag ${ref}` : ''}`,
-      );
-    }
 
     const asset = findReleaseAsset(releaseData.assets);
     let archiveUrl: string | undefined;
