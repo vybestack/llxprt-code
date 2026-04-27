@@ -13,16 +13,29 @@ import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
 import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
 import { CodexOAuthProvider } from '../auth/codex-oauth-provider.js';
-import type { TokenStore } from '../auth/types.js';
+import type { OAuthProvider, TokenStore } from '../auth/types.js';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
+
+type AddItemCallback = (
+  itemData: Omit<HistoryItemWithoutId, 'id'>,
+  baseTimestamp?: number,
+) => number;
+
+type OAuthProviderWithAddItem = OAuthProvider & {
+  setAddItem?: (addItem: AddItemCallback) => void;
+};
+
+type OAuthRegistrationManager = Pick<OAuthManager, 'registerProvider'> & {
+  getTokenStore?: () => TokenStore;
+};
 
 /**
  * Track which OAuth providers have been registered to avoid duplicate registration
  */
 const oauthLogger = new DebugLogger('llxprt:oauth:registration');
 
-let registeredProviders = new WeakMap<OAuthManager, Set<string>>();
+let registeredProviders = new WeakMap<OAuthRegistrationManager, Set<string>>();
 
 /**
  * Context-aware OAuth provider registration
@@ -30,17 +43,10 @@ let registeredProviders = new WeakMap<OAuthManager, Set<string>>();
  */
 export function ensureOAuthProviderRegistered(
   providerName: string,
-  oauthManager: OAuthManager,
+  oauthManager: OAuthRegistrationManager,
   tokenStore?: TokenStore,
-  addItem?: (
-    itemData: Omit<HistoryItemWithoutId, 'id'>,
-    baseTimestamp?: number,
-  ) => number,
+  addItem?: AddItemCallback,
 ): void {
-  if (!oauthManager) {
-    return;
-  }
-
   let registered = registeredProviders.get(oauthManager);
   if (!registered) {
     registered = new Set<string>();
@@ -51,7 +57,7 @@ export function ensureOAuthProviderRegistered(
   }
 
   const effectiveTokenStore = tokenStore ?? oauthManager.getTokenStore?.();
-  if (!effectiveTokenStore) {
+  if (effectiveTokenStore === undefined) {
     oauthLogger.debug(
       () =>
         `Token store unavailable for '${providerName}'; skipping OAuth provider registration`,
@@ -59,7 +65,7 @@ export function ensureOAuthProviderRegistered(
     return;
   }
 
-  let oauthProvider = null;
+  let oauthProvider: OAuthProviderWithAddItem;
 
   switch (providerName) {
     case 'gemini':
@@ -79,15 +85,13 @@ export function ensureOAuthProviderRegistered(
   }
 
   // Note: setAddItem is still called as a fallback for providers that don't accept it in constructor
-  if (oauthProvider && addItem) {
+  if (addItem) {
     oauthProvider.setAddItem?.(addItem);
   }
 
-  if (oauthProvider) {
-    oauthLogger.debug(() => `Registering OAuth provider '${providerName}'`);
-    oauthManager.registerProvider(oauthProvider);
-    registered.add(providerName);
-  }
+  oauthLogger.debug(() => `Registering OAuth provider '${providerName}'`);
+  oauthManager.registerProvider(oauthProvider);
+  registered.add(providerName);
 }
 
 /**
@@ -95,7 +99,7 @@ export function ensureOAuthProviderRegistered(
  */
 export function isOAuthProviderRegistered(
   providerName: string,
-  oauthManager: OAuthManager,
+  oauthManager: OAuthRegistrationManager,
 ): boolean {
   return registeredProviders.get(oauthManager)?.has(providerName) ?? false;
 }
@@ -104,5 +108,5 @@ export function isOAuthProviderRegistered(
  * Reset registered providers (mainly for testing)
  */
 export function resetRegisteredProviders(): void {
-  registeredProviders = new WeakMap();
+  registeredProviders = new WeakMap<OAuthRegistrationManager, Set<string>>();
 }
