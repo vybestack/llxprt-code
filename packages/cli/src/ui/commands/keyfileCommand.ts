@@ -23,7 +23,7 @@ export const keyfileCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
-    const filePath = args?.trim();
+    const filePath = args.trim();
     const runtime = getRuntimeApi();
     const status = runtime.getActiveProviderStatus();
     const providerName = status.providerName;
@@ -80,7 +80,7 @@ export const keyfileCommand: SlashCommand = {
       if (filePath === 'none') {
         await runtime.updateActiveProviderApiKey(null);
         runtime.setEphemeralSetting('auth-keyfile', undefined);
-        context.services.settings.removeProviderKeyfile?.(providerName);
+        context.services.settings.removeProviderKeyfile(providerName);
 
         return {
           type: 'message',
@@ -103,10 +103,7 @@ export const keyfileCommand: SlashCommand = {
       const result = await runtime.updateActiveProviderApiKey(apiKey);
       runtime.setEphemeralSetting('auth-keyfile', resolvedPath);
       runtime.setEphemeralSetting('auth-key', undefined);
-      context.services.settings.setProviderKeyfile?.(
-        providerName,
-        resolvedPath,
-      );
+      context.services.settings.setProviderKeyfile(providerName, resolvedPath);
 
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: () => void;
