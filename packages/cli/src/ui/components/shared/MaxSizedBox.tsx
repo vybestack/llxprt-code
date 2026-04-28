@@ -118,6 +118,7 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
   if (maxWidth === undefined) {
     throw new Error('maxWidth must be defined when maxHeight is set.');
   }
+  const targetMaxWidth = maxWidth;
   function visitRows(element: React.ReactNode) {
     if (!React.isValidElement<{ children?: React.ReactNode }>(element)) {
       return;
@@ -129,7 +130,7 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
     }
 
     if (element.type === Box) {
-      layoutInkElementAsStyledText(element, maxWidth!, laidOutStyledText);
+      layoutInkElementAsStyledText(element, targetMaxWidth, laidOutStyledText);
       return;
     }
 
@@ -139,18 +140,16 @@ export const MaxSizedBox: React.FC<MaxSizedBoxProps> = ({
   React.Children.forEach(children, visitRows);
 
   const contentWillOverflow =
-    (targetMaxHeight !== undefined &&
-      laidOutStyledText.length > targetMaxHeight) ||
+    laidOutStyledText.length > targetMaxHeight ||
     additionalHiddenLinesCount > 0;
-  const visibleContentHeight =
-    contentWillOverflow && targetMaxHeight !== undefined
-      ? targetMaxHeight - 1
-      : targetMaxHeight;
+  const visibleContentHeight = contentWillOverflow
+    ? targetMaxHeight - 1
+    : targetMaxHeight;
 
-  const hiddenLinesCount =
-    visibleContentHeight !== undefined
-      ? Math.max(0, laidOutStyledText.length - visibleContentHeight)
-      : 0;
+  const hiddenLinesCount = Math.max(
+    0,
+    laidOutStyledText.length - visibleContentHeight,
+  );
   const totalHiddenLines = hiddenLinesCount + additionalHiddenLinesCount;
 
   useEffect(() => {
