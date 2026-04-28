@@ -28,6 +28,33 @@ import { splitPartsByRole } from './streamUtils.js';
 
 const geminiStreamLogger = new DebugLogger('llxprt:ui:gemini-stream');
 
+type ToolCallWithRuntimeResponseParts = (
+  | TrackedCompletedToolCall
+  | TrackedCancelledToolCall
+) & {
+  response: { responseParts: Part[] };
+};
+
+function isToolCallWithResponseParts(
+  toolCall: TrackedToolCall,
+): toolCall is ToolCallWithRuntimeResponseParts {
+  if (
+    toolCall.status !== 'success' &&
+    toolCall.status !== 'error' &&
+    toolCall.status !== 'cancelled'
+  ) {
+    return false;
+  }
+
+  const response = (toolCall as { response?: { responseParts?: unknown } })
+    .response;
+  return Array.isArray(response?.responseParts);
+}
+
+function isFunctionCallPart(part: unknown): boolean {
+  return part !== null && typeof part === 'object' && 'functionCall' in part;
+}
+
 // ─── Micro-helpers (pure transforms — no React hooks, no side effects) ─────────
 
 /**
@@ -38,19 +65,7 @@ export function classifyCompletedTools(tools: TrackedToolCall[]): {
   primaryTools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>;
   externalTools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>;
 } {
-  const completedAndReady = tools.filter(
-    (tc): tc is TrackedCompletedToolCall | TrackedCancelledToolCall => {
-      const isTerminalState =
-        tc.status === 'success' ||
-        tc.status === 'error' ||
-        tc.status === 'cancelled';
-      if (!isTerminalState) return false;
-      return (
-        (tc as TrackedCompletedToolCall | TrackedCancelledToolCall).response
-          ?.responseParts !== undefined
-      );
-    },
-  );
+  const completedAndReady = tools.filter(isToolCallWithResponseParts);
 
   const primary: Array<TrackedCompletedToolCall | TrackedCancelledToolCall> =
     [];
@@ -77,9 +92,7 @@ export function buildToolResponses(
   geminiTools: Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
 ): Part[] {
   return geminiTools.flatMap((toolCall) =>
-    toolCall.response.responseParts.filter(
-      (part) => !(part && typeof part === 'object' && 'functionCall' in part),
-    ),
+    toolCall.response.responseParts.filter((part) => !isFunctionCallPart(part)),
   );
 }
 
@@ -168,12 +181,7 @@ async function _executeCompletedTools(
   // Issue #968: Turn was cancelled — record history but do not continue.
   if (turnCancelledRef.current) {
     const completedWithResponses = completedToolCallsFromScheduler.filter(
-      (tc): tc is TrackedCompletedToolCall | TrackedCancelledToolCall =>
-        (tc.status === 'success' ||
-          tc.status === 'error' ||
-          tc.status === 'cancelled') &&
-        (tc as TrackedCompletedToolCall | TrackedCancelledToolCall).response
-          ?.responseParts !== undefined,
+      isToolCallWithResponseParts,
     );
     if (completedWithResponses.length > 0) {
       recordCancelledToolHistory(
